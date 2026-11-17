@@ -84,7 +84,8 @@ public class NoDispatcherRefusalTests
                 Name = typeof(ISchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         run.Input = """{"Value":"requeue"}""";
         await _fx.NotNull().DataContext.Track(run);
@@ -107,8 +108,8 @@ public class NoDispatcherRefusalTests
         {
             Name = $"refused-{Guid.NewGuid():N}",
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await _fx.NotNull().DataContext.Track(group);
         await _fx.NotNull().DataContext.SaveChanges(CancellationToken.None);
@@ -190,7 +191,8 @@ public class NoDispatcherRefusalTests
                 Manifest = manifest,
                 Reason = "seeded",
                 RetryCount = 3,
-            }
+            },
+            TimeProvider.System
         );
         await _fx.NotNull().DataContext.Track(deadLetter);
         await _fx.NotNull().DataContext.SaveChanges(CancellationToken.None);

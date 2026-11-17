@@ -142,7 +142,7 @@ public class OperationsServiceMachineInstancesTests : TestSetup
     [Test]
     public async Task A_page_deeper_than_the_count_cap_is_refused_as_the_api_refuses_it()
     {
-        await Seed(SnapshotOwnerKind.System, "Running", DateTimeOffset.UtcNow);
+        await Seed(SnapshotOwnerKind.System, "Running", TimeProvider.System.GetUtcNow());
 
         var deepest = await _operations
             .NotNull()
@@ -176,7 +176,7 @@ public class OperationsServiceMachineInstancesTests : TestSetup
     [Test]
     public async Task The_state_counts_are_read_once_for_every_caller_within_a_few_seconds()
     {
-        var clock = new ManualTimeProvider(DateTimeOffset.UtcNow);
+        var clock = new ManualTimeProvider(TimeProvider.System.GetUtcNow());
         var operations = new OperationsService(
             Scope.ServiceProvider.GetRequiredService<Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService>(),
             Scope.ServiceProvider.GetRequiredService<Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory>(),
@@ -184,13 +184,13 @@ public class OperationsServiceMachineInstancesTests : TestSetup
             Scope.ServiceProvider.GetRequiredService<Trax.Mediator.Services.TrainExecution.ITrainExecutionService>(),
             new ServiceCollection().AddSingleton<TimeProvider>(clock).BuildServiceProvider()
         );
-        await Seed(SnapshotOwnerKind.System, "Running", DateTimeOffset.UtcNow);
+        await Seed(SnapshotOwnerKind.System, "Running", TimeProvider.System.GetUtcNow());
 
         var first = await operations.GetMachineInstanceStateCountsAsync(
             _machine.NotNull(),
             CancellationToken.None
         );
-        await Seed(SnapshotOwnerKind.System, "Running", DateTimeOffset.UtcNow);
+        await Seed(SnapshotOwnerKind.System, "Running", TimeProvider.System.GetUtcNow());
         var cached = await operations.GetMachineInstanceStateCountsAsync(
             _machine.NotNull(),
             CancellationToken.None
@@ -245,7 +245,7 @@ public class OperationsServiceMachineInstancesTests : TestSetup
     public async Task A_lookup_names_the_owner_kind_so_a_users_draft_never_answers_for_a_system_instance()
     {
         var id = Guid.NewGuid();
-        var at = DateTimeOffset.UtcNow;
+        var at = TimeProvider.System.GetUtcNow();
         var system = await Seed(SnapshotOwnerKind.System, "Running", at, id: id);
         var user = await Seed(SnapshotOwnerKind.User, "Draft", at, id: id);
 
@@ -321,7 +321,7 @@ public class OperationsServiceMachineInstancesTests : TestSetup
     [Test]
     public async Task Counts_each_state_per_machine_and_owner_kind()
     {
-        var at = DateTimeOffset.UtcNow;
+        var at = TimeProvider.System.GetUtcNow();
         await Seed(SnapshotOwnerKind.System, "Running", at);
         await Seed(SnapshotOwnerKind.System, "Running", at);
         await Seed(SnapshotOwnerKind.User, "Running", at);
@@ -358,7 +358,7 @@ public class OperationsServiceMachineInstancesTests : TestSetup
     [Test]
     public async Task An_instance_waiting_on_a_failed_or_cancelled_run_or_an_overdue_timer_is_stuck()
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = TimeProvider.System.GetUtcNow();
         var failedToken = Guid.NewGuid().ToString("N"); // a run's external id is 32 characters
         var runningToken = Guid.NewGuid().ToString("N"); // a run's external id is 32 characters
         var cancelledToken = Guid.NewGuid().ToString("N"); // a run's external id is 32 characters

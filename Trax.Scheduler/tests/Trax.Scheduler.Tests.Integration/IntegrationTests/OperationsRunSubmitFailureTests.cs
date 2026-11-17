@@ -152,12 +152,12 @@ public class OperationsRunSubmitFailureTests
             NpgsqlTransaction claim
         )
         {
-            var deadline = DateTime.UtcNow.AddSeconds(30);
+            var deadline = TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(30);
             var probe = new NpgsqlConnection(TestPostgres.ConnectionString);
             await using (probe.ConfigureAwait(false))
             {
                 await probe.OpenAsync().ConfigureAwait(false);
-                while (DateTime.UtcNow < deadline)
+                while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
                 {
                     var waiting = new NpgsqlCommand(
                         """

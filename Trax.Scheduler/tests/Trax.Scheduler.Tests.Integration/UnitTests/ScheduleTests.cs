@@ -29,7 +29,7 @@ public class ScheduleTests
     public void FromCron_SetsTypeAndExpression()
     {
         // Act
-        var schedule = Schedule.FromCron("0 3 * * *");
+        var schedule = Schedule.FromCron("0 3 * * *", TimeProvider.System);
 
         // Assert
         schedule.Type.Should().Be(ScheduleType.Cron);
@@ -45,7 +45,7 @@ public class ScheduleTests
     public void ToCronExpression_CronType_ReturnsExpression()
     {
         // Arrange
-        var schedule = Schedule.FromCron("30 2 * * 1");
+        var schedule = Schedule.FromCron("30 2 * * 1", TimeProvider.System);
 
         // Act
         var cron = schedule.ToCronExpression();
@@ -180,7 +180,7 @@ public class ScheduleTests
     [Test]
     public void ToCronExpression_6FieldCronPassthrough()
     {
-        var schedule = Schedule.FromCron("30 0 3 * * *");
+        var schedule = Schedule.FromCron("30 0 3 * * *", TimeProvider.System);
 
         var cron = schedule.ToCronExpression();
 

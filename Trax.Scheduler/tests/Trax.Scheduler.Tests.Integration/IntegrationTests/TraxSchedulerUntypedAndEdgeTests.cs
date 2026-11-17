@@ -72,7 +72,10 @@ public class TraxSchedulerUntypedAndEdgeTests : TestSetup
 
         manifest.ScheduleType.Should().Be(ScheduleType.Once);
         manifest.ScheduledAt.Should().NotBeNull();
-        manifest.ScheduledAt.NotNull().Value.Should().BeAfter(DateTime.UtcNow.AddMinutes(25));
+        manifest
+            .ScheduledAt.NotNull()
+            .Value.Should()
+            .BeAfter(TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(25));
     }
 
     [Test]

@@ -51,7 +51,8 @@ public class OperationsServiceMetricsTests : TestSetup
                 Name = name == "" ? (isAdmin ? AdminTrainName : TrainName) : name,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         meta.TrainState = state;
         meta.StartTime = DateTime.SpecifyKind(startTime, DateTimeKind.Utc);
@@ -82,7 +83,8 @@ public class OperationsServiceMetricsTests : TestSetup
                 Manifest = manifest,
                 Reason = "x",
                 RetryCount = 1,
-            }
+            },
+            TimeProvider.System
         );
         dl.Status = status;
         await DataContext.Track(dl).ConfigureAwait(false);
@@ -117,7 +119,7 @@ public class OperationsServiceMetricsTests : TestSetup
     [Test]
     public async Task GetDashboardMetrics_TodayKpis_ReflectStateCounts()
     {
-        var now = DateTime.UtcNow;
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime;
         await SeedMetadata(TrainState.Completed, now);
         await SeedMetadata(TrainState.Completed, now);
         await SeedMetadata(TrainState.Completed, now);
@@ -142,7 +144,7 @@ public class OperationsServiceMetricsTests : TestSetup
     [Test]
     public async Task GetDashboardMetrics_NoTerminal_SuccessRateIsZero()
     {
-        await SeedMetadata(TrainState.InProgress, DateTime.UtcNow);
+        await SeedMetadata(TrainState.InProgress, TimeProvider.System.GetUtcNow().UtcDateTime);
 
         var metrics = await _operations
             .NotNull()
@@ -177,7 +179,7 @@ public class OperationsServiceMetricsTests : TestSetup
     [Test]
     public async Task GetDashboardMetrics_HideAdminTrains_ExcludesAdminTrainsFromCounts()
     {
-        var now = DateTime.UtcNow;
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime;
         await SeedMetadata(TrainState.Completed, now);
         await SeedMetadata(TrainState.Completed, now, isAdmin: true);
         await SeedMetadata(TrainState.InProgress, now, isAdmin: true);
@@ -242,7 +244,7 @@ public class OperationsServiceMetricsTests : TestSetup
     [Test]
     public async Task GetDashboardMetrics_ExecutionsOverTime_60m_PopulatesBucketCounts()
     {
-        var now = DateTime.UtcNow;
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime;
         var bucketTime = now.AddMinutes(-5);
         await SeedMetadata(TrainState.Completed, bucketTime);
         await SeedMetadata(TrainState.Cancelled, bucketTime);
@@ -271,7 +273,7 @@ public class OperationsServiceMetricsTests : TestSetup
     [Test]
     public async Task GetDashboardMetrics_ExecutionsOverTime_PopulatesBucketCounts()
     {
-        var now = DateTime.UtcNow;
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime;
         // Place several completions inside the same hour bucket.
         var bucketTime = now.AddHours(-2);
         await SeedMetadata(TrainState.Completed, bucketTime);
@@ -297,7 +299,7 @@ public class OperationsServiceMetricsTests : TestSetup
     [Test]
     public async Task GetDashboardMetrics_TopFailures_OrderedByCount()
     {
-        var now = DateTime.UtcNow.AddHours(-1);
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1);
         for (var i = 0; i < 3; i++)
             await SeedMetadata(TrainState.Failed, now, name: "Trax.Tests.IAlpha");
         for (var i = 0; i < 5; i++)
@@ -321,7 +323,7 @@ public class OperationsServiceMetricsTests : TestSetup
     [Test]
     public async Task GetDashboardMetrics_TopAverageDurations_RootLevelOnly()
     {
-        var now = DateTime.UtcNow.AddHours(-1);
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1);
         var slow = await SeedMetadata(
             TrainState.Completed,
             now,
@@ -355,7 +357,7 @@ public class OperationsServiceMetricsTests : TestSetup
     [Test]
     public async Task GetDashboardMetrics_Throughput_OrdersTopThreePlusOther()
     {
-        var now = DateTime.UtcNow.AddHours(-3);
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-3);
         // 6 of A (top), 4 of B, 2 of C, 1 each of D and E (collapses into Other)
         for (var i = 0; i < 6; i++)
             await SeedMetadata(TrainState.Completed, now, name: "Trax.Tests.IAlpha");
@@ -396,7 +398,7 @@ public class OperationsServiceMetricsTests : TestSetup
     public async Task GetDashboardMetrics_Throughput_DropsEmptySeries()
     {
         // Only one train completed → only that series, no "Other"
-        var now = DateTime.UtcNow.AddHours(-1);
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1);
         await SeedMetadata(TrainState.Completed, now, name: "Trax.Tests.ISolo");
 
         var metrics = await _operations
@@ -422,7 +424,7 @@ public class OperationsServiceMetricsTests : TestSetup
     public async Task MetricSeries_ForATrainWithTenRunsOverTwoHours_CountsEachBucketAndReadsItsPercentiles()
     {
         var name = $"Trax.Tests.ISeries{Guid.NewGuid():N}";
-        var now = DateTime.UtcNow;
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime;
         var quarter = TimeSpan.FromMinutes(15).Ticks;
         var t0 = new DateTime(now.Ticks - now.Ticks % quarter, DateTimeKind.Utc).AddHours(-2);
 
@@ -493,7 +495,7 @@ public class OperationsServiceMetricsTests : TestSetup
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
-        var start = DateTime.UtcNow.AddDays(-3);
+        var start = TimeProvider.System.GetUtcNow().UtcDateTime.AddDays(-3);
         foreach (
             var (owner, state) in new[]
             {
@@ -606,7 +608,7 @@ public class OperationsServiceMetricsTests : TestSetup
         metrics.WorkingSetBytes.Should().BeGreaterThan(0);
         metrics.GcHeapBytes.Should().BeGreaterThan(0);
         metrics.UptimeSeconds.Should().BeGreaterThan(0);
-        metrics.ProcessStartTimeUtc.Should().BeBefore(DateTime.UtcNow);
+        metrics.ProcessStartTimeUtc.Should().BeBefore(TimeProvider.System.GetUtcNow().UtcDateTime);
         metrics.ProcessStartTimeUtc.Kind.Should().Be(DateTimeKind.Utc);
     }
 

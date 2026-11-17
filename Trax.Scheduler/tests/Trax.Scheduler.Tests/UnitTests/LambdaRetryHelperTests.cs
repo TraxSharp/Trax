@@ -38,6 +38,7 @@ public class LambdaRetryHelperTests
             DefaultRequest,
             FastOptions(),
             NullLogger.Instance,
+            TimeProvider.System,
             CancellationToken.None
         );
 
@@ -55,6 +56,7 @@ public class LambdaRetryHelperTests
             DefaultRequest,
             FastOptions(),
             NullLogger.Instance,
+            TimeProvider.System,
             CancellationToken.None
         );
 
@@ -75,6 +77,7 @@ public class LambdaRetryHelperTests
             DefaultRequest,
             FastOptions(),
             NullLogger.Instance,
+            TimeProvider.System,
             CancellationToken.None
         );
 
@@ -95,6 +98,7 @@ public class LambdaRetryHelperTests
             DefaultRequest,
             FastOptions(),
             NullLogger.Instance,
+            TimeProvider.System,
             CancellationToken.None
         );
 
@@ -112,6 +116,7 @@ public class LambdaRetryHelperTests
             DefaultRequest,
             FastOptions(),
             NullLogger.Instance,
+            TimeProvider.System,
             CancellationToken.None
         );
 
@@ -134,6 +139,7 @@ public class LambdaRetryHelperTests
             DefaultRequest,
             FastOptions(5),
             NullLogger.Instance,
+            TimeProvider.System,
             CancellationToken.None
         );
 
@@ -162,6 +168,7 @@ public class LambdaRetryHelperTests
                     DefaultRequest,
                     FastOptions(3),
                     NullLogger.Instance,
+                    TimeProvider.System,
                     CancellationToken.None
                 )
                 .ConfigureAwait(false);
@@ -188,6 +195,7 @@ public class LambdaRetryHelperTests
                     DefaultRequest,
                     FastOptions(),
                     NullLogger.Instance,
+                    TimeProvider.System,
                     CancellationToken.None
                 )
                 .ConfigureAwait(false);
@@ -210,6 +218,7 @@ public class LambdaRetryHelperTests
                     DefaultRequest,
                     FastOptions(),
                     NullLogger.Instance,
+                    TimeProvider.System,
                     CancellationToken.None
                 )
                 .ConfigureAwait(false);
@@ -230,6 +239,7 @@ public class LambdaRetryHelperTests
                     DefaultRequest,
                     FastOptions(),
                     NullLogger.Instance,
+                    TimeProvider.System,
                     CancellationToken.None
                 )
                 .ConfigureAwait(false);
@@ -257,6 +267,7 @@ public class LambdaRetryHelperTests
                     DefaultRequest,
                     FastOptions(0),
                     NullLogger.Instance,
+                    TimeProvider.System,
                     CancellationToken.None
                 )
                 .ConfigureAwait(false);
@@ -279,6 +290,7 @@ public class LambdaRetryHelperTests
             DefaultRequest,
             FastOptions(),
             NullLogger.Instance,
+            TimeProvider.System,
             CancellationToken.None
         );
 
@@ -456,6 +468,7 @@ public class LambdaRetryHelperTests
                     DefaultRequest,
                     options,
                     NullLogger.Instance,
+                    TimeProvider.System,
                     cts.Token
                 )
                 .ConfigureAwait(false);

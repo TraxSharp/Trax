@@ -55,7 +55,8 @@ public class OperationsServiceWorkQueueDetailTests : TestSetup
                 SubjectKey = subject,
                 Priority = priority,
                 ScheduledAt = scheduledAt,
-            }
+            },
+            TimeProvider.System
         );
         entry.Status = status;
         entry.MetadataId = metadataId;
@@ -75,7 +76,8 @@ public class OperationsServiceWorkQueueDetailTests : TestSetup
                 Name = typeof(ISchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         run.TrainState = state;
         await DataContext.Track(run).ConfigureAwait(false);
@@ -127,7 +129,10 @@ public class OperationsServiceWorkQueueDetailTests : TestSetup
     {
         var running = await AddRun(TrainState.InProgress);
         var holder = await AddEntry("customer-2", WorkQueueStatus.Dispatched, metadataId: running);
-        var older = await AddEntry("customer-2", createdAt: DateTime.UtcNow.AddMinutes(-5));
+        var older = await AddEntry(
+            "customer-2",
+            createdAt: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5)
+        );
         var waiting = await AddEntry("customer-2");
 
         var detail = await Detail(waiting);
@@ -155,11 +160,14 @@ public class OperationsServiceWorkQueueDetailTests : TestSetup
     [Test]
     public async Task An_older_or_higher_priority_sibling_is_what_it_queues_behind()
     {
-        var older = await AddEntry("customer-4", createdAt: DateTime.UtcNow.AddMinutes(-5));
+        var older = await AddEntry(
+            "customer-4",
+            createdAt: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5)
+        );
         var younger = await AddEntry("customer-4");
         var urgent = await AddEntry(
             "customer-5",
-            createdAt: DateTime.UtcNow.AddMinutes(1),
+            createdAt: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(1),
             priority: 9
         );
         var ordinary = await AddEntry("customer-5");
@@ -172,7 +180,11 @@ public class OperationsServiceWorkQueueDetailTests : TestSetup
     [Test]
     public async Task A_sibling_not_yet_due_is_not_ahead_of_it()
     {
-        await AddEntry("customer-6", priority: 9, scheduledAt: DateTime.UtcNow.AddDays(1));
+        await AddEntry(
+            "customer-6",
+            priority: 9,
+            scheduledAt: TimeProvider.System.GetUtcNow().UtcDateTime.AddDays(1)
+        );
         var dueNow = await AddEntry("customer-6");
 
         (await Detail(dueNow))

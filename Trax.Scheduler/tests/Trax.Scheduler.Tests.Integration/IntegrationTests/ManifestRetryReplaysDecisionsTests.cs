@@ -371,8 +371,9 @@ public class ManifestRetryReplaysDecisionsTests
                             Input = manifest.Properties,
                             InputTypeName = manifest.PropertyTypeName,
                             ReplayDecisionsOf = failed.Id,
-                            ScheduledAt = DateTime.UtcNow.AddHours(1),
-                        }
+                            ScheduledAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(1),
+                        },
+                        TimeProvider.System
                     )
                 );
             else
@@ -384,7 +385,8 @@ public class ManifestRetryReplaysDecisionsTests
                         ExternalId = Guid.NewGuid().ToString("N"),
                         Input = null,
                         ReplayDecisionsOf = failed.Id,
-                    }
+                    },
+                    TimeProvider.System
                 );
                 running.TrainState = TrainState.InProgress;
                 data.Metadatas.Add(running);
@@ -444,14 +446,22 @@ public class ManifestRetryReplaysDecisionsTests
                 await data
                     .Metadatas.Where(m => m.Id == first.Id)
                     .ExecuteUpdateAsync(
-                        s => s.SetProperty(m => m.StartTime, DateTime.UtcNow.AddMinutes(-11)),
+                        s =>
+                            s.SetProperty(
+                                m => m.StartTime,
+                                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-11)
+                            ),
                         cancellationToken: CancellationToken.None
                     )
                     .ConfigureAwait(false);
                 return await data
                     .Metadatas.Where(m => m.Id == replay.Id)
                     .ExecuteUpdateAsync(
-                        s => s.SetProperty(m => m.StartTime, DateTime.UtcNow.AddMinutes(-10)),
+                        s =>
+                            s.SetProperty(
+                                m => m.StartTime,
+                                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10)
+                            ),
                         cancellationToken: CancellationToken.None
                     )
                     .ConfigureAwait(false);
@@ -1002,7 +1012,11 @@ public class ManifestRetryReplaysDecisionsTests
         await WithData(data =>
             data.Manifests.Where(m => m.Id == manifest.Id)
                 .ExecuteUpdateAsync(
-                    s => s.SetProperty(m => m.LastSuccessfulRun, DateTime.UtcNow.AddHours(-2)),
+                    s =>
+                        s.SetProperty(
+                            m => m.LastSuccessfulRun,
+                            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
+                        ),
                     cancellationToken: CancellationToken.None
                 )
         );
@@ -1079,7 +1093,7 @@ public class ManifestRetryReplaysDecisionsTests
         // The parent's LastSuccessfulRun and the entry's DispatchedAt are stamped by the database's
         // clock, the run's StartTime by its host's. Here the two clocks disagree about whether the
         // parent succeeded after the failed run.
-        var success = DateTime.UtcNow.AddMinutes(-10);
+        var success = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10);
         var startedAt = dispatchedAfterTheParentsSuccess
             ? success.AddMinutes(-5)
             : success.AddMinutes(5);
@@ -1301,7 +1315,7 @@ public class ManifestRetryReplaysDecisionsTests
         {
             if (Interlocked.Increment(ref _arrived) == participants)
                 _all.TrySetResult();
-            return _all.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            return _all.Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
         }
     }
 
@@ -1475,8 +1489,9 @@ public class ManifestRetryReplaysDecisionsTests
                         Input = manifest.Properties,
                         InputTypeName = manifest.PropertyTypeName,
                         ReplayDecisionsOf = source,
-                        ScheduledAt = DateTime.UtcNow.AddHours(1),
-                    }
+                        ScheduledAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(1),
+                    },
+                    TimeProvider.System
                 )
             );
             await data.SaveChanges(CancellationToken.None).ConfigureAwait(false);
@@ -1701,7 +1716,8 @@ public class ManifestRetryReplaysDecisionsTests
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
                     ReplayDecisionsOf = failed.Id,
-                }
+                },
+                TimeProvider.System
             );
             await data.Track(earlier).ConfigureAwait(false);
             await data.SaveChanges(CancellationToken.None).ConfigureAwait(false);
@@ -1768,7 +1784,8 @@ public class ManifestRetryReplaysDecisionsTests
                     Input = input ?? manifest.Properties,
                     InputTypeName = manifest.PropertyTypeName,
                     ReplayDecisionsOf = source,
-                }
+                },
+                TimeProvider.System
             );
             data.WorkQueues.Add(entry);
             await data.SaveChanges(CancellationToken.None).ConfigureAwait(false);

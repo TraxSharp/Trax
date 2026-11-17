@@ -43,7 +43,8 @@ public class SubjectSiblingQueriesTests
                 SubjectKey = subject,
                 Priority = priority,
                 ScheduledAt = scheduledAt,
-            }
+            },
+            TimeProvider.System
         );
 
         entry.Status = WorkQueueStatus.Queued;

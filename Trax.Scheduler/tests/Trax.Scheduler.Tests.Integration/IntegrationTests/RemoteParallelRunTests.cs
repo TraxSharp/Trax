@@ -117,7 +117,8 @@ public class RemoteParallelRunTests(ClusterStore store)
                                 BaseUrl = WorkerUrl,
                                 Retry = new HttpRetryOptions { MaxRetries = 0 },
                             },
-                            NullLogger<HttpJobSubmitter>.Instance
+                            NullLogger<HttpJobSubmitter>.Instance,
+                            TimeProvider.System
                         ))
                     ),
                 // No junction events here: every junction_run row the test reads is the worker's.
@@ -153,7 +154,7 @@ public class RemoteParallelRunTests(ClusterStore store)
             await scope
                 .ServiceProvider.GetRequiredService<IJobDispatcherTrain>()
                 .Run(Unit.Default)
-                .WaitAsync(TimeSpan.FromSeconds(60));
+                .WaitAsync(TimeSpan.FromSeconds(60), TimeProvider.System);
 
         var dispatched = await With(data =>
             data.WorkQueues.AsNoTracking().SingleAsync(q => q.Id == entry.Id)
@@ -241,7 +242,8 @@ public class RemoteParallelRunTests(ClusterStore store)
                 ),
                 InputTypeName = typeof(ParallelRemoteInput).FullName,
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         await data.Track(entry).ConfigureAwait(false);
         await data.SaveChanges(CancellationToken.None).ConfigureAwait(false);
@@ -274,7 +276,7 @@ public class RemoteParallelRunTests(ClusterStore store)
                     .Invoke(writer, [CancellationToken.None])
                     .NotNull()
         )
-            .WaitAsync(TimeSpan.FromSeconds(30))
+            .WaitAsync(TimeSpan.FromSeconds(30), TimeProvider.System)
             .ConfigureAwait(false);
 
         return await With(data => data.JunctionRuns.AsNoTracking().ForRun(runId).ToListAsync())

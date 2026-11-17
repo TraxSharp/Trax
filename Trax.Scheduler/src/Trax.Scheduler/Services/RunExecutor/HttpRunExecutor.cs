@@ -29,7 +29,8 @@ namespace Trax.Scheduler.Services.RunExecutor;
 internal sealed class HttpRunExecutor(
     HttpClient httpClient,
     RemoteRunOptions options,
-    ILogger<HttpRunExecutor> logger
+    ILogger<HttpRunExecutor> logger,
+    TimeProvider timeProvider
 ) : IRunExecutor
 {
     private const int MaxErrorBodyLength = 2000;
@@ -86,6 +87,7 @@ internal sealed class HttpRunExecutor(
                 request,
                 options.Retry,
                 logger,
+                timeProvider,
                 ct,
                 options.SigningKey,
                 RunnerRequestPurpose.Run,

@@ -95,7 +95,8 @@ public class RunnerRefusesSchedulerTrainsTests : TestSetup
                 Name = typeof(IMetadataCleanupTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new MetadataCleanupRequest(),
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = TrainState.Pending;
         await DataContext.Track(metadata);
@@ -130,7 +131,8 @@ public class RunnerRefusesSchedulerTrainsTests : TestSetup
                 Name = name,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new MetadataCleanupRequest(),
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = TrainState.Pending;
         await DataContext.Track(metadata);
@@ -163,7 +165,8 @@ public class RunnerRefusesSchedulerTrainsTests : TestSetup
                 Name = typeof(IManifestManagerTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = Unit.Default,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = TrainState.Pending;
         await DataContext.Track(metadata);

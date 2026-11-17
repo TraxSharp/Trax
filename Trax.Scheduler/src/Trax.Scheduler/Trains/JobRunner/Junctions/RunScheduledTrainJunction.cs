@@ -30,7 +30,8 @@ internal sealed class RunScheduledTrainJunction(
     ITrainBus trainBus,
     IDataContext dataContext,
     DormantDependentContext dormantDependentContext,
-    ILogger<RunScheduledTrainJunction> logger
+    ILogger<RunScheduledTrainJunction> logger,
+    TimeProvider timeProvider
 ) : EffectJunction<(Metadata, ResolvedTrainInput), Unit>
 {
     public override async Task<Unit> Run((Metadata, ResolvedTrainInput) input)
@@ -133,6 +134,7 @@ internal sealed class RunScheduledTrainJunction(
         metadata.Manifest.LastSuccessfulRun = await DatabaseClock
             .UtcNowAsync(
                 dataContext.Manifests.Where(m => m.Id == manifestId),
+                timeProvider,
                 CancellationToken.None
             )
             .ConfigureAwait(false);

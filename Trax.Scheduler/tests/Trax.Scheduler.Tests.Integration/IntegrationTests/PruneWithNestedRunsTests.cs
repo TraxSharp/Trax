@@ -210,7 +210,8 @@ public class PruneWithNestedRunsTests : TestSetup
                 Input = new SchedulerTestInput { Value = "run" },
                 ManifestId = manifestId,
                 ParentId = parentId,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = TrainState.Completed;
 

@@ -53,14 +53,15 @@ public class MetadataCleanupDefaultTests
         );
         await using var provider = services.BuildServiceProvider();
 
-        var old = DateTime.UtcNow.AddHours(-2);
+        var old = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2);
         var run = Metadata.Create(
             new CreateMetadata
             {
                 Name = typeof(IJobDispatcherTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         run.TrainState = TrainState.Completed;
         run.StartTime = old;
@@ -80,7 +81,7 @@ public class MetadataCleanupDefaultTests
         await cleanup.NotNull().StartAsync(CancellationToken.None);
         try
         {
-            await Gone(provider, run.Id).WaitAsync(Bound);
+            await Gone(provider, run.Id).WaitAsync(Bound, TimeProvider.System);
         }
         finally
         {

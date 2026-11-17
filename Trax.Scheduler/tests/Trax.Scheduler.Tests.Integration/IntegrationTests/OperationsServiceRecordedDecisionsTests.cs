@@ -168,7 +168,8 @@ public class OperationsServiceRecordedDecisionsTests : TestSetup
                 Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = TrainState.Completed;
         await DataContext.Track(metadata).ConfigureAwait(false);
@@ -201,7 +202,7 @@ public class OperationsServiceRecordedDecisionsTests : TestSetup
                 Decider = "Tests.Decider",
                 Shadows = shadows,
                 Routes = routes,
-                DecidedAt = DateTime.UtcNow,
+                DecidedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
             }
         );
         await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);

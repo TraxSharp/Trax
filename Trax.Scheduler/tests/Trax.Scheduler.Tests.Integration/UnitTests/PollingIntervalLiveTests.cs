@@ -71,13 +71,13 @@ public class PollingIntervalLiveTests
         try
         {
             // The first cycle runs at start.
-            await first.Task.WaitAsync(SyncTimeout, CancellationToken.None);
+            await first.Task.WaitAsync(SyncTimeout, TimeProvider.System, CancellationToken.None);
 
             // An hour-long wait is under way; the operator shortens the interval.
             config.JobDispatcherPollingInterval = TimeSpan.FromMilliseconds(50);
 
             // The new interval applies to the wait already under way; before, this waited an hour.
-            await second.Task.WaitAsync(SyncTimeout, CancellationToken.None);
+            await second.Task.WaitAsync(SyncTimeout, TimeProvider.System, CancellationToken.None);
         }
         finally
         {
@@ -205,12 +205,16 @@ public class PollingIntervalLiveTests
         try
         {
             // The first cycle runs at start, then an hour-long wait begins.
-            await first.Task.WaitAsync(SyncTimeout, CancellationToken.None).ConfigureAwait(false);
+            await first
+                .Task.WaitAsync(SyncTimeout, TimeProvider.System, CancellationToken.None)
+                .ConfigureAwait(false);
 
             shorten();
 
             // The next cycle runs after the new interval, not after the hour.
-            await second.Task.WaitAsync(SyncTimeout, CancellationToken.None).ConfigureAwait(false);
+            await second
+                .Task.WaitAsync(SyncTimeout, TimeProvider.System, CancellationToken.None)
+                .ConfigureAwait(false);
         }
         finally
         {

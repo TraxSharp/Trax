@@ -147,7 +147,7 @@ public class OperationsServiceEnqueueTests
     [Test]
     public async Task A_scheduled_enqueue_keeps_its_scheduled_time()
     {
-        var when = DateTime.UtcNow.AddHours(3);
+        var when = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(3);
 
         await Queue(
             new QueueTrainInput(typeof(IProbeTrain).FullName.NotNull(), "{\"customerId\":1}")

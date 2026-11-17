@@ -108,7 +108,8 @@ public class RemoteFailureClassificationTests
                 Name = "SomeTrain",
                 ExternalId = "abc",
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         metadata.AddException(rebuilt);
 
@@ -158,7 +159,8 @@ public class RemoteFailureClassificationTests
                 Name = "SomeTrain",
                 ExternalId = "abc",
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         metadata.AddException(rebuilt);
 
@@ -196,7 +198,8 @@ public class RemoteFailureClassificationTests
                 Name = "SomeTrain",
                 ExternalId = "abc",
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         metadata.AddException(rebuilt);
 

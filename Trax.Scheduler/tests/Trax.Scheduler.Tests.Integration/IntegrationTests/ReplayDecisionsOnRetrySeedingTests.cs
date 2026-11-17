@@ -147,7 +147,8 @@ public class ReplayDecisionsOnRetrySeedingTests
                 InputTypeName = manifest.PropertyTypeName,
                 ManifestId = manifest.Id,
                 ReplayDecisionsOf = 4242,
-            }
+            },
+            TimeProvider.System
         );
         fx.DataContext.WorkQueues.Add(entry);
         await fx.DataContext.SaveChanges(CancellationToken.None);

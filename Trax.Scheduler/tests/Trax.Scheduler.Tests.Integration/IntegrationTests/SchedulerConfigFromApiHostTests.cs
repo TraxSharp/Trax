@@ -90,16 +90,19 @@ public class SchedulerConfigFromApiHostTests
 
     private static async Task WaitFor(Func<bool> condition, string because)
     {
-        var deadline = DateTime.UtcNow + SyncTimeout;
-        while (!condition() && DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + SyncTimeout;
+        while (!condition() && TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
             await Task.Delay(50).ConfigureAwait(false); // determinism: polls the condition, bounded by SyncTimeout
         condition().Should().BeTrue($"{because}. See {AdrPath}.");
     }
 
     private static async Task WaitFor(Func<Task<bool>> condition, string because)
     {
-        var deadline = DateTime.UtcNow + SyncTimeout;
-        while (!await condition().ConfigureAwait(false) && DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + SyncTimeout;
+        while (
+            !await condition().ConfigureAwait(false)
+            && TimeProvider.System.GetUtcNow().UtcDateTime < deadline
+        )
             await Task.Delay(50).ConfigureAwait(false); // determinism: polls the condition, bounded by SyncTimeout
         (await condition().ConfigureAwait(false)).Should().BeTrue($"{because}. See {AdrPath}.");
     }
@@ -357,7 +360,7 @@ public class SchedulerConfigFromApiHostTests
                 new Trax.Effect.Models.SchedulerConfig.SchedulerConfig
                 {
                     StalePendingTimeout = TimeSpan.FromMinutes(3),
-                    UpdatedAt = DateTime.UtcNow,
+                    UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                 }
             );
             await db.SaveChanges(CancellationToken.None);
@@ -433,7 +436,7 @@ public class SchedulerConfigFromApiHostTests
             running.Configuration.MaxActiveJobs = 9;
 
             // negative-wait: no refresh may run, which only elapsed time can show.
-            await Task.Delay(TimeSpan.FromMilliseconds(500));
+            await Task.Delay(TimeSpan.FromMilliseconds(500), TimeProvider.System);
 
             settings.CompletedRefreshes.Should().Be(0);
             running
@@ -463,7 +466,7 @@ public class SchedulerConfigFromApiHostTests
 
             // negative-wait: counts the refreshes in a fixed window, which only elapsed time can
             // show. A zero interval taken literally would refresh continuously.
-            await Task.Delay(TimeSpan.FromSeconds(1));
+            await Task.Delay(TimeSpan.FromSeconds(1), TimeProvider.System);
 
             settings
                 .CompletedRefreshes.Should()

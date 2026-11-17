@@ -230,13 +230,14 @@ public class OperationsServiceReadModelTests : TestSetup
                     Manifest = deadLettered,
                     Reason = "test",
                     RetryCount = 1,
-                }
+                },
+                TimeProvider.System
             )
         );
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
-        var before = DateTime.UtcNow;
+        var before = TimeProvider.System.GetUtcNow().UtcDateTime;
         var upcoming = await _operations
             .NotNull()
             .GetUpcomingRunsAsync(
@@ -244,7 +245,7 @@ public class OperationsServiceReadModelTests : TestSetup
                 3,
                 CancellationToken.None
             );
-        var after = DateTime.UtcNow;
+        var after = TimeProvider.System.GetUtcNow().UtcDateTime;
 
         upcoming
             .Select(u => u.ManifestId)
@@ -296,14 +297,14 @@ public class OperationsServiceReadModelTests : TestSetup
         var run = await SeedRun(
             manifest: null,
             TrainState.Completed,
-            DateTime.UtcNow,
-            DateTime.UtcNow
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime
         );
         var otherRun = await SeedRun(
             manifest: null,
             TrainState.Completed,
-            DateTime.UtcNow,
-            DateTime.UtcNow
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime
         );
         await SeedLogs(run.Id, 3, LogLevel.Information, "Alpha");
         await SeedLogs(run.Id, 2, LogLevel.Error, "Alpha");
@@ -345,8 +346,8 @@ public class OperationsServiceReadModelTests : TestSetup
         var run = await SeedRun(
             manifest: null,
             TrainState.Completed,
-            DateTime.UtcNow,
-            DateTime.UtcNow
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime
         );
         await SeedLogs(run.Id, 7, LogLevel.Information, "Paged");
 
@@ -382,8 +383,8 @@ public class OperationsServiceReadModelTests : TestSetup
         var run = await SeedRun(
             manifest: null,
             TrainState.Completed,
-            DateTime.UtcNow,
-            DateTime.UtcNow
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime
         );
         await SeedLogs(run.Id, 5, LogLevel.Information, "Offset");
 
@@ -409,8 +410,8 @@ public class OperationsServiceReadModelTests : TestSetup
         var run = await SeedRun(
             manifest: null,
             TrainState.Completed,
-            DateTime.UtcNow,
-            DateTime.UtcNow
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime
         );
         await SeedLogs(run.Id, OperationsService.MaxPageSize + 1, LogLevel.Information, "Clamp");
 
@@ -428,8 +429,8 @@ public class OperationsServiceReadModelTests : TestSetup
         var run = await SeedRun(
             manifest: null,
             TrainState.Completed,
-            DateTime.UtcNow,
-            DateTime.UtcNow
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime
         );
         await SeedLog(run.Id, "Payment REFUSED for order 7", "Shop.Payments");
         await SeedLog(run.Id, "payment accepted", "Shop.Payments");
@@ -460,8 +461,8 @@ public class OperationsServiceReadModelTests : TestSetup
         var run = await SeedRun(
             manifest: null,
             TrainState.Completed,
-            DateTime.UtcNow,
-            DateTime.UtcNow
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime
         );
         await SeedLog(run.Id, "one", "Shop.Payments.Gateway");
         await SeedLog(run.Id, "two", "Shop.Stock");
@@ -499,8 +500,8 @@ public class OperationsServiceReadModelTests : TestSetup
         var run = await SeedRun(
             manifest: null,
             TrainState.Completed,
-            DateTime.UtcNow,
-            DateTime.UtcNow
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime
         );
         await SeedLog(run.Id, "Disk at 50% capacity", "Wildcards");
         await SeedLog(run.Id, "Disk at 500 MB", "Wildcards");
@@ -525,8 +526,8 @@ public class OperationsServiceReadModelTests : TestSetup
         var run = await SeedRun(
             manifest: null,
             TrainState.Completed,
-            DateTime.UtcNow,
-            DateTime.UtcNow
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime
         );
         await SeedLogs(run.Id, 7, LogLevel.Information, "Ascending");
 
@@ -564,8 +565,8 @@ public class OperationsServiceReadModelTests : TestSetup
         var run = await SeedRun(
             manifest: null,
             TrainState.Completed,
-            DateTime.UtcNow,
-            DateTime.UtcNow
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime
         );
         await SeedLogs(run.Id, 5, LogLevel.Information, "AscendingOffset");
 
@@ -592,8 +593,8 @@ public class OperationsServiceReadModelTests : TestSetup
         var run = await SeedRun(
             manifest: null,
             TrainState.Completed,
-            DateTime.UtcNow,
-            DateTime.UtcNow
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime
         );
         await SeedLogs(run.Id, 3, LogLevel.Information, "Empty");
 
@@ -624,8 +625,8 @@ public class OperationsServiceReadModelTests : TestSetup
         var run = await SeedRun(
             manifest: null,
             TrainState.Completed,
-            DateTime.UtcNow,
-            DateTime.UtcNow
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime
         );
         var rows = OperationsService.LogTextWindow + 20_000;
         var ctx = (DbContext)DataContext;
@@ -723,7 +724,8 @@ public class OperationsServiceReadModelTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
                 ManifestId = manifest?.Id,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = state;
         metadata.StartTime = start;
@@ -745,8 +747,8 @@ public class OperationsServiceReadModelTests : TestSetup
         var run = await SeedRun(
             manifest: null,
             TrainState.Completed,
-            DateTime.UtcNow,
-            DateTime.UtcNow
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime
         );
         await SeedLogs(run.Id, matching, LogLevel.Information, "Shop.Capped");
         await SeedLogs(run.Id, 5, LogLevel.Information, "Shop.Other");
@@ -766,8 +768,8 @@ public class OperationsServiceReadModelTests : TestSetup
         var run = await SeedRun(
             manifest: null,
             TrainState.Completed,
-            DateTime.UtcNow,
-            DateTime.UtcNow
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime
         );
         await SeedLogs(run.Id, OperationsService.LogCountCap + 1, LogLevel.Information, "Wide");
 

@@ -140,7 +140,8 @@ public class MachineInstanceListingIndexTests : TestSetup
                     (IDataContext)context,
                     query,
                     skip: 0,
-                    take: 25
+                    take: 25,
+                    TimeProvider.System
                 );
                 var command = (NpgsqlCommand)page.CreateDbCommand();
                 await using (command.ConfigureAwait(false))

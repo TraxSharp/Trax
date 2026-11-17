@@ -34,6 +34,9 @@ internal sealed class SchedulerStartupService(
     ILogger<SchedulerStartupService> logger
 ) : IHostedService
 {
+    // The container's clock (AddTrax registers the system's), or the system's when it has none.
+    private TimeProvider Clock => serviceProvider.GetService<TimeProvider>() ?? TimeProvider.System;
+
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         configuration.Owner ??= ResolveOwner(serviceProvider);
@@ -78,7 +81,7 @@ internal sealed class SchedulerStartupService(
     /// </remarks>
     private async Task RecoverStuckJobs(CancellationToken cancellationToken)
     {
-        var serverStartTime = DateTime.UtcNow;
+        var serverStartTime = Clock.GetUtcNow().UtcDateTime;
 
         var scope = serviceProvider.CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
@@ -101,7 +104,7 @@ internal sealed class SchedulerStartupService(
             if (stuckIds.Count == 0)
                 break;
 
-            var now = DateTime.UtcNow;
+            var now = Clock.GetUtcNow().UtcDateTime;
 
             // One conditional write per run, so only the runs this recovery failed are published:
             // a run that finished meanwhile matches nothing.
@@ -264,7 +267,7 @@ internal sealed class SchedulerStartupService(
                     maxRetries,
                     retryDelay.TotalSeconds
                 );
-                await Task.Delay(retryDelay, cancellationToken).ConfigureAwait(false);
+                await Task.Delay(retryDelay, Clock, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex)
             {

@@ -26,7 +26,11 @@ public class SqliteFailureWindowTests : TestSetup
     {
         // The scheduler counts a day of failures; this manifest counts only its last hour.
         var manifest = await CreateDueManifest(maxRetries: 0, failureWindow: TimeSpan.FromHours(1));
-        await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddHours(-2));
+        await CreateRun(
+            manifest,
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
+        );
 
         await RunManifestManager();
 
@@ -43,7 +47,11 @@ public class SqliteFailureWindowTests : TestSetup
     public async Task A_failure_inside_the_manifests_own_window_still_counts()
     {
         var manifest = await CreateDueManifest(maxRetries: 0, failureWindow: TimeSpan.FromHours(3));
-        await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddHours(-2));
+        await CreateRun(
+            manifest,
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
+        );
 
         await RunManifestManager();
 
@@ -56,10 +64,26 @@ public class SqliteFailureWindowTests : TestSetup
     public async Task A_success_after_failures_in_the_window_does_not_delay_the_next_run()
     {
         var manifest = await CreateDueManifest(maxRetries: 3);
-        await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddHours(-4));
-        await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddHours(-3));
-        await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddHours(-2));
-        await CreateRun(manifest, TrainState.Completed, DateTime.UtcNow.AddHours(-1));
+        await CreateRun(
+            manifest,
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-4)
+        );
+        await CreateRun(
+            manifest,
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-3)
+        );
+        await CreateRun(
+            manifest,
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
+        );
+        await CreateRun(
+            manifest,
+            TrainState.Completed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1)
+        );
 
         await RunManifestManager();
 
@@ -79,9 +103,21 @@ public class SqliteFailureWindowTests : TestSetup
     public async Task A_failure_after_a_success_backs_off_by_every_failure_in_the_window()
     {
         var manifest = await CreateDueManifest(maxRetries: 3);
-        await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddHours(-3));
-        await CreateRun(manifest, TrainState.Completed, DateTime.UtcNow.AddHours(-2));
-        await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddHours(-1));
+        await CreateRun(
+            manifest,
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-3)
+        );
+        await CreateRun(
+            manifest,
+            TrainState.Completed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
+        );
+        await CreateRun(
+            manifest,
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1)
+        );
 
         await RunManifestManager();
 
@@ -117,7 +153,7 @@ public class SqliteFailureWindowTests : TestSetup
             }
         );
         manifest.ManifestGroupId = group.Id;
-        manifest.LastSuccessfulRun = DateTime.UtcNow.AddMinutes(-5);
+        manifest.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5);
         manifest.FailureWindowSeconds = (int?)failureWindow?.TotalSeconds;
         await DataContext.Track(manifest).ConfigureAwait(false);
         await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
@@ -134,7 +170,8 @@ public class SqliteFailureWindowTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "window" },
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         run.TrainState = state;
         run.StartTime = startTime;

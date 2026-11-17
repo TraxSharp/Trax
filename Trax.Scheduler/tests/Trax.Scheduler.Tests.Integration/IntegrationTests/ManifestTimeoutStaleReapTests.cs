@@ -157,10 +157,11 @@ public class ManifestTimeoutStaleReapTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "long" },
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         run.TrainState = TrainState.InProgress;
-        run.StartTime = DateTime.UtcNow.AddMinutes(-startedMinutesAgo);
+        run.StartTime = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-startedMinutesAgo);
         await DataContext.Track(run).ConfigureAwait(false);
         await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();

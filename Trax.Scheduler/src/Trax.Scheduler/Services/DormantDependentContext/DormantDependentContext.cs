@@ -29,7 +29,8 @@ namespace Trax.Scheduler.Services.DormantDependentContext;
 internal sealed class DormantDependentContext(
     IDataContextProviderFactory dataContextFactory,
     SchedulerConfiguration schedulerConfiguration,
-    ILogger<DormantDependentContext> logger
+    ILogger<DormantDependentContext> logger,
+    TimeProvider timeProvider
 ) : IDormantDependentContext
 {
     private static readonly AsyncLocal<long?> ParentManifestIdLocal = new();
@@ -258,7 +259,8 @@ internal sealed class DormantDependentContext(
                 ManifestId = manifest.Id,
                 StarterHash = manifest.StarterHash,
                 Priority = effectivePriority,
-            }
+            },
+            timeProvider
         );
 
         await context.Track(entry).ConfigureAwait(false);

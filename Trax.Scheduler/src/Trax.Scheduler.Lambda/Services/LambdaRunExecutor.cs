@@ -31,7 +31,8 @@ namespace Trax.Scheduler.Lambda.Services;
 internal sealed class LambdaRunExecutor(
     IAmazonLambda lambdaClient,
     LambdaRunOptions options,
-    ILogger<LambdaRunExecutor> logger
+    ILogger<LambdaRunExecutor> logger,
+    TimeProvider timeProvider
 ) : IRunExecutor
 {
     /// <summary>
@@ -85,7 +86,8 @@ internal sealed class LambdaRunExecutor(
                 ? RunnerRequestSignature.Create(
                     key,
                     RunnerRequestPurpose.Run,
-                    Encoding.UTF8.GetBytes(payloadJson)
+                    Encoding.UTF8.GetBytes(payloadJson),
+                    timeProvider
                 )
                 : null,
         };
@@ -104,7 +106,14 @@ internal sealed class LambdaRunExecutor(
         );
 
         var invokeResponse = await LambdaRetryHelper
-            .InvokeWithRetryAsync(lambdaClient, invokeRequest, options.Retry, logger, ct)
+            .InvokeWithRetryAsync(
+                lambdaClient,
+                invokeRequest,
+                options.Retry,
+                logger,
+                timeProvider,
+                ct
+            )
             .ConfigureAwait(false);
 
         if (!string.IsNullOrEmpty(invokeResponse.FunctionError))

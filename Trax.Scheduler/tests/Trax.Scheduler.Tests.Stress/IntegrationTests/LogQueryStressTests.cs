@@ -46,7 +46,7 @@ public class LogQueryStressTests : TestSetup
         var db = (DbContext)DataContext;
         db.Database.SetCommandTimeout(TimeSpan.FromMinutes(5));
 
-        var seed = Stopwatch.StartNew();
+        var seedStarted = TimeProvider.System.GetTimestamp();
         // Every message names an order and a customer, about one in a hundred contains
         // "customer 42", and one in a million carries a rare marker. Categories cycle through 50
         // names.
@@ -66,7 +66,7 @@ public class LogQueryStressTests : TestSetup
             .Out.WriteLineAsync(
                 string.Create(
                     CultureInfo.InvariantCulture,
-                    $"Seeded {Rows:N0} log rows in {seed.ElapsedMilliseconds} ms"
+                    $"Seeded {Rows:N0} log rows in {(long)TimeProvider.System.GetElapsedTime(seedStarted).TotalMilliseconds} ms"
                 )
             )
             .ConfigureAwait(false);

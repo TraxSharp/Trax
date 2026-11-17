@@ -23,7 +23,8 @@ namespace Trax.Scheduler.Trains.DeadLetterCleanup.Junctions;
 internal sealed class DeleteResolvedDeadLettersJunction(
     IDataContext dataContext,
     SchedulerConfiguration configuration,
-    ILogger<DeleteResolvedDeadLettersJunction> logger
+    ILogger<DeleteResolvedDeadLettersJunction> logger,
+    TimeProvider timeProvider
 ) : EffectJunction<DeadLetterCleanupRequest, Unit>
 {
     private const int BatchSize = 1000;
@@ -39,7 +40,7 @@ internal sealed class DeleteResolvedDeadLettersJunction(
         }
 
         var cutoffTime = TimeCutoff.Before(
-            DateTime.UtcNow,
+            timeProvider.GetUtcNow().UtcDateTime,
             configuration.DeadLetterRetentionPeriod
         );
         var totalDeleted = 0;

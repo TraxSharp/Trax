@@ -55,7 +55,7 @@ public class OperationsServiceMachineInstanceTransitionsTests : TestSetup
             State = state,
             Context = """{"secret":"never shown"}""",
             ConcurrencyToken = Guid.NewGuid(),
-            UpdatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = TimeProvider.System.GetUtcNow(),
             SpawnedBy = spawnedBy,
         };
         DataContext.SnapshotDrafts.Add(row);
@@ -166,7 +166,7 @@ public class OperationsServiceMachineInstanceTransitionsTests : TestSetup
             machine: _machine.NotNull() + "-child",
             spawnedBy: spawned
         );
-        var at = DateTimeOffset.UtcNow;
+        var at = TimeProvider.System.GetUtcNow();
         await History(
             instance,
             Row(1, SnapshotTransitionKind.Start, trigger: null, from: null, "Running", at, ran),
@@ -235,7 +235,7 @@ public class OperationsServiceMachineInstanceTransitionsTests : TestSetup
     {
         var id = Guid.NewGuid();
         var mine = await Seed(SnapshotOwnerKind.User, "Locked");
-        var at = DateTimeOffset.UtcNow;
+        var at = TimeProvider.System.GetUtcNow();
         await History(
             mine,
             Row(

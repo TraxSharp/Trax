@@ -133,15 +133,16 @@ public class ParallelDispatchTests
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
         // Act
-        var sw = Stopwatch.StartNew();
+        var swStarted = TimeProvider.System.GetTimestamp();
         await train.Run(Unit.Default);
-        sw.Stop();
+        var swElapsed = TimeProvider.System.GetElapsedTime(swStarted);
 
         if (train is IDisposable d)
             d.Dispose();
 
         // Assert — sequential: 3 entries at 200ms each = ~600ms minimum
-        sw.ElapsedMilliseconds.Should()
+        swElapsed
+            .TotalMilliseconds.Should()
             .BeGreaterThanOrEqualTo(500, "sequential dispatch should take at least 3 * delay");
         _submitter
             .NotNull()
@@ -164,15 +165,16 @@ public class ParallelDispatchTests
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
         // Act
-        var sw = Stopwatch.StartNew();
+        var swStarted = TimeProvider.System.GetTimestamp();
         await train.Run(Unit.Default);
-        sw.Stop();
+        var swElapsed = TimeProvider.System.GetElapsedTime(swStarted);
 
         if (train is IDisposable d)
             d.Dispose();
 
         // Assert — parallel: 3 entries with concurrency 3 should complete in ~1 delay period
-        sw.ElapsedMilliseconds.Should()
+        swElapsed
+            .TotalMilliseconds.Should()
             .BeLessThan(
                 500,
                 "parallel dispatch of 3 entries with concurrency 3 should be faster than sequential"
@@ -384,7 +386,8 @@ public class ParallelDispatchTests
                     Input = manifest.Properties,
                     InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                     ManifestId = manifest.Id,
-                }
+                },
+                TimeProvider.System
             );
 
             await _dataContext.NotNull().Track(entry).ConfigureAwait(false);

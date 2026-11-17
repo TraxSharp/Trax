@@ -64,7 +64,8 @@ public class InvokeOutcomeNoticeTests
         await reconciler.StartAsync(CancellationToken.None);
         try
         {
-            await Task.WhenAll(reconciler.Listening, reconciler.FirstSweep).WaitAsync(Bound);
+            await Task.WhenAll(reconciler.Listening, reconciler.FirstSweep)
+                .WaitAsync(Bound, TimeProvider.System);
 
             var instance = await _api.NotNull().Start(StepMachine.Context(InvokedStepModes.Ok));
             var token = (await _api.NotNull().Row(instance.Id, SystemStepMachine.MachineId))
@@ -74,7 +75,7 @@ public class InvokeOutcomeNoticeTests
 
             await _worker.NotNull().DispatchAndRun(token);
 
-            (await delivered.WaitAsync(Bound))
+            (await delivered.WaitAsync(Bound, TimeProvider.System))
                 .Should()
                 .BeEquivalentTo(
                     new { To = "Done" },
@@ -95,7 +96,8 @@ public class InvokeOutcomeNoticeTests
         await reconciler.StartAsync(CancellationToken.None);
         try
         {
-            await Task.WhenAll(reconciler.Listening, reconciler.FirstSweep).WaitAsync(Bound);
+            await Task.WhenAll(reconciler.Listening, reconciler.FirstSweep)
+                .WaitAsync(Bound, TimeProvider.System);
 
             var instance = await api.Start(StepMachine.Context(InvokedStepModes.Ok));
             var token = (await api.Row(instance.Id, SystemStepMachine.MachineId))
@@ -117,7 +119,7 @@ public class InvokeOutcomeNoticeTests
             var run = (await _worker.NotNull().Entry(token)).NotNull().MetadataId.NotNull().Value;
             (await _worker.NotNull().Run(run)).TrainState.Should().Be(TrainState.Failed);
 
-            (await delivered.WaitAsync(Bound))
+            (await delivered.WaitAsync(Bound, TimeProvider.System))
                 .Should()
                 .BeEquivalentTo(
                     new { To = "Failed", Applied = "failed" },
@@ -142,7 +144,8 @@ public class InvokeOutcomeNoticeTests
         await reconciler.StartAsync(CancellationToken.None);
         try
         {
-            await Task.WhenAll(reconciler.Listening, reconciler.FirstSweep).WaitAsync(Bound);
+            await Task.WhenAll(reconciler.Listening, reconciler.FirstSweep)
+                .WaitAsync(Bound, TimeProvider.System);
             swept.Count.Should().Be(1, "the interval is an hour: only the start has swept");
 
             await using (var admin = new NpgsqlConnection(_cluster.NotNull().ConnectionString))
@@ -160,8 +163,8 @@ public class InvokeOutcomeNoticeTests
 
             // The first retry comes after a one-second back-off, and asks for a full sweep: what ended while it
             // was not listening was never notified.
-            await subscribed.Reached(2).WaitAsync(Bound);
-            await swept.Reached(2).WaitAsync(Bound);
+            await subscribed.Reached(2).WaitAsync(Bound, TimeProvider.System);
+            await swept.Reached(2).WaitAsync(Bound, TimeProvider.System);
 
             // And it hears notices again.
             var instance = await api.Start(StepMachine.Context(InvokedStepModes.Ok));
@@ -170,7 +173,9 @@ public class InvokeOutcomeNoticeTests
                 .InvokeToken.NotNull();
             var delivered = DeliveryOf(reconciler, token);
             await _worker.NotNull().DispatchAndRun(token);
-            (await delivered.WaitAsync(Bound)).Should().BeEquivalentTo(new { To = "Done" });
+            (await delivered.WaitAsync(Bound, TimeProvider.System))
+                .Should()
+                .BeEquivalentTo(new { To = "Done" });
         }
         finally
         {

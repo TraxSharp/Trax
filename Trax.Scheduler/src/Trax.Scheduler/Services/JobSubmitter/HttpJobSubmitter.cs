@@ -24,7 +24,8 @@ namespace Trax.Scheduler.Services.JobSubmitter;
 internal sealed class HttpJobSubmitter(
     HttpClient httpClient,
     RemoteWorkerOptions options,
-    ILogger<HttpJobSubmitter> logger
+    ILogger<HttpJobSubmitter> logger,
+    TimeProvider timeProvider
 ) : IJobSubmitter
 {
     private const int MaxErrorBodyLength = 2000;
@@ -71,6 +72,7 @@ internal sealed class HttpJobSubmitter(
                 request,
                 options.Retry,
                 logger,
+                timeProvider,
                 cancellationToken,
                 options.SigningKey,
                 RunnerRequestPurpose.Execute

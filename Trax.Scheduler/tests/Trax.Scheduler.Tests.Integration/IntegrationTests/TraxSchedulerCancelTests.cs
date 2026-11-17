@@ -348,7 +348,8 @@ public class TraxSchedulerCancelTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "CancelTest" },
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = state;
         await DataContext.Track(metadata).ConfigureAwait(false);

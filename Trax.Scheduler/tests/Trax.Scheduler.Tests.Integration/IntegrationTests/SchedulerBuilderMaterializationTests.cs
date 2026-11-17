@@ -69,7 +69,7 @@ public class SchedulerBuilderMaterializationTests
     [Test]
     public async Task ScheduleOnce_Inferred_MaterialisesAsOnceManifestWithScheduledAt()
     {
-        var before = DateTime.UtcNow;
+        var before = TimeProvider.System.GetUtcNow().UtcDateTime;
         await using var fx = await SchedulerE2EFixture.CreateAsync(s =>
             s.ScheduleOnce<ISchedulerTestTrain>(
                 "ext-once",
@@ -285,7 +285,7 @@ public class SchedulerBuilderMaterializationTests
             s.Schedule<ISchedulerTestTrain>(
                 "ext-cron",
                 new SchedulerTestInput(),
-                Schedule.FromCron("0 3 * * *")
+                Schedule.FromCron("0 3 * * *", TimeProvider.System)
             )
         );
 

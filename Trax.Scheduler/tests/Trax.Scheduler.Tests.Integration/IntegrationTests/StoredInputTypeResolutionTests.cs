@@ -110,7 +110,8 @@ public class StoredInputTypeResolutionTests : TestSetup
                 Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "stored-type" },
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(metadata);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -121,7 +122,8 @@ public class StoredInputTypeResolutionTests : TestSetup
                 MetadataId = metadata.Id,
                 Input = """{"value":"x"}""",
                 InputType = typeof(NotATrainInput).FullName,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(job);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -168,7 +170,8 @@ public class StoredInputTypeResolutionTests : TestSetup
                 TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = """{"value":"stored-type"}""",
                 InputTypeName = inputTypeName,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(entry).ConfigureAwait(false);
         await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);

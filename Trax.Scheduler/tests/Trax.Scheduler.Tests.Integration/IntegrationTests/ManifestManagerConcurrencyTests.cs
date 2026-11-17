@@ -49,7 +49,7 @@ public class ManifestManagerConcurrencyTests : TestSetup
         );
         manifest.ManifestGroupId = group.Id;
         // Set LastSuccessfulRun far in the past so it's due
-        manifest.LastSuccessfulRun = DateTime.UtcNow.AddHours(-1);
+        manifest.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1);
 
         await DataContext.Track(manifest);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -102,7 +102,7 @@ public class ManifestManagerConcurrencyTests : TestSetup
                 }
             );
             manifest.ManifestGroupId = group.Id;
-            manifest.LastSuccessfulRun = DateTime.UtcNow.AddHours(-1);
+            manifest.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1);
 
             await DataContext.Track(manifest);
             await DataContext.SaveChanges(CancellationToken.None);
@@ -157,7 +157,7 @@ public class ManifestManagerConcurrencyTests : TestSetup
             }
         );
         manifest.ManifestGroupId = group.Id;
-        manifest.LastSuccessfulRun = DateTime.UtcNow.AddHours(-1);
+        manifest.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1);
 
         await DataContext.Track(manifest);
         await DataContext.SaveChanges(CancellationToken.None);

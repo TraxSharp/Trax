@@ -209,7 +209,8 @@ public class TraxLambdaFunctionTests
                 type == LambdaRequestType.Run
                     ? RunnerRequestPurpose.Run
                     : RunnerRequestPurpose.Execute,
-                System.Text.Encoding.UTF8.GetBytes(payload)
+                System.Text.Encoding.UTF8.GetBytes(payload),
+                TimeProvider.System
             ),
         };
 
@@ -352,7 +353,8 @@ public class TraxLambdaFunctionTests
             RunnerRequestSignature.Create(
                 Key,
                 RunnerRequestPurpose.Run,
-                System.Text.Encoding.UTF8.GetBytes(payload)
+                System.Text.Encoding.UTF8.GetBytes(payload),
+                TimeProvider.System
             )
         );
         var response = await client.SendAsync(request);
@@ -370,7 +372,8 @@ public class TraxLambdaFunctionTests
         var requestSignature = RunnerRequestSignature.Create(
             Key,
             RunnerRequestPurpose.Run,
-            System.Text.Encoding.UTF8.GetBytes(payload)
+            System.Text.Encoding.UTF8.GetBytes(payload),
+            TimeProvider.System
         );
         var request = new HttpRequestMessage(HttpMethod.Post, "/trax/run")
         {
@@ -487,7 +490,8 @@ public class TraxLambdaFunctionTests
             RunnerRequestSignature.Create(
                 Key,
                 RunnerRequestPurpose.Run,
-                System.Text.Encoding.UTF8.GetBytes(payload)
+                System.Text.Encoding.UTF8.GetBytes(payload),
+                TimeProvider.System
             )
         );
         var response = await host.GetTestClient().SendAsync(request);
@@ -526,7 +530,8 @@ public class TraxLambdaFunctionTests
             RunnerRequestSignature.Create(
                 Key,
                 RunnerRequestPurpose.Run,
-                System.Text.Encoding.UTF8.GetBytes(payload)
+                System.Text.Encoding.UTF8.GetBytes(payload),
+                TimeProvider.System
             )
         );
         var response = await client.SendAsync(request);
@@ -667,7 +672,12 @@ public class TraxLambdaFunctionTests
 
         await stop.CancelAsync();
         // negative-wait: an upper bound on shutdown, not a wait for it.
-        (await Task.WhenAny(running, Task.Delay(TimeSpan.FromSeconds(10), CancellationToken.None)))
+        (
+            await Task.WhenAny(
+                running,
+                Task.Delay(TimeSpan.FromSeconds(10), TimeProvider.System, CancellationToken.None)
+            )
+        )
             .Should()
             .BeSameAs(running, "cancelling the token stops the server");
         await running;
@@ -715,14 +725,15 @@ public class TraxLambdaFunctionTests
         Func<Task<HttpResponseMessage>> send
     )
     {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(10);
         while (true)
         {
             try
             {
                 return await send().ConfigureAwait(false);
             }
-            catch (HttpRequestException) when (DateTime.UtcNow < deadline)
+            catch (HttpRequestException)
+                when (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
             {
                 // determinism: the poll interval of a bounded wait for the server to listen.
                 await Task.Delay(50).ConfigureAwait(false);
@@ -987,7 +998,8 @@ public class TraxLambdaFunctionTests
                     Name = "Some.Train",
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
-                }
+                },
+                TimeProvider.System
             );
             await context.Track(run).ConfigureAwait(false);
             await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);

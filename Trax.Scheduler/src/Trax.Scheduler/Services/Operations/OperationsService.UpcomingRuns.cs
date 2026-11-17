@@ -75,7 +75,7 @@ public partial class OperationsService
             .ToListAsync(ct)
             .ConfigureAwait(false);
 
-        var now = DateTime.UtcNow;
+        var now = Clock.GetUtcNow().UtcDateTime;
         var byId = rows.ToDictionary(r => r.Id);
 
         return ids.Where(byId.ContainsKey)

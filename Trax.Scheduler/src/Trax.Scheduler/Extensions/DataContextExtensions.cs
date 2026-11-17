@@ -32,6 +32,7 @@ internal static class DataContextExtensions
         this IDataContext context,
         string groupName,
         ManifestGroupSeed group,
+        TimeProvider timeProvider,
         CancellationToken ct = default
     )
     {
@@ -58,7 +59,7 @@ internal static class DataContextExtensions
                 changed = true;
             }
             if (changed)
-                existing.UpdatedAt = DateTime.UtcNow;
+                existing.UpdatedAt = timeProvider.GetUtcNow().UtcDateTime;
             return existing.Id;
         }
 
@@ -68,8 +69,8 @@ internal static class DataContextExtensions
             Priority = group.Priority ?? group.PriorityIfNew,
             MaxActiveJobs = group.MaxActiveJobsStated ? group.MaxActiveJobs : null,
             IsEnabled = group.IsEnabled ?? true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = timeProvider.GetUtcNow().UtcDateTime,
+            UpdatedAt = timeProvider.GetUtcNow().UtcDateTime,
         };
         context.ManifestGroups.Add(created);
         await context.SaveChanges(ct).ConfigureAwait(false);
@@ -88,6 +89,7 @@ internal static class DataContextExtensions
         ManifestOptions options,
         string groupId,
         ManifestGroupSeed group,
+        TimeProvider timeProvider,
         CancellationToken ct = default
     )
         where TTrain : IServiceTrain<TInput, TOutput>
@@ -100,6 +102,7 @@ internal static class DataContextExtensions
             options,
             groupId,
             group,
+            timeProvider,
             ct
         );
 
@@ -115,11 +118,12 @@ internal static class DataContextExtensions
         ManifestOptions options,
         string groupId,
         ManifestGroupSeed group,
+        TimeProvider timeProvider,
         CancellationToken ct = default
     )
     {
         var manifestGroupId = await context
-            .EnsureManifestGroupAsync(groupId, group, ct)
+            .EnsureManifestGroupAsync(groupId, group, timeProvider, ct)
             .ConfigureAwait(false);
 
         var existing = await context
@@ -135,7 +139,7 @@ internal static class DataContextExtensions
                 existing.IsEnabled = isEnabled;
             ApplyStatedSettings(existing, options);
             existing.ManifestGroupId = manifestGroupId;
-            ApplySchedule(existing, schedule);
+            ApplySchedule(existing, schedule, timeProvider);
             ApplyVariance(existing, schedule, options);
             ApplyMisfireOptions(existing, options);
             ApplyExclusions(existing, options);
@@ -163,7 +167,7 @@ internal static class DataContextExtensions
             Priority = options.Priority,
         };
         manifest.SetProperties(input);
-        ApplySchedule(manifest, schedule);
+        ApplySchedule(manifest, schedule, timeProvider);
         ApplyVariance(manifest, schedule, options);
         ApplyMisfireOptions(manifest, options);
         ApplyExclusions(manifest, options);
@@ -186,6 +190,7 @@ internal static class DataContextExtensions
         ManifestOptions options,
         string groupId,
         ManifestGroupSeed group,
+        TimeProvider timeProvider,
         CancellationToken ct = default
     )
         where TTrain : IServiceTrain<TInput, TOutput>
@@ -198,6 +203,7 @@ internal static class DataContextExtensions
             options,
             groupId,
             group,
+            timeProvider,
             ct
         );
 
@@ -213,11 +219,12 @@ internal static class DataContextExtensions
         ManifestOptions options,
         string groupId,
         ManifestGroupSeed group,
+        TimeProvider timeProvider,
         CancellationToken ct = default
     )
     {
         var manifestGroupId = await context
-            .EnsureManifestGroupAsync(groupId, group, ct)
+            .EnsureManifestGroupAsync(groupId, group, timeProvider, ct)
             .ConfigureAwait(false);
 
         var existing = await context
@@ -288,6 +295,7 @@ internal static class DataContextExtensions
         ManifestOptions options,
         string groupId,
         ManifestGroupSeed group,
+        TimeProvider timeProvider,
         CancellationToken ct = default
     )
         where TTrain : IServiceTrain<TInput, TOutput>
@@ -300,6 +308,7 @@ internal static class DataContextExtensions
             options,
             groupId,
             group,
+            timeProvider,
             ct
         );
 
@@ -315,11 +324,12 @@ internal static class DataContextExtensions
         ManifestOptions options,
         string groupId,
         ManifestGroupSeed group,
+        TimeProvider timeProvider,
         CancellationToken ct = default
     )
     {
         var manifestGroupId = await context
-            .EnsureManifestGroupAsync(groupId, group, ct)
+            .EnsureManifestGroupAsync(groupId, group, timeProvider, ct)
             .ConfigureAwait(false);
 
         var existing = await context
@@ -407,7 +417,11 @@ internal static class DataContextExtensions
     /// <summary>
     /// Applies schedule configuration to a manifest.
     /// </summary>
-    private static void ApplySchedule(Manifest manifest, Schedule schedule)
+    private static void ApplySchedule(
+        Manifest manifest,
+        Schedule schedule,
+        TimeProvider timeProvider
+    )
     {
         var unchangedCron =
             manifest.ScheduleType == ScheduleType.Cron
@@ -438,7 +452,7 @@ internal static class DataContextExtensions
                     ? firstOccurrence
                     : CronParser
                         .Parse(schedule.CronExpression.NotNull())
-                        .GetNextOccurrence(DateTime.UtcNow, TimeZoneInfo.Utc);
+                        .GetNextOccurrence(timeProvider.GetUtcNow().UtcDateTime, TimeZoneInfo.Utc);
     }
 
     /// <summary>

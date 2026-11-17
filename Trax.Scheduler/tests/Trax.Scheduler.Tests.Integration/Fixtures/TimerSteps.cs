@@ -169,7 +169,7 @@ internal static class TimerSteps
     {
         var scope = host.Services.CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
-        var at = DateTimeOffset.UtcNow - by;
+        var at = TimeProvider.System.GetUtcNow() - by;
         await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .SnapshotDrafts.Where(d => d.RowId == rowId)
@@ -182,7 +182,7 @@ internal static class TimerSteps
     {
         var scope = host.Services.CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
-        DateTimeOffset? at = DateTimeOffset.UtcNow - by;
+        DateTimeOffset? at = TimeProvider.System.GetUtcNow() - by;
         await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .SnapshotDrafts.Where(d => d.RowId == rowId)

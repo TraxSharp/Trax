@@ -35,7 +35,12 @@ public class HttpRunExecutorTests
             Retry = new HttpRetryOptions { MaxRetries = 0 },
         };
         var client = new HttpClient(handler) { BaseAddress = new Uri(opts.BaseUrl) };
-        return new HttpRunExecutor(client, opts, NullLogger<HttpRunExecutor>.Instance);
+        return new HttpRunExecutor(
+            client,
+            opts,
+            NullLogger<HttpRunExecutor>.Instance,
+            TimeProvider.System
+        );
     }
 
     [Test]

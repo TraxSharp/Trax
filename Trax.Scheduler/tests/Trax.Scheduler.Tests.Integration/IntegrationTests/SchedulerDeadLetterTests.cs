@@ -39,7 +39,8 @@ public class SchedulerDeadLetterTests
                 Manifest = manifest,
                 Reason = "test",
                 RetryCount = 3,
-            }
+            },
+            TimeProvider.System
         );
         await fx.DataContext.Track(dl).ConfigureAwait(false);
         await fx.DataContext.SaveChanges(default).ConfigureAwait(false);
@@ -258,7 +259,10 @@ public class SchedulerDeadLetterTests
         await fx
             .DataContext.DeadLetters.Where(d => d.Id == dl.Id)
             .ExecuteUpdateAsync(s =>
-                s.SetProperty(d => d.ResolvedAt, DateTime.UtcNow.AddDays(-90))
+                s.SetProperty(
+                    d => d.ResolvedAt,
+                    TimeProvider.System.GetUtcNow().UtcDateTime.AddDays(-90)
+                )
             );
 
         await fx.RunDeadLetterCleanupAsync();
@@ -281,7 +285,10 @@ public class SchedulerDeadLetterTests
         await fx
             .DataContext.DeadLetters.Where(d => d.Id == dl.Id)
             .ExecuteUpdateAsync(s =>
-                s.SetProperty(d => d.ResolvedAt, DateTime.UtcNow.AddDays(-90))
+                s.SetProperty(
+                    d => d.ResolvedAt,
+                    TimeProvider.System.GetUtcNow().UtcDateTime.AddDays(-90)
+                )
             );
 
         await fx.RunDeadLetterCleanupAsync();
@@ -350,7 +357,8 @@ public class SchedulerDeadLetterTests
                 Input = manifest.Properties,
                 InputTypeName = manifest.PropertyTypeName,
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         await fx.DataContext.Track(entry).ConfigureAwait(false);
         await fx.DataContext.SaveChanges(default).ConfigureAwait(false);
@@ -646,7 +654,7 @@ public class SchedulerDeadLetterTests
         var awaiting = await SeedDeadLetterAsync(fx, "dl-a1");
         var done = await SeedDeadLetterAsync(fx, "dl-a1");
         await fx.Scheduler.AcknowledgeDeadLetterAsync(done.Id, "earlier");
-        var before = DateTime.UtcNow;
+        var before = TimeProvider.System.GetUtcNow().UtcDateTime;
 
         var result = await fx.Scheduler.AcknowledgeAllDeadLettersAsync("clearing");
 

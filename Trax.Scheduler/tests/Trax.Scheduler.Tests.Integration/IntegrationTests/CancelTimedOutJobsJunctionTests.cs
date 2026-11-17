@@ -48,7 +48,7 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
         var metadata = await CreateMetadata(
             manifest,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddSeconds(-120)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(-120)
         );
 
         // Act
@@ -73,7 +73,7 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
         var metadata = await CreateMetadata(
             manifest,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddSeconds(-30)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(-30)
         );
 
         // Act
@@ -100,12 +100,12 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
         var timedOutMetadata = await CreateMetadata(
             shortTimeout,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddSeconds(-90)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(-90)
         );
         var okMetadata = await CreateMetadata(
             longTimeout,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddSeconds(-90)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(-90)
         );
 
         // Act
@@ -133,7 +133,7 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
         var metadata = await CreateMetadata(
             manifest,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddSeconds(-120)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(-120)
         );
 
         // Set CancellationRequested to true before the junction runs
@@ -175,7 +175,7 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
         await CreateMetadata(
             manifest,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddSeconds(-120)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(-120)
         );
 
         // Act
@@ -230,7 +230,8 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "TimeoutTest" },
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = state;
 

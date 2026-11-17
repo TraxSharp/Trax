@@ -29,7 +29,11 @@ internal sealed class DeadLetterCleanupPollingService(
 
         while (
             await PollingDelay
-                .WaitAsync(() => configuration.DeadLetterCleanupInterval, stoppingToken)
+                .WaitAsync(
+                    () => configuration.DeadLetterCleanupInterval,
+                    serviceProvider.GetService<TimeProvider>() ?? TimeProvider.System,
+                    stoppingToken
+                )
                 .ConfigureAwait(false)
         )
         {

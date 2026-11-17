@@ -156,7 +156,8 @@ public class TriggerAlreadyQueuedTests
                 context,
                 fx.Configuration,
                 NullLogger<CreateWorkQueueEntriesJunction>.Instance,
-                fx.Services.GetRequiredService<RetryDecisionReplay>()
+                fx.Services.GetRequiredService<RetryDecisionReplay>(),
+                TimeProvider.System
             );
             await junction.Run(views);
 
@@ -169,7 +170,8 @@ public class TriggerAlreadyQueuedTests
                         TrainName = typeof(ISchedulerTestTrain).FullName.NotNull(),
                         Input = "{}",
                         InputTypeName = typeof(SchedulerTestInput).FullName.NotNull(),
-                    }
+                    },
+                    TimeProvider.System
                 )
             );
             await context.SaveChanges(CancellationToken.None);
@@ -334,8 +336,8 @@ public class TriggerAlreadyQueuedTests
         var probe = await OpenConnectionAsync().ConfigureAwait(false);
         await using (probe.ConfigureAwait(false))
         {
-            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
-            while (DateTime.UtcNow < deadline)
+            var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(15);
+            while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
             {
                 var command = new NpgsqlCommand(
                     "SELECT count(*) FROM pg_stat_activity "
@@ -391,7 +393,11 @@ public class TriggerAlreadyQueuedTests
         var logs = new CapturingLoggerProvider();
         await using var fx = await CreateAsync(logs);
         await fx.MaterializePendingManifestsAsync();
-        var retryId = await QueueRetryAsync(fx, "aq-a", DateTime.UtcNow.AddMinutes(30));
+        var retryId = await QueueRetryAsync(
+            fx,
+            "aq-a",
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(30)
+        );
 
         await fx.Scheduler.TriggerAsync("aq-a");
 
@@ -418,7 +424,11 @@ public class TriggerAlreadyQueuedTests
     {
         await using var fx = await CreateAsync();
         await fx.MaterializePendingManifestsAsync();
-        var retryId = await QueueRetryAsync(fx, "aq-a", DateTime.UtcNow.AddMinutes(30));
+        var retryId = await QueueRetryAsync(
+            fx,
+            "aq-a",
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(30)
+        );
 
         await fx.Scheduler.TriggerAsync("aq-a", TimeSpan.FromMinutes(5));
 
@@ -428,7 +438,10 @@ public class TriggerAlreadyQueuedTests
             .SingleAsync(w => w.Id == retryId);
         retry
             .ScheduledAt.Should()
-            .BeCloseTo(DateTime.UtcNow.AddMinutes(5), TimeSpan.FromMinutes(1));
+            .BeCloseTo(
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(5),
+                TimeSpan.FromMinutes(1)
+            );
     }
 
     [Test]
@@ -436,7 +449,7 @@ public class TriggerAlreadyQueuedTests
     {
         await using var fx = await CreateAsync();
         await fx.MaterializePendingManifestsAsync();
-        var dueAt = DateTime.UtcNow.AddMinutes(2);
+        var dueAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(2);
         var retryId = await QueueRetryAsync(fx, "aq-a", dueAt);
 
         await fx.Scheduler.TriggerAsync("aq-a", TimeSpan.FromMinutes(30));
@@ -467,7 +480,8 @@ public class TriggerAlreadyQueuedTests
                 InputTypeName = manifest.PropertyTypeName,
                 ManifestId = manifest.Id,
                 ScheduledAt = dueAt,
-            }
+            },
+            TimeProvider.System
         );
         await fx.DataContext.Track(entry).ConfigureAwait(false);
         await fx.DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);

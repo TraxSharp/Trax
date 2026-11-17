@@ -43,12 +43,13 @@ internal sealed class ReapStaleInProgressMetadataJunction(
     IDataContext dataContext,
     SchedulerConfiguration config,
     DeferredOutcomeEvents outcomeEvents,
-    ILogger<ReapStaleInProgressMetadataJunction> logger
+    ILogger<ReapStaleInProgressMetadataJunction> logger,
+    TimeProvider timeProvider
 ) : EffectJunction<Unit, Unit>
 {
     public override async Task<Unit> Run(Unit input)
     {
-        var now = DateTime.UtcNow;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
         var cutoff = now - config.StaleInProgressTimeout;
 
         // Candidates are past the global stale timeout; a run whose manifest allows it longer
@@ -117,6 +118,7 @@ internal sealed class ReapStaleInProgressMetadataJunction(
                 "Job was stuck InProgress beyond the configured stale in-progress timeout",
                 "StaleInProgressTimeout",
                 nameof(ReapStaleInProgressMetadataJunction),
+                timeProvider,
                 CancellationToken
             )
             .ConfigureAwait(false);

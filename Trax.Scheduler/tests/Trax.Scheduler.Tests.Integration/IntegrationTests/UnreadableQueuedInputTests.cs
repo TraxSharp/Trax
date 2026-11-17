@@ -51,7 +51,9 @@ public class UnreadableQueuedInputTests : TestSetup
             .Status.Should()
             .Be(WorkQueueStatus.Queued, "a host that registers the type may still claim it");
         unknownRow.MetadataId.Should().BeNull("no run is recorded against the manifest");
-        unknownRow.ScheduledAt.Should().BeAfter(DateTime.UtcNow, "it is pushed back");
+        unknownRow
+            .ScheduledAt.Should()
+            .BeAfter(TimeProvider.System.GetUtcNow().UtcDateTime, "it is pushed back");
         unknownRow.DispatchAttempts.Should().Be(1);
         (await DataContext.Metadatas.CountAsync(m => m.ExternalId == unknown.ExternalId))
             .Should()
@@ -115,7 +117,8 @@ public class UnreadableQueuedInputTests : TestSetup
                 Manifest = manifest,
                 Reason = "test",
                 RetryCount = 3,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(deadLetter);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -129,7 +132,8 @@ public class UnreadableQueuedInputTests : TestSetup
                 InputTypeName = typeof(SchedulerTestInput).FullName.NotNull(),
                 ManifestId = manifest.Id,
                 DeadLetterId = deadLetter.Id,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(entry);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -180,7 +184,8 @@ public class UnreadableQueuedInputTests : TestSetup
                 Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(source);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -218,7 +223,8 @@ public class UnreadableQueuedInputTests : TestSetup
                 InputTypeName = inputTypeName,
                 SubjectKey = subject,
                 ReplayDecisionsOf = replayDecisionsOf,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(entry).ConfigureAwait(false);
         await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);

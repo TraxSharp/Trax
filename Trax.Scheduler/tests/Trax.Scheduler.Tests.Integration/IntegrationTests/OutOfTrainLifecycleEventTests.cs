@@ -101,10 +101,13 @@ public class OutOfTrainLifecycleEventTests
     [Test]
     public async Task A_reaped_InProgress_run_and_a_reaped_Pending_run_each_publish_Failed_once()
     {
-        var stalePending = await SeedRunAsync(TrainState.Pending, DateTime.UtcNow.AddHours(-1));
+        var stalePending = await SeedRunAsync(
+            TrainState.Pending,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1)
+        );
         var staleInProgress = await SeedRunAsync(
             TrainState.InProgress,
-            DateTime.UtcNow.AddHours(-1)
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1)
         );
 
         // The real leader path: the reapers write inside the leader transaction, and their events
@@ -145,7 +148,12 @@ public class OutOfTrainLifecycleEventTests
     {
         var stale = new List<long>();
         for (var i = 0; i < 4; i++)
-            stale.Add(await SeedRunAsync(TrainState.InProgress, DateTime.UtcNow.AddHours(-1)));
+            stale.Add(
+                await SeedRunAsync(
+                    TrainState.InProgress,
+                    TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1)
+                )
+            );
 
         // Each OnFailed waits for a second one to be in flight with it, or gives up after a while.
         _lifecycle.MeetOnFailed(TimeSpan.FromSeconds(5));
@@ -174,7 +182,10 @@ public class OutOfTrainLifecycleEventTests
     [Test]
     public async Task An_operator_cancel_of_a_pending_run_publishes_Cancelled_once()
     {
-        var pending = await SeedRunAsync(TrainState.Pending, DateTime.UtcNow);
+        var pending = await SeedRunAsync(
+            TrainState.Pending,
+            TimeProvider.System.GetUtcNow().UtcDateTime
+        );
 
         var scope = _provider.NotNull().CreateAsyncScope();
         await using (scope.ConfigureAwait(false))
@@ -211,7 +222,10 @@ public class OutOfTrainLifecycleEventTests
     [Test]
     public async Task A_run_failed_by_startup_recovery_publishes_Failed_once()
     {
-        var stuck = await SeedRunAsync(TrainState.InProgress, DateTime.UtcNow.AddMinutes(-5));
+        var stuck = await SeedRunAsync(
+            TrainState.InProgress,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5)
+        );
 
         var configuration = new SchedulerConfiguration
         {
@@ -283,7 +297,8 @@ public class OutOfTrainLifecycleEventTests
                 Name = TrainName,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         await context.Track(metadata).ConfigureAwait(false);
         await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
@@ -384,7 +399,7 @@ public class OutOfTrainLifecycleEventTests
                 _met.TrySetResult();
             try
             {
-                await _met.Task.WaitAsync(within).ConfigureAwait(false);
+                await _met.Task.WaitAsync(within, TimeProvider.System).ConfigureAwait(false);
             }
             catch (TimeoutException)
             {

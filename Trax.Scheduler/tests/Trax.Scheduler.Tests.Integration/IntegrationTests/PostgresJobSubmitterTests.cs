@@ -53,7 +53,8 @@ public class PostgresJobSubmitterTests : TestSetup
         job.Input.Should().BeNull();
         job.InputType.Should().BeNull();
         job.FetchedAt.Should().BeNull();
-        job.CreatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(10));
+        job.CreatedAt.Should()
+            .BeCloseTo(TimeProvider.System.GetUtcNow().UtcDateTime, TimeSpan.FromSeconds(10));
     }
 
     [Test]
@@ -236,7 +237,7 @@ public class PostgresJobSubmitterTests : TestSetup
     {
         // Arrange
         var jobSubmitter = new PostgresJobSubmitter(DataContext);
-        var beforeEnqueue = DateTime.UtcNow;
+        var beforeEnqueue = TimeProvider.System.GetUtcNow().UtcDateTime;
 
         // Act
         var jobId = await jobSubmitter.EnqueueAsync(metadataId: 61);
@@ -249,7 +250,8 @@ public class PostgresJobSubmitterTests : TestSetup
 
         job.Should().NotBeNull();
         job.NotNull().CreatedAt.Should().BeOnOrAfter(beforeEnqueue.AddSeconds(-1));
-        job.CreatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(10));
+        job.CreatedAt.Should()
+            .BeCloseTo(TimeProvider.System.GetUtcNow().UtcDateTime, TimeSpan.FromSeconds(10));
     }
 
     #endregion

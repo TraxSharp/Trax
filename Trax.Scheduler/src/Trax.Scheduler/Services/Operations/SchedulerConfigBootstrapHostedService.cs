@@ -156,6 +156,7 @@ internal sealed class SchedulerConfigBootstrapHostedService : IHostedService, ID
                         configuration.SettingsRefreshInterval > TimeSpan.Zero
                             ? configuration.SettingsRefreshInterval
                             : TimeSpan.FromSeconds(5),
+                    _services.GetService<TimeProvider>() ?? TimeProvider.System,
                     stoppingToken
                 )
                 .ConfigureAwait(false)

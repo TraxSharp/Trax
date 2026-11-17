@@ -23,8 +23,8 @@ public sealed class WriteResearchNote(IDataContext context)
                 {
                     Name =
                         ResearchProbe.NotePrefix + input.Topic + "-" + Guid.NewGuid().ToString("N"),
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow,
+                    CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+                    UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                 }
             )
             .ConfigureAwait(false);

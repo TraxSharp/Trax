@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+
 namespace Trax.Scheduler.Trains.ManifestManager.Utilities;
 
 using Microsoft.Extensions.Logging;
@@ -407,7 +409,7 @@ internal static class SchedulingHelpers
     /// A cron that has never succeeded is due at <see cref="Manifest.NextScheduledRun"/>, which
     /// scheduling it set to its first occurrence. One with neither value, written before that
     /// was stamped, is due at once, unless its expression has no occurrence at all (one stored
-    /// without passing <see cref="Schedule.FromCron"/>), which is never due. A cancelled run later than the last success replaces it as
+    /// without passing <see cref="Schedule.FromCron(string)"/>), which is never due. A cancelled run later than the last success replaces it as
     /// the anchor (see <see cref="ScheduleAnchor"/>), and then the next occurrence after it is due.
     /// </remarks>
     private static bool EvaluateCronSchedule(
@@ -720,7 +722,7 @@ internal static class SchedulingHelpers
             return null;
         }
 
-        var jitterSeconds = Random.Shared.Next(0, manifest.VarianceSeconds.Value + 1);
+        var jitterSeconds = RandomNumberGenerator.GetInt32(0, manifest.VarianceSeconds.Value + 1);
         return baseNextRun.AddSeconds(jitterSeconds);
     }
 

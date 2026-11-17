@@ -18,6 +18,9 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 [TestFixture]
 public class SchedulingHelpersExtraTests
 {
+    // The scheduling decisions take the time as an input; a fixed one makes them repeatable.
+    private static readonly DateTime FixedNow = new(2026, 3, 10, 12, 0, 0, DateTimeKind.Utc);
+
     private static SchedulerConfiguration NewConfig() => new();
 
     private static Manifest NewManifest()
@@ -36,7 +39,7 @@ public class SchedulingHelpersExtraTests
         m.ScheduleType = ScheduleType.OnDemand;
 
         SchedulingHelpers
-            .ShouldRunNow(m, DateTime.UtcNow, NewConfig(), NullLogger.Instance)
+            .ShouldRunNow(m, FixedNow, NewConfig(), NullLogger.Instance)
             .Should()
             .BeFalse();
     }
@@ -48,7 +51,7 @@ public class SchedulingHelpersExtraTests
         m.ScheduleType = ScheduleType.Dependent;
 
         SchedulingHelpers
-            .ShouldRunNow(m, DateTime.UtcNow, NewConfig(), NullLogger.Instance)
+            .ShouldRunNow(m, FixedNow, NewConfig(), NullLogger.Instance)
             .Should()
             .BeFalse();
     }
@@ -61,7 +64,7 @@ public class SchedulingHelpersExtraTests
         m.CronExpression = null;
 
         SchedulingHelpers
-            .ShouldRunNow(m, DateTime.UtcNow, NewConfig(), NullLogger.Instance)
+            .ShouldRunNow(m, FixedNow, NewConfig(), NullLogger.Instance)
             .Should()
             .BeFalse();
     }
@@ -74,7 +77,7 @@ public class SchedulingHelpersExtraTests
         m.CronExpression = "totally not cron syntax @@@";
 
         Action act = () =>
-            SchedulingHelpers.ShouldRunNow(m, DateTime.UtcNow, NewConfig(), NullLogger.Instance);
+            SchedulingHelpers.ShouldRunNow(m, FixedNow, NewConfig(), NullLogger.Instance);
 
         act.Should().NotThrow();
     }
@@ -87,7 +90,7 @@ public class SchedulingHelpersExtraTests
         m.IntervalSeconds = null;
 
         SchedulingHelpers
-            .ShouldRunNow(m, DateTime.UtcNow, NewConfig(), NullLogger.Instance)
+            .ShouldRunNow(m, FixedNow, NewConfig(), NullLogger.Instance)
             .Should()
             .BeFalse();
     }
@@ -100,7 +103,7 @@ public class SchedulingHelpersExtraTests
         m.IntervalSeconds = 0;
 
         SchedulingHelpers
-            .ShouldRunNow(m, DateTime.UtcNow, NewConfig(), NullLogger.Instance)
+            .ShouldRunNow(m, FixedNow, NewConfig(), NullLogger.Instance)
             .Should()
             .BeFalse();
     }
@@ -110,11 +113,11 @@ public class SchedulingHelpersExtraTests
     {
         var m = NewManifest();
         m.ScheduleType = ScheduleType.Once;
-        m.ScheduledAt = DateTime.UtcNow.AddMinutes(-1);
-        m.LastSuccessfulRun = DateTime.UtcNow.AddMinutes(-1);
+        m.ScheduledAt = FixedNow.AddMinutes(-1);
+        m.LastSuccessfulRun = FixedNow.AddMinutes(-1);
 
         SchedulingHelpers
-            .ShouldRunNow(m, DateTime.UtcNow, NewConfig(), NullLogger.Instance)
+            .ShouldRunNow(m, FixedNow, NewConfig(), NullLogger.Instance)
             .Should()
             .BeFalse();
     }
@@ -125,11 +128,11 @@ public class SchedulingHelpersExtraTests
         var m = NewManifest();
         m.ScheduleType = ScheduleType.Cron;
         m.CronExpression = "0 * * * *";
-        m.LastSuccessfulRun = DateTime.UtcNow.AddHours(-2);
+        m.LastSuccessfulRun = FixedNow.AddHours(-2);
         m.MisfireThresholdSeconds = 7200;
 
         SchedulingHelpers
-            .ShouldRunNow(m, DateTime.UtcNow, NewConfig(), NullLogger.Instance)
+            .ShouldRunNow(m, FixedNow, NewConfig(), NullLogger.Instance)
             .Should()
             .BeTrue();
     }
@@ -140,12 +143,12 @@ public class SchedulingHelpersExtraTests
         var m = NewManifest();
         m.ScheduleType = ScheduleType.Cron;
         m.CronExpression = "0 * * * *";
-        m.LastSuccessfulRun = DateTime.UtcNow.AddDays(-7);
+        m.LastSuccessfulRun = FixedNow.AddDays(-7);
         m.MisfirePolicy = MisfirePolicy.FireOnceNow;
         m.MisfireThresholdSeconds = 1;
 
         SchedulingHelpers
-            .ShouldRunNow(m, DateTime.UtcNow, NewConfig(), NullLogger.Instance)
+            .ShouldRunNow(m, FixedNow, NewConfig(), NullLogger.Instance)
             .Should()
             .BeTrue();
     }
@@ -159,12 +162,12 @@ public class SchedulingHelpersExtraTests
         var m = NewManifest();
         m.ScheduleType = ScheduleType.Cron;
         m.CronExpression = "*/30 * * * *";
-        m.LastSuccessfulRun = DateTime.UtcNow.AddDays(-2);
+        m.LastSuccessfulRun = FixedNow.AddDays(-2);
         m.MisfirePolicy = MisfirePolicy.DoNothing;
         m.MisfireThresholdSeconds = 1;
 
         Action act = () =>
-            SchedulingHelpers.ShouldRunNow(m, DateTime.UtcNow, NewConfig(), NullLogger.Instance);
+            SchedulingHelpers.ShouldRunNow(m, FixedNow, NewConfig(), NullLogger.Instance);
 
         act.Should().NotThrow();
     }
@@ -175,12 +178,12 @@ public class SchedulingHelpersExtraTests
         var m = NewManifest();
         m.ScheduleType = ScheduleType.Interval;
         m.IntervalSeconds = 60;
-        m.LastSuccessfulRun = DateTime.UtcNow.AddHours(-3);
+        m.LastSuccessfulRun = FixedNow.AddHours(-3);
         m.MisfirePolicy = MisfirePolicy.DoNothing;
         m.MisfireThresholdSeconds = 1;
 
         Action act = () =>
-            SchedulingHelpers.ShouldRunNow(m, DateTime.UtcNow, NewConfig(), NullLogger.Instance);
+            SchedulingHelpers.ShouldRunNow(m, FixedNow, NewConfig(), NullLogger.Instance);
 
         act.Should().NotThrow();
     }
@@ -191,12 +194,12 @@ public class SchedulingHelpersExtraTests
         var m = NewManifest();
         m.ScheduleType = ScheduleType.Interval;
         m.IntervalSeconds = 60;
-        m.LastSuccessfulRun = DateTime.UtcNow.AddDays(-1);
+        m.LastSuccessfulRun = FixedNow.AddDays(-1);
         m.MisfirePolicy = MisfirePolicy.FireOnceNow;
         m.MisfireThresholdSeconds = 1;
 
         SchedulingHelpers
-            .ShouldRunNow(m, DateTime.UtcNow, NewConfig(), NullLogger.Instance)
+            .ShouldRunNow(m, FixedNow, NewConfig(), NullLogger.Instance)
             .Should()
             .BeTrue();
     }
@@ -207,7 +210,7 @@ public class SchedulingHelpersExtraTests
     public void IsTimeForCron_NeverRun_ReturnsTrue()
     {
         SchedulingHelpers
-            .IsTimeForCron(lastSuccessfulRun: null, "* * * * *", DateTime.UtcNow)
+            .IsTimeForCron(lastSuccessfulRun: null, "* * * * *", FixedNow)
             .Should()
             .BeTrue();
     }
@@ -216,7 +219,7 @@ public class SchedulingHelpersExtraTests
     public void IsTimeForCron_RanRecently_ReturnsFalse()
     {
         SchedulingHelpers
-            .IsTimeForCron(DateTime.UtcNow.AddSeconds(-1), "0 0 * * *", DateTime.UtcNow)
+            .IsTimeForCron(FixedNow.AddSeconds(-1), "0 0 * * *", FixedNow)
             .Should()
             .BeFalse();
     }
@@ -225,7 +228,7 @@ public class SchedulingHelpersExtraTests
     public void IsTimeForCron_OverdueByLong_ReturnsTrue()
     {
         SchedulingHelpers
-            .IsTimeForCron(DateTime.UtcNow.AddDays(-2), "0 0 * * *", DateTime.UtcNow)
+            .IsTimeForCron(FixedNow.AddDays(-2), "0 0 * * *", FixedNow)
             .Should()
             .BeTrue();
     }
@@ -238,7 +241,7 @@ public class SchedulingHelpersExtraTests
     public void IsTimeForInterval_NeverRun_ReturnsTrue()
     {
         SchedulingHelpers
-            .IsTimeForInterval(lastSuccessfulRun: null, 60, DateTime.UtcNow)
+            .IsTimeForInterval(lastSuccessfulRun: null, 60, FixedNow)
             .Should()
             .BeTrue();
     }
@@ -247,7 +250,7 @@ public class SchedulingHelpersExtraTests
     public void IsTimeForInterval_NotYetDue_ReturnsFalse()
     {
         SchedulingHelpers
-            .IsTimeForInterval(DateTime.UtcNow.AddSeconds(-30), 60, DateTime.UtcNow)
+            .IsTimeForInterval(FixedNow.AddSeconds(-30), 60, FixedNow)
             .Should()
             .BeFalse();
     }
@@ -256,7 +259,7 @@ public class SchedulingHelpersExtraTests
     public void IsTimeForInterval_PastDue_ReturnsTrue()
     {
         SchedulingHelpers
-            .IsTimeForInterval(DateTime.UtcNow.AddMinutes(-5), 60, DateTime.UtcNow)
+            .IsTimeForInterval(FixedNow.AddMinutes(-5), 60, FixedNow)
             .Should()
             .BeTrue();
     }
@@ -279,7 +282,7 @@ public class SchedulingHelpersExtraTests
         bool expected
     )
     {
-        var now = DateTime.UtcNow;
+        var now = FixedNow;
         var m = NewManifest();
         m.ScheduleType = ScheduleType.Interval;
         m.IntervalSeconds = 300;
@@ -308,7 +311,7 @@ public class SchedulingHelpersExtraTests
         m.ScheduleType = ScheduleType.Interval;
         m.IntervalSeconds = 60;
         m.VarianceSeconds = null;
-        m.LastSuccessfulRun = DateTime.UtcNow;
+        m.LastSuccessfulRun = FixedNow;
 
         var result = Invoke(m);
         result.Should().BeNull();
@@ -334,7 +337,7 @@ public class SchedulingHelpersExtraTests
         m.ScheduleType = ScheduleType.Interval;
         m.IntervalSeconds = 60;
         m.VarianceSeconds = 10;
-        m.LastSuccessfulRun = DateTime.UtcNow;
+        m.LastSuccessfulRun = FixedNow;
 
         var result = Invoke(m);
         result.Should().NotBeNull();
@@ -363,7 +366,7 @@ public class SchedulingHelpersExtraTests
         var m = NewManifest();
         m.ScheduleType = ScheduleType.Once;
         m.VarianceSeconds = 10;
-        m.LastSuccessfulRun = DateTime.UtcNow;
+        m.LastSuccessfulRun = FixedNow;
 
         var result = Invoke(m);
         result.Should().BeNull();
@@ -376,7 +379,7 @@ public class SchedulingHelpersExtraTests
         m.ScheduleType = ScheduleType.Cron;
         m.CronExpression = "garbage";
         m.VarianceSeconds = 10;
-        m.LastSuccessfulRun = DateTime.UtcNow;
+        m.LastSuccessfulRun = FixedNow;
 
         var result = Invoke(m);
         result.Should().BeNull();

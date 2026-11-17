@@ -342,7 +342,8 @@ public class OperationsServiceBatchTests : TestSetup
                 Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = state;
         await DataContext.Track(metadata).ConfigureAwait(false);
@@ -359,7 +360,8 @@ public class OperationsServiceBatchTests : TestSetup
                 TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = null,
                 InputTypeName = null,
-            }
+            },
+            TimeProvider.System
         );
         entry.Status = status;
         await DataContext.Track(entry).ConfigureAwait(false);

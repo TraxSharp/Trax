@@ -51,6 +51,9 @@ internal sealed class LocalWorkerService(
     LocalWorkerSlots? slots = null
 ) : BackgroundService
 {
+    // The container's clock (AddTrax registers the system's), or the system's when it has none.
+    private TimeProvider Clock => serviceProvider.GetService<TimeProvider>() ?? TimeProvider.System;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation(
@@ -83,7 +86,8 @@ internal sealed class LocalWorkerService(
 
                 if (claimedCount == 0)
                 {
-                    await Task.Delay(options.PollingInterval, stoppingToken).ConfigureAwait(false);
+                    await Task.Delay(options.PollingInterval, Clock, stoppingToken)
+                        .ConfigureAwait(false);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -93,7 +97,8 @@ internal sealed class LocalWorkerService(
             catch (Exception ex)
             {
                 logger.LogError(ex, "Worker {WorkerId} encountered an error", workerId);
-                await Task.Delay(options.PollingInterval, stoppingToken).ConfigureAwait(false);
+                await Task.Delay(options.PollingInterval, Clock, stoppingToken)
+                    .ConfigureAwait(false);
             }
         }
 
@@ -134,7 +139,7 @@ internal sealed class LocalWorkerService(
 
             // Claim all jobs in the batch
             foreach (var job in jobs)
-                job.FetchedAt = DateTime.UtcNow;
+                job.FetchedAt = Clock.GetUtcNow().UtcDateTime;
 
             await dataContext.SaveChanges(stoppingToken).ConfigureAwait(false);
             await dataContext.CommitTransaction().ConfigureAwait(false);
@@ -390,6 +395,7 @@ internal sealed class LocalWorkerService(
                     "The job failed before its run started. The worker's log has the error.",
                     "JobFailedBeforeRun",
                     nameof(LocalWorkerService),
+                    Clock,
                     CancellationToken.None
                 )
                 .ConfigureAwait(false);
@@ -488,7 +494,7 @@ internal sealed class LocalWorkerService(
                     await using var heartbeatScopeDisposal = heartbeatScope.ConfigureAwait(false);
                     var heartbeatContext =
                         heartbeatScope.ServiceProvider.GetRequiredService<IDataContext>();
-                    var now = DateTime.UtcNow;
+                    var now = Clock.GetUtcNow().UtcDateTime;
 
                     await heartbeatContext
                         .BackgroundJobs.Where(j => ids.Contains(j.Id))

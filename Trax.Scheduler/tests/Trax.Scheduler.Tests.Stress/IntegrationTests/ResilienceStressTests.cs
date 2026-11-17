@@ -50,7 +50,7 @@ public class ResilienceStressTests : TestSetup
         var manifest = (await SeedManifests(1, group.Id))[0];
 
         var dispatcherName = typeof(JobDispatcherTrain).FullName.NotNull();
-        var expired = DateTime.UtcNow.AddHours(-2);
+        var expired = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2);
 
         await SeedAdminMetadata(dispatcherName, dispatcherRows, expired);
         var referencedIds = await SeedAdminMetadataReturningIds(
@@ -278,7 +278,8 @@ public class ResilienceStressTests : TestSetup
                     Manifest = reloaded,
                     Reason = "scale-test",
                     RetryCount = 3,
-                }
+                },
+                TimeProvider.System
             );
             deadLetter.RetryMetadataId = id;
             await DataContext.Track(deadLetter).ConfigureAwait(false);
@@ -313,10 +314,11 @@ public class ResilienceStressTests : TestSetup
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
                     ParentId = parentId,
-                }
+                },
+                TimeProvider.System
             );
             child.TrainState = TrainState.InProgress;
-            child.StartTime = DateTime.UtcNow;
+            child.StartTime = TimeProvider.System.GetUtcNow().UtcDateTime;
             await DataContext.Track(child).ConfigureAwait(false);
         }
         await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
@@ -326,7 +328,7 @@ public class ResilienceStressTests : TestSetup
     private async Task SeedManifestMetadata(Manifest manifest, int count, TrainState state)
     {
         const int flushEvery = 5000;
-        var baseTime = DateTime.UtcNow.AddHours(-1);
+        var baseTime = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1);
         for (var i = 0; i < count; i++)
         {
             var metadata = Metadata.Create(
@@ -336,7 +338,8 @@ public class ResilienceStressTests : TestSetup
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
                     ManifestId = manifest.Id,
-                }
+                },
+                TimeProvider.System
             );
             metadata.TrainState = state;
             metadata.StartTime = baseTime;
@@ -360,7 +363,8 @@ public class ResilienceStressTests : TestSetup
                 Name = name,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = TrainState.Completed;
         metadata.StartTime = startTime;

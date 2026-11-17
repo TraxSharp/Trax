@@ -32,7 +32,7 @@ public class SqliteDashboardMetricsTests : TestSetup
     {
         // Whole milliseconds: Sqlite reads three fractional digits, so a start with finer ticks would
         // shift a 250 ms duration by up to a millisecond and the average past its tolerance.
-        var now = DateTime.UtcNow.AddMinutes(-30);
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-30);
         var start = new DateTime(
             now.Ticks - now.Ticks % TimeSpan.TicksPerMillisecond,
             DateTimeKind.Utc
@@ -80,7 +80,7 @@ public class SqliteDashboardMetricsTests : TestSetup
     [Test]
     public async Task Average_durations_leave_out_admin_trains_when_asked()
     {
-        var start = DateTime.UtcNow.AddHours(-1);
+        var start = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1);
         await Seed("Trax.Tests.IUser", TrainState.Completed, start, start.AddSeconds(2));
         await Seed(AdminTrains.FullNames[0], TrainState.Completed, start, start.AddSeconds(9));
 
@@ -100,7 +100,7 @@ public class SqliteDashboardMetricsTests : TestSetup
     [Test]
     public async Task A_trains_metric_series_reads_on_Sqlite()
     {
-        var now = DateTime.UtcNow;
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime;
         var start = new DateTime(
             now.Ticks - now.Ticks % TimeSpan.TicksPerHour,
             DateTimeKind.Utc
@@ -144,7 +144,8 @@ public class SqliteDashboardMetricsTests : TestSetup
                 Name = name,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         meta.TrainState = state;
         meta.StartTime = DateTime.SpecifyKind(start, DateTimeKind.Utc);

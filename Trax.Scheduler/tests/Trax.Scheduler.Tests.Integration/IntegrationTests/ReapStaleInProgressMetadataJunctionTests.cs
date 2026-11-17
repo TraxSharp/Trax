@@ -58,7 +58,7 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
         var metadata = await CreateMetadata(
             manifest,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddMinutes(-60)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-60)
         );
 
         // Act
@@ -90,7 +90,7 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
         var metadata = await CreateMetadata(
             manifest,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddMinutes(-10)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10)
         );
 
         // Act
@@ -117,7 +117,7 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
         var metadata = await CreateMetadata(
             manifest,
             TrainState.Pending,
-            startTime: DateTime.UtcNow.AddMinutes(-60)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-60)
         );
 
         // Act
@@ -147,7 +147,7 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
         var metadata = await CreateMetadata(
             manifest,
             TrainState.Completed,
-            startTime: DateTime.UtcNow.AddMinutes(-60)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-60)
         );
 
         // Act
@@ -172,7 +172,7 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
         var metadata = await CreateMetadata(
             manifest,
             TrainState.Failed,
-            startTime: DateTime.UtcNow.AddMinutes(-60)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-60)
         );
 
         // Act
@@ -197,7 +197,7 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
         var metadata = await CreateMetadata(
             manifest,
             TrainState.Cancelled,
-            startTime: DateTime.UtcNow.AddMinutes(-60)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-60)
         );
 
         // Act
@@ -226,21 +226,21 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
         var metadata1 = await CreateMetadata(
             manifest1,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddMinutes(-45)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-45)
         );
 
         var manifest2 = await CreateManifest();
         var metadata2 = await CreateMetadata(
             manifest2,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddMinutes(-60)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-60)
         );
 
         var manifest3 = await CreateManifest();
         var metadata3 = await CreateMetadata(
             manifest3,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddHours(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
 
         // Act
@@ -278,14 +278,14 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
         var staleMetadata = await CreateMetadata(
             staleManifest,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddMinutes(-60)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-60)
         );
 
         var recentManifest = await CreateManifest();
         var recentMetadata = await CreateMetadata(
             recentManifest,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddMinutes(-5)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5)
         );
 
         // Act
@@ -333,7 +333,7 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
         var metadata = await CreateMetadata(
             manifest,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddMinutes(-1)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-1)
         );
 
         // Act
@@ -363,7 +363,7 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
         var metadata = await CreateMetadata(
             manifest,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddMinutes(-25)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-25)
         );
 
         // Act
@@ -392,7 +392,7 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
         var metadata = await CreateMetadata(
             manifest,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddMinutes(-60)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-60)
         );
 
         // Act
@@ -429,7 +429,8 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "ManualTest" },
                 ManifestId = null,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = TrainState.InProgress;
 
@@ -439,7 +440,11 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
         await DataContext
             .Metadatas.Where(m => m.Id == metadata.Id)
             .ExecuteUpdateAsync(
-                s => s.SetProperty(m => m.StartTime, DateTime.UtcNow.AddMinutes(-60)),
+                s =>
+                    s.SetProperty(
+                        m => m.StartTime,
+                        TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-60)
+                    ),
                 CancellationToken.None
             );
         DataContext.Reset();
@@ -500,7 +505,8 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "StaleInProgressTest" },
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = state;
 

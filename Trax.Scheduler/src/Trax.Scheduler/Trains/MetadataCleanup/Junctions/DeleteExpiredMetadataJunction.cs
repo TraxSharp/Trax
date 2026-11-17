@@ -47,6 +47,7 @@ internal sealed class DeleteExpiredMetadataJunction(
     IDataContext dataContext,
     SchedulerConfiguration configuration,
     ILogger<DeleteExpiredMetadataJunction> logger,
+    TimeProvider timeProvider,
     ITrainDiscoveryService? discoveryService = null
 ) : EffectJunction<MetadataCleanupRequest, Unit>
 {
@@ -65,7 +66,7 @@ internal sealed class DeleteExpiredMetadataJunction(
                 conflict.ToString()
             );
 
-        var now = DateTime.UtcNow;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
         var batchSize = BatchSize(cleanupConfig.DeleteBatchSize);
         var totals = new CleanupTotals();
 

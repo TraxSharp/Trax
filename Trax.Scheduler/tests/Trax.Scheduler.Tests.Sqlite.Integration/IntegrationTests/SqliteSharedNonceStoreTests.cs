@@ -53,7 +53,12 @@ public class SqliteSharedNonceStoreTests
         await using var first = RunnerInstance();
         await using var second = RunnerInstance();
         var body = Encoding.UTF8.GetBytes("""{"trainName":"x"}""");
-        var signature = RunnerRequestSignature.Create(Key, RunnerRequestPurpose.Run, body);
+        var signature = RunnerRequestSignature.Create(
+            Key,
+            RunnerRequestPurpose.Run,
+            body,
+            TimeProvider.System
+        );
 
         (
             await first
@@ -79,7 +84,7 @@ public class SqliteSharedNonceStoreTests
     {
         await using var instance = RunnerInstance();
         var store = instance.GetRequiredService<INonceStore>();
-        var now = DateTimeOffset.UtcNow;
+        var now = TimeProvider.System.GetUtcNow();
 
         (await store.TryRecordAsync("a", now.AddMinutes(-1), now, CancellationToken.None))
             .Should()
@@ -102,7 +107,7 @@ public class SqliteSharedNonceStoreTests
             first.GetRequiredService<INonceStore>(),
             second.GetRequiredService<INonceStore>(),
         };
-        var now = DateTimeOffset.UtcNow;
+        var now = TimeProvider.System.GetUtcNow();
 
         var recorded = await Task.WhenAll(
             Enumerable
@@ -124,7 +129,7 @@ public class SqliteSharedNonceStoreTests
     {
         await using var instance = RunnerInstance();
         var store = instance.GetRequiredService<INonceStore>();
-        var now = DateTimeOffset.UtcNow;
+        var now = TimeProvider.System.GetUtcNow();
         await store.TryRecordAsync("expired", now.AddMinutes(-1), now, CancellationToken.None);
 
         for (var i = 0; i < DatabaseNonceStore.SweepEvery; i++)
@@ -145,7 +150,7 @@ public class SqliteSharedNonceStoreTests
     {
         await using var instance = RunnerInstance();
         var store = instance.GetRequiredService<INonceStore>();
-        var now = DateTimeOffset.UtcNow;
+        var now = TimeProvider.System.GetUtcNow();
         (await store.TryRecordAsync("first", now.AddMinutes(5), now, CancellationToken.None))
             .Should()
             .BeTrue();

@@ -142,8 +142,8 @@ public abstract class TestSetup
             MaxActiveJobs = maxActiveJobs,
             Priority = priority,
             IsEnabled = isEnabled,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await dataContext.Track(group).ConfigureAwait(false);
         await dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);

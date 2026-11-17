@@ -63,7 +63,12 @@ public class NonceStoreSelectionTests
         });
         var verifier = provider.GetRequiredService<RunnerRequestVerifier>();
         var body = "{}"u8.ToArray();
-        var signature = RunnerRequestSignature.Create(Key, RunnerRequestPurpose.Run, body);
+        var signature = RunnerRequestSignature.Create(
+            Key,
+            RunnerRequestPurpose.Run,
+            body,
+            TimeProvider.System
+        );
 
         provider.GetRequiredService<INonceStore>().Should().BeOfType<InMemoryNonceStore>();
         (await verifier.VerifyAsync(RunnerRequestPurpose.Run, body, signature, requireFresh: true))
@@ -94,7 +99,12 @@ public class NonceStoreSelectionTests
             .VerifyAsync(
                 RunnerRequestPurpose.Run,
                 body,
-                RunnerRequestSignature.Create(Key, RunnerRequestPurpose.Run, body),
+                RunnerRequestSignature.Create(
+                    Key,
+                    RunnerRequestPurpose.Run,
+                    body,
+                    TimeProvider.System
+                ),
                 requireFresh: true
             );
 

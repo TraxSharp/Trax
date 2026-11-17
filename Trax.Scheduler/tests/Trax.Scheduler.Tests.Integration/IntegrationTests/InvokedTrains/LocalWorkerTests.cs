@@ -76,7 +76,8 @@ public class LocalWorkerTests(ClusterStore store)
                     MetadataId = runId,
                     Input = "{}",
                     InputType = "Nowhere.NotAnInput",
-                }
+                },
+                TimeProvider.System
             );
             await context.Track(job);
             await context.SaveChanges(CancellationToken.None);
@@ -97,7 +98,7 @@ public class LocalWorkerTests(ClusterStore store)
         await worker.StartAsync(CancellationToken.None);
         try
         {
-            await JobGone(jobId).WaitAsync(Bound);
+            await JobGone(jobId).WaitAsync(Bound, TimeProvider.System);
         }
         finally
         {

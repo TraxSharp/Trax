@@ -558,7 +558,8 @@ public partial class SchedulerConfigurationBuilder
                 CreateSubmitter = services => new Services.JobSubmitter.HttpJobSubmitter(
                     services.GetRequiredService<IHttpClientFactory>().CreateClient(clientName),
                     options,
-                    services.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.JobSubmitter.HttpJobSubmitter>>()
+                    services.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.JobSubmitter.HttpJobSubmitter>>(),
+                    services.GetRequiredService<TimeProvider>()
                 ),
                 Description = $"UseRemoteWorkers({options.BaseUrl})",
             }

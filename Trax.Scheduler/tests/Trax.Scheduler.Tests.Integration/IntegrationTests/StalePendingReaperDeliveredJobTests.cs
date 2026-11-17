@@ -38,8 +38,14 @@ public class StalePendingReaperDeliveredJobTests : TestSetup
 
             // Dispatched 25 minutes ago, and its job is sitting unclaimed in the local worker
             // queue because every worker is busy with earlier jobs.
-            var metadata = await CreatePendingMetadata(manifest, DateTime.UtcNow.AddMinutes(-25));
-            var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = metadata.Id });
+            var metadata = await CreatePendingMetadata(
+                manifest,
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-25)
+            );
+            var job = BackgroundJob.Create(
+                new CreateBackgroundJob { MetadataId = metadata.Id },
+                TimeProvider.System
+            );
             await DataContext.Track(job);
             await DataContext.SaveChanges(CancellationToken.None);
             DataContext.Reset();
@@ -99,7 +105,8 @@ public class StalePendingReaperDeliveredJobTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
 
         await DataContext.Track(metadata).ConfigureAwait(false);

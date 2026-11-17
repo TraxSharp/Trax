@@ -20,8 +20,8 @@ public class PollingDelayTests
         await cts.CancelAsync();
 
         var waited = await PollingDelay
-            .WaitAsync(() => TimeSpan.Zero, cts.Token)
-            .WaitAsync(TimeSpan.FromSeconds(5), CancellationToken.None);
+            .WaitAsync(() => TimeSpan.Zero, TimeProvider.System, cts.Token)
+            .WaitAsync(TimeSpan.FromSeconds(5), TimeProvider.System, CancellationToken.None);
 
         waited.Should().BeFalse();
     }
@@ -33,8 +33,8 @@ public class PollingDelayTests
         await cts.CancelAsync();
 
         var waited = await PollingDelay
-            .WaitAsync(() => TimeSpan.FromSeconds(-1), cts.Token)
-            .WaitAsync(TimeSpan.FromSeconds(5), CancellationToken.None);
+            .WaitAsync(() => TimeSpan.FromSeconds(-1), TimeProvider.System, cts.Token)
+            .WaitAsync(TimeSpan.FromSeconds(5), TimeProvider.System, CancellationToken.None);
 
         waited.Should().BeFalse();
     }
@@ -42,15 +42,16 @@ public class PollingDelayTests
     [Test]
     public async Task A_zero_interval_waits_the_shortest_polling_interval()
     {
-        var elapsed = Stopwatch.StartNew();
+        var elapsedStarted = TimeProvider.System.GetTimestamp();
 
         var waited = await PollingDelay
-            .WaitAsync(() => TimeSpan.Zero, CancellationToken.None)
-            .WaitAsync(TimeSpan.FromSeconds(10));
+            .WaitAsync(() => TimeSpan.Zero, TimeProvider.System, CancellationToken.None)
+            .WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
 
         waited.Should().BeTrue();
-        elapsed
-            .Elapsed.Should()
+        TimeProvider
+            .System.GetElapsedTime(elapsedStarted)
+            .Should()
             .BeGreaterThanOrEqualTo(
                 SchedulerConfigLimits.MinTimerInterval - TimeSpan.FromMilliseconds(50)
             );
@@ -62,8 +63,8 @@ public class PollingDelayTests
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
 
         var waited = await PollingDelay
-            .WaitAsync(() => TimeSpan.FromHours(1), cts.Token)
-            .WaitAsync(TimeSpan.FromSeconds(5), CancellationToken.None);
+            .WaitAsync(() => TimeSpan.FromHours(1), TimeProvider.System, cts.Token)
+            .WaitAsync(TimeSpan.FromSeconds(5), TimeProvider.System, CancellationToken.None);
 
         waited.Should().BeFalse();
     }

@@ -18,8 +18,11 @@ namespace Trax.Scheduler.Sqs.Services;
 /// A Lambda function (or other SQS consumer) runs <see cref="Trains.JobRunner.JobRunnerTrain"/>
 /// to execute the train.
 /// </remarks>
-internal sealed class SqsJobSubmitter(IAmazonSQS sqsClient, SqsWorkerOptions options)
-    : IJobSubmitter
+internal sealed class SqsJobSubmitter(
+    IAmazonSQS sqsClient,
+    SqsWorkerOptions options,
+    TimeProvider timeProvider
+) : IJobSubmitter
 {
     /// <inheritdoc />
     public Task<string> EnqueueAsync(long metadataId) =>
@@ -77,7 +80,8 @@ internal sealed class SqsJobSubmitter(IAmazonSQS sqsClient, SqsWorkerOptions opt
                     StringValue = RunnerRequestSignature.Create(
                         key,
                         RunnerRequestPurpose.Execute,
-                        Encoding.UTF8.GetBytes(body)
+                        Encoding.UTF8.GetBytes(body),
+                        timeProvider
                     ),
                 },
             };

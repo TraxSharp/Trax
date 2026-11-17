@@ -86,6 +86,10 @@ public partial class SchedulerConfigurationBuilder
             ServiceDescriptor.Singleton<ICancellationRegistry, CancellationRegistry>()
         );
 
+        // The clock everything the scheduler stamps and compares is read from. AddTrax registers
+        // the system's; a host that registered its own keeps it.
+        _parentBuilder.ServiceCollection.TryAddSingleton(TimeProvider.System);
+
         // Register ITraxScheduler. Built by the container, then handed what its dead-letter
         // requeue resumes runs with, so its public constructors stay as they are.
         _parentBuilder.ServiceCollection.TryAddScoped<TraxScheduler>();

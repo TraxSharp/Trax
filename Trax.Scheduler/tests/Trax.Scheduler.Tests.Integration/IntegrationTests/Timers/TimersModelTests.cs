@@ -305,7 +305,7 @@ public class TimersModelTests(ClusterStore store)
                             test._api.NotNull().FireTimers(),
                             test._api2.NotNull().FireTimers()
                         )
-                        .WaitAsync(Bound)
+                        .WaitAsync(Bound, TimeProvider.System)
                         .ConfigureAwait(false);
                     Fired(both.SelectMany(b => b).ToList(), readsVersion2: false);
                     break;
@@ -479,14 +479,14 @@ public class TimersModelTests(ClusterStore store)
 
             test._gate.Arm();
             var held = Advance(test._pausing.NotNull(), draft, trigger.ToString());
-            await test._gate.Reached.WaitAsync(Bound).ConfigureAwait(false);
+            await test._gate.Reached.WaitAsync(Bound, TimeProvider.System).ConfigureAwait(false);
             Fired(
                 await test._api.NotNull().FireTimers().ConfigureAwait(false),
                 readsVersion2: false
             );
             test._gate.Release();
 
-            (await held.WaitAsync(Bound).ConfigureAwait(false))
+            (await held.WaitAsync(Bound, TimeProvider.System).ConfigureAwait(false))
                 .Should()
                 .NotBeOfType<AdvanceOutcome.Advanced>(
                     $"the fire won, and the client's event meets Expired. See {Adr}"
@@ -504,7 +504,9 @@ public class TimersModelTests(ClusterStore store)
             ReminderPublishGate.Reset();
             ReminderPublishGate.Armed = true;
             var publish = test._api.NotNull().Publish(draft.User, draft.Id, NextRequest());
-            await ReminderPublishGate.Entered.WaitAsync(Bound).ConfigureAwait(false);
+            await ReminderPublishGate
+                .Entered.WaitAsync(Bound, TimeProvider.System)
+                .ConfigureAwait(false);
             var underClaim = await test._api2.NotNull().FireTimers().ConfigureAwait(false);
             underClaim
                 .Should()
@@ -515,7 +517,7 @@ public class TimersModelTests(ClusterStore store)
             // The sweep fires every other draft that is due, which the model applies as any sweep's.
             Fired(underClaim, readsVersion2: false, waiting: draft);
             ReminderPublishGate.Release();
-            (await publish.WaitAsync(Bound).ConfigureAwait(false))
+            (await publish.WaitAsync(Bound, TimeProvider.System).ConfigureAwait(false))
                 .Should()
                 .BeOfType<AdvanceOutcome.Advanced>();
             ReminderPublishGate.Reset();

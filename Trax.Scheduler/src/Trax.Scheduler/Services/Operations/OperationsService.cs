@@ -58,6 +58,12 @@ public partial class OperationsService : IOperationsService
     private readonly IServiceProvider? _services;
 
     /// <summary>
+    /// The clock the service reads the time from: the container's <see cref="TimeProvider"/>
+    /// (AddTrax registers the system's), or the system's when the service has no container.
+    /// </summary>
+    private TimeProvider Clock => _services?.GetService<TimeProvider>() ?? TimeProvider.System;
+
+    /// <summary>
     /// The constructor dependency injection uses. The service provider is the scope's own, and
     /// <see cref="RunTrainAsync"/> resolves from it what only a run needs: the job submitter the
     /// train is routed to, and the authorization services the mediator would consult.
@@ -958,7 +964,8 @@ public partial class OperationsService : IOperationsService
                 Name = trainName,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            Clock
         );
 
         var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
@@ -1217,10 +1224,11 @@ public partial class OperationsService : IOperationsService
                     Name = nameof(OperationsService),
                     ExternalId = string.Empty,
                     Input = null,
-                }
+                },
+                Clock
             );
             failure.AddException(submitFailure);
-            var endTime = DateTime.UtcNow;
+            var endTime = Clock.GetUtcNow().UtcDateTime;
 
             if (db.SupportsSetUpdates())
                 return await pending
@@ -2031,7 +2039,7 @@ public partial class OperationsService : IOperationsService
         if (NoDispatcherRefusal(db) is { } noDispatcher)
             return new TriggerManifestResult(Success: false, noDispatcher, Trigger: null);
 
-        var now = DateTime.UtcNow;
+        var now = Clock.GetUtcNow().UtcDateTime;
         // A delay past the last time a DateTime holds cannot be a due time; refused rather than
         // left to throw ArgumentOutOfRangeException from the addition.
         if (delay is { } tooLong && tooLong > DateTime.MaxValue - now)
@@ -2046,7 +2054,7 @@ public partial class OperationsService : IOperationsService
         // The trigger ITraxScheduler.TriggerAsync and the batch triggers use, so a manifest
         // triggered here is triggered exactly as one triggered by name from code.
         var outcome = await SchedulerTrigger
-            .TriggerManifestAsync(db, manifest, runAt, askAfresh, seams: null, ct)
+            .TriggerManifestAsync(db, manifest, runAt, askAfresh, seams: null, Clock, ct)
             .ConfigureAwait(false);
         _changeSignal?.Notify(ChangeDomain.WorkQueue);
 
@@ -2229,7 +2237,7 @@ public partial class OperationsService : IOperationsService
         CancellationToken ct
     )
     {
-        var now = DateTime.UtcNow;
+        var now = Clock.GetUtcNow().UtcDateTime;
         try
         {
             foreach (var (id, manifest) in targets)
@@ -2241,6 +2249,7 @@ public partial class OperationsService : IOperationsService
                         runAt: now,
                         tally.AskAfresh,
                         seams: null,
+                        Clock,
                         ct
                     )
                     .ConfigureAwait(false);
@@ -2384,7 +2393,7 @@ public partial class OperationsService : IOperationsService
         CancellationToken ct
     )
     {
-        var now = DateTime.UtcNow;
+        var now = Clock.GetUtcNow().UtcDateTime;
         var differing = groups.Where(g => g.IsEnabled != enabled);
         var changed = db.SupportsSetUpdates()
             ? await differing
@@ -2539,7 +2548,7 @@ public partial class OperationsService : IOperationsService
             if (heldBy is null)
                 queuedBehind = await db
                     .WorkQueues.AsNoTracking()
-                    .DispatchedAheadOf(entry, DateTime.UtcNow)
+                    .DispatchedAheadOf(entry, Clock.GetUtcNow().UtcDateTime)
                     .Select(b => (long?)b.Id)
                     .FirstOrDefaultAsync(ct)
                     .ConfigureAwait(false);
@@ -2642,7 +2651,7 @@ public partial class OperationsService : IOperationsService
                 manifest.CronExpression,
                 manifest.IntervalSeconds,
                 update,
-                DateTime.UtcNow
+                Clock.GetUtcNow().UtcDateTime
             ) is
             { } refusal
         )
@@ -2803,7 +2812,7 @@ public partial class OperationsService : IOperationsService
                 )
             );
 
-        group.UpdatedAt = DateTime.UtcNow;
+        group.UpdatedAt = Clock.GetUtcNow().UtcDateTime;
         await db.SaveChanges(ct).ConfigureAwait(false);
         _changeSignal?.Notify(ChangeDomain.ManifestGroup);
 
@@ -3001,7 +3010,7 @@ public partial class OperationsService : IOperationsService
         CancellationToken ct
     )
     {
-        var now = DateTime.UtcNow;
+        var now = Clock.GetUtcNow().UtcDateTime;
         var todayStart = now.Date;
         var last7d = now.AddDays(-7);
 
@@ -3225,7 +3234,7 @@ public partial class OperationsService : IOperationsService
     {
         using var process = Process.GetCurrentProcess();
         var startTimeUtc = process.StartTime.ToUniversalTime();
-        var now = DateTime.UtcNow;
+        var now = Clock.GetUtcNow().UtcDateTime;
         return new ServerMetrics(
             ProcessStartTimeUtc: startTimeUtc,
             UptimeSeconds: (now - startTimeUtc).TotalSeconds,
@@ -3570,7 +3579,7 @@ public partial class OperationsService : IOperationsService
 
         foreach (var (setting, value) in changes)
             setting.WriteRow(row, value);
-        row.UpdatedAt = DateTime.UtcNow;
+        row.UpdatedAt = Clock.GetUtcNow().UtcDateTime;
 
         await db.SaveChanges(ct).ConfigureAwait(false);
 

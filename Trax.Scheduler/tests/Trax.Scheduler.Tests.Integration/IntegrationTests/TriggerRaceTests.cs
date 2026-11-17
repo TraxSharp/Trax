@@ -82,9 +82,10 @@ public class TriggerRaceTests : TestSetup
             TraxScheduler.TriggerManifestAsync(
                 DataContext,
                 manifest,
-                DateTime.UtcNow,
+                TimeProvider.System.GetUtcNow().UtcDateTime,
                 askAfresh: false,
                 seams,
+                TimeProvider.System,
                 CancellationToken.None
             );
 
@@ -117,9 +118,10 @@ public class TriggerRaceTests : TestSetup
             TraxScheduler.TriggerManifestAsync(
                 DataContext,
                 manifest,
-                DateTime.UtcNow,
+                TimeProvider.System.GetUtcNow().UtcDateTime,
                 askAfresh: false,
                 seams,
+                TimeProvider.System,
                 CancellationToken.None
             );
 
@@ -145,9 +147,10 @@ public class TriggerRaceTests : TestSetup
             TraxScheduler.TriggerManifestAsync(
                 DataContext,
                 manifest,
-                DateTime.UtcNow,
+                TimeProvider.System.GetUtcNow().UtcDateTime,
                 askAfresh: false,
                 seams,
+                TimeProvider.System,
                 CancellationToken.None
             );
 
@@ -184,7 +187,8 @@ public class TriggerRaceTests : TestSetup
                     Input = manifest.Properties,
                     InputTypeName = manifest.PropertyTypeName,
                     ManifestId = manifest.Id,
-                }
+                },
+                TimeProvider.System
             );
             await db.Track(entry).ConfigureAwait(false);
             await db.SaveChanges(ct).ConfigureAwait(false);
@@ -208,10 +212,11 @@ public class TriggerRaceTests : TestSetup
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
                     ManifestId = manifest.Id,
-                }
+                },
+                TimeProvider.System
             );
             run.TrainState = TrainState.Completed;
-            run.EndTime = DateTime.UtcNow;
+            run.EndTime = TimeProvider.System.GetUtcNow().UtcDateTime;
             await db.Track(run).ConfigureAwait(false);
             await db.SaveChanges(ct).ConfigureAwait(false);
             await db
@@ -220,7 +225,10 @@ public class TriggerRaceTests : TestSetup
                     s =>
                         s.SetProperty(w => w.Status, WorkQueueStatus.Dispatched)
                             .SetProperty(w => w.MetadataId, run.Id)
-                            .SetProperty(w => w.DispatchedAt, DateTime.UtcNow),
+                            .SetProperty(
+                                w => w.DispatchedAt,
+                                TimeProvider.System.GetUtcNow().UtcDateTime
+                            ),
                     ct
                 )
                 .ConfigureAwait(false);

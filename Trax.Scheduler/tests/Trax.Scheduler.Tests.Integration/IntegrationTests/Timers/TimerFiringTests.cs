@@ -161,7 +161,7 @@ public class TimerFiringTests(ClusterStore store)
         var before = await _db.NotNull().Revision(row);
 
         var fires = await Task.WhenAll(_api.NotNull().FireTimers(), _api2.NotNull().FireTimers())
-            .WaitAsync(Bound);
+            .WaitAsync(Bound, TimeProvider.System);
 
         var mine = fires.SelectMany(f => f).Where(r => r.InstanceId == id).ToList();
         mine.Count(r => string.Equals(r.Outcome, TimerFireResult.Fired, StringComparison.Ordinal))
@@ -233,7 +233,7 @@ public class TimerFiringTests(ClusterStore store)
 
         // Each host sweeps until a sweep fires nothing; neither may wait on the other's locks.
         var results = await Task.WhenAll(Drain(_api.NotNull()), Drain(_api2.NotNull()))
-            .WaitAsync(Bound);
+            .WaitAsync(Bound, TimeProvider.System);
 
         var fired = results
             .SelectMany(r => r)
@@ -273,7 +273,7 @@ public class TimerFiringTests(ClusterStore store)
         await _db.NotNull().MakeDue(row);
         var due = await _db.NotNull().DueAt(row);
         var revision = await _db.NotNull().Revision(row);
-        _noReminder.NotNull().Reconciler.Time = new ManualTime(DateTimeOffset.UtcNow);
+        _noReminder.NotNull().Reconciler.Time = new ManualTime(TimeProvider.System.GetUtcNow());
 
         (await _noReminder.NotNull().FireTimers())
             .Should()
@@ -316,18 +316,18 @@ public class TimerFiringTests(ClusterStore store)
         await waking.Reconciler.StartAsync(CancellationToken.None);
         try
         {
-            await waking.Reconciler.FirstSweep.WaitAsync(Bound);
+            await waking.Reconciler.FirstSweep.WaitAsync(Bound, TimeProvider.System);
 
             // Polls the condition, under a ceiling (ADR 0006): no sweep is due for an hour, so only a wake for the
             // timer's due time can move the row.
-            var elapsed = Stopwatch.StartNew();
+            var elapsedStarted = TimeProvider.System.GetTimestamp();
             while (
                 !string.Equals(
                     (await Reminder(id)).State,
                     nameof(ReminderState.Expired),
                     StringComparison.Ordinal
                 )
-                && elapsed.Elapsed < Bound
+                && TimeProvider.System.GetElapsedTime(elapsedStarted) < Bound
             )
                 await Task.Yield();
         }
@@ -351,7 +351,7 @@ public class TimerFiringTests(ClusterStore store)
         var due = await _db.NotNull().DueAt(row);
         due.Should().NotBeNull();
         _api2.NotNull().Reconciler.Time = new ManualTime(
-            DateTimeOffset.UtcNow + TimeSpan.FromHours(1)
+            TimeProvider.System.GetUtcNow() + TimeSpan.FromHours(1)
         );
 
         (await _api2.NotNull().FireTimers())
@@ -392,7 +392,7 @@ public class TimerFiringTests(ClusterStore store)
         var (user, id, row) = await OpenReview();
         ReminderPublishGate.Armed = true;
         var publish = _api.NotNull().Publish(user, id, "publish-1");
-        await ReminderPublishGate.Entered.WaitAsync(Bound);
+        await ReminderPublishGate.Entered.WaitAsync(Bound, TimeProvider.System);
         await _db.NotNull().MakeDue(row);
 
         (await _api2.NotNull().FireTimers())
@@ -404,7 +404,9 @@ public class TimerFiringTests(ClusterStore store)
         (await Reminder(id)).State.Should().Be(nameof(ReminderState.Review));
 
         ReminderPublishGate.Release();
-        (await publish.WaitAsync(Bound)).Should().BeOfType<AdvanceOutcome.Advanced>();
+        (await publish.WaitAsync(Bound, TimeProvider.System))
+            .Should()
+            .BeOfType<AdvanceOutcome.Advanced>();
         (await _api.NotNull().FireTimers()).Should().NotContain(r => r.InstanceId == id);
         (await _api2.NotNull().FireTimers()).Should().NotContain(r => r.InstanceId == id);
 
@@ -519,13 +521,13 @@ public class TimerFiringTests(ClusterStore store)
 
         _gate.Arm();
         var approve = _pausing.NotNull().Send(user, id, ReminderTrigger.Approve);
-        await _gate.Reached.WaitAsync(Bound);
+        await _gate.Reached.WaitAsync(Bound, TimeProvider.System);
         (await _api.NotNull().FireTimers())
             .Should()
             .ContainSingle(r => r.InstanceId == id && r.Outcome == TimerFireResult.Fired);
         _gate.Release();
 
-        (await approve.WaitAsync(Bound))
+        (await approve.WaitAsync(Bound, TimeProvider.System))
             .Should()
             .BeOfType<AdvanceOutcome.Rejected>(
                 $"the client's event meets the server's snapshot, in which Approve has no edge. See {Adr}"
@@ -551,13 +553,15 @@ public class TimerFiringTests(ClusterStore store)
 
         _gate.Arm();
         var extend = _pausing.NotNull().Send(user, lost, ReminderTrigger.Extend);
-        await _gate.Reached.WaitAsync(Bound);
+        await _gate.Reached.WaitAsync(Bound, TimeProvider.System);
         (await _api.NotNull().FireTimers())
             .Should()
             .ContainSingle(r => r.InstanceId == lost && r.Outcome == TimerFireResult.Fired);
         _gate.Release();
 
-        (await extend.WaitAsync(Bound)).Should().NotBeOfType<AdvanceOutcome.Advanced>();
+        (await extend.WaitAsync(Bound, TimeProvider.System))
+            .Should()
+            .NotBeOfType<AdvanceOutcome.Advanced>();
         (await Reminder(lost)).State.Should().Be(nameof(ReminderState.Expired));
         (await _db.NotNull().Revision(lostRow))
             .Should()
@@ -726,12 +730,12 @@ public class TimerFiringTests(ClusterStore store)
             read.TrySetResult();
             await resume.Task.ConfigureAwait(false);
         });
-        await read.Task.WaitAsync(Bound);
+        await read.Task.WaitAsync(Bound, TimeProvider.System);
         (await _api2.NotNull().FireTimers())
             .Should()
             .ContainSingle(r => r.InstanceId == fired && r.Outcome == TimerFireResult.Fired);
         resume.TrySetResult();
-        (await sweep.WaitAsync(Bound))
+        (await sweep.WaitAsync(Bound, TimeProvider.System))
             .Should()
             .Be(0, "the row was written after the sweep read it");
 
@@ -788,7 +792,7 @@ public class TimerFiringTests(ClusterStore store)
         var token = started.InvokeToken.NotNull();
         var runId = await _worker.NotNull().Dispatch(token);
         var job = _worker.NotNull().RunJob(runId);
-        await InvokedStepGate.Entered.WaitAsync(Bound);
+        await InvokedStepGate.Entered.WaitAsync(Bound, TimeProvider.System);
         await _db.NotNull().MakeDue(started.RowId);
 
         (await _api.NotNull().FireTimers())
@@ -796,7 +800,8 @@ public class TimerFiringTests(ClusterStore store)
             .ContainSingle(r => r.InstanceId == instance.Id && r.Outcome == TimerFireResult.Fired);
         (await _worker.NotNull().Run(runId)).CancellationRequested.Should().BeTrue();
         InvokedStepGate.Release();
-        await job.ContinueWith(_ => { }, TaskScheduler.Default).WaitAsync(Bound);
+        await job.ContinueWith(_ => { }, TaskScheduler.Default)
+            .WaitAsync(Bound, TimeProvider.System);
 
         (await _worker.NotNull().Run(runId))
             .TrainState.Should()
@@ -847,7 +852,7 @@ public class TimerFiringTests(ClusterStore store)
         var before = await _db.NotNull().Revision(started.RowId);
 
         await Task.WhenAll(_full.NotNull().RunManifestManager(), _api2.NotNull().FireTimers())
-            .WaitAsync(Bound);
+            .WaitAsync(Bound, TimeProvider.System);
 
         (await Wait(instance.Id))
             .State.Should()
@@ -902,7 +907,7 @@ public class TimerFiringTests(ClusterStore store)
             await resume.Task.ConfigureAwait(false);
         };
         var sweep = host.FireTimers();
-        await read.Task.WaitAsync(Bound).ConfigureAwait(false);
+        await read.Task.WaitAsync(Bound, TimeProvider.System).ConfigureAwait(false);
         return new PausedSweep(sweep, resume);
     }
 
@@ -914,7 +919,7 @@ public class TimerFiringTests(ClusterStore store)
         public async Task<IReadOnlyList<TimerFireResult>> Release()
         {
             Resume.TrySetResult();
-            return await Sweep.WaitAsync(Bound).ConfigureAwait(false);
+            return await Sweep.WaitAsync(Bound, TimeProvider.System).ConfigureAwait(false);
         }
     }
 

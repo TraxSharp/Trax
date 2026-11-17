@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -27,6 +26,9 @@ internal sealed class JobDispatcherPollingService(
     ILogger<JobDispatcherPollingService> logger
 ) : BackgroundService
 {
+    // The container's clock (AddTrax registers the system's), or the system's when it has none.
+    private TimeProvider Clock => serviceProvider.GetService<TimeProvider>() ?? TimeProvider.System;
+
     /// <summary>
     /// The least time from the start of one cycle to the start of a cycle a wake begins. Wakes
     /// already coalesce, but a host queuing work without pause would otherwise keep the
@@ -34,7 +36,8 @@ internal sealed class JobDispatcherPollingService(
     /// </summary>
     internal static readonly TimeSpan MinimumWakeGap = TimeSpan.FromMilliseconds(100);
 
-    private readonly Stopwatch _sinceCycleStarted = new();
+    // When the last cycle started, as a timestamp of the clock.
+    private long _cycleStarted;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -64,6 +67,7 @@ internal sealed class JobDispatcherPollingService(
         // The interval is read as the wait goes, so a runtime change applies to this wait.
         var timer = PollingDelay.WaitAsync(
             () => configuration.JobDispatcherPollingInterval,
+            Clock,
             race.Token
         );
         var woken = wake.WaitAsync(race.Token);
@@ -82,12 +86,12 @@ internal sealed class JobDispatcherPollingService(
 
         if (first == woken)
         {
-            var gap = MinimumWakeGap - _sinceCycleStarted.Elapsed;
+            var gap = MinimumWakeGap - Clock.GetElapsedTime(_cycleStarted);
             if (gap > TimeSpan.Zero)
             {
                 try
                 {
-                    await Task.Delay(gap, stoppingToken).ConfigureAwait(false);
+                    await Task.Delay(gap, Clock, stoppingToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -103,7 +107,7 @@ internal sealed class JobDispatcherPollingService(
 
     private async Task RunJobDispatcher(CancellationToken cancellationToken)
     {
-        _sinceCycleStarted.Restart();
+        _cycleStarted = Clock.GetTimestamp();
 
         if (!configuration.JobDispatcherEnabled)
         {

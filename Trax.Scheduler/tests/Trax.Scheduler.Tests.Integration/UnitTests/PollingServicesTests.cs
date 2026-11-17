@@ -67,7 +67,7 @@ public class PollingServicesTests
         using var cts = new CancellationTokenSource();
         await service.StartAsync(cts.Token).ConfigureAwait(false);
         await trainHit
-            .Task.WaitAsync(TimeSpan.FromSeconds(10), CancellationToken.None)
+            .Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System, CancellationToken.None)
             .ConfigureAwait(false);
         await cts.CancelAsync().ConfigureAwait(false);
         await service.StopAsync(CancellationToken.None).ConfigureAwait(false);
@@ -78,8 +78,8 @@ public class PollingServicesTests
 
     private static async Task<bool> WaitUntilAsync(Func<bool> predicate, TimeSpan timeout)
     {
-        var deadline = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + timeout;
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             if (predicate())
                 return true;

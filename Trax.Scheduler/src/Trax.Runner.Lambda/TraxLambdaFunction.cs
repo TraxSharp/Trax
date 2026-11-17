@@ -573,7 +573,9 @@ public abstract class TraxLambdaFunction
                 .CreateDbContextAsync(CancellationToken.None)
                 .ConfigureAwait(false);
             await using var contextDisposal = context.ConfigureAwait(false);
-            var now = DateTime.UtcNow;
+            var now = (services.GetService<TimeProvider>() ?? TimeProvider.System)
+                .GetUtcNow()
+                .UtcDateTime;
             var pending = context.Metadatas.Where(m =>
                 m.Id == metadataId && m.TrainState == TrainState.Pending
             );

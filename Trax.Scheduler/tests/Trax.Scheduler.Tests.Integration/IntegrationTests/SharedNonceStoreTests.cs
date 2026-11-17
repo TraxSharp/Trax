@@ -51,7 +51,12 @@ public class SharedNonceStoreTests
         await using var first = RunnerInstance();
         await using var second = RunnerInstance();
         var body = Encoding.UTF8.GetBytes($$"""{"trainName":"{{Guid.NewGuid()}}"}""");
-        var signature = RunnerRequestSignature.Create(Key, RunnerRequestPurpose.Run, body);
+        var signature = RunnerRequestSignature.Create(
+            Key,
+            RunnerRequestPurpose.Run,
+            body,
+            TimeProvider.System
+        );
 
         (await Verify(first, body, signature)).Should().Be(RunnerRequestVerdict.Accepted);
 
@@ -69,7 +74,12 @@ public class SharedNonceStoreTests
         await using var first = RunnerInstance();
         await using var second = RunnerInstance();
         var body = Encoding.UTF8.GetBytes($$"""{"trainName":"{{Guid.NewGuid()}}"}""");
-        var signature = RunnerRequestSignature.Create(Key, RunnerRequestPurpose.Run, body);
+        var signature = RunnerRequestSignature.Create(
+            Key,
+            RunnerRequestPurpose.Run,
+            body,
+            TimeProvider.System
+        );
 
         var verdicts = await Task.WhenAll(
             Enumerable
@@ -95,7 +105,12 @@ public class SharedNonceStoreTests
             var body = Encoding.UTF8.GetBytes(
                 string.Create(CultureInfo.InvariantCulture, $$"""{"n":{{i}}}""")
             );
-            var signature = RunnerRequestSignature.Create(Key, RunnerRequestPurpose.Run, body);
+            var signature = RunnerRequestSignature.Create(
+                Key,
+                RunnerRequestPurpose.Run,
+                body,
+                TimeProvider.System
+            );
             (await Verify(i % 2 == 0 ? first : second, body, signature))
                 .Should()
                 .Be(RunnerRequestVerdict.Accepted);
@@ -108,7 +123,7 @@ public class SharedNonceStoreTests
         await using var instance = RunnerInstance();
         var store = instance.GetRequiredService<INonceStore>();
         var nonce = Convert.ToHexString(Guid.NewGuid().ToByteArray());
-        var now = DateTimeOffset.UtcNow;
+        var now = TimeProvider.System.GetUtcNow();
 
         (await store.TryRecordAsync(nonce, now.AddMinutes(-1), now, CancellationToken.None))
             .Should()
@@ -126,7 +141,7 @@ public class SharedNonceStoreTests
     {
         await using var instance = RunnerInstance();
         var store = instance.GetRequiredService<INonceStore>();
-        var now = DateTimeOffset.UtcNow;
+        var now = TimeProvider.System.GetUtcNow();
         var expired = Convert.ToHexString(Guid.NewGuid().ToByteArray());
         await store.TryRecordAsync(expired, now.AddMinutes(-1), now, CancellationToken.None);
 

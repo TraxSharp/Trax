@@ -61,7 +61,8 @@ public class JobRunnerTrainTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = input,
                 ManifestId = null,
-            }
+            },
+            TimeProvider.System
         );
 
         await DataContext.Track(metadata);
@@ -111,7 +112,8 @@ public class JobRunnerTrainTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = input,
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(metadata);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -176,7 +178,7 @@ public class JobRunnerTrainTests : TestSetup
         updatedManifest.NotNull().LastSuccessfulRun.Should().NotBeNull();
         updatedManifest
             .LastSuccessfulRun.Should()
-            .BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(10));
+            .BeCloseTo(TimeProvider.System.GetUtcNow().UtcDateTime, TimeSpan.FromSeconds(10));
     }
 
     [Test]
@@ -184,13 +186,13 @@ public class JobRunnerTrainTests : TestSetup
     {
         // Arrange
         var manifest = await CreateAndSaveManifest();
-        var beforeExecution = DateTime.UtcNow;
+        var beforeExecution = TimeProvider.System.GetUtcNow().UtcDateTime;
         var metadata = await CreateAndSaveMetadata(manifest, TrainState.Pending);
         var input = manifest.GetProperties<SchedulerTestInput>();
 
         // Act
         await JobRunner.Run(new RunJobRequest(metadata.Id, input));
-        var afterExecution = DateTime.UtcNow;
+        var afterExecution = TimeProvider.System.GetUtcNow().UtcDateTime;
 
         // Assert
         DataContext.Reset();
@@ -269,7 +271,8 @@ public class JobRunnerTrainTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = manifest.GetProperties<SchedulerTestInput>(),
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(metadata);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -373,7 +376,8 @@ public class JobRunnerTrainTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = manifest.GetProperties<SchedulerTestInput>(),
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
 
         metadata.TrainState = state;

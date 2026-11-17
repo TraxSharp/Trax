@@ -218,11 +218,12 @@ public class JobTimeoutCoverageTests : TestSetup
                 TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = "{}",
                 InputTypeName = typeof(SchedulerTestInput).FullName,
-            }
+            },
+            TimeProvider.System
         );
         entry.Status = WorkQueueStatus.Dispatched;
         entry.MetadataId = metadataId;
-        entry.DispatchedAt = DateTime.UtcNow;
+        entry.DispatchedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
         await DataContext.Track(entry).ConfigureAwait(false);
         await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
@@ -265,7 +266,8 @@ public class JobTimeoutCoverageTests : TestSetup
                 Input = new SchedulerTestInput { Value = "timeout" },
                 ManifestId = manifestId,
                 ParentId = parentId,
-            }
+            },
+            TimeProvider.System
         );
         run.TrainState = TrainState.InProgress;
         await DataContext.Track(run).ConfigureAwait(false);
@@ -273,7 +275,10 @@ public class JobTimeoutCoverageTests : TestSetup
         await DataContext
             .Metadatas.Where(m => m.Id == run.Id)
             .ExecuteUpdateAsync(s =>
-                s.SetProperty(m => m.StartTime, DateTime.UtcNow.AddMinutes(-startedMinutesAgo))
+                s.SetProperty(
+                    m => m.StartTime,
+                    TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-startedMinutesAgo)
+                )
             )
             .ConfigureAwait(false);
         DataContext.Reset();

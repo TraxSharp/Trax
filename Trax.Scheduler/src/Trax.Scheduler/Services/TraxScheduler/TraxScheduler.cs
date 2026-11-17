@@ -38,7 +38,10 @@ namespace Trax.Scheduler.Services.TraxScheduler;
 /// The scheduler configuration, whose <c>DefaultMaxRetries</c> and <c>DefaultMisfirePolicy</c> a
 /// manifest takes when its options state neither. Null keeps the built-in defaults.
 /// </param>
-/// <param name="changeSignal">Optional; always resolved via DI in a host.</param>
+/// <param name="changeSignal">Null signals nothing; always resolved via DI in a host.</param>
+/// <param name="timeProvider">
+/// The clock the scheduler reads the time from: the stamps it writes and the due times it compares.
+/// </param>
 /// <remarks>
 /// This is the constructor dependency injection uses: it takes every other constructor's
 /// parameters and more, so the container always picks it.
@@ -50,7 +53,8 @@ public class TraxScheduler(
     ICancellationRegistry cancellationRegistry,
     ILogger<TraxScheduler> logger,
     SchedulerConfiguration? configuration,
-    ITraxChangeSignal? changeSignal = null
+    ITraxChangeSignal? changeSignal,
+    TimeProvider timeProvider
 ) : ITraxScheduler
 {
     /// <summary>
@@ -88,7 +92,32 @@ public class TraxScheduler(
             cancellationRegistry,
             logger,
             configuration: null,
-            changeSignal
+            changeSignal,
+            TimeProvider.System
+        ) { }
+
+    /// <summary>
+    /// The constructor as it shipped before the clock parameter, kept so code built against it
+    /// still binds. A scheduler built this way reads the system's clock.
+    /// </summary>
+    public TraxScheduler(
+        IDataContextProviderFactory dataContextFactory,
+        ITrainRegistry trainRegistry,
+        ITrainDiscoveryService? trainDiscovery,
+        ICancellationRegistry cancellationRegistry,
+        ILogger<TraxScheduler> logger,
+        SchedulerConfiguration? configuration,
+        ITraxChangeSignal? changeSignal = null
+    )
+        : this(
+            dataContextFactory,
+            trainRegistry,
+            trainDiscovery,
+            cancellationRegistry,
+            logger,
+            configuration,
+            changeSignal,
+            TimeProvider.System
         ) { }
 
     /// <summary>
@@ -140,6 +169,7 @@ public class TraxScheduler(
                     resolved.ManifestOptions,
                     groupId: resolved.GroupId ?? externalId,
                     group: resolved.Group,
+                    timeProvider,
                     ct: ct
                 )
                 .ConfigureAwait(false);
@@ -208,6 +238,7 @@ public class TraxScheduler(
                             itemOptions,
                             groupId: effectiveGroupId,
                             group: resolved.Group,
+                            timeProvider,
                             ct: ct
                         )
                         .ConfigureAwait(false);
@@ -288,6 +319,7 @@ public class TraxScheduler(
                     resolved.ManifestOptions,
                     groupId: resolved.GroupId ?? externalId,
                     group: resolved.Group,
+                    timeProvider,
                     ct: ct
                 )
                 .ConfigureAwait(false);
@@ -380,6 +412,7 @@ public class TraxScheduler(
                             itemOptions,
                             groupId: effectiveGroupId,
                             group: resolved.Group,
+                            timeProvider,
                             ct: ct
                         )
                         .ConfigureAwait(false);
@@ -477,7 +510,7 @@ public class TraxScheduler(
             var outcome = await TriggerManifestAsync(
                     context,
                     manifest,
-                    runAt: DateTime.UtcNow,
+                    runAt: timeProvider.GetUtcNow().UtcDateTime,
                     askAfresh,
                     ct
                 )
@@ -509,7 +542,7 @@ public class TraxScheduler(
             var outcome = await TriggerManifestAsync(
                     context,
                     manifest,
-                    DateTime.UtcNow + delay,
+                    timeProvider.GetUtcNow().UtcDateTime + delay,
                     askAfresh,
                     ct
                 )
@@ -611,6 +644,7 @@ public class TraxScheduler(
             runAt,
             askAfresh,
             new TriggerSeams(BeforeTriggerRelease, BeforeTriggerInsert, AfterTriggerCollision),
+            timeProvider,
             ct
         );
 
@@ -626,6 +660,7 @@ public class TraxScheduler(
         DateTime runAt,
         bool askAfresh,
         TriggerSeams? seams,
+        TimeProvider timeProvider,
         CancellationToken ct
     )
     {
@@ -638,6 +673,7 @@ public class TraxScheduler(
                         runAt,
                         askAfresh,
                         seams?.BeforeRelease,
+                        timeProvider,
                         ct
                     )
                     .ConfigureAwait(false) is
@@ -646,7 +682,7 @@ public class TraxScheduler(
                 return queued;
 
             // An immediate trigger stores no time, as it always has; a delayed one stores its time.
-            DateTime? scheduledAt = runAt > DateTime.UtcNow ? runAt : null;
+            DateTime? scheduledAt = runAt > timeProvider.GetUtcNow().UtcDateTime ? runAt : null;
             var entry = WorkQueue.Create(
                 new CreateWorkQueue
                 {
@@ -658,7 +694,8 @@ public class TraxScheduler(
                     Priority = manifest.Priority,
                     ScheduledAt = scheduledAt,
                     ExplicitTrigger = true,
-                }
+                },
+                timeProvider
             );
             context.WorkQueues.Add(entry);
 
@@ -740,6 +777,7 @@ public class TraxScheduler(
         DateTime runAt,
         bool askAfresh,
         Func<long, CancellationToken, Task>? beforeRelease,
+        TimeProvider timeProvider,
         CancellationToken ct
     )
     {
@@ -766,7 +804,7 @@ public class TraxScheduler(
         // does: the dispatcher compares a stored time with the database's clock, and this host's
         // "now" may still be ahead of it.
         var dueAt = moveForward
-            ? (runAt > DateTime.UtcNow ? runAt : (DateTime?)null)
+            ? (runAt > timeProvider.GetUtcNow().UtcDateTime ? runAt : (DateTime?)null)
             : queued.ScheduledAt;
 
         var entry = context.WorkQueues.Where(w =>
@@ -866,10 +904,11 @@ public class TraxScheduler(
                 .UpsertOnceManifestAsync<TTrain, TInput, TOutput>(
                     externalId,
                     input,
-                    DateTime.UtcNow + delay,
+                    timeProvider.GetUtcNow().UtcDateTime + delay,
                     resolved.ManifestOptions,
                     groupId: resolved.GroupId ?? externalId,
                     group: resolved.Group,
+                    timeProvider,
                     ct: ct
                 )
                 .ConfigureAwait(false);
@@ -905,7 +944,7 @@ public class TraxScheduler(
 
             // One save per manifest, so a manifest that already has a queued entry is skipped rather
             // than failing the whole group on the unique index.
-            var now = DateTime.UtcNow;
+            var now = timeProvider.GetUtcNow().UtcDateTime;
             var queued = 0;
             foreach (var manifest in manifests)
             {
@@ -1046,6 +1085,7 @@ public class TraxScheduler(
                     resolved.ManifestOptions,
                     groupId: resolved.GroupId ?? externalId,
                     group: resolved.Group,
+                    timeProvider,
                     ct: ct
                 )
                 .ConfigureAwait(false);
@@ -1087,10 +1127,11 @@ public class TraxScheduler(
                     trainType,
                     externalId,
                     input,
-                    DateTime.UtcNow + delay,
+                    timeProvider.GetUtcNow().UtcDateTime + delay,
                     resolved.ManifestOptions,
                     groupId: resolved.GroupId ?? externalId,
                     group: resolved.Group,
+                    timeProvider,
                     ct: ct
                 )
                 .ConfigureAwait(false);
@@ -1146,6 +1187,7 @@ public class TraxScheduler(
                     resolved.ManifestOptions,
                     groupId: resolved.GroupId ?? externalId,
                     group: resolved.Group,
+                    timeProvider,
                     ct: ct
                 )
                 .ConfigureAwait(false);
@@ -1215,6 +1257,7 @@ public class TraxScheduler(
                             itemOptions,
                             groupId: effectiveGroupId,
                             group: resolved.Group,
+                            timeProvider,
                             ct: ct
                         )
                         .ConfigureAwait(false);
@@ -1327,6 +1370,7 @@ public class TraxScheduler(
                             itemOptions,
                             groupId: effectiveGroupId,
                             group: resolved.Group,
+                            timeProvider,
                             ct: ct
                         )
                         .ConfigureAwait(false);
@@ -1454,7 +1498,8 @@ public class TraxScheduler(
             context.WorkQueues.Add(entry);
 
             deadLetter.Requeue(
-                string.Create(CultureInfo.InvariantCulture, $"Re-queued (WorkQueue {entry.Id})")
+                string.Create(CultureInfo.InvariantCulture, $"Re-queued (WorkQueue {entry.Id})"),
+                timeProvider
             );
 
             try
@@ -1527,7 +1572,7 @@ public class TraxScheduler(
                     "Dead letter not found or already resolved"
                 );
 
-            deadLetter.Acknowledge(note);
+            deadLetter.Acknowledge(note, timeProvider);
             await context.SaveChanges(ct).ConfigureAwait(false);
             changeSignal?.Notify(ChangeDomain.DeadLetter);
 
@@ -1807,7 +1852,7 @@ public class TraxScheduler(
 
         if (context.SupportsSetUpdates())
         {
-            var now = DateTime.UtcNow;
+            var now = timeProvider.GetUtcNow().UtcDateTime;
             acknowledged = await awaiting
                 .ExecuteUpdateAsync(
                     s =>
@@ -1822,7 +1867,7 @@ public class TraxScheduler(
         {
             var rows = await awaiting.ToListAsync(ct).ConfigureAwait(false);
             foreach (var row in rows)
-                row.Acknowledge(note);
+                row.Acknowledge(note, timeProvider);
             await context.SaveChanges(ct).ConfigureAwait(false);
             acknowledged = rows.Count;
         }
@@ -1979,7 +2024,7 @@ public class TraxScheduler(
         {
             context.WorkQueues.Add(entry);
             foreach (var dl in members)
-                dl.Requeue("Re-queued (batch)");
+                dl.Requeue("Re-queued (batch)", timeProvider);
         }
 
         // A replay of the same run queued since the lookup: that entry asks afresh instead.
@@ -2027,7 +2072,7 @@ public class TraxScheduler(
         return new RequeueCounts(resolved, batches.Count, folded, skipped);
     }
 
-    private static WorkQueue CreateWorkQueueFromDeadLetter(
+    private WorkQueue CreateWorkQueueFromDeadLetter(
         Effect.Models.DeadLetter.DeadLetter deadLetter,
         long? replayDecisionsOf,
         long? resumeFrom
@@ -2050,7 +2095,8 @@ public class TraxScheduler(
                 ReplayDecisionsOf = replayDecisionsOf,
                 // After the failed run's latest checkpoint: no step is named.
                 ResumeFrom = resumeFrom,
-            }
+            },
+            timeProvider
         );
     }
 

@@ -269,7 +269,8 @@ public class SqsJobRunnerHandlerTests
                     StringValue = RunnerRequestSignature.Create(
                         signWith,
                         RunnerRequestPurpose.Execute,
-                        System.Text.Encoding.UTF8.GetBytes(body)
+                        System.Text.Encoding.UTF8.GetBytes(body),
+                        TimeProvider.System
                     ),
                 },
             };

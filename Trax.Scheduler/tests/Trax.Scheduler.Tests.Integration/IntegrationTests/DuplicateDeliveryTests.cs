@@ -42,7 +42,8 @@ public class DuplicateDeliveryTests : TestSetup
 
             // Whichever delivery lost does not wait for the train; the winner is held open until
             // the loser has finished, so the loser always meets a row that is not Pending.
-            var loser = await Task.WhenAny(first, second).WaitAsync(TimeSpan.FromSeconds(30));
+            var loser = await Task.WhenAny(first, second)
+                .WaitAsync(TimeSpan.FromSeconds(30), TimeProvider.System);
             await loser;
             gate.SetResult();
 
@@ -196,7 +197,8 @@ public class DuplicateDeliveryTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(metadata).ConfigureAwait(false);
         await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);

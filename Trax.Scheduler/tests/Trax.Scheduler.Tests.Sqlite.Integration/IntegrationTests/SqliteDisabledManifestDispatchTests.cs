@@ -25,7 +25,7 @@ namespace Trax.Scheduler.Tests.Sqlite.Integration.IntegrationTests;
 [TestFixture]
 public class SqliteDisabledManifestDispatchTests : TestSetup
 {
-    private DateTime _createdAt = DateTime.UtcNow.AddMinutes(-10);
+    private DateTime _createdAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10);
 
     [Test]
     public async Task Entries_held_by_disabled_manifests_do_not_take_the_groups_share_of_a_cycle()
@@ -145,7 +145,8 @@ public class SqliteDisabledManifestDispatchTests : TestSetup
                 Input = "{}",
                 InputTypeName = typeof(SchedulerTestInput).FullName,
                 ManifestId = manifestId,
-            }
+            },
+            TimeProvider.System
         );
         // Distinct created_at values in the order queued, so the held entries rank ahead of the
         // enabled one.

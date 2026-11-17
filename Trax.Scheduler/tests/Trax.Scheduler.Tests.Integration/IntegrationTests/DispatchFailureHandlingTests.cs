@@ -170,7 +170,9 @@ public class DispatchFailureHandlingTests
             .FirstAsync(m => m.ManifestId == manifest.Id);
 
         metadata.EndTime.Should().NotBeNull("failed metadata should have an EndTime");
-        metadata.EndTime.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(10));
+        metadata
+            .EndTime.Should()
+            .BeCloseTo(TimeProvider.System.GetUtcNow().UtcDateTime, TimeSpan.FromSeconds(10));
     }
 
     [Test]
@@ -403,10 +405,13 @@ public class DispatchFailureHandlingTests
             .WorkQueues.AsNoTracking()
             .FirstAsync(q => q.Id == entry.Id);
         queued.DispatchAttempts.Should().Be(1, "the second cycle came before the backoff ended");
-        queued.ScheduledAt.Should().BeAfter(DateTime.UtcNow);
+        queued.ScheduledAt.Should().BeAfter(TimeProvider.System.GetUtcNow().UtcDateTime);
         queued
             .ScheduledAt.Should()
-            .BeCloseTo(DateTime.UtcNow + DispatchFailure.FirstBackoff, TimeSpan.FromSeconds(5));
+            .BeCloseTo(
+                TimeProvider.System.GetUtcNow().UtcDateTime + DispatchFailure.FirstBackoff,
+                TimeSpan.FromSeconds(5)
+            );
     }
 
     [Test]
@@ -524,7 +529,8 @@ public class DispatchFailureHandlingTests
                 Input = """{"value":{"not":"a string"}}""",
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         await _dataContext.NotNull().Track(entry);
         await _dataContext.NotNull().SaveChanges(CancellationToken.None);
@@ -594,7 +600,8 @@ public class DispatchFailureHandlingTests
                 Input = """{"value":{"not":"a string"}}""",
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         await _dataContext.NotNull().Track(entry);
         await _dataContext.NotNull().SaveChanges(CancellationToken.None);
@@ -645,7 +652,8 @@ public class DispatchFailureHandlingTests
             await CreateAndSaveWorkQueueEntry(manifest2);
 
             // A bound, not a wait: a hook that never returns would otherwise hold the cycle forever.
-            var cycle = () => RunDispatcherCycle().WaitAsync(TimeSpan.FromSeconds(20));
+            var cycle = () =>
+                RunDispatcherCycle().WaitAsync(TimeSpan.FromSeconds(20), TimeProvider.System);
 
             await cycle
                 .Should()
@@ -887,7 +895,8 @@ public class DispatchFailureHandlingTests
                 Input = manifest.Properties,
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
 
         await _dataContext.NotNull().Track(entry).ConfigureAwait(false);

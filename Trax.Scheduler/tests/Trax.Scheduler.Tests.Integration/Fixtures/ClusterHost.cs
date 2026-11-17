@@ -229,7 +229,7 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyn
     {
         var scope = services.CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
-        var start = DateTime.UtcNow - age;
+        var start = TimeProvider.System.GetUtcNow().UtcDateTime - age;
         await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .Metadatas.Where(x => x.Id == metadataId)

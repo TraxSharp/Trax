@@ -13,6 +13,9 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 [TestFixture]
 public class ScheduleVarianceTests
 {
+    // The scheduling decisions take the time as an input; a fixed one makes them repeatable.
+    private static readonly DateTime FixedNow = new(2026, 3, 10, 12, 0, 0, DateTimeKind.Utc);
+
     private SchedulerConfiguration? _config;
     private ILogger? _logger;
 
@@ -82,7 +85,7 @@ public class ScheduleVarianceTests
             ScheduleType = ScheduleType.Interval,
             IntervalSeconds = 300,
             VarianceSeconds = null,
-            LastSuccessfulRun = DateTime.UtcNow,
+            LastSuccessfulRun = FixedNow,
         };
 
         SchedulingHelpers.ComputeNextScheduledRun(manifest).Should().BeNull();
@@ -96,7 +99,7 @@ public class ScheduleVarianceTests
             ScheduleType = ScheduleType.Interval,
             IntervalSeconds = 300,
             VarianceSeconds = 0,
-            LastSuccessfulRun = DateTime.UtcNow,
+            LastSuccessfulRun = FixedNow,
         };
 
         SchedulingHelpers.ComputeNextScheduledRun(manifest).Should().BeNull();
@@ -109,7 +112,7 @@ public class ScheduleVarianceTests
         {
             ScheduleType = ScheduleType.Dependent,
             VarianceSeconds = 120,
-            LastSuccessfulRun = DateTime.UtcNow,
+            LastSuccessfulRun = FixedNow,
         };
 
         SchedulingHelpers.ComputeNextScheduledRun(manifest).Should().BeNull();
@@ -157,7 +160,7 @@ public class ScheduleVarianceTests
         {
             ScheduleType = ScheduleType.Once,
             VarianceSeconds = 120,
-            LastSuccessfulRun = DateTime.UtcNow,
+            LastSuccessfulRun = FixedNow,
         };
 
         SchedulingHelpers.ComputeNextScheduledRun(manifest).Should().BeNull();

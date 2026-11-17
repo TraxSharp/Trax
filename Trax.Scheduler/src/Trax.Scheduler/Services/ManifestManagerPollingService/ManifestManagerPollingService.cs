@@ -49,7 +49,11 @@ internal sealed class ManifestManagerPollingService(
         // The interval is read each cycle, so a runtime change applies to the next wait.
         while (
             await PollingDelay
-                .WaitAsync(() => configuration.ManifestManagerPollingInterval, stoppingToken)
+                .WaitAsync(
+                    () => configuration.ManifestManagerPollingInterval,
+                    serviceProvider.GetService<TimeProvider>() ?? TimeProvider.System,
+                    stoppingToken
+                )
                 .ConfigureAwait(false)
         )
         {

@@ -856,7 +856,8 @@ public class MaxActiveJobsTests
                         Value = string.Create(CultureInfo.InvariantCulture, $"Active_{i}"),
                     },
                     ManifestId = activeManifest.Id,
-                }
+                },
+                TimeProvider.System
             );
             metadata.TrainState = TrainState.Pending;
             await dataContext.Track(metadata);
@@ -897,7 +898,8 @@ public class MaxActiveJobsTests
                     Input = manifest.Properties,
                     InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                     ManifestId = manifest.Id,
-                }
+                },
+                TimeProvider.System
             );
             await dataContext.Track(entry);
             await dataContext.SaveChanges(CancellationToken.None);
@@ -1002,7 +1004,8 @@ public class MaxActiveJobsTests
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "ExcludedActive" },
                 ManifestId = activeManifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = TrainState.InProgress;
         await dataContext.Track(metadata);
@@ -1035,7 +1038,8 @@ public class MaxActiveJobsTests
                 Input = queuedManifest.Properties,
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                 ManifestId = queuedManifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         await dataContext.Track(entry);
         await dataContext.SaveChanges(CancellationToken.None);
@@ -1131,7 +1135,8 @@ public class MaxActiveJobsTests
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = manifest.GetProperties<SchedulerTestInput>(),
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
 
         metadata.TrainState = state;
@@ -1153,7 +1158,8 @@ public class MaxActiveJobsTests
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                 ManifestId = manifest.Id,
                 Priority = priority,
-            }
+            },
+            TimeProvider.System
         );
 
         await _dataContext.NotNull().Track(entry).ConfigureAwait(false);

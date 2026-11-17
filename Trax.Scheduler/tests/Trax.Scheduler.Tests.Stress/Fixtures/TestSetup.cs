@@ -148,20 +148,21 @@ public abstract class TestSetup
     )
     {
         var limit = timeout ?? QueryTimeout;
-        var sw = Stopwatch.StartNew();
+        var swStarted = TimeProvider.System.GetTimestamp();
         await action().ConfigureAwait(false);
-        sw.Stop();
+        var swElapsed = TimeProvider.System.GetElapsedTime(swStarted);
 
-        sw.Elapsed.Should()
+        swElapsed
+            .Should()
             .BeLessThan(
                 limit,
                 string.Create(
                     CultureInfo.InvariantCulture,
-                    $"query took {sw.Elapsed.TotalMilliseconds:F0}ms, exceeding {limit.TotalMilliseconds:F0}ms limit"
+                    $"query took {swElapsed.TotalMilliseconds:F0}ms, exceeding {limit.TotalMilliseconds:F0}ms limit"
                 )
             );
 
-        return sw.Elapsed;
+        return swElapsed;
     }
 
     #region Bulk Data Seeding
@@ -173,8 +174,8 @@ public abstract class TestSetup
             Name = name,
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await DataContext.Track(group).ConfigureAwait(false);
         await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
@@ -218,7 +219,7 @@ public abstract class TestSetup
         DateTime? startTime = null
     )
     {
-        var baseTime = startTime ?? DateTime.UtcNow.AddHours(-1);
+        var baseTime = startTime ?? TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1);
 
         for (int i = 0; i < manifests.Count; i++)
         {
@@ -234,7 +235,8 @@ public abstract class TestSetup
                             Value = string.Create(CultureInfo.InvariantCulture, $"input-{i}-{j}"),
                         },
                         ManifestId = manifests[i].Id,
-                    }
+                    },
+                    TimeProvider.System
                 );
                 metadata.TrainState = state;
                 metadata.StartTime = baseTime.AddMinutes(j);
@@ -259,7 +261,8 @@ public abstract class TestSetup
                     Input = manifests[i].Properties,
                     InputTypeName = manifests[i].PropertyTypeName,
                     ManifestId = manifests[i].Id,
-                }
+                },
+                TimeProvider.System
             );
             await DataContext.Track(entry).ConfigureAwait(false);
         }
@@ -285,7 +288,8 @@ public abstract class TestSetup
                             $"Test dead letter {i}-{j}"
                         ),
                         RetryCount = 3,
-                    }
+                    },
+                    TimeProvider.System
                 );
                 await DataContext.Track(deadLetter).ConfigureAwait(false);
             }
@@ -299,7 +303,8 @@ public abstract class TestSetup
         for (int i = 0; i < count; i++)
         {
             var job = BackgroundJob.Create(
-                new CreateBackgroundJob { MetadataId = startMetadataId + i }
+                new CreateBackgroundJob { MetadataId = startMetadataId + i },
+                TimeProvider.System
             );
             await DataContext.Track(job).ConfigureAwait(false);
         }

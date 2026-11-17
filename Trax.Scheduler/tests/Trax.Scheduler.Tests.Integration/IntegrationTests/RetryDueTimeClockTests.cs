@@ -92,7 +92,7 @@ public class RetryDueTimeClockTests : TestSetup
             }
         );
         manifest.ManifestGroupId = group.Id;
-        manifest.LastSuccessfulRun = DateTime.UtcNow.AddMinutes(-5);
+        manifest.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5);
         await DataContext.Track(manifest).ConfigureAwait(false);
         await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
@@ -104,10 +104,11 @@ public class RetryDueTimeClockTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "clock" },
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         run.TrainState = TrainState.Failed;
-        run.StartTime = DateTime.UtcNow.AddHours(-1);
+        run.StartTime = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1);
         run.EndTime = run.StartTime.AddMinutes(1);
         await DataContext.Track(run).ConfigureAwait(false);
         await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);

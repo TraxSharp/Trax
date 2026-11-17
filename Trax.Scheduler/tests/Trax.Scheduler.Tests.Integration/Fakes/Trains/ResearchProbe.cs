@@ -57,7 +57,7 @@ public static class ResearchProbe
         {
             HoldIn = null;
             Held.Release();
-            await _released.Task.WaitAsync(HoldBound).ConfigureAwait(false);
+            await _released.Task.WaitAsync(HoldBound, TimeProvider.System).ConfigureAwait(false);
         }
 
         if (string.Equals(FailIn, junction, StringComparison.Ordinal))

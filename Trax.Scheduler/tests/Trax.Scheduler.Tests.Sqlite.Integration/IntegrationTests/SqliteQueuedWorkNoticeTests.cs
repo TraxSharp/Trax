@@ -31,7 +31,9 @@ public class SqliteQueuedWorkNoticeTests : TestSetup
 
         await QueueAsync();
 
-        await subscription.WaitAsync(CancellationToken.None).WaitAsync(Timeout);
+        await subscription
+            .WaitAsync(CancellationToken.None)
+            .WaitAsync(Timeout, TimeProvider.System);
     }
 
     [Test]
@@ -49,7 +51,8 @@ public class SqliteQueuedWorkNoticeTests : TestSetup
                         TrainName = typeof(ISchedulerTestTrain).FullName.NotNull(),
                         Input = "{}",
                         InputTypeName = typeof(SchedulerTestInput).FullName,
-                    }
+                    },
+                    TimeProvider.System
                 )
             );
             await DataContext.SaveChanges(CancellationToken.None);
@@ -62,7 +65,7 @@ public class SqliteQueuedWorkNoticeTests : TestSetup
 
         await QueueAsync();
 
-        await next.WaitAsync(Timeout);
+        await next.WaitAsync(Timeout, TimeProvider.System);
     }
 
     private async Task QueueAsync()

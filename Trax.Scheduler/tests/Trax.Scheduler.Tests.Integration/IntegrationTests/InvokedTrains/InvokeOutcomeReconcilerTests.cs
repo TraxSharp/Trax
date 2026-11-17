@@ -152,7 +152,7 @@ public class InvokeOutcomeReconcilerTests(ClusterStore store)
     [Test]
     public async Task A_row_this_host_cannot_read_is_tried_again_only_after_a_growing_wait()
     {
-        var time = new ManualTime(DateTimeOffset.UtcNow);
+        var time = new ManualTime(TimeProvider.System.GetUtcNow());
         _api.NotNull().Reconciler.Time = time;
         var token = await StartedToken();
         await _worker.NotNull().DispatchAndRun(token);

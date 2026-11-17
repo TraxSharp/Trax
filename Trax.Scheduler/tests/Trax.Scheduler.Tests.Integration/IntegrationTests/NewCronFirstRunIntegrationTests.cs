@@ -17,8 +17,8 @@ public class NewCronFirstRunIntegrationTests
     public async Task A_new_daily_cron_is_not_queued_before_its_first_occurrence()
     {
         // Two hours ahead, so the first occurrence cannot fall inside the test.
-        var at = DateTime.UtcNow.AddHours(2);
-        var before = DateTime.UtcNow;
+        var at = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(2);
+        var before = TimeProvider.System.GetUtcNow().UtcDateTime;
 
         await using var fx = await SchedulerE2EFixture.CreateAsync(s =>
             s.Schedule<ISchedulerTestTrain>(

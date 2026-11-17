@@ -98,9 +98,10 @@ public class ResolveStaleStagedEntriesJunctionTests : TestSetup
                 Input = "{}",
                 InputTypeName = typeof(SchedulerTestInput).FullName,
                 DeferPromotion = true,
-            }
+            },
+            TimeProvider.System
         );
-        entry.CreatedAt = DateTime.UtcNow - age;
+        entry.CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime - age;
 
         await DataContext.Track(entry).ConfigureAwait(false);
         await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);

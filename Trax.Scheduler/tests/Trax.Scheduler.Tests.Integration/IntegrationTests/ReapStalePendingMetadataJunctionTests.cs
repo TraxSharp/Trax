@@ -50,7 +50,7 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
         var metadata = await CreateMetadata(
             manifest,
             TrainState.Pending,
-            startTime: DateTime.UtcNow.AddMinutes(-30)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-30)
         );
 
         // Act
@@ -77,7 +77,7 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
         var metadata = await CreateMetadata(
             manifest,
             TrainState.Pending,
-            startTime: DateTime.UtcNow.AddMinutes(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-2)
         );
 
         // Act
@@ -107,7 +107,7 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
         var metadata = await CreateMetadata(
             manifest,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddMinutes(-30)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-30)
         );
 
         // Act
@@ -137,7 +137,7 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
         var metadata = await CreateMetadata(
             manifest,
             TrainState.Completed,
-            startTime: DateTime.UtcNow.AddMinutes(-30)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-30)
         );
 
         // Act
@@ -162,7 +162,7 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
         var metadata = await CreateMetadata(
             manifest,
             TrainState.Failed,
-            startTime: DateTime.UtcNow.AddMinutes(-30)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-30)
         );
 
         // Act
@@ -187,21 +187,21 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
         var metadata1 = await CreateMetadata(
             manifest1,
             TrainState.Pending,
-            startTime: DateTime.UtcNow.AddMinutes(-20)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-20)
         );
 
         var manifest2 = await CreateManifest();
         var metadata2 = await CreateMetadata(
             manifest2,
             TrainState.Pending,
-            startTime: DateTime.UtcNow.AddMinutes(-15)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-15)
         );
 
         var manifest3 = await CreateManifest();
         var metadata3 = await CreateMetadata(
             manifest3,
             TrainState.Pending,
-            startTime: DateTime.UtcNow.AddMinutes(-60)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-60)
         );
 
         // Act
@@ -236,14 +236,14 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
         var staleMetadata = await CreateMetadata(
             staleManifest,
             TrainState.Pending,
-            startTime: DateTime.UtcNow.AddMinutes(-20)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-20)
         );
 
         var recentManifest = await CreateManifest();
         var recentMetadata = await CreateMetadata(
             recentManifest,
             TrainState.Pending,
-            startTime: DateTime.UtcNow.AddMinutes(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-2)
         );
 
         // Act
@@ -287,7 +287,7 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
         var metadata = await CreateMetadata(
             manifest,
             TrainState.Pending,
-            startTime: DateTime.UtcNow.AddMinutes(-20)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-20)
         );
 
         // Act
@@ -322,7 +322,7 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
             manifest,
             TrainState.Pending,
             // Use 9 minutes ago — within the 10 min timeout
-            startTime: DateTime.UtcNow.AddMinutes(-9)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-9)
         );
 
         // Act
@@ -349,7 +349,7 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
         var metadata = await CreateMetadata(
             manifest,
             TrainState.Pending,
-            startTime: DateTime.UtcNow.AddMinutes(-1)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-1)
         );
 
         // Act
@@ -379,7 +379,8 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "ManualTest" },
                 ManifestId = null,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = TrainState.Pending;
 
@@ -389,7 +390,11 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
         await DataContext
             .Metadatas.Where(m => m.Id == metadata.Id)
             .ExecuteUpdateAsync(
-                s => s.SetProperty(m => m.StartTime, DateTime.UtcNow.AddMinutes(-20)),
+                s =>
+                    s.SetProperty(
+                        m => m.StartTime,
+                        TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-20)
+                    ),
                 CancellationToken.None
             );
         DataContext.Reset();
@@ -448,7 +453,8 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "StalePendingTest" },
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = state;
 

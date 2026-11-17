@@ -624,7 +624,8 @@ public class HttpRunExecutorTests
                     BaseDelay = TimeSpan.FromMilliseconds(1),
                 },
             },
-            NullLogger<HttpRunExecutor>.Instance
+            NullLogger<HttpRunExecutor>.Instance,
+            TimeProvider.System
         );
 
         var result = await executor.ExecuteAsync(
@@ -657,7 +658,8 @@ public class HttpRunExecutorTests
                     BaseDelay = TimeSpan.FromMilliseconds(1),
                 },
             },
-            NullLogger<HttpRunExecutor>.Instance
+            NullLogger<HttpRunExecutor>.Instance,
+            TimeProvider.System
         );
 
         var act = async () =>
@@ -678,7 +680,8 @@ public class HttpRunExecutorTests
         new(
             client,
             new RemoteRunOptions { Retry = new HttpRetryOptions { MaxRetries = 0 } },
-            NullLogger<HttpRunExecutor>.Instance
+            NullLogger<HttpRunExecutor>.Instance,
+            TimeProvider.System
         );
 
     #endregion

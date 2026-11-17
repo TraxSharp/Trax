@@ -68,7 +68,8 @@ public class ChangeSignalEmissionTests
                 Manifest = manifest,
                 Reason = "seeded",
                 RetryCount = 3,
-            }
+            },
+            TimeProvider.System
         );
         await fx.DataContext.Track(dl).ConfigureAwait(false);
         await fx.DataContext.SaveChanges(default).ConfigureAwait(false);

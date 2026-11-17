@@ -12,6 +12,9 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 [TestFixture]
 public class OnceScheduleTests
 {
+    // The scheduling decisions take the time as an input; a fixed one makes them repeatable.
+    private static readonly DateTime FixedNow = new(2026, 3, 10, 12, 0, 0, DateTimeKind.Utc);
+
     private SchedulerConfiguration? _config;
     private ILogger? _logger;
 
@@ -31,10 +34,10 @@ public class OnceScheduleTests
             ExternalId = Guid.NewGuid().ToString("N"),
             Name = "TestTrain",
             ScheduleType = ScheduleType.Once,
-            ScheduledAt = DateTime.UtcNow.AddMinutes(-5),
+            ScheduledAt = FixedNow.AddMinutes(-5),
             IsEnabled = true,
         };
-        var now = DateTime.UtcNow;
+        var now = FixedNow;
 
         // Act
         var result = SchedulingHelpers.ShouldRunNow(
@@ -57,10 +60,10 @@ public class OnceScheduleTests
             ExternalId = Guid.NewGuid().ToString("N"),
             Name = "TestTrain",
             ScheduleType = ScheduleType.Once,
-            ScheduledAt = DateTime.UtcNow.AddMinutes(30),
+            ScheduledAt = FixedNow.AddMinutes(30),
             IsEnabled = true,
         };
-        var now = DateTime.UtcNow;
+        var now = FixedNow;
 
         // Act
         var result = SchedulingHelpers.ShouldRunNow(
@@ -86,7 +89,7 @@ public class OnceScheduleTests
             ScheduledAt = null,
             IsEnabled = true,
         };
-        var now = DateTime.UtcNow;
+        var now = FixedNow;
 
         // Act
         var result = SchedulingHelpers.ShouldRunNow(
@@ -109,11 +112,11 @@ public class OnceScheduleTests
             ExternalId = Guid.NewGuid().ToString("N"),
             Name = "TestTrain",
             ScheduleType = ScheduleType.Once,
-            ScheduledAt = DateTime.UtcNow.AddMinutes(-30),
-            LastSuccessfulRun = DateTime.UtcNow.AddMinutes(-25),
+            ScheduledAt = FixedNow.AddMinutes(-30),
+            LastSuccessfulRun = FixedNow.AddMinutes(-25),
             IsEnabled = true,
         };
-        var now = DateTime.UtcNow;
+        var now = FixedNow;
 
         // Act
         var result = SchedulingHelpers.ShouldRunNow(

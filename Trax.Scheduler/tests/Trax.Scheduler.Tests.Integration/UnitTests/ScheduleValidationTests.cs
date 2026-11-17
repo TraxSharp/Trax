@@ -31,7 +31,7 @@ public class ScheduleValidationTests
     [TestCase("")]
     public void An_invalid_cron_expression_is_refused(string expression)
     {
-        var act = () => Schedule.FromCron(expression);
+        var act = () => Schedule.FromCron(expression, TimeProvider.System);
 
         act.Should().Throw<FormatException>();
     }
@@ -41,7 +41,7 @@ public class ScheduleValidationTests
     [TestCase("0 0 31 2,4,6,9,11 *")]
     public void A_cron_that_can_never_fire_is_refused(string expression)
     {
-        var act = () => Schedule.FromCron(expression);
+        var act = () => Schedule.FromCron(expression, TimeProvider.System);
 
         act.Should().Throw<FormatException>().WithMessage("*never*");
     }
@@ -49,7 +49,7 @@ public class ScheduleValidationTests
     [Test]
     public void A_cron_that_fires_only_in_leap_years_is_accepted()
     {
-        var act = () => Schedule.FromCron("0 0 29 2 *");
+        var act = () => Schedule.FromCron("0 0 29 2 *", TimeProvider.System);
 
         act.Should().NotThrow();
     }
@@ -67,7 +67,7 @@ public class ScheduleValidationTests
     [TestCase(" 0 3 * * 1-5 ")]
     public void A_valid_cron_expression_is_kept_as_written(string expression)
     {
-        Schedule.FromCron(expression).CronExpression.Should().Be(expression);
+        Schedule.FromCron(expression, TimeProvider.System).CronExpression.Should().Be(expression);
     }
 
     [Test]

@@ -61,7 +61,8 @@ public class RemoteParallelFailureTests
                 Name = typeof(IRemoteBranchesTrain).FullName.NotNull(),
                 ExternalId = "remote",
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         metadata.AddException(rebuilt);
 

@@ -60,7 +60,8 @@ internal static class RunQueueHook
                 Name = trainName,
                 ExternalId = externalId,
                 Input = input,
-            }
+            },
+            services.GetService<TimeProvider>() ?? TimeProvider.System
         );
 
         var scope = services.CreateAsyncScope();

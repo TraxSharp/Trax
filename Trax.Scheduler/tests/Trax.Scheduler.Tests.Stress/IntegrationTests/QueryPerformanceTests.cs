@@ -75,14 +75,14 @@ public class QueryPerformanceTests : TestSetup
                 inProgress,
                 MetadataPerManifest,
                 TrainState.InProgress,
-                DateTime.UtcNow.AddMinutes(-30)
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-30)
             )
             .ConfigureAwait(false);
         await SeedMetadata(
                 pending,
                 MetadataPerManifest,
                 TrainState.Pending,
-                DateTime.UtcNow.AddMinutes(-10)
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10)
             )
             .ConfigureAwait(false);
 
@@ -100,7 +100,7 @@ public class QueryPerformanceTests : TestSetup
     {
         // This query pattern: WHERE train_state='pending' AND start_time < cutoff
         // Without ix_metadata_train_state_start_time, this is a full sequential scan.
-        var cutoff = DateTime.UtcNow - TimeSpan.FromMinutes(5);
+        var cutoff = TimeProvider.System.GetUtcNow().UtcDateTime - TimeSpan.FromMinutes(5);
 
         var elapsed = await AssertCompletesWithin(async () =>
         {
@@ -138,7 +138,7 @@ public class QueryPerformanceTests : TestSetup
     {
         // This query pattern: WHERE train_state='in_progress' AND start_time < serverStartTime
         // Without composite index, scans all 50K rows.
-        var serverStartTime = DateTime.UtcNow;
+        var serverStartTime = TimeProvider.System.GetUtcNow().UtcDateTime;
 
         var elapsed = await AssertCompletesWithin(async () =>
         {
@@ -277,7 +277,7 @@ public class QueryPerformanceTests : TestSetup
         // Instead of a single massive DELETE, we load IDs in batches and delete
         // associated FK rows + metadata per batch. This limits row-level lock duration.
         var trainName = typeof(StressTestTrain).FullName.NotNull();
-        var cutoff = DateTime.UtcNow.AddMinutes(-30);
+        var cutoff = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-30);
         var batchSize = 1000;
         var whitelist = new HashSet<string>(StringComparer.Ordinal) { trainName };
 
@@ -348,7 +348,7 @@ public class QueryPerformanceTests : TestSetup
         // Small batch size (100) exercises the loop more frequently.
         // Verifies overhead from multiple round-trips is acceptable.
         var trainName = typeof(StressTestTrain).FullName.NotNull();
-        var cutoff = DateTime.UtcNow.AddMinutes(-30);
+        var cutoff = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-30);
         var batchSize = 100;
         var whitelist = new HashSet<string>(StringComparer.Ordinal) { trainName };
         var batchCount = 0;
@@ -468,7 +468,7 @@ public class QueryPerformanceTests : TestSetup
     {
         // Dashboard KPI: GROUP BY train_state WHERE start_time in last 24h
         // Without ix_metadata_start_time_desc, this does a full sequential scan + sort.
-        var cutoff = DateTime.UtcNow.AddDays(-1);
+        var cutoff = TimeProvider.System.GetUtcNow().UtcDateTime.AddDays(-1);
 
         var elapsed = await AssertCompletesWithin(async () =>
         {
@@ -573,7 +573,7 @@ public class QueryPerformanceTests : TestSetup
         // DeleteExpiredMetadataJunction: DELETE WHERE name IN (whitelist) AND start_time < cutoff
         // AND train_state IN (completed, failed, cancelled). Uses subquery for cascade.
         var trainName = typeof(StressTestTrain).FullName.NotNull();
-        var cutoff = DateTime.UtcNow.AddMinutes(-30);
+        var cutoff = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-30);
 
         var elapsed = await AssertCompletesWithin(
             async () =>
@@ -868,7 +868,7 @@ public class QueryPerformanceTests : TestSetup
 
                         if (job is not null)
                         {
-                            job.FetchedAt = DateTime.UtcNow;
+                            job.FetchedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
                             await ctx.SaveChanges(CancellationToken.None).ConfigureAwait(false);
                             await ctx.CommitTransaction().ConfigureAwait(false);
                             claimed.Add(job.Id);
@@ -943,7 +943,7 @@ public class QueryPerformanceTests : TestSetup
 
                         if (job is not null)
                         {
-                            job.FetchedAt = DateTime.UtcNow;
+                            job.FetchedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
                             await ctx.SaveChanges(CancellationToken.None).ConfigureAwait(false);
                             await ctx.CommitTransaction().ConfigureAwait(false);
                             claimed.Add(job.Id);
@@ -1006,7 +1006,7 @@ public class QueryPerformanceTests : TestSetup
                         if (jobs.Count > 0)
                         {
                             foreach (var job in jobs)
-                                job.FetchedAt = DateTime.UtcNow;
+                                job.FetchedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
                             await ctx.SaveChanges(CancellationToken.None).ConfigureAwait(false);
                             await ctx.CommitTransaction().ConfigureAwait(false);
                             claimed.AddRange(jobs.Select(j => j.Id));
@@ -1476,7 +1476,10 @@ public class QueryPerformanceTests : TestSetup
                         && q.Manifest.ManifestGroup.IsEnabled
                     )
                 )
-                .Where(q => q.ScheduledAt == null || q.ScheduledAt <= DateTime.UtcNow)
+                .Where(q =>
+                    q.ScheduledAt == null
+                    || q.ScheduledAt <= TimeProvider.System.GetUtcNow().UtcDateTime
+                )
                 .OrderByDescending(q =>
                     q.Manifest != null && q.Manifest.ManifestGroup != null
                         ? q.Manifest.ManifestGroup.Priority
@@ -1523,7 +1526,10 @@ public class QueryPerformanceTests : TestSetup
                         && q.Manifest.ManifestGroup.IsEnabled
                     )
                 )
-                .Where(q => q.ScheduledAt == null || q.ScheduledAt <= DateTime.UtcNow)
+                .Where(q =>
+                    q.ScheduledAt == null
+                    || q.ScheduledAt <= TimeProvider.System.GetUtcNow().UtcDateTime
+                )
                 .OrderByDescending(q =>
                     q.Manifest != null && q.Manifest.ManifestGroup != null
                         ? q.Manifest.ManifestGroup.Priority
@@ -1556,7 +1562,7 @@ public class QueryPerformanceTests : TestSetup
     {
         // ExecuteUpdateAsync on many rows — used by ReapStalePendingMetadataJunction and
         // CancelTimedOutJobsJunction to transition state in bulk.
-        var now = DateTime.UtcNow;
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime;
 
         var pendingIds = await DataContext
             .Metadatas.Where(m => m.TrainState == TrainState.Pending)

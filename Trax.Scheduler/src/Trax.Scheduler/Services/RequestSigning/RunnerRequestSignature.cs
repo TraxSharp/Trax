@@ -53,14 +53,35 @@ public static class RunnerRequestSignature
     /// <param name="purpose">What the request is for.</param>
     /// <param name="body">The exact bytes that will be sent.</param>
     /// <returns>The value for the <see cref="HeaderName"/> header or attribute.</returns>
-    public static string Create(byte[] key, RunnerRequestPurpose purpose, ReadOnlySpan<byte> body)
+    public static string Create(
+        byte[] key,
+        RunnerRequestPurpose purpose,
+        ReadOnlySpan<byte> body
+    ) => Create(key, purpose, body, TimeProvider.System);
+
+    /// <summary>
+    /// Signs <paramref name="body"/> for <paramref name="purpose"/> with a fresh nonce and a
+    /// timestamp read from <paramref name="timeProvider"/>.
+    /// </summary>
+    /// <param name="key">The shared key, at least <see cref="MinimumKeyLength"/> bytes.</param>
+    /// <param name="purpose">What the request is for.</param>
+    /// <param name="body">The exact bytes that will be sent.</param>
+    /// <param name="timeProvider">The clock the timestamp is read from.</param>
+    /// <returns>The value for the <see cref="HeaderName"/> header or attribute.</returns>
+    public static string Create(
+        byte[] key,
+        RunnerRequestPurpose purpose,
+        ReadOnlySpan<byte> body,
+        TimeProvider timeProvider
+    )
     {
         EnsureKey(key, nameof(key));
+        ArgumentNullException.ThrowIfNull(timeProvider);
         return Create(
             key,
             purpose,
             body,
-            DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+            timeProvider.GetUtcNow().ToUnixTimeSeconds(),
             Convert.ToHexString(RandomNumberGenerator.GetBytes(16))
         );
     }

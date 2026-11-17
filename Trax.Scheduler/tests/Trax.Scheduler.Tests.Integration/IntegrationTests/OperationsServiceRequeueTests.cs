@@ -62,7 +62,8 @@ public class OperationsServiceRequeueTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
                 ReplayDecisionsOf = replayDecisionsOf,
-            }
+            },
+            TimeProvider.System
         );
         run.Input = input;
         await DataContext.Track(run).ConfigureAwait(false);
@@ -85,7 +86,7 @@ public class OperationsServiceRequeueTests : TestSetup
                 Answer = "\"Express\"",
                 Routes = """[{"track": "Express", "fallback_reason": null}]""",
                 Decider = "TestDecider",
-                DecidedAt = DateTime.UtcNow,
+                DecidedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
             }
         );
         await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);

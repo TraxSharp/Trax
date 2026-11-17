@@ -246,7 +246,7 @@ public class ManifestManagerTrainTests : TestSetup
 
         // Re-load the manifest to track it and update LastSuccessfulRun
         var trackedManifest = await DataContext.Manifests.FirstAsync(m => m.Id == manifest.Id);
-        trackedManifest.LastSuccessfulRun = DateTime.UtcNow;
+        trackedManifest.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime;
         await DataContext.SaveChanges(CancellationToken.None);
         var lastRunBefore = trackedManifest.LastSuccessfulRun.NotNull().Value;
         DataContext.Reset();
@@ -1053,7 +1053,7 @@ public class ManifestManagerTrainTests : TestSetup
 
         // Set parent's LastSuccessfulRun to now (simulating a recent success)
         var trackedParent = await DataContext.Manifests.FirstAsync(m => m.Id == parent.Id);
-        trackedParent.LastSuccessfulRun = DateTime.UtcNow;
+        trackedParent.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime;
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
@@ -1089,7 +1089,9 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         var trackedParent = await DataContext.Manifests.FirstAsync(m => m.Id == parent.Id);
-        trackedParent.LastSuccessfulRun = DateTime.UtcNow.AddMinutes(-10);
+        trackedParent.LastSuccessfulRun = TimeProvider
+            .System.GetUtcNow()
+            .UtcDateTime.AddMinutes(-10);
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
@@ -1099,7 +1101,9 @@ public class ManifestManagerTrainTests : TestSetup
         // Dependent ran 5 minutes ago (after parent)
         var dependent = await CreateAndSaveDependentManifest(parent, inputValue: "Dependent");
         var trackedDependent = await DataContext.Manifests.FirstAsync(m => m.Id == dependent.Id);
-        trackedDependent.LastSuccessfulRun = DateTime.UtcNow.AddMinutes(-5);
+        trackedDependent.LastSuccessfulRun = TimeProvider
+            .System.GetUtcNow()
+            .UtcDateTime.AddMinutes(-5);
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
@@ -1150,7 +1154,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         var trackedParent = await DataContext.Manifests.FirstAsync(m => m.Id == parent.Id);
-        trackedParent.LastSuccessfulRun = DateTime.UtcNow;
+        trackedParent.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime;
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
@@ -1184,7 +1188,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         var trackedParent = await DataContext.Manifests.FirstAsync(m => m.Id == parent.Id);
-        trackedParent.LastSuccessfulRun = DateTime.UtcNow;
+        trackedParent.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime;
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
@@ -1218,7 +1222,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         var trackedParent = await DataContext.Manifests.FirstAsync(m => m.Id == parent.Id);
-        trackedParent.LastSuccessfulRun = DateTime.UtcNow;
+        trackedParent.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime;
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
@@ -1253,7 +1257,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         var trackedA = await DataContext.Manifests.FirstAsync(m => m.Id == manifestA.Id);
-        trackedA.LastSuccessfulRun = DateTime.UtcNow;
+        trackedA.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime;
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
@@ -1324,7 +1328,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         var trackedParent = await DataContext.Manifests.FirstAsync(m => m.Id == parent.Id);
-        trackedParent.LastSuccessfulRun = DateTime.UtcNow;
+        trackedParent.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime;
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
@@ -1384,7 +1388,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         var trackedParent = await DataContext.Manifests.FirstAsync(m => m.Id == parent.Id);
-        trackedParent.LastSuccessfulRun = DateTime.UtcNow;
+        trackedParent.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime;
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
@@ -1419,7 +1423,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         var trackedParent = await DataContext.Manifests.FirstAsync(m => m.Id == parent.Id);
-        trackedParent.LastSuccessfulRun = DateTime.UtcNow;
+        trackedParent.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime;
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
@@ -1453,7 +1457,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         var trackedParent = await DataContext.Manifests.FirstAsync(m => m.Id == parent.Id);
-        trackedParent.LastSuccessfulRun = DateTime.UtcNow;
+        trackedParent.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime;
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
@@ -1494,7 +1498,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         var trackedParent = await DataContext.Manifests.FirstAsync(m => m.Id == parent.Id);
-        trackedParent.LastSuccessfulRun = DateTime.UtcNow;
+        trackedParent.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime;
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
@@ -1532,7 +1536,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         var trackedA = await DataContext.Manifests.FirstAsync(m => m.Id == manifestA.Id);
-        trackedA.LastSuccessfulRun = DateTime.UtcNow;
+        trackedA.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime;
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
@@ -1572,7 +1576,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         var trackedParent = await DataContext.Manifests.FirstAsync(m => m.Id == parent.Id);
-        trackedParent.LastSuccessfulRun = DateTime.UtcNow;
+        trackedParent.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime;
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
@@ -1610,7 +1614,7 @@ public class ManifestManagerTrainTests : TestSetup
         // Arrange - Create a Once manifest with ScheduledAt in the past that has never run
         var manifest = await CreateAndSaveManifest(
             scheduleType: ScheduleType.Once,
-            scheduledAt: DateTime.UtcNow.AddMinutes(-5),
+            scheduledAt: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5),
             inputValue: "OnceJob_Due"
         );
 
@@ -1636,7 +1640,7 @@ public class ManifestManagerTrainTests : TestSetup
         // Arrange - Create a Once manifest with ScheduledAt in the future
         var manifest = await CreateAndSaveManifest(
             scheduleType: ScheduleType.Once,
-            scheduledAt: DateTime.UtcNow.AddHours(1),
+            scheduledAt: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(1),
             inputValue: "OnceJob_Future"
         );
 
@@ -1660,13 +1664,13 @@ public class ManifestManagerTrainTests : TestSetup
         // Arrange - Create a Once manifest with ScheduledAt in the past
         var manifest = await CreateAndSaveManifest(
             scheduleType: ScheduleType.Once,
-            scheduledAt: DateTime.UtcNow.AddMinutes(-30),
+            scheduledAt: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-30),
             inputValue: "OnceJob_AlreadyRan"
         );
 
         // Set LastSuccessfulRun to simulate that it already ran
         var loaded = await DataContext.Manifests.FirstAsync(m => m.Id == manifest.Id);
-        loaded.LastSuccessfulRun = DateTime.UtcNow.AddMinutes(-25);
+        loaded.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-25);
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
@@ -1703,7 +1707,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         var loaded = await DataContext.Manifests.FirstAsync(m => m.Id == manifest.Id);
-        loaded.LastSuccessfulRun = DateTime.UtcNow.AddMinutes(-12);
+        loaded.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-12);
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
@@ -1739,7 +1743,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         var loaded = await DataContext.Manifests.FirstAsync(m => m.Id == manifest.Id);
-        loaded.LastSuccessfulRun = DateTime.UtcNow.AddMinutes(-12);
+        loaded.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-12);
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
@@ -1775,7 +1779,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         var loaded = await DataContext.Manifests.FirstAsync(m => m.Id == manifest.Id);
-        loaded.LastSuccessfulRun = DateTime.UtcNow.AddSeconds(-630);
+        loaded.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(-630);
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
@@ -1813,9 +1817,15 @@ public class ManifestManagerTrainTests : TestSetup
         await DataContext
             .Manifests.Where(m => m.Id == manifest.Id)
             .ExecuteUpdateAsync(s =>
-                s.SetProperty(m => m.LastSuccessfulRun, DateTime.UtcNow.AddMinutes(-3))
+                s.SetProperty(
+                        m => m.LastSuccessfulRun,
+                        TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-3)
+                    )
                     .SetProperty(m => m.VarianceSeconds, 120)
-                    .SetProperty(m => m.NextScheduledRun, DateTime.UtcNow.AddMinutes(5))
+                    .SetProperty(
+                        m => m.NextScheduledRun,
+                        TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(5)
+                    )
             );
         DataContext.Reset();
 
@@ -1846,9 +1856,15 @@ public class ManifestManagerTrainTests : TestSetup
         await DataContext
             .Manifests.Where(m => m.Id == manifest.Id)
             .ExecuteUpdateAsync(s =>
-                s.SetProperty(m => m.LastSuccessfulRun, DateTime.UtcNow.AddMinutes(-10))
+                s.SetProperty(
+                        m => m.LastSuccessfulRun,
+                        TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10)
+                    )
                     .SetProperty(m => m.VarianceSeconds, 120)
-                    .SetProperty(m => m.NextScheduledRun, DateTime.UtcNow.AddMinutes(-2))
+                    .SetProperty(
+                        m => m.NextScheduledRun,
+                        TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-2)
+                    )
             );
         DataContext.Reset();
 
@@ -1912,7 +1928,7 @@ public class ManifestManagerTrainTests : TestSetup
             maxRetries: 3
         );
 
-        var oldTime = DateTime.UtcNow.AddHours(-2);
+        var oldTime = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2);
         await CreateAndSaveMetadata(manifest, TrainState.Failed, startTime: oldTime.AddMinutes(-3));
         await CreateAndSaveMetadata(manifest, TrainState.Failed, startTime: oldTime.AddMinutes(-2));
         await CreateAndSaveMetadata(manifest, TrainState.Failed, startTime: oldTime.AddMinutes(-1));
@@ -1944,7 +1960,7 @@ public class ManifestManagerTrainTests : TestSetup
             maxRetries: 2
         );
 
-        var resolutionTime = DateTime.UtcNow.AddHours(-1);
+        var resolutionTime = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1);
         // Old failures before resolution
         await CreateAndSaveMetadata(
             manifest,
@@ -1999,7 +2015,7 @@ public class ManifestManagerTrainTests : TestSetup
             maxRetries: 2
         );
 
-        var resolutionTime = DateTime.UtcNow.AddHours(-1);
+        var resolutionTime = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1);
         // Old failures
         await CreateAndSaveMetadata(
             manifest,
@@ -2059,8 +2075,8 @@ public class ManifestManagerTrainTests : TestSetup
             maxRetries: 2
         );
 
-        var dl1Time = DateTime.UtcNow.AddHours(-3);
-        var dl2Time = DateTime.UtcNow.AddHours(-1);
+        var dl1Time = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-3);
+        var dl2Time = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1);
 
         // Old failures before DL1
         await CreateAndSaveMetadata(
@@ -2109,7 +2125,7 @@ public class ManifestManagerTrainTests : TestSetup
             maxRetries: 3
         );
 
-        var oldTime = DateTime.UtcNow.AddHours(-2);
+        var oldTime = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2);
         await CreateAndSaveMetadata(manifest, TrainState.Failed, startTime: oldTime.AddMinutes(-3));
         await CreateAndSaveMetadata(manifest, TrainState.Failed, startTime: oldTime.AddMinutes(-2));
         await CreateAndSaveMetadata(manifest, TrainState.Failed, startTime: oldTime.AddMinutes(-1));
@@ -2198,7 +2214,7 @@ public class ManifestManagerTrainTests : TestSetup
             maxRetries: 2
         );
 
-        var resolutionTime = DateTime.UtcNow.AddHours(-1);
+        var resolutionTime = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1);
         // Old failures
         await CreateAndSaveMetadata(
             manifest,
@@ -2286,7 +2302,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         // Cycle 1: 2 failures → dead letter → resolved
-        var dl1Time = DateTime.UtcNow.AddHours(-4);
+        var dl1Time = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-4);
         await CreateAndSaveMetadata(
             manifest,
             TrainState.Failed,
@@ -2300,7 +2316,7 @@ public class ManifestManagerTrainTests : TestSetup
         await CreateAndSaveDeadLetter(manifest, DeadLetterStatus.Retried, resolvedAt: dl1Time);
 
         // Cycle 2: 2 more failures → dead letter → resolved
-        var dl2Time = DateTime.UtcNow.AddHours(-2);
+        var dl2Time = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2);
         await CreateAndSaveMetadata(
             manifest,
             TrainState.Failed,
@@ -2450,7 +2466,8 @@ public class ManifestManagerTrainTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = manifest.GetProperties<SchedulerTestInput>(),
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
 
         metadata.TrainState = state;
@@ -2482,7 +2499,8 @@ public class ManifestManagerTrainTests : TestSetup
                 Manifest = reloadedManifest,
                 Reason = "Test dead letter",
                 RetryCount = 3,
-            }
+            },
+            TimeProvider.System
         );
 
         deadLetter.Status = status;
@@ -2535,7 +2553,8 @@ public class ManifestManagerTrainTests : TestSetup
                 Input = manifest.Properties,
                 InputTypeName = manifest.PropertyTypeName,
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
 
         await DataContext.Track(entry).ConfigureAwait(false);

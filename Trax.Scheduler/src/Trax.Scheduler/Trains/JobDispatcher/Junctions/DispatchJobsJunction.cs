@@ -48,6 +48,9 @@ internal sealed class DispatchJobsJunction(
     ITraxChangeSignal? changeSignal = null
 ) : EffectJunction<List<WorkQueue>, Unit>
 {
+    // The container's clock (AddTrax registers the system's), or the system's when it has none.
+    private TimeProvider Clock => serviceProvider.GetService<TimeProvider>() ?? TimeProvider.System;
+
     /// <summary>
     /// How long recording a failed submit may take once the dispatcher's own token has been
     /// cancelled.
@@ -70,7 +73,7 @@ internal sealed class DispatchJobsJunction(
 
     public override async Task<Unit> Run(List<WorkQueue> entries)
     {
-        var dispatchStartTime = DateTime.UtcNow;
+        var dispatchStartTime = Clock.GetUtcNow().UtcDateTime;
         var jobsDispatched = 0;
 
         logger.LogDebug("Starting DispatchJobsJunction for {EntryCount} entries", entries.Count);
@@ -131,7 +134,7 @@ internal sealed class DispatchJobsJunction(
             await Task.WhenAll(tasks).ConfigureAwait(false);
         }
 
-        var duration = DateTime.UtcNow - dispatchStartTime;
+        var duration = Clock.GetUtcNow().UtcDateTime - dispatchStartTime;
 
         if (jobsDispatched > 0)
         {
@@ -273,7 +276,8 @@ internal sealed class DispatchJobsJunction(
                 ResumeAt = claimed.ResumeAt,
                 InvokedBy = InvokedBy(claimed),
                 StarterHash = claimed.StarterHash,
-            }
+            },
+            Clock
         );
 
         await dataContext.Track(metadata).ConfigureAwait(false);
@@ -285,7 +289,11 @@ internal sealed class DispatchJobsJunction(
         // By the database's clock: a dependent's next run is decided by comparing this with its
         // parent's LastSuccessfulRun, which a worker on another machine stamps (see DatabaseClock).
         claimed.DispatchedAt = await DatabaseClock
-            .UtcNowAsync(dataContext.WorkQueues.Where(q => q.Id == claimed.Id), CancellationToken)
+            .UtcNowAsync(
+                dataContext.WorkQueues.Where(q => q.Id == claimed.Id),
+                Clock,
+                CancellationToken
+            )
             .ConfigureAwait(false);
         await dataContext.SaveChanges(CancellationToken).ConfigureAwait(false);
 
@@ -459,6 +467,7 @@ internal sealed class DispatchJobsJunction(
             await DatabaseClock
                 .UtcNowAsync(
                     dataContext.WorkQueues.Where(q => q.Id == claimed.Id),
+                    Clock,
                     CancellationToken
                 )
                 .ConfigureAwait(false) + backoff;
@@ -517,10 +526,11 @@ internal sealed class DispatchJobsJunction(
                 ResumeAt = claimed.ResumeAt,
                 InvokedBy = InvokedBy(claimed),
                 StarterHash = claimed.StarterHash,
-            }
+            },
+            Clock
         );
         metadata.TrainState = TrainState.Failed;
-        metadata.EndTime = DateTime.UtcNow;
+        metadata.EndTime = Clock.GetUtcNow().UtcDateTime;
         metadata.AddException(failure);
 
         await dataContext.Track(metadata).ConfigureAwait(false);
@@ -531,7 +541,11 @@ internal sealed class DispatchJobsJunction(
         // By the database's clock: a dependent's next run is decided by comparing this with its
         // parent's LastSuccessfulRun, which a worker on another machine stamps (see DatabaseClock).
         claimed.DispatchedAt = await DatabaseClock
-            .UtcNowAsync(dataContext.WorkQueues.Where(q => q.Id == claimed.Id), CancellationToken)
+            .UtcNowAsync(
+                dataContext.WorkQueues.Where(q => q.Id == claimed.Id),
+                Clock,
+                CancellationToken
+            )
             .ConfigureAwait(false);
         await dataContext.SaveChanges(CancellationToken).ConfigureAwait(false);
         await LinkDeadLetterRetryAsync(dataContext, claimed, metadata.Id).ConfigureAwait(false);
@@ -643,7 +657,7 @@ internal sealed class DispatchJobsJunction(
                 ) + $"{failure.FailureException}: {failure.FailureReason}"
                 : failure.FailureReason;
 
-            var now = DateTime.UtcNow;
+            var now = Clock.GetUtcNow().UtcDateTime;
             var failed = await dataContext
                 .Metadatas.Where(m => m.Id == metadataId && m.TrainState == TrainState.Pending)
                 .ExecuteUpdateAsync(
@@ -690,6 +704,7 @@ internal sealed class DispatchJobsJunction(
                         await DatabaseClock
                             .UtcNowAsync(
                                 dataContext.WorkQueues.Where(w => w.Id == workQueueId),
+                                Clock,
                                 token
                             )
                             .ConfigureAwait(false) + backoff;
@@ -775,7 +790,7 @@ internal sealed class DispatchJobsJunction(
     /// The failure fields <see cref="Trax.Effect.Models.Metadata.Metadata.AddException"/> would
     /// record for <paramref name="exception"/>, for a write that sets them without loading the row.
     /// </summary>
-    private static Trax.Effect.Models.Metadata.Metadata DescribeFailure(Exception exception)
+    private Trax.Effect.Models.Metadata.Metadata DescribeFailure(Exception exception)
     {
         var description = Trax.Effect.Models.Metadata.Metadata.Create(
             new CreateMetadata
@@ -783,7 +798,8 @@ internal sealed class DispatchJobsJunction(
                 Name = nameof(DispatchJobsJunction),
                 ExternalId = string.Empty,
                 Input = null,
-            }
+            },
+            Clock
         );
         description.AddException(exception);
         return description;

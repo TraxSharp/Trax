@@ -155,7 +155,8 @@ public class DispatchShutdownTests
                 Input = manifest.Properties,
                 InputTypeName = typeof(SchedulerTestInput).FullName,
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         await _dataContext.NotNull().Track(entry).ConfigureAwait(false);
         await _dataContext.NotNull().SaveChanges(CancellationToken.None).ConfigureAwait(false);

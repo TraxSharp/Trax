@@ -42,14 +42,14 @@ public class RunnerRequestSigningTests
     private static string Sign(
         RunnerRequestPurpose purpose = RunnerRequestPurpose.Execute,
         byte[]? body = null
-    ) => RunnerRequestSignature.Create(Key, purpose, body ?? Body);
+    ) => RunnerRequestSignature.Create(Key, purpose, body ?? Body, TimeProvider.System);
 
     #region Verification
 
     [Test]
     public async Task Verify_ValidSignature_IsAccepted() =>
         (
-            await Verifier()
+            await Verifier(time: TimeProvider.System)
                 .VerifyAsync(RunnerRequestPurpose.Execute, Body, Sign(), requireFresh: true)
         )
             .Should()
@@ -58,7 +58,7 @@ public class RunnerRequestSigningTests
     [Test]
     public async Task Verify_NoSignature_IsMissing() =>
         (
-            await Verifier()
+            await Verifier(time: TimeProvider.System)
                 .VerifyAsync(
                     RunnerRequestPurpose.Execute,
                     Body,
@@ -72,7 +72,7 @@ public class RunnerRequestSigningTests
     [Test]
     public async Task Verify_BodyChangedAfterSigning_IsInvalid() =>
         (
-            await Verifier()
+            await Verifier(time: TimeProvider.System)
                 .VerifyAsync(
                     RunnerRequestPurpose.Execute,
                     Encoding.UTF8.GetBytes("""{"metadataId":2}"""),
@@ -86,7 +86,7 @@ public class RunnerRequestSigningTests
     [Test]
     public async Task Verify_SignedForTheOtherPurpose_IsInvalid() =>
         (
-            await Verifier()
+            await Verifier(time: TimeProvider.System)
                 .VerifyAsync(
                     RunnerRequestPurpose.Run,
                     Body,
@@ -105,7 +105,7 @@ public class RunnerRequestSigningTests
     [TestCase("v1,t=1,n=00000000000000000000000000000000,s=not base64!")]
     public async Task Verify_MalformedSignature_IsRefused(string signature) =>
         (
-            await Verifier()
+            await Verifier(time: TimeProvider.System)
                 .VerifyAsync(RunnerRequestPurpose.Execute, Body, signature, requireFresh: true)
         )
             .Should()
@@ -114,7 +114,7 @@ public class RunnerRequestSigningTests
     [Test]
     public async Task Verify_TimestampOutsideTheSkew_IsStale()
     {
-        var old = DateTimeOffset.UtcNow.AddMinutes(-10).ToUnixTimeSeconds();
+        var old = TimeProvider.System.GetUtcNow().AddMinutes(-10).ToUnixTimeSeconds();
         var signature = RunnerRequestSignature.Create(
             Key,
             RunnerRequestPurpose.Run,
@@ -124,7 +124,7 @@ public class RunnerRequestSigningTests
         );
 
         (
-            await Verifier()
+            await Verifier(time: TimeProvider.System)
                 .VerifyAsync(RunnerRequestPurpose.Run, Body, signature, requireFresh: true)
         )
             .Should()
@@ -134,7 +134,7 @@ public class RunnerRequestSigningTests
     [Test]
     public async Task Verify_TimestampOutsideTheSkew_WhenFreshnessIsNotRequired_IsAccepted()
     {
-        var old = DateTimeOffset.UtcNow.AddHours(-3).ToUnixTimeSeconds();
+        var old = TimeProvider.System.GetUtcNow().AddHours(-3).ToUnixTimeSeconds();
         var signature = RunnerRequestSignature.Create(
             Key,
             RunnerRequestPurpose.Execute,
@@ -144,7 +144,7 @@ public class RunnerRequestSigningTests
         );
 
         (
-            await Verifier()
+            await Verifier(time: TimeProvider.System)
                 .VerifyAsync(RunnerRequestPurpose.Execute, Body, signature, requireFresh: false)
         )
             .Should()
@@ -154,7 +154,7 @@ public class RunnerRequestSigningTests
     [Test]
     public async Task Verify_SameSignatureTwice_IsReplayed()
     {
-        var verifier = Verifier();
+        var verifier = Verifier(time: TimeProvider.System);
         var signature = Sign(RunnerRequestPurpose.Run);
 
         (await verifier.VerifyAsync(RunnerRequestPurpose.Run, Body, signature, requireFresh: true))
@@ -173,7 +173,7 @@ public class RunnerRequestSigningTests
     {
         // The nonce is remembered only after the MAC verifies, so a caller without the key
         // cannot spend a nonce the scheduler is about to use.
-        var verifier = Verifier();
+        var verifier = Verifier(time: TimeProvider.System);
         var genuine = Sign(RunnerRequestPurpose.Run);
         var forged =
             genuine[..genuine.LastIndexOf("s=", StringComparison.Ordinal)]
@@ -190,11 +190,14 @@ public class RunnerRequestSigningTests
 
     [Test]
     public async Task Verify_NoSigningKey_AcceptsWithoutASignature() => (
-            await Verifier(o =>
-                {
-                    o.SigningKey = null;
-                    o.AllowUnsignedRequests();
-                })
+            await Verifier(
+                    o =>
+                    {
+                        o.SigningKey = null;
+                        o.AllowUnsignedRequests();
+                    },
+                    TimeProvider.System
+                )
                 .VerifyAsync(RunnerRequestPurpose.Run, Body, signature: null, requireFresh: true)
         ).Should().Be(RunnerRequestVerdict.Accepted);
 
@@ -205,7 +208,7 @@ public class RunnerRequestSigningTests
     [Test]
     public void EnsurePosture_NothingConfigured_Throws()
     {
-        var verifier = Verifier(o => o.SigningKey = null);
+        var verifier = Verifier(o => o.SigningKey = null, TimeProvider.System);
 
         var act = () => verifier.EnsurePosture("test-entry");
 
@@ -219,11 +222,14 @@ public class RunnerRequestSigningTests
     [Test]
     public void EnsurePosture_PolicyOnly_ThrowsWhereAPolicyCannotApply()
     {
-        var verifier = Verifier(o =>
-        {
-            o.SigningKey = null;
-            o.AuthorizationPolicy = "scheduler";
-        });
+        var verifier = Verifier(
+            o =>
+            {
+                o.SigningKey = null;
+                o.AuthorizationPolicy = "scheduler";
+            },
+            TimeProvider.System
+        );
 
         var act = () => verifier.EnsurePosture("sqs");
 
@@ -237,12 +243,15 @@ public class RunnerRequestSigningTests
     [Test]
     public void EnsurePosture_SigningKeyOrUnsignedOptIn_Passes()
     {
-        Verifier().Invoking(v => v.EnsurePosture("a")).Should().NotThrow();
-        Verifier(o =>
-            {
-                o.SigningKey = null;
-                o.AllowUnsignedRequests();
-            })
+        Verifier(time: TimeProvider.System).Invoking(v => v.EnsurePosture("a")).Should().NotThrow();
+        Verifier(
+                o =>
+                {
+                    o.SigningKey = null;
+                    o.AllowUnsignedRequests();
+                },
+                TimeProvider.System
+            )
             .Invoking(v => v.EnsurePosture("b"))
             .Should()
             .NotThrow();
@@ -312,14 +321,15 @@ public class RunnerRequestSigningTests
         var submitter = new HttpJobSubmitter(
             client,
             new RemoteWorkerOptions { BaseUrl = "http://test/", SigningKey = Key },
-            NullLogger<HttpJobSubmitter>.Instance
+            NullLogger<HttpJobSubmitter>.Instance,
+            TimeProvider.System
         );
 
         await submitter.EnqueueAsync(7);
 
         var (body, signature) = handler.Requests.Single();
         (
-            await Verifier()
+            await Verifier(time: TimeProvider.System)
                 .VerifyAsync(RunnerRequestPurpose.Execute, body, signature, requireFresh: true)
         )
             .Should()
@@ -346,7 +356,8 @@ public class RunnerRequestSigningTests
         var submitter = new HttpJobSubmitter(
             client,
             new RemoteWorkerOptions { BaseUrl = "http://test/" },
-            NullLogger<HttpJobSubmitter>.Instance
+            NullLogger<HttpJobSubmitter>.Instance,
+            TimeProvider.System
         );
 
         await submitter.EnqueueAsync(7);
@@ -380,7 +391,8 @@ public class RunnerRequestSigningTests
                     MaxDelay = TimeSpan.FromMilliseconds(1),
                 },
             },
-            NullLogger<HttpRunExecutor>.Instance
+            NullLogger<HttpRunExecutor>.Instance,
+            TimeProvider.System
         );
 
     private static Task<Trax.Mediator.Services.TrainExecution.RunTrainResult> RunThrough(
@@ -404,7 +416,7 @@ public class RunnerRequestSigningTests
 
         var (body, signature) = handler.Requests.Single();
         (
-            await Verifier()
+            await Verifier(time: TimeProvider.System)
                 .VerifyAsync(RunnerRequestPurpose.Run, body, signature, requireFresh: true)
         )
             .Should()
@@ -604,13 +616,14 @@ public class RunnerRequestSigningTests
                 MaxDelay = TimeSpan.FromMilliseconds(1),
             },
             logger: null,
+            TimeProvider.System,
             CancellationToken.None,
             Key,
             RunnerRequestPurpose.Execute
         );
 
         handler.Requests.Should().HaveCount(2);
-        var verifier = Verifier();
+        var verifier = Verifier(time: TimeProvider.System);
         foreach (var (body, signature) in handler.Requests)
             (
                 await verifier.VerifyAsync(

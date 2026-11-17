@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Cryptography;
 using Amazon.Lambda;
 using Amazon.Lambda.Model;
 using Amazon.Runtime;
@@ -28,6 +29,7 @@ internal static class LambdaRetryHelper
     /// <param name="request">The invocation request.</param>
     /// <param name="options">Retry configuration.</param>
     /// <param name="logger">Logger for retry diagnostics.</param>
+    /// <param name="timeProvider">The clock the retries wait on.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The invoke response (either successful or from the last attempt before a non-transient failure).</returns>
     internal static async Task<InvokeResponse> InvokeWithRetryAsync(
@@ -35,6 +37,7 @@ internal static class LambdaRetryHelper
         InvokeRequest request,
         LambdaRetryOptions options,
         ILogger? logger,
+        TimeProvider timeProvider,
         CancellationToken ct
     )
     {
@@ -65,7 +68,7 @@ internal static class LambdaRetryHelper
                     maxRetries
                 );
 
-                await Task.Delay(delay, ct).ConfigureAwait(false);
+                await Task.Delay(delay, timeProvider, ct).ConfigureAwait(false);
             }
         }
 
@@ -95,7 +98,8 @@ internal static class LambdaRetryHelper
         var exponentialMs = options.BaseDelay.TotalMilliseconds * Math.Pow(2, attempt);
 
         // Add jitter: +/-25%
-        var jitterFactor = 0.75 + Random.Shared.NextDouble() * 0.5;
+        var jitterFactor =
+            0.75 + RandomNumberGenerator.GetInt32(int.MaxValue) / (double)int.MaxValue * 0.5;
         var delayMs = exponentialMs * jitterFactor;
 
         return Clamp(TimeSpan.FromMilliseconds(delayMs), options);

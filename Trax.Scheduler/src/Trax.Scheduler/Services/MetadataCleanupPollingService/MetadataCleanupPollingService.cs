@@ -42,7 +42,11 @@ internal sealed class MetadataCleanupPollingService(
         // The interval is read each cycle, so a runtime change applies to the next wait.
         while (
             await PollingDelay
-                .WaitAsync(() => cleanupConfig.CleanupInterval, stoppingToken)
+                .WaitAsync(
+                    () => cleanupConfig.CleanupInterval,
+                    serviceProvider.GetService<TimeProvider>() ?? TimeProvider.System,
+                    stoppingToken
+                )
                 .ConfigureAwait(false)
         )
         {

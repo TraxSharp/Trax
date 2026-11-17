@@ -34,7 +34,8 @@ public class SqliteCleanupTests : TestSetup
                 Name = typeof(ISchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "delete-me" },
-            }
+            },
+            TimeProvider.System
         );
 
         await DataContext.Track(metadata);
@@ -65,7 +66,8 @@ public class SqliteCleanupTests : TestSetup
                     {
                         Value = string.Create(CultureInfo.InvariantCulture, $"item-{i}"),
                     },
-                }
+                },
+                TimeProvider.System
             );
             m.TrainState = i < 3 ? TrainState.Completed : TrainState.Failed;
             await DataContext.Track(m);
@@ -108,7 +110,8 @@ public class SqliteCleanupTests : TestSetup
                 Name = typeof(ISchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "update-me" },
-            }
+            },
+            TimeProvider.System
         );
 
         await DataContext.Track(metadata);
@@ -143,7 +146,8 @@ public class SqliteCleanupTests : TestSetup
                     {
                         Value = string.Create(CultureInfo.InvariantCulture, $"batch-{i}"),
                     },
-                }
+                },
+                TimeProvider.System
             );
             await DataContext.Track(m);
         }
@@ -244,7 +248,8 @@ public class SqliteCleanupTests : TestSetup
                 Manifest = reloaded,
                 Reason = "test",
                 RetryCount = 3,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(deadLetter);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -292,7 +297,8 @@ public class SqliteCleanupTests : TestSetup
                 Input = null,
                 InputTypeName = null,
                 ReplayDecisionsOf = queuedSource.Id,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(entry);
         var replayer = Metadata.Create(
@@ -302,7 +308,8 @@ public class SqliteCleanupTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
                 ReplayDecisionsOf = replayedSource.Id,
-            }
+            },
+            TimeProvider.System
         );
         replayer.TrainState = TrainState.Failed;
         await DataContext.Track(replayer);
@@ -326,11 +333,12 @@ public class SqliteCleanupTests : TestSetup
                 Name = name,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = TrainState.Completed;
-        metadata.StartTime = DateTime.UtcNow.AddHours(-2);
-        metadata.EndTime = DateTime.UtcNow.AddHours(-2).AddSeconds(1);
+        metadata.StartTime = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2);
+        metadata.EndTime = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2).AddSeconds(1);
 
         await DataContext.Track(metadata).ConfigureAwait(false);
         await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);

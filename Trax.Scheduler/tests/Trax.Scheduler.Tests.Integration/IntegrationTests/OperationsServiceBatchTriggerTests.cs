@@ -132,7 +132,10 @@ public class OperationsServiceBatchTriggerTests : TestSetup
         var a = await SeedManifest(group, enabled: true);
         var b = await SeedManifest(group, enabled: false);
         var c = await SeedManifest(group, enabled: true);
-        var waiting = await SeedQueuedEntry(c, scheduledAt: DateTime.UtcNow.AddHours(1));
+        var waiting = await SeedQueuedEntry(
+            c,
+            scheduledAt: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(1)
+        );
 
         var result = await _operations
             .NotNull()
@@ -202,7 +205,7 @@ public class OperationsServiceBatchTriggerTests : TestSetup
         var failed = await SeedRun(manifest.Id, TrainState.Failed);
         var retry = await SeedQueuedEntry(
             manifest,
-            scheduledAt: DateTime.UtcNow.AddMinutes(10),
+            scheduledAt: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(10),
             replayDecisionsOf: failed.Id
         );
 
@@ -225,7 +228,7 @@ public class OperationsServiceBatchTriggerTests : TestSetup
         var failed = await SeedRun(manifest.Id, TrainState.Failed);
         var retry = await SeedQueuedEntry(
             manifest,
-            scheduledAt: DateTime.UtcNow.AddMinutes(10),
+            scheduledAt: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(10),
             replayDecisionsOf: failed.Id
         );
 
@@ -322,7 +325,10 @@ public class OperationsServiceBatchTriggerTests : TestSetup
     {
         var group = await CreateAndSaveManifestGroup(DataContext, $"g-{Guid.NewGuid():N}");
         var manifest = await SeedManifest(group, enabled: true);
-        var waiting = await SeedQueuedEntry(manifest, DateTime.UtcNow.AddHours(1));
+        var waiting = await SeedQueuedEntry(
+            manifest,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(1)
+        );
 
         var result = await _operations
             .NotNull()
@@ -599,7 +605,8 @@ public class OperationsServiceBatchTriggerTests : TestSetup
                 ManifestId = manifest.Id,
                 ScheduledAt = scheduledAt,
                 ReplayDecisionsOf = replayDecisionsOf,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(entry).ConfigureAwait(false);
         await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
@@ -616,7 +623,8 @@ public class OperationsServiceBatchTriggerTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
                 ManifestId = manifestId,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = state;
         await DataContext.Track(metadata).ConfigureAwait(false);

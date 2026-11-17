@@ -36,24 +36,26 @@ public class ManifestManagerSqliteTests : TestSetup
             Scope.ServiceProvider.GetRequiredService<ISqlDialect>()
         );
 
-        var cycleClock = Stopwatch.StartNew();
+        var cycleClockStarted = TimeProvider.System.GetTimestamp();
         var cycle = polling.RunManifestManager(CancellationToken.None);
 
         // A write from elsewhere in the host while the cycle runs.
-        var writeClock = Stopwatch.StartNew();
+        var writeClockStarted = TimeProvider.System.GetTimestamp();
         await using (var other = Scope.ServiceProvider.CreateAsyncScope())
         {
             var context = other.ServiceProvider.GetRequiredService<IDataContext>();
-            await context.Track(NewRun(TrainState.Completed, DateTime.UtcNow));
+            await context.Track(
+                NewRun(TrainState.Completed, TimeProvider.System.GetUtcNow().UtcDateTime)
+            );
             await context.SaveChanges(CancellationToken.None);
         }
-        writeClock.Stop();
+        var writeClockElapsed = TimeProvider.System.GetElapsedTime(writeClockStarted);
 
         await cycle;
-        cycleClock.Stop();
+        var cycleClockElapsed = TimeProvider.System.GetElapsedTime(cycleClockStarted);
 
-        writeClock.Elapsed.Should().BeLessThan(Quick, "the cycle must not hold the write lock");
-        cycleClock.Elapsed.Should().BeLessThan(Quick, "the cycle's own train must not wait on it");
+        writeClockElapsed.Should().BeLessThan(Quick, "the cycle must not hold the write lock");
+        cycleClockElapsed.Should().BeLessThan(Quick, "the cycle's own train must not wait on it");
 
         DataContext.Reset();
         var run = await DataContext.Metadatas.AsNoTracking().SingleAsync(m => m.Id == stale.Id);
@@ -62,7 +64,10 @@ public class ManifestManagerSqliteTests : TestSetup
 
     private async Task<Metadata> CreateStalePendingRun()
     {
-        var run = NewRun(TrainState.Pending, DateTime.UtcNow.AddHours(-1));
+        var run = NewRun(
+            TrainState.Pending,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1)
+        );
         await DataContext.Track(run).ConfigureAwait(false);
         await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
@@ -77,7 +82,8 @@ public class ManifestManagerSqliteTests : TestSetup
                 Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "stale" },
-            }
+            },
+            TimeProvider.System
         );
         run.TrainState = state;
         run.StartTime = startTime;

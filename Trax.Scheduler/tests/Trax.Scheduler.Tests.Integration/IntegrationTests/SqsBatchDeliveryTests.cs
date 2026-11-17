@@ -199,7 +199,8 @@ public class SqsBatchDeliveryTests
                 Name = typeof(IDeliveryProbeTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         await _dataContext.NotNull().Track(metadata).ConfigureAwait(false);
         await _dataContext.NotNull().SaveChanges(CancellationToken.None).ConfigureAwait(false);

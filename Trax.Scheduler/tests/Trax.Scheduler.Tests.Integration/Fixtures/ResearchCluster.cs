@@ -180,7 +180,7 @@ public sealed class ResearchCluster : IAsyncDisposable
                     .Invoke(writer, [CancellationToken.None])
                     .NotNull()
         )
-            .WaitAsync(TimeSpan.FromSeconds(30))
+            .WaitAsync(TimeSpan.FromSeconds(30), TimeProvider.System)
             .ConfigureAwait(false);
 
         return await With(data =>

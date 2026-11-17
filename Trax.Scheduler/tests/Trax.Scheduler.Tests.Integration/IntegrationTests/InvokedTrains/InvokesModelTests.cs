@@ -742,7 +742,9 @@ public class InvokesModelTests(ClusterStore store)
                 test._full.NotNull().Deliver(run.Token)
             );
             var sweep = test._api2.NotNull().Sweep();
-            await Task.WhenAll(deliveries, sweep).WaitAsync(Bound).ConfigureAwait(false);
+            await Task.WhenAll(deliveries, sweep)
+                .WaitAsync(Bound, TimeProvider.System)
+                .ConfigureAwait(false);
 
             (await deliveries.ConfigureAwait(false)).Should().NotContainNulls("no delivery fails");
             var all = (await deliveries.ConfigureAwait(false))
@@ -894,7 +896,9 @@ public class InvokesModelTests(ClusterStore store)
                 return await Api2.Deliver(run.Token).ConfigureAwait(false);
             });
             go.SetResult();
-            await Task.WhenAll(leave, delivery).WaitAsync(Bound).ConfigureAwait(false);
+            await Task.WhenAll(leave, delivery)
+                .WaitAsync(Bound, TimeProvider.System)
+                .ConfigureAwait(false);
             Count((await delivery.ConfigureAwait(false)));
 
             var left = (await leave.ConfigureAwait(false)) is AdvanceOutcome.Advanced;
@@ -955,7 +959,9 @@ public class InvokesModelTests(ClusterStore store)
                     .ConfigureAwait(false);
             });
             go.SetResult();
-            await Task.WhenAll(leave, dispatch).WaitAsync(Bound).ConfigureAwait(false);
+            await Task.WhenAll(leave, dispatch)
+                .WaitAsync(Bound, TimeProvider.System)
+                .ConfigureAwait(false);
 
             (await leave.ConfigureAwait(false)).Should().BeOfType<AdvanceOutcome.Advanced>();
             await ObserveDispatch(host).ConfigureAwait(false);
@@ -992,7 +998,9 @@ public class InvokesModelTests(ClusterStore store)
                 await host.RunJob(run.MetadataId.NotNull().Value).ConfigureAwait(false);
             });
             go.SetResult();
-            await Task.WhenAll(leave, job).WaitAsync(Bound).ConfigureAwait(false);
+            await Task.WhenAll(leave, job)
+                .WaitAsync(Bound, TimeProvider.System)
+                .ConfigureAwait(false);
 
             var ended = (
                 await host.Run(run.MetadataId.NotNull().Value).ConfigureAwait(false)
@@ -1046,7 +1054,9 @@ public class InvokesModelTests(ClusterStore store)
                 )
                 .ToArray();
             go.SetResult();
-            var started = await Task.WhenAll(starts).WaitAsync(Bound).ConfigureAwait(false);
+            var started = await Task.WhenAll(starts)
+                .WaitAsync(Bound, TimeProvider.System)
+                .ConfigureAwait(false);
 
             started.Select(s => s.Id).Distinct().Should().ContainSingle("one key, one instance");
             started
@@ -1069,7 +1079,7 @@ public class InvokesModelTests(ClusterStore store)
             var scope = Api.Services.CreateAsyncScope();
             await using (scope.ConfigureAwait(false))
             {
-                var aged = DateTimeOffset.UtcNow - TimeSpan.FromHours(2);
+                var aged = TimeProvider.System.GetUtcNow() - TimeSpan.FromHours(2);
                 await scope
                     .ServiceProvider.GetRequiredService<IDataContext>()
                     .SnapshotDrafts.Where(x => x.Id == user.Id && x.Machine == user.Machine)

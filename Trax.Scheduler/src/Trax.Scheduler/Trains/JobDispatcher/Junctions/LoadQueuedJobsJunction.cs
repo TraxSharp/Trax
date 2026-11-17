@@ -7,6 +7,7 @@ using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Utilities;
 
 namespace Trax.Scheduler.Trains.JobDispatcher.Junctions;
 
@@ -91,7 +92,8 @@ internal sealed class LoadQueuedJobsJunction(
                 || (q.Manifest != null && q.Manifest.IsEnabled)
                 || q.IsExplicitTrigger
             )
-            .Where(q => q.ScheduledAt == null || q.ScheduledAt <= DateTime.UtcNow)
+            // Due by the database's clock, the one the claim compares with.
+            .Where(DatabaseClock.IsDue())
             // Subjects with a run still in flight are not candidates. The claim refuses them
             // anyway; dropping them here keeps a blocked subject from crowding the batch.
             .Where(q =>

@@ -19,7 +19,8 @@ namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 /// </remarks>
 internal sealed class DetermineJobsToQueueJunction(
     ILogger<DetermineJobsToQueueJunction> logger,
-    SchedulerConfiguration config
+    SchedulerConfiguration config,
+    TimeProvider timeProvider
 ) : EffectJunction<(List<ManifestDispatchView>, List<DeadLetter>), List<ManifestDispatchView>>
 {
     public override async Task<List<ManifestDispatchView>> Run(
@@ -32,7 +33,7 @@ internal sealed class DetermineJobsToQueueJunction(
             "Starting DetermineJobsToQueueJunction to identify manifests due for execution"
         );
 
-        var now = DateTime.UtcNow;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
         var viewsToQueue = new List<ManifestDispatchView>();
 
         // Create a set of manifest IDs that were just dead-lettered in this cycle

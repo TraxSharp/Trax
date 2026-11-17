@@ -295,7 +295,7 @@ public class CheckpointResumeTests(ClusterStore store)
                     await _cluster.NotNull().Host.RunManifestManager().ConfigureAwait(false);
             operatorResume = await operations
                 .ResumeExecutionAsync(failed.Id, from: null, CancellationToken.None)
-                .WaitAsync(Bound);
+                .WaitAsync(Bound, TimeProvider.System);
         }
         if (!retryFirst)
             await _cluster.NotNull().Host.RunManifestManager();
@@ -457,7 +457,7 @@ public class CheckpointResumeTests(ClusterStore store)
             await scope
                 .ServiceProvider.GetRequiredService<ITraxRequestHandler>()
                 .ExecuteJobAsync(received)
-                .WaitAsync(Bound);
+                .WaitAsync(Bound, TimeProvider.System);
 
         var resumed = await _cluster.NotNull().Host.Run(runId);
         resumed.TrainState.Should().Be(TrainState.Completed, resumed.FailureReason);
@@ -501,7 +501,7 @@ public class CheckpointResumeTests(ClusterStore store)
                 .Count.Should()
                 .Be(1);
         _decider.Release();
-        await job.WaitAsync(Bound);
+        await job.WaitAsync(Bound, TimeProvider.System);
 
         var run = await _cluster.NotNull().Host.Run(runId);
         run.TrainState.Should()
@@ -539,7 +539,7 @@ public class CheckpointResumeTests(ClusterStore store)
             .CancellationRequested.Should()
             .BeTrue("the manifest manager flags a run past its timeout");
         _decider.Release();
-        await job.WaitAsync(Bound);
+        await job.WaitAsync(Bound, TimeProvider.System);
 
         var run = await _cluster.NotNull().Host.Run(runId);
         run.TrainState.Should()
@@ -575,7 +575,7 @@ public class CheckpointResumeTests(ClusterStore store)
         ResearchProbe.RanFor("progress").Should().Equal([nameof(SummarizeLong)]);
 
         ResearchProbe.Release();
-        await job.WaitAsync(Bound);
+        await job.WaitAsync(Bound, TimeProvider.System);
 
         var run = await _cluster.NotNull().Host.Run(runId);
         run.TrainState.Should().Be(TrainState.Completed, run.FailureReason);
@@ -603,7 +603,7 @@ public class CheckpointResumeTests(ClusterStore store)
         retry
             .ScheduledAt.Should()
             .BeAfter(
-                DateTime.UtcNow.AddMinutes(9),
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(9),
                 $"a retry that resumes waits out the same backoff as one that reruns ({Adr})"
             );
 
@@ -618,7 +618,10 @@ public class CheckpointResumeTests(ClusterStore store)
         await delayed.With(d =>
             d.WorkQueues.Where(q => q.Id == retry.Id)
                 .ExecuteUpdateAsync(s =>
-                    s.SetProperty(q => q.ScheduledAt, DateTime.UtcNow.AddMinutes(-1))
+                    s.SetProperty(
+                        q => q.ScheduledAt,
+                        TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-1)
+                    )
                 )
         );
         var resumed = await delayed.DispatchAndRun(await delayed.Entry(retry.Id));

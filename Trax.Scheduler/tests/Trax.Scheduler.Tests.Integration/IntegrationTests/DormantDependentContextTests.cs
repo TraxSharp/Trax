@@ -316,7 +316,8 @@ public class DormantDependentContextTests : TestSetup
                 Input = dormant.Properties,
                 InputTypeName = dormant.PropertyTypeName,
                 ManifestId = dormant.Id,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(existingEntry);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -358,7 +359,8 @@ public class DormantDependentContextTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
                 ManifestId = dormant.Id,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = TrainState.InProgress;
         await DataContext.Track(metadata);

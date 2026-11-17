@@ -47,7 +47,8 @@ public class DispatchAndLoadCoverageTests
                 Manifest = manifest,
                 Reason = "test",
                 RetryCount = 1,
-            }
+            },
+            TimeProvider.System
         );
         await fx.DataContext.Track(deadLetter);
         await fx.DataContext.SaveChanges(default);

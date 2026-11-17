@@ -34,7 +34,7 @@ public class RecoverStuckJobsTests : TestSetup
         var metadata = await CreateAndSaveMetadata(
             manifest,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddMinutes(-5)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5)
         );
 
         var configuration = CreateRecoveryConfiguration(recoverStuckJobs: true);
@@ -69,7 +69,7 @@ public class RecoverStuckJobsTests : TestSetup
             var metadata = await CreateAndSaveMetadata(
                 manifest,
                 TrainState.InProgress,
-                startTime: DateTime.UtcNow.AddMinutes(-10)
+                startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10)
             );
             metadataIds.Add(metadata.Id);
         }
@@ -97,7 +97,7 @@ public class RecoverStuckJobsTests : TestSetup
         var metadata = await CreateAndSaveMetadata(
             manifest,
             TrainState.Completed,
-            startTime: DateTime.UtcNow.AddMinutes(-5)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5)
         );
 
         var configuration = CreateRecoveryConfiguration(recoverStuckJobs: true);
@@ -120,7 +120,7 @@ public class RecoverStuckJobsTests : TestSetup
         var metadata = await CreateAndSaveMetadata(
             manifest,
             TrainState.Failed,
-            startTime: DateTime.UtcNow.AddMinutes(-5)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5)
         );
 
         var configuration = CreateRecoveryConfiguration(recoverStuckJobs: true);
@@ -146,7 +146,7 @@ public class RecoverStuckJobsTests : TestSetup
         var metadata = await CreateAndSaveMetadata(
             manifest,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddMinutes(-5)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5)
         );
 
         var configuration = CreateRecoveryConfiguration(recoverStuckJobs: false);
@@ -171,7 +171,7 @@ public class RecoverStuckJobsTests : TestSetup
         await CreateAndSaveMetadata(
             manifest,
             TrainState.Completed,
-            startTime: DateTime.UtcNow.AddMinutes(-5)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5)
         );
 
         var configuration = CreateRecoveryConfiguration(recoverStuckJobs: true);
@@ -199,7 +199,7 @@ public class RecoverStuckJobsTests : TestSetup
             var metadata = await CreateAndSaveMetadata(
                 manifest,
                 TrainState.InProgress,
-                startTime: DateTime.UtcNow.AddMinutes(-10)
+                startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10)
             );
             metadataIds.Add(metadata.Id);
         }
@@ -283,7 +283,8 @@ public class RecoverStuckJobsTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = manifest.GetProperties<SchedulerTestInput>(),
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
 
         metadata.TrainState = state;

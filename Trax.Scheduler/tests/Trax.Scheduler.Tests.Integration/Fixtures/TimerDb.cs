@@ -38,7 +38,7 @@ internal sealed class TimerDb(InvokeCluster cluster)
             )
             : Execute(
                 $"UPDATE {Table} SET due_at = @at WHERE row_id = @row",
-                ("at", DateTimeOffset.UtcNow + from),
+                ("at", TimeProvider.System.GetUtcNow() + from),
                 ("row", rowId)
             );
 
@@ -51,7 +51,7 @@ internal sealed class TimerDb(InvokeCluster cluster)
             )
             : Execute(
                 $"UPDATE {Table} SET due_at = @at WHERE machine = @machine",
-                ("at", DateTimeOffset.UtcNow - TimeSpan.FromSeconds(1)),
+                ("at", TimeProvider.System.GetUtcNow() - TimeSpan.FromSeconds(1)),
                 ("machine", machine)
             );
 
@@ -113,7 +113,7 @@ internal sealed class TimerDb(InvokeCluster cluster)
     public async Task<DateTimeOffset> Now()
     {
         if (!Postgres)
-            return DateTimeOffset.UtcNow;
+            return TimeProvider.System.GetUtcNow();
         var connection = await Open().ConfigureAwait(false);
         await using (connection.ConfigureAwait(false))
         {

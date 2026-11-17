@@ -73,7 +73,8 @@ public class RemoteDeliveryOutcomeTests
                                     BaseUrl = "https://runner.test/trax/execute",
                                     Retry = new HttpRetryOptions { MaxRetries = 0 },
                                 },
-                                NullLogger<HttpJobSubmitter>.Instance
+                                NullLogger<HttpJobSubmitter>.Instance,
+                                TimeProvider.System
                             ))
                         )
                     )
@@ -271,7 +272,8 @@ public class RemoteDeliveryOutcomeTests
                 ),
                 InputTypeName = typeof(DeliveryProbeInput).FullName,
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         await _dataContext.NotNull().Track(entry).ConfigureAwait(false);
         await _dataContext.NotNull().SaveChanges(CancellationToken.None).ConfigureAwait(false);
@@ -313,7 +315,9 @@ public class RemoteDeliveryOutcomeTests
             Task[] running;
             lock (_running)
                 running = [.. _running];
-            await Task.WhenAll(running).WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+            await Task.WhenAll(running)
+                .WaitAsync(TimeSpan.FromSeconds(30), TimeProvider.System)
+                .ConfigureAwait(false);
         }
 
         protected override async Task<HttpResponseMessage> SendAsync(

@@ -88,7 +88,11 @@ public class DatabaseClockSkewTests
         // The skew is in place: the database's clock, as the scheduler reads it, is ahead.
         (await DatabaseNow().ConfigureAwait(false))
             .Should()
-            .BeCloseTo(DateTime.UtcNow + Skew, Tolerance, "the test's clock skew must apply");
+            .BeCloseTo(
+                TimeProvider.System.GetUtcNow().UtcDateTime + Skew,
+                Tolerance,
+                "the test's clock skew must apply"
+            );
     }
 
     [Test]
@@ -106,7 +110,10 @@ public class DatabaseClockSkewTests
             .SingleAsync(q => q.ManifestId == manifest.Id && q.Status == WorkQueueStatus.Queued);
         entry
             .ScheduledAt.Should()
-            .BeCloseTo(DateTime.UtcNow + Skew + TimeSpan.FromMinutes(5), Tolerance);
+            .BeCloseTo(
+                TimeProvider.System.GetUtcNow().UtcDateTime + Skew + TimeSpan.FromMinutes(5),
+                Tolerance
+            );
     }
 
     [Test]
@@ -129,7 +136,10 @@ public class DatabaseClockSkewTests
         requeued.DispatchAttempts.Should().Be(1);
         requeued
             .ScheduledAt.Should()
-            .BeCloseTo(DateTime.UtcNow + Skew + TimeSpan.FromSeconds(5), Tolerance);
+            .BeCloseTo(
+                TimeProvider.System.GetUtcNow().UtcDateTime + Skew + TimeSpan.FromSeconds(5),
+                Tolerance
+            );
     }
 
     [Test]
@@ -151,7 +161,10 @@ public class DatabaseClockSkewTests
         deferred.DispatchAttempts.Should().Be(1);
         deferred
             .ScheduledAt.Should()
-            .BeCloseTo(DateTime.UtcNow + Skew + TimeSpan.FromSeconds(5), Tolerance);
+            .BeCloseTo(
+                TimeProvider.System.GetUtcNow().UtcDateTime + Skew + TimeSpan.FromSeconds(5),
+                Tolerance
+            );
     }
 
     /// <summary>
@@ -182,7 +195,8 @@ public class DatabaseClockSkewTests
                 TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = input,
                 InputTypeName = inputTypeName,
-            }
+            },
+            TimeProvider.System
         );
         await _fx.NotNull().DataContext.Track(entry).ConfigureAwait(false);
         await _fx.NotNull().DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
@@ -211,7 +225,7 @@ public class DatabaseClockSkewTests
             }
         );
         manifest.ManifestGroupId = group.Id;
-        manifest.LastSuccessfulRun = DateTime.UtcNow.AddMinutes(-5);
+        manifest.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5);
         await _fx.NotNull().DataContext.Track(manifest).ConfigureAwait(false);
         await _fx.NotNull().DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         _fx.NotNull().DataContext.Reset();
@@ -223,10 +237,11 @@ public class DatabaseClockSkewTests
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "clock" },
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         run.TrainState = TrainState.Failed;
-        run.StartTime = DateTime.UtcNow.AddHours(-1);
+        run.StartTime = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1);
         run.EndTime = run.StartTime.AddMinutes(1);
         await _fx.NotNull().DataContext.Track(run).ConfigureAwait(false);
         await _fx.NotNull().DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);

@@ -34,10 +34,11 @@ internal static class ReapedRuns
         string reason,
         string exception,
         string junction,
+        TimeProvider timeProvider,
         CancellationToken cancellationToken
     )
     {
-        var mark = NextMark();
+        var mark = NextMark(timeProvider);
         var moved = await stillStale
             .ExecuteUpdateAsync(
                 s =>
@@ -70,9 +71,9 @@ internal static class ReapedRuns
     /// <summary>
     /// A UTC time to the microsecond, later than any this process has returned before.
     /// </summary>
-    internal static DateTime NextMark()
+    internal static DateTime NextMark(TimeProvider timeProvider)
     {
-        var now = DateTime.UtcNow.Ticks;
+        var now = timeProvider.GetUtcNow().UtcDateTime.Ticks;
         now -= now % TimeSpan.TicksPerMicrosecond;
         while (true)
         {

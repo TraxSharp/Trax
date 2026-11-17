@@ -100,7 +100,7 @@ public class OperationsServiceTests : TestSetup
     [Test]
     public async Task QueueTrainAsync_ScheduledAt_IsPersisted()
     {
-        var when = DateTime.UtcNow.AddMinutes(10);
+        var when = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(10);
 
         await _operations
             .NotNull()
@@ -213,7 +213,10 @@ public class OperationsServiceTests : TestSetup
     [Test]
     public async Task CancelWorkQueueEntryAsync_QueuedEntry_TransitionsToCancelled()
     {
-        var queued = WorkQueue.Create(new CreateWorkQueue { TrainName = TrainName });
+        var queued = WorkQueue.Create(
+            new CreateWorkQueue { TrainName = TrainName },
+            TimeProvider.System
+        );
         await DataContext.Track(queued);
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
@@ -244,7 +247,10 @@ public class OperationsServiceTests : TestSetup
     [Test]
     public async Task CancelWorkQueueEntryAsync_AlreadyCancelled_ReturnsFailure()
     {
-        var entry = WorkQueue.Create(new CreateWorkQueue { TrainName = TrainName });
+        var entry = WorkQueue.Create(
+            new CreateWorkQueue { TrainName = TrainName },
+            TimeProvider.System
+        );
         entry.Status = WorkQueueStatus.Cancelled;
         await DataContext.Track(entry);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -264,7 +270,10 @@ public class OperationsServiceTests : TestSetup
     [Test]
     public async Task CancelWorkQueueEntryAsync_AlreadyDispatched_ReturnsFailure()
     {
-        var entry = WorkQueue.Create(new CreateWorkQueue { TrainName = TrainName });
+        var entry = WorkQueue.Create(
+            new CreateWorkQueue { TrainName = TrainName },
+            TimeProvider.System
+        );
         entry.Status = WorkQueueStatus.Dispatched;
         await DataContext.Track(entry);
         await DataContext.SaveChanges(CancellationToken.None);

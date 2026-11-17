@@ -41,7 +41,8 @@ public class InvokedRunIsNeverRetriedTests : TestSetup
                 ),
                 InputTypeName = typeof(FailingSchedulerTestInput).AssemblyQualifiedName,
                 InvokedBy = new InvokedBy("ingest", instance, SnapshotOwnerKind.System),
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(entry);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -65,7 +66,7 @@ public class InvokedRunIsNeverRetriedTests : TestSetup
             .Metadatas.Where(m => m.Id == run.Id)
             .ExecuteUpdateAsync(s =>
                 s.SetProperty(m => m.TrainState, TrainState.Failed)
-                    .SetProperty(m => m.EndTime, DateTime.UtcNow)
+                    .SetProperty(m => m.EndTime, TimeProvider.System.GetUtcNow().UtcDateTime)
             );
 
         var manager = Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();

@@ -8,7 +8,7 @@ namespace Trax.Scheduler.Services.Scheduling;
 /// </summary>
 /// <remarks>
 /// Schedule is an immutable record that encapsulates scheduling configuration.
-/// Use the static factory methods <see cref="FromInterval"/> and <see cref="FromCron"/>
+/// Use the static factory methods <see cref="FromInterval"/> and <see cref="FromCron(string)"/>
 /// to create instances, or use the <see cref="Every"/> and <see cref="Cron"/> helper classes
 /// for more readable schedule definitions.
 /// </remarks>
@@ -101,12 +101,25 @@ public record Schedule
     /// var schedule = Schedule.FromCron("*/15 * * * * *");  // Every 15 seconds (6-field)
     /// </code>
     /// </example>
-    public static Schedule FromCron(string expression)
+    public static Schedule FromCron(string expression) => FromCron(expression, TimeProvider.System);
+
+    /// <summary>
+    /// As <see cref="FromCron(string)"/>, checking that the expression fires within ten years of
+    /// the time <paramref name="timeProvider"/> gives.
+    /// </summary>
+    /// <param name="expression">A 5-field or 6-field cron expression, in UTC.</param>
+    /// <param name="timeProvider">The clock the next occurrence is searched from.</param>
+    /// <exception cref="FormatException">
+    /// <paramref name="expression"/> is not a valid cron expression, or it never fires within ten
+    /// years of that time.
+    /// </exception>
+    internal static Schedule FromCron(string expression, TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(expression);
+        ArgumentNullException.ThrowIfNull(timeProvider);
         var parsed = CronParser.Parse(expression);
 
-        var now = DateTime.UtcNow;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
         var next = parsed.GetNextOccurrence(now, TimeZoneInfo.Utc);
         if (next is null || next > now.AddYears(CronSearchWindowYears))
             throw new FormatException(
@@ -120,7 +133,7 @@ public record Schedule
     }
 
     /// <summary>
-    /// How far ahead <see cref="FromCron"/> looks for a cron expression's next occurrence before
+    /// How far ahead <see cref="FromCron(string)"/> looks for a cron expression's next occurrence before
     /// refusing it as one that never fires.
     /// </summary>
     internal const int CronSearchWindowYears = 10;

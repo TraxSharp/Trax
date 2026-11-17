@@ -142,7 +142,8 @@ public class DispatchConcurrencyTests : TestSetup
                     Input = manifest.Properties,
                     InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                     ManifestId = manifest.Id,
-                }
+                },
+                TimeProvider.System
             );
             await DataContext.Track(entry).ConfigureAwait(false);
             await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
@@ -173,7 +174,8 @@ public class DispatchConcurrencyTests : TestSetup
                         TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                         Input = "{}",
                         InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
-                    }
+                    },
+                    TimeProvider.System
                 );
                 await DataContext.Track(entry).ConfigureAwait(false);
                 await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
@@ -197,7 +199,7 @@ public class DispatchConcurrencyTests : TestSetup
         // Transition to Dispatched
         firstEntry = await DataContext.WorkQueues.FirstAsync(q => q.Id == firstEntry.Id);
         firstEntry.Status = WorkQueueStatus.Dispatched;
-        firstEntry.DispatchedAt = DateTime.UtcNow;
+        firstEntry.DispatchedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
@@ -266,7 +268,8 @@ public class DispatchConcurrencyTests : TestSetup
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                 ManifestId = manifest.Id,
                 Priority = priority,
-            }
+            },
+            TimeProvider.System
         );
 
         await DataContext.Track(entry).ConfigureAwait(false);

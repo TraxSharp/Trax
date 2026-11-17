@@ -181,7 +181,7 @@ public class ExclusionScheduleTests
             ExternalId = Guid.NewGuid().ToString("N"),
             Name = "TestTrain",
             ScheduleType = ScheduleType.Once,
-            ScheduledAt = DateTime.UtcNow.AddMinutes(-5),
+            ScheduledAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5),
             IsEnabled = true,
         };
         manifest.SetExclusions([Exclude.DaysOfWeek(DayOfWeek.Saturday)]);

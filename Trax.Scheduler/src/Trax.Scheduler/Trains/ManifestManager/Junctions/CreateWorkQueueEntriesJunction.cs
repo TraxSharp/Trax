@@ -25,13 +25,14 @@ internal sealed class CreateWorkQueueEntriesJunction(
     SchedulerConfiguration schedulerConfiguration,
     ILogger<CreateWorkQueueEntriesJunction> logger,
     RetryDecisionReplay retryReplay,
+    TimeProvider timeProvider,
     ITraxChangeSignal? changeSignal = null,
     RetryResume? retryResume = null
 ) : EffectJunction<List<ManifestDispatchView>, Unit>
 {
     public override async Task<Unit> Run(List<ManifestDispatchView> views)
     {
-        var pollStartTime = DateTime.UtcNow;
+        var pollStartTime = timeProvider.GetUtcNow().UtcDateTime;
         var entriesCreated = 0;
 
         logger.LogDebug(
@@ -126,6 +127,7 @@ internal sealed class CreateWorkQueueEntriesJunction(
                         databaseNow ??= await DatabaseClock
                             .UtcNowAsync(
                                 dataContext.Manifests.Where(m => m.Id == manifestId),
+                                timeProvider,
                                 CancellationToken
                             )
                             .ConfigureAwait(false);
@@ -160,7 +162,8 @@ internal sealed class CreateWorkQueueEntriesJunction(
                         ResumeFrom = resumeSources.TryGetValue(view.Manifest.Id, out var resumed)
                             ? resumed
                             : null,
-                    }
+                    },
+                    timeProvider
                 );
 
                 await dataContext.Track(entry).ConfigureAwait(false);
@@ -205,7 +208,7 @@ internal sealed class CreateWorkQueueEntriesJunction(
             }
         }
 
-        var duration = DateTime.UtcNow - pollStartTime;
+        var duration = timeProvider.GetUtcNow().UtcDateTime - pollStartTime;
 
         if (entriesCreated > 0)
         {

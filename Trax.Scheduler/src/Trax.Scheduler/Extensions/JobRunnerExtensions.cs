@@ -101,6 +101,9 @@ public static class JobRunnerExtensions
         // Cancellation registry (singleton — shared across all requests)
         services.TryAddSingleton<ICancellationRegistry, CancellationRegistry>();
 
+        // The clock the runner stamps its rows from, unless the host registered its own.
+        services.TryAddSingleton(TimeProvider.System);
+
         // Runtime scheduler interface
         services.TryAddScoped<ITraxScheduler, TraxScheduler>();
 

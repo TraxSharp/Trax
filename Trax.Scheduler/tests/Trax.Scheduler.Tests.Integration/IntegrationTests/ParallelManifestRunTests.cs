@@ -159,7 +159,7 @@ public class ParallelManifestRunTests
             retry
                 .ScheduledAt.Should()
                 .BeAfter(
-                    DateTime.UtcNow.AddMinutes(9),
+                    TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(9),
                     "a Parallel run's failure is a failed run, retried after the backoff"
                 );
         }
@@ -235,7 +235,7 @@ public class ParallelManifestRunTests
 
         await RunManifestManagerAsync();
         var dispatching = Task.Run(() => DispatchQueuedAsync(manifest));
-        await ParallelProbe.Held.WaitAsync(TimeSpan.FromSeconds(30));
+        await ParallelProbe.Held.WaitAsync(TimeSpan.FromSeconds(30), TimeProvider.System);
 
         // The run has been going for longer than its manifest allows.
         var runId = await WithData(async data =>
@@ -248,7 +248,10 @@ public class ParallelManifestRunTests
             await data
                 .Metadatas.Where(m => m.Id == run.Id)
                 .ExecuteUpdateAsync(s =>
-                    s.SetProperty(m => m.StartTime, DateTime.UtcNow.AddMinutes(-5))
+                    s.SetProperty(
+                        m => m.StartTime,
+                        TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5)
+                    )
                 )
                 .ConfigureAwait(false);
             return run.Id;
@@ -256,7 +259,7 @@ public class ParallelManifestRunTests
 
         await RunManifestManagerAsync();
         ParallelProbe.Release();
-        var run = await dispatching.WaitAsync(TimeSpan.FromSeconds(30));
+        var run = await dispatching.WaitAsync(TimeSpan.FromSeconds(30), TimeProvider.System);
 
         run.Id.Should().Be(runId);
         run.TrainState.Should()

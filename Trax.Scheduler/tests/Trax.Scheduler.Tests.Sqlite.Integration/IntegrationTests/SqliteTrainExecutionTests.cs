@@ -112,7 +112,8 @@ public class SqliteTrainExecutionTests : TestSetup
                 Name = typeof(ISchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "job-runner-test" },
-            }
+            },
+            TimeProvider.System
         );
 
         await DataContext.Track(metadata);

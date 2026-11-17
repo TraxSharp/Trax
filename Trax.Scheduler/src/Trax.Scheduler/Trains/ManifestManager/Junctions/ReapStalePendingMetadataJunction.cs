@@ -36,12 +36,13 @@ internal sealed class ReapStalePendingMetadataJunction(
     IDataContext dataContext,
     SchedulerConfiguration config,
     DeferredOutcomeEvents outcomeEvents,
-    ILogger<ReapStalePendingMetadataJunction> logger
+    ILogger<ReapStalePendingMetadataJunction> logger,
+    TimeProvider timeProvider
 ) : EffectJunction<Unit, Unit>
 {
     public override async Task<Unit> Run(Unit input)
     {
-        var cutoff = DateTime.UtcNow - config.StalePendingTimeout;
+        var cutoff = timeProvider.GetUtcNow().UtcDateTime - config.StalePendingTimeout;
 
         var staleMetadata = await dataContext
             .Metadatas.Where(m =>
@@ -97,6 +98,7 @@ internal sealed class ReapStalePendingMetadataJunction(
                 "Job was not picked up within the configured stale pending timeout",
                 "StalePendingTimeout",
                 nameof(ReapStalePendingMetadataJunction),
+                timeProvider,
                 CancellationToken
             )
             .ConfigureAwait(false);

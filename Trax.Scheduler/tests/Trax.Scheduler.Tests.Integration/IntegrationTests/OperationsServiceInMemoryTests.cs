@@ -206,8 +206,9 @@ public class OperationsServiceInMemoryTests
                     Input = queued.Properties,
                     InputTypeName = queued.PropertyTypeName,
                     ManifestId = queued.Id,
-                    ScheduledAt = DateTime.UtcNow.AddHours(1),
-                }
+                    ScheduledAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(1),
+                },
+                TimeProvider.System
             )
         );
 
@@ -337,7 +338,7 @@ public class OperationsServiceInMemoryTests
     [Test]
     public async Task Dashboard_metrics_average_root_run_durations()
     {
-        var start = DateTime.UtcNow.AddMinutes(-30);
+        var start = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-30);
         foreach (var seconds in new[] { 10, 20 })
         {
             var run = await SeedRun(TrainState.Completed);
@@ -387,8 +388,8 @@ public class OperationsServiceInMemoryTests
             {
                 Name = $"{name}-{Guid.NewGuid():N}",
                 IsEnabled = enabled,
-                CreatedAt = DateTime.UtcNow.AddMinutes(-1),
-                UpdatedAt = DateTime.UtcNow.AddMinutes(-1),
+                CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-1),
+                UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-1),
             }
         );
 
@@ -417,7 +418,8 @@ public class OperationsServiceInMemoryTests
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
                 ManifestId = manifestId,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = state;
         return Save(metadata);
@@ -431,7 +433,8 @@ public class OperationsServiceInMemoryTests
                 TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = null,
                 InputTypeName = null,
-            }
+            },
+            TimeProvider.System
         );
         entry.Status = status;
         return Save(entry);

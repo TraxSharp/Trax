@@ -130,7 +130,10 @@ public class CronParserTests
     [Test]
     public void GetNextOccurrence_InvalidExpression_ReturnsNull()
     {
-        var next = CronParser.GetNextOccurrence("invalid", DateTime.UtcNow);
+        var next = CronParser.GetNextOccurrence(
+            "invalid",
+            TimeProvider.System.GetUtcNow().UtcDateTime
+        );
         next.Should().BeNull();
     }
 

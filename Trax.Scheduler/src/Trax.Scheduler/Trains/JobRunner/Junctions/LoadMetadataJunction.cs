@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
 using Trax.Core.Extensions;
@@ -109,7 +110,9 @@ internal sealed class LoadMetadataJunction(
     /// </remarks>
     private async Task RecordCancelledBeforeStartAsync(Metadata metadata)
     {
-        var endTime = DateTime.UtcNow;
+        var endTime = (services.GetService<TimeProvider>() ?? TimeProvider.System)
+            .GetUtcNow()
+            .UtcDateTime;
         var flagged = dataContext.Metadatas.Where(m =>
             m.Id == metadata.Id && m.TrainState == TrainState.Pending && m.CancellationRequested
         );

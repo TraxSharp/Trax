@@ -88,7 +88,7 @@ public class CancellationIntegrationTests : TestSetup
     {
         // Arrange
         var metadata = await CreateTestMetadata();
-        var junctionStartTime = DateTime.UtcNow;
+        var junctionStartTime = TimeProvider.System.GetUtcNow().UtcDateTime;
 
         // Act — set step progress
         await DataContext
@@ -361,7 +361,8 @@ public class CancellationIntegrationTests : TestSetup
                 Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "test" },
-            }
+            },
+            TimeProvider.System
         );
 
         await DataContext.Track(metadata).ConfigureAwait(false);

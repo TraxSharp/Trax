@@ -26,7 +26,8 @@ namespace Trax.Scheduler.Lambda.Services;
 internal sealed class LambdaJobSubmitter(
     IAmazonLambda lambdaClient,
     LambdaWorkerOptions options,
-    ILogger<LambdaJobSubmitter> logger
+    ILogger<LambdaJobSubmitter> logger,
+    TimeProvider timeProvider
 ) : IJobSubmitter
 {
     /// <inheritdoc />
@@ -72,7 +73,8 @@ internal sealed class LambdaJobSubmitter(
                 ? RunnerRequestSignature.Create(
                     key,
                     RunnerRequestPurpose.Execute,
-                    Encoding.UTF8.GetBytes(payloadJson)
+                    Encoding.UTF8.GetBytes(payloadJson),
+                    timeProvider
                 )
                 : null,
         };
@@ -96,6 +98,7 @@ internal sealed class LambdaJobSubmitter(
                 invokeRequest,
                 options.Retry,
                 logger,
+                timeProvider,
                 cancellationToken
             )
             .ConfigureAwait(false);

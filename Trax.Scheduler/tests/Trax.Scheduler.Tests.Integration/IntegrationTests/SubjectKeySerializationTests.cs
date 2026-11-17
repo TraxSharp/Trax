@@ -233,9 +233,13 @@ public class SubjectKeySerializationTests
         var older = await CreateEntry(
             "customer-1",
             "older",
-            createdAt: DateTime.UtcNow.AddMinutes(-5)
+            createdAt: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5)
         );
-        var newer = await CreateEntry("customer-1", "newer", createdAt: DateTime.UtcNow);
+        var newer = await CreateEntry(
+            "customer-1",
+            "newer",
+            createdAt: TimeProvider.System.GetUtcNow().UtcDateTime
+        );
 
         await RunCycle();
 
@@ -280,7 +284,7 @@ public class SubjectKeySerializationTests
             await CreateEntry(
                 "customer-1",
                 string.Create(CultureInfo.InvariantCulture, $"c1-{i}"),
-                createdAt: DateTime.UtcNow.AddMinutes(-10 + i)
+                createdAt: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10 + i)
             );
         var other = await CreateEntry("customer-2", "c2");
 
@@ -311,13 +315,13 @@ public class SubjectKeySerializationTests
         await CreateEntry(
             subjectKey: null,
             "staged-1",
-            createdAt: DateTime.UtcNow.AddMinutes(-10),
+            createdAt: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10),
             staged: true
         );
         await CreateEntry(
             subjectKey: null,
             "staged-2",
-            createdAt: DateTime.UtcNow.AddMinutes(-9),
+            createdAt: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-9),
             staged: true
         );
         var ready = await CreateEntry(subjectKey: null, "ready");
@@ -379,7 +383,7 @@ public class SubjectKeySerializationTests
 
         await contextA.CommitTransaction();
 
-        (await b.WaitAsync(ReleasedWorkBudget))
+        (await b.WaitAsync(ReleasedWorkBudget, TimeProvider.System))
             .Should()
             .BeNull(
                 "B waits on the subject lock, and once A commits it can see A's run in flight — "
@@ -430,7 +434,8 @@ public class SubjectKeySerializationTests
 
         try
         {
-            await Task.WhenAll(dispatcherA, dispatcherB).WaitAsync(ReleasedWorkBudget);
+            await Task.WhenAll(dispatcherA, dispatcherB)
+                .WaitAsync(ReleasedWorkBudget, TimeProvider.System);
         }
         catch (TimeoutException)
         {
@@ -507,9 +512,9 @@ public class SubjectKeySerializationTests
     /// </summary>
     private async Task WaitUntilBlockedBehindGate(int gatePid, int backends)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(30);
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(30);
 
-        while (DateTime.UtcNow < deadline)
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             var probe = _serviceProvider.NotNull().CreateAsyncScope();
             await using var probeDisposal = probe.ConfigureAwait(false);
@@ -554,9 +559,9 @@ public class SubjectKeySerializationTests
     /// </summary>
     private async Task WaitUntilSomethingWaitsOnAnAdvisoryLock()
     {
-        var deadline = DateTime.UtcNow.AddSeconds(30);
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(30);
 
-        while (DateTime.UtcNow < deadline)
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             var probe = _serviceProvider.NotNull().CreateAsyncScope();
             await using var probeDisposal = probe.ConfigureAwait(false);
@@ -603,14 +608,15 @@ public class SubjectKeySerializationTests
                 Name = claimed.TrainName.NotNull(),
                 ExternalId = claimed.ExternalId,
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         await context.Track(metadata).ConfigureAwait(false);
         await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         claimed.Status = WorkQueueStatus.Dispatched;
         claimed.MetadataId = metadata.Id;
-        claimed.DispatchedAt = DateTime.UtcNow;
+        claimed.DispatchedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
         await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         return metadata.Id;
     }
@@ -644,7 +650,8 @@ public class SubjectKeySerializationTests
                 InputTypeName = typeof(SchedulerTestInput).FullName,
                 SubjectKey = subjectKey,
                 DeferPromotion = staged,
-            }
+            },
+            TimeProvider.System
         );
 
         if (createdAt is not null)

@@ -29,7 +29,7 @@ namespace Trax.Scheduler.Tests.Sqlite.Integration.IntegrationTests;
 )]
 public class SqliteDependentRunsAfterEachParentSuccessTests : TestSetup
 {
-    private static readonly DateTime T0 = DateTime.UtcNow.AddHours(-1);
+    private static readonly DateTime T0 = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1);
 
     [Test]
     public async Task A_parent_success_during_the_dependents_run_queues_the_dependent_again()
@@ -277,7 +277,8 @@ public class SqliteDependentRunsAfterEachParentSuccessTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput(),
                 ManifestId = manifestId,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = state;
         metadata.StartTime = startTime;
@@ -305,7 +306,8 @@ public class SqliteDependentRunsAfterEachParentSuccessTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput(),
                 ManifestId = manifestId,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = state;
         metadata.StartTime = startTime;
@@ -317,7 +319,8 @@ public class SqliteDependentRunsAfterEachParentSuccessTests : TestSetup
             {
                 TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ManifestId = manifestId,
-            }
+            },
+            TimeProvider.System
         );
         entry.Status = WorkQueueStatus.Dispatched;
         entry.MetadataId = metadata.Id;

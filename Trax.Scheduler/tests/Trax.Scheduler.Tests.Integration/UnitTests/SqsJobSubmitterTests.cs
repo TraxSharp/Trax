@@ -30,7 +30,7 @@ public class SqsJobSubmitterTests
     {
         var options = new SqsWorkerOptions { QueueUrl = queueUrl, MessageGroupId = messageGroupId };
         var client = new MockSqsClient();
-        return (new SqsJobSubmitter(client, options), client);
+        return (new SqsJobSubmitter(client, options, TimeProvider.System), client);
     }
 
     #endregion
@@ -44,7 +44,8 @@ public class SqsJobSubmitterTests
         var client = new MockSqsClient();
         var submitter = new SqsJobSubmitter(
             client,
-            new SqsWorkerOptions { QueueUrl = "https://sqs/q", SigningKey = key }
+            new SqsWorkerOptions { QueueUrl = "https://sqs/q", SigningKey = key },
+            TimeProvider.System
         );
 
         await submitter.EnqueueAsync(42);

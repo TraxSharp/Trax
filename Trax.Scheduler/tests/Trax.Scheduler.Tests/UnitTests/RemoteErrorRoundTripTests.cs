@@ -68,7 +68,8 @@ public class RemoteErrorRoundTripTests
                 Name = "My.Namespace.IMyTrain",
                 ExternalId = "test",
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         metadata.AddException(reconstructedException);
 
@@ -114,7 +115,8 @@ public class RemoteErrorRoundTripTests
                 Name = "My.Namespace.IMyTrain",
                 ExternalId = "test",
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         metadata.AddException(reconstructedException);
 
@@ -203,7 +205,8 @@ public class RemoteErrorRoundTripTests
                 Name = "Test.Train",
                 ExternalId = "test",
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         metadata.AddException(exception);
 
@@ -234,7 +237,8 @@ public class RemoteErrorRoundTripTests
                 Name = "Test.Train",
                 ExternalId = "test",
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         metadata.AddException(exception);
 
@@ -268,7 +272,8 @@ public class RemoteErrorRoundTripTests
                 Name = "Test.Train",
                 ExternalId = "test",
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
 
         // Act
@@ -302,7 +307,8 @@ public class RemoteErrorRoundTripTests
                 Name = "Test.Train",
                 ExternalId = "test",
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
 
         // Act
@@ -347,7 +353,8 @@ public class RemoteErrorRoundTripTests
                 Name = "Test.Train",
                 ExternalId = "test",
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
 
         // Act
@@ -389,7 +396,8 @@ public class RemoteErrorRoundTripTests
                 Name = "Test.Train",
                 ExternalId = "test",
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
 
         // Act
@@ -420,7 +428,8 @@ public class RemoteErrorRoundTripTests
                 Name = "Test.Train",
                 ExternalId = "test",
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
 
         // Act

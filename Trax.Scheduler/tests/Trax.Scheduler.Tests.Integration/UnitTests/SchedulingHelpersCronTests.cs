@@ -13,6 +13,9 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 [TestFixture]
 public class SchedulingHelpersCronTests
 {
+    // The scheduling decisions take the time as an input; a fixed one makes them repeatable.
+    private static readonly DateTime FixedNow = new(2026, 3, 10, 12, 0, 0, DateTimeKind.Utc);
+
     private SchedulerConfiguration? _config;
     private ILogger? _logger;
 
@@ -38,7 +41,7 @@ public class SchedulingHelpersCronTests
         };
 
         SchedulingHelpers
-            .ShouldRunNow(manifest, DateTime.UtcNow, _config.NotNull(), _logger.NotNull())
+            .ShouldRunNow(manifest, FixedNow, _config.NotNull(), _logger.NotNull())
             .Should()
             .BeFalse();
     }
@@ -54,7 +57,7 @@ public class SchedulingHelpersCronTests
         };
 
         SchedulingHelpers
-            .ShouldRunNow(manifest, DateTime.UtcNow, _config.NotNull(), _logger.NotNull())
+            .ShouldRunNow(manifest, FixedNow, _config.NotNull(), _logger.NotNull())
             .Should()
             .BeTrue();
     }
@@ -83,7 +86,7 @@ public class SchedulingHelpersCronTests
     public void IsTimeForCron_NullLastRun_ReturnsTrue()
     {
         SchedulingHelpers
-            .IsTimeForCron(lastSuccessfulRun: null, "0 3 * * *", DateTime.UtcNow)
+            .IsTimeForCron(lastSuccessfulRun: null, "0 3 * * *", FixedNow)
             .Should()
             .BeTrue();
     }
@@ -92,7 +95,7 @@ public class SchedulingHelpersCronTests
     public void IsTimeForCron_InvalidExpression_ReturnsFalse()
     {
         var lastRun = new DateTime(2026, 3, 2, 12, 0, 0, DateTimeKind.Utc);
-        SchedulingHelpers.IsTimeForCron(lastRun, "invalid", DateTime.UtcNow).Should().BeFalse();
+        SchedulingHelpers.IsTimeForCron(lastRun, "invalid", FixedNow).Should().BeFalse();
     }
 
     // ── IsTimeForCron — 6-field ──────────────────────────────────────
@@ -128,7 +131,7 @@ public class SchedulingHelpersCronTests
     public void IsTimeForCron_6Field_NullLastRun_ReturnsTrue()
     {
         SchedulingHelpers
-            .IsTimeForCron(lastSuccessfulRun: null, "*/15 * * * * *", DateTime.UtcNow)
+            .IsTimeForCron(lastSuccessfulRun: null, "*/15 * * * * *", FixedNow)
             .Should()
             .BeTrue();
     }
@@ -141,7 +144,7 @@ public class SchedulingHelpersCronTests
         var manifest = CreateCronManifest("*/30 * * * * *");
 
         SchedulingHelpers
-            .ShouldRunNow(manifest, DateTime.UtcNow, _config.NotNull(), _logger.NotNull())
+            .ShouldRunNow(manifest, FixedNow, _config.NotNull(), _logger.NotNull())
             .Should()
             .BeTrue();
     }
@@ -179,7 +182,7 @@ public class SchedulingHelpersCronTests
         manifest.LastSuccessfulRun = new DateTime(2026, 3, 2, 12, 0, 0, DateTimeKind.Utc);
 
         SchedulingHelpers
-            .ShouldRunNow(manifest, DateTime.UtcNow, _config.NotNull(), _logger.NotNull())
+            .ShouldRunNow(manifest, FixedNow, _config.NotNull(), _logger.NotNull())
             .Should()
             .BeFalse();
     }

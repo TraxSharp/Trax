@@ -230,7 +230,7 @@ public class OperationsServiceLocalWorkerTests
                 {
                     DefaultMaxRetries = 6,
                     LocalWorkerCount = workerCount,
-                    UpdatedAt = DateTime.UtcNow,
+                    UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                 }
             );
             await db.SaveChanges(CancellationToken.None).ConfigureAwait(false);

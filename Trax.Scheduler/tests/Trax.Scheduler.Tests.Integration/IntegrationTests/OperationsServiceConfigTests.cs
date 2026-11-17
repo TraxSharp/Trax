@@ -635,7 +635,7 @@ public class OperationsServiceConfigTests : TestSetup
             DefaultMaxRetries = 6,
             StalePendingTimeout = TimeSpan.FromDays(100_000),
             LocalWorkerCount = 1_000_000,
-            UpdatedAt = DateTime.UtcNow,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         DataContext.SchedulerConfigs.Add(row);
         await DataContext.SaveChanges(CancellationToken.None);

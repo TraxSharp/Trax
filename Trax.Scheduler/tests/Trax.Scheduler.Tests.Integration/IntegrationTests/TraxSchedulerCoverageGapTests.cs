@@ -32,7 +32,7 @@ public class TraxSchedulerCoverageGapTests : TestSetup
         // Arrange
         var manifest = await CreateScheduledManifest("delayed-trigger-1");
         var delay = TimeSpan.FromMinutes(15);
-        var beforeTrigger = DateTime.UtcNow;
+        var beforeTrigger = TimeProvider.System.GetUtcNow().UtcDateTime;
 
         // Act
         await _scheduler.NotNull().TriggerAsync(manifest.ExternalId, delay);
@@ -81,7 +81,10 @@ public class TraxSchedulerCoverageGapTests : TestSetup
         manifest.ExternalId.Should().Be(externalId);
         manifest.ScheduleType.Should().Be(ScheduleType.Once);
         manifest.ScheduledAt.Should().NotBeNull();
-        manifest.ScheduledAt.NotNull().Value.Should().BeAfter(DateTime.UtcNow.AddMinutes(55));
+        manifest
+            .ScheduledAt.NotNull()
+            .Value.Should()
+            .BeAfter(TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(55));
 
         DataContext.Reset();
         var persisted = await DataContext

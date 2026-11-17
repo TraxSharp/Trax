@@ -127,7 +127,7 @@ public class InvokedRunOperationsTests(ClusterStore store)
                     .CancelMachineInstanceAsync(SystemKey(instance.Id), CancellationToken.None)
                     .ConfigureAwait(false);
             });
-            await Task.WhenAll(dispatch, cancel).WaitAsync(Bound);
+            await Task.WhenAll(dispatch, cancel).WaitAsync(Bound, TimeProvider.System);
 
             var entry = (await _api.NotNull().Entry(token)).NotNull();
             var run = await RunByExternalId(token);
@@ -255,7 +255,7 @@ public class InvokedRunOperationsTests(ClusterStore store)
         var token = (await SystemRow(instance.Id)).InvokeToken.NotNull();
         var runId = await _worker.NotNull().Dispatch(token);
         var job = _worker.NotNull().RunJob(runId);
-        await InvokedStepGate.Entered.WaitAsync(Bound);
+        await InvokedStepGate.Entered.WaitAsync(Bound, TimeProvider.System);
 
         var result = await Cancel(_worker.NotNull(), SystemKey(instance.Id));
 
@@ -264,7 +264,8 @@ public class InvokedRunOperationsTests(ClusterStore store)
             .Message.Should()
             .Be(OperationsService.CancelRequestedMessage(SystemKey(instance.Id), "Running"));
         InvokedStepGate.Release();
-        await job.ContinueWith(_ => { }, TaskScheduler.Default).WaitAsync(Bound);
+        await job.ContinueWith(_ => { }, TaskScheduler.Default)
+            .WaitAsync(Bound, TimeProvider.System);
 
         (await _worker.NotNull().Run(runId))
             .TrainState.Should()

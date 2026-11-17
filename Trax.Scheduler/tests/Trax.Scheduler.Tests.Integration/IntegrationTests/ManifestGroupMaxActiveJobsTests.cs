@@ -806,7 +806,10 @@ public class ManifestGroupMaxActiveJobsTests
                 .NotNull()
                 .WorkQueues.Where(q => q.Id == entry.Id)
                 .ExecuteUpdateAsync(s =>
-                    s.SetProperty(q => q.ScheduledAt, DateTime.UtcNow.AddHours(1))
+                    s.SetProperty(
+                        q => q.ScheduledAt,
+                        TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(1)
+                    )
                 );
             _dataContext.NotNull().Reset();
         }
@@ -842,7 +845,8 @@ public class ManifestGroupMaxActiveJobsTests
         var futureDispatched = await _dataContext
             .NotNull()
             .WorkQueues.CountAsync(q =>
-                q.ScheduledAt > DateTime.UtcNow && q.Status == WorkQueueStatus.Dispatched
+                q.ScheduledAt > TimeProvider.System.GetUtcNow().UtcDateTime
+                && q.Status == WorkQueueStatus.Dispatched
             );
         futureDispatched.Should().Be(0, "future-scheduled entries should not be dispatched");
     }
@@ -1030,7 +1034,8 @@ public class ManifestGroupMaxActiveJobsTests
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = manifest.GetProperties<SchedulerTestInput>(),
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
 
         metadata.TrainState = state;
@@ -1052,7 +1057,8 @@ public class ManifestGroupMaxActiveJobsTests
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                 ManifestId = manifest.Id,
                 Priority = priority,
-            }
+            },
+            TimeProvider.System
         );
 
         await _dataContext.NotNull().Track(entry).ConfigureAwait(false);
@@ -1079,7 +1085,8 @@ public class ManifestGroupMaxActiveJobsTests
                 Input = serializedInput,
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                 Priority = priority,
-            }
+            },
+            TimeProvider.System
         );
 
         await _dataContext.NotNull().Track(entry).ConfigureAwait(false);

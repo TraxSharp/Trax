@@ -38,7 +38,7 @@ public class LambdaJobSubmitterTests
             .Abstractions
             .NullLogger<LambdaJobSubmitter>
             .Instance;
-        return (new LambdaJobSubmitter(client, options, logger), client);
+        return (new LambdaJobSubmitter(client, options, logger, TimeProvider.System), client);
     }
 
     #endregion
@@ -53,7 +53,8 @@ public class LambdaJobSubmitterTests
         var submitter = new LambdaJobSubmitter(
             client,
             new LambdaWorkerOptions { FunctionName = "fn", SigningKey = key },
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<LambdaJobSubmitter>.Instance
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<LambdaJobSubmitter>.Instance,
+            TimeProvider.System
         );
 
         await submitter.EnqueueAsync(42);
@@ -370,7 +371,7 @@ public class LambdaJobSubmitterTests
             .Abstractions
             .NullLogger<LambdaJobSubmitter>
             .Instance;
-        var submitter = new LambdaJobSubmitter(client, options, logger);
+        var submitter = new LambdaJobSubmitter(client, options, logger, TimeProvider.System);
 
         // Act
         var jobId = await submitter.EnqueueAsync(42);

@@ -34,7 +34,12 @@ public class HttpJobSubmitterTests
         };
         var options = new RemoteWorkerOptions { Retry = new HttpRetryOptions { MaxRetries = 0 } };
         return (
-            new HttpJobSubmitter(httpClient, options, NullLogger<HttpJobSubmitter>.Instance),
+            new HttpJobSubmitter(
+                httpClient,
+                options,
+                NullLogger<HttpJobSubmitter>.Instance,
+                TimeProvider.System
+            ),
             handler
         );
     }
@@ -427,7 +432,8 @@ public class HttpJobSubmitterTests
         var submitter = new HttpJobSubmitter(
             client,
             options,
-            NullLogger<HttpJobSubmitter>.Instance
+            NullLogger<HttpJobSubmitter>.Instance,
+            TimeProvider.System
         );
 
         var jobId = await submitter.EnqueueAsync(42);
@@ -460,7 +466,8 @@ public class HttpJobSubmitterTests
         var submitter = new HttpJobSubmitter(
             client,
             options,
-            NullLogger<HttpJobSubmitter>.Instance
+            NullLogger<HttpJobSubmitter>.Instance,
+            TimeProvider.System
         );
 
         var act = async () => await submitter.EnqueueAsync(42).ConfigureAwait(false);
@@ -485,7 +492,8 @@ public class HttpJobSubmitterTests
         var submitter = new HttpJobSubmitter(
             client,
             options,
-            NullLogger<HttpJobSubmitter>.Instance
+            NullLogger<HttpJobSubmitter>.Instance,
+            TimeProvider.System
         );
 
         var act = async () => await submitter.EnqueueAsync(42).ConfigureAwait(false);

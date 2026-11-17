@@ -93,8 +93,8 @@ public class DispatcherWakeTests
 
         // The startup cycle has run and the listener is listening, so whatever happens next is
         // something the test did.
-        await _cycles.WhenReached(1).WaitAsync(SetupTimeout);
-        await _subscriptions.WhenReached(1).WaitAsync(SetupTimeout);
+        await _cycles.WhenReached(1).WaitAsync(SetupTimeout, TimeProvider.System);
+        await _subscriptions.WhenReached(1).WaitAsync(SetupTimeout, TimeProvider.System);
     }
 
     [TearDown]
@@ -117,14 +117,14 @@ public class DispatcherWakeTests
 
         var queued = await QueueFromApiHostAsync();
 
-        await _notices.WhenReached(noticesBefore + 1).WaitAsync(SetupTimeout);
+        await _notices.WhenReached(noticesBefore + 1).WaitAsync(SetupTimeout, TimeProvider.System);
         await WaitUntilDispatchedAsync(queued, SetupTimeout);
 
         // The next poll is an hour after the startup cycle, far past any timeout here, so the
         // cycle that ran the entry is one the notice began. The run can finish before that
         // cycle reports itself, so wait for the report rather than read the count.
         SetupTimeout.Should().BeLessThan(Poll);
-        await _cycles.WhenReached(cyclesBefore + 1).WaitAsync(SetupTimeout);
+        await _cycles.WhenReached(cyclesBefore + 1).WaitAsync(SetupTimeout, TimeProvider.System);
         _cycles
             .Count.Should()
             .BeGreaterThan(cyclesBefore, "the notice woke the dispatcher; no poll was due");
@@ -156,7 +156,8 @@ public class DispatcherWakeTests
                         TrainName = typeof(ISchedulerTestTrain).FullName.NotNull(),
                         Input = "{}",
                         InputTypeName = typeof(SchedulerTestInput).FullName,
-                    }
+                    },
+                    TimeProvider.System
                 )
             );
             await dataContext.SaveChanges(CancellationToken.None);
@@ -171,7 +172,7 @@ public class DispatcherWakeTests
             .Should()
             .Be(1, "only the committed enqueue notifies; the rolled back one never does");
 
-        await _notices.WhenReached(noticesBefore + 1).WaitAsync(SetupTimeout);
+        await _notices.WhenReached(noticesBefore + 1).WaitAsync(SetupTimeout, TimeProvider.System);
         Listener.Notices.Should().Be(noticesBefore + 1);
         await WaitUntilDispatchedAsync(sentinel, SetupTimeout);
     }
@@ -195,12 +196,12 @@ public class DispatcherWakeTests
         }
 
         // The first retry comes after a one-second backoff.
-        await _subscriptions.WhenReached(2).WaitAsync(SetupTimeout);
+        await _subscriptions.WhenReached(2).WaitAsync(SetupTimeout, TimeProvider.System);
 
         var noticesBefore = Listener.Notices;
         var queued = await QueueFromApiHostAsync();
 
-        await _notices.WhenReached(noticesBefore + 1).WaitAsync(SetupTimeout);
+        await _notices.WhenReached(noticesBefore + 1).WaitAsync(SetupTimeout, TimeProvider.System);
         await WaitUntilDispatchedAsync(queued, SetupTimeout);
     }
 
@@ -227,16 +228,19 @@ public class DispatcherWakeTests
     /// </summary>
     private async Task WaitUntilDispatchedAsync(long workQueueId, TimeSpan timeout)
     {
-        var elapsed = Stopwatch.StartNew();
+        var elapsedStarted = TimeProvider.System.GetTimestamp();
         var next = _cycles.Count + 1;
         while (!await IsDispatchedAsync(workQueueId).ConfigureAwait(false))
         {
-            var remaining = timeout - elapsed.Elapsed;
+            var remaining = timeout - TimeProvider.System.GetElapsedTime(elapsedStarted);
             if (remaining <= TimeSpan.Zero)
                 break;
             try
             {
-                await _cycles.WhenReached(next).WaitAsync(remaining).ConfigureAwait(false);
+                await _cycles
+                    .WhenReached(next)
+                    .WaitAsync(remaining, TimeProvider.System)
+                    .ConfigureAwait(false);
             }
             catch (TimeoutException)
             {

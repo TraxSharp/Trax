@@ -141,7 +141,7 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
             _api.NotNull().Deliver(token),
             _api2.NotNull().Deliver(token)
         );
-        await Task.WhenAll(sweeps, deliveries).WaitAsync(Bound);
+        await Task.WhenAll(sweeps, deliveries).WaitAsync(Bound, TimeProvider.System);
 
         var all = (await sweeps.ConfigureAwait(false))
             .SelectMany(r => r)
@@ -236,7 +236,7 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
             .NotNull()
             .Dispatch((await SystemRow(timedOut.Id)).InvokeToken.NotNull());
         var job = _worker.NotNull().RunJob(timedOutRun);
-        await InvokedStepGate.Entered.WaitAsync(Bound);
+        await InvokedStepGate.Entered.WaitAsync(Bound, TimeProvider.System);
         await _worker.NotNull().Age(timedOutRun, TimeSpan.FromMinutes(30));
         await _worker.NotNull().RunManifestManager();
         InvokedStepGate.Release();
@@ -252,7 +252,7 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
             .NotNull()
             .Dispatch((await SystemRow(cancelled.Id)).InvokeToken.NotNull());
         job = _worker.NotNull().RunJob(cancelledRun);
-        await InvokedStepGate.Entered.WaitAsync(Bound);
+        await InvokedStepGate.Entered.WaitAsync(Bound, TimeProvider.System);
         var scope = _worker.NotNull().Services.CreateAsyncScope();
         await using (scope.ConfigureAwait(false))
             (
@@ -375,7 +375,7 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
         var token = (await UserRow(id)).InvokeToken.NotNull();
         var runId = await _worker.NotNull().Dispatch(token);
         var job = _worker.NotNull().RunJob(runId);
-        await InvokedStepGate.Entered.WaitAsync(Bound);
+        await InvokedStepGate.Entered.WaitAsync(Bound, TimeProvider.System);
 
         // The API host leaves the state while the worker runs the train: it can reach the run only through
         // the database.
@@ -716,7 +716,10 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
                 .ServiceProvider.GetRequiredService<IDataContext>()
                 .WorkQueues.Where(w => w.ExternalId == token)
                 .ExecuteUpdateAsync(s =>
-                    s.SetProperty(w => w.ScheduledAt, DateTime.UtcNow.AddMinutes(-1))
+                    s.SetProperty(
+                        w => w.ScheduledAt,
+                        TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-1)
+                    )
                 );
         await _worker.NotNull().DispatchAndRun(token);
         (await _api.NotNull().Sweep())
@@ -936,7 +939,7 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
         // Running.
         var runId = await _worker.NotNull().Dispatch(token);
         var job = _worker.NotNull().RunJob(runId);
-        await InvokedStepGate.Entered.WaitAsync(Bound);
+        await InvokedStepGate.Entered.WaitAsync(Bound, TimeProvider.System);
         (await _api.NotNull().Sweep()).Should().BeEmpty();
         (await _api.NotNull().Deliver(token)).Should().BeOfType<InvokeDelivery.Running>();
         var row = await SystemRow(instance.Id);
@@ -1069,7 +1072,7 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
         {
             await _worker.NotNull().DispatchAndRun(token);
 
-            (await delivered.Task.WaitAsync(Bound))
+            (await delivered.Task.WaitAsync(Bound, TimeProvider.System))
                 .Should()
                 .BeEquivalentTo(
                     new { To = "Done" },
@@ -1096,7 +1099,7 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
 
     // A job the test let run to its end, whatever it threw, within the bound.
     private static Task Settled(Task job) =>
-        job.ContinueWith(_ => { }, TaskScheduler.Default).WaitAsync(Bound);
+        job.ContinueWith(_ => { }, TaskScheduler.Default).WaitAsync(Bound, TimeProvider.System);
 
     private async Task<SnapshotDraft> SystemRow(Guid id) =>
         (await _api.NotNull().Row(id, SystemStepMachine.MachineId).ConfigureAwait(false)).NotNull();

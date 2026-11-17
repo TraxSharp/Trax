@@ -65,7 +65,7 @@ public partial class OperationsService
         var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
         await using var dbDisposal = db.ConfigureAwait(false);
         var overdueBefore = OverdueBefore();
-        var items = await MachineInstancePageQuery(db, query, skip, take, overdueBefore)
+        var items = await MachineInstancePageQuery(db, query, skip, take, Clock, overdueBefore)
             .ToListAsync(ct)
             .ConfigureAwait(false);
         return new MachineInstancePage(
@@ -545,7 +545,7 @@ public partial class OperationsService
                     .WithCancellation(ct)
                     .ConfigureAwait(false)
             )
-                if (OperatorView(change, only) is { } record)
+                if (OperatorView(change, only, Clock) is { } record)
                     yield return record;
         }
     }
@@ -555,7 +555,11 @@ public partial class OperationsService
     // names no instance, so it is not shown. A reload names none either, but it says writes may
     // have been missed (the listener started or reconnected, or the feed fell behind), so it is
     // sent as a record marked Reload, and the reader reads what it shows again.
-    internal static MachineInstanceRecord? OperatorView(SnapshotRowChange change, string? machine)
+    internal static MachineInstanceRecord? OperatorView(
+        SnapshotRowChange change,
+        string? machine,
+        TimeProvider clock
+    )
     {
         if (change.Kind is SnapshotRowChangeKind.Reload)
             return new MachineInstanceRecord(
@@ -566,7 +570,7 @@ public partial class OperationsService
                 "",
                 0,
                 CreatedAt: null,
-                DateTimeOffset.UtcNow,
+                clock.GetUtcNow(),
                 HasLiveInvokedRun: false
             )
             {
@@ -592,7 +596,7 @@ public partial class OperationsService
             change.State,
             change.Version,
             change.CreatedAt,
-            change.UpdatedAt ?? DateTimeOffset.UtcNow,
+            change.UpdatedAt ?? clock.GetUtcNow(),
             change.Kind is not SnapshotRowChangeKind.Gone && change.HasInvokeToken
         )
         {
@@ -611,13 +615,14 @@ public partial class OperationsService
         MachineInstanceQuery query,
         int skip,
         int take,
+        TimeProvider clock,
         DateTimeOffset? overdueBefore = null
     ) =>
         FilterMachineInstances(
                 db,
                 db.SnapshotDrafts.AsNoTracking(),
                 query,
-                overdueBefore ?? DateTimeOffset.UtcNow - DefaultTimerGrace
+                overdueBefore ?? clock.GetUtcNow() - DefaultTimerGrace
             )
             .OrderByDescending(x => x.UpdatedAt)
             .ThenByDescending(x => x.RowId)

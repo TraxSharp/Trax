@@ -94,7 +94,7 @@ public class JobDispatcherTrainTests : TestSetup
         var dispatchedEntry = await CreateAndSaveWorkQueueEntry(manifest);
         dispatchedEntry = await DataContext.WorkQueues.FirstAsync(q => q.Id == dispatchedEntry.Id);
         dispatchedEntry.Status = WorkQueueStatus.Dispatched;
-        dispatchedEntry.DispatchedAt = DateTime.UtcNow;
+        dispatchedEntry.DispatchedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
@@ -164,7 +164,8 @@ public class JobDispatcherTrainTests : TestSetup
                 Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(source);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -180,7 +181,8 @@ public class JobDispatcherTrainTests : TestSetup
                 ),
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                 ReplayDecisionsOf = source.Id,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(entry);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -210,7 +212,8 @@ public class JobDispatcherTrainTests : TestSetup
                     TraxJsonSerializationOptions.ManifestProperties
                 ),
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(entry);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -251,7 +254,8 @@ public class JobDispatcherTrainTests : TestSetup
                 TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = """{"value":{"not":"a string"}}""",
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(entry);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -298,7 +302,7 @@ public class JobDispatcherTrainTests : TestSetup
         // Arrange
         var manifest = await CreateAndSaveManifest();
         var entry = await CreateAndSaveWorkQueueEntry(manifest);
-        var beforeDispatch = DateTime.UtcNow;
+        var beforeDispatch = TimeProvider.System.GetUtcNow().UtcDateTime;
 
         // Act
         await _train.NotNull().Run(Unit.Default);
@@ -309,7 +313,9 @@ public class JobDispatcherTrainTests : TestSetup
 
         updatedEntry.DispatchedAt.Should().NotBeNull();
         updatedEntry.DispatchedAt.Should().BeOnOrAfter(beforeDispatch);
-        updatedEntry.DispatchedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(10));
+        updatedEntry
+            .DispatchedAt.Should()
+            .BeCloseTo(TimeProvider.System.GetUtcNow().UtcDateTime, TimeSpan.FromSeconds(10));
     }
 
     [Test]
@@ -365,7 +371,7 @@ public class JobDispatcherTrainTests : TestSetup
         updatedManifest.NotNull().LastSuccessfulRun.Should().NotBeNull();
         updatedManifest
             .LastSuccessfulRun.Should()
-            .BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(10));
+            .BeCloseTo(TimeProvider.System.GetUtcNow().UtcDateTime, TimeSpan.FromSeconds(10));
     }
 
     #endregion
@@ -545,7 +551,7 @@ public class JobDispatcherTrainTests : TestSetup
         var manifest = await CreateAndSaveManifest(inputValue: "FutureScheduled");
         var entry = await CreateAndSaveWorkQueueEntry(
             manifest,
-            scheduledAt: DateTime.UtcNow.AddHours(1)
+            scheduledAt: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(1)
         );
 
         // Act
@@ -568,7 +574,7 @@ public class JobDispatcherTrainTests : TestSetup
         var manifest = await CreateAndSaveManifest(inputValue: "PastScheduled");
         var entry = await CreateAndSaveWorkQueueEntry(
             manifest,
-            scheduledAt: DateTime.UtcNow.AddMinutes(-5)
+            scheduledAt: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5)
         );
 
         // Act
@@ -707,7 +713,8 @@ public class JobDispatcherTrainTests : TestSetup
                 ManifestId = manifest.Id,
                 Priority = priority,
                 ScheduledAt = scheduledAt,
-            }
+            },
+            TimeProvider.System
         );
 
         await DataContext.Track(entry).ConfigureAwait(false);
@@ -738,7 +745,8 @@ public class JobDispatcherTrainTests : TestSetup
                 Input = serializedInput,
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                 Priority = priority,
-            }
+            },
+            TimeProvider.System
         );
 
         await DataContext.Track(entry).ConfigureAwait(false);

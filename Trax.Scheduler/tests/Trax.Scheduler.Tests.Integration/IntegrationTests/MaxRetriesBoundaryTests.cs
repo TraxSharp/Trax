@@ -42,7 +42,10 @@ public class MaxRetriesBoundaryTests : TestSetup
     {
         var manifest = await CreateManifest(maxRetries);
         for (var i = 0; i < failures; i++)
-            await CreateFailedRun(manifest, DateTime.UtcNow.AddMinutes(-10 - i));
+            await CreateFailedRun(
+                manifest,
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10 - i)
+            );
 
         await Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>().Run(Unit.Default);
 
@@ -93,7 +96,8 @@ public class MaxRetriesBoundaryTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "boundary" },
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         run.TrainState = TrainState.Failed;
         run.StartTime = startTime;

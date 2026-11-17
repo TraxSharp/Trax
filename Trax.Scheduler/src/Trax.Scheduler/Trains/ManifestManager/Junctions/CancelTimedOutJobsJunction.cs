@@ -38,12 +38,13 @@ internal sealed class CancelTimedOutJobsJunction(
     IDataContext dataContext,
     SchedulerConfiguration config,
     ICancellationRegistry cancellationRegistry,
-    ILogger<CancelTimedOutJobsJunction> logger
+    ILogger<CancelTimedOutJobsJunction> logger,
+    TimeProvider timeProvider
 ) : EffectJunction<Unit, Unit>
 {
     public override async Task<Unit> Run(Unit input)
     {
-        var now = DateTime.UtcNow;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
         var adminTrainNames = AdminTrains.FullNames.ToList();
 
         var inProgressMetadata = await dataContext

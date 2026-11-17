@@ -51,7 +51,8 @@ public class NonEntityFrameworkDataContextTests
                     Manifest = manifest,
                     Reason = "seeded",
                     RetryCount = 3,
-                }
+                },
+                TimeProvider.System
             )
         );
         await fx.DataContext.SaveChanges(CancellationToken.None);

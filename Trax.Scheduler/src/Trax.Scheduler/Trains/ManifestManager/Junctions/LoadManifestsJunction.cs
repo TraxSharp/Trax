@@ -23,14 +23,17 @@ namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 /// The projection pushes aggregation into the database via COUNT/EXISTS subqueries,
 /// keeping the query cost O(manifests) regardless of child table sizes.
 /// </remarks>
-internal sealed class LoadManifestsJunction(IDataContext dataContext, SchedulerConfiguration config)
-    : EffectJunction<Unit, List<ManifestDispatchView>>
+internal sealed class LoadManifestsJunction(
+    IDataContext dataContext,
+    SchedulerConfiguration config,
+    TimeProvider timeProvider
+) : EffectJunction<Unit, List<ManifestDispatchView>>
 {
     public override async Task<List<ManifestDispatchView>> Run(Unit input)
     {
         // A failed run counts toward the backoff and the dead letter only while it is recent:
         // inside the manifest's own failure window when it has one, the scheduler's otherwise.
-        var now = DateTime.UtcNow;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
         var failureWindowStart = now - config.FailureCountWindow;
 
         return await dataContext

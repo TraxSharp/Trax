@@ -733,7 +733,8 @@ public class OrphanManifestPruningTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = manifest.GetProperties<SchedulerTestInput>(),
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
 
         metadata.TrainState = state;
@@ -757,7 +758,8 @@ public class OrphanManifestPruningTests : TestSetup
                 Manifest = reloadedManifest,
                 Reason = "Test dead letter",
                 RetryCount = 3,
-            }
+            },
+            TimeProvider.System
         );
 
         await DataContext.Track(deadLetter).ConfigureAwait(false);
@@ -776,7 +778,8 @@ public class OrphanManifestPruningTests : TestSetup
                 Input = manifest.Properties,
                 InputTypeName = manifest.PropertyTypeName,
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
 
         await DataContext.Track(entry).ConfigureAwait(false);

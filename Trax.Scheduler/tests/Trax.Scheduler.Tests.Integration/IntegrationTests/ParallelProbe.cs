@@ -76,7 +76,7 @@ public static class ParallelProbe
     public static void FastBranchFinished(long run) => FastFinishedIn(run).TrySetResult();
 
     public static Task FastBranchFinishedIn(long run) =>
-        FastFinishedIn(run).Task.WaitAsync(TimeSpan.FromSeconds(30));
+        FastFinishedIn(run).Task.WaitAsync(TimeSpan.FromSeconds(30), TimeProvider.System);
 
     private static TaskCompletionSource FastFinishedIn(long run) =>
         FastFinished.GetOrAdd(run, _ => New());
@@ -87,7 +87,9 @@ public static class ParallelProbe
             return;
 
         _held.TrySetResult();
-        await _released.Task.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+        await _released
+            .Task.WaitAsync(TimeSpan.FromSeconds(30), TimeProvider.System)
+            .ConfigureAwait(false);
     }
 
     public static IReadOnlyList<(string Branch, string Way)> TakenBy(long run) =>

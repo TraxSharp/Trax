@@ -141,7 +141,8 @@ public class LambdaRunExecutorTests
         var executor = new LambdaRunExecutor(
             client,
             new LambdaRunOptions { FunctionName = "my-runner", SigningKey = key },
-            NullLogger<LambdaRunExecutor>.Instance
+            NullLogger<LambdaRunExecutor>.Instance,
+            TimeProvider.System
         );
 
         await executor.ExecuteAsync(
@@ -598,7 +599,8 @@ public class LambdaRunExecutorTests
                     BaseDelay = TimeSpan.FromMilliseconds(1),
                 },
             },
-            NullLogger<LambdaRunExecutor>.Instance
+            NullLogger<LambdaRunExecutor>.Instance,
+            TimeProvider.System
         );
 
         // Act
@@ -621,7 +623,8 @@ public class LambdaRunExecutorTests
         new(
             client,
             new LambdaRunOptions { FunctionName = "my-runner" },
-            NullLogger<LambdaRunExecutor>.Instance
+            NullLogger<LambdaRunExecutor>.Instance,
+            TimeProvider.System
         );
 
     private static MockLambdaClient CreateMockClient(RemoteRunResponse response)

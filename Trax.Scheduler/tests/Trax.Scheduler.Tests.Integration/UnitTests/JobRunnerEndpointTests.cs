@@ -282,7 +282,7 @@ public class JobRunnerEndpointTests
         };
         request.Headers.Add(
             RunnerRequestSignature.HeaderName,
-            signature ?? RunnerRequestSignature.Create(Key, purpose, body)
+            signature ?? RunnerRequestSignature.Create(Key, purpose, body, TimeProvider.System)
         );
         return request;
     }
@@ -444,7 +444,8 @@ public class JobRunnerEndpointTests
                 SigningKey = Key,
                 Retry = new HttpRetryOptions { MaxRetries = 0 },
             },
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<HttpRunExecutor>.Instance
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<HttpRunExecutor>.Instance,
+            TimeProvider.System
         );
         var result = await executor
             .ExecuteAsync("T", new { Name = "x" }, typeof(Core.Functional.Unit))
@@ -600,7 +601,7 @@ public class JobRunnerEndpointTests
             Key,
             RunnerRequestPurpose.Run,
             new byte[16],
-            DateTimeOffset.UtcNow.AddHours(-1).ToUnixTimeSeconds(),
+            TimeProvider.System.GetUtcNow().AddHours(-1).ToUnixTimeSeconds(),
             "00112233445566778899aabbccddeeff"
         );
 

@@ -65,7 +65,7 @@ public partial class OperationsService
             throw new ArgumentException(refusal, nameof(range));
 
         var (size, count) = MetricSeriesBuckets(range);
-        var now = DateTime.UtcNow;
+        var now = Clock.GetUtcNow().UtcDateTime;
         var to = new DateTime(now.Ticks - now.Ticks % size.Ticks, DateTimeKind.Utc) + size;
         var from = to - TimeSpan.FromTicks(size.Ticks * count);
 

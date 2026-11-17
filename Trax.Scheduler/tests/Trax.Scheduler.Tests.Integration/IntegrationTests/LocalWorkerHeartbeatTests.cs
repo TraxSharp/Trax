@@ -53,16 +53,26 @@ public class LocalWorkerHeartbeatTests : TestSetup
 
         try
         {
-            await started.Task.WaitAsync(TimeSpan.FromSeconds(30), CancellationToken.None);
-            var claimedAt = DateTime.UtcNow;
+            await started.Task.WaitAsync(
+                TimeSpan.FromSeconds(30),
+                TimeProvider.System,
+                CancellationToken.None
+            );
+            var claimedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
 
             var second = NewWorker(registry);
             await second.StartAsync(stop.Token);
 
             // negative-wait: the job must still be held by the first worker well after its
             // visibility timeout has passed, which only elapsed time can show.
-            while (DateTime.UtcNow - claimedAt < VisibilityTimeout * 2.5)
-                await Task.Delay(TimeSpan.FromMilliseconds(100), CancellationToken.None);
+            while (
+                TimeProvider.System.GetUtcNow().UtcDateTime - claimedAt < VisibilityTimeout * 2.5
+            )
+                await Task.Delay(
+                    TimeSpan.FromMilliseconds(100),
+                    TimeProvider.System,
+                    CancellationToken.None
+                );
 
             DataContext.Reset();
             var jobRunnerRuns = await DataContext
@@ -118,16 +128,26 @@ public class LocalWorkerHeartbeatTests : TestSetup
 
         try
         {
-            await started.Task.WaitAsync(TimeSpan.FromSeconds(30), CancellationToken.None);
-            var claimedAt = DateTime.UtcNow;
+            await started.Task.WaitAsync(
+                TimeSpan.FromSeconds(30),
+                TimeProvider.System,
+                CancellationToken.None
+            );
+            var claimedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
 
             other = NewWorker(registry, batchSize: 1);
             await other.StartAsync(stop.Token);
 
             // negative-wait: the waiting jobs must still be held well after their visibility
             // timeout has passed, which only elapsed time can show.
-            while (DateTime.UtcNow - claimedAt < VisibilityTimeout * 2.5)
-                await Task.Delay(TimeSpan.FromMilliseconds(100), CancellationToken.None);
+            while (
+                TimeProvider.System.GetUtcNow().UtcDateTime - claimedAt < VisibilityTimeout * 2.5
+            )
+                await Task.Delay(
+                    TimeSpan.FromMilliseconds(100),
+                    TimeProvider.System,
+                    CancellationToken.None
+                );
 
             foreach (var key in waiting)
                 DeliveryProbeTrain
@@ -330,8 +350,8 @@ public class LocalWorkerHeartbeatTests : TestSetup
 
     private static async Task<bool> WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
     {
-        var deadline = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + timeout;
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             if (condition())
                 return true;
@@ -406,8 +426,8 @@ public class LocalWorkerHeartbeatTests : TestSetup
 
     private async Task WaitForRunState(long metadataId, TrainState state)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(30);
-        while (DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(30);
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             DataContext.Reset();
             var row = await DataContext
@@ -435,7 +455,8 @@ public class LocalWorkerHeartbeatTests : TestSetup
                 Name = typeof(DeliveryProbeTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(metadata).ConfigureAwait(false);
         await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
@@ -449,7 +470,8 @@ public class LocalWorkerHeartbeatTests : TestSetup
                     TraxJsonSerializationOptions.ManifestProperties
                 ),
                 InputType = typeof(DeliveryProbeInput).FullName,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(job).ConfigureAwait(false);
         await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);

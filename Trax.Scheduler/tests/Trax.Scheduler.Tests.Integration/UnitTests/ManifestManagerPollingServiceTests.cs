@@ -60,7 +60,7 @@ public class ManifestManagerPollingServiceTests
         using var cts = new CancellationTokenSource();
         await service.StartAsync(cts.Token);
 
-        await trainHit.Task.WaitAsync(SyncTimeout, CancellationToken.None);
+        await trainHit.Task.WaitAsync(SyncTimeout, TimeProvider.System, CancellationToken.None);
 
         await cts.CancelAsync().ConfigureAwait(false);
         await service.StopAsync(CancellationToken.None).ConfigureAwait(false);
@@ -101,7 +101,7 @@ public class ManifestManagerPollingServiceTests
         using var cts = new CancellationTokenSource();
         await service.StartAsync(cts.Token);
 
-        await trainHit.Task.WaitAsync(SyncTimeout, CancellationToken.None);
+        await trainHit.Task.WaitAsync(SyncTimeout, TimeProvider.System, CancellationToken.None);
 
         await cts.CancelAsync().ConfigureAwait(false);
         var stop = async () =>
@@ -135,7 +135,11 @@ public class ManifestManagerPollingServiceTests
         // passed the train by, rather than never having run at all.
         using var cts = new CancellationTokenSource();
         await service.StartAsync(cts.Token);
-        await logger.Skipped.Task.WaitAsync(SyncTimeout, CancellationToken.None);
+        await logger.Skipped.Task.WaitAsync(
+            SyncTimeout,
+            TimeProvider.System,
+            CancellationToken.None
+        );
         await cts.CancelAsync().ConfigureAwait(false);
         await service.StopAsync(CancellationToken.None).ConfigureAwait(false);
 

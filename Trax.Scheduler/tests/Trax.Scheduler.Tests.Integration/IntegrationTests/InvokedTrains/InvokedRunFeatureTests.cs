@@ -195,7 +195,7 @@ public class InvokedRunFeatureTests(ClusterStore store)
             .InvokeToken.NotNull();
         var runId = await observed.Dispatch(token);
         var job = observed.RunJob(runId);
-        await InvokedStepGate.Entered.WaitAsync(Bound);
+        await InvokedStepGate.Entered.WaitAsync(Bound, TimeProvider.System);
 
         (await observed.Run(runId))
             .CurrentlyRunningJunction.Should()
@@ -205,7 +205,8 @@ public class InvokedRunFeatureTests(ClusterStore store)
             );
 
         InvokedStepGate.Release();
-        await job.ContinueWith(_ => { }, TaskScheduler.Default).WaitAsync(Bound);
+        await job.ContinueWith(_ => { }, TaskScheduler.Default)
+            .WaitAsync(Bound, TimeProvider.System);
         // Disposing the host drains the junction-event writer.
         await observed.DisposeAsync();
 
@@ -274,7 +275,7 @@ public class InvokedRunFeatureTests(ClusterStore store)
             await scope
                 .ServiceProvider.GetRequiredService<ITraxRequestHandler>()
                 .ExecuteJobAsync(received)
-                .WaitAsync(Bound);
+                .WaitAsync(Bound, TimeProvider.System);
 
         (await _api.NotNull().Run(runId)).TrainState.Should().Be(TrainState.Completed);
         (await _api.NotNull().Sweep())
