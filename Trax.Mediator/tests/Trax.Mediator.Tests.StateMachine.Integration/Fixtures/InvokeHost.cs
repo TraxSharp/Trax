@@ -20,25 +20,6 @@ using Trax.StateMachine.Persistence;
 
 namespace Trax.Mediator.Tests.StateMachine.Integration.Fixtures;
 
-/// <summary>The providers a host can store drafts on.</summary>
-public enum StoreProvider
-{
-    Postgres,
-    Sqlite,
-    InMemory,
-}
-
-/// <summary>What a test host registers beyond the provider.</summary>
-public sealed record HostOptions
-{
-    public bool Mediator { get; init; } = true;
-
-    public bool JunctionProgress { get; init; } = true;
-
-    /// <summary>Registrations made after Trax's, so the last one wins.</summary>
-    public Action<IServiceCollection>? Configure { get; init; }
-}
-
 /// <summary>
 /// A host with <c>AddStateMachines</c> and <c>AddMediator</c> over this assembly's machines and trains, on Postgres
 /// (the shared throwaway database) or a fresh SQLite file, with the test principal and a recording authorization.

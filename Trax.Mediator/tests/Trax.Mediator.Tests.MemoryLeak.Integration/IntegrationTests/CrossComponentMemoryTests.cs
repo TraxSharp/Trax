@@ -417,35 +417,3 @@ public class CrossComponentMemoryTests
             );
     }
 }
-
-// Mock configuration for testing
-public class MockTraxEffectConfiguration(JsonSerializerOptions options) : ITraxEffectConfiguration
-{
-    public JsonSerializerOptions SystemJsonSerializerOptions { get; } = options;
-
-    public bool SerializeJunctionData { get; } = true;
-    public LogLevel LogLevel { get; } = LogLevel.Debug;
-}
-
-// Helper factory classes for testing
-public class TestParameterEffectProviderFactory(JsonSerializerOptions options)
-    : IEffectProviderFactory
-{
-    public Trax.Effect.Services.EffectProvider.IEffectProvider Create()
-    {
-        return new ParameterEffect(options, new ParameterEffectConfiguration());
-    }
-}
-
-public class TestJsonEffectProviderFactory(
-    JsonSerializerOptions options,
-    ITraxEffectConfiguration configuration
-) : IEffectProviderFactory
-{
-    private readonly JsonSerializerOptions _options = options;
-
-    public Trax.Effect.Services.EffectProvider.IEffectProvider Create()
-    {
-        return new JsonEffectProvider(null!, configuration);
-    }
-}
