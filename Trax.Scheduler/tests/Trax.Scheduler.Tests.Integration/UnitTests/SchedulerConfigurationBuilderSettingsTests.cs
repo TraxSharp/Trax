@@ -370,7 +370,3 @@ public class SchedulerConfigurationBuilderSettingsTests
 
     #endregion
 }
-
-internal interface ISettingsTestTrain;
-
-internal interface ISettingsTestTrainB;

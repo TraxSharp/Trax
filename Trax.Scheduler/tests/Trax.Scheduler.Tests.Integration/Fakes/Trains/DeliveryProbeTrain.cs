@@ -40,38 +40,3 @@ public class DeliveryProbeTrain : ServiceTrain<DeliveryProbeInput, Unit>, IDeliv
 
     protected override Task<Either<Exception, Unit>> Junctions() => Chain<ProbeBody>().Resolve();
 }
-
-/// <summary>Input for <see cref="DeliveryProbeTrain"/>.</summary>
-public record DeliveryProbeInput : IManifestProperties
-{
-    public string Key { get; set; } = string.Empty;
-
-    /// <summary>When true, the body throws after counting itself.</summary>
-    public bool Fail { get; set; }
-}
-
-/// <summary>Interface for <see cref="DeliveryProbeTrain"/>.</summary>
-public interface IDeliveryProbeTrain : IServiceTrain<DeliveryProbeInput, Unit>;
-
-internal sealed class ProbeBody : Junction<DeliveryProbeInput, Unit>
-{
-    public override async Task<Unit> Run(DeliveryProbeInput input)
-    {
-        DeliveryProbeTrain.Runs.AddOrUpdate(input.Key, 1, (_, count) => count + 1);
-        DeliveryProbeTrain.Tokens[input.Key] = CancellationToken;
-        DeliveryProbeTrain
-            .Started.GetOrAdd(
-                input.Key,
-                _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)
-            )
-            .TrySetResult();
-
-        if (DeliveryProbeTrain.Gates.TryGetValue(input.Key, out var gate))
-            await gate.Task.WaitAsync(CancellationToken).ConfigureAwait(false);
-
-        if (input.Fail)
-            throw new TrainException($"Probe {input.Key} failed as asked.");
-
-        return Unit.Default;
-    }
-}

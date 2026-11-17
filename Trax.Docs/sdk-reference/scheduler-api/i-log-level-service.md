@@ -10,6 +10,9 @@ package: Trax.Scheduler
 namespace: Trax.Scheduler.Services.LogLevels
 source:
   - Trax.Scheduler/src/Trax.Scheduler/Services/LogLevels/ILogLevelService.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Services/LogLevels/CategoryLogLevel.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Services/LogLevels/LogLevelChange.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Services/LogLevels/LogLevelUpdateResult.cs
   - Trax.Scheduler/src/Trax.Scheduler/Services/LogLevels/LogLevelService.cs
 ---
 

@@ -385,25 +385,3 @@ public class CancellationIntegrationTests : TestSetup
 
     #endregion
 }
-
-/// <summary>
-/// Minimal concrete EffectTrain for testing step effect providers.
-/// </summary>
-public class TestProgressTrain : ServiceTrain<string, string>
-{
-    protected override Task<Either<Exception, string>> Junctions() =>
-        Chain<PassThrough1_736>().Resolve();
-
-    private sealed class PassThrough1_736 : Junction<string, string>
-    {
-        public override Task<string> Run(string input) => Task.FromResult(input);
-    }
-}
-
-/// <summary>
-/// Minimal concrete EffectJunction for testing junction effect providers.
-/// </summary>
-public class TestProgressJunction : EffectJunction<string, string>
-{
-    public override Task<string> Run(string input) => Task.FromResult(input);
-}

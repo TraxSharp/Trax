@@ -212,9 +212,7 @@ public sealed class ResearchCluster : IAsyncDisposable
                         .Where(q =>
                             q.ResumeFrom != null && !data.Metadatas.Any(m => m.Id == q.ResumeFrom)
                         )
-                        .Select(q =>
-                            "work_queue " + q.Id + " resumes " + q.ResumeFrom
-                        )
+                        .Select(q => "work_queue " + q.Id + " resumes " + q.ResumeFrom)
                         .ToListAsync()
                         .ConfigureAwait(false)
                 )
@@ -225,9 +223,7 @@ public sealed class ResearchCluster : IAsyncDisposable
                                 r.ResumeFrom != null
                                 && !data.Metadatas.Any(m => m.Id == r.ResumeFrom)
                             )
-                            .Select(r =>
-                                "metadata " + r.Id + " resumes " + r.ResumeFrom
-                            )
+                            .Select(r => "metadata " + r.Id + " resumes " + r.ResumeFrom)
                             .ToListAsync()
                             .ConfigureAwait(false)
                     )

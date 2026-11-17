@@ -5,24 +5,6 @@ using Trax.Scheduler.Configuration;
 namespace Trax.Scheduler.Trains.ManifestManager.Utilities;
 
 /// <summary>
-/// An InProgress run as the timeout canceller and the stale reaper read it.
-/// </summary>
-internal sealed record TimedRun(
-    long Id,
-    long? ParentId,
-    string Name,
-    DateTime StartTime,
-    long? ManifestId,
-    int? ManifestTimeoutSeconds
-);
-
-/// <summary>
-/// What bounds a run: its effective timeout (<see langword="null"/> when nothing bounds it) and
-/// whether it, or the run it is nested in, is one a scheduler must leave alone.
-/// </summary>
-internal sealed record RunBound(TimeSpan? Timeout, bool Excluded, long? RootManifestId);
-
-/// <summary>
 /// Resolves a run's timeout from the run at the root of its <c>ParentId</c> chain, so a train
 /// nested inside a scheduled run is bounded by the scheduled run's manifest and not by the
 /// global default.

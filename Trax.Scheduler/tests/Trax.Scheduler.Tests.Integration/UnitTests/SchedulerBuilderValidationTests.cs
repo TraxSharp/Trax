@@ -570,7 +570,3 @@ public class SchedulerBuilderValidationTests
 
     #endregion
 }
-
-internal interface ITestTrain;
-
-internal interface ITestTrainB;

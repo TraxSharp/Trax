@@ -4,23 +4,6 @@ using static Trax.StateMachine.Rules;
 
 namespace Trax.Scheduler.Tests.Integration.Fakes.InvokedTrains;
 
-public enum FeatureState
-{
-    Idle,
-    Deciding,
-    Shortening,
-    Done,
-    Failed,
-    Cancelled,
-}
-
-public enum FeatureTrigger
-{
-    Decide,
-    Shorten,
-    Retry,
-}
-
 /// <summary>
 /// A user's machine whose states invoke trains using other Trax features: <c>Deciding</c> invokes
 /// <see cref="IInvokedDecidingTrain"/>, which asks a decider, and <c>Shortening</c> invokes

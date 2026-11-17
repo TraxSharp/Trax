@@ -11,41 +11,6 @@ using Trax.Scheduler.Tests.Integration.Fixtures;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
-/// <summary>A train whose input holds rows of strings, for the run input size test.</summary>
-public interface IRowsRunTrain : IServiceTrain<RowsRunInput, Unit>;
-
-/// <summary>Input for <see cref="IRowsRunTrain"/>.</summary>
-public record RowsRunInput : IManifestProperties
-{
-    public List<List<string>> Rows { get; set; } = [];
-}
-
-/// <summary>Does nothing; only its input matters.</summary>
-public class RowsRunTrain : ServiceTrain<RowsRunInput, Unit>, IRowsRunTrain
-{
-    protected override Task<Either<Exception, Unit>> Junctions() =>
-        Task.FromResult<Either<Exception, Unit>>(Unit.Default);
-}
-
-/// <summary>A train whose input's stored form is far larger than the JSON a caller sends.</summary>
-public interface IPaddedRunTrain : IServiceTrain<PaddedRunInput, Unit>;
-
-/// <summary>
-/// Input for <see cref="IPaddedRunTrain"/>. A caller may send <c>{}</c>, but the stored form
-/// writes every member, and the default padding is larger than the stored-input cap.
-/// </summary>
-public record PaddedRunInput : IManifestProperties
-{
-    public string Padding { get; set; } = new('x', 1_100_000);
-}
-
-/// <summary>Does nothing; only its input matters.</summary>
-public class PaddedRunTrain : ServiceTrain<PaddedRunInput, Unit>, IPaddedRunTrain
-{
-    protected override Task<Either<Exception, Unit>> Junctions() =>
-        Task.FromResult<Either<Exception, Unit>>(Unit.Default);
-}
-
 /// <summary>
 /// A run's input is read the way the mediator reads every caller's input, JSON reference metadata
 /// included, and what the run stores for its worker is held to the same stored-input cap a queued

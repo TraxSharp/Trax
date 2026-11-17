@@ -11,22 +11,3 @@ public class SavedInputShapesTrain : ServiceTrain<SavedInputShapes, Unit>, ISave
 {
     protected override async Task<Either<Exception, Unit>> Junctions() => Resolve();
 }
-
-/// <summary>Input for <see cref="SavedInputShapesTrain"/>.</summary>
-public record SavedInputShapes
-{
-    public List<int>? Counts { get; set; }
-    public string[]? Tags { get; set; }
-    public SavedInputPlace? Home { get; set; }
-    public SavedInputPlace? Billing { get; set; }
-}
-
-/// <summary>An object <see cref="SavedInputShapes"/> can hold twice.</summary>
-public record SavedInputPlace
-{
-    public string? City { get; set; }
-    public int Zip { get; set; }
-}
-
-/// <summary>Interface for <see cref="SavedInputShapesTrain"/>.</summary>
-public interface ISavedInputShapesTrain : IServiceTrain<SavedInputShapes, Unit>;

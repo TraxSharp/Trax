@@ -164,5 +164,3 @@ public class UseSqsWorkersBuilderTests
 
     #endregion
 }
-
-internal interface ITestSqsTrain;

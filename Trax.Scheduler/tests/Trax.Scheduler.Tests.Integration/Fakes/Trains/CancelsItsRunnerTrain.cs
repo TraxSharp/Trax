@@ -21,24 +21,3 @@ public class CancelsItsRunnerTrain
 
     protected override Task<Either<Exception, Unit>> Junctions() => Chain<CancelRunner>().Resolve();
 }
-
-/// <summary>Input for <see cref="CancelsItsRunnerTrain"/>.</summary>
-public record CancelsItsRunnerInput : IManifestProperties
-{
-    public string Key { get; set; } = string.Empty;
-}
-
-/// <summary>Interface for <see cref="CancelsItsRunnerTrain"/>.</summary>
-public interface ICancelsItsRunnerTrain : IServiceTrain<CancelsItsRunnerInput, Unit>;
-
-/// <summary>Cancels the registered runner token and returns without observing it.</summary>
-internal sealed class CancelRunner : Junction<CancelsItsRunnerInput, Unit>
-{
-    public override Task<Unit> Run(CancelsItsRunnerInput input)
-    {
-        if (CancelsItsRunnerTrain.Runners.TryGetValue(input.Key, out var runner))
-            runner.Cancel();
-
-        return Task.FromResult(Unit.Default);
-    }
-}

@@ -183,5 +183,3 @@ public class UseRemoteWorkersBuilderTests
 
     #endregion
 }
-
-internal interface ITestRemoteTrain;
