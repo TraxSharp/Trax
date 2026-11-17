@@ -700,7 +700,7 @@ trax deploy --target compose --build
 |---|---|
 | `app` | Lower case, a letter first, then letters, digits or dashes. Names the database, its user and the images. |
 | `services` | Each deployed project, relative to the file, under its service name. `port` is the loopback port compose publishes a hub's HTTP on. `count` is how many copies run; a service whose host runs the `api` or `scheduler` role runs one. `init` names a lone project `hub` and several by the last part of their names. |
-| `connectionStrings` | The names under `ConnectionStrings:` the hosts read Postgres and RabbitMQ from. Default `Trax` and `RabbitMq`. |
+| `connectionStrings` | The name under `ConnectionStrings:` the hosts read Postgres from, and the name they read RabbitMQ's settings under. Default `Trax` and `RabbitMq`. |
 | `settings`, `secrets` | Configuration the deployment must supply, as environment names (`__` for `:`). Every one is required. |
 
 `init` makes a service of every web or console project under the directory that references a `Trax.*` package,
@@ -724,16 +724,24 @@ The Trax services drop every Linux capability and run with `no-new-privileges`; 
 proxy, `tailscale serve`) decides who may reach it.
 
 Every password, setting and secret is `${NAME:?set NAME}`, so compose stops when one is missing; `.env.example`
-lists them. Images are `<app>-<service>:${TRAX_IMAGE_TAG:-latest}`; `--build` builds each with
+lists them. No password is written into a connection string or a URI, so one holding `/`, `;` or `@` arrives
+intact: the Postgres password is `PGPASSWORD`, which Npgsql reads when the connection string has none, and
+RabbitMQ is `RabbitMq__Host`, `RabbitMq__UserName` and `RabbitMq__Password` (under the `rabbitMq` name in
+`connectionStrings`), with no `ConnectionStrings__RabbitMq`. A host reads those with
+`UseRabbitMq(builder.Configuration)` and `UseRabbitMqInvalidation(builder.Configuration, ...)`; see
+[UseRabbitMq](/docs/sdk-reference/configuration/use-rabbit-mq#reading-the-broker-from-configuration). Images are
+`<app>-<service>:${TRAX_IMAGE_TAG:-latest}`; `--build` builds each with
 `dotnet publish -t:PublishContainer` under that name. A host that keeps its runs anywhere but Postgres is refused,
 and so is a `compose.yaml` trax did not write.
 
 ### `--target aws`
 
 `trax deploy --env <name>` deploys one environment of `trax.deploy.json` to AWS, as the CloudFormation stack
-`<app>-<name>`. Credentials come from the standard AWS chain (a profile, SSO, the environment, a role); trax stores
-none. Nothing beyond the .NET SDK is needed: the stack is CloudFormation that trax generates, and the images are
-built and pushed with `dotnet publish -t:PublishContainer`.
+`<app>-<name>`. An environment's name is lower-case letters and digits only, so no two apps share a stack name;
+trax also refuses a stack whose `trax:app` tag names another app, or that has none. Credentials come from the
+standard AWS chain (a profile, SSO, the environment, a role); trax stores none. Nothing beyond the .NET SDK is
+needed: the stack is CloudFormation that trax generates, and the images are built and pushed with
+`dotnet publish -t:PublishContainer`.
 
 ```json
 "environments": {
@@ -755,8 +763,8 @@ built and pushed with `dotnet publish -t:PublishContainer`.
 | `profile` | `production`: a VPC with private subnets behind one NAT gateway, HTTPS on `domain` with an ACM certificate (HTTP redirects), Postgres 17 `db.t4g.small` Multi-AZ with deletion protection and a final snapshot. `try`: public subnets locked by security groups, no NAT, a `db.t4g.micro` deleted with the stack, served on a CloudFront address with no domain. |
 | `domain`, `hostedZoneId` | Production's host name. With the Route 53 zone, the certificate is validated and the name pointed at the load balancer by the stack; without it, CloudFormation waits for the validation record you add. |
 | `network` | `vpcId`, `cidr`, two or more `publicSubnets` and `privateSubnets`: deploy into an existing VPC instead of creating one. |
-| `databaseSecretArn` | A Secrets Manager secret holding a whole Postgres connection string: use an existing database instead of creating one. |
-| `auth` | `{ "kind": "cognito" }` creates a user pool, an app client and an `Operator` group, and sets `Auth__Authority` and `Auth__Audience` (`authorityKey`, `audienceKey` rename them). Leave it out to give an existing issuer in `settings`. |
+| `databaseSecretArn` | A Secrets Manager secret holding a whole Postgres connection string: use an existing database instead of creating one. On RDS, it can verify the server with `SSL Mode=VerifyFull;Root Certificate=/app/trax/rds-global-bundle.pem`, the bundle every image carries. Off RDS, copy the server's CA into the app's publish output (it lands under `/app`) and name that path instead. |
+| `auth` | `{ "kind": "cognito" }` creates a user pool, an app client and an `Operator` group, and sets `Auth__Authority` and `Auth__Audience` (`authorityKey`, `audienceKey` rename them). In `production` the pool and the group have deletion protection and are kept when the stack is deleted; see `destroy` below. Leave it out to give an existing issuer in `settings`. |
 | `settings` | A value for each name the file lists under `settings`. |
 | `counts` | Copies per service here, over the file's `count`. |
 
@@ -767,14 +775,16 @@ A deploy:
    check, more than one copy of the API or the scheduler);
 2. pushes each service's image to the ECR repository `trax/<stack>/<service>`, tagged with the time and the commit;
 3. creates or updates the stack with the migrate task on the new image, while the services stay where they are
-   (a new stack's at zero);
+   (a new stack's, and a service the stack does not run yet, at zero);
 4. runs the migrate task (`--trax-migrate`) and stops if it does not exit 0;
-5. rolls every service onto the new image with the ECS circuit breaker on, which rolls a version back if it never
-   gets healthy, and prints the address.
+5. rolls every service onto the new image at its count with the ECS circuit breaker on, which rolls a version back
+   if it never gets healthy, and prints the address.
 
 Every security group replaces the default allow-all egress: the services reach HTTPS and the database, the
 database reaches nothing, and only the load balancer takes traffic from outside, on 443 and 80 in production and
-from CloudFront alone in `try`. Secrets reach a task by reference: the database password from the secret the stack
+from CloudFront alone in `try`. The services connect to the database with `SSL Mode=VerifyFull`, checking its
+certificate against the Amazon RDS CA bundle that `Trax.Effect.Data.Postgres` puts in every image at
+`/app/trax/rds-global-bundle.pem`. Secrets reach a task by reference: the database password from the secret the stack
 generates (never rotated, so a running task does not lose it), each app secret from `<stack>/app/<NAME>`.
 
 In `try`, CloudFront talks to the load balancer over plain HTTP, since the load balancer has no certificate
@@ -788,12 +798,18 @@ trax deploy secret list --env production
 trax deploy --env production
 trax deploy status --env production
 trax deploy logs hub --env production --follow          # or migrate
-trax deploy destroy --env production     # asks for the stack's name; --delete-data also deletes images and secrets
+trax deploy destroy --env production     # asks for the stack's name; --delete-data also deletes the user pool, images and secrets
 ```
 
 `destroy` turns a production database's deletion protection off, then deletes the stack; the database leaves a
 final snapshot, which RDS keeps until you delete it. A secret `--delete-data` deleted can be recovered for seven days, and
 `secret set` restores it with the new value, so the environment can be deployed again the same day.
+
+A production Cognito user pool outlives `destroy`, with its users, their MFA and their groups. `destroy` records
+its id in the SSM parameter `/<stack>/user-pool` and prints it with the number of users in it, and the next deploy
+of that environment signs in against that pool instead of creating one, so the `sub` claims stored with the data
+still match. With `--delete-data`, `destroy` deletes the pool, every user in it, and the record. A `try`
+environment's pool is deleted with its stack.
 
 ## SDK Reference
 

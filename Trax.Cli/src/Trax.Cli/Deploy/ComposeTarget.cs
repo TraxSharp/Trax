@@ -43,13 +43,19 @@ internal static class ComposeTarget
         y.AppendLine("# What every Trax service is given.");
         y.AppendLine("x-trax: &trax");
         // The runtime image has no Kerberos library, which Npgsql otherwise probes for on every connection.
+        // No password goes into the connection string or a URI, where a ';' or a '/' in it would break them:
+        // Npgsql reads PGPASSWORD, and UseRabbitMq(configuration) reads the broker's parts apart.
         y.AppendLine(
-            $"  ConnectionStrings__{file.ConnectionStrings.Trax}: Host=database;Database={file.App};Username={file.App};Password={Required("POSTGRES_PASSWORD")};GSS Encryption Mode=Disable"
+            $"  ConnectionStrings__{file.ConnectionStrings.Trax}: Host=database;Database={file.App};Username={file.App};GSS Encryption Mode=Disable"
         );
+        y.AppendLine($"  PGPASSWORD: {Required("POSTGRES_PASSWORD")}");
         if (rabbit)
-            y.AppendLine(
-                $"  ConnectionStrings__{file.ConnectionStrings.RabbitMq}: amqp://{file.App}:{Required("RABBITMQ_PASSWORD")}@rabbitmq:5672"
-            );
+        {
+            var broker = file.ConnectionStrings.RabbitMq;
+            y.AppendLine($"  {broker}__Host: rabbitmq");
+            y.AppendLine($"  {broker}__UserName: {file.App}");
+            y.AppendLine($"  {broker}__Password: {Required("RABBITMQ_PASSWORD")}");
+        }
         foreach (var name in file.Settings.Concat(file.Secrets).Order(StringComparer.Ordinal))
             y.AppendLine($"  {name}: {Required(name)}");
         y.AppendLine();

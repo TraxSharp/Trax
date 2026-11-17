@@ -91,7 +91,8 @@ public class TraxMigrateTests
         services.AddTrax(
             trax => trax.AddEffects(effects => effects.UseInMemory()),
             exportsDeploy: false,
-            migrates: true
+            migrates: true,
+            exportsClient: false
         );
 
         services

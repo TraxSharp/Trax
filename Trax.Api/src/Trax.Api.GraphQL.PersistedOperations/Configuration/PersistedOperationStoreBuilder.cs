@@ -83,6 +83,34 @@ public sealed class PersistedOperationStoreBuilder
     }
 
     /// <summary>
+    /// <see cref="UseRabbitMqInvalidation(string, Action{RabbitMqInvalidationOptions})"/>, with the
+    /// broker read from configuration under <paramref name="name"/>: <c>ConnectionStrings:{name}</c>,
+    /// an AMQP URI, when it is set; otherwise <c>{name}:Host</c>, with <c>{name}:Port</c> (default
+    /// 5672), over plain <c>amqp://</c>. <c>{name}:UserName</c> and <c>{name}:Password</c>, when
+    /// set, take the place of any user and password in the URI, so a password never has to be
+    /// encoded into one. These are the settings <c>UseRabbitMq(configuration)</c> reads for the
+    /// train-event broadcaster.
+    /// </summary>
+    /// <param name="configuration">The host's configuration.</param>
+    /// <param name="configure">Sets the signing key, and any opt-out.</param>
+    /// <param name="name">The name the settings are under. Defaults to <c>RabbitMq</c>.</param>
+    /// <exception cref="ArgumentException">
+    /// Neither <c>ConnectionStrings:{name}</c> nor <c>{name}:Host</c> is set, or
+    /// <c>{name}:Port</c> is not a port.
+    /// </exception>
+    public PersistedOperationStoreBuilder UseRabbitMqInvalidation(
+        Microsoft.Extensions.Configuration.IConfiguration configuration,
+        Action<RabbitMqInvalidationOptions> configure,
+        string name = "RabbitMq"
+    )
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        UseRabbitMqInvalidation(RabbitMqSettings.Read(configuration, name, _rabbitMqInvalidation));
+        configure(_rabbitMqInvalidation);
+        return this;
+    }
+
+    /// <summary>
     /// Broadcast every change over RabbitMQ, with no signing key yet. The store refuses to start
     /// until one is set through
     /// <see cref="UseRabbitMqInvalidation(string, Action{RabbitMqInvalidationOptions})"/>.

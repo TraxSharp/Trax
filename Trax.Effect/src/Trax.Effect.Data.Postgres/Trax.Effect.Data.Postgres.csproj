@@ -11,6 +11,30 @@
     <EmbeddedResource Include="Migrations/*.sql" />
   </ItemGroup>
 
+  <!-- The CAs that sign every Amazon RDS server certificate, so a host on RDS can connect with
+       SSL Mode=VerifyFull;Root Certificate=/app/trax/rds-global-bundle.pem. Every app that uses this
+       package gets it at trax/rds-global-bundle.pem in its build and publish output, which is /app in
+       an image built with -t:PublishContainer: through the project reference here, and through
+       buildTransitive/Trax.Effect.Data.Postgres.targets from the package.
+       Source: https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem, fetched 2026-11-17,
+       sha256 90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b (114 certificates).
+       Replace it from the same URL when AWS adds a CA; nothing downloads it at build time. -->
+  <ItemGroup>
+    <None
+      Update="Certificates/rds-global-bundle.pem"
+      Link="trax/rds-global-bundle.pem"
+      CopyToOutputDirectory="PreserveNewest"
+      CopyToPublishDirectory="PreserveNewest"
+      Pack="true"
+      PackagePath="buildTransitive/rds-global-bundle.pem"
+    />
+    <None
+      Update="buildTransitive/Trax.Effect.Data.Postgres.targets"
+      Pack="true"
+      PackagePath="buildTransitive/Trax.Effect.Data.Postgres.targets"
+    />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />

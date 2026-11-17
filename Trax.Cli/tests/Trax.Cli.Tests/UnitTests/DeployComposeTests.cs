@@ -91,8 +91,11 @@ public class DeployComposeTests
 
                 # What every Trax service is given.
                 x-trax: &trax
-                  ConnectionStrings__Trax: Host=database;Database=orders;Username=orders;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD};GSS Encryption Mode=Disable
-                  ConnectionStrings__RabbitMq: amqp://orders:${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD}@rabbitmq:5672
+                  ConnectionStrings__Trax: Host=database;Database=orders;Username=orders;GSS Encryption Mode=Disable
+                  PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+                  RabbitMq__Host: rabbitmq
+                  RabbitMq__UserName: orders
+                  RabbitMq__Password: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD}
                   Auth__Authority: ${Auth__Authority:?set Auth__Authority}
                   Stripe__ApiKey: ${Stripe__ApiKey:?set Stripe__ApiKey}
 
@@ -193,6 +196,65 @@ public class DeployComposeTests
                 TRAX_IMAGE_TAG=latest
 
                 """
+            );
+    }
+
+    [Test]
+    public void A_password_with_url_characters_still_connects()
+    {
+        const string password = "a/b;c";
+        var compose = ComposeTarget.Render(File_(), Exports())[0].Content;
+
+        // What compose hands every Trax service once it has read the .env.
+        var env = Interpolated(
+            compose,
+            new Dictionary<string, string>
+            {
+                ["POSTGRES_PASSWORD"] = password,
+                ["RABBITMQ_PASSWORD"] = password,
+                ["Auth__Authority"] = "https://issuer.example.com",
+                ["Stripe__ApiKey"] = "sk",
+            }
+        );
+
+        env["PGPASSWORD"].Should().Be(password);
+        env["ConnectionStrings__Trax"]
+            .Split(';')
+            .Select(p => p.Split('=')[0])
+            .Should()
+            .Equal("Host", "Database", "Username", "GSS Encryption Mode");
+        env.Should().NotContainKey("ConnectionStrings__RabbitMq");
+        env["RabbitMq__Host"].Should().Be("rabbitmq");
+        env["RabbitMq__UserName"].Should().Be("orders");
+        env["RabbitMq__Password"].Should().Be(password);
+        env.Where(e => e.Value.Contains(password))
+            .Select(e => e.Key)
+            .Should()
+            .BeEquivalentTo(
+                ["PGPASSWORD", "RabbitMq__Password"],
+                "a password reaches a host only as a value of its own"
+            );
+    }
+
+    /// <summary>The <c>x-trax</c> settings with each <c>${NAME:?...}</c> replaced as compose does.</summary>
+    private static Dictionary<string, string> Interpolated(
+        string compose,
+        IReadOnlyDictionary<string, string> values
+    )
+    {
+        var lines = compose.ReplaceLineEndings("\n").Split('\n');
+        var start = Array.IndexOf(lines, "x-trax: &trax") + 1;
+        return lines[start..]
+            .TakeWhile(l => l.StartsWith("  ", StringComparison.Ordinal))
+            .Select(l => l.Trim().Split(": ", 2))
+            .ToDictionary(
+                p => p[0],
+                p =>
+                    System.Text.RegularExpressions.Regex.Replace(
+                        p[1],
+                        @"\$\{([A-Za-z_][A-Za-z0-9_]*):\?[^}]*\}",
+                        m => values[m.Groups[1].Value]
+                    )
             );
     }
 

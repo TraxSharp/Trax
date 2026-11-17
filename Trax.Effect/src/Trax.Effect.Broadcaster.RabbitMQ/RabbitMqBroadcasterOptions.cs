@@ -1,3 +1,5 @@
+using RabbitMQ.Client;
+
 namespace Trax.Effect.Broadcaster.RabbitMQ;
 
 /// <summary>
@@ -7,9 +9,37 @@ namespace Trax.Effect.Broadcaster.RabbitMQ;
 public class RabbitMqBroadcasterOptions
 {
     /// <summary>
-    /// AMQP connection URI (e.g., "amqp://guest:guest@localhost:5672").
+    /// AMQP connection URI (e.g., "amqp://guest:guest@localhost:5672"). It may leave the user and
+    /// password out when <see cref="UserName"/> and <see cref="Password"/> carry them.
     /// </summary>
     public required string ConnectionString { get; set; }
+
+    /// <summary>
+    /// The broker user, in place of the one in <see cref="ConnectionString"/>. Set it with
+    /// <see cref="Password"/> to keep credentials out of the URI, where a password holding a
+    /// <c>/</c>, <c>@</c> or <c>:</c> would have to be percent-encoded.
+    /// </summary>
+    public string? UserName { get; set; }
+
+    /// <summary>
+    /// The broker password, in place of the one in <see cref="ConnectionString"/>. Taken as it is:
+    /// nothing in it needs encoding.
+    /// </summary>
+    public string? Password { get; set; }
+
+    /// <summary>
+    /// The connection factory for these options: <see cref="ConnectionString"/>, with
+    /// <see cref="UserName"/> and <see cref="Password"/> in place of its own when they are set.
+    /// </summary>
+    internal ConnectionFactory CreateConnectionFactory()
+    {
+        var factory = new ConnectionFactory { Uri = new Uri(ConnectionString) };
+        if (UserName is not null)
+            factory.UserName = UserName;
+        if (Password is not null)
+            factory.Password = Password;
+        return factory;
+    }
 
     /// <summary>
     /// Name of the fanout exchange used for broadcasting lifecycle events.

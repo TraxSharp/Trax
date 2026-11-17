@@ -132,7 +132,7 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
         CancellationToken ct
     )
     {
-        var factory = new ConnectionFactory { Uri = new Uri(_options.ConnectionString) };
+        var factory = _options.CreateConnectionFactory();
         _connection = await factory.CreateConnectionAsync(ct);
         _channel = await _connection.CreateChannelAsync(cancellationToken: ct);
         var channel = _channel;

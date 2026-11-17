@@ -144,6 +144,23 @@ public class AwsStackTemplateTests
     }
 
     [Test]
+    public void The_connection_string_verifies_the_server()
+    {
+        var template = Build();
+        var env = Properties(template, "HubTaskDefinition")["ContainerDefinitions"]![0]![
+            "Environment"
+        ]!.AsArray();
+
+        var connection = env.Single(e => (string)e!["Name"]! == "ConnectionStrings__Trax")![
+            "Value"
+        ]!["Fn::Sub"]!.GetValue<string>();
+
+        connection.Should().Contain("SSL Mode=VerifyFull;");
+        connection.Should().Contain($"Root Certificate={AwsStack.RdsCaBundle};");
+        AwsStack.RdsCaBundle.Should().Be("/app/trax/rds-global-bundle.pem");
+    }
+
+    [Test]
     public void No_IAM_statement_grants_every_action()
     {
         var text = AwsStack.Compact(Build());
@@ -230,18 +247,27 @@ public class AwsStackTemplateTests
     }
 
     [Test]
-    public void Services_wait_at_zero_until_the_stack_is_running_and_run_their_counts_after()
+    public void Each_service_runs_the_count_its_own_parameter_gives()
     {
         var template = Build();
+        var parameters = (JsonObject)template["Parameters"]!;
 
         Properties(template, "HubService")["DesiredCount"]!
             .ToJsonString()
             .Should()
-            .Be("""{"Fn::If":["Running",1,0]}""");
+            .Be("""{"Ref":"HubCount"}""");
         Properties(template, "WorkerService")["DesiredCount"]!
             .ToJsonString()
             .Should()
-            .Be("""{"Fn::If":["Running",3,0]}""", "the environment's count overrides the file's");
+            .Be("""{"Ref":"WorkerCount"}""");
+        parameters["HubCount"]!["Type"]!.GetValue<string>().Should().Be("Number");
+        parameters["HubCount"]!["Default"]!.GetValue<string>().Should().Be("1");
+        parameters["WorkerCount"]!["Default"]!
+            .GetValue<string>()
+            .Should()
+            .Be("3", "the environment's count overrides the file's");
+        parameters.Should().NotContainKey("Scale");
+        ((JsonObject?)template["Conditions"])?.Should().NotContainKey("Running");
     }
 
     [Test]
@@ -284,6 +310,52 @@ public class AwsStackTemplateTests
     }
 
     [Test]
+    public void Production_keeps_its_user_pool()
+    {
+        var template = Build();
+        var pool = (JsonObject)template["Resources"]!["UserPool"]!;
+        var group = (JsonObject)template["Resources"]!["OperatorGroup"]!;
+
+        ((string)pool["DeletionPolicy"]!).Should().Be("Retain");
+        ((string)pool["UpdateReplacePolicy"]!).Should().Be("Retain");
+        ((string)pool["Properties"]!["DeletionProtection"]!).Should().Be("ACTIVE");
+        ((string)group["DeletionPolicy"]!)
+            .Should()
+            .Be("Retain", "deleting the group would drop every membership in the kept pool");
+        // A pool a destroy kept is passed back in, and the stack creates none.
+        template["Parameters"]![AwsStack.UserPoolParameter]!["Default"]!
+            .GetValue<string>()
+            .Should()
+            .Be("");
+        ((string)pool["Condition"]!).Should().Be("CreateUserPool");
+        ((string)group["Condition"]!).Should().Be("CreateUserPool");
+        Properties(template, "UserPoolClient")["UserPoolId"]!
+            .ToJsonString()
+            .Should()
+            .Contain(AwsStack.UserPoolParameter);
+        template["Outputs"]!["UserPoolId"]!["Value"]!
+            .ToJsonString()
+            .Should()
+            .Contain(AwsStack.UserPoolParameter);
+    }
+
+    [Test]
+    public void A_try_environment_keeps_no_user_pool()
+    {
+        var template = Build(File_(DeployEnvironment.Try));
+        var pool = (JsonObject)template["Resources"]!["UserPool"]!;
+
+        pool.ContainsKey("DeletionPolicy").Should().BeFalse();
+        pool.ContainsKey("UpdateReplacePolicy").Should().BeFalse();
+        pool.ContainsKey("Condition").Should().BeFalse();
+        ((JsonObject)pool["Properties"]!).ContainsKey("DeletionProtection").Should().BeFalse();
+        ((JsonObject)template["Parameters"]!)
+            .ContainsKey(AwsStack.UserPoolParameter)
+            .Should()
+            .BeFalse();
+    }
+
+    [Test]
     public void An_existing_network_creates_no_VPC()
     {
         var file = File_();
@@ -304,6 +376,30 @@ public class AwsStackTemplateTests
     [Test]
     public void It_fits_CloudFormations_inline_limit() =>
         AwsStack.Compact(Build()).Length.Should().BeLessThan(AwsDeployer.InlineTemplateLimit);
+
+    [TestCase("eu-prod")]
+    [TestCase("Prod")]
+    [TestCase("prod_eu")]
+    public void An_environment_name_other_than_letters_and_digits_is_refused(string name)
+    {
+        var file = File_();
+        file.Environments[name] = file.Environments["production"];
+
+        var act = () => file.Environment(name);
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage($"*'{name}'*lower-case letters and digits only*");
+    }
+
+    [Test]
+    public void An_environment_name_of_letters_and_digits_is_accepted()
+    {
+        var file = File_();
+        file.Environments["2eu"] = file.Environments["production"];
+
+        file.Environment("2eu").Should().BeSameAs(file.Environments["production"]);
+    }
 
     [Test]
     public void Production_without_a_domain_is_refused()

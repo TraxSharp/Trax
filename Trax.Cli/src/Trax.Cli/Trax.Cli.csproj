@@ -26,11 +26,13 @@
     <!-- The AWS target of trax deploy: the stack, the images, the migrate task, secrets and logs. -->
     <PackageReference Include="AWSSDK.CloudFormation" />
     <PackageReference Include="AWSSDK.CloudWatchLogs" />
+    <PackageReference Include="AWSSDK.CognitoIdentityProvider" />
     <PackageReference Include="AWSSDK.EC2" />
     <PackageReference Include="AWSSDK.ECR" />
     <PackageReference Include="AWSSDK.ECS" />
     <PackageReference Include="AWSSDK.SecretsManager" />
     <PackageReference Include="AWSSDK.SecurityToken" />
+    <PackageReference Include="AWSSDK.SimpleSystemsManagement" />
     <!-- Never called directly: the SDK loads these by reflection to resolve an SSO profile's credentials
          (aws sso login), and fails without them. -->
     <PackageReference Include="AWSSDK.SSO" />

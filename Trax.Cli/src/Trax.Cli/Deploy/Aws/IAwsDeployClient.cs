@@ -62,6 +62,26 @@ internal interface IAwsDeployClient
     /// <summary>The secrets whose names start with <paramref name="prefix"/>, with when each last changed.</summary>
     Task<IReadOnlyList<AwsSecret>> ListSecretsAsync(string prefix, CancellationToken ct);
 
+    /// <summary>The value of the SSM parameter <paramref name="name"/>, or null when there is none.</summary>
+    Task<string?> GetParameterAsync(string name, CancellationToken ct);
+
+    /// <summary>Creates or overwrites the SSM parameter <paramref name="name"/>.</summary>
+    Task PutParameterAsync(
+        string name,
+        string value,
+        IReadOnlyDictionary<string, string> tags,
+        CancellationToken ct
+    );
+
+    /// <summary>Deletes the SSM parameter <paramref name="name"/>; nothing when there is none.</summary>
+    Task DeleteParameterAsync(string name, CancellationToken ct);
+
+    /// <summary>Roughly how many users the Cognito user pool holds, or null when the pool does not exist.</summary>
+    Task<long?> UserCountAsync(string userPoolId, CancellationToken ct);
+
+    /// <summary>Turns off the user pool's deletion protection and deletes it; nothing when it does not exist.</summary>
+    Task DeleteUserPoolAsync(string userPoolId, CancellationToken ct);
+
     Task<IReadOnlyList<AwsServiceState>> DescribeServicesAsync(
         string cluster,
         IReadOnlyList<string> services,
@@ -85,6 +105,10 @@ internal sealed record AwsStackState(
     IReadOnlyDictionary<string, string> Parameters
 )
 {
+    /// <summary>The stack's tags: <c>trax:app</c> names the app that deployed it.</summary>
+    public IReadOnlyDictionary<string, string> Tags { get; init; } =
+        new Dictionary<string, string>(StringComparer.Ordinal);
+
     /// <summary>Whether the stack is settled and can be changed.</summary>
     public bool Settled => !Status.EndsWith("_IN_PROGRESS", StringComparison.Ordinal);
 

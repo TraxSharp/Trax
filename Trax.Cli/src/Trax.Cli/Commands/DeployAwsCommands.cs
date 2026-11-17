@@ -125,7 +125,8 @@ internal static class DeployAwsCommands
         var deleteData = new Option<bool>("--delete-data")
         {
             Description =
-                "Also delete the images and the app's secrets. Production's database still leaves a final snapshot.",
+                "Also delete production's user pool with every user in it, the images and the app's secrets. "
+                + "Production's database still leaves a final snapshot.",
         };
         var yes = new Option<bool>("--yes")
         {
@@ -309,6 +310,26 @@ internal static class DeployAwsCommands
                 Console.WriteLine(line);
         });
 
+    /// <summary>What destroy asks before it deletes anything: what goes, and what happens to the users.</summary>
+    internal static string DestroyPrompt(DeployFile file, string environment, bool deleteData)
+    {
+        var env = file.Environment(environment);
+        var stack = file.StackName(environment);
+        var cognito = env.Auth is { Kind: DeployAuth.Cognito };
+        var production = env.Profile == DeployEnvironment.Production;
+        var gone = new List<string> { stack };
+        if (cognito && (deleteData || !production))
+            gone.Add("its user pool with every user in it");
+        if (deleteData)
+            gone.Add("its images and its secrets");
+        var users =
+            cognito && production && !deleteData
+                ? " Its user pool and every user in it are kept, and the next deploy signs in against them; "
+                    + "--delete-data deletes them."
+                : "";
+        return $"This deletes {string.Join(", ", gone)}.{users} Type {stack} to go on: ";
+    }
+
     internal static async Task<int> DestroyAsync(
         string filePath,
         string environment,
@@ -323,9 +344,7 @@ internal static class DeployAwsCommands
             var stack = file.StackName(environment);
             if (!yes)
             {
-                Console.Write(
-                    $"This deletes {stack}{(deleteData ? ", its images and its secrets" : "")}. Type {stack} to go on: "
-                );
+                Console.Write(DestroyPrompt(file, environment, deleteData));
                 if (ReadLine()?.Trim() != stack)
                     throw new InvalidOperationException("Nothing was deleted.");
             }

@@ -102,6 +102,15 @@ needs a data source mapped the same way outside the container.
 | `TimeProvider` | Singleton, if none is registered | `TimeProvider.System`, the heartbeat's clock |
 | `ITraxFeatureDbConfigurator` | Singleton | A `DelegateFeatureDbConfigurator` that points a feature's own `DbContext` at the same data source (`UseNpgsql`), so it needs no `AddDbContext` of the host's |
 
+### The RDS CA bundle
+
+The package puts Amazon's RDS CA bundle (the CAs that sign every RDS server certificate) in the app's build and
+publish output at `trax/rds-global-bundle.pem`, so an image built with `dotnet publish -t:PublishContainer` has it at
+`/app/trax/rds-global-bundle.pem`. A connection to RDS verifies the server against it with
+`SSL Mode=VerifyFull;Root Certificate=/app/trax/rds-global-bundle.pem`, as the stack `trax deploy` generates does.
+The bundle is part of the package, fetched once from `truststore.pki.rds.amazonaws.com`; nothing downloads it when
+the app builds or starts.
+
 ## Examples
 
 ```csharp compile
