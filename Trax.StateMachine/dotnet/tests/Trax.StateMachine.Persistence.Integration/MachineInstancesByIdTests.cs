@@ -32,8 +32,16 @@ public class MachineInstancesByIdTests
         _file = Path.Combine(Path.GetTempPath(), $"sm_by_id_{Guid.NewGuid():N}.db");
         var (irs, host) = PolicyRunnerTests.Definitions();
         foreach (var (id, ir) in irs)
-            File.WriteAllText(Path.Combine(_dir, id + IrDirectory.IrSuffix), ir.ToJsonString());
-        File.WriteAllText(Path.Combine(_dir, IrDirectory.HostFileName), host.ToJsonString());
+            await File.WriteAllTextAsync(
+                    Path.Combine(_dir, id + IrDirectory.IrSuffix),
+                    ir.ToJsonString()
+                )
+                .ConfigureAwait(false);
+        await File.WriteAllTextAsync(
+                Path.Combine(_dir, IrDirectory.HostFileName),
+                host.ToJsonString()
+            )
+            .ConfigureAwait(false);
 
         var services = new ServiceCollection();
         services.AddLogging();
@@ -45,7 +53,7 @@ public class MachineInstancesByIdTests
         foreach (
             var service in _provider.GetServices<IHostedService>().OfType<IHostedLifecycleService>()
         )
-            await service.StartingAsync(CancellationToken.None);
+            await service.StartingAsync(CancellationToken.None).ConfigureAwait(false);
     }
 
     [TearDown]

@@ -49,7 +49,10 @@ internal static class FeatureDirectory
     )
     {
         var read = ReadFeatures(featuresDir, glossaryPath, trains);
-        var derived = FeatureDerivation.Derive(read.Glossary.Inner, read.Features);
+        var derived = FeatureDerivation
+            .DeriveAsync(read.Glossary.Inner, read.Features)
+            .GetAwaiter()
+            .GetResult();
         return Derived(derived, read);
     }
 

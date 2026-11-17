@@ -33,11 +33,12 @@ public class CheckoutConformanceTests
     }
 
     [TestCaseSource(nameof(AdvanceFixtures))]
-    public void Advance_matches_the_shared_fixture(string path) => Replay(path);
+    public Task Advance_matches_the_shared_fixture(string path) => Replay(path);
 
-    private static void Replay(string path)
+    private static async Task Replay(string path)
     {
-        var fixture = (JsonObject)JsonNode.Parse(File.ReadAllText(path))!;
+        var fixture = (JsonObject)
+            JsonNode.Parse(await File.ReadAllTextAsync(path).ConfigureAwait(false))!;
         var given = ToSnapshot((JsonObject)fixture["given"]!);
         var when = (JsonObject)fixture["when"]!;
         var trigger = when["trigger"]!.GetValue<string>();
@@ -73,9 +74,10 @@ public class CheckoutConformanceTests
     }
 
     [TestCaseSource(nameof(RehydrateFixtures))]
-    public void Rehydrate_matches_the_shared_fixture(string path)
+    public async Task Rehydrate_matches_the_shared_fixture(string path)
     {
-        var fixture = (JsonObject)JsonNode.Parse(File.ReadAllText(path))!;
+        var fixture = (JsonObject)
+            JsonNode.Parse(await File.ReadAllTextAsync(path).ConfigureAwait(false))!;
         var json =
             fixture["raw"] is JsonNode raw && raw.GetValueKind() == JsonValueKind.String
                 ? raw.GetValue<string>()
@@ -101,13 +103,14 @@ public class CheckoutConformanceTests
     }
 
     [Test]
-    public void Serialize_canonicalizes_the_multi_key_wire_handoff_samples()
+    public async Task Serialize_canonicalizes_the_multi_key_wire_handoff_samples()
     {
         var handoff = (JsonObject)
             JsonNode.Parse(
-                File.ReadAllText(
-                    Path.Combine(FixturePaths.MachinesRoot, "checkout", "wire-handoff.json")
-                )
+                await File.ReadAllTextAsync(
+                        Path.Combine(FixturePaths.MachinesRoot, "checkout", "wire-handoff.json")
+                    )
+                    .ConfigureAwait(false)
             )!;
 
         foreach (var sample in (JsonArray)handoff["samples"]!)

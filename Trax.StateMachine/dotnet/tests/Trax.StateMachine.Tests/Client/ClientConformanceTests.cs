@@ -87,22 +87,25 @@ public partial class ClientConformanceTests
         process.ExitCode.Should().Be(0, report);
         // Skipped only where PROTOCOL.md's allowlist grants the C# client a lack, and excused only where its list of
         // expected failures names the transcript.
-        var expected = ExpectedFailures();
+        var expected = await ExpectedFailures().ConfigureAwait(false);
+        var skipped = await SkippedByTheAllowlist().ConfigureAwait(false);
         report
             .Should()
             .MatchRegex(
-                $@"([1-9]\d*) of \1 transcripts passed, {SkippedByTheAllowlist()} skipped, {expected} expected failures?\."
+                $@"([1-9]\d*) of \1 transcripts passed, {skipped} skipped, {expected} expected failures?\."
             );
     }
 
     // The transcripts expected-failures/dotnet.json names, by case or by prefix; none when it is absent.
-    private static int ExpectedFailures()
+    private static async Task<int> ExpectedFailures()
     {
         var clientKit = Path.Combine(FixturePaths.ConformanceRoot, "client");
         var list = Path.Combine(clientKit, "expected-failures", $"{ClientTestee.Client}.json");
         if (!File.Exists(list))
             return 0;
-        var entries = JsonNode.Parse(File.ReadAllText(list))!.AsArray();
+        var entries = JsonNode
+            .Parse(await File.ReadAllTextAsync(list).ConfigureAwait(false))!
+            .AsArray();
         return Directory
             .GetFiles(Path.Combine(clientKit, "transcripts"), "*.json")
             .Select(Path.GetFileNameWithoutExtension)
@@ -121,10 +124,11 @@ public partial class ClientConformanceTests
     private static readonly JsonDocumentOptions Transcript = new() { MaxDepth = 256 };
 
     // The transcripts that need a capability the allowlist in PROTOCOL.md grants the C# client a lack of.
-    private static int SkippedByTheAllowlist()
+    private static async Task<int> SkippedByTheAllowlist()
     {
         var clientKit = Path.Combine(FixturePaths.ConformanceRoot, "client");
-        var protocol = File.ReadAllText(Path.Combine(clientKit, "PROTOCOL.md"));
+        var protocol = await File.ReadAllTextAsync(Path.Combine(clientKit, "PROTOCOL.md"))
+            .ConfigureAwait(false);
         var block = LacksBlock.Match(protocol);
         block.Success.Should().BeTrue("PROTOCOL.md has a `json lacks` block");
         var lacked = JsonNode
@@ -135,16 +139,21 @@ public partial class ClientConformanceTests
             )
             .Select(e => (string)e!["capability"]!)
             .ToHashSet(StringComparer.Ordinal);
-        return Directory
-            .GetFiles(Path.Combine(clientKit, "transcripts"), "*.json")
-            .Count(path =>
-                (
-                    JsonNode
-                        .Parse(File.ReadAllText(path), documentOptions: Transcript)!["needs"]
-                        ?.AsArray()
-                    ?? []
-                ).Any(n => lacked.Contains((string)n!))
-            );
+        var skipped = 0;
+        foreach (var path in Directory.GetFiles(Path.Combine(clientKit, "transcripts"), "*.json"))
+        {
+            var needs =
+                JsonNode
+                    .Parse(
+                        await File.ReadAllTextAsync(path).ConfigureAwait(false),
+                        documentOptions: Transcript
+                    )!["needs"]
+                    ?.AsArray()
+                ?? [];
+            if (needs.Any(n => lacked.Contains((string)n!)))
+                skipped++;
+        }
+        return skipped;
     }
 
     [GeneratedRegex(

@@ -94,30 +94,33 @@ public class RefusalCodeParityTests
 
     // ts/src/refusalCodes.conformance.test.ts checks the same.
     [Test]
-    public void Every_engine_or_client_code_is_held_by_a_kit_case_or_says_why_not()
+    public async Task Every_engine_or_client_code_is_held_by_a_kit_case_or_says_why_not()
     {
         var root = FixturePaths.ConformanceRoot;
-        var engine = CodesIn(
-            new[] { "machines", "strict-input", "plan" }.SelectMany(d =>
+        var engine = await CodesIn(
+                new[] { "machines", "strict-input", "plan" }.SelectMany(d =>
+                    Directory.EnumerateFiles(
+                        Path.Combine(root, d),
+                        "*.json",
+                        SearchOption.AllDirectories
+                    )
+                )
+            )
+            .ConfigureAwait(false);
+        var client = await CodesIn(
                 Directory.EnumerateFiles(
-                    Path.Combine(root, d),
+                    Path.Combine(root, "client", "transcripts"),
                     "*.json",
                     SearchOption.AllDirectories
                 )
             )
-        );
-        var client = CodesIn(
-            Directory.EnumerateFiles(
-                Path.Combine(root, "client", "transcripts"),
-                "*.json",
-                SearchOption.AllDirectories
-            )
-        );
+            .ConfigureAwait(false);
 
         var wrong = new List<string>();
         foreach (
             var entry in JsonNode.Parse(
-                File.ReadAllText(Path.Combine(root, "refusal-codes.json"))
+                await File.ReadAllTextAsync(Path.Combine(root, "refusal-codes.json"))
+                    .ConfigureAwait(false)
             )!["codes"]!.AsArray()
         )
         {
@@ -150,7 +153,7 @@ public class RefusalCodeParityTests
 
     // Every string a `reason`, `code` or `error` member holds, at any depth: where a case writes the refusal it
     // expects.
-    private static HashSet<string> CodesIn(IEnumerable<string> files)
+    private static async Task<HashSet<string>> CodesIn(IEnumerable<string> files)
     {
         var found = new HashSet<string>(StringComparer.Ordinal);
         void Walk(JsonNode? node)
@@ -176,7 +179,12 @@ public class RefusalCodeParityTests
             }
         }
         foreach (var file in files)
-            Walk(JsonNode.Parse(File.ReadAllText(file), documentOptions: KitFile));
+            Walk(
+                JsonNode.Parse(
+                    await File.ReadAllTextAsync(file).ConfigureAwait(false),
+                    documentOptions: KitFile
+                )
+            );
         return found;
     }
 

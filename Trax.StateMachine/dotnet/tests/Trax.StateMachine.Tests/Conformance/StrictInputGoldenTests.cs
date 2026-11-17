@@ -22,23 +22,23 @@ public class StrictInputGoldenTests
     private static string CasesFile => Path.Combine(Dir, "cases.json");
 
     [Test]
-    public void The_committed_IR_is_what_the_exporter_writes()
+    public async Task The_committed_IR_is_what_the_exporter_writes()
     {
         var exported = IrExporter.Export(StrictInputMachine.Built) + "\n";
-        Update(IrFile, exported);
+        await Update(IrFile, exported).ConfigureAwait(false);
 
-        File.ReadAllText(IrFile)
+        (await File.ReadAllTextAsync(IrFile).ConfigureAwait(false))
             .Should()
             .Be(exported, "regenerate it deliberately with UPDATE_CONFORMANCE=1");
     }
 
     [Test]
-    public void The_committed_cases_are_what_the_engine_answers()
+    public async Task The_committed_cases_are_what_the_engine_answers()
     {
         var written = Write();
-        Update(CasesFile, written);
+        await Update(CasesFile, written).ConfigureAwait(false);
 
-        File.ReadAllText(CasesFile)
+        (await File.ReadAllTextAsync(CasesFile).ConfigureAwait(false))
             .Should()
             .Be(written, "regenerate it deliberately with UPDATE_CONFORMANCE=1");
     }
@@ -145,7 +145,7 @@ public class StrictInputGoldenTests
             _ => throw new InvalidOperationException($"Unexpected advance result {result}."),
         };
 
-    private static void Update(string path, string content)
+    private static async Task Update(string path, string content)
     {
         if (
             !string.Equals(
@@ -156,6 +156,6 @@ public class StrictInputGoldenTests
         )
             return;
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, content);
+        await File.WriteAllTextAsync(path, content).ConfigureAwait(false);
     }
 }

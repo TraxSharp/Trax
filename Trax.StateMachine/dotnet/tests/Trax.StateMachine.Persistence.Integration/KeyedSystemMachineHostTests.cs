@@ -56,8 +56,10 @@ public class KeyedSystemMachineHostTests
         );
         derived.Succeeded.Should().BeTrue(string.Join('\n', derived.Problems));
         foreach (var (id, ir) in derived.Irs)
-            File.WriteAllText(Path.Combine(_dir, id + ".ir.json"), ir);
-        File.WriteAllText(Path.Combine(_dir, "host.json"), derived.Host);
+            await File.WriteAllTextAsync(Path.Combine(_dir, id + ".ir.json"), ir)
+                .ConfigureAwait(false);
+        await File.WriteAllTextAsync(Path.Combine(_dir, "host.json"), derived.Host)
+            .ConfigureAwait(false);
 
         var services = new ServiceCollection();
         services.AddLogging();
@@ -69,7 +71,7 @@ public class KeyedSystemMachineHostTests
         foreach (
             var service in _provider.GetServices<IHostedService>().OfType<IHostedLifecycleService>()
         )
-            await service.StartingAsync(CancellationToken.None);
+            await service.StartingAsync(CancellationToken.None).ConfigureAwait(false);
     }
 
     [TearDown]

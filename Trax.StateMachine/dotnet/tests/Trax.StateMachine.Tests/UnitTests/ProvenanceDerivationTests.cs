@@ -79,9 +79,10 @@ public class ProvenanceDerivationTests
         """;
 
     [Test]
-    public void Each_part_names_the_scenarios_that_produced_it()
+    public async Task Each_part_names_the_scenarios_that_produced_it()
     {
-        var provenance = Provenance([("a.feature", Ordering), ("b.feature", More)]);
+        var provenance = await Provenance([("a.feature", Ordering), ("b.feature", More)])
+            .ConfigureAwait(false);
 
         provenance["order"]!["start"]!
             .AsArray()
@@ -96,25 +97,34 @@ public class ProvenanceDerivationTests
     }
 
     [Test]
-    public void It_holds_no_step_text()
+    public async Task It_holds_no_step_text()
     {
-        Provenance([("a.feature", Ordering)]).ToJsonString().Should().NotContain("loaves for");
+        (await Provenance([("a.feature", Ordering)]).ConfigureAwait(false))
+            .ToJsonString()
+            .Should()
+            .NotContain("loaves for");
     }
 
     [Test]
-    public void The_order_of_the_files_changes_nothing()
+    public async Task The_order_of_the_files_changes_nothing()
     {
-        Provenance([("b.feature", More), ("a.feature", Ordering)])
+        (await Provenance([("b.feature", More), ("a.feature", Ordering)]).ConfigureAwait(false))
             .ToJsonString()
             .Should()
-            .Be(Provenance([("a.feature", Ordering), ("b.feature", More)]).ToJsonString());
+            .Be(
+                (
+                    await Provenance([("a.feature", Ordering), ("b.feature", More)])
+                        .ConfigureAwait(false)
+                ).ToJsonString()
+            );
     }
 
-    private static JsonObject Provenance(IReadOnlyList<(string, string)> features)
+    private static async Task<JsonObject> Provenance(IReadOnlyList<(string, string)> features)
     {
-        var derived = FeatureDerivation.Derive(
-            Trax.StateMachine.Features.Glossary.Read(Glossary),
-            features
+        var derived = (
+            await FeatureDerivation
+                .DeriveAsync(Trax.StateMachine.Features.Glossary.Read(Glossary), features)
+                .ConfigureAwait(false)
         );
         derived.Problems.Should().BeEmpty();
         return JsonNode.Parse(derived.Host!)!["provenance"]!.AsObject();

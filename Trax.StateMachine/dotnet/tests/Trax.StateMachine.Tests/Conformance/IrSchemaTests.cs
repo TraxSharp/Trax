@@ -14,12 +14,14 @@ public class IrSchemaTests
 {
     [Test]
     [Category(Categories.CrossEngine)]
-    public void Every_IR_the_exporter_writes_for_the_test_machines_validates()
+    public async Task Every_IR_the_exporter_writes_for_the_test_machines_validates()
     {
         var irs = ExportedIrs();
         irs.Should().NotBeEmpty();
 
-        var results = TwinEngine.ValidateIrs(irs.Select(i => i.Ir).ToList());
+        var results = await TwinEngine
+            .ValidateIrsAsync(irs.Select(i => i.Ir).ToList())
+            .ConfigureAwait(false);
 
         var invalid = irs.Zip(results)
             .Where(r => r.Second.Count > 0)

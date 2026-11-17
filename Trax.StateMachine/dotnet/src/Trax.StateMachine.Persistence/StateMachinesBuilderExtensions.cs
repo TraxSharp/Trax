@@ -78,9 +78,22 @@ public static class StateMachinesBuilderExtensions
                     + "AddStateMachines(o => ..., typeof(A).Assembly, typeof(B).Assembly)."
             );
 
+        var options = new StateMachineOptions();
+        configure?.Invoke(options);
+
+        // Registration is synchronous; the read below awaits only file reads, each ConfigureAwait(false), so the
+        // wait holds no context of its own. Machines served from features are read before discovery runs.
+        var served = options.FeaturesDirectory is { } features
+            ? IrDirectory
+                .LoadAsync(features, options.FeatureTrainAssemblies)
+                .GetAwaiter()
+                .GetResult()
+            : null;
+
         RegisterMachinesAndStores(
             builder.ServiceCollection,
-            configure,
+            options,
+            served,
             assemblies,
             inMemory: !builder.HasDatabaseProvider
         );
@@ -96,21 +109,15 @@ public static class StateMachinesBuilderExtensions
     // registry, and the six generic stateMachine mutation routes.
     private static void RegisterMachinesAndStores(
         IServiceCollection services,
-        Action<StateMachineOptions>? configure,
+        StateMachineOptions options,
+        IrDirectory.Loaded? served,
         Assembly[] assemblies,
         bool inMemory
     )
     {
-        var options = new StateMachineOptions();
-        configure?.Invoke(options);
-
         // Machines served from features are registered as the host's own, before discovery reads them.
-        if (options.FeaturesDirectory is { } features)
-            services.AddIrMachinesFrom(
-                features,
-                options.ConfigurePolicyRunner,
-                options.FeatureTrainAssemblies
-            );
+        if (served is not null)
+            services.AddIrMachinesFrom(served, options.ConfigurePolicyRunner);
         else if (options.ConfigurePolicyRunner is not null)
             throw new InvalidOperationException(
                 "StateMachineOptions.PolicyRunner configures the policies of machines served from features, and "

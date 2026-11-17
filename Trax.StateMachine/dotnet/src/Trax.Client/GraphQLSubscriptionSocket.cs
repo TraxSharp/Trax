@@ -642,7 +642,10 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
                     $"The server sent a message larger than {_options.MaxMessageSize} bytes."
                 );
             }
-            text.Write(buffer, 0, result.Count);
+            // A MemoryStream writes at once; the token is not passed, so a cancel after the frame arrived ends the
+            // read where it did before, at the next receive.
+            await text.WriteAsync(buffer.AsMemory(0, result.Count), CancellationToken.None)
+                .ConfigureAwait(false);
             if (result.EndOfMessage)
                 break;
         }

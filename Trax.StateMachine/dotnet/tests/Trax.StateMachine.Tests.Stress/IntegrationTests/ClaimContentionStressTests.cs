@@ -37,8 +37,7 @@ public class ClaimContentionStressTests : StressFixture
 
         wins.Should().Be(keys, "exactly one claimant wins each of {0} keys", keys);
         losses.Should().Be(keys * (claimants - 1), "everyone else loses");
-
-        TestContext.Progress.WriteLine(
+        await TestContext.Progress.WriteLineAsync(
             $"[claims] {keys} keys x {claimants} claimants = {keys * claimants} claims, winners={wins}, losers={losses}"
         );
     }

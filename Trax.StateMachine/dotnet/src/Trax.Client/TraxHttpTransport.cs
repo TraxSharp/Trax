@@ -281,7 +281,8 @@ public sealed class TraxHttpTransport : ITraxTransport
     {
         if (content.Headers.ContentLength > max)
             return null;
-        using var stream = await content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        var stream = await content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        await using var streamDisposal = stream.ConfigureAwait(false);
         using var body = new MemoryStream();
         var buffer = new byte[8192];
         int read;
@@ -289,7 +290,8 @@ public sealed class TraxHttpTransport : ITraxTransport
         {
             if (body.Length + read > max)
                 return null;
-            body.Write(buffer, 0, read);
+            await body.WriteAsync(buffer.AsMemory(0, read), CancellationToken.None)
+                .ConfigureAwait(false);
         }
         return Encoding.UTF8.GetString(body.GetBuffer(), 0, (int)body.Length);
     }

@@ -72,9 +72,9 @@ public class ViewDerivationTests
         """;
 
     [Test]
-    public void A_views_readers_are_the_actors_whose_people_read_it()
+    public async Task A_views_readers_are_the_actors_whose_people_read_it()
     {
-        var derived = Derive(Ordering);
+        var derived = await Derive(Ordering).ConfigureAwait(false);
 
         derived.Problems.Should().BeEmpty();
         var view = HostFile.Read(derived.Host!).Views["orders"];
@@ -84,32 +84,35 @@ public class ViewDerivationTests
     }
 
     [Test]
-    public void A_view_no_scenario_reads_is_not_served()
+    public async Task A_view_no_scenario_reads_is_not_served()
     {
-        var derived = Derive(Ordering);
+        var derived = await Derive(Ordering).ConfigureAwait(false);
 
         HostFile.Read(derived.Host!).Views.Should().NotContainKey("shop sign");
     }
 
     [Test]
-    public void A_machine_no_scenario_uses_is_not_derived()
+    public async Task A_machine_no_scenario_uses_is_not_derived()
     {
-        var derived = Derive(Ordering);
+        var derived = await Derive(Ordering).ConfigureAwait(false);
 
         derived.Irs.Keys.Should().Equal("order");
         HostFile.Read(derived.Host!).Machines.Keys.Should().Equal("order");
     }
 
     [Test]
-    public void A_view_reading_a_machine_the_scenario_never_shows_is_a_problem()
+    public async Task A_view_reading_a_machine_the_scenario_never_shows_is_a_problem()
     {
-        var derived = Derive(
-            Ordering
-                + """
+        var derived = (
+            await Derive(
+                    Ordering
+                        + """
 
-                  Scenario: Ada reads the sign
-                    Then Ada's shop sign shows open "Closed"
-                """
+                          Scenario: Ada reads the sign
+                            Then Ada's shop sign shows open "Closed"
+                        """
+                )
+                .ConfigureAwait(false)
         );
 
         derived
@@ -120,19 +123,22 @@ public class ViewDerivationTests
     }
 
     [Test]
-    public void A_view_shows_a_person_their_own_instances_only()
+    public async Task A_view_shows_a_person_their_own_instances_only()
     {
-        var derived = Derive(
-            Ordering
-                + """
+        var derived = (
+            await Derive(
+                    Ordering
+                        + """
 
-                  Scenario: Bo's orders are his own
-                    Given Bo is a customer
-                    And Bo has an order
-                    When Ada orders "3" loaves for her order
-                    Then Ada's order is a draft
-                    And Bo's orders show loaves "3"
-                """
+                          Scenario: Bo's orders are his own
+                            Given Bo is a customer
+                            And Bo has an order
+                            When Ada orders "3" loaves for her order
+                            Then Ada's order is a draft
+                            And Bo's orders show loaves "3"
+                        """
+                )
+                .ConfigureAwait(false)
         );
 
         derived
@@ -143,18 +149,21 @@ public class ViewDerivationTests
     }
 
     [Test]
-    public void A_system_instance_is_shown_to_everyone_who_reads_the_view()
+    public async Task A_system_instance_is_shown_to_everyone_who_reads_the_view()
     {
-        var derived = Derive(
-            """
-            Feature: The shop
-              Scenario: The sign says the shop is open
-                Given Kit is a baker
-                And the shop is closed
-                When the shop opens
-                Then the shop is open
-                And Kit's shop sign shows open "We're open"
-            """
+        var derived = (
+            await Derive(
+                    """
+                    Feature: The shop
+                      Scenario: The sign says the shop is open
+                        Given Kit is a baker
+                        And the shop is closed
+                        When the shop opens
+                        Then the shop is open
+                        And Kit's shop sign shows open "We're open"
+                    """
+                )
+                .ConfigureAwait(false)
         );
 
         derived.Problems.Should().BeEmpty();
@@ -168,14 +177,17 @@ public class ViewDerivationTests
     }
 
     [Test]
-    public void A_value_the_instances_do_not_show_is_a_problem()
+    public async Task A_value_the_instances_do_not_show_is_a_problem()
     {
-        var derived = Derive(
-            Background()
-                + """
-                  Scenario: Wrong label
-                    Then Ada's orders show status "In the oven"
-                """
+        var derived = (
+            await Derive(
+                    Background()
+                        + """
+                          Scenario: Wrong label
+                            Then Ada's orders show status "In the oven"
+                        """
+                )
+                .ConfigureAwait(false)
         );
 
         derived
@@ -194,8 +206,8 @@ public class ViewDerivationTests
 
             """;
 
-    private static Derived Derive(string feature) =>
-        FeatureDerivation.Derive(
+    private static Task<Derived> Derive(string feature) =>
+        FeatureDerivation.DeriveAsync(
             Trax.StateMachine.Features.Glossary.Read(Glossary),
             [("views.feature", feature)]
         );

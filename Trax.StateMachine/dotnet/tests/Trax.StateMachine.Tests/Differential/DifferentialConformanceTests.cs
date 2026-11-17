@@ -15,19 +15,19 @@ namespace Trax.StateMachine.Tests.Differential;
 public class DifferentialConformanceTests
 {
     [Test]
-    public void Turnstile_engine_reproduces_the_shared_differential_corpus() =>
+    public Task Turnstile_engine_reproduces_the_shared_differential_corpus() =>
         AssertReplays("turnstile", DeclarativeTurnstile.Machine);
 
     [Test]
-    public void Checkout_engine_reproduces_the_shared_differential_corpus() =>
+    public Task Checkout_engine_reproduces_the_shared_differential_corpus() =>
         AssertReplays("checkout", DeclarativeCheckout.Machine);
 
     // Its guards are lt, gte and lte, each sampled on both sides of its bound.
     [Test]
-    public void Gauge_engine_reproduces_the_shared_differential_corpus() =>
+    public Task Gauge_engine_reproduces_the_shared_differential_corpus() =>
         AssertReplays("gauge", GaugeMachine.Machine);
 
-    private static void AssertReplays<TState, TTrigger>(
+    private static async Task AssertReplays<TState, TTrigger>(
         string name,
         SnapshotMachine<TState, TTrigger> machine
     )
@@ -35,7 +35,10 @@ public class DifferentialConformanceTests
         where TTrigger : struct, Enum
     {
         var file = FixturePaths.DifferentialFile(name);
-        var diffs = DifferentialCorpus.Replay(machine, File.ReadAllText(file));
+        var diffs = DifferentialCorpus.Replay(
+            machine,
+            await File.ReadAllTextAsync(file).ConfigureAwait(false)
+        );
         diffs
             .Should()
             .BeEmpty(

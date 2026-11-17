@@ -13,9 +13,9 @@ namespace Trax.StateMachine.Tests.UnitTests;
 public class HostFileFormatTests
 {
     [Test]
-    public void The_bakery_host_file_reads_into_its_machines_policies_and_views()
+    public async Task The_bakery_host_file_reads_into_its_machines_policies_and_views()
     {
-        var host = HostFile.Read(Bakery().ToJsonString());
+        var host = HostFile.Read((await Bakery().ConfigureAwait(false)).ToJsonString());
 
         var order = host.Machines["order"];
         order.SystemKey.Should().BeNull();
@@ -38,9 +38,9 @@ public class HostFileFormatTests
     }
 
     [Test]
-    public void A_key_it_does_not_know_is_refused_naming_it()
+    public async Task A_key_it_does_not_know_is_refused_naming_it()
     {
-        var host = Bakery();
+        var host = await Bakery().ConfigureAwait(false);
         host["machines"]!["order"]!["requiresPolicy"] = "CanOrder";
 
         var read = () => HostFile.Read(host.ToJsonString());
@@ -51,9 +51,9 @@ public class HostFileFormatTests
     }
 
     [Test]
-    public void An_owner_named_by_actor_is_refused()
+    public async Task An_owner_named_by_actor_is_refused()
     {
-        var host = Bakery();
+        var host = await Bakery().ConfigureAwait(false);
         host["machines"]!["order"]!["owner"] = new JsonObject { ["user"] = "customer" };
 
         var read = () => HostFile.Read(host.ToJsonString());
@@ -64,9 +64,9 @@ public class HostFileFormatTests
     }
 
     [Test]
-    public void A_policy_firing_a_trigger_clients_may_fire_is_refused()
+    public async Task A_policy_firing_a_trigger_clients_may_fire_is_refused()
     {
-        var host = Bakery();
+        var host = await Bakery().ConfigureAwait(false);
         host["policies"]![1]!["then"]!["trigger"] = "Place";
 
         var read = () => HostFile.Read(host.ToJsonString());
@@ -77,9 +77,9 @@ public class HostFileFormatTests
     }
 
     [Test]
-    public void A_client_rule_on_a_system_machine_is_refused()
+    public async Task A_client_rule_on_a_system_machine_is_refused()
     {
-        var host = Bakery();
+        var host = await Bakery().ConfigureAwait(false);
         host["machines"]!["shop"]!["triggers"]!["Open"] = new JsonObject
         {
             ["roles"] = new JsonArray(new JsonArray("baker")),
@@ -93,9 +93,9 @@ public class HostFileFormatTests
     }
 
     [Test]
-    public void A_policy_listed_twice_is_refused_at_the_second()
+    public async Task A_policy_listed_twice_is_refused_at_the_second()
     {
-        var host = Bakery();
+        var host = await Bakery().ConfigureAwait(false);
         var twice = host["policies"]![1]!.DeepClone();
         twice["then"]!["inState"] = "Draft";
         host["policies"]!.AsArray().Add(twice);
@@ -108,9 +108,9 @@ public class HostFileFormatTests
     }
 
     [Test]
-    public void A_batch_size_is_refused_since_it_is_the_hosts_option()
+    public async Task A_batch_size_is_refused_since_it_is_the_hosts_option()
     {
-        var host = Bakery();
+        var host = await Bakery().ConfigureAwait(false);
         host["policies"]![1]!["batch"] = 100;
 
         var read = () => HostFile.Read(host.ToJsonString());
@@ -118,18 +118,19 @@ public class HostFileFormatTests
         read.Should().Throw<FormatException>().WithMessage("*/policies/1/batch:*not a key*");
     }
 
-    private static JsonObject Bakery() =>
+    private static async Task<JsonObject> Bakery() =>
         JsonNode
             .Parse(
-                File.ReadAllText(
-                    Path.Combine(
-                        FixturePaths.ConformanceRoot,
-                        "formats",
-                        "host",
-                        "valid",
-                        "bakery.json"
+                await File.ReadAllTextAsync(
+                        Path.Combine(
+                            FixturePaths.ConformanceRoot,
+                            "formats",
+                            "host",
+                            "valid",
+                            "bakery.json"
+                        )
                     )
-                )
+                    .ConfigureAwait(false)
             )!
             .AsObject();
 }

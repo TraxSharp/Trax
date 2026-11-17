@@ -12,7 +12,7 @@ namespace Trax.StateMachine.Gherkin;
 /// </summary>
 internal static class FeatureDerivation
 {
-    internal static Derived Derive(
+    internal static async Task<Derived> DeriveAsync(
         Glossary glossary,
         IReadOnlyList<(string Path, string Text)> features
     )
@@ -75,11 +75,9 @@ internal static class FeatureDerivation
             ScenarioResult run;
             try
             {
-                run = ScenarioRunner
+                run = await ScenarioRunner
                     .Run(walk, glossary, new MemoryDriver(irs, hostFile, glossary))
-                    .AsTask()
-                    .GetAwaiter()
-                    .GetResult();
+                    .ConfigureAwait(false);
             }
             catch (Exception e) when (e is not OutOfMemoryException)
             {

@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Trax.Client;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Client;
 using Trax.StateMachine.Tests.Helpers;
 
@@ -13,13 +14,25 @@ namespace Trax.StateMachine.Tests.Client;
 /// </summary>
 public class DefaultsParityTests
 {
-    private static readonly JsonObject Defaults = Read("client", "defaults.json");
-    private static readonly JsonObject Limits = Read("limits.json");
+    // Read once for the fixture, before any test runs.
+    private static JsonObject? _defaults;
+    private static JsonObject? _limits;
 
-    private static JsonObject Read(params string[] parts) =>
+    private static JsonObject Defaults => _defaults.NotNull();
+    private static JsonObject Limits => _limits.NotNull();
+
+    [OneTimeSetUp]
+    public async Task ReadKit()
+    {
+        _defaults = await Read("client", "defaults.json").ConfigureAwait(false);
+        _limits = await Read("limits.json").ConfigureAwait(false);
+    }
+
+    private static async Task<JsonObject> Read(params string[] parts) =>
         (JsonObject)
             JsonNode.Parse(
-                File.ReadAllText(Path.Combine([FixturePaths.ConformanceRoot, .. parts]))
+                await File.ReadAllTextAsync(Path.Combine([FixturePaths.ConformanceRoot, .. parts]))
+                    .ConfigureAwait(false)
             )!;
 
     private static TimeSpan Ms(JsonNode? node) =>

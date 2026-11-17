@@ -61,19 +61,19 @@ public class MachineConformanceTests
     }
 
     /// <summary>Commit both artifacts exactly as the machine would generate them.</summary>
-    private void CommitArtifacts(IMachine machine)
+    private async Task CommitArtifacts(IMachine machine)
     {
-        File.WriteAllText(_ir, machine.ExportIr() + "\n");
-        File.WriteAllText(_corpus, machine.Corpus!);
+        await File.WriteAllTextAsync(_ir, machine.ExportIr() + "\n").ConfigureAwait(false);
+        await File.WriteAllTextAsync(_corpus, machine.Corpus!).ConfigureAwait(false);
     }
 
     #region Check
 
     [Test]
-    public void Check_returns_no_problems_when_the_ir_the_corpus_and_the_engine_all_agree()
+    public async Task Check_returns_no_problems_when_the_ir_the_corpus_and_the_engine_all_agree()
     {
         var machine = new ConformingMachine();
-        CommitArtifacts(machine);
+        await CommitArtifacts(machine).ConfigureAwait(false);
 
         MachineConformance.Check(machine, _ir, _corpus).Should().BeEmpty();
     }
@@ -94,12 +94,12 @@ public class MachineConformanceTests
     }
 
     [Test]
-    public void Check_surfaces_a_self_check_diff_when_only_the_engine_disagrees()
+    public async Task Check_surfaces_a_self_check_diff_when_only_the_engine_disagrees()
     {
         // Both artifacts are exactly what the machine ships, so the only thing left to catch is the engine
         // failing to reproduce the corpus it embeds.
         var machine = new DriftingMachine();
-        CommitArtifacts(machine);
+        await CommitArtifacts(machine).ConfigureAwait(false);
 
         MachineConformance
             .Check(machine, _ir, _corpus)

@@ -112,36 +112,38 @@ public class TriggerInputPropertyTests
     private const int Inputs = 500;
 
     [Test]
-    public void Generated_inputs_get_the_same_verdict_in_both_engines()
+    public async Task Generated_inputs_get_the_same_verdict_in_both_engines()
     {
         var ir = (JsonObject)JsonNode.Parse(IrExporter.Export(RangeMachine.Built))!;
-        Gen.Select(AValidInput, AMutation, Gen.Int[0, 1_000])
+        await Gen.Select(AValidInput, AMutation, Gen.Int[0, 1_000])
             .Select(
                 (input, mutation, pick) => (Mutation: mutation, Sent: Apply(mutation, input, pick))
             )
             .Array[Inputs]
-            .Sample(
-                batch =>
+            .SampleAsync(
+                async batch =>
                 {
-                    var twin = TwinEngine.Replay(
-                        new Dictionary<string, JsonObject>(StringComparer.Ordinal)
-                        {
-                            ["range"] = ir,
-                        },
-                        batch
-                            .Select(b => new TwinEngine.Sequence(
-                                "range",
-                                RangeMachine.Open(),
-                                [
-                                    new TwinEngine.Step(
-                                        "advance",
-                                        nameof(RangeTrigger.Build),
-                                        b.Sent?.DeepClone()
-                                    ),
-                                ]
-                            ))
-                            .ToList()
-                    );
+                    var twin = await TwinEngine
+                        .ReplayAsync(
+                            new Dictionary<string, JsonObject>(StringComparer.Ordinal)
+                            {
+                                ["range"] = ir,
+                            },
+                            batch
+                                .Select(b => new TwinEngine.Sequence(
+                                    "range",
+                                    RangeMachine.Open(),
+                                    [
+                                        new TwinEngine.Step(
+                                            "advance",
+                                            nameof(RangeTrigger.Build),
+                                            b.Sent?.DeepClone()
+                                        ),
+                                    ]
+                                ))
+                                .ToList()
+                        )
+                        .ConfigureAwait(false);
 
                     for (var i = 0; i < batch.Length; i++)
                     {
@@ -186,6 +188,7 @@ public class TriggerInputPropertyTests
                     }
                 },
                 iter: 1
-            );
+            )
+            .ConfigureAwait(false);
     }
 }

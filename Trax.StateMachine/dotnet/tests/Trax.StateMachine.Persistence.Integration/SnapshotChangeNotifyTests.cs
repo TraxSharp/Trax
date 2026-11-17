@@ -4,6 +4,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Utils;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.StateMachine.Persistence.Integration.Fakes;
@@ -551,26 +552,30 @@ public class SnapshotChangeNotifyTests
     }
 
     /// <summary>The shipped Postgres migrations that notify the snapshot change channel, by resource name.</summary>
-    private static List<(string Name, string Sql)> NotifyingMigrations()
+    private static async Task<List<(string Name, string Sql)>> NotifyingMigrations()
     {
         var assembly = typeof(DatabaseMigrator).Assembly;
-        return assembly
-            .GetManifestResourceNames()
-            .Where(name => name.EndsWith(".sql", StringComparison.Ordinal))
-            .Select(name =>
-            {
-                using var stream = assembly.GetManifestResourceStream(name)!;
-                using var reader = new StreamReader(stream);
-                return (name, reader.ReadToEnd());
-            })
-            .Where(m => m.Item2.Contains(SnapshotNotices.Channel, StringComparison.Ordinal))
-            .ToList();
+        var migrations = new List<(string Name, string Sql)>();
+        foreach (
+            var name in assembly
+                .GetManifestResourceNames()
+                .Where(name => name.EndsWith(".sql", StringComparison.Ordinal))
+        )
+        {
+            var stream = assembly.GetManifestResourceStream(name).NotNull();
+            await using var streamDisposal = stream.ConfigureAwait(false);
+            using var reader = new StreamReader(stream);
+            var sql = await reader.ReadToEndAsync().ConfigureAwait(false);
+            if (sql.Contains(SnapshotNotices.Channel, StringComparison.Ordinal))
+                migrations.Add((name, sql));
+        }
+        return migrations;
     }
 
     [Test]
-    public void The_listener_channel_is_the_one_the_migration_notifies()
+    public async Task The_listener_channel_is_the_one_the_migration_notifies()
     {
-        var migrations = NotifyingMigrations();
+        var migrations = await NotifyingMigrations().ConfigureAwait(false);
 
         migrations
             .Should()
@@ -585,22 +590,22 @@ public class SnapshotChangeNotifyTests
     [Test]
     public async Task The_trigger_migration_reruns_over_its_own_result()
     {
-        var migrations = NotifyingMigrations();
+        var migrations = await NotifyingMigrations().ConfigureAwait(false);
         migrations.Should().ContainSingle($"one migration adds the notify trigger. See {Adr}");
 
         var connection = new NpgsqlConnection(PostgresSetup.ConnectionString);
         await using var connectionDisposal = connection.ConfigureAwait(false);
-        await connection.OpenAsync();
-        var before = await NotifyTriggers(connection);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var before = await NotifyTriggers(connection).ConfigureAwait(false);
         var rerun = connection.CreateCommand();
         await using (rerun.ConfigureAwait(false))
         {
             rerun.CommandText = migrations[0].Sql;
-            await rerun.ExecuteNonQueryAsync();
+            await rerun.ExecuteNonQueryAsync().ConfigureAwait(false);
         }
 
         before.Should().NotBeEmpty("the migration installed the trigger");
-        (await NotifyTriggers(connection))
+        (await NotifyTriggers(connection).ConfigureAwait(false))
             .Should()
             .Equal(before, $"running the migration again changes nothing. See {Adr}");
     }

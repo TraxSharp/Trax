@@ -19,9 +19,9 @@ public class FormatCorpusTests
     public static IEnumerable<string> Formats => ["glossary", "host"];
 
     [TestCaseSource(nameof(Formats))]
-    public void The_reader_files_every_corpus_document_where_it_is(string format)
+    public async Task The_reader_files_every_corpus_document_where_it_is(string format)
     {
-        var wrong = Corpus(format)
+        var wrong = (await Corpus(format).ConfigureAwait(false))
             .Where(d =>
                 Reads(format, d.Text) != (string.Equals(d.Kind, "valid", StringComparison.Ordinal))
             )
@@ -37,10 +37,12 @@ public class FormatCorpusTests
 
     [TestCaseSource(nameof(Formats))]
     [Category(Categories.CrossEngine)]
-    public void The_schema_files_every_corpus_document_where_it_is(string format)
+    public async Task The_schema_files_every_corpus_document_where_it_is(string format)
     {
-        var corpus = Corpus(format);
-        var verdicts = TwinEngine.ValidateFormat(format, corpus.Select(d => d.Text).ToList());
+        var corpus = await Corpus(format).ConfigureAwait(false);
+        var verdicts = await TwinEngine
+            .ValidateFormatAsync(format, corpus.Select(d => d.Text).ToList())
+            .ConfigureAwait(false);
 
         var wrong = corpus
             .Zip(verdicts)
@@ -146,9 +148,9 @@ public class FormatCorpusTests
     }
 
     [TestCaseSource(nameof(Formats))]
-    public void Every_corpus_directory_holds_documents(string format)
+    public async Task Every_corpus_directory_holds_documents(string format)
     {
-        var kinds = Corpus(format)
+        var kinds = (await Corpus(format).ConfigureAwait(false))
             .GroupBy(d => d.Kind, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal);
 
@@ -177,20 +179,22 @@ public class FormatCorpusTests
         }
     }
 
-    private static List<(string Kind, string Name, string Text)> Corpus(string format) =>
-        Directory
-            .GetDirectories(Path.Combine(FixturePaths.ConformanceRoot, "formats", format))
-            .SelectMany(dir =>
-                Directory
-                    .GetFiles(dir, "*.json")
-                    .Order(StringComparer.Ordinal)
-                    .Select(f =>
-                        (
-                            Path.GetFileName(dir),
-                            Path.GetFileNameWithoutExtension(f),
-                            File.ReadAllText(f)
-                        )
-                    )
+    private static async Task<List<(string Kind, string Name, string Text)>> Corpus(string format)
+    {
+        var corpus = new List<(string Kind, string Name, string Text)>();
+        foreach (
+            var dir in Directory.GetDirectories(
+                Path.Combine(FixturePaths.ConformanceRoot, "formats", format)
             )
-            .ToList();
+        )
+        foreach (var f in Directory.GetFiles(dir, "*.json").Order(StringComparer.Ordinal))
+            corpus.Add(
+                (
+                    Path.GetFileName(dir),
+                    Path.GetFileNameWithoutExtension(f),
+                    await File.ReadAllTextAsync(f).ConfigureAwait(false)
+                )
+            );
+        return corpus;
+    }
 }

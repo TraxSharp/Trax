@@ -14,9 +14,9 @@ namespace Trax.StateMachine.Tests.UnitTests;
 public class GlossaryFormatTests
 {
     [Test]
-    public void The_bakery_glossary_reads_into_its_actors_machines_and_views()
+    public async Task The_bakery_glossary_reads_into_its_actors_machines_and_views()
     {
-        var glossary = Glossary.Read(Bakery().ToJsonString());
+        var glossary = Glossary.Read((await Bakery().ConfigureAwait(false)).ToJsonString());
 
         glossary.Actors["customer"].Roles.Should().Equal("customer");
         glossary.Actors["customer"].Noun.Should().Be("a customer");
@@ -42,9 +42,9 @@ public class GlossaryFormatTests
     }
 
     [Test]
-    public void An_actor_with_no_roles_is_refused_naming_the_actor()
+    public async Task An_actor_with_no_roles_is_refused_naming_the_actor()
     {
-        var glossary = Bakery();
+        var glossary = await Bakery().ConfigureAwait(false);
         glossary["actors"]!["customer"]!.AsObject().Remove("roles");
 
         var read = () => Glossary.Read(glossary.ToJsonString());
@@ -53,9 +53,9 @@ public class GlossaryFormatTests
     }
 
     [Test]
-    public void An_actor_that_says_any_signed_in_caller_is_read_as_one()
+    public async Task An_actor_that_says_any_signed_in_caller_is_read_as_one()
     {
-        var glossary = Bakery();
+        var glossary = await Bakery().ConfigureAwait(false);
         var customer = glossary["actors"]!["customer"]!.AsObject();
         customer.Remove("roles");
         customer["anyAuthenticated"] = true;
@@ -68,9 +68,9 @@ public class GlossaryFormatTests
     }
 
     [Test]
-    public void Two_triggers_sharing_a_sentence_are_refused_naming_both_places()
+    public async Task Two_triggers_sharing_a_sentence_are_refused_naming_both_places()
     {
-        var glossary = Bakery();
+        var glossary = await Bakery().ConfigureAwait(false);
         glossary["machines"]!["shop"]!["triggers"]!["Close"]!["phrase"] = "The  shop OPENS";
 
         var read = () => Glossary.Read(glossary.ToJsonString());
@@ -83,9 +83,9 @@ public class GlossaryFormatTests
     }
 
     [Test]
-    public void Two_machines_may_share_an_action_their_nouns_tell_apart()
+    public async Task Two_machines_may_share_an_action_their_nouns_tell_apart()
     {
-        var glossary = Bakery();
+        var glossary = await Bakery().ConfigureAwait(false);
         glossary["machines"]!["order"]!["triggers"]!["Place"]!["phrase"] = "cancels {subject}";
         glossary["machines"]!["receipt"]!["triggers"]!["Cancel"]!["phrase"] = "cancels {subject}";
 
@@ -95,9 +95,9 @@ public class GlossaryFormatTests
     }
 
     [Test]
-    public void A_phrase_that_speaks_as_I_is_refused()
+    public async Task A_phrase_that_speaks_as_I_is_refused()
     {
-        var glossary = Bakery();
+        var glossary = await Bakery().ConfigureAwait(false);
         glossary["machines"]!["order"]!["triggers"]!["Place"]!["phrase"] = "I place {subject}";
 
         var read = () => Glossary.Read(glossary.ToJsonString());
@@ -108,9 +108,9 @@ public class GlossaryFormatTests
     }
 
     [Test]
-    public void A_users_trigger_that_does_not_say_where_its_machine_goes_is_refused()
+    public async Task A_users_trigger_that_does_not_say_where_its_machine_goes_is_refused()
     {
-        var glossary = Bakery();
+        var glossary = await Bakery().ConfigureAwait(false);
         glossary["machines"]!["order"]!["triggers"]!["Place"]!["phrase"] = "places the order";
 
         var read = () => Glossary.Read(glossary.ToJsonString());
@@ -119,9 +119,9 @@ public class GlossaryFormatTests
     }
 
     [Test]
-    public void A_key_it_does_not_know_is_refused_naming_it()
+    public async Task A_key_it_does_not_know_is_refused_naming_it()
     {
-        var glossary = Bakery();
+        var glossary = await Bakery().ConfigureAwait(false);
         glossary["actors"]!["customer"]!["role"] = "customer";
 
         var read = () => Glossary.Read(glossary.ToJsonString());
@@ -130,9 +130,9 @@ public class GlossaryFormatTests
     }
 
     [Test]
-    public void A_guard_with_no_rule_is_a_format_error_not_a_crash()
+    public async Task A_guard_with_no_rule_is_a_format_error_not_a_crash()
     {
-        var glossary = Bakery();
+        var glossary = await Bakery().ConfigureAwait(false);
         glossary["machines"]!["order"]!["guards"]!["hasLoaves"]!.AsObject().Remove("rule");
 
         var read = () => Glossary.Read(glossary.ToJsonString());
@@ -150,9 +150,9 @@ public class GlossaryFormatTests
     }
 
     [Test]
-    public void Another_version_is_refused()
+    public async Task Another_version_is_refused()
     {
-        var glossary = Bakery();
+        var glossary = await Bakery().ConfigureAwait(false);
         glossary["version"] = 2;
 
         var read = () => Glossary.Read(glossary.ToJsonString());
@@ -179,18 +179,19 @@ public class GlossaryFormatTests
         read.Should().Throw<FormatException>();
     }
 
-    private static JsonObject Bakery() =>
+    private static async Task<JsonObject> Bakery() =>
         JsonNode
             .Parse(
-                File.ReadAllText(
-                    Path.Combine(
-                        FixturePaths.ConformanceRoot,
-                        "formats",
-                        "glossary",
-                        "valid",
-                        "bakery.json"
+                await File.ReadAllTextAsync(
+                        Path.Combine(
+                            FixturePaths.ConformanceRoot,
+                            "formats",
+                            "glossary",
+                            "valid",
+                            "bakery.json"
+                        )
                     )
-                )
+                    .ConfigureAwait(false)
             )!
             .AsObject();
 }

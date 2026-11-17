@@ -39,8 +39,10 @@ public class AddStateMachinesBuilderTests
 
         contributed.Should().Contain(StateMachineMutations.Assembly);
 
-        using var provider = services.BuildServiceProvider();
-        using var scope = provider.CreateScope();
+        var provider = services.BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var sp = scope.ServiceProvider;
 
         // The whole subsystem resolves: the registry discovered the machines, and the store is wired.

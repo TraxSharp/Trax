@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Fakes;
 using Trax.StateMachine.Tests.Helpers;
 
@@ -42,23 +43,30 @@ public class FluentCheckoutTests
     // The shared fixtures but those that send a bad input: this checkout's guards and reducers are delegates, which
     // read the input themselves, so it declares no input schema and no invalid-input can come from it. The
     // declarative checkout replays those (CheckoutConformanceTests).
-    public static IEnumerable<TestCaseData> DelegateAdvanceFixtures() =>
-        CheckoutConformanceTests
-            .AdvanceFixtures()
-            .Where(c =>
+    public static async Task<IEnumerable<TestCaseData>> DelegateAdvanceFixtures()
+    {
+        var fixtures = new List<TestCaseData>();
+        foreach (var c in CheckoutConformanceTests.AdvanceFixtures())
+        {
+            var text = await File.ReadAllTextAsync((string)c.Arguments[0].NotNull())
+                .ConfigureAwait(false);
+            if (
                 !string.Equals(
-                    JsonNode.Parse(File.ReadAllText((string)c.Arguments[0]!))!["expect"]!
-                        ["reason"]
-                        ?.GetValue<string>(),
+                    JsonNode.Parse(text)!["expect"]!["reason"]?.GetValue<string>(),
                     RefusalCode.InvalidInput.ToWire(),
                     StringComparison.Ordinal
                 )
-            );
+            )
+                fixtures.Add(c);
+        }
+        return fixtures;
+    }
 
     [TestCaseSource(nameof(DelegateAdvanceFixtures))]
-    public void Advance_matches_the_shared_fixture(string path)
+    public async Task Advance_matches_the_shared_fixture(string path)
     {
-        var fixture = (JsonObject)JsonNode.Parse(File.ReadAllText(path))!;
+        var fixture = (JsonObject)
+            JsonNode.Parse(await File.ReadAllTextAsync(path).ConfigureAwait(false))!;
         var given = ToSnapshot((JsonObject)fixture["given"]!);
         var when = (JsonObject)fixture["when"]!;
         var input = when["input"]?.DeepClone();
@@ -95,9 +103,10 @@ public class FluentCheckoutTests
         typeof(CheckoutConformanceTests),
         nameof(CheckoutConformanceTests.RehydrateFixtures)
     )]
-    public void Rehydrate_matches_the_shared_fixture(string path)
+    public async Task Rehydrate_matches_the_shared_fixture(string path)
     {
-        var fixture = (JsonObject)JsonNode.Parse(File.ReadAllText(path))!;
+        var fixture = (JsonObject)
+            JsonNode.Parse(await File.ReadAllTextAsync(path).ConfigureAwait(false))!;
         var json =
             fixture["raw"] is JsonNode raw && raw.GetValueKind() == JsonValueKind.String
                 ? raw.GetValue<string>()

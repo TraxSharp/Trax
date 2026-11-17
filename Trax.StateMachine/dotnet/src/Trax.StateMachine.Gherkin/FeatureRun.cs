@@ -10,7 +10,7 @@ namespace Trax.StateMachine.Gherkin;
 /// </summary>
 internal static class FeatureRun
 {
-    internal static RunReport Run(
+    internal static async Task<RunReport> RunAsync(
         Glossary glossary,
         IReadOnlyList<(string Path, string Text)> features,
         IReadOnlyDictionary<string, JsonObject> irs,
@@ -63,11 +63,9 @@ internal static class FeatureRun
             var walk = Walk.Run(scenario, glossary, resolver);
             var result = dryRun
                 ? DryRun(walk)
-                : ScenarioRunner
+                : await ScenarioRunner
                     .Run(walk, glossary, new MemoryDriver(irs, host, glossary))
-                    .AsTask()
-                    .GetAwaiter()
-                    .GetResult();
+                    .ConfigureAwait(false);
             results.Add(result);
             if (failFast && result.Status is not ScenarioStatus.Passed)
                 break;

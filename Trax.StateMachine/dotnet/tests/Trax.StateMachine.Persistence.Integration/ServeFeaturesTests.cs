@@ -138,9 +138,9 @@ public class ServeFeaturesTests
     private string _dir = null!;
 
     [SetUp]
-    public void SetUp() => _dir = Write(Glossary, Ordering);
+    public async Task SetUp() => _dir = await Write(Glossary, Ordering).ConfigureAwait(false);
 
-    private static string Write(string glossary, string feature)
+    private static async Task<string> Write(string glossary, string feature)
     {
         var dir = Path.Combine(Path.GetTempPath(), $"trax-serve-features-{Guid.NewGuid():N}");
         Directory.CreateDirectory(dir);
@@ -150,8 +150,10 @@ public class ServeFeaturesTests
         );
         derived.Succeeded.Should().BeTrue(string.Join('\n', derived.Problems));
         foreach (var (id, ir) in derived.Irs)
-            File.WriteAllText(Path.Combine(dir, id + ".ir.json"), ir);
-        File.WriteAllText(Path.Combine(dir, "host.json"), derived.Host);
+            await File.WriteAllTextAsync(Path.Combine(dir, id + ".ir.json"), ir)
+                .ConfigureAwait(false);
+        await File.WriteAllTextAsync(Path.Combine(dir, "host.json"), derived.Host)
+            .ConfigureAwait(false);
         return dir;
     }
 
@@ -215,9 +217,9 @@ public class ServeFeaturesTests
     }
 
     [Test]
-    public void Policies_on_the_InMemory_provider_are_refused()
+    public async Task Policies_on_the_InMemory_provider_are_refused()
     {
-        var dir = Write(WithPolicy, Expiring);
+        var dir = await Write(WithPolicy, Expiring).ConfigureAwait(false);
         try
         {
             var services = new ServiceCollection();
@@ -245,9 +247,12 @@ public class ServeFeaturesTests
     [TestCase("Interval", 0)]
     [TestCase("Interval", -1)]
     [TestCase("Interval", 50 * 24 * 3600)]
-    public void A_policy_runner_option_out_of_range_is_refused_naming_it(string option, int value)
+    public async Task A_policy_runner_option_out_of_range_is_refused_naming_it(
+        string option,
+        int value
+    )
     {
-        var dir = Write(WithPolicy, Expiring);
+        var dir = await Write(WithPolicy, Expiring).ConfigureAwait(false);
         try
         {
             var services = new ServiceCollection();
@@ -287,9 +292,10 @@ public class ServeFeaturesTests
     }
 
     [Test]
-    public void ServeFeatures_names_the_output_range_a_train_needs()
+    public async Task ServeFeatures_names_the_output_range_a_train_needs()
     {
-        var dir = Write(Scoring.Replace("{range}", "", StringComparison.Ordinal), Tallying);
+        var dir = await Write(Scoring.Replace("{range}", "", StringComparison.Ordinal), Tallying)
+            .ConfigureAwait(false);
         try
         {
             var services = new ServiceCollection();
@@ -324,16 +330,17 @@ public class ServeFeaturesTests
     }
 
     [Test]
-    public void ServeFeatures_serves_a_train_output_whose_range_the_glossary_gives()
+    public async Task ServeFeatures_serves_a_train_output_whose_range_the_glossary_gives()
     {
-        var dir = Write(
-            Scoring.Replace(
-                "{range}",
-                ", \"minimum\": -2147483648, \"maximum\": 2147483647",
-                StringComparison.Ordinal
-            ),
-            Tallying
-        );
+        var dir = await Write(
+                Scoring.Replace(
+                    "{range}",
+                    ", \"minimum\": -2147483648, \"maximum\": 2147483647",
+                    StringComparison.Ordinal
+                ),
+                Tallying
+            )
+            .ConfigureAwait(false);
         try
         {
             var services = new ServiceCollection();

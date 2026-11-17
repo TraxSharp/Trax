@@ -47,9 +47,9 @@ public partial class ClientSurfaceTests
     private sealed record Table(List<string> Languages, List<Named> Types, List<Named> Members);
 
     [Test]
-    public void EveryCSharpNameTheTableGives_IsPublic()
+    public async Task EveryCSharpNameTheTableGives_IsPublic()
     {
-        var table = ReadTable();
+        var table = await ReadTable().ConfigureAwait(false);
 
         var missing = table
             .Types.Concat(table.Members)
@@ -74,9 +74,9 @@ public partial class ClientSurfaceTests
     }
 
     [Test]
-    public void EveryPublicMemberOfACoveredType_IsInTheTable()
+    public async Task EveryPublicMemberOfACoveredType_IsInTheTable()
     {
-        var table = ReadTable();
+        var table = await ReadTable().ConfigureAwait(false);
         var named = table.Members.Select(m => m.Name).ToHashSet(StringComparer.Ordinal);
 
         var missing = new List<string>();
@@ -217,7 +217,7 @@ public partial class ClientSurfaceTests
     // conformance/testees.json has a row per language the kits run, its `language` as the table's header names it.
     // The table has a column for each of those languages and no other.
     [Test]
-    public void TheTable_HasAColumnForEachTesteeLanguage()
+    public async Task TheTable_HasAColumnForEachTesteeLanguage()
     {
         var path = Path.Combine(RepoRoot.Path, "..", "conformance", "testees.json");
         if (!File.Exists(path))
@@ -225,7 +225,9 @@ public partial class ClientSurfaceTests
                 "conformance/testees.json is absent, so there is no testee list to hold the columns to."
             );
 
-        using var json = JsonDocument.Parse(File.ReadAllText(path));
+        using var json = JsonDocument.Parse(
+            await File.ReadAllTextAsync(path).ConfigureAwait(false)
+        );
         var list =
             json.RootElement.ValueKind == JsonValueKind.Array ? json.RootElement
             : json.RootElement.ValueKind == JsonValueKind.Object
@@ -246,19 +248,17 @@ public partial class ClientSurfaceTests
             .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal);
 
-        ReadTable()
+        (await ReadTable().ConfigureAwait(false))
             .Languages.Order(StringComparer.Ordinal)
             .Should()
             .Equal(languages, "the client surface table's languages are the testees'");
     }
 
-    private static Table ReadTable()
+    private static async Task<Table> ReadTable()
     {
         var path = Path.Combine(RepoRoot.Path, "..", "conformance", "client", "PROTOCOL.md");
-        return Parse(
-            File.ReadAllText(path).Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'),
-            CSharp
-        );
+        var text = await File.ReadAllTextAsync(path).ConfigureAwait(false);
+        return Parse(text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'), CSharp);
     }
 
     // The two tables, read strictly: a header row whose first cell is `Type` or `Member` and whose other cells name

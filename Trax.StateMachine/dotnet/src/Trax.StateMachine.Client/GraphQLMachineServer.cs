@@ -745,7 +745,7 @@ public sealed partial class GraphQLMachineServer : IMachineServer
                 timer = source.Token;
             }
             close?.Dispose();
-            CancelAndDispose(previous);
+            _ = CancelAndDisposeAsync(previous);
             _ = Task.Delay(delay, server._time, timer)
                 .ContinueWith(
                     t =>
@@ -788,15 +788,19 @@ public sealed partial class GraphQLMachineServer : IMachineServer
                 timer = _timer;
                 _timer = null;
             }
-            CancelAndDispose(timer);
+            _ = CancelAndDisposeAsync(timer);
             close?.Dispose();
         }
 
-        // The token was taken before the source is disposed, and is cancelled first: a delay waiting on it ends.
-        private static void CancelAndDispose(CancellationTokenSource? timer)
+        // The token was taken before the source is disposed, and is cancelled first: a delay waiting on it ends. The
+        // token reads as cancelled once CancelAsync returns; the delay's callback runs on the thread pool, and the
+        // source is disposed after it.
+        private static async Task CancelAndDisposeAsync(CancellationTokenSource? timer)
         {
-            timer?.Cancel();
-            timer?.Dispose();
+            if (timer is null)
+                return;
+            await timer.CancelAsync().ConfigureAwait(false);
+            timer.Dispose();
         }
     }
 

@@ -15,25 +15,27 @@ public class FuzzTests
     private const string TypeScriptTestee = "--testee node ts/tools/conformance/testee-ts.mjs";
 
     [Test]
-    public void The_compiled_CSharp_machines_answer_as_the_TypeScript_engine_does() =>
+    public Task The_compiled_CSharp_machines_answer_as_the_TypeScript_engine_does() =>
         Fuzz(new ConformanceTestee(), irs: false);
 
     [Test]
-    public void The_CSharp_engine_built_from_random_IRs_answers_as_the_TypeScript_engine_does() =>
+    public Task The_CSharp_engine_built_from_random_IRs_answers_as_the_TypeScript_engine_does() =>
         Fuzz(new ConformanceTestee(fromIr: true), irs: true);
 
-    private static void Fuzz(ConformanceTestee testee, bool irs)
+    private static async Task Fuzz(ConformanceTestee testee, bool irs)
     {
         var seed = Environment.GetEnvironmentVariable("TRAX_FUZZ_SEED") ?? "1";
         var cases = int.Parse(
             Environment.GetEnvironmentVariable("TRAX_FUZZ_CASES") ?? "300",
             System.Globalization.CultureInfo.InvariantCulture
         );
-        var (exitCode, report) = TwinEngine.RunFuzzer(
-            $"--seed {seed} --cases {cases}{(irs ? " --irs" : "")} {TypeScriptTestee}",
-            line => Answer(testee, line),
-            TimeSpan.FromMinutes(2) + TimeSpan.FromMilliseconds(cases * 5.0)
-        );
+        var (exitCode, report) = await TwinEngine
+            .RunFuzzerAsync(
+                $"--seed {seed} --cases {cases}{(irs ? " --irs" : "")} {TypeScriptTestee}",
+                line => Answer(testee, line),
+                TimeSpan.FromMinutes(2) + TimeSpan.FromMilliseconds(cases * 5.0)
+            )
+            .ConfigureAwait(false);
 
         exitCode.Should().Be(0, report);
         report.Should().Contain("every testee answered alike");

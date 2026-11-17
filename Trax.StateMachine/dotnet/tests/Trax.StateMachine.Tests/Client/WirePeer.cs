@@ -83,7 +83,8 @@ internal sealed class WirePeer(NetworkStream stream, CancellationToken stopping)
             var result = await Socket.ReceiveAsync(buffer, Stopping).ConfigureAwait(false);
             if (result.MessageType == WebSocketMessageType.Close)
                 return null;
-            text.Write(buffer, 0, result.Count);
+            await text.WriteAsync(buffer.AsMemory(0, result.Count), CancellationToken.None)
+                .ConfigureAwait(false);
             if (result.EndOfMessage)
                 return (JsonObject)JsonNode.Parse(text.ToArray())!;
         }

@@ -106,7 +106,7 @@ public class MigrationSchemaTests
 
     private static async Task AssertStoresRoundTrip(ServiceProvider host)
     {
-        using var _ = host;
+        await using var hostDisposal = host.ConfigureAwait(false);
         var dialect = host.GetRequiredService<ISqlDialect>();
         IDataContext ctx() =>
             (IDataContext)host.GetRequiredService<IDataContextProviderFactory>().Create();

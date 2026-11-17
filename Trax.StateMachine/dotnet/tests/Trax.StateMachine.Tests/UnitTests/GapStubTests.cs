@@ -76,9 +76,9 @@ public class GapStubTests
         """;
 
     [Test]
-    public void Each_part_no_scenario_shows_is_a_gap()
+    public async Task Each_part_no_scenario_shows_is_a_gap()
     {
-        var gaps = Find(Ordering);
+        var gaps = await Find(Ordering).ConfigureAwait(false);
 
         gaps.Select(g => (g.Kind, g.What))
             .Should()
@@ -96,15 +96,17 @@ public class GapStubTests
     }
 
     [Test]
-    public void Every_stub_is_green_when_pasted_and_speaks_in_the_third_person()
+    public async Task Every_stub_is_green_when_pasted_and_speaks_in_the_third_person()
     {
-        var gaps = Find(Ordering).Where(g => g.Kind != GapKind.Grant).ToList();
+        var gaps = (await Find(Ordering).ConfigureAwait(false))
+            .Where(g => g.Kind != GapKind.Grant)
+            .ToList();
 
         gaps.Should().OnlyContain(g => g.Stub != null);
         foreach (var gap in gaps)
         {
             gap.Stub.Should().NotMatchRegex(@"\b(I|my|me)\b");
-            var derived = Derive(Ordering, gap.Stub);
+            var derived = await Derive(Ordering, gap.Stub).ConfigureAwait(false);
             derived
                 .Problems.Should()
                 .BeEmpty($"the {gap.Kind} stub for {gap.What} is green:\n{gap.Stub}");
@@ -112,12 +114,12 @@ public class GapStubTests
     }
 
     [Test]
-    public void A_pasted_stub_closes_its_gap_and_no_other()
+    public async Task A_pasted_stub_closes_its_gap_and_no_other()
     {
-        var before = Find(Ordering);
+        var before = await Find(Ordering).ConfigureAwait(false);
         var cancel = before.Single(g => g.Kind == GapKind.Trigger);
 
-        var after = Find(Ordering, cancel.Stub);
+        var after = await Find(Ordering, cancel.Stub).ConfigureAwait(false);
 
         after.Should().NotContain(g => g.Kind == GapKind.Trigger && g.What == "Cancel");
         after
@@ -128,9 +130,11 @@ public class GapStubTests
     }
 
     [Test]
-    public void The_refusal_stub_shows_the_guard_refusing_from_its_state()
+    public async Task The_refusal_stub_shows_the_guard_refusing_from_its_state()
     {
-        var refusal = Find(Ordering).Single(g => g.Kind == GapKind.Refusal);
+        var refusal = (await Find(Ordering).ConfigureAwait(false)).Single(g =>
+            g.Kind == GapKind.Refusal
+        );
 
         refusal
             .Stub.Should()
@@ -139,12 +143,14 @@ public class GapStubTests
     }
 
     [Test]
-    public void Features_that_do_not_derive_have_their_problems_first()
+    public async Task Features_that_do_not_derive_have_their_problems_first()
     {
-        var (gaps, problems) = Missing.Find(
-            Trax.StateMachine.Features.Glossary.Read(Glossary),
-            [("o.feature", "Feature: O\n  Scenario: S\n    When Ada juggles\n")]
-        );
+        var (gaps, problems) = await Missing
+            .FindAsync(
+                Trax.StateMachine.Features.Glossary.Read(Glossary),
+                [("o.feature", "Feature: O\n  Scenario: S\n    When Ada juggles\n")]
+            )
+            .ConfigureAwait(false);
 
         gaps.Should().BeEmpty();
         problems.Should().NotBeEmpty();
@@ -200,7 +206,7 @@ public class GapStubTests
     // The trigger names its guard, so the derived edge carries it whether or not a scenario shows it refusing.
     [TestCase(false)]
     [TestCase(true)]
-    public void Missing_counts_an_input_guard_shown_by_a_when(bool named)
+    public async Task Missing_counts_an_input_guard_shown_by_a_when(bool named)
     {
         var glossary = Trax.StateMachine.Features.Glossary.Read(
             named
@@ -216,14 +222,18 @@ public class GapStubTests
             .Triggers["Answer"]
             .Guard.Should()
             .Be(named ? "hasAnswer" : null);
-        IReadOnlyList<Gap> GuardGaps(string feature)
+        async Task<IReadOnlyList<Gap>> GuardGaps(string feature)
         {
-            var (gaps, problems) = Missing.Find(glossary, [("answering.feature", feature)]);
+            var (gaps, problems) = await Missing
+                .FindAsync(glossary, [("answering.feature", feature)])
+                .ConfigureAwait(false);
             problems.Should().BeEmpty();
             return gaps.Where(g => g.Kind is GapKind.Guard or GapKind.Refusal).ToList();
         }
 
-        var unshown = GuardGaps(Answering).Single(g => g.Kind == GapKind.Guard);
+        var unshown = (await GuardGaps(Answering).ConfigureAwait(false)).Single(g =>
+            g.Kind == GapKind.Guard
+        );
         unshown.What.Should().Be("hasAnswer");
         unshown
             .Stub.Should()
@@ -231,7 +241,7 @@ public class GapStubTests
             .And.NotContain("And Ada's answer sheet")
             .And.Contain("Then Ada's answer sheet is still open");
 
-        GuardGaps(Answering + "\n" + Refusing).Should().BeEmpty();
+        (await GuardGaps(Answering + "\n" + Refusing).ConfigureAwait(false)).Should().BeEmpty();
     }
 
     // A stub is pasted as a feature of its own, so the Background of another does not repeat its Givens.
@@ -240,18 +250,17 @@ public class GapStubTests
             ? [("ordering.feature", feature)]
             : [("ordering.feature", feature), ("stub.feature", "Feature: Stub\n" + stub)];
 
-    private static IReadOnlyList<Gap> Find(string feature, string? stub = null)
+    private static async Task<IReadOnlyList<Gap>> Find(string feature, string? stub = null)
     {
-        var (gaps, problems) = Missing.Find(
-            Trax.StateMachine.Features.Glossary.Read(Glossary),
-            Files(feature, stub)
-        );
+        var (gaps, problems) = await Missing
+            .FindAsync(Trax.StateMachine.Features.Glossary.Read(Glossary), Files(feature, stub))
+            .ConfigureAwait(false);
         problems.Should().BeEmpty();
         return gaps;
     }
 
-    private static Derived Derive(string feature, string? stub = null) =>
-        FeatureDerivation.Derive(
+    private static Task<Derived> Derive(string feature, string? stub = null) =>
+        FeatureDerivation.DeriveAsync(
             Trax.StateMachine.Features.Glossary.Read(Glossary),
             Files(feature, stub)
         );

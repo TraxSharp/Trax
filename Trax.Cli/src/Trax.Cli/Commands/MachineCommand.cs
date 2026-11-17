@@ -564,9 +564,10 @@ internal static class MachineCommand
                 args.Trains
             );
             var (glossary, features) = (read.Glossary.Inner, read.Features);
-            var (host, irs) = Trax.StateMachine.Persistence.FromIr.IrDirectory.Read(
-                args.MachinesDir
-            );
+            var (host, irs) = Trax
+                .StateMachine.Persistence.FromIr.IrDirectory.ReadAsync(args.MachinesDir)
+                .GetAwaiter()
+                .GetResult();
             var locations = new List<(string File, long Line)>();
             foreach (var location in args.Locations)
             {
@@ -604,15 +605,18 @@ internal static class MachineCommand
                     return 1;
                 }
 
-            var report = FeatureRun.Run(
-                glossary,
-                features,
-                irs,
-                host,
-                new RunSelection(args.Tags, args.Names, locations),
-                args.DryRun,
-                args.FailFast
-            );
+            var report = FeatureRun
+                .RunAsync(
+                    glossary,
+                    features,
+                    irs,
+                    host,
+                    new RunSelection(args.Tags, args.Names, locations),
+                    args.DryRun,
+                    args.FailFast
+                )
+                .GetAwaiter()
+                .GetResult();
             foreach (var problem in report.Problems)
                 stderr.WriteLine(problem);
             var text = RunReportWriter.Write(report, args.Format);
@@ -770,7 +774,10 @@ internal static class MachineCommand
         try
         {
             var read = FeatureDirectory.ReadFeatures(featuresDir, glossaryPath, trains);
-            var (gaps, problems) = Missing.Find(read.Glossary.Inner, read.Features);
+            var (gaps, problems) = Missing
+                .FindAsync(read.Glossary.Inner, read.Features)
+                .GetAwaiter()
+                .GetResult();
             if (problems.Count > 0)
             {
                 foreach (var problem in problems)
@@ -1029,7 +1036,10 @@ internal static class MachineCommand
     {
         try
         {
-            var (host, irs) = Trax.StateMachine.Persistence.FromIr.IrDirectory.Read(machinesDir);
+            var (host, irs) = Trax
+                .StateMachine.Persistence.FromIr.IrDirectory.ReadAsync(machinesDir)
+                .GetAwaiter()
+                .GetResult();
             var text = BoardWriter.Write(Trax.StateMachine.Features.Board.Draw(irs, host), format);
             if (outPath is null)
                 stdout.Write(text);

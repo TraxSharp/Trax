@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Client;
 using Trax.StateMachine.Tests.Helpers;
 
@@ -15,7 +16,13 @@ public class ClientSyncTests
     // How long a test waits for the controller before it fails; every wait here is on a signal, never a duration.
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(10);
 
-    private static readonly ClientManifestMachine Wizard = Manifest();
+    // Read once for the fixture, before any test runs.
+    private static ClientManifestMachine? _wizard;
+
+    private static ClientManifestMachine Wizard => _wizard.NotNull();
+
+    [OneTimeSetUp]
+    public async Task ReadWizard() => _wizard = await Manifest().ConfigureAwait(false);
 
     private static readonly PlannedEvent Fill = new(
         "Update",
@@ -24,13 +31,14 @@ public class ClientSyncTests
 
     private static readonly string[] Navigation = ["Begin", "Next", "Back"];
 
-    private static ClientManifestMachine Manifest()
+    private static async Task<ClientManifestMachine> Manifest()
     {
         var ir = (JsonObject)
             JsonNode.Parse(
-                File.ReadAllText(
-                    Path.Combine(FixturePaths.ConformanceRoot, "plan", "wizard.ir.json")
-                )
+                await File.ReadAllTextAsync(
+                        Path.Combine(FixturePaths.ConformanceRoot, "plan", "wizard.ir.json")
+                    )
+                    .ConfigureAwait(false)
             )!;
         var manifest = new ClientManifestMachine
         {

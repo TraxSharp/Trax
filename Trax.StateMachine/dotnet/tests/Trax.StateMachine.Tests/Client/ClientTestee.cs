@@ -87,7 +87,7 @@ public sealed class ClientTestee : IAsyncDisposable
                     )
                     .ConfigureAwait(false)
             ),
-            "build" => await BuildAsync(request).ConfigureAwait(false),
+            "build" => await AnswerBuildAsync(request).ConfigureAwait(false),
             "headers" => Headers(request),
             "retry" => OutcomeOf(await controller.RetryAsync().ConfigureAwait(false)),
             "sync" => SyncOf(
@@ -198,7 +198,7 @@ public sealed class ClientTestee : IAsyncDisposable
 
     // Builds a client from the open request with the build's members over it, reports whether it was built, and
     // disposes it unstarted.
-    private async Task<JsonObject> BuildAsync(JsonObject request)
+    private async Task<JsonObject> AnswerBuildAsync(JsonObject request)
     {
         var merged = (JsonObject)_opened!.DeepClone();
         foreach (var (key, value) in request)

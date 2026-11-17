@@ -186,7 +186,7 @@ public class DraftLifetimeTests(StoreProvider provider)
                 .BeTrue();
         }
         await Born(host, id, PastLifetime);
-        runs.RowExists = () => host.Rows(id).Result.Count > 0;
+        runs.RowExists = async () => (await host.Rows(id).ConfigureAwait(false)).Count > 0;
 
         await Sweeper(host).SweepOnce();
 
@@ -332,13 +332,14 @@ public class DraftLifetimeTests(StoreProvider provider)
     {
         public List<string> Cancelled { get; } = [];
         public List<bool> RowExistedWhenCancelled { get; } = [];
-        public Func<bool>? RowExists { get; set; }
+        public Func<Task<bool>>? RowExists { get; set; }
 
-        public Task Cancel(string invokeToken, CancellationToken cancellationToken = default)
+        public async Task Cancel(string invokeToken, CancellationToken cancellationToken = default)
         {
             Cancelled.Add(invokeToken);
-            RowExistedWhenCancelled.Add(RowExists?.Invoke() ?? false);
-            return Task.CompletedTask;
+            RowExistedWhenCancelled.Add(
+                RowExists is not null && await RowExists().ConfigureAwait(false)
+            );
         }
     }
 }

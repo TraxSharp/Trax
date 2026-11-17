@@ -62,9 +62,9 @@ public class GlossaryStateShapesTests
         """;
 
     [Test]
-    public void A_committed_state_with_a_rule_and_its_own_context_is_written_into_the_IR_and_served_as_written()
+    public async Task A_committed_state_with_a_rule_and_its_own_context_is_written_into_the_IR_and_served_as_written()
     {
-        var derived = Derive(Receipts, ("paying.feature", Paying));
+        var derived = await Derive(Receipts, ("paying.feature", Paying)).ConfigureAwait(false);
 
         derived.Problems.Should().BeEmpty();
         var ir = JsonNode.Parse(derived.Irs["checkout"])!.AsObject();
@@ -218,16 +218,17 @@ public class GlossaryStateShapesTests
         """;
 
     [Test]
-    public void A_turnstile_written_as_features_derives_exactly_the_IR_its_fluent_copy_exports()
+    public async Task A_turnstile_written_as_features_derives_exactly_the_IR_its_fluent_copy_exports()
     {
-        var derived = Derive(TurnstileGlossary, ("turnstile.feature", Turnstile));
+        var derived = await Derive(TurnstileGlossary, ("turnstile.feature", Turnstile))
+            .ConfigureAwait(false);
 
         derived.Problems.Should().BeEmpty();
         derived.Irs["turnstile"].Should().Be(FluentTurnstile());
     }
 
     [Test]
-    public void A_differential_block_is_derived_from_what_the_scenarios_sent_and_set_up()
+    public async Task A_differential_block_is_derived_from_what_the_scenarios_sent_and_set_up()
     {
         var glossary = TurnstileGlossary.Replace(
             "\"initial\": \"Locked\",",
@@ -244,7 +245,7 @@ public class GlossaryStateShapesTests
                     Then Ada's turnstile is locked
                 """;
 
-        var derived = Derive(glossary, ("turnstile.feature", features));
+        var derived = await Derive(glossary, ("turnstile.feature", features)).ConfigureAwait(false);
 
         derived.Problems.Should().BeEmpty();
         var ir = JsonNode.Parse(derived.Irs["turnstile"])!.AsObject();
@@ -266,42 +267,45 @@ public class GlossaryStateShapesTests
     }
 
     [Test]
-    public void A_differential_block_with_nothing_in_it_is_a_problem()
+    public async Task A_differential_block_with_nothing_in_it_is_a_problem()
     {
-        var derived = Derive(
-            """
-            {
-              "version": 1,
-              "actors": { "member": { "noun": "a member", "anyAuthenticated": true } },
-              "machines": {
-                "note": {
-                  "ownedBy": "member",
-                  "noun": "note",
-                  "start": "has a note",
-                  "initial": "Open",
-                  "differential": true,
-                  "states": { "Open": "is open", "Closed": "is closed" },
-                  "triggers": { "Close": { "phrase": "closes {subject}" } }
-                }
-              }
-            }
-            """,
-            (
-                "notes.feature",
-                """
-                Feature: Notes
-                  Scenario: Closing a note
-                    Given Ada is a member
-                    And Ada has a note
-                    When Ada closes her note
-                    Then Ada's note is closed
-                """
-            )
+        var derived = (
+            await Derive(
+                    """
+                    {
+                      "version": 1,
+                      "actors": { "member": { "noun": "a member", "anyAuthenticated": true } },
+                      "machines": {
+                        "note": {
+                          "ownedBy": "member",
+                          "noun": "note",
+                          "start": "has a note",
+                          "initial": "Open",
+                          "differential": true,
+                          "states": { "Open": "is open", "Closed": "is closed" },
+                          "triggers": { "Close": { "phrase": "closes {subject}" } }
+                        }
+                      }
+                    }
+                    """,
+                    (
+                        "notes.feature",
+                        """
+                        Feature: Notes
+                          Scenario: Closing a note
+                            Given Ada is a member
+                            And Ada has a note
+                            When Ada closes her note
+                            Then Ada's note is closed
+                        """
+                    )
+                )
+                .ConfigureAwait(false)
         );
 
         derived.Problems.Should().ContainSingle().Which.Message.Should().Contain("differential");
     }
 
-    private static Derived Derive(string glossary, params (string, string)[] features) =>
-        FeatureDerivation.Derive(Glossary.Read(glossary), features);
+    private static Task<Derived> Derive(string glossary, params (string, string)[] features) =>
+        FeatureDerivation.DeriveAsync(Glossary.Read(glossary), features);
 }

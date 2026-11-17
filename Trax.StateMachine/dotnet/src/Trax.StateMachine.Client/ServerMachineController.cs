@@ -58,6 +58,8 @@ public sealed class ServerMachineController : IDisposable
         RefusalCode.Conflict.ToWire(),
     };
 
+    // Every await in this class is ConfigureAwait(true): work posted to the loop must resume on it, and
+    // ConfigureAwait(false) would resume on the thread pool, beside whatever the loop runs next.
     private readonly TaskScheduler _loop =
         new ConcurrentExclusiveSchedulerPair().ExclusiveScheduler;
     private readonly MachineShape _shape;
@@ -428,10 +430,8 @@ public sealed class ServerMachineController : IDisposable
             return;
         _disposed = true;
         Close();
-        _timers.Cancel();
-        _timers.Dispose();
-        _lifetime.Cancel();
-        _lifetime.Dispose();
+        _ = CancelAndDisposeAsync(_timers);
+        _ = CancelAndDisposeAsync(_lifetime);
         var queued = _queue.ToList();
         _queue.Clear();
         foreach (var entry in queued)
@@ -502,7 +502,7 @@ public sealed class ServerMachineController : IDisposable
         _opened = true;
         try
         {
-            await open().ConfigureAwait(false);
+            await open().ConfigureAwait(true);
         }
         finally
         {
@@ -540,7 +540,7 @@ public sealed class ServerMachineController : IDisposable
             answer = Answered(
                 await _server
                     .StartAsync(_startInput?.DeepClone(), requestId, _alive)
-                    .ConfigureAwait(false)
+                    .ConfigureAwait(true)
             );
         }
         catch (Exception ex)
@@ -569,7 +569,7 @@ public sealed class ServerMachineController : IDisposable
                         () => CreateAsync(requestId, attempt + 1),
                         () => Task.CompletedTask
                     )
-                    .ConfigureAwait(false);
+                    .ConfigureAwait(true);
                 return;
             }
             if (string.Equals(problem.Code, ClientOutdated, StringComparison.Ordinal))
@@ -636,11 +636,13 @@ public sealed class ServerMachineController : IDisposable
             stream = _server.Subscribe(
                 id,
                 message =>
-                    Post(() =>
+                {
+                    _ = Post(() =>
                     {
                         if (open && !_disposed && _error is null)
                             OnStream(message);
-                    })
+                    });
+                }
             );
         }
         catch (Exception ex)
@@ -749,13 +751,13 @@ public sealed class ServerMachineController : IDisposable
         ServerAnswer answer;
         try
         {
-            answer = Answered(await _server.GetAsync(id, _alive).ConfigureAwait(false));
+            answer = Answered(await _server.GetAsync(id, _alive).ConfigureAwait(true));
         }
         catch (Exception ex)
         {
             if (_disposed || _error is not null)
                 return;
-            await ReadFailedAsync(rowId, attempt, TransportFailure(ex)).ConfigureAwait(false);
+            await ReadFailedAsync(rowId, attempt, TransportFailure(ex)).ConfigureAwait(true);
             return;
         }
         if (_disposed || _error is not null)
@@ -778,7 +780,7 @@ public sealed class ServerMachineController : IDisposable
                             return Task.CompletedTask;
                         }
                     )
-                    .ConfigureAwait(false);
+                    .ConfigureAwait(true);
                 return;
             }
             var first = _confirmed is null;
@@ -810,7 +812,7 @@ public sealed class ServerMachineController : IDisposable
         var changed = Accept(snapshot, Source.Load, out var unreadable);
         if (unreadable is not null)
         {
-            await ReadFailedAsync(rowId, attempt, unreadable).ConfigureAwait(false);
+            await ReadFailedAsync(rowId, attempt, unreadable).ConfigureAwait(true);
             return;
         }
         // A push of the incarnation now held is taken after the read; one of another incarnation is kept until a read
@@ -880,7 +882,7 @@ public sealed class ServerMachineController : IDisposable
                     return Task.CompletedTask;
                 }
             )
-            .ConfigureAwait(false);
+            .ConfigureAwait(true);
     }
 
     private void EndRead()
@@ -1117,7 +1119,7 @@ public sealed class ServerMachineController : IDisposable
                         request.ClientResult,
                         _alive
                     )
-                    .ConfigureAwait(false)
+                    .ConfigureAwait(true)
             );
         }
         catch (Exception ex)
@@ -1165,7 +1167,7 @@ public sealed class ServerMachineController : IDisposable
                         () => DeliverAsync(entry, request, attempt + 1),
                         () => Task.CompletedTask
                     )
-                    .ConfigureAwait(false);
+                    .ConfigureAwait(true);
                 return;
             }
             _lastFailed = request;
@@ -1205,7 +1207,7 @@ public sealed class ServerMachineController : IDisposable
 
     private async Task<SyncOutcome> SyncAsync(long generation, SyncRequest request)
     {
-        var outcome = await SyncCoreAsync(generation, request).ConfigureAwait(false);
+        var outcome = await SyncCoreAsync(generation, request).ConfigureAwait(true);
         // Only the newest sync says whether the page is saved; a superseded one leaves it to the one that took over.
         if (generation == _syncGeneration && !_disposed)
         {
@@ -1240,7 +1242,7 @@ public sealed class ServerMachineController : IDisposable
                     TaskCreationOptions.RunContinuationsAsynchronously
                 );
                 _syncWaiters.Add(waiter);
-                await waiter.Task.ConfigureAwait(false);
+                await waiter.Task.ConfigureAwait(true);
             }
             if (generation != _syncGeneration)
                 return new SyncOutcome.Superseded();
@@ -1305,7 +1307,7 @@ public sealed class ServerMachineController : IDisposable
             sent++;
 
             var outcome = await Enqueue(new QueuedEvent(next.Trigger, next.Input?.DeepClone()))
-                .ConfigureAwait(false);
+                .ConfigureAwait(true);
             if (generation != _syncGeneration)
                 return new SyncOutcome.Superseded();
             fieldsAnswered =
@@ -1400,8 +1402,7 @@ public sealed class ServerMachineController : IDisposable
         _error = error;
         _status = MachineStatus.Stopped;
         Close();
-        _timers.Cancel();
-        _timers.Dispose();
+        _ = CancelAndDisposeAsync(_timers);
         _timers = new CancellationTokenSource();
         _sending = false;
         var stranded = _queue.ToList();
@@ -1412,6 +1413,14 @@ public sealed class ServerMachineController : IDisposable
         SettleStart(new SendOutcome.Stopped(error));
         WakeSyncs();
         Emit();
+    }
+
+    // Cancels a source and disposes it once its callbacks ran. The token reads as cancelled as soon as this returns; a
+    // delay waiting on it resumes on the loop afterwards, as it would after Cancel.
+    private static async Task CancelAndDisposeAsync(CancellationTokenSource source)
+    {
+        await source.CancelAsync().ConfigureAwait(true);
+        source.Dispose();
     }
 
     // Runs `next` after the attempt's delay, or `exhausted` at once when there is none left. Completes once whichever
@@ -1430,14 +1439,14 @@ public sealed class ServerMachineController : IDisposable
     {
         try
         {
-            await Task.Delay(delay, token).ConfigureAwait(false);
+            await Task.Delay(delay, token).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
             return;
         }
         if (!_disposed && _error is null)
-            await next().ConfigureAwait(false);
+            await next().ConfigureAwait(true);
     }
 
     // An answer with neither a snapshot nor a problem is not one: it fails as a transport failure would.

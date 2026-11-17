@@ -143,7 +143,12 @@ public class SnapshotChangeListenerTests
         var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
         await using var readerDisposal = reader.ConfigureAwait(false);
         while (await reader.ReadAsync().ConfigureAwait(false))
-            sessions.Add((reader.GetInt32(0), reader.IsDBNull(1) ? null : reader.GetString(1)));
+            sessions.Add(
+                (
+                    reader.GetInt32(0),
+                    await reader.IsDBNullAsync(1).ConfigureAwait(false) ? null : reader.GetString(1)
+                )
+            );
         return sessions;
     }
 

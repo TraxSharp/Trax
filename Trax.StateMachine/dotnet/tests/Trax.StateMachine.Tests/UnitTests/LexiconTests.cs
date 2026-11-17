@@ -207,14 +207,19 @@ public partial class LexiconTests
 
     [Test]
     [Category(Categories.CrossEngine)]
-    public void Every_elaborated_glossary_is_one_the_schema_accepts()
+    public async Task Every_elaborated_glossary_is_one_the_schema_accepts()
     {
         var names = ValidLexicons().ToList();
-        var texts = names
-            .Select(n => File.ReadAllText(GlossaryOf(Path.Combine(Valid, n))))
-            .ToList();
+        var texts = new List<string>();
+        foreach (var n in names)
+            texts.Add(
+                await File.ReadAllTextAsync(GlossaryOf(Path.Combine(Valid, n)))
+                    .ConfigureAwait(false)
+            );
 
-        var verdicts = TwinEngine.ValidateFormat("glossary", texts);
+        var verdicts = await TwinEngine
+            .ValidateFormatAsync("glossary", texts)
+            .ConfigureAwait(false);
 
         names
             .Zip(verdicts)

@@ -20,7 +20,7 @@ public class StrictInputParityTests
         "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md";
 
     [Test]
-    public void Each_value_gets_one_verdict_in_both_engines()
+    public async Task Each_value_gets_one_verdict_in_both_engines()
     {
         var cases = StrictInputMachine.Cases;
         var ir = (JsonObject)JsonNode.Parse(IrExporter.Export(StrictInputMachine.Built))!;
@@ -30,16 +30,18 @@ public class StrictInputParityTests
             .Prepend(StrictInputMachine.ValidInput())
             .ToList();
 
-        var twin = TwinEngine.Replay(
-            new Dictionary<string, JsonObject>(StringComparer.Ordinal) { ["strict"] = ir },
-            inputs
-                .Select(input => new TwinEngine.Sequence(
-                    "strict",
-                    start,
-                    [new TwinEngine.Step("advance", nameof(StrictTrigger.Submit), input)]
-                ))
-                .ToList()
-        );
+        var twin = await TwinEngine
+            .ReplayAsync(
+                new Dictionary<string, JsonObject>(StringComparer.Ordinal) { ["strict"] = ir },
+                inputs
+                    .Select(input => new TwinEngine.Sequence(
+                        "strict",
+                        start,
+                        [new TwinEngine.Step("advance", nameof(StrictTrigger.Submit), input)]
+                    ))
+                    .ToList()
+            )
+            .ConfigureAwait(false);
 
         var names = cases.Select(c => c.Name).Prepend("valid input").ToList();
         var expected = cases.Select(c => c.Valid).Prepend(element: true).ToList();

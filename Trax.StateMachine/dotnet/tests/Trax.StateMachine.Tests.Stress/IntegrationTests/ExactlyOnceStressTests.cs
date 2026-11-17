@@ -95,7 +95,7 @@ public class ExactlyOnceStressTests : StressFixture
         states.Should().OnlyContain(s => s == "Placed", "every draft ends Placed with a receipt");
 
         var sends = instances * per;
-        TestContext.Progress.WriteLine(
+        await TestContext.Progress.WriteLineAsync(
             $"[exactly-once] {instances} drafts x {per} sends = {sends} sends in {sw.ElapsedMilliseconds} ms "
                 + $"({sends * 1000.0 / Math.Max(1, sw.ElapsedMilliseconds):N0} sends/s), deliveries={effect.Calls}"
         );

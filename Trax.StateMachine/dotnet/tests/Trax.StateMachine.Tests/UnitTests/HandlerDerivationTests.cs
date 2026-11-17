@@ -171,18 +171,18 @@ public class HandlerDerivationTests
         """;
 
     [Test]
-    public void A_checkout_written_as_features_derives_exactly_the_IR_its_fluent_copy_exports()
+    public async Task A_checkout_written_as_features_derives_exactly_the_IR_its_fluent_copy_exports()
     {
-        var derived = Derive(Glossary, Features);
+        var derived = await Derive(Glossary, Features).ConfigureAwait(false);
 
         derived.Problems.Should().BeEmpty();
         derived.Irs["checkout"].Should().Be(FluentCheckout.Export());
     }
 
     [Test]
-    public void The_host_file_names_each_effect_handler_and_migration_the_IR_uses_and_nothing_else()
+    public async Task The_host_file_names_each_effect_handler_and_migration_the_IR_uses_and_nothing_else()
     {
-        var derived = Derive(Glossary, Features);
+        var derived = await Derive(Glossary, Features).ConfigureAwait(false);
 
         var entry = JsonNode.Parse(derived.Host!)!["machines"]!["checkout"]!;
         entry["effects"]!
@@ -229,15 +229,18 @@ public class HandlerDerivationTests
     }
 
     [Test]
-    public void A_scenario_only_the_host_runs_still_has_to_read()
+    public async Task A_scenario_only_the_host_runs_still_has_to_read()
     {
-        var derived = Derive(
-            Glossary,
-            Features.Replace(
-                "When Ada adds \"jam\" to her checkout",
-                "When Ada adds jam to her checkout",
-                StringComparison.Ordinal
-            )
+        var derived = (
+            await Derive(
+                    Glossary,
+                    Features.Replace(
+                        "When Ada adds \"jam\" to her checkout",
+                        "When Ada adds jam to her checkout",
+                        StringComparison.Ordinal
+                    )
+                )
+                .ConfigureAwait(false)
         );
 
         derived.Problems.Should().ContainSingle().Which.Message.Should().Contain("adds jam");
@@ -289,9 +292,9 @@ public class HandlerDerivationTests
     }
 
     [Test]
-    public void A_host_file_that_does_not_pair_its_handlers_with_the_IR_is_refused_when_served()
+    public async Task A_host_file_that_does_not_pair_its_handlers_with_the_IR_is_refused_when_served()
     {
-        var derived = Derive(Glossary, Features);
+        var derived = await Derive(Glossary, Features).ConfigureAwait(false);
         var ir = JsonNode.Parse(derived.Irs["checkout"])!.AsObject();
         var host = HostFile.Read(derived.Host!).Machines["checkout"];
 
@@ -438,8 +441,8 @@ public class HandlerDerivationTests
         }
     }
 
-    private static Derived Derive(string glossary, string features) =>
-        FeatureDerivation.Derive(
+    private static Task<Derived> Derive(string glossary, string features) =>
+        FeatureDerivation.DeriveAsync(
             Trax.StateMachine.Features.Glossary.Read(glossary),
             [("checkout.feature", features)]
         );

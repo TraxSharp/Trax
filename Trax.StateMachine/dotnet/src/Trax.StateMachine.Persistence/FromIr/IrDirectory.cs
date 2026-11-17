@@ -24,9 +24,12 @@ internal static class IrDirectory
     /// <summary>Reads, checks and builds every machine of <paramref name="directory"/>.</summary>
     /// <param name="directory">The directory <c>from-gherkin</c> writes.</param>
     /// <param name="trainAssemblies">Where the trains the machines invoke are looked for, by their full name.</param>
-    internal static Loaded Load(string directory, IReadOnlyCollection<Assembly> trainAssemblies)
+    internal static async Task<Loaded> LoadAsync(
+        string directory,
+        IReadOnlyCollection<Assembly> trainAssemblies
+    )
     {
-        var (host, irs) = Read(directory);
+        var (host, irs) = await ReadAsync(directory).ConfigureAwait(false);
         var machines = IrMachines.Create(
             irs.Select(kv => new IrMachines.Source(kv.Value, host.Machines[kv.Key])).ToList(),
             trainAssemblies
@@ -38,9 +41,10 @@ internal static class IrDirectory
     /// Reads and checks the host file and every IR of <paramref name="directory"/>, building nothing: what
     /// <c>trax machine run</c> runs the features on.
     /// </summary>
-    internal static (HostFile Host, IReadOnlyDictionary<string, JsonObject> Irs) Read(
-        string directory
-    )
+    internal static async Task<(
+        HostFile Host,
+        IReadOnlyDictionary<string, JsonObject> Irs
+    )> ReadAsync(string directory)
     {
         if (!Directory.Exists(directory))
             throw new InvalidOperationException(
@@ -55,7 +59,7 @@ internal static class IrDirectory
         HostFile host;
         try
         {
-            host = HostFile.Read(File.ReadAllText(hostPath));
+            host = HostFile.Read(await File.ReadAllTextAsync(hostPath).ConfigureAwait(false));
         }
         catch (FormatException ex)
         {
@@ -72,7 +76,8 @@ internal static class IrDirectory
             try
             {
                 ir =
-                    JsonNode.Parse(File.ReadAllText(path)) as JsonObject
+                    JsonNode.Parse(await File.ReadAllTextAsync(path).ConfigureAwait(false))
+                        as JsonObject
                     ?? throw new InvalidOperationException($"{path} is not a JSON object.");
             }
             catch (JsonException ex)
@@ -100,27 +105,16 @@ internal static class IrDirectory
     }
 
     /// <summary>
-    /// Registers every machine of <paramref name="directory"/> as the host's own <see cref="IMachine"/>, refusing the
-    /// host if any is refused. Call it before <c>AddTraxGraphQL</c>, which serves the machines registered before it.
+    /// Registers every machine <see cref="LoadAsync"/> read from a directory as the host's own <see cref="IMachine"/>,
+    /// and, when the host file has policies, the runner that fires them, configured by <paramref name="policies"/>.
+    /// Call it before <c>AddTraxGraphQL</c>, which serves the machines registered before it.
     /// </summary>
     internal static IServiceCollection AddIrMachinesFrom(
         this IServiceCollection services,
-        string directory,
-        params Assembly[] trainAssemblies
-    ) => services.AddIrMachinesFrom(directory, policies: null, trainAssemblies);
-
-    /// <summary>
-    /// As <see cref="AddIrMachinesFrom(IServiceCollection, string, Assembly[])"/>, and, when the host file has policies,
-    /// the runner that fires them, configured by <paramref name="policies"/>.
-    /// </summary>
-    internal static IServiceCollection AddIrMachinesFrom(
-        this IServiceCollection services,
-        string directory,
-        Action<PolicyRunnerOptions>? policies,
-        params Assembly[] trainAssemblies
+        Loaded loaded,
+        Action<PolicyRunnerOptions>? policies
     )
     {
-        var loaded = Load(directory, trainAssemblies);
         services.AddIrMachines(loaded.Machines);
         services.AddSingleton(loaded.Host);
         if (loaded.Host.Views.Count > 0)

@@ -11,25 +11,31 @@ namespace Trax.StateMachine.Tests.UnitTests;
 /// </summary>
 public class IrMachineFormatTests
 {
-    private static JsonObject Turnstile(string irFormat)
+    private static async Task<JsonObject> Turnstile(string irFormat)
     {
-        var ir = JsonNode.Parse(File.ReadAllText(FixturePaths.IrFile("turnstile")))!.AsObject();
+        var ir = JsonNode
+            .Parse(
+                await File.ReadAllTextAsync(FixturePaths.IrFile("turnstile")).ConfigureAwait(false)
+            )!
+            .AsObject();
         ir["irFormat"] = JsonNode.Parse(irFormat);
         return JsonNode.Parse(ir.ToJsonString())!.AsObject();
     }
 
     [Test]
-    public void A_format_written_with_a_fraction_of_zero_is_that_format()
+    public async Task A_format_written_with_a_fraction_of_zero_is_that_format()
     {
-        var build = () => new IrMachine(Turnstile("1.0"));
+        var ir = await Turnstile("1.0").ConfigureAwait(false);
+        var build = () => new IrMachine(ir);
 
         build.Should().NotThrow();
     }
 
     [Test]
-    public void A_format_with_a_fraction_is_no_format()
+    public async Task A_format_with_a_fraction_is_no_format()
     {
-        var build = () => new IrMachine(Turnstile("1.5"));
+        var ir = await Turnstile("1.5").ConfigureAwait(false);
+        var build = () => new IrMachine(ir);
 
         build.Should().Throw<ArgumentException>();
     }

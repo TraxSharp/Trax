@@ -32,7 +32,7 @@ public static class TwinEngine
     /// Replays <paramref name="sequences"/> through the twin, each machine built from its IR in
     /// <paramref name="irs"/>, and returns its answers, one list per sequence and one answer per step.
     /// </summary>
-    public static IReadOnlyList<IReadOnlyList<Answer>> Replay(
+    public static async Task<IReadOnlyList<IReadOnlyList<Answer>>> ReplayAsync(
         IReadOnlyDictionary<string, JsonObject> irs,
         IReadOnlyList<Sequence> sequences
     )
@@ -78,7 +78,10 @@ public static class TwinEngine
         };
 
         var answers = (JsonArray)
-            JsonNode.Parse(Run(engineRoot, "tools/replay-sequences.mjs", request.ToJsonString()))!;
+            JsonNode.Parse(
+                await Run(engineRoot, "tools/replay-sequences.mjs", request.ToJsonString())
+                    .ConfigureAwait(false)
+            )!;
         return answers
             .Select(sequence =>
                 (IReadOnlyList<Answer>)
@@ -97,13 +100,16 @@ public static class TwinEngine
     /// Checks each of <paramref name="irs"/> against <c>conformance/ir.schema.json</c> with the engine's validator
     /// (<c>tools/conformance/ir-schema.mjs</c>), and returns each one's errors, empty when it is valid.
     /// </summary>
-    public static IReadOnlyList<IReadOnlyList<string>> ValidateIrs(IReadOnlyList<JsonObject> irs)
+    public static async Task<IReadOnlyList<IReadOnlyList<string>>> ValidateIrsAsync(
+        IReadOnlyList<JsonObject> irs
+    )
     {
         var engineRoot = EngineRoot();
         var request = new JsonArray(irs.Select(ir => (JsonNode)ir.DeepClone()).ToArray());
         var answers = (JsonArray)
             JsonNode.Parse(
-                Run(engineRoot, "tools/conformance/ir-schema.mjs", request.ToJsonString())
+                await Run(engineRoot, "tools/conformance/ir-schema.mjs", request.ToJsonString())
+                    .ConfigureAwait(false)
             )!;
         return answers
             .Select(errors =>
@@ -118,7 +124,7 @@ public static class TwinEngine
     /// (<c>glossary</c> or <c>host</c>, <c>conformance/&lt;format&gt;.schema.json</c>) with the engine's validator
     /// (<c>tools/conformance/format-schema.mjs</c>), and returns each one's errors, empty when it is valid.
     /// </summary>
-    public static IReadOnlyList<IReadOnlyList<string>> ValidateFormat(
+    public static async Task<IReadOnlyList<IReadOnlyList<string>>> ValidateFormatAsync(
         string format,
         IReadOnlyList<string> documents
     )
@@ -131,7 +137,8 @@ public static class TwinEngine
         };
         var answers = (JsonArray)
             JsonNode.Parse(
-                Run(engineRoot, "tools/conformance/format-schema.mjs", request.ToJsonString())
+                await Run(engineRoot, "tools/conformance/format-schema.mjs", request.ToJsonString())
+                    .ConfigureAwait(false)
             )!;
         return answers
             .Select(errors =>
@@ -146,21 +153,22 @@ public static class TwinEngine
     /// testee: each request line the runner writes is answered with the line <paramref name="answer"/> returns.
     /// Returns the runner's exit code (0 when every case passed) and its report.
     /// </summary>
-    public static (int ExitCode, string Report) RunConformance(Func<string, string> answer) =>
-        RunStdio("conformance/run.mjs --name dotnet --stdio", answer, NodeTimeout);
+    public static Task<(int ExitCode, string Report)> RunConformanceAsync(
+        Func<string, string> answer
+    ) => RunStdio("conformance/run.mjs --name dotnet --stdio", answer, NodeTimeout);
 
     /// <summary>
     /// Runs the differential fuzzer (<c>conformance/fuzz.mjs --stdio</c>, with <paramref name="arguments"/>) with
     /// <paramref name="answer"/> as one of its testees, the others the commands the arguments name. Returns its exit
     /// code (0 when every testee answered alike) and its report.
     /// </summary>
-    public static (int ExitCode, string Report) RunFuzzer(
+    public static Task<(int ExitCode, string Report)> RunFuzzerAsync(
         string arguments,
         Func<string, string> answer,
         TimeSpan timeout
     ) => RunStdio($"conformance/fuzz.mjs --stdio {arguments}", answer, timeout);
 
-    private static (int ExitCode, string Report) RunStdio(
+    private static async Task<(int ExitCode, string Report)> RunStdio(
         string arguments,
         Func<string, string> answer,
         TimeSpan timeout
@@ -177,22 +185,31 @@ public static class TwinEngine
         };
         using var process = Process.Start(start)!;
         var stderr = process.StandardError.ReadToEndAsync();
-        var conversation = Task.Run(() =>
+        var conversation = Task.Run(async () =>
         {
-            while (process.StandardOutput.ReadLine() is { } request)
+            while (
+                await process.StandardOutput.ReadLineAsync().ConfigureAwait(false) is { } request
+            )
             {
-                process.StandardInput.WriteLine(answer(request));
-                process.StandardInput.Flush();
+                await process.StandardInput.WriteLineAsync(answer(request)).ConfigureAwait(false);
+                await process.StandardInput.FlushAsync().ConfigureAwait(false);
             }
         });
 
-        // The test owns its wait (ADR 0014): the script finishes well within it, or the test fails.
-        if (!conversation.Wait(timeout) || !process.WaitForExit(timeout))
+        // The test owns its wait (ADR 0014): the script finishes well within it, or the test fails. The wait is on
+        // the real clock, since the script runs in real time.
+        using var hang = new CancellationTokenSource();
+        var answered =
+            await Task.WhenAny(conversation, Task.Delay(timeout, TimeProvider.System, hang.Token))
+                .ConfigureAwait(false) == conversation;
+        await hang.CancelAsync().ConfigureAwait(false);
+        if (!answered || !process.WaitForExit(timeout))
         {
             process.Kill(entireProcessTree: true);
             Assert.Fail($"node {arguments} did not finish within {timeout}.");
         }
-        return (process.ExitCode, stderr.GetAwaiter().GetResult());
+        await conversation.ConfigureAwait(false);
+        return (process.ExitCode, await stderr.ConfigureAwait(false));
     }
 
     private static string EngineRoot()
@@ -213,7 +230,7 @@ public static class TwinEngine
         Assert.Ignore($"The TypeScript twin cannot run: {why} Skipping the cross-engine check.");
     }
 
-    private static string Run(string engineRoot, string script, string request)
+    private static async Task<string> Run(string engineRoot, string script, string request)
     {
         var start = new ProcessStartInfo("node", script)
         {
@@ -226,7 +243,7 @@ public static class TwinEngine
         using var process = Process.Start(start)!;
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();
-        process.StandardInput.Write(request);
+        await process.StandardInput.WriteAsync(request).ConfigureAwait(false);
         process.StandardInput.Close();
 
         // The test owns its wait (ADR 0014): the twin answers well within it, or the test fails.
@@ -238,8 +255,8 @@ public static class TwinEngine
 
         if (process.ExitCode == MissingDependencies)
             Unavailable("its dependencies are not installed (npm ci in Trax.StateMachine/ts).");
-        process.ExitCode.Should().Be(0, $"{script} failed: {stderr.GetAwaiter().GetResult()}");
-        return stdout.GetAwaiter().GetResult();
+        process.ExitCode.Should().Be(0, $"{script} failed: {await stderr.ConfigureAwait(false)}");
+        return await stdout.ConfigureAwait(false);
     }
 
     private static bool NodeIsAvailable()

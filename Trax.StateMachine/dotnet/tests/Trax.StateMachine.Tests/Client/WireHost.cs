@@ -77,7 +77,7 @@ internal sealed class WireHost : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        _stop.Cancel();
+        await _stop.CancelAsync().ConfigureAwait(false);
         _listener.Stop();
         await _accepting.ConfigureAwait(false);
         Task[] peers;

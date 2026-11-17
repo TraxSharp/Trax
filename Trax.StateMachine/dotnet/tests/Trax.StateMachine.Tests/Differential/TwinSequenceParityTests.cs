@@ -93,7 +93,7 @@ public class TwinSequenceParityTests
         where TState : struct, Enum
         where TTrigger : struct, Enum => (JsonObject)JsonNode.Parse(IrExporter.Export(built))!;
 
-    private static IEnumerable<Subject> Subjects(string machinesRoot)
+    private static IEnumerable<Subject> Subjects(JsonObject checkoutIr)
     {
         yield return For(
             "turnstile",
@@ -118,10 +118,7 @@ public class TwinSequenceParityTests
         yield return For(
             "checkout",
             DeclarativeCheckout.Machine,
-            (JsonObject)
-                JsonNode.Parse(
-                    File.ReadAllText(Path.Combine(machinesRoot, "checkout", "checkout.ir.json"))
-                )!,
+            checkoutIr,
             [
                 Snap(
                     "checkout",
@@ -237,7 +234,7 @@ public class TwinSequenceParityTests
     }
 
     [Test]
-    public void Random_event_sequences_with_timers_fired_at_random_points_agree()
+    public async Task Random_event_sequences_with_timers_fired_at_random_points_agree()
     {
         if (!NodeIsAvailable())
             Unavailable("node is not on PATH.");
@@ -246,23 +243,32 @@ public class TwinSequenceParityTests
 
         // An empty request first: it skips the test when the engine's dependencies are absent, which cannot be
         // done from inside a sample.
-        RunTool(
-            engineRoot,
-            new JsonObject
-            {
-                ["engineSrc"] = Path.Combine(engineRoot, "src"),
-                ["machines"] = new JsonObject(),
-                ["sequences"] = new JsonArray(),
-            }.ToJsonString()
-        );
+        await RunTool(
+                engineRoot,
+                new JsonObject
+                {
+                    ["engineSrc"] = Path.Combine(engineRoot, "src"),
+                    ["machines"] = new JsonObject(),
+                    ["sequences"] = new JsonArray(),
+                }.ToJsonString()
+            )
+            .ConfigureAwait(false);
 
-        foreach (var subject in Subjects(machinesRoot))
-            Sequences(subject)
+        var checkoutIr = (JsonObject)
+            JsonNode.Parse(
+                await File.ReadAllTextAsync(
+                        Path.Combine(machinesRoot, "checkout", "checkout.ir.json")
+                    )
+                    .ConfigureAwait(false)
+            )!;
+        foreach (var subject in Subjects(checkoutIr))
+            await Sequences(subject)
                 .Array[500]
-                .Sample(batch => AgreeOn(subject, batch, engineRoot), iter: 1);
+                .SampleAsync(batch => AgreeOn(subject, batch, engineRoot), iter: 1)
+                .ConfigureAwait(false);
     }
 
-    private static void AgreeOn(
+    private static async Task AgreeOn(
         Subject subject,
         (int Start, Step[] Steps)[] batch,
         string engineRoot
@@ -301,7 +307,10 @@ public class TwinSequenceParityTests
             ),
         };
 
-        var twin = (JsonArray)JsonNode.Parse(RunTool(engineRoot, request.ToJsonString()))!;
+        var twin = (JsonArray)
+            JsonNode.Parse(
+                await RunTool(engineRoot, request.ToJsonString()).ConfigureAwait(false)
+            )!;
 
         var diffs = new List<string>();
         for (var i = 0; i < batch.Length; i++)
@@ -369,7 +378,7 @@ public class TwinSequenceParityTests
             ["context"] = snapshot.Context.DeepClone(),
         };
 
-    private static string RunTool(string engineRoot, string request)
+    private static async Task<string> RunTool(string engineRoot, string request)
     {
         var start = new ProcessStartInfo("node", "tools/replay-sequences.mjs")
         {
@@ -382,7 +391,7 @@ public class TwinSequenceParityTests
         using var process = Process.Start(start)!;
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();
-        process.StandardInput.Write(request);
+        await process.StandardInput.WriteAsync(request).ConfigureAwait(false);
         process.StandardInput.Close();
 
         // The test owns its wait (ADR 0014): the twin answers well within it, or the test fails.
@@ -398,8 +407,8 @@ public class TwinSequenceParityTests
             );
         process
             .ExitCode.Should()
-            .Be(0, $"replay-sequences.mjs failed: {stderr.GetAwaiter().GetResult()}");
-        return stdout.GetAwaiter().GetResult();
+            .Be(0, $"replay-sequences.mjs failed: {await stderr.ConfigureAwait(false)}");
+        return await stdout.ConfigureAwait(false);
     }
 
     /// <summary>

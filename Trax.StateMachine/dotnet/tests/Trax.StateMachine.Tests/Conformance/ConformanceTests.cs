@@ -40,11 +40,12 @@ public class ConformanceTests
     }
 
     [TestCaseSource(nameof(AdvanceFixtures))]
-    public void Advance_matches_the_shared_fixture(string path) => Replay(path);
+    public Task Advance_matches_the_shared_fixture(string path) => Replay(path);
 
-    private static void Replay(string path)
+    private static async Task Replay(string path)
     {
-        var fixture = (JsonObject)JsonNode.Parse(File.ReadAllText(path))!;
+        var fixture = (JsonObject)
+            JsonNode.Parse(await File.ReadAllTextAsync(path).ConfigureAwait(false))!;
         var given = ToSnapshot((JsonObject)fixture["given"]!);
         var when = (JsonObject)fixture["when"]!;
         var trigger = when["trigger"]!.GetValue<string>();
@@ -80,9 +81,10 @@ public class ConformanceTests
     }
 
     [TestCaseSource(nameof(RehydrateFixtures))]
-    public void Rehydrate_matches_the_shared_fixture(string path)
+    public async Task Rehydrate_matches_the_shared_fixture(string path)
     {
-        var fixture = (JsonObject)JsonNode.Parse(File.ReadAllText(path))!;
+        var fixture = (JsonObject)
+            JsonNode.Parse(await File.ReadAllTextAsync(path).ConfigureAwait(false))!;
         var json =
             fixture["raw"] is JsonNode raw && raw.GetValueKind() == JsonValueKind.String
                 ? raw.GetValue<string>()

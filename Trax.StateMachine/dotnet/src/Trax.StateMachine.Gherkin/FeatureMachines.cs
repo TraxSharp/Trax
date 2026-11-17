@@ -24,7 +24,12 @@ public static class FeatureMachines
     {
         ArgumentNullException.ThrowIfNull(glossary);
         ArgumentNullException.ThrowIfNull(features);
-        var derived = FeatureDerivation.Derive(glossary.Inner, Files(features));
+        // The public calls are synchronous; every await under this one is ConfigureAwait(false), and the in-memory
+        // driver touches no I/O, so the wait holds no context of its own.
+        var derived = FeatureDerivation
+            .DeriveAsync(glossary.Inner, Files(features))
+            .GetAwaiter()
+            .GetResult();
         return new DerivedMachines(
             derived.Irs,
             derived.Host,
@@ -74,15 +79,20 @@ public static class FeatureMachines
                 );
             }
         var (parsed, hostFile) = Paired(irs, host);
-        var report = FeatureRun.Run(
-            glossary.Inner,
-            Files(features),
-            parsed,
-            hostFile,
-            new RunSelection(options.Tags, options.Names, options.Locations),
-            options.DryRun,
-            options.FailFast
-        );
+        // The public calls are synchronous; every await under this one is ConfigureAwait(false), and the in-memory
+        // driver touches no I/O, so the wait holds no context of its own.
+        var report = FeatureRun
+            .RunAsync(
+                glossary.Inner,
+                Files(features),
+                parsed,
+                hostFile,
+                new RunSelection(options.Tags, options.Names, options.Locations),
+                options.DryRun,
+                options.FailFast
+            )
+            .GetAwaiter()
+            .GetResult();
         return new FeatureRunReport(
             report.Scenarios.Select(Result).ToList(),
             report.Problems.Select(FeatureProblem.Of).ToList()
@@ -118,7 +128,12 @@ public static class FeatureMachines
     {
         ArgumentNullException.ThrowIfNull(glossary);
         ArgumentNullException.ThrowIfNull(features);
-        var (gaps, _) = Gherkin.Missing.Find(glossary.Inner, Files(features));
+        // The public calls are synchronous; every await under this one is ConfigureAwait(false), and the in-memory
+        // driver touches no I/O, so the wait holds no context of its own.
+        var (gaps, _) = Gherkin
+            .Missing.FindAsync(glossary.Inner, Files(features))
+            .GetAwaiter()
+            .GetResult();
         return gaps.Select(g => new FeatureGap(
                 g.Kind.ToString().ToLowerInvariant(),
                 g.Machine,

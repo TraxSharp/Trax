@@ -93,17 +93,20 @@ public class InvokeDerivationTests
             """;
 
     [Test]
-    public void Output_fields_out_of_name_order_derive_a_machine_the_host_serves_as_written()
+    public async Task Output_fields_out_of_name_order_derive_a_machine_the_host_serves_as_written()
     {
         var glossary = JsonNode.Parse(Glossary)!;
         glossary["machines"]!["game"]!["states"]!.AsObject().Remove("Answering");
         glossary["machines"]!["game"]!["invokes"]!.AsObject().Remove("Answering");
-        var derived = Derive(
-            glossary.ToJsonString(),
-            Background
-                + Shot("the shot lands", "has fired")
-                + Shot("the shot fails", "has stopped")
-                + Shot("the shot is called off", "has stopped")
+        var derived = (
+            await Derive(
+                    glossary.ToJsonString(),
+                    Background
+                        + Shot("the shot lands", "has fired")
+                        + Shot("the shot fails", "has stopped")
+                        + Shot("the shot is called off", "has stopped")
+                )
+                .ConfigureAwait(false)
         );
 
         derived.Problems.Should().BeEmpty();
@@ -125,17 +128,20 @@ public class InvokeDerivationTests
     }
 
     [Test]
-    public void An_outcome_entering_another_invoking_state_on_a_users_machine_is_a_problem()
+    public async Task An_outcome_entering_another_invoking_state_on_a_users_machine_is_a_problem()
     {
-        var derived = Derive(
-            Glossary,
-            Background
-                + Shot("the shot lands", "is being answered")
-                + Shot("the shot fails", "has stopped")
-                + Shot("the shot is called off", "has stopped")
-                + Answer("the answer lands", "has fired")
-                + Answer("the answer fails", "has stopped")
-                + Answer("the answer is called off", "has stopped")
+        var derived = (
+            await Derive(
+                    Glossary,
+                    Background
+                        + Shot("the shot lands", "is being answered")
+                        + Shot("the shot fails", "has stopped")
+                        + Shot("the shot is called off", "has stopped")
+                        + Answer("the answer lands", "has fired")
+                        + Answer("the answer fails", "has stopped")
+                        + Answer("the answer is called off", "has stopped")
+                )
+                .ConfigureAwait(false)
         );
 
         var problem = derived
@@ -152,7 +158,7 @@ public class InvokeDerivationTests
     }
 
     [Test]
-    public void An_outcome_entering_another_invoking_state_on_a_system_machine_derives()
+    public async Task An_outcome_entering_another_invoking_state_on_a_system_machine_derives()
     {
         var glossary = JsonNode.Parse(Glossary)!;
         var game = glossary["machines"]!["game"]!.AsObject();
@@ -163,39 +169,42 @@ public class InvokeDerivationTests
         game["name"] = "the game";
         game["triggers"] = JsonNode.Parse("""{ "Fire": { "phrase": "the game fires" } }""");
 
-        var derived = Derive(
-            glossary.ToJsonString(),
-            """
-            Feature: Firing
-              Scenario: The shot is answered
-                Given the game is ready
-                When the game fires
-                Then the game is firing
-                When the shot lands
-                Then the game is being answered
-                When the answer lands
-                Then the game has fired
+        var derived = (
+            await Derive(
+                    glossary.ToJsonString(),
+                    """
+                    Feature: Firing
+                      Scenario: The shot is answered
+                        Given the game is ready
+                        When the game fires
+                        Then the game is firing
+                        When the shot lands
+                        Then the game is being answered
+                        When the answer lands
+                        Then the game has fired
 
-              Scenario: The shot fails
-                Given the game is firing
-                When the shot fails
-                Then the game has stopped
+                      Scenario: The shot fails
+                        Given the game is firing
+                        When the shot fails
+                        Then the game has stopped
 
-              Scenario: The shot is called off
-                Given the game is firing
-                When the shot is called off
-                Then the game has stopped
+                      Scenario: The shot is called off
+                        Given the game is firing
+                        When the shot is called off
+                        Then the game has stopped
 
-              Scenario: The answer fails
-                Given the game is being answered
-                When the answer fails
-                Then the game has stopped
+                      Scenario: The answer fails
+                        Given the game is being answered
+                        When the answer fails
+                        Then the game has stopped
 
-              Scenario: The answer is called off
-                Given the game is being answered
-                When the answer is called off
-                Then the game has stopped
-            """
+                      Scenario: The answer is called off
+                        Given the game is being answered
+                        When the answer is called off
+                        Then the game has stopped
+                    """
+                )
+                .ConfigureAwait(false)
         );
 
         derived
@@ -206,8 +215,8 @@ public class InvokeDerivationTests
             );
     }
 
-    private static Derived Derive(string glossary, string feature) =>
-        FeatureDerivation.Derive(
+    private static Task<Derived> Derive(string glossary, string feature) =>
+        FeatureDerivation.DeriveAsync(
             Trax.StateMachine.Features.Glossary.Read(glossary),
             [("game.feature", feature)]
         );

@@ -76,8 +76,7 @@ public class ThroughputStressTests : StressFixture
 
         var states = await Fan(n, StressProfile.MaxConcurrency, i => LoadState(ids[i]));
         states.Should().OnlyContain(s => s == "Review", "every instance ends in Review");
-
-        TestContext.Progress.WriteLine(
+        await TestContext.Progress.WriteLineAsync(
             $"[throughput] {ops} ops ({n} instances x 3) in {sw.ElapsedMilliseconds} ms "
                 + $"({ops * 1000.0 / Math.Max(1, sw.ElapsedMilliseconds):N0} ops/s)"
         );

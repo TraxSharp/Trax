@@ -71,23 +71,22 @@ internal static class GlossaryWriter
         ["system"] = ["keyedBy"],
     };
 
-    private static readonly JsonWriterOptions Options = new()
+    // The writer these options make is the one a Utf8JsonWriter with the same settings would be; MaxDepth is the
+    // writer's own default, not the serializer's.
+    private static readonly JsonSerializerOptions Options = new()
     {
-        Indented = true,
+        WriteIndented = true,
         IndentSize = 2,
         NewLine = "\n",
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        MaxDepth = 1000,
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
     };
 
     /// <summary>The glossary's canonical text.</summary>
-    internal static string Write(JsonObject glossary)
-    {
-        var ordered = Root(glossary);
-        using var stream = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(stream, Options))
-            ordered.WriteTo(writer);
-        return Encoding.UTF8.GetString(stream.ToArray()) + "\n";
-    }
+    internal static string Write(JsonObject glossary) =>
+        Root(glossary).ToJsonString(Options) + "\n";
 
     private static JsonObject Kind(
         JsonObject node,

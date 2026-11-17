@@ -307,7 +307,7 @@ public class ScenarioDriverParityTests
     public async Task Up()
     {
         _glossary = Trax.StateMachine.Features.Glossary.Read(Glossary);
-        var derived = FeatureDerivation.Derive(_glossary, Features);
+        var derived = await FeatureDerivation.DeriveAsync(_glossary, Features);
         derived.Problems.Should().BeEmpty();
         _irs = derived.Irs.ToDictionary(kv => kv.Key, kv => JsonNode.Parse(kv.Value)!.AsObject());
         _hostFile = HostFile.Read(derived.Host!);

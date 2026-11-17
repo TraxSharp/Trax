@@ -31,11 +31,11 @@ public class IrMachineHostTests(StoreProvider provider)
     private IMachine _ingest = null!;
 
     [OneTimeSetUp]
-    public void SetUp()
+    public async Task SetUp()
     {
         // Renamed, so they do not collide with the hand-written machines the host's scan registers.
-        var turnstile = Ir("turnstile", "ir-turnstile");
-        var ingest = Ir("ingest", "ir-ingest");
+        var turnstile = await Ir("turnstile", "ir-turnstile").ConfigureAwait(false);
+        var ingest = await Ir("ingest", "ir-ingest").ConfigureAwait(false);
         var riders = new AccessRule([
             [Rider],
         ]);
@@ -115,7 +115,7 @@ public class IrMachineHostTests(StoreProvider provider)
     [Test]
     public async Task A_machine_with_no_read_rule_is_refused_at_startup()
     {
-        var ir = Ir("turnstile", "ir-turnstile-unread");
+        var ir = await Ir("turnstile", "ir-turnstile-unread").ConfigureAwait(false);
         var unread = IrMachines.Create(
             new IrMachines.Source(
                 ir,
@@ -132,11 +132,9 @@ public class IrMachineHostTests(StoreProvider provider)
             []
         );
 
-        var problems = await MachineRulesStartupValidator.Problems(
-            [unread],
-            new StateMachineOptions(),
-            caller: null
-        );
+        var problems = await MachineRulesStartupValidator
+            .Problems([unread], new StateMachineOptions(), caller: null)
+            .ConfigureAwait(false);
 
         problems.Should().ContainSingle().Which.Should().Contain("get, changed, discard");
     }
@@ -237,9 +235,11 @@ public class IrMachineHostTests(StoreProvider provider)
                 .Be("Cancelled", "the cancelled outcome's edge goes where the IR says");
     }
 
-    private static JsonObject Ir(string name, string id)
+    private static async Task<JsonObject> Ir(string name, string id)
     {
-        var ir = JsonNode.Parse(File.ReadAllText(IrFile(name)))!.AsObject();
+        var ir = JsonNode
+            .Parse(await File.ReadAllTextAsync(IrFile(name)).ConfigureAwait(false))!
+            .AsObject();
         ir["id"] = id;
         return ir;
     }

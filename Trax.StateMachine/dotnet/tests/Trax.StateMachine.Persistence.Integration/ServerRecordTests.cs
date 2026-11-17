@@ -155,9 +155,10 @@ public class ServerRecordTests(StoreProvider provider)
     public async Task A_host_upsert_out_of_a_kept_row_leaves_it_judged_by_its_state()
     {
         var id = await RevisingByOperator();
-        using (var scope = _host.Services.CreateScope())
+        var upsertScope = _host.Services.CreateAsyncScope();
+        await using (upsertScope.ConfigureAwait(false))
             (
-                await scope
+                await upsertScope
                     .ServiceProvider.GetRequiredService<ISnapshotStore>()
                     .Upsert(_user, id, DraftSnapshot())
             )
@@ -177,9 +178,10 @@ public class ServerRecordTests(StoreProvider provider)
     public async Task A_host_update_out_of_a_kept_row_leaves_it_judged_by_its_state()
     {
         var id = await RevisingByOperator();
-        using (var scope = _host.Services.CreateScope())
+        var updateScope = _host.Services.CreateAsyncScope();
+        await using (updateScope.ConfigureAwait(false))
         {
-            var store = scope.ServiceProvider.GetRequiredService<ISnapshotStore>();
+            var store = updateScope.ServiceProvider.GetRequiredService<ISnapshotStore>();
             var stored = await store.Get(_user, Machine, id);
             (await store.Update(_user, id, DraftSnapshot(), stored!.Token)).Should().BeTrue();
         }

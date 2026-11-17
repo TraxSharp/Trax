@@ -12,12 +12,14 @@ internal static class Missing
     /// The gaps of features that derive. Features that do not derive have their problems to fix first: an empty list
     /// and the problems.
     /// </summary>
-    internal static (IReadOnlyList<Gap> Gaps, IReadOnlyList<Problem> Problems) Find(
-        Glossary glossary,
-        IReadOnlyList<(string Path, string Text)> features
-    )
+    internal static async Task<(
+        IReadOnlyList<Gap> Gaps,
+        IReadOnlyList<Problem> Problems
+    )> FindAsync(Glossary glossary, IReadOnlyList<(string Path, string Text)> features)
     {
-        var baseline = FeatureDerivation.Derive(glossary, features);
+        var baseline = await FeatureDerivation
+            .DeriveAsync(glossary, features)
+            .ConfigureAwait(false);
         if (baseline.Problems.Count > 0)
             return ([], baseline.Problems);
         var host = JsonNode.Parse(baseline.Host!)!.AsObject();
@@ -36,7 +38,7 @@ internal static class Missing
         var heldFor = HeldFor(walks);
 
         var gaps = new List<Gap>();
-        void Add(
+        async Task Add(
             GapKind kind,
             string machine,
             string what,
@@ -46,7 +48,7 @@ internal static class Missing
         {
             string? stub = null;
             foreach (var claim in stubs)
-                if (Holds(glossary, features, baseline, claim))
+                if (await HoldsAsync(glossary, features, baseline, claim).ConfigureAwait(false))
                 {
                     stub = claim.Scenario;
                     break;
@@ -59,13 +61,14 @@ internal static class Missing
             var m = machine.Id;
             if (!baseline.Irs.ContainsKey(m))
             {
-                Add(
-                    GapKind.Machine,
-                    m,
-                    m,
-                    $"{m}: no scenario uses it, so it is not derived.",
-                    MachineStubs(glossary, machine)
-                );
+                await Add(
+                        GapKind.Machine,
+                        m,
+                        m,
+                        $"{m}: no scenario uses it, so it is not derived.",
+                        MachineStubs(glossary, machine)
+                    )
+                    .ConfigureAwait(false);
                 continue;
             }
             var ir = JsonNode.Parse(baseline.Irs[m])!.AsObject();
@@ -105,87 +108,90 @@ internal static class Missing
                 var trigger in machine.Triggers.Values.OrderBy(t => t.Name, StringComparer.Ordinal)
             )
                 if (!Shown(m, $"command {trigger.Name}"))
-                    Add(
-                        GapKind.Trigger,
-                        m,
-                        trigger.Name,
-                        $"{m} {trigger.Name}: no scenario fires it, so it is not served.",
-                        reached
-                            .Order(StringComparer.Ordinal)
-                            .SelectMany(from =>
-                                Targets(machine, from)
-                                    .OrderBy(to => reached.Contains(to))
-                                    .Select(to =>
-                                        Move(
-                                            glossary,
-                                            machine,
-                                            from,
-                                            trigger,
-                                            to,
-                                            $"command {trigger.Name}"
+                    await Add(
+                            GapKind.Trigger,
+                            m,
+                            trigger.Name,
+                            $"{m} {trigger.Name}: no scenario fires it, so it is not served.",
+                            reached
+                                .Order(StringComparer.Ordinal)
+                                .SelectMany(from =>
+                                    Targets(machine, from)
+                                        .OrderBy(to => reached.Contains(to))
+                                        .Select(to =>
+                                            Move(
+                                                glossary,
+                                                machine,
+                                                from,
+                                                trigger,
+                                                to,
+                                                $"command {trigger.Name}"
+                                            )
                                         )
-                                    )
-                            )
-                            .OfType<Claim>()
-                    );
+                                )
+                                .OfType<Claim>()
+                        )
+                        .ConfigureAwait(false);
 
             foreach (var (state, _) in machine.States.OrderBy(s => s.Key, StringComparer.Ordinal))
                 if (!reached.Contains(state))
-                    Add(
-                        GapKind.State,
-                        m,
-                        state,
-                        $"{m} {state}: no scenario moves an instance there.",
-                        reached
-                            .Order(StringComparer.Ordinal)
-                            .SelectMany(from =>
-                                machine
-                                    .Triggers.Values.OrderBy(t => Shown(m, $"command {t.Name}"))
-                                    .ThenBy(t => t.Name, StringComparer.Ordinal)
-                                    .Select(trigger =>
-                                        Move(
-                                            glossary,
-                                            machine,
-                                            from,
-                                            trigger,
-                                            state,
-                                            $"edge {from} {trigger.Name} {state}"
+                    await Add(
+                            GapKind.State,
+                            m,
+                            state,
+                            $"{m} {state}: no scenario moves an instance there.",
+                            reached
+                                .Order(StringComparer.Ordinal)
+                                .SelectMany(from =>
+                                    machine
+                                        .Triggers.Values.OrderBy(t => Shown(m, $"command {t.Name}"))
+                                        .ThenBy(t => t.Name, StringComparer.Ordinal)
+                                        .Select(trigger =>
+                                            Move(
+                                                glossary,
+                                                machine,
+                                                from,
+                                                trigger,
+                                                state,
+                                                $"edge {from} {trigger.Name} {state}"
+                                            )
+                                                is { } move
+                                                ? move with
+                                                {
+                                                    Trigger = trigger.Name,
+                                                }
+                                                : null
                                         )
-                                            is { } move
-                                            ? move with
-                                            {
-                                                Trigger = trigger.Name,
-                                            }
-                                            : null
-                                    )
-                            )
-                            .OfType<Claim>()
-                    );
+                                )
+                                .OfType<Claim>()
+                        )
+                        .ConfigureAwait(false);
 
             foreach (
                 var guard in machine.Guards.Values.OrderBy(g => g.Name, StringComparer.Ordinal)
             )
                 if (!guardsUsed.Contains((m, guard.Name)) && !Decides(guard))
-                    Add(
-                        GapKind.Guard,
-                        m,
-                        guard.Name,
-                        guard.OnInput
-                            ? $"{m} guard {guard.Name}: no scenario shows it refusing a When's value."
-                            : $"{m} guard {guard.Name}: no scenario sets it up.",
-                        edges
-                            .Select(e =>
-                                Guarded(
-                                    glossary,
-                                    machine,
-                                    guard,
-                                    e.From,
-                                    machine.Triggers[e.Trigger],
-                                    e.To
+                    await Add(
+                            GapKind.Guard,
+                            m,
+                            guard.Name,
+                            guard.OnInput
+                                ? $"{m} guard {guard.Name}: no scenario shows it refusing a When's value."
+                                : $"{m} guard {guard.Name}: no scenario sets it up.",
+                            edges
+                                .Select(e =>
+                                    Guarded(
+                                        glossary,
+                                        machine,
+                                        guard,
+                                        e.From,
+                                        machine.Triggers[e.Trigger],
+                                        e.To
+                                    )
                                 )
-                            )
-                            .OfType<Claim>()
-                    );
+                                .OfType<Claim>()
+                        )
+                        .ConfigureAwait(false);
 
             // A move no scenario shows refused: a guarded edge, or one a guard is shown holding for and never failing.
             foreach (var edge in edges.DistinctBy(e => (e.From, e.Trigger)))
@@ -203,23 +209,24 @@ internal static class Missing
                         )
                         .ToList();
                 if (!Shown(m, $"guard {edge.From} {edge.Trigger}") && guards.Count > 0)
-                    Add(
-                        GapKind.Refusal,
-                        m,
-                        $"{edge.From} {edge.Trigger}",
-                        $"{m} {edge.Trigger} from {edge.From}: no scenario shows it refused.",
-                        guards
-                            .Select(g =>
-                                Refused(
-                                    glossary,
-                                    machine,
-                                    g,
-                                    edge.From,
-                                    machine.Triggers[edge.Trigger]
+                    await Add(
+                            GapKind.Refusal,
+                            m,
+                            $"{edge.From} {edge.Trigger}",
+                            $"{m} {edge.Trigger} from {edge.From}: no scenario shows it refused.",
+                            guards
+                                .Select(g =>
+                                    Refused(
+                                        glossary,
+                                        machine,
+                                        g,
+                                        edge.From,
+                                        machine.Triggers[edge.Trigger]
+                                    )
                                 )
-                            )
-                            .OfType<Claim>()
-                    );
+                                .OfType<Claim>()
+                        )
+                        .ConfigureAwait(false);
             }
 
             foreach (
@@ -229,34 +236,36 @@ internal static class Missing
                 var (phrase, outcome) in invoke.Outcomes.OrderBy(o => o.Key, StringComparer.Ordinal)
             )
                 if (!Shown(m, $"outcome {invoke.State} {outcome.Kind}"))
-                    Add(
-                        GapKind.Outcome,
-                        m,
-                        $"{invoke.State} {outcome.Kind}",
-                        $"{m} {invoke.State}: no scenario shows '{phrase}'.",
-                        Targets(machine, invoke.State)
-                            .Select(to =>
-                                OutcomeStub(
-                                    glossary,
-                                    machine,
-                                    invoke.State,
-                                    phrase,
-                                    outcome.Kind,
-                                    to
+                    await Add(
+                            GapKind.Outcome,
+                            m,
+                            $"{invoke.State} {outcome.Kind}",
+                            $"{m} {invoke.State}: no scenario shows '{phrase}'.",
+                            Targets(machine, invoke.State)
+                                .Select(to =>
+                                    OutcomeStub(
+                                        glossary,
+                                        machine,
+                                        invoke.State,
+                                        phrase,
+                                        outcome.Kind,
+                                        to
+                                    )
                                 )
-                            )
-                    );
+                        )
+                        .ConfigureAwait(false);
         }
 
         foreach (var view in glossary.Views.Values.OrderBy(v => v.Name, StringComparer.Ordinal))
             if (host["views"]?[view.Name] is null)
-                Add(
-                    GapKind.View,
-                    view.Reads[0].Machine,
-                    view.Name,
-                    $"view {view.Name}: no scenario reads it, so it is not served.",
-                    [ViewStub(glossary, view, baseline)]
-                );
+                await Add(
+                        GapKind.View,
+                        view.Reads[0].Machine,
+                        view.Name,
+                        $"view {view.Name}: no scenario reads it, so it is not served.",
+                        [ViewStub(glossary, view, baseline)]
+                    )
+                    .ConfigureAwait(false);
 
         foreach (
             var line in baseline
@@ -288,17 +297,19 @@ internal static class Missing
 
     // The features with the stub pasted derive with no problem, show the claimed part, and change nothing else: no other
     // machine's IR, no part of the host file outside the claim, and no line of the access table but the claim's.
-    private static bool Holds(
+    private static async Task<bool> HoldsAsync(
         Glossary glossary,
         IReadOnlyList<(string Path, string Text)> features,
         Derived baseline,
         Claim claim
     )
     {
-        var stubbed = FeatureDerivation.Derive(
-            glossary,
-            [.. features, ("(stub).feature", "Feature: Stub\n" + claim.Scenario)]
-        );
+        var stubbed = await FeatureDerivation
+            .DeriveAsync(
+                glossary,
+                [.. features, ("(stub).feature", "Feature: Stub\n" + claim.Scenario)]
+            )
+            .ConfigureAwait(false);
         if (stubbed.Problems.Count > 0)
             return false;
         var host = JsonNode.Parse(stubbed.Host!)!.AsObject();

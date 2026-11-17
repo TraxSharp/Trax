@@ -70,9 +70,9 @@ public class AccessDerivationTests
         """;
 
     [Test]
-    public void An_owners_act_grants_their_actor_the_trigger_and_the_grant_is_in_the_table()
+    public async Task An_owners_act_grants_their_actor_the_trigger_and_the_grant_is_in_the_table()
     {
-        var derived = Derive(People);
+        var derived = await Derive(People).ConfigureAwait(false);
 
         derived.Problems.Should().BeEmpty();
         var order = HostFile.Read(derived.Host!).Machines["order"];
@@ -88,17 +88,17 @@ public class AccessDerivationTests
     }
 
     [Test]
-    public void The_table_lists_each_actors_roles_so_a_changed_role_shows_in_review()
+    public async Task The_table_lists_each_actors_roles_so_a_changed_role_shows_in_review()
     {
-        var derived = Derive(People);
+        var derived = await Derive(People).ConfigureAwait(false);
 
         derived.Access.Should().StartWith("@").And.Contain("@customer: roles customer\n");
     }
 
     [Test]
-    public void An_actor_a_rule_admits_that_no_scenario_shows_is_marked_in_the_table()
+    public async Task An_actor_a_rule_admits_that_no_scenario_shows_is_marked_in_the_table()
     {
-        var derived = Derive(People);
+        var derived = await Derive(People).ConfigureAwait(false);
 
         derived
             .Access.Should()
@@ -109,9 +109,9 @@ public class AccessDerivationTests
     }
 
     [Test]
-    public void A_trigger_no_scenario_fires_is_not_served()
+    public async Task A_trigger_no_scenario_fires_is_not_served()
     {
-        var derived = Derive(People);
+        var derived = await Derive(People).ConfigureAwait(false);
 
         var ir = JsonNode.Parse(derived.Irs["order"])!;
         ir["triggers"]!.AsArray().Select(t => t!.GetValue<string>()).Should().Equal("Place");
@@ -119,9 +119,9 @@ public class AccessDerivationTests
     }
 
     [Test]
-    public void The_derived_host_file_passes_the_hosts_own_startup_checks()
+    public async Task The_derived_host_file_passes_the_hosts_own_startup_checks()
     {
-        var derived = Derive(People);
+        var derived = await Derive(People).ConfigureAwait(false);
         var ir = JsonNode.Parse(derived.Irs["order"])!.AsObject();
 
         var machine = IrMachines.Create(
@@ -129,22 +129,28 @@ public class AccessDerivationTests
             []
         );
 
-        MachineRulesStartupValidator
-            .Problems([machine], new StateMachineOptions(), caller: null)
-            .Result.Should()
+        (
+            await MachineRulesStartupValidator
+                .Problems([machine], new StateMachineOptions(), caller: null)
+                .ConfigureAwait(false)
+        )
+            .Should()
             .BeEmpty();
     }
 
     [Test]
-    public void One_person_acting_on_anothers_instance_is_refused_at_derivation()
+    public async Task One_person_acting_on_anothers_instance_is_refused_at_derivation()
     {
-        var derived = Derive(
-            People
-                + """
-                  Scenario: Bo places Ada's order
-                    When Bo places Ada's order
-                    Then Ada's order is placed
-                """
+        var derived = (
+            await Derive(
+                    People
+                        + """
+                          Scenario: Bo places Ada's order
+                            When Bo places Ada's order
+                            Then Ada's order is placed
+                        """
+                )
+                .ConfigureAwait(false)
         );
 
         derived
@@ -155,16 +161,19 @@ public class AccessDerivationTests
     }
 
     [Test]
-    public void A_person_firing_a_system_machine_is_refused_at_derivation()
+    public async Task A_person_firing_a_system_machine_is_refused_at_derivation()
     {
-        var derived = Derive(
-            People
-                + """
-                  Scenario: Ada opens the shop
-                    Given the shop is closed
-                    When Ada the shop opens
-                    Then the shop is open
-                """
+        var derived = (
+            await Derive(
+                    People
+                        + """
+                          Scenario: Ada opens the shop
+                            Given the shop is closed
+                            When Ada the shop opens
+                            Then the shop is open
+                        """
+                )
+                .ConfigureAwait(false)
         );
 
         derived
@@ -175,16 +184,19 @@ public class AccessDerivationTests
     }
 
     [Test]
-    public void An_actor_allowed_in_one_scenario_and_denied_in_another_is_a_problem_not_a_widened_rule()
+    public async Task An_actor_allowed_in_one_scenario_and_denied_in_another_is_a_problem_not_a_widened_rule()
     {
-        var derived = Derive(
-            People
-                + """
-                  Scenario: Bo may not place
-                    Given Bo has an order
-                    When Bo places his order
-                    Then Bo is not allowed
-                """
+        var derived = (
+            await Derive(
+                    People
+                        + """
+                          Scenario: Bo may not place
+                            Given Bo has an order
+                            When Bo places his order
+                            Then Bo is not allowed
+                        """
+                )
+                .ConfigureAwait(false)
         );
 
         derived
@@ -195,24 +207,27 @@ public class AccessDerivationTests
     }
 
     [Test]
-    public void A_trigger_both_a_person_and_the_server_fire_is_refused()
+    public async Task A_trigger_both_a_person_and_the_server_fire_is_refused()
     {
         var glossary = JsonNode.Parse(Glossary)!;
         glossary["machines"]!["order"]!["triggers"]!["Bake"]!["phrase"] = "bakes {subject}";
-        var derived = Derive(
-            People
-                + """
-                  Scenario: Ada bakes
-                    Given Ada's order is placed
-                    When Ada bakes her order
-                    Then Ada's order is baking
+        var derived = (
+            await Derive(
+                    People
+                        + """
+                          Scenario: Ada bakes
+                            Given Ada's order is placed
+                            When Ada bakes her order
+                            Then Ada's order is baking
 
-                  Scenario: Bo's order bakes on its own
-                    Given Bo's order is placed
-                    When bakes Bo's order
-                    Then Bo's order is baking
-                """,
-            glossary.ToJsonString()
+                          Scenario: Bo's order bakes on its own
+                            Given Bo's order is placed
+                            When bakes Bo's order
+                            Then Bo's order is baking
+                        """,
+                    glossary.ToJsonString()
+                )
+                .ConfigureAwait(false)
         );
 
         derived
@@ -223,16 +238,19 @@ public class AccessDerivationTests
     }
 
     [Test]
-    public void A_role_gated_trigger_back_to_the_start_state_is_refused_worded_like_the_host()
+    public async Task A_role_gated_trigger_back_to_the_start_state_is_refused_worded_like_the_host()
     {
-        var derived = Derive(
-            People
-                + """
-                  Scenario: Reopening
-                    Given Ada's order is placed
-                    When Ada reopens her order
-                    Then Ada's order is a draft
-                """
+        var derived = (
+            await Derive(
+                    People
+                        + """
+                          Scenario: Reopening
+                            Given Ada's order is placed
+                            When Ada reopens her order
+                            Then Ada's order is a draft
+                        """
+                )
+                .ConfigureAwait(false)
         );
 
         derived
@@ -243,16 +261,19 @@ public class AccessDerivationTests
     }
 
     [Test]
-    public void A_trigger_only_steps_with_no_person_fire_is_the_servers()
+    public async Task A_trigger_only_steps_with_no_person_fire_is_the_servers()
     {
-        var derived = Derive(
-            People
-                + """
-                  Scenario: Baking starts
-                    Given Ada's order is placed
-                    When Ada's order starts baking
-                    Then Ada's order is baking
-                """
+        var derived = (
+            await Derive(
+                    People
+                        + """
+                          Scenario: Baking starts
+                            Given Ada's order is placed
+                            When Ada's order starts baking
+                            Then Ada's order is baking
+                        """
+                )
+                .ConfigureAwait(false)
         );
 
         HostFile.Read(derived.Host!).Machines["order"].Triggers["Bake"].IsServer.Should().BeTrue();
@@ -260,19 +281,22 @@ public class AccessDerivationTests
     }
 
     [Test]
-    public void Any_signed_in_owner_may_return_their_instance_to_the_start_state()
+    public async Task Any_signed_in_owner_may_return_their_instance_to_the_start_state()
     {
-        var derived = Derive(
-            """
-            Feature: Notes
-              Scenario: Shutting and opening
-                Given Cy is a member
-                And Cy has a note
-                When Cy shuts his note
-                Then Cy's note is shut
-                When Cy opens his note
-                Then Cy's note is open
-            """
+        var derived = (
+            await Derive(
+                    """
+                    Feature: Notes
+                      Scenario: Shutting and opening
+                        Given Cy is a member
+                        And Cy has a note
+                        When Cy shuts his note
+                        Then Cy's note is shut
+                        When Cy opens his note
+                        Then Cy's note is open
+                    """
+                )
+                .ConfigureAwait(false)
         );
 
         derived
@@ -286,8 +310,8 @@ public class AccessDerivationTests
             .BeTrue();
     }
 
-    private static Derived Derive(string feature, string glossary = Glossary) =>
-        FeatureDerivation.Derive(
+    private static Task<Derived> Derive(string feature, string glossary = Glossary) =>
+        FeatureDerivation.DeriveAsync(
             Trax.StateMachine.Features.Glossary.Read(glossary),
             [("order.feature", feature)]
         );

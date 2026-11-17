@@ -19,12 +19,13 @@ public class PlanTests
 
     private static readonly string[] Navigation = ["Begin", "Next", "Back"];
 
-    private static JsonObject WizardIr() =>
+    private static async Task<JsonObject> WizardIr() =>
         (JsonObject)
             JsonNode.Parse(
-                File.ReadAllText(
-                    Path.Combine(FixturePaths.ConformanceRoot, "plan", "wizard.ir.json")
-                )
+                await File.ReadAllTextAsync(
+                        Path.Combine(FixturePaths.ConformanceRoot, "plan", "wizard.ir.json")
+                    )
+                    .ConfigureAwait(false)
             )!;
 
     private static Snapshot Wizard(string state, string? name = null, string? email = null) =>
@@ -40,9 +41,14 @@ public class PlanTests
         result.Should().BeOfType<PlanResult.Planned>().Subject.Events.Select(e => e.Trigger);
 
     [Test]
-    public void The_fields_event_is_tried_before_navigation_from_every_snapshot()
+    public async Task The_fields_event_is_tried_before_navigation_from_every_snapshot()
     {
-        var plan = new IrMachine(WizardIr()).Plan(Wizard("Start"), "Review", Fill, Navigation);
+        var plan = new IrMachine(await WizardIr().ConfigureAwait(false)).Plan(
+            Wizard("Start"),
+            "Review",
+            Fill,
+            Navigation
+        );
 
         var events = plan.Should().BeOfType<PlanResult.Planned>().Subject.Events;
         events.Select(e => e.Trigger).Should().Equal("Begin", "Update", "Next");
@@ -51,9 +57,9 @@ public class PlanTests
     }
 
     [Test]
-    public void The_plan_does_not_depend_on_the_order_the_IR_lists_its_transitions()
+    public async Task The_plan_does_not_depend_on_the_order_the_IR_lists_its_transitions()
     {
-        var reversed = WizardIr();
+        var reversed = await WizardIr().ConfigureAwait(false);
         var transitions = reversed["transitions"]!.AsArray().Select(t => t!.DeepClone()).Reverse();
         reversed["transitions"] = new JsonArray(transitions.ToArray());
 
@@ -63,9 +69,9 @@ public class PlanTests
     }
 
     [Test]
-    public void A_snapshot_at_the_target_holding_the_fields_plans_nothing()
+    public async Task A_snapshot_at_the_target_holding_the_fields_plans_nothing()
     {
-        var plan = new IrMachine(WizardIr()).Plan(
+        var plan = new IrMachine(await WizardIr().ConfigureAwait(false)).Plan(
             Wizard("Review", "Ada", "ada@example.com"),
             "Review",
             Fill,
@@ -76,9 +82,14 @@ public class PlanTests
     }
 
     [Test]
-    public void An_edge_on_a_custom_guard_without_a_handler_is_not_tried_and_answers_undetermined()
+    public async Task An_edge_on_a_custom_guard_without_a_handler_is_not_tried_and_answers_undetermined()
     {
-        var plan = new IrMachine(WizardIr()).Plan(Wizard("Details"), "Review", Fill, ["Skip"]);
+        var plan = new IrMachine(await WizardIr().ConfigureAwait(false)).Plan(
+            Wizard("Details"),
+            "Review",
+            Fill,
+            ["Skip"]
+        );
 
         var undetermined = plan.Should().BeOfType<PlanResult.Undetermined>().Subject;
         undetermined.Trigger.Should().Be("Skip");
@@ -86,10 +97,10 @@ public class PlanTests
     }
 
     [Test]
-    public void An_edge_on_a_custom_guard_with_a_handler_is_planned()
+    public async Task An_edge_on_a_custom_guard_with_a_handler_is_planned()
     {
         var machine = new IrMachine(
-            WizardIr(),
+            await WizardIr().ConfigureAwait(false),
             new Dictionary<string, Func<JsonObject, JsonNode?, bool>>(StringComparer.Ordinal)
             {
                 ["approved"] = (_, _) => true,
@@ -102,9 +113,11 @@ public class PlanTests
     }
 
     // The wizard's search over a graph that counts what it asks of the engine.
-    private static (PlanResult Plan, List<string> Advanced, int Serialized) Counted(Snapshot from)
+    private static async Task<(PlanResult Plan, List<string> Advanced, int Serialized)> Counted(
+        Snapshot from
+    )
     {
-        var machine = new IrMachine(WizardIr());
+        var machine = new IrMachine(await WizardIr().ConfigureAwait(false));
         var advanced = new List<string>();
         var serialized = 0;
         var graph = new PlanGraph(
@@ -129,11 +142,11 @@ public class PlanTests
     }
 
     [Test]
-    public void Each_snapshot_is_advanced_by_each_edge_once_the_goal_tests_fields_event_included()
+    public async Task Each_snapshot_is_advanced_by_each_edge_once_the_goal_tests_fields_event_included()
     {
         foreach (var from in new[] { Wizard("Start"), Wizard("Review", "Bob", "bob@example.com") })
         {
-            var (plan, advanced, serialized) = Counted(from);
+            var (plan, advanced, serialized) = await Counted(from).ConfigureAwait(false);
 
             plan.Should().BeOfType<PlanResult.Planned>();
             advanced.Should().OnlyHaveUniqueItems();
@@ -143,11 +156,11 @@ public class PlanTests
     }
 
     [Test]
-    public void A_navigation_trigger_listed_twice_is_tried_once_from_each_snapshot()
+    public async Task A_navigation_trigger_listed_twice_is_tried_once_from_each_snapshot()
     {
         var asked = 0;
         var machine = new IrMachine(
-            WizardIr(),
+            await WizardIr().ConfigureAwait(false),
             new Dictionary<string, Func<JsonObject, JsonNode?, bool>>(StringComparer.Ordinal)
             {
                 ["approved"] = (_, _) =>
@@ -169,9 +182,9 @@ public class PlanTests
     }
 
     [Test]
-    public void A_target_past_the_depth_limit_is_exceeded_rather_than_unreachable()
+    public async Task A_target_past_the_depth_limit_is_exceeded_rather_than_unreachable()
     {
-        var machine = new IrMachine(WizardIr());
+        var machine = new IrMachine(await WizardIr().ConfigureAwait(false));
 
         machine
             .Plan(Wizard("Start"), "Review", Fill, Navigation, maxDepth: 2)
@@ -183,9 +196,9 @@ public class PlanTests
     }
 
     [Test]
-    public void A_trigger_a_client_may_not_move_with_is_invalid()
+    public async Task A_trigger_a_client_may_not_move_with_is_invalid()
     {
-        var machine = new IrMachine(WizardIr());
+        var machine = new IrMachine(await WizardIr().ConfigureAwait(false));
         var start = Wizard("Review");
 
         machine

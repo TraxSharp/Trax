@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Helpers;
 
 namespace Trax.StateMachine.Tests.Conformance;
@@ -20,20 +21,36 @@ public partial class TesteeRosterTests
 
     private static string RepositoryRoot => Directory.GetParent(FixturePaths.FolderRoot)!.FullName;
 
-    private static JsonArray Rows() =>
-        JsonNode.Parse(
-            File.ReadAllText(Path.Combine(FixturePaths.ConformanceRoot, "testees.json"))
-        )!["languages"]!.AsArray();
+    // The three files are read once for the fixture; each call below parses its own copy.
+    private static string? _testees;
+    private static string? _ciYml;
+    private static string? _packages;
+
+    [OneTimeSetUp]
+    public async Task ReadFiles()
+    {
+        _testees = await File.ReadAllTextAsync(
+                Path.Combine(FixturePaths.ConformanceRoot, "testees.json")
+            )
+            .ConfigureAwait(false);
+        _ciYml = await File.ReadAllTextAsync(
+                Path.Combine(RepositoryRoot, ".github", "workflows", "ci.yml")
+            )
+            .ConfigureAwait(false);
+        _packages = await File.ReadAllTextAsync(
+                Path.Combine(RepositoryRoot, ".github", "ci", "packages.json")
+            )
+            .ConfigureAwait(false);
+    }
+
+    private static JsonArray Rows() => JsonNode.Parse(_testees.NotNull())!["languages"]!.AsArray();
 
     private static string Text(JsonNode row, string key) => (string)row[key]!;
 
-    private static string CiYml() =>
-        File.ReadAllText(Path.Combine(RepositoryRoot, ".github", "workflows", "ci.yml"));
+    private static string CiYml() => _ciYml.NotNull();
 
     private static JsonObject Suite(string name) =>
-        JsonNode.Parse(
-            File.ReadAllText(Path.Combine(RepositoryRoot, ".github", "ci", "packages.json"))
-        )!["suites"]!
+        JsonNode.Parse(_packages.NotNull())!["suites"]!
             .AsArray()
             .Select(s => s!.AsObject())
             .SingleOrDefault(s => string.Equals((string)s["name"]!, name, StringComparison.Ordinal))
