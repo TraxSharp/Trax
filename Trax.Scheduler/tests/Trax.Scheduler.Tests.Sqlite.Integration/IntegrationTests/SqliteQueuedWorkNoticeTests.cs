@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.QueuedWorkListener;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
@@ -45,7 +46,7 @@ public class SqliteQueuedWorkNoticeTests : TestSetup
                 WorkQueue.Create(
                     new CreateWorkQueue
                     {
-                        TrainName = typeof(ISchedulerTestTrain).FullName!,
+                        TrainName = typeof(ISchedulerTestTrain).FullName.NotNull(),
                         Input = "{}",
                         InputTypeName = typeof(SchedulerTestInput).FullName,
                     }
@@ -68,7 +69,11 @@ public class SqliteQueuedWorkNoticeTests : TestSetup
     {
         var execution = Scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
         await execution
-            .QueueAsync(typeof(ISchedulerTestTrain).FullName!, "{}", ct: CancellationToken.None)
+            .QueueAsync(
+                typeof(ISchedulerTestTrain).FullName.NotNull(),
+                "{}",
+                ct: CancellationToken.None
+            )
             .ConfigureAwait(false);
     }
 }

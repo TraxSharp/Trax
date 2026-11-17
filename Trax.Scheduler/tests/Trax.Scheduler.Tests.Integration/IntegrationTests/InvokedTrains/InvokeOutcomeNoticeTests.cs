@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
@@ -24,9 +25,9 @@ public class InvokeOutcomeNoticeTests
 {
     private static readonly TimeSpan Bound = TimeSpan.FromSeconds(30);
 
-    private InvokeCluster _cluster = null!;
-    private ClusterHost _api = null!;
-    private ClusterHost _worker = null!;
+    private InvokeCluster? _cluster;
+    private ClusterHost? _api;
+    private ClusterHost? _worker;
 
     [OneTimeSetUp]
     public async Task CreateCluster()
@@ -34,37 +35,44 @@ public class InvokeOutcomeNoticeTests
         _cluster = await InvokeCluster.Create(ClusterStore.Postgres);
 
         // A sweep interval no test waits out: only the notice can deliver within the bound.
-        _api = _cluster.Host(
-            machines: true,
-            scheduler: false,
-            options: o => o.InvokeOutcomeSweepInterval = TimeSpan.FromHours(1)
-        );
-        _worker = _cluster.Host(machines: false, scheduler: true);
-        await _cluster.Reset();
+        _api = _cluster
+            .NotNull()
+            .Host(
+                machines: true,
+                scheduler: false,
+                options: o => o.InvokeOutcomeSweepInterval = TimeSpan.FromHours(1)
+            );
+        _worker = _cluster.NotNull().Host(machines: false, scheduler: true);
+        await _cluster.NotNull().Reset();
     }
 
     [OneTimeTearDown]
     public async Task DisposeCluster()
     {
-        await _api.DisposeAsync();
-        await _worker.DisposeAsync();
-        await _cluster.DisposeAsync();
+        if (_api is not null)
+            await _api.DisposeAsync();
+        if (_worker is not null)
+            await _worker.DisposeAsync();
+        if (_cluster is not null)
+            await _cluster.DisposeAsync();
     }
 
     [Test]
     public async Task A_run_ending_on_another_host_wakes_the_reconciler_before_its_interval()
     {
-        var reconciler = _api.Reconciler;
+        var reconciler = _api.NotNull().Reconciler;
         await reconciler.StartAsync(CancellationToken.None);
         try
         {
             await Task.WhenAll(reconciler.Listening, reconciler.FirstSweep).WaitAsync(Bound);
 
-            var instance = await _api.Start(StepMachine.Context(InvokedStepModes.Ok));
-            var token = (await _api.Row(instance.Id, SystemStepMachine.MachineId))!.InvokeToken!;
+            var instance = await _api.NotNull().Start(StepMachine.Context(InvokedStepModes.Ok));
+            var token = (await _api.NotNull().Row(instance.Id, SystemStepMachine.MachineId))
+                .NotNull()
+                .InvokeToken.NotNull();
             var delivered = DeliveryOf(reconciler, token);
 
-            await _worker.DispatchAndRun(token);
+            await _worker.NotNull().DispatchAndRun(token);
 
             (await delivered.WaitAsync(Bound))
                 .Should()
@@ -90,7 +98,9 @@ public class InvokeOutcomeNoticeTests
             await Task.WhenAll(reconciler.Listening, reconciler.FirstSweep).WaitAsync(Bound);
 
             var instance = await api.Start(StepMachine.Context(InvokedStepModes.Ok));
-            var token = (await api.Row(instance.Id, SystemStepMachine.MachineId))!.InvokeToken!;
+            var token = (await api.Row(instance.Id, SystemStepMachine.MachineId))
+                .NotNull()
+                .InvokeToken.NotNull();
             var delivered = DeliveryOf(reconciler, token);
 
             // An input that no longer reads as its train's: the dispatcher inserts the run already failed, and
@@ -100,12 +110,12 @@ public class InvokeOutcomeNoticeTests
                     .ServiceProvider.GetRequiredService<IDataContext>()
                     .WorkQueues.Where(w => w.ExternalId == token)
                     .ExecuteUpdateAsync(s => s.SetProperty(w => w.Input, "[1]"));
-            await using (var scope = _worker.Services.CreateAsyncScope())
+            await using (var scope = _worker.NotNull().Services.CreateAsyncScope())
                 await scope
                     .ServiceProvider.GetRequiredService<IJobDispatcherTrain>()
                     .Run(Unit.Default);
-            var run = (await _worker.Entry(token))!.MetadataId!.Value;
-            (await _worker.Run(run)).TrainState.Should().Be(TrainState.Failed);
+            var run = (await _worker.NotNull().Entry(token)).NotNull().MetadataId.NotNull().Value;
+            (await _worker.NotNull().Run(run)).TrainState.Should().Be(TrainState.Failed);
 
             (await delivered.WaitAsync(Bound))
                 .Should()
@@ -135,7 +145,7 @@ public class InvokeOutcomeNoticeTests
             await Task.WhenAll(reconciler.Listening, reconciler.FirstSweep).WaitAsync(Bound);
             swept.Count.Should().Be(1, "the interval is an hour: only the start has swept");
 
-            await using (var admin = new NpgsqlConnection(_cluster.ConnectionString))
+            await using (var admin = new NpgsqlConnection(_cluster.NotNull().ConnectionString))
             {
                 await admin.OpenAsync();
                 await using var terminate = new NpgsqlCommand(
@@ -143,7 +153,7 @@ public class InvokeOutcomeNoticeTests
                         + "WHERE application_name = 'trax_invoked_run_listener' AND datname = current_database()",
                     admin
                 );
-                ((long)(await terminate.ExecuteScalarAsync())!)
+                ((long)(await terminate.ExecuteScalarAsync()).NotNull())
                     .Should()
                     .Be(1, "the host holds one listening session");
             }
@@ -155,9 +165,11 @@ public class InvokeOutcomeNoticeTests
 
             // And it hears notices again.
             var instance = await api.Start(StepMachine.Context(InvokedStepModes.Ok));
-            var token = (await api.Row(instance.Id, SystemStepMachine.MachineId))!.InvokeToken!;
+            var token = (await api.Row(instance.Id, SystemStepMachine.MachineId))
+                .NotNull()
+                .InvokeToken.NotNull();
             var delivered = DeliveryOf(reconciler, token);
-            await _worker.DispatchAndRun(token);
+            await _worker.NotNull().DispatchAndRun(token);
             (await delivered.WaitAsync(Bound)).Should().BeEquivalentTo(new { To = "Done" });
         }
         finally
@@ -168,11 +180,13 @@ public class InvokeOutcomeNoticeTests
 
     // A host of its own, so its reconciler starts afresh; it sweeps only when asked to.
     private ClusterHost ListeningHost() =>
-        _cluster.Host(
-            machines: true,
-            scheduler: false,
-            options: o => o.InvokeOutcomeSweepInterval = TimeSpan.FromHours(1)
-        );
+        _cluster
+            .NotNull()
+            .Host(
+                machines: true,
+                scheduler: false,
+                options: o => o.InvokeOutcomeSweepInterval = TimeSpan.FromHours(1)
+            );
 
     private static Task<InvokeDelivery> DeliveryOf(InvokeOutcomeReconciler reconciler, string token)
     {

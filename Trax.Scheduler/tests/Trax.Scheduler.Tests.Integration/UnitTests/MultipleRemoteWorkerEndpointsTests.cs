@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
@@ -111,9 +112,12 @@ public class MultipleRemoteWorkerEndpointsTests
         var scope = provider.CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var routing = scope.ServiceProvider.GetRequiredService<JobSubmitterRoutingConfiguration>();
-        var submitter = routing.ResolveSubmitter(scope.ServiceProvider, train.FullName!);
+        var submitter = routing.ResolveSubmitter(scope.ServiceProvider, train.FullName.NotNull());
         submitter.Should().NotBeNull($"{train.Name} is routed");
-        await submitter!.EnqueueAsync(metadataId, CancellationToken.None).ConfigureAwait(false);
+        await submitter
+            .NotNull()
+            .EnqueueAsync(metadataId, CancellationToken.None)
+            .ConfigureAwait(false);
         return submitter;
     }
 
@@ -169,20 +173,23 @@ public class MultipleRemoteWorkerEndpointsTests
         )
         {
             var body = await request
-                .Content!.ReadAsByteArrayAsync(cancellationToken)
+                .Content.NotNull()
+                .ReadAsByteArrayAsync(cancellationToken)
                 .ConfigureAwait(false);
-            var job = JsonSerializer.Deserialize<RemoteJobRequest>(
-                body,
-                new JsonSerializerOptions(JsonSerializerDefaults.Web)
-                {
-                    RespectNullableAnnotations = false,
-                    RespectRequiredConstructorParameters = false,
-                }
-            )!;
+            var job = JsonSerializer
+                .Deserialize<RemoteJobRequest>(
+                    body,
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web)
+                    {
+                        RespectNullableAnnotations = false,
+                        RespectRequiredConstructorParameters = false,
+                    }
+                )
+                .NotNull();
             lock (Requests)
                 Requests.Add(
                     new RecordedRequest(
-                        request.RequestUri!,
+                        request.RequestUri.NotNull(),
                         job.MetadataId,
                         request.Headers.TryGetValues("Authorization", out var values)
                             ? values.ToArray()

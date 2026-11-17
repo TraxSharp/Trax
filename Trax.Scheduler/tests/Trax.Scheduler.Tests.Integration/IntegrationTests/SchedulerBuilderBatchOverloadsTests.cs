@@ -2,6 +2,7 @@ using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Models.Manifest;
 using Trax.Scheduler.Configuration;
@@ -152,7 +153,7 @@ public class SchedulerBuilderBatchOverloadsTests
             .ToListAsync();
 
         manifests.Select(m => m.ExternalId).Should().BeEquivalentTo("process-a", "process-b");
-        manifests.Should().AllSatisfy(m => m.ManifestGroup.Name.Should().Be("process"));
+        manifests.Should().AllSatisfy(m => m.ManifestGroup.NotNull().Name.Should().Be("process"));
     }
 
     [Test]
@@ -262,7 +263,7 @@ public class SchedulerBuilderBatchOverloadsTests
             .Where(m => m.ExternalId.StartsWith("process-"))
             .ToListAsync();
         manifests.Should().HaveCount(2);
-        manifests.Should().AllSatisfy(m => m.ManifestGroup.Name.Should().Be("process"));
+        manifests.Should().AllSatisfy(m => m.ManifestGroup.NotNull().Name.Should().Be("process"));
     }
 
     [Test]
@@ -296,7 +297,7 @@ public class SchedulerBuilderBatchOverloadsTests
 
         manifests.Should().HaveCount(2);
         manifests.Select(m => m.ExternalId).Should().BeEquivalentTo("leaves-a", "leaves-b");
-        manifests.Should().AllSatisfy(m => m.ManifestGroup.Name.Should().Be("leaves"));
+        manifests.Should().AllSatisfy(m => m.ManifestGroup.NotNull().Name.Should().Be("leaves"));
     }
 
     [Test]
@@ -325,7 +326,7 @@ public class SchedulerBuilderBatchOverloadsTests
             .ToListAsync();
 
         manifests.Should().HaveCount(2);
-        manifests.Should().AllSatisfy(m => m.ManifestGroup.Name.Should().Be("deps"));
+        manifests.Should().AllSatisfy(m => m.ManifestGroup.NotNull().Name.Should().Be("deps"));
     }
 
     [Test]

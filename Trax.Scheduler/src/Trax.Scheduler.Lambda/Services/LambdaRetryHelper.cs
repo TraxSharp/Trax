@@ -3,6 +3,7 @@ using Amazon.Lambda;
 using Amazon.Lambda.Model;
 using Amazon.Runtime;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Lambda.Configuration;
 
 namespace Trax.Scheduler.Lambda.Services;
@@ -68,7 +69,7 @@ internal static class LambdaRetryHelper
             }
         }
 
-        throw lastException!;
+        throw lastException.NotNull();
     }
 
     /// <summary>

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Npgsql;
+using Trax.Core.Extensions;
 
 namespace Trax.Scheduler.Tests.Integration.Fixtures;
 
@@ -25,7 +26,8 @@ internal static class TestPostgres
                 .SetBasePath(AppContext.BaseDirectory)
                 .AddJsonFile("appsettings.json", optional: false)
                 .Build()
-                .GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+                .GetRequiredSection("Configuration")["DatabaseConnectionString"]
+                .NotNull()
         )
         {
             Port = Port,

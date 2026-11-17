@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.Metadata;
@@ -40,7 +41,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class OperationsServiceRequeueTests : TestSetup
 {
-    private IOperationsService _operations = null!;
+    private IOperationsService? _operations;
 
     [SetUp]
     public void GetService()
@@ -57,7 +58,7 @@ public class OperationsServiceRequeueTests : TestSetup
         var run = Metadata.Create(
             new CreateMetadata
             {
-                Name = trainName ?? typeof(ISchedulerTestTrain).FullName!,
+                Name = trainName ?? typeof(ISchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
                 ReplayDecisionsOf = replayDecisionsOf,
@@ -105,9 +106,11 @@ public class OperationsServiceRequeueTests : TestSetup
             .Where(m => m.Id == source)
             .Select(m => m.Input)
             .SingleAsync();
-        System.Text.Encoding.UTF8.GetByteCount(stored!).Should().BeGreaterThan(cap);
+        System.Text.Encoding.UTF8.GetByteCount(stored.NotNull()).Should().BeGreaterThan(cap);
 
-        var result = await _operations.RequeueExecutionAsync(source, CancellationToken.None);
+        var result = await _operations
+            .NotNull()
+            .RequeueExecutionAsync(source, CancellationToken.None);
 
         result.Success.Should().BeTrue(result.Message);
         DataContext.WorkQueues.AsNoTracking().Single().Input.Should().Contain(value);
@@ -119,7 +122,9 @@ public class OperationsServiceRequeueTests : TestSetup
         var source = await SeedRunAsync("""{"Value":"again"}""");
         await RecordDecisionAsync(source);
 
-        var result = await _operations.RequeueExecutionAsync(source, CancellationToken.None);
+        var result = await _operations
+            .NotNull()
+            .RequeueExecutionAsync(source, CancellationToken.None);
 
         result.Success.Should().BeTrue(result.Message);
         var entry = DataContext.WorkQueues.AsNoTracking().Single();
@@ -145,14 +150,16 @@ public class OperationsServiceRequeueTests : TestSetup
             source
         );
 
-        var result = await _operations.RequeueExecutionAsync(source, CancellationToken.None);
+        var result = await _operations
+            .NotNull()
+            .RequeueExecutionAsync(source, CancellationToken.None);
 
         result.Success.Should().BeTrue(result.Message);
         (
             await db
                 .Database.SqlQueryRaw<string?>(
                     "SELECT starter_hash AS \"Value\" FROM trax.work_queue WHERE id = {0}",
-                    result.Id!.Value
+                    result.Id.NotNull().Value
                 )
                 .SingleAsync()
         )
@@ -167,7 +174,9 @@ public class OperationsServiceRequeueTests : TestSetup
         // Another run's decisions are not this run's.
         await RecordDecisionAsync(await SeedRunAsync("""{"Value":"other"}"""));
 
-        var result = await _operations.RequeueExecutionAsync(source, CancellationToken.None);
+        var result = await _operations
+            .NotNull()
+            .RequeueExecutionAsync(source, CancellationToken.None);
 
         result.Success.Should().BeTrue(result.Message);
         DataContext
@@ -187,7 +196,9 @@ public class OperationsServiceRequeueTests : TestSetup
         await RecordDecisionAsync(first);
         var second = await SeedRunAsync("""{"Value":"again"}""", replayDecisionsOf: first);
 
-        var result = await _operations.RequeueExecutionAsync(second, CancellationToken.None);
+        var result = await _operations
+            .NotNull()
+            .RequeueExecutionAsync(second, CancellationToken.None);
 
         result.Success.Should().BeTrue(result.Message);
         DataContext
@@ -202,7 +213,9 @@ public class OperationsServiceRequeueTests : TestSetup
     {
         var source = await SeedRunAsync("""{"Value":"again"}""", "Some.Retired.ITrain");
 
-        var result = await _operations.RequeueExecutionAsync(source, CancellationToken.None);
+        var result = await _operations
+            .NotNull()
+            .RequeueExecutionAsync(source, CancellationToken.None);
 
         result.Success.Should().BeFalse();
         result
@@ -223,7 +236,9 @@ public class OperationsServiceRequeueTests : TestSetup
         // caller of a requeue supplied no InputJson, so the refusal names the run's saved input.
         var source = await SeedRunAsync("""{"Value":{"was":"an object"}}""");
 
-        var result = await _operations.RequeueExecutionAsync(source, CancellationToken.None);
+        var result = await _operations
+            .NotNull()
+            .RequeueExecutionAsync(source, CancellationToken.None);
 
         result.Success.Should().BeFalse();
         result
@@ -329,14 +344,18 @@ public class OperationsServiceRequeueTests : TestSetup
         saved.Should().Contain("\"$values\"").And.Contain("\"$ref\"");
         var source = await SeedRunAsync(saved, typeof(ISavedInputShapesTrain).FullName);
 
-        var result = await _operations.RequeueExecutionAsync(source, CancellationToken.None);
+        var result = await _operations
+            .NotNull()
+            .RequeueExecutionAsync(source, CancellationToken.None);
 
         result.Success.Should().BeTrue(result.Message);
         var entry = DataContext.WorkQueues.AsNoTracking().Single();
-        var queued = JsonSerializer.Deserialize<SavedInputShapes>(
-            entry.Input!,
-            TraxJsonSerializationOptions.ManifestProperties
-        )!;
+        var queued = JsonSerializer
+            .Deserialize<SavedInputShapes>(
+                entry.Input.NotNull(),
+                TraxJsonSerializationOptions.ManifestProperties
+            )
+            .NotNull();
         queued.Counts.Should().Equal(3, 1, 4);
         queued.Tags.Should().Equal("alpha", "beta");
         queued.Home.Should().Be(shared);
@@ -356,15 +375,18 @@ public class OperationsServiceRequeueTests : TestSetup
         );
         var source = await SeedRunAsync(saved, typeof(ISavedInputShapesTrain).FullName);
 
-        var result = await _operations.RequeueExecutionAsync(source, CancellationToken.None);
+        var result = await _operations
+            .NotNull()
+            .RequeueExecutionAsync(source, CancellationToken.None);
 
         result.Success.Should().BeTrue(result.Message);
         var entry = DataContext.WorkQueues.AsNoTracking().Single();
         JsonSerializer
             .Deserialize<SavedInputShapes>(
-                entry.Input!,
+                entry.Input.NotNull(),
                 TraxJsonSerializationOptions.ManifestProperties
-            )!
+            )
+            .NotNull()
             .Billing.Should()
             .Be(shared);
     }
@@ -372,7 +394,9 @@ public class OperationsServiceRequeueTests : TestSetup
     [Test]
     public async Task An_unknown_run_is_reported_and_nothing_is_queued()
     {
-        var result = await _operations.RequeueExecutionAsync(999_999_999, CancellationToken.None);
+        var result = await _operations
+            .NotNull()
+            .RequeueExecutionAsync(999_999_999, CancellationToken.None);
 
         result.Success.Should().BeFalse();
         result.Message.Should().Be("Execution 999999999 not found.");
@@ -394,7 +418,9 @@ public class OperationsServiceRequeueTests : TestSetup
         var source = await SeedRunAsync(savedInput);
         await RecordDecisionAsync(source);
 
-        var result = await _operations.RequeueExecutionAsync(source, CancellationToken.None);
+        var result = await _operations
+            .NotNull()
+            .RequeueExecutionAsync(source, CancellationToken.None);
 
         result.Success.Should().BeFalse();
         result

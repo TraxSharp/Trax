@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -1440,12 +1441,14 @@ public class TraxScheduler(
             var replayDecisionsOf = askAfresh
                 ? null
                 : await RetryReplay
-                    .SourceForRetryAsync(deadLetter.Manifest!, ct)
+                    .SourceForRetryAsync(deadLetter.Manifest.NotNull(), ct)
                     .ConfigureAwait(false);
             // Resumed after the failed run's latest checkpoint when it has one the chain allows,
             // whether or not it asks afresh: that concerns its deciders (Trax.Docs/adr/0047).
             var resumeFrom = RetryResume is { } resume
-                ? await resume.SourceForRetryAsync(deadLetter.Manifest!, ct).ConfigureAwait(false)
+                ? await resume
+                    .SourceForRetryAsync(deadLetter.Manifest.NotNull(), ct)
+                    .ConfigureAwait(false)
                 : null;
             var entry = CreateWorkQueueFromDeadLetter(deadLetter, replayDecisionsOf, resumeFrom);
             context.WorkQueues.Add(entry);
@@ -1924,7 +1927,7 @@ public class TraxScheduler(
                     && manifestIds.Contains(q.ManifestId.Value)
                     && q.Status == WorkQueueStatus.Queued
                 )
-                .Select(q => q.ManifestId!.Value)
+                .Select(q => q.ManifestId.NotNull().Value)
                 .ToListAsync(ct)
                 .ConfigureAwait(false)
         ).ToHashSet();
@@ -1942,13 +1945,13 @@ public class TraxScheduler(
         var replaySources = askAfresh
             ? new Dictionary<long, long>()
             : await RetryReplay
-                .SourcesForRetriesAsync(groups.Select(g => g[0].Manifest!).ToList(), ct)
+                .SourcesForRetriesAsync(groups.Select(g => g[0].Manifest.NotNull()).ToList(), ct)
                 .ConfigureAwait(false);
 
         // And resumes it after its latest checkpoint, as a retry does (Trax.Docs/adr/0047).
         var resumeSources = RetryResume is { } resume
             ? await resume
-                .SourcesForRetriesAsync(groups.Select(g => g[0].Manifest!).ToList(), ct)
+                .SourcesForRetriesAsync(groups.Select(g => g[0].Manifest.NotNull()).ToList(), ct)
                 .ConfigureAwait(false)
             : new Dictionary<long, long>();
 
@@ -2030,7 +2033,7 @@ public class TraxScheduler(
         long? resumeFrom
     )
     {
-        var manifest = deadLetter.Manifest!;
+        var manifest = deadLetter.Manifest.NotNull();
 
         return WorkQueue.Create(
             new CreateWorkQueue

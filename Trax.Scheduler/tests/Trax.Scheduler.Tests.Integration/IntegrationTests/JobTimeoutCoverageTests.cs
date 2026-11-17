@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
@@ -25,7 +26,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class JobTimeoutCoverageTests : TestSetup
 {
-    private SchedulerConfiguration _config = null!;
+    private SchedulerConfiguration? _config;
     private TimeSpan _previousTimeout;
     private TimeSpan _previousStaleTimeout;
 
@@ -33,18 +34,20 @@ public class JobTimeoutCoverageTests : TestSetup
     {
         await base.TestSetUp().ConfigureAwait(false);
         _config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
-        _previousTimeout = _config.DefaultJobTimeout;
-        _previousStaleTimeout = _config.StaleInProgressTimeout;
-        _config.DefaultJobTimeout = TimeSpan.FromMinutes(20);
-        _config.StaleInProgressTimeout = TimeSpan.FromMinutes(60);
+        _previousTimeout = _config.NotNull().DefaultJobTimeout;
+        _previousStaleTimeout = _config.NotNull().StaleInProgressTimeout;
+        _config.NotNull().DefaultJobTimeout = TimeSpan.FromMinutes(20);
+        _config.NotNull().StaleInProgressTimeout = TimeSpan.FromMinutes(60);
     }
 
     [TearDown]
     public void RestoreTimeout()
     {
-        _config.DefaultJobTimeout = _previousTimeout;
-        _config.StaleInProgressTimeout = _previousStaleTimeout;
-        _config.ExcludedTrainTypeNames.Remove(typeof(SchedulerTestTrain).FullName!);
+        _config.NotNull().DefaultJobTimeout = _previousTimeout;
+        _config.NotNull().StaleInProgressTimeout = _previousStaleTimeout;
+        _config
+            .NotNull()
+            .ExcludedTrainTypeNames.Remove(typeof(SchedulerTestTrain).FullName.NotNull());
     }
 
     [LeavesStuckRuns(
@@ -149,7 +152,7 @@ public class JobTimeoutCoverageTests : TestSetup
     [Test]
     public async Task An_excluded_train_past_DefaultJobTimeout_is_not_cancelled()
     {
-        _config.ExcludedTrainTypeNames.Add(typeof(SchedulerTestTrain).FullName!);
+        _config.NotNull().ExcludedTrainTypeNames.Add(typeof(SchedulerTestTrain).FullName.NotNull());
         var manifest = await CreateManifest(isEnabled: true);
         var run = await CreateInProgressRun(manifest.Id, startedMinutesAgo: 30);
 
@@ -166,7 +169,7 @@ public class JobTimeoutCoverageTests : TestSetup
     [Test]
     public async Task A_run_inside_a_long_DefaultJobTimeout_is_not_reaped_as_stale()
     {
-        _config.DefaultJobTimeout = TimeSpan.FromHours(2);
+        _config.NotNull().DefaultJobTimeout = TimeSpan.FromHours(2);
         var manifest = await CreateManifest(isEnabled: true);
         var run = await CreateInProgressRun(manifest.Id, startedMinutesAgo: 61);
 
@@ -212,7 +215,7 @@ public class JobTimeoutCoverageTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = "{}",
                 InputTypeName = typeof(SchedulerTestInput).FullName,
             }
@@ -257,7 +260,7 @@ public class JobTimeoutCoverageTests : TestSetup
         var run = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "timeout" },
                 ManifestId = manifestId,

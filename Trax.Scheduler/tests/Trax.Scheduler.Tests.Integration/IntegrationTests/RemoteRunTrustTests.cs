@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Attributes;
@@ -34,9 +35,9 @@ public class RemoteRunTrustTests : TestSetup
     {
         var response = await Handler.RunTrainAsync(
             new RemoteRunRequest(
-                typeof(IGatedRemoteTrain).FullName!,
+                typeof(IGatedRemoteTrain).FullName.NotNull(),
                 "{}",
-                typeof(GatedRemoteInput).FullName!
+                typeof(GatedRemoteInput).FullName.NotNull()
             )
         );
 
@@ -54,9 +55,9 @@ public class RemoteRunTrustTests : TestSetup
     {
         var response = await Handler.RunTrainAsync(
             new RemoteRunRequest(
-                typeof(IQueuesGatedTrain).FullName!,
+                typeof(IQueuesGatedTrain).FullName.NotNull(),
                 "{}",
-                typeof(QueuesGatedInput).FullName!
+                typeof(QueuesGatedInput).FullName.NotNull()
             )
         );
 
@@ -138,9 +139,9 @@ public class RemoteRunTrustTests : TestSetup
 
         var response = await Handler.RunTrainAsync(
             new RemoteRunRequest(
-                typeof(IReadsTrustTrain).FullName!,
+                typeof(IReadsTrustTrain).FullName.NotNull(),
                 $$"""{"key":"{{key}}"}""",
-                typeof(ReadsTrustInput).FullName!
+                typeof(ReadsTrustInput).FullName.NotNull()
             )
         );
 

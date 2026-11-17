@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 
 namespace Trax.Scheduler.Services.Operations;
@@ -58,7 +59,7 @@ public partial class OperationsService
 
         var page = rows.Take(take).ToList();
         var tokens = page.Where(t => t.InvokeToken != null)
-            .Select(t => t.InvokeToken!)
+            .Select(t => t.InvokeToken.NotNull())
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
@@ -115,7 +116,7 @@ public partial class OperationsService
                     .ToListAsync(ct)
                     .ConfigureAwait(false)
             )
-                children[child.SpawnedBy!] = new MachineInstanceStartedChild(
+                children[child.SpawnedBy.NotNull()] = new MachineInstanceStartedChild(
                     child.Machine,
                     child.OwnerKind,
                     child.Id,

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -21,22 +22,38 @@ namespace Trax.Scheduler.Tests.Sqlite.Integration.Fixtures;
 [TestFixture]
 public abstract class TestSetup
 {
-    private ServiceProvider ServiceProvider { get; set; } = null!;
-    private string _dbPath = null!;
+    private ServiceProvider ServiceProvider
+    {
+        get => field.NotNull(nameof(ServiceProvider));
+        set;
+    }
+    private string? _dbPath;
 
     public AsyncServiceScope Scope { get; private set; }
 
-    public ITrainBus TrainBus { get; private set; } = null!;
+    public ITrainBus TrainBus
+    {
+        get => field.NotNull(nameof(TrainBus));
+        private set;
+    }
 
-    public IJobRunnerTrain JobRunner { get; private set; } = null!;
+    public IJobRunnerTrain JobRunner
+    {
+        get => field.NotNull(nameof(JobRunner));
+        private set;
+    }
 
-    public IDataContext DataContext { get; private set; } = null!;
+    public IDataContext DataContext
+    {
+        get => field.NotNull(nameof(DataContext));
+        private set;
+    }
 
     [OneTimeSetUp]
     public async Task RunBeforeAnyTests()
     {
         _dbPath = Path.Combine(Path.GetTempPath(), $"trax_scheduler_test_{Guid.NewGuid():N}.db");
-        var connectionString = $"Data Source={_dbPath}";
+        var connectionString = $"Data Source={_dbPath.NotNull()}";
 
         var arrayLoggingProvider = new ArrayLoggingProvider();
 
@@ -70,12 +87,12 @@ public abstract class TestSetup
     {
         await ServiceProvider.DisposeAsync();
 
-        if (File.Exists(_dbPath))
-            File.Delete(_dbPath);
-        var walPath = _dbPath + "-wal";
+        if (File.Exists(_dbPath.NotNull()))
+            File.Delete(_dbPath.NotNull());
+        var walPath = _dbPath.NotNull() + "-wal";
         if (File.Exists(walPath))
             File.Delete(walPath);
-        var shmPath = _dbPath + "-shm";
+        var shmPath = _dbPath.NotNull() + "-shm";
         if (File.Exists(shmPath))
             File.Delete(shmPath);
     }

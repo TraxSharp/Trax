@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Decisions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -721,7 +722,7 @@ public partial class OperationsService : IOperationsService
                 replayDecisionsOf is null && resumeFrom is null && starterHash is null
                     ? await _trainExecution
                         .QueueAsync(
-                            registration.ServiceType.FullName!,
+                            registration.ServiceType.FullName.NotNull(),
                             inputJson,
                             priority,
                             scheduledAt,
@@ -730,7 +731,7 @@ public partial class OperationsService : IOperationsService
                         .ConfigureAwait(false)
                     : await _trainExecution
                         .QueueAsync(
-                            registration.ServiceType.FullName!,
+                            registration.ServiceType.FullName.NotNull(),
                             inputJson,
                             new QueueTrainOptions
                             {
@@ -851,7 +852,11 @@ public partial class OperationsService : IOperationsService
         {
             // A refusal: the train's OnQueue hook or QueueSubjectKey threw, the subject key could
             // not be used, or a deferred entry was cancelled before it was confirmed.
-            return Refused("The enqueue was refused", ex, registration.ServiceType.FullName!);
+            return Refused(
+                "The enqueue was refused",
+                ex,
+                registration.ServiceType.FullName.NotNull()
+            );
         }
 
         _changeSignal?.Notify(ChangeDomain.WorkQueue);
@@ -894,7 +899,7 @@ public partial class OperationsService : IOperationsService
                 Message: $"Unknown train: {input.TrainName}. Use operations.getTrains to list registered trains."
             );
 
-        var trainName = registration.ServiceType.FullName!;
+        var trainName = registration.ServiceType.FullName.NotNull();
 
         // The mediator's step: authorization before the input is read, so a caller who may not run
         // the train learns nothing about its input from a parse error, then the input read exactly
@@ -3148,7 +3153,9 @@ public partial class OperationsService : IOperationsService
             .Select(g => new
             {
                 Name = g.Key,
-                AvgMs = g.Average(m => (m.EndTime!.Value - m.StartTime).TotalMilliseconds),
+                AvgMs = g.Average(m =>
+                    (m.EndTime.GetValueOrDefault() - m.StartTime).TotalMilliseconds
+                ),
             })
             .OrderByDescending(x => x.AvgMs)
             .Take(10);
@@ -3168,7 +3175,7 @@ public partial class OperationsService : IOperationsService
             .Select(g => new
             {
                 Name = g.Key,
-                AvgTicks = g.Average(m => m.EndTime!.Value.Ticks - m.StartTime.Ticks),
+                AvgTicks = g.Average(m => m.EndTime.GetValueOrDefault().Ticks - m.StartTime.Ticks),
             })
             .OrderByDescending(x => x.AvgTicks)
             .Take(10)

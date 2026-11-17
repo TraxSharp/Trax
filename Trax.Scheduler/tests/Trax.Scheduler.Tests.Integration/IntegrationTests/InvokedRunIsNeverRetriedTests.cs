@@ -2,6 +2,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue;
@@ -33,7 +34,7 @@ public class InvokedRunIsNeverRetriedTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(IFailingSchedulerTestTrain).FullName!,
+                TrainName = typeof(IFailingSchedulerTestTrain).FullName.NotNull(),
                 Input = JsonSerializer.Serialize(
                     new FailingSchedulerTestInput { FailureMessage = "invoked" },
                     TraxJsonSerializationOptions.ManifestProperties
@@ -53,7 +54,7 @@ public class InvokedRunIsNeverRetriedTests : TestSetup
             .WorkQueues.AsNoTracking()
             .Include(q => q.Metadata)
             .SingleAsync(q => q.Id == entry.Id);
-        var run = dispatched.Metadata!;
+        var run = dispatched.Metadata.NotNull();
         run.InvokingMachine.Should()
             .Be("ingest", $"dispatch carries the link to the run. See {Adr}");
         run.InvokingInstanceId.Should().Be(instance);

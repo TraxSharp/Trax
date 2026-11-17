@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Services.ServiceTrain;
@@ -72,7 +73,7 @@ public partial class SchedulerConfigurationBuilder
                 ExpectedExternalIds = sourceList.Select(s => map(s).ExternalId).ToList(),
                 ScheduleFunc = async (scheduler, ct) =>
                 {
-                    var results = await scheduler
+                    await scheduler
                         .ScheduleManyAsync<TTrain, TInput, TOutput, TSource>(
                             sourceList,
                             map,
@@ -82,7 +83,6 @@ public partial class SchedulerConfigurationBuilder
                             ct: ct
                         )
                         .ConfigureAwait(false);
-                    return results.FirstOrDefault()!;
                 },
             }
         );
@@ -212,7 +212,7 @@ public partial class SchedulerConfigurationBuilder
                 ExpectedExternalIds = sourceList.Select(s => map(s).ExternalId).ToList(),
                 ScheduleFunc = async (scheduler, ct) =>
                 {
-                    var results = await scheduler
+                    await scheduler
                         .ScheduleManyDependentAsync<TTrain, TInput, TOutput, TSource>(
                             sourceList,
                             map,
@@ -222,7 +222,6 @@ public partial class SchedulerConfigurationBuilder
                             ct: ct
                         )
                         .ConfigureAwait(false);
-                    return results.FirstOrDefault()!;
                 },
             }
         );
@@ -349,7 +348,7 @@ public partial class SchedulerConfigurationBuilder
                 ExpectedExternalIds = sourceList.Select(s => map(s).ExternalId).ToList(),
                 ScheduleFunc = async (scheduler, ct) =>
                 {
-                    var results = await scheduler
+                    await scheduler
                         .ScheduleManyDependentAsync<TTrain, TInput, TOutput, TSource>(
                             sourceList,
                             map,
@@ -359,7 +358,6 @@ public partial class SchedulerConfigurationBuilder
                             ct: ct
                         )
                         .ConfigureAwait(false);
-                    return results.FirstOrDefault()!;
                 },
             }
         );
@@ -487,7 +485,7 @@ public partial class SchedulerConfigurationBuilder
                 ExpectedExternalIds = sourceList.Select(s => map(s).ExternalId).ToList(),
                 ScheduleFunc = async (scheduler, ct) =>
                 {
-                    var results = await scheduler
+                    await scheduler
                         .ScheduleManyDependentAsync<TTrain, TInput, TOutput, TSource>(
                             sourceList,
                             map,
@@ -497,7 +495,6 @@ public partial class SchedulerConfigurationBuilder
                             ct: ct
                         )
                         .ConfigureAwait(false);
-                    return results.FirstOrDefault()!;
                 },
             }
         );

@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Testing;
@@ -38,8 +39,8 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class OperationsServiceBatchTriggerTests : TestSetup
 {
-    private RecordingChangeSignal _signal = null!;
-    private OperationsService _operations = null!;
+    private RecordingChangeSignal? _signal;
+    private OperationsService? _operations;
 
     public override async Task TestSetUp()
     {
@@ -51,7 +52,7 @@ public class OperationsServiceBatchTriggerTests : TestSetup
             new SchedulerConfiguration(),
             Substitute.For<ITrainExecutionService>(),
             Scope.ServiceProvider,
-            changeSignal: _signal
+            changeSignal: _signal.NotNull()
         );
     }
 
@@ -76,11 +77,11 @@ public class OperationsServiceBatchTriggerTests : TestSetup
         Func<OperationsService, IReadOnlyCollection<long>, Task<BatchTriggerResult>> batch
     )
     {
-        var result = await batch(_operations, []);
+        var result = await batch(_operations.NotNull(), []);
 
         result.Success.Should().BeFalse("an empty selection is a caller's mistake, not a no-op");
         result.Message.Should().Contain("No ids");
-        _signal.Domains.Should().BeEmpty();
+        _signal.NotNull().Domains.Should().BeEmpty();
     }
 
     [TestCaseSource(nameof(EveryTriggerBatch))]
@@ -97,25 +98,24 @@ public class OperationsServiceBatchTriggerTests : TestSetup
             .Append(group.Id)
             .ToList();
 
-        var result = await batch(_operations, ids);
+        var result = await batch(_operations.NotNull(), ids);
 
         result.Success.Should().BeFalse();
         result.Message.Should().Contain(OperationsService.MaxBatchSize.ToString());
         (await QueuedFor(manifest.Id)).Should().Be(0);
-        _signal.Domains.Should().BeEmpty();
+        _signal.NotNull().Domains.Should().BeEmpty();
     }
 
     [Test]
     public async Task Cancel_groups_refuses_an_empty_list_and_a_list_over_the_limit()
     {
-        (await _operations.CancelManifestGroupsAsync([], CancellationToken.None))
+        (await _operations.NotNull().CancelManifestGroupsAsync([], CancellationToken.None))
             .Success.Should()
             .BeFalse();
         var tooMany = Enumerable.Range(1, OperationsService.MaxBatchSize + 1).Select(i => (long)i);
-        var result = await _operations.CancelManifestGroupsAsync(
-            tooMany.ToList(),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .CancelManifestGroupsAsync(tooMany.ToList(), CancellationToken.None);
 
         result.Success.Should().BeFalse();
         result.Message.Should().Contain(OperationsService.MaxBatchSize.ToString());
@@ -134,11 +134,9 @@ public class OperationsServiceBatchTriggerTests : TestSetup
         var c = await SeedManifest(group, enabled: true);
         var waiting = await SeedQueuedEntry(c, scheduledAt: DateTime.UtcNow.AddHours(1));
 
-        var result = await _operations.TriggerManifestsAsync(
-            [a.Id, b.Id, c.Id],
-            askAfresh: false,
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .TriggerManifestsAsync([a.Id, b.Id, c.Id], askAfresh: false, CancellationToken.None);
 
         result.Success.Should().BeTrue(result.Message);
         result.Matched.Should().Be(3);
@@ -156,7 +154,10 @@ public class OperationsServiceBatchTriggerTests : TestSetup
             .SingleAsync(w => w.Id == waiting.Id);
         released.IsExplicitTrigger.Should().BeTrue();
         released.ScheduledAt.Should().BeNull("it was brought forward to now");
-        _signal.Domains.Should().Equal([ChangeDomain.WorkQueue], "the change is signalled once");
+        _signal
+            .NotNull()
+            .Domains.Should()
+            .Equal([ChangeDomain.WorkQueue], "the change is signalled once");
     }
 
     [Test]
@@ -165,11 +166,13 @@ public class OperationsServiceBatchTriggerTests : TestSetup
         var group = await CreateAndSaveManifestGroup(DataContext, $"g-{Guid.NewGuid():N}");
         var known = await SeedManifest(group, enabled: true);
 
-        var result = await _operations.TriggerManifestsAsync(
-            [999_999, known.Id, known.Id],
-            askAfresh: false,
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .TriggerManifestsAsync(
+                [999_999, known.Id, known.Id],
+                askAfresh: false,
+                CancellationToken.None
+            );
 
         result.Success.Should().BeTrue();
         result.Matched.Should().Be(1, "a repeated id is triggered once");
@@ -182,15 +185,13 @@ public class OperationsServiceBatchTriggerTests : TestSetup
     [Test]
     public async Task Only_unknown_ids_signal_nothing()
     {
-        var result = await _operations.TriggerManifestsAsync(
-            [999_998, 999_999],
-            askAfresh: false,
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .TriggerManifestsAsync([999_998, 999_999], askAfresh: false, CancellationToken.None);
 
         result.Success.Should().BeTrue();
         result.Skipped.Should().Be(2);
-        _signal.Domains.Should().BeEmpty();
+        _signal.NotNull().Domains.Should().BeEmpty();
     }
 
     [Test]
@@ -205,11 +206,9 @@ public class OperationsServiceBatchTriggerTests : TestSetup
             replayDecisionsOf: failed.Id
         );
 
-        var result = await _operations.TriggerManifestsAsync(
-            [manifest.Id],
-            askAfresh: true,
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .TriggerManifestsAsync([manifest.Id], askAfresh: true, CancellationToken.None);
 
         result.AlreadyQueued.Should().Be(1);
         result.TooLateToAskAfresh.Should().Be(0);
@@ -230,11 +229,9 @@ public class OperationsServiceBatchTriggerTests : TestSetup
             replayDecisionsOf: failed.Id
         );
 
-        await _operations.TriggerManifestsAsync(
-            [manifest.Id],
-            askAfresh: false,
-            CancellationToken.None
-        );
+        await _operations
+            .NotNull()
+            .TriggerManifestsAsync([manifest.Id], askAfresh: false, CancellationToken.None);
 
         (await DataContext.WorkQueues.AsNoTracking().SingleAsync(w => w.Id == retry.Id))
             .ReplayDecisionsOf.Should()
@@ -260,7 +257,7 @@ public class OperationsServiceBatchTriggerTests : TestSetup
             new SchedulerConfiguration(),
             Substitute.For<ITrainExecutionService>(),
             Scope.ServiceProvider,
-            changeSignal: _signal
+            changeSignal: _signal.NotNull()
         );
 
         var result = await operations.TriggerManifestsAsync(
@@ -283,18 +280,20 @@ public class OperationsServiceBatchTriggerTests : TestSetup
         var group = await CreateAndSaveManifestGroup(DataContext, $"g-{Guid.NewGuid():N}");
         var manifest = await SeedManifest(group, enabled: true);
 
-        var result = await _operations.TriggerManifestAsync(
-            manifest.ExternalId,
-            delay: null,
-            askAfresh: false,
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .TriggerManifestAsync(
+                manifest.ExternalId,
+                delay: null,
+                askAfresh: false,
+                CancellationToken.None
+            );
 
         result.Success.Should().BeTrue(result.Message);
-        result.Trigger!.Created.Should().BeTrue();
+        result.Trigger.NotNull().Created.Should().BeTrue();
         result.Message.Should().Contain("queued a new run");
         (await QueuedFor(manifest.Id)).Should().Be(1);
-        _signal.Domains.Should().Equal(ChangeDomain.WorkQueue);
+        _signal.NotNull().Domains.Should().Equal(ChangeDomain.WorkQueue);
     }
 
     [Test]
@@ -303,12 +302,14 @@ public class OperationsServiceBatchTriggerTests : TestSetup
         var group = await CreateAndSaveManifestGroup(DataContext, $"g-{Guid.NewGuid():N}");
         var manifest = await SeedManifest(group, enabled: true);
 
-        var result = await _operations.TriggerManifestAsync(
-            manifest.ExternalId,
-            delay: TimeSpan.MaxValue,
-            askAfresh: false,
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .TriggerManifestAsync(
+                manifest.ExternalId,
+                delay: TimeSpan.MaxValue,
+                askAfresh: false,
+                CancellationToken.None
+            );
 
         result.Success.Should().BeFalse();
         result.Trigger.Should().BeNull();
@@ -323,15 +324,17 @@ public class OperationsServiceBatchTriggerTests : TestSetup
         var manifest = await SeedManifest(group, enabled: true);
         var waiting = await SeedQueuedEntry(manifest, DateTime.UtcNow.AddHours(1));
 
-        var result = await _operations.TriggerManifestAsync(
-            manifest.ExternalId,
-            delay: null,
-            askAfresh: false,
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .TriggerManifestAsync(
+                manifest.ExternalId,
+                delay: null,
+                askAfresh: false,
+                CancellationToken.None
+            );
 
         result.Success.Should().BeTrue(result.Message);
-        result.Trigger!.Created.Should().BeFalse();
+        result.Trigger.NotNull().Created.Should().BeFalse();
         result.Trigger.MovedForward.Should().BeTrue();
         result.Trigger.WorkQueueId.Should().Be(waiting.Id);
         result.Message.Should().Contain("brought it forward");
@@ -345,15 +348,17 @@ public class OperationsServiceBatchTriggerTests : TestSetup
         var manifest = await SeedManifest(group, enabled: true);
         await SeedQueuedEntry(manifest, scheduledAt: null);
 
-        var result = await _operations.TriggerManifestAsync(
-            manifest.ExternalId,
-            delay: TimeSpan.FromMinutes(5),
-            askAfresh: false,
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .TriggerManifestAsync(
+                manifest.ExternalId,
+                delay: TimeSpan.FromMinutes(5),
+                askAfresh: false,
+                CancellationToken.None
+            );
 
         result.Success.Should().BeTrue(result.Message);
-        result.Trigger!.Created.Should().BeFalse();
+        result.Trigger.NotNull().Created.Should().BeFalse();
         result.Trigger.MovedForward.Should().BeFalse();
         result.Message.Should().Contain("now runs as the trigger");
     }
@@ -361,17 +366,19 @@ public class OperationsServiceBatchTriggerTests : TestSetup
     [Test]
     public async Task A_single_trigger_of_an_unknown_external_id_changes_nothing()
     {
-        var result = await _operations.TriggerManifestAsync(
-            $"missing-{Guid.NewGuid():N}",
-            delay: null,
-            askAfresh: false,
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .TriggerManifestAsync(
+                $"missing-{Guid.NewGuid():N}",
+                delay: null,
+                askAfresh: false,
+                CancellationToken.None
+            );
 
         result.Success.Should().BeFalse();
         result.Message.Should().Contain("not found");
         result.Trigger.Should().BeNull();
-        _signal.Domains.Should().BeEmpty();
+        _signal.NotNull().Domains.Should().BeEmpty();
     }
 
     #endregion
@@ -392,10 +399,9 @@ public class OperationsServiceBatchTriggerTests : TestSetup
         var b1 = await SeedManifest(second, enabled: true);
         var c1 = await SeedManifest(untouched, enabled: true);
 
-        var result = await _operations.TriggerManifestGroupsAsync(
-            [first.Id, second.Id, 999_999],
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .TriggerManifestGroupsAsync([first.Id, second.Id, 999_999], CancellationToken.None);
 
         result.Success.Should().BeTrue(result.Message);
         result.Matched.Should().Be(2, "two of the ids named a group");
@@ -406,7 +412,7 @@ public class OperationsServiceBatchTriggerTests : TestSetup
         (await QueuedFor(aOff.Id)).Should().Be(0, "a group trigger leaves disabled members");
         (await QueuedFor(aDependent.Id)).Should().Be(0, "a dependent runs after its parent");
         (await QueuedFor(c1.Id)).Should().Be(0);
-        _signal.Domains.Should().Equal([ChangeDomain.WorkQueue]);
+        _signal.NotNull().Domains.Should().Equal([ChangeDomain.WorkQueue]);
     }
 
     [Test]
@@ -416,10 +422,9 @@ public class OperationsServiceBatchTriggerTests : TestSetup
         for (var i = 0; i < 3; i++)
             await SeedManifest(group, enabled: true);
 
-        var result = await _operations.TriggerManifestGroupsAsync(
-            [group.Id],
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .TriggerManifestGroupsAsync([group.Id], CancellationToken.None);
 
         result.Queued.Should().Be(3);
         result.Matched.Should().Be(1);
@@ -434,10 +439,9 @@ public class OperationsServiceBatchTriggerTests : TestSetup
         var queued = await SeedManifest(group, enabled: true);
         await SeedQueuedEntry(queued, scheduledAt: null);
 
-        var batch = await _operations.TriggerManifestGroupsAsync(
-            [group.Id],
-            CancellationToken.None
-        );
+        var batch = await _operations
+            .NotNull()
+            .TriggerManifestGroupsAsync([group.Id], CancellationToken.None);
 
         batch.Queued.Should().Be(1, "TriggerGroupAsync would report 1 for the same rows");
     }
@@ -461,10 +465,9 @@ public class OperationsServiceBatchTriggerTests : TestSetup
         await SeedRun(m2.Id, TrainState.Completed);
         var elsewhere = await SeedRun(m3.Id, TrainState.InProgress);
 
-        var result = await _operations.CancelManifestGroupsAsync(
-            [first.Id, second.Id, 999_999],
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .CancelManifestGroupsAsync([first.Id, second.Id, 999_999], CancellationToken.None);
 
         result.Success.Should().BeTrue(result.Message);
         result.Count.Should().Be(2);
@@ -476,7 +479,10 @@ public class OperationsServiceBatchTriggerTests : TestSetup
             .ToListAsync();
         flagged.Should().BeEquivalentTo([pending.Id, running.Id]);
         flagged.Should().NotContain(elsewhere.Id);
-        _signal.Domains.Should().Equal([ChangeDomain.Execution], "the change is signalled once");
+        _signal
+            .NotNull()
+            .Domains.Should()
+            .Equal([ChangeDomain.Execution], "the change is signalled once");
     }
 
     [LeavesStuckRuns("Seeds in-progress runs that no host is running; the cancel only flags them.")]
@@ -490,10 +496,9 @@ public class OperationsServiceBatchTriggerTests : TestSetup
             await SeedRun(manifest.Id, TrainState.InProgress);
         }
 
-        var result = await _operations.CancelManifestGroupsAsync(
-            [group.Id, 999_999],
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .CancelManifestGroupsAsync([group.Id, 999_999], CancellationToken.None);
 
         result.Count.Should().Be(3);
         result
@@ -522,10 +527,9 @@ public class OperationsServiceBatchTriggerTests : TestSetup
 
         try
         {
-            var result = await _operations.CancelManifestGroupsAsync(
-                [group.Id],
-                CancellationToken.None
-            );
+            var result = await _operations
+                .NotNull()
+                .CancelManifestGroupsAsync([group.Id], CancellationToken.None);
 
             result.Count.Should().Be(1, result.Message);
             runningToken.IsCancellationRequested.Should().BeTrue("it runs on this host");
@@ -608,7 +612,7 @@ public class OperationsServiceBatchTriggerTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
                 ManifestId = manifestId,
@@ -636,7 +640,8 @@ public class OperationsServiceBatchTriggerTests : TestSetup
 
         private IDataContext Observe(IDataContext context)
         {
-            ((DbContext)context).SavingChanges += (sender, _) => onSaving((DbContext)sender!);
+            ((DbContext)context).SavingChanges += (sender, _) =>
+                onSaving((DbContext)sender.NotNull());
             return context;
         }
     }

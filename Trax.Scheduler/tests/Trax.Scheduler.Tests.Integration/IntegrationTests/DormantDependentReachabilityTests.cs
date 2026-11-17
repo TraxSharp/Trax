@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Models.Manifest;
@@ -54,7 +55,7 @@ public class DormantDependentReachabilityTests
 
         var execution = fx.Services.GetRequiredService<ITrainExecutionService>();
         await execution.RunAsync(
-            typeof(IActivatingTrain).FullName!,
+            typeof(IActivatingTrain).FullName.NotNull(),
             """{"value":"ad-hoc"}""",
             ct: default
         );

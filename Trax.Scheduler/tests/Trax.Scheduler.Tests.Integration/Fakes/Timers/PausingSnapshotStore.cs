@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 
@@ -15,7 +16,7 @@ internal sealed class PausingSnapshotStore(ISnapshotStore inner, PauseGate gate)
     {
         var registered = services.Last(d => d.ServiceType == typeof(ISnapshotStore));
         services.Remove(registered);
-        var create = registered.ImplementationFactory!;
+        var create = registered.ImplementationFactory.NotNull();
         services.AddScoped<ISnapshotStore>(sp => new PausingSnapshotStore(
             (ISnapshotStore)create(sp),
             gate

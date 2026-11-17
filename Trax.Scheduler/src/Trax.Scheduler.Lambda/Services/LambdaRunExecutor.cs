@@ -4,6 +4,7 @@ using Amazon.Lambda;
 using Amazon.Lambda.Model;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Utils;
 using Trax.Mediator.Services.RunExecutor;
 using Trax.Mediator.Services.TrainExecution;
@@ -72,7 +73,11 @@ internal sealed class LambdaRunExecutor(
             TraxJsonSerializationOptions.ManifestProperties
         );
 
-        var runRequest = new RemoteRunRequest(trainName, inputJson, input.GetType().FullName!);
+        var runRequest = new RemoteRunRequest(
+            trainName,
+            inputJson,
+            input.GetType().FullName.NotNull()
+        );
         var payloadJson = JsonSerializer.Serialize(runRequest);
         var envelope = new LambdaEnvelope(LambdaRequestType.Run, payloadJson)
         {

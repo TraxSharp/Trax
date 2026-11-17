@@ -5,6 +5,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Models.SnapshotDraft;
 using Trax.Scheduler.Tests.Integration.Fakes.Timers;
@@ -105,7 +106,8 @@ internal static class TimerSteps
         await using var scopeDisposal = scope.ConfigureAwait(false);
         return await scope
             .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
-            .EffectRunner(ReminderMachine.MachineId)!
+            .EffectRunner(ReminderMachine.MachineId)
+            .NotNull()
             .Run(user, id, requestId)
             .ConfigureAwait(false);
     }
@@ -191,5 +193,6 @@ internal static class TimerSteps
     private static ISnapshotDraftService Reminders(IServiceScope scope) =>
         scope
             .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
-            .Service(ReminderMachine.MachineId)!;
+            .Service(ReminderMachine.MachineId)
+            .NotNull();
 }

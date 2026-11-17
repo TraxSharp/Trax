@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue;
@@ -71,12 +72,12 @@ internal sealed class LoadDispatchCapacityJunction(
 
         var groupActiveCounts = activeCounts
             .Where(x => x.GroupId.HasValue)
-            .ToDictionary(x => x.GroupId!.Value, x => x.Count);
+            .ToDictionary(x => x.GroupId.NotNull().Value, x => x.Count);
 
         // Load per-group limits (only groups that have a limit set)
         var groupLimits = await dataContext
             .ManifestGroups.Where(g => g.MaxActiveJobs != null)
-            .ToDictionaryAsync(g => g.Id, g => g.MaxActiveJobs!.Value, CancellationToken)
+            .ToDictionaryAsync(g => g.Id, g => g.MaxActiveJobs.NotNull().Value, CancellationToken)
             .ConfigureAwait(false);
 
         return new DispatchContext(entries, activeMetadataCount, groupActiveCounts, groupLimits);

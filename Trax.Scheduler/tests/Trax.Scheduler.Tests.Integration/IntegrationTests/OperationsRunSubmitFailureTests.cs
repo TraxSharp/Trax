@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -32,7 +33,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class OperationsRunSubmitFailureTests
 {
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     [OneTimeSetUp]
     public void RunBeforeAnyTests()
@@ -60,12 +61,16 @@ public class OperationsRunSubmitFailureTests
     }
 
     [OneTimeTearDown]
-    public async Task RunAfterAnyTests() => await _provider.DisposeAsync();
+    public async Task RunAfterAnyTests()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [SetUp]
     public async Task TestSetUp()
     {
-        await using var scope = _provider.CreateAsyncScope();
+        await using var scope = _provider.NotNull().CreateAsyncScope();
         await TestSetup.CleanupDatabase(scope.ServiceProvider.GetRequiredService<IDataContext>());
     }
 
@@ -75,11 +80,11 @@ public class OperationsRunSubmitFailureTests
     [Test]
     public async Task A_failed_submit_does_not_overwrite_a_run_the_runner_claimed_meanwhile()
     {
-        await using var scope = _provider.CreateAsyncScope();
+        await using var scope = _provider.NotNull().CreateAsyncScope();
         var operations = scope.ServiceProvider.GetRequiredService<IOperationsService>();
 
         var result = await operations.RunTrainAsync(
-            new RunTrainInput(typeof(ISchedulerTestTrain).FullName!, """{"value":"x"}"""),
+            new RunTrainInput(typeof(ISchedulerTestTrain).FullName.NotNull(), """{"value":"x"}"""),
             CancellationToken.None
         );
 
@@ -89,9 +94,9 @@ public class OperationsRunSubmitFailureTests
 
         var runner = StartsTheRunThenThrows.Runner;
         runner.Should().NotBeNull("the submitter started the run");
-        await runner!;
+        await runner.NotNull();
 
-        await using var check = _provider.CreateAsyncScope();
+        await using var check = _provider.NotNull().CreateAsyncScope();
         var db = check.ServiceProvider.GetRequiredService<IDataContext>();
         var run = await db.Metadatas.AsNoTracking().SingleAsync();
         run.TrainState.Should()
@@ -163,7 +168,11 @@ public class OperationsRunSubmitFailureTests
                     );
                     await using (waiting.ConfigureAwait(false))
                     {
-                        if ((long)(await waiting.ExecuteScalarAsync().ConfigureAwait(false))! > 0)
+                        if (
+                            (long)
+                                (await waiting.ExecuteScalarAsync().ConfigureAwait(false)).NotNull()
+                            > 0
+                        )
                             break;
                         await Task.Yield();
                     }

@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Persistence;
 
@@ -52,7 +53,7 @@ public partial class OperationsService
             .DistinctBy(m => m.Name, StringComparer.Ordinal)
             .ToDictionary(
                 m => m.Name,
-                m => JsonNode.Parse(m.ExportIr())!.AsObject(),
+                m => JsonNode.Parse(m.ExportIr()).NotNull().AsObject(),
                 StringComparer.Ordinal
             );
         var drawn = Board.Draw(irs, host);

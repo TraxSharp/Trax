@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
@@ -15,7 +16,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class TraxSchedulerCoverageGapTests : TestSetup
 {
-    private ITraxScheduler _scheduler = null!;
+    private ITraxScheduler? _scheduler;
 
     public override async Task TestSetUp()
     {
@@ -34,7 +35,7 @@ public class TraxSchedulerCoverageGapTests : TestSetup
         var beforeTrigger = DateTime.UtcNow;
 
         // Act
-        await _scheduler.TriggerAsync(manifest.ExternalId, delay);
+        await _scheduler.NotNull().TriggerAsync(manifest.ExternalId, delay);
 
         // Assert
         DataContext.Reset();
@@ -52,7 +53,8 @@ public class TraxSchedulerCoverageGapTests : TestSetup
     [Test]
     public async Task TriggerAsyncWithDelay_NonexistentExternalId_Throws()
     {
-        var act = () => _scheduler.TriggerAsync("does-not-exist-trigger", TimeSpan.FromMinutes(1));
+        var act = () =>
+            _scheduler.NotNull().TriggerAsync("does-not-exist-trigger", TimeSpan.FromMinutes(1));
 
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
@@ -68,16 +70,18 @@ public class TraxSchedulerCoverageGapTests : TestSetup
         var input = new SchedulerTestInput { Value = "once-typed" };
         var delay = TimeSpan.FromHours(1);
 
-        var manifest = await _scheduler.ScheduleOnceAsync<
-            ISchedulerTestTrain,
-            SchedulerTestInput,
-            Unit
-        >(externalId, input, delay);
+        var manifest = await _scheduler
+            .NotNull()
+            .ScheduleOnceAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
+                externalId,
+                input,
+                delay
+            );
 
         manifest.ExternalId.Should().Be(externalId);
         manifest.ScheduleType.Should().Be(ScheduleType.Once);
         manifest.ScheduledAt.Should().NotBeNull();
-        manifest.ScheduledAt!.Value.Should().BeAfter(DateTime.UtcNow.AddMinutes(55));
+        manifest.ScheduledAt.NotNull().Value.Should().BeAfter(DateTime.UtcNow.AddMinutes(55));
 
         DataContext.Reset();
         var persisted = await DataContext
@@ -91,16 +95,18 @@ public class TraxSchedulerCoverageGapTests : TestSetup
     {
         var input = new SchedulerTestInput { Value = "auto-id" };
 
-        var first = await _scheduler.ScheduleOnceAsync<
-            ISchedulerTestTrain,
-            SchedulerTestInput,
-            Unit
-        >(input, TimeSpan.FromMinutes(5));
-        var second = await _scheduler.ScheduleOnceAsync<
-            ISchedulerTestTrain,
-            SchedulerTestInput,
-            Unit
-        >(input, TimeSpan.FromMinutes(5));
+        var first = await _scheduler
+            .NotNull()
+            .ScheduleOnceAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
+                input,
+                TimeSpan.FromMinutes(5)
+            );
+        var second = await _scheduler
+            .NotNull()
+            .ScheduleOnceAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
+                input,
+                TimeSpan.FromMinutes(5)
+            );
 
         first.ExternalId.Should().StartWith("once-");
         second.ExternalId.Should().StartWith("once-");

@@ -2,6 +2,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Mediator.Services.TrainDiscovery;
@@ -18,13 +19,14 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 [TestFixture]
 public class TransportInputRedactionTests
 {
-    private ITrainDiscoveryService _discovery = null!;
+    private ITrainDiscoveryService? _discovery;
 
     [SetUp]
     public void SetUp()
     {
         _discovery = Substitute.For<ITrainDiscoveryService>();
         _discovery
+            .NotNull()
             .DiscoverTrains()
             .Returns([
                 Registration(typeof(PaymentInput)),
@@ -54,7 +56,8 @@ public class TransportInputRedactionTests
             GraphQLOperations = GraphQLOperation.Run,
         };
 
-    private static JsonElement Parse(string? json) => JsonDocument.Parse(json!).RootElement;
+    private static JsonElement Parse(string? json) =>
+        JsonDocument.Parse(json.NotNull()).RootElement;
 
     private static bool IsMarker(JsonElement element) =>
         element.ValueKind == JsonValueKind.Object
@@ -66,7 +69,7 @@ public class TransportInputRedactionTests
     public void A_sensitive_member_is_masked_and_the_rest_reads_as_stored()
     {
         var masked = TransportInputRedaction.Redact(
-            _discovery,
+            _discovery.NotNull(),
             """{"accountId":"acct-1","cardNumber":"4111111111111111"}""",
             typeof(PaymentInput).FullName
         );
@@ -81,7 +84,7 @@ public class TransportInputRedactionTests
     public void A_member_typed_as_object_is_masked()
     {
         var masked = TransportInputRedaction.Redact(
-            _discovery,
+            _discovery.NotNull(),
             """{"accountId":"acct-2","details":{"number":"4222222222222222"}}""",
             typeof(UntypedPaymentInput).FullName
         );
@@ -96,7 +99,7 @@ public class TransportInputRedactionTests
     public void An_input_of_no_registered_type_is_masked_whole(string? typeName)
     {
         var masked = TransportInputRedaction.Redact(
-            _discovery,
+            _discovery.NotNull(),
             """{"secret":"s3cr3t"}""",
             typeName
         );
@@ -109,7 +112,7 @@ public class TransportInputRedactionTests
     public void A_copy_that_does_not_read_as_its_type_is_masked_whole(string json)
     {
         var masked = TransportInputRedaction.Redact(
-            _discovery,
+            _discovery.NotNull(),
             json,
             typeof(PaymentInput).FullName
         );
@@ -121,7 +124,7 @@ public class TransportInputRedactionTests
     public void A_type_whose_own_code_throws_while_it_is_read_is_masked_whole()
     {
         var masked = TransportInputRedaction.Redact(
-            _discovery,
+            _discovery.NotNull(),
             """{"secret":"s3cr3t"}""",
             typeof(ThrowingInput).FullName
         );
@@ -132,7 +135,7 @@ public class TransportInputRedactionTests
     [Test]
     public void No_copy_is_null() =>
         TransportInputRedaction
-            .Redact(_discovery, json: null, typeof(PaymentInput).FullName)
+            .Redact(_discovery.NotNull(), json: null, typeof(PaymentInput).FullName)
             .Should()
             .BeNull();
 

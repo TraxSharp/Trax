@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -60,19 +61,19 @@ public class ManifestRetryReplaysDecisionsTests
     private const string Adr =
         "docs/adr/0017-a-manifests-retry-replays-the-decisions-of-the-run-it-retries.md";
 
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     // A host built for one test, in place of the shared one. Disposed by that test.
     private IServiceProvider? _override;
 
-    private IServiceProvider Provider => _override ?? _provider;
-    private ScriptedDecider _decider = null!;
+    private IServiceProvider Provider => _override ?? _provider.NotNull();
+    private ScriptedDecider? _decider;
 
     [OneTimeSetUp]
     public void BuildProvider()
     {
         _decider = new ScriptedDecider();
-        _provider = BuildProvider(_decider);
+        _provider = BuildProvider(_decider.NotNull());
     }
 
     private static ServiceProvider BuildProvider(
@@ -119,7 +120,11 @@ public class ManifestRetryReplaysDecisionsTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.DisposeAsync();
+    public async Task DisposeProvider()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [SetUp]
     public async Task Clean()
@@ -139,12 +144,14 @@ public class ManifestRetryReplaysDecisionsTests
     public async Task A_retry_takes_the_failed_runs_tracks_without_asking_the_decider()
     {
         var manifest = await CreateManifestAsync("retry");
-        var before = _decider.Requests.Count;
+        var before = _decider.NotNull().Requests.Count;
 
         DecisionProbe.FailAt = ProbeFailure.AfterQuestions;
         var failed = await CycleAsync(manifest);
         failed.TrainState.Should().Be(TrainState.Failed);
-        (_decider.Requests.Count - before).Should().Be(2, "the first run asked both questions");
+        (_decider.NotNull().Requests.Count - before)
+            .Should()
+            .Be(2, "the first run asked both questions");
 
         // A decider asked now would send the retry down the other tracks.
         DecisionProbe.FailAt = ProbeFailure.None;
@@ -156,7 +163,7 @@ public class ManifestRetryReplaysDecisionsTests
             .ReplayDecisionsOf.Should()
             .Be(failed.Id, $"the retry replays the run it retries. See {Adr}");
         (await EntryOf(retry.Id)).ReplayDecisionsOf.Should().Be(failed.Id);
-        (_decider.Requests.Count - before)
+        (_decider.NotNull().Requests.Count - before)
             .Should()
             .Be(2, $"the retry asked nothing: two questions in all, not four. See {Adr}");
         DecisionProbe
@@ -173,7 +180,7 @@ public class ManifestRetryReplaysDecisionsTests
     public async Task A_retry_replays_once_and_the_retry_after_a_failed_replay_asks_afresh()
     {
         var manifest = await CreateManifestAsync("once", maxRetries: 3);
-        var before = _decider.Requests.Count;
+        var before = _decider.NotNull().Requests.Count;
 
         DecisionProbe.FailAt = ProbeFailure.AfterQuestions;
         var first = await CycleAsync(manifest);
@@ -183,7 +190,9 @@ public class ManifestRetryReplaysDecisionsTests
         var second = await CycleAsync(manifest);
         second.TrainState.Should().Be(TrainState.Failed);
         second.ReplayDecisionsOf.Should().Be(first.Id);
-        (_decider.Requests.Count - before).Should().Be(2, "the first retry asked nothing");
+        (_decider.NotNull().Requests.Count - before)
+            .Should()
+            .Be(2, "the first retry asked nothing");
 
         DecisionProbe.FailAt = ProbeFailure.None;
         Answer(ProbeLane.Fast, ProbeSize.Small);
@@ -193,7 +202,7 @@ public class ManifestRetryReplaysDecisionsTests
         third
             .ReplayDecisionsOf.Should()
             .BeNull($"answers already replayed into a failure are not replayed again. See {Adr}");
-        (_decider.Requests.Count - before)
+        (_decider.NotNull().Requests.Count - before)
             .Should()
             .Be(4, "the second retry asked both questions afresh");
         DecisionProbe
@@ -245,7 +254,7 @@ public class ManifestRetryReplaysDecisionsTests
                 .ServiceProvider.GetRequiredService<IOperationsService>()
                 .RequeueExecutionAsync(failed.Id, CancellationToken.None);
             result.Success.Should().BeTrue(result.Message);
-            requeueEntry = result.Id!.Value;
+            requeueEntry = result.Id.NotNull().Value;
         }
         var requeued = await DispatchEntryAsync(requeueEntry);
         requeued.TrainState.Should().Be(TrainState.Failed);
@@ -409,7 +418,7 @@ public class ManifestRetryReplaysDecisionsTests
     public async Task A_retry_after_cleanup_swept_the_failed_replay_asks_afresh_on_a_host_without_cleanup()
     {
         var swept = BuildProvider(
-            _decider,
+            _decider.NotNull(),
             configureScheduler: scheduler =>
                 scheduler.AddMetadataCleanup(c =>
                     c.AddTrainType<IDecisionProbeTrain>(TimeSpan.FromMinutes(5))
@@ -512,7 +521,7 @@ public class ManifestRetryReplaysDecisionsTests
 
         DecisionProbe.FailAt = ProbeFailure.None;
         Answer(ProbeLane.Fast, ProbeSize.Small);
-        var asked = _decider.Requests.Count;
+        var asked = _decider.NotNull().Requests.Count;
         var retry = await DispatchQueuedAsync(manifest);
 
         retry
@@ -522,7 +531,9 @@ public class ManifestRetryReplaysDecisionsTests
                 $"a manifest's retry that cannot replay asks afresh rather than failing. See {Adr}"
             );
         retry.ReplayDecisionsOf.Should().Be(failed.Id, "the link reached the run");
-        (_decider.Requests.Count - asked).Should().Be(2, "both questions were asked afresh");
+        (_decider.NotNull().Requests.Count - asked)
+            .Should()
+            .Be(2, "both questions were asked afresh");
         DecisionProbe.TracksOf("vanished").TakeLast(2).Should().Equal("Fast", "Small");
     }
 
@@ -537,14 +548,14 @@ public class ManifestRetryReplaysDecisionsTests
         (await QueuedEntryOf(manifest)).ReplayDecisionsOf.Should().Be(failed.Id);
 
         // The retry is claimed and run by a host without AddDecisionRecording.
-        var unrecording = BuildProvider(_decider, recordDecisions: false);
+        var unrecording = BuildProvider(_decider.NotNull(), recordDecisions: false);
         await using var unrecordingDisposal = unrecording.ConfigureAwait(false);
         _override = unrecording;
         try
         {
             DecisionProbe.FailAt = ProbeFailure.None;
             Answer(ProbeLane.Fast, ProbeSize.Small);
-            var asked = _decider.Requests.Count;
+            var asked = _decider.NotNull().Requests.Count;
             var retry = await DispatchQueuedAsync(manifest);
 
             retry
@@ -554,7 +565,7 @@ public class ManifestRetryReplaysDecisionsTests
                     $"a manifest's retry that cannot replay asks afresh rather than failing. See {Adr}"
                 );
             retry.ReplayDecisionsOf.Should().Be(failed.Id, "the link reached the run");
-            (_decider.Requests.Count - asked).Should().Be(2);
+            (_decider.NotNull().Requests.Count - asked).Should().Be(2);
             DecisionProbe.TracksOf("unrecording-host").TakeLast(2).Should().Equal("Fast", "Small");
         }
         finally
@@ -584,14 +595,14 @@ public class ManifestRetryReplaysDecisionsTests
 
         DecisionProbe.FailAt = ProbeFailure.None;
         Answer(ProbeLane.Fast, ProbeSize.Small);
-        var asked = _decider.Requests.Count;
+        var asked = _decider.NotNull().Requests.Count;
         var retry = await CycleAsync(manifest);
 
         retry.TrainState.Should().Be(TrainState.Completed, retry.FailureReason);
         retry
             .ReplayDecisionsOf.Should()
             .Be(failed.Id, "the run is linked; the answers no longer fit");
-        (_decider.Requests.Count - asked)
+        (_decider.NotNull().Requests.Count - asked)
             .Should()
             .Be(2, $"an answer given to another question is not replayed. See {Adr}");
         DecisionProbe
@@ -622,7 +633,7 @@ public class ManifestRetryReplaysDecisionsTests
 
         DecisionProbe.FailAt = ProbeFailure.None;
         Answer(ProbeLane.Fast, ProbeSize.Small);
-        var asked = _decider.Requests.Count;
+        var asked = _decider.NotNull().Requests.Count;
 
         var requeued = await RequeueDeadLetterAndRunAsync(manifest, askAfresh, how);
 
@@ -632,7 +643,7 @@ public class ManifestRetryReplaysDecisionsTests
             requeued
                 .ReplayDecisionsOf.Should()
                 .BeNull($"the operator asked the requeue to ask afresh. See {Adr}");
-            (_decider.Requests.Count - asked).Should().Be(2);
+            (_decider.NotNull().Requests.Count - asked).Should().Be(2);
             DecisionProbe
                 .TracksOf("dead-letter")
                 .Should()
@@ -643,7 +654,7 @@ public class ManifestRetryReplaysDecisionsTests
             requeued
                 .ReplayDecisionsOf.Should()
                 .Be(failed.Id, $"a dead-letter requeue retries the failed run. See {Adr}");
-            (_decider.Requests.Count - asked).Should().Be(0, "the requeue asked nothing");
+            (_decider.NotNull().Requests.Count - asked).Should().Be(0, "the requeue asked nothing");
             DecisionProbe
                 .TracksOf("dead-letter")
                 .Should()
@@ -742,7 +753,7 @@ public class ManifestRetryReplaysDecisionsTests
 
         DecisionProbe.FailAt = ProbeFailure.None;
         Answer(ProbeLane.Fast, ProbeSize.Small);
-        var asked = _decider.Requests.Count;
+        var asked = _decider.NotNull().Requests.Count;
         var retry = await DispatchQueuedAsync(manifest);
 
         retry.TrainState.Should().Be(TrainState.Completed, retry.FailureReason);
@@ -750,7 +761,7 @@ public class ManifestRetryReplaysDecisionsTests
             .ReplayDecisionsOf.Should()
             .BeNull($"the manifest no longer replays decisions on retry. See {Adr}");
         (await EntryOf(retry.Id)).ReplayDecisionsOf.Should().BeNull();
-        (_decider.Requests.Count - asked).Should().Be(2);
+        (_decider.NotNull().Requests.Count - asked).Should().Be(2);
     }
 
     [Test]
@@ -764,7 +775,7 @@ public class ManifestRetryReplaysDecisionsTests
 
         // A host whose replay lookup cannot reach its store.
         var faulty = BuildProvider(
-            _decider,
+            _decider.NotNull(),
             services =>
                 services.AddScoped(_ => new RetryDecisionReplay(
                     new UnreachableStore(),
@@ -792,7 +803,7 @@ public class ManifestRetryReplaysDecisionsTests
             maxRetries: deadLetter ? 0 : 3,
             replayDecisionsOnRetry: false
         );
-        var before = _decider.Requests.Count;
+        var before = _decider.NotNull().Requests.Count;
 
         DecisionProbe.FailAt = ProbeFailure.AfterQuestions;
         var failed = await CycleAsync(manifest);
@@ -814,7 +825,7 @@ public class ManifestRetryReplaysDecisionsTests
         retry
             .ReplayDecisionsOf.Should()
             .BeNull($"the manifest set ReplayDecisionsOnRetry(false). See {Adr}");
-        (_decider.Requests.Count - before)
+        (_decider.NotNull().Requests.Count - before)
             .Should()
             .Be(4, "the failed run and its retry each asked both questions");
         DecisionProbe
@@ -834,11 +845,9 @@ public class ManifestRetryReplaysDecisionsTests
 
         // The manifest's properties are edited between the failure and its retry. The answers
         // were given about the old input.
-        var edited = manifest.Properties!.Replace(
-            "before-edit",
-            "after-edit",
-            StringComparison.Ordinal
-        );
+        var edited = manifest
+            .Properties.NotNull()
+            .Replace("before-edit", "after-edit", StringComparison.Ordinal);
         await WithData(data =>
             data.Manifests.Where(m => m.Id == manifest.Id)
                 .ExecuteUpdateAsync(
@@ -849,7 +858,7 @@ public class ManifestRetryReplaysDecisionsTests
 
         DecisionProbe.FailAt = ProbeFailure.None;
         Answer(ProbeLane.Fast, ProbeSize.Small);
-        var asked = _decider.Requests.Count;
+        var asked = _decider.NotNull().Requests.Count;
         var retry = await CycleAsync(manifest);
 
         retry.TrainState.Should().Be(TrainState.Completed, retry.FailureReason);
@@ -857,7 +866,9 @@ public class ManifestRetryReplaysDecisionsTests
             .ReplayDecisionsOf.Should()
             .BeNull($"answers given about one input are not replayed into another. See {Adr}");
         (await EntryOf(retry.Id)).ReplayDecisionsOf.Should().BeNull();
-        (_decider.Requests.Count - asked).Should().Be(2, "the retry asked both questions afresh");
+        (_decider.NotNull().Requests.Count - asked)
+            .Should()
+            .Be(2, "the retry asked both questions afresh");
         DecisionProbe.TracksOf("after-edit").Should().Equal("Fast", "Small");
     }
 
@@ -1202,9 +1213,9 @@ public class ManifestRetryReplaysDecisionsTests
                     sp.GetRequiredService<IDataContextProviderFactory>(),
                     gate
                 ));
-        var first = BuildProvider(_decider, Configure);
+        var first = BuildProvider(_decider.NotNull(), Configure);
         await using var firstDisposal = first.ConfigureAwait(false);
-        var second = BuildProvider(_decider, Configure);
+        var second = BuildProvider(_decider.NotNull(), Configure);
         await using var secondDisposal = second.ConfigureAwait(false);
 
         static async Task Cycle(IServiceProvider host)
@@ -1255,7 +1266,7 @@ public class ManifestRetryReplaysDecisionsTests
         // takes before each save, so the retry can be saved again without its link.
         await QueueCompetingReplayAsync(manifest, failed.Id);
         var stale = BuildProvider(
-            _decider,
+            _decider.NotNull(),
             services =>
                 services.AddScoped<RetryDecisionReplay>(sp => new StaleLookup(
                     sp.GetRequiredService<IDataContextProviderFactory>(),
@@ -1404,7 +1415,7 @@ public class ManifestRetryReplaysDecisionsTests
     {
         var recording = new RecordingChangeSignal();
         var signalled = BuildProvider(
-            _decider,
+            _decider.NotNull(),
             services => services.AddSingleton<ITraxChangeSignal>(recording)
         );
         await using var signalledDisposal = signalled.ConfigureAwait(false);
@@ -1543,7 +1554,7 @@ public class ManifestRetryReplaysDecisionsTests
         // The lookup ran before a requeue of the failed run was queued, so it still names it.
         await QueueCompetingReplayAsync(manifest, failed.Id);
         var stale = BuildProvider(
-            _decider,
+            _decider.NotNull(),
             services =>
                 services.AddScoped<RetryDecisionReplay>(sp => new StaleLookup(
                     sp.GetRequiredService<IDataContextProviderFactory>(),
@@ -1740,7 +1751,7 @@ public class ManifestRetryReplaysDecisionsTests
                 .RequeueExecutionAsync(metadataId, CancellationToken.None)
                 .ConfigureAwait(false);
         result.Success.Should().BeTrue(result.Message);
-        return await DispatchEntryAsync(result.Id!.Value).ConfigureAwait(false);
+        return await DispatchEntryAsync(result.Id.NotNull().Value).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1785,7 +1796,7 @@ public class ManifestRetryReplaysDecisionsTests
         var tracksBefore = expectedTracksBefore ?? DecisionProbe.TracksOf(value).Count;
         DecisionProbe.FailAt = ProbeFailure.None;
         Answer(ProbeLane.Fast, ProbeSize.Small);
-        var asked = _decider.Requests.Count;
+        var asked = _decider.NotNull().Requests.Count;
 
         var retry = await CycleAsync(manifest).ConfigureAwait(false);
 
@@ -1794,11 +1805,14 @@ public class ManifestRetryReplaysDecisionsTests
             .ReplayDecisionsOf.Should()
             .BeNull($"a replay that could not be honoured is not linked. See {Adr}");
         (await EntryOf(retry.Id).ConfigureAwait(false)).ReplayDecisionsOf.Should().BeNull();
-        (_decider.Requests.Count - asked).Should().Be(2, "the retry asked both questions afresh");
+        (_decider.NotNull().Requests.Count - asked)
+            .Should()
+            .Be(2, "the retry asked both questions afresh");
         DecisionProbe.TracksOf(value).Skip(tracksBefore).Should().Equal("Fast", "Small");
     }
 
-    private void Answer(ProbeLane lane, ProbeSize size) => _decider.Choose(lane).Choose(size);
+    private void Answer(ProbeLane lane, ProbeSize size) =>
+        _decider.NotNull().Choose(lane).Choose(size);
 
     public enum DeadLetterRequeue
     {

@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.HostHeartbeats;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
@@ -281,7 +282,7 @@ public partial class SchedulerConfigurationBuilder
         var remoteTrains = new TrainDiscoveryService(_parentBuilder.ServiceCollection)
             .DiscoverTrains()
             .Where(r => r.IsRemote)
-            .Select(r => r.ServiceType.FullName!)
+            .Select(r => r.ServiceType.FullName.NotNull())
             .ToList();
 
         if (_routedSubmitterRegistrations.Count == 0)
@@ -343,7 +344,7 @@ public partial class SchedulerConfigurationBuilder
                 && e.To is not null
                 && !string.Equals(e.From, e.To, StringComparison.Ordinal)
             )
-            .Select(e => (e.From!, e.To!))
+            .Select(e => (e.From.NotNull(), e.To.NotNull()))
             .Distinct()
             .ToList();
 

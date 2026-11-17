@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Scheduler.Configuration;
@@ -12,8 +13,8 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 [TestFixture]
 public class SchedulingHelpersCronTests
 {
-    private SchedulerConfiguration _config = null!;
-    private ILogger _logger = null!;
+    private SchedulerConfiguration? _config;
+    private ILogger? _logger;
 
     [SetUp]
     public void SetUp()
@@ -37,7 +38,7 @@ public class SchedulingHelpersCronTests
         };
 
         SchedulingHelpers
-            .ShouldRunNow(manifest, DateTime.UtcNow, _config, _logger)
+            .ShouldRunNow(manifest, DateTime.UtcNow, _config.NotNull(), _logger.NotNull())
             .Should()
             .BeFalse();
     }
@@ -53,7 +54,7 @@ public class SchedulingHelpersCronTests
         };
 
         SchedulingHelpers
-            .ShouldRunNow(manifest, DateTime.UtcNow, _config, _logger)
+            .ShouldRunNow(manifest, DateTime.UtcNow, _config.NotNull(), _logger.NotNull())
             .Should()
             .BeTrue();
     }
@@ -140,7 +141,7 @@ public class SchedulingHelpersCronTests
         var manifest = CreateCronManifest("*/30 * * * * *");
 
         SchedulingHelpers
-            .ShouldRunNow(manifest, DateTime.UtcNow, _config, _logger)
+            .ShouldRunNow(manifest, DateTime.UtcNow, _config.NotNull(), _logger.NotNull())
             .Should()
             .BeTrue();
     }
@@ -152,7 +153,10 @@ public class SchedulingHelpersCronTests
         var manifest = CreateCronManifest("*/30 * * * * *");
         manifest.LastSuccessfulRun = new DateTime(2026, 3, 2, 12, 0, 0, DateTimeKind.Utc);
 
-        SchedulingHelpers.ShouldRunNow(manifest, now, _config, _logger).Should().BeTrue();
+        SchedulingHelpers
+            .ShouldRunNow(manifest, now, _config.NotNull(), _logger.NotNull())
+            .Should()
+            .BeTrue();
     }
 
     [Test]
@@ -162,7 +166,10 @@ public class SchedulingHelpersCronTests
         var manifest = CreateCronManifest("*/30 * * * * *");
         manifest.LastSuccessfulRun = new DateTime(2026, 3, 2, 12, 0, 0, DateTimeKind.Utc);
 
-        SchedulingHelpers.ShouldRunNow(manifest, now, _config, _logger).Should().BeFalse();
+        SchedulingHelpers
+            .ShouldRunNow(manifest, now, _config.NotNull(), _logger.NotNull())
+            .Should()
+            .BeFalse();
     }
 
     [Test]
@@ -172,7 +179,7 @@ public class SchedulingHelpersCronTests
         manifest.LastSuccessfulRun = new DateTime(2026, 3, 2, 12, 0, 0, DateTimeKind.Utc);
 
         SchedulingHelpers
-            .ShouldRunNow(manifest, DateTime.UtcNow, _config, _logger)
+            .ShouldRunNow(manifest, DateTime.UtcNow, _config.NotNull(), _logger.NotNull())
             .Should()
             .BeFalse();
     }
@@ -187,7 +194,10 @@ public class SchedulingHelpersCronTests
         manifest.LastSuccessfulRun = new DateTime(2026, 3, 2, 6, 0, 0, DateTimeKind.Utc);
         var now = new DateTime(2026, 3, 2, 12, 0, 0, DateTimeKind.Utc);
 
-        SchedulingHelpers.ShouldRunNow(manifest, now, _config, _logger).Should().BeTrue();
+        SchedulingHelpers
+            .ShouldRunNow(manifest, now, _config.NotNull(), _logger.NotNull())
+            .Should()
+            .BeTrue();
     }
 
     [Test]
@@ -198,7 +208,10 @@ public class SchedulingHelpersCronTests
         manifest.LastSuccessfulRun = new DateTime(2026, 3, 2, 6, 0, 0, DateTimeKind.Utc);
         var now = new DateTime(2026, 3, 2, 10, 0, 0, DateTimeKind.Utc);
 
-        SchedulingHelpers.ShouldRunNow(manifest, now, _config, _logger).Should().BeFalse();
+        SchedulingHelpers
+            .ShouldRunNow(manifest, now, _config.NotNull(), _logger.NotNull())
+            .Should()
+            .BeFalse();
     }
 
     // ── Upcoming runs over an exclusion window ───────────────────────
@@ -213,7 +226,7 @@ public class SchedulingHelpersCronTests
         manifest.SetExclusions([Exclude.Dates(new DateOnly(2026, 3, 3))]);
         var now = new DateTime(2026, 3, 2, 12, 0, 0, DateTimeKind.Utc);
 
-        var runs = SchedulingHelpers.UpcomingRuns(manifest, 2, now, _config);
+        var runs = SchedulingHelpers.UpcomingRuns(manifest, 2, now, _config.NotNull());
 
         runs.Should()
             .Equal(
@@ -234,7 +247,7 @@ public class SchedulingHelpersCronTests
         var now = new DateTime(2026, 3, 2, 12, 0, 0, DateTimeKind.Utc);
 
         SchedulingHelpers
-            .UpcomingRuns(manifest, 2, now, _config)
+            .UpcomingRuns(manifest, 2, now, _config.NotNull())
             .Should()
             .Equal(
                 new DateTime(2026, 3, 4, 2, 0, 0, DateTimeKind.Utc),

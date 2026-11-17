@@ -2,6 +2,7 @@ using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.ManifestGroup;
@@ -26,7 +27,7 @@ namespace Trax.Scheduler.Tests.Stress.IntegrationTests;
 )]
 public class GroupFairBatchingStressTests : TestSetup
 {
-    private IManifestManagerTrain _train = null!;
+    private IManifestManagerTrain? _train;
 
     public override async Task TestSetUp()
     {
@@ -60,7 +61,7 @@ public class GroupFairBatchingStressTests : TestSetup
         try
         {
             // Act
-            await _train.Run(Unit.Default);
+            await _train.NotNull().Run(Unit.Default);
 
             // Assert
             DataContext.Reset();
@@ -68,7 +69,8 @@ public class GroupFairBatchingStressTests : TestSetup
                 .WorkQueues.Include(q => q.Manifest)
                 .Where(q =>
                     q.Status == WorkQueueStatus.Queued
-                    && q.Manifest!.ManifestGroupId == deltaGroup.Id
+                    && q.Manifest != null
+                    && q.Manifest.ManifestGroupId == deltaGroup.Id
                 )
                 .CountAsync();
 
@@ -112,7 +114,7 @@ public class GroupFairBatchingStressTests : TestSetup
         {
             // Act — must complete within 5 seconds
             await AssertCompletesWithin(async () =>
-                await _train.Run(Unit.Default).ConfigureAwait(false)
+                await _train.NotNull().Run(Unit.Default).ConfigureAwait(false)
             );
 
             // Assert — each group gets exactly 50 entries (500 / 10)
@@ -123,7 +125,8 @@ public class GroupFairBatchingStressTests : TestSetup
                     .WorkQueues.Include(q => q.Manifest)
                     .Where(q =>
                         q.Status == WorkQueueStatus.Queued
-                        && q.Manifest!.ManifestGroupId == group.Id
+                        && q.Manifest != null
+                        && q.Manifest.ManifestGroupId == group.Id
                     )
                     .CountAsync();
 
@@ -158,7 +161,7 @@ public class GroupFairBatchingStressTests : TestSetup
         try
         {
             // Act
-            await _train.Run(Unit.Default);
+            await _train.NotNull().Run(Unit.Default);
 
             // Assert — each group should get exactly 4 entries (200 / 50)
             DataContext.Reset();
@@ -168,7 +171,8 @@ public class GroupFairBatchingStressTests : TestSetup
                     .WorkQueues.Include(q => q.Manifest)
                     .Where(q =>
                         q.Status == WorkQueueStatus.Queued
-                        && q.Manifest!.ManifestGroupId == group.Id
+                        && q.Manifest != null
+                        && q.Manifest.ManifestGroupId == group.Id
                     )
                     .CountAsync();
 

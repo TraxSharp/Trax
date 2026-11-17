@@ -4,6 +4,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Extensions;
@@ -52,7 +53,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class SubjectKeySerializationTests
 {
-    private static readonly string TestTrainName = typeof(SchedulerTestTrain).FullName!;
+    private static readonly string TestTrainName = typeof(SchedulerTestTrain).FullName.NotNull();
 
     /// <summary>
     /// The ceiling on waiting for a dispatcher or a hand-written claim to finish once the test has
@@ -62,12 +63,12 @@ public class SubjectKeySerializationTests
     /// </summary>
     private static readonly TimeSpan ReleasedWorkBudget = TimeSpan.FromSeconds(60);
 
-    private ServiceProvider _serviceProvider = null!;
-    private ArrayLoggingProvider _logs = null!;
+    private ServiceProvider? _serviceProvider;
+    private ArrayLoggingProvider? _logs;
     private AsyncServiceScope _scope;
-    private IDataContext _dataContext = null!;
-    private ParallelDispatchTests.DelayingJobSubmitter _submitter = null!;
-    private SchedulerConfiguration _schedulerConfiguration = null!;
+    private IDataContext? _dataContext;
+    private ParallelDispatchTests.DelayingJobSubmitter? _submitter;
+    private SchedulerConfiguration? _schedulerConfiguration;
 
     [OneTimeSetUp]
     public async Task RunBeforeAnyTests()
@@ -82,7 +83,7 @@ public class SubjectKeySerializationTests
             .AddSingleton<ILoggerProvider>(arrayLoggingProvider)
             .AddSingleton<IArrayLoggingProvider>(arrayLoggingProvider)
             .AddLogging(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug))
-            .AddSingleton(_submitter)
+            .AddSingleton(_submitter.NotNull())
             .AddTrax(trax =>
                 trax.AddEffects(effects =>
                         effects
@@ -112,31 +113,35 @@ public class SubjectKeySerializationTests
             })
             .BuildServiceProvider();
 
-        _schedulerConfiguration = _serviceProvider.GetRequiredService<SchedulerConfiguration>();
+        _schedulerConfiguration = _serviceProvider
+            .NotNull()
+            .GetRequiredService<SchedulerConfiguration>();
     }
 
     [OneTimeTearDown]
     public async Task RunAfterAnyTests()
     {
-        await _serviceProvider.DisposeAsync();
+        if (_serviceProvider is not null)
+            await _serviceProvider.DisposeAsync();
     }
 
     [SetUp]
     public async Task TestSetUp()
     {
-        _scope = _serviceProvider.CreateAsyncScope();
+        _scope = _serviceProvider.NotNull().CreateAsyncScope();
         _dataContext = _scope.ServiceProvider.GetRequiredService<IDataContext>();
-        await TestSetup.CleanupDatabase(_dataContext);
-        _submitter.Reset();
+        await TestSetup.CleanupDatabase(_dataContext.NotNull());
+        _submitter.NotNull().Reset();
     }
 
     [TearDown]
     public async Task TestTearDown()
     {
         // Reset to default after each test
-        _schedulerConfiguration.MaxConcurrentDispatch = 1;
-        _schedulerConfiguration.MaxActiveJobs = new SchedulerConfiguration().MaxActiveJobs;
-        _schedulerConfiguration.MaxQueuedJobsPerCycle =
+        _schedulerConfiguration.NotNull().MaxConcurrentDispatch = 1;
+        _schedulerConfiguration.NotNull().MaxActiveJobs =
+            new SchedulerConfiguration().MaxActiveJobs;
+        _schedulerConfiguration.NotNull().MaxQueuedJobsPerCycle =
             new SchedulerConfiguration().MaxQueuedJobsPerCycle;
 
         if (_dataContext is IDisposable disposable)
@@ -195,11 +200,12 @@ public class SubjectKeySerializationTests
         await RunCycle();
 
         var blocked = await EntryAsync(second.Id);
-        blocked!
+        blocked
+            .NotNull()
             .Status.Should()
             .Be(WorkQueueStatus.Queued, "a blocked entry must remain claimable on a later cycle");
         blocked.ConfirmedAt.Should().NotBeNull();
-        (await EntryAsync(first.Id))!.Status.Should().Be(WorkQueueStatus.Dispatched);
+        (await EntryAsync(first.Id)).NotNull().Status.Should().Be(WorkQueueStatus.Dispatched);
     }
 
     [Test]
@@ -212,7 +218,8 @@ public class SubjectKeySerializationTests
         await CompleteAllRuns();
         await RunCycle();
 
-        (await EntryAsync(second.Id))!
+        (await EntryAsync(second.Id))
+            .NotNull()
             .Status.Should()
             .Be(
                 WorkQueueStatus.Dispatched,
@@ -232,8 +239,8 @@ public class SubjectKeySerializationTests
 
         await RunCycle();
 
-        (await EntryAsync(older.Id))!.Status.Should().Be(WorkQueueStatus.Dispatched);
-        (await EntryAsync(newer.Id))!.Status.Should().Be(WorkQueueStatus.Queued);
+        (await EntryAsync(older.Id)).NotNull().Status.Should().Be(WorkQueueStatus.Dispatched);
+        (await EntryAsync(newer.Id)).NotNull().Status.Should().Be(WorkQueueStatus.Queued);
     }
 
     [Test]
@@ -248,7 +255,8 @@ public class SubjectKeySerializationTests
         await FailAllRuns();
         await RunCycle();
 
-        (await EntryAsync(second.Id))!
+        (await EntryAsync(second.Id))
+            .NotNull()
             .Status.Should()
             .Be(
                 WorkQueueStatus.Dispatched,
@@ -266,7 +274,7 @@ public class SubjectKeySerializationTests
     public async Task A_backlog_for_one_subject_does_not_starve_another(bool groupFair)
     {
         UseLoadPath(groupFair);
-        _schedulerConfiguration.MaxActiveJobs = 2;
+        _schedulerConfiguration.NotNull().MaxActiveJobs = 2;
 
         for (var i = 0; i < 4; i++)
             await CreateEntry(
@@ -279,7 +287,8 @@ public class SubjectKeySerializationTests
         await RunCycle();
         await RunCycle();
 
-        (await EntryAsync(other.Id))!
+        (await EntryAsync(other.Id))
+            .NotNull()
             .Status.Should()
             .Be(
                 WorkQueueStatus.Dispatched,
@@ -296,7 +305,7 @@ public class SubjectKeySerializationTests
     public async Task Stranded_staged_entries_do_not_take_capacity(bool groupFair)
     {
         UseLoadPath(groupFair);
-        _schedulerConfiguration.MaxActiveJobs = 2;
+        _schedulerConfiguration.NotNull().MaxActiveJobs = 2;
 
         // Older than the ready entry, so without the filter they sort first and take both slots.
         await CreateEntry(
@@ -315,7 +324,8 @@ public class SubjectKeySerializationTests
 
         await RunCycle();
 
-        (await EntryAsync(ready.Id))!
+        (await EntryAsync(ready.Id))
+            .NotNull()
             .Status.Should()
             .Be(
                 WorkQueueStatus.Dispatched,
@@ -324,7 +334,7 @@ public class SubjectKeySerializationTests
     }
 
     private void UseLoadPath(bool groupFair) =>
-        _schedulerConfiguration.MaxQueuedJobsPerCycle = groupFair ? 100 : null;
+        _schedulerConfiguration.NotNull().MaxQueuedJobsPerCycle = groupFair ? 100 : null;
 
     [Test]
     public async Task Two_dispatchers_claiming_sibling_entries_at_once_are_serialized()
@@ -336,13 +346,13 @@ public class SubjectKeySerializationTests
         var first = await CreateEntry("customer-1", "first");
         var second = await CreateEntry("customer-1", "second");
 
-        var scopeA = _serviceProvider.CreateAsyncScope();
+        var scopeA = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeADisposal = scopeA.ConfigureAwait(false);
-        var scopeB = _serviceProvider.CreateAsyncScope();
+        var scopeB = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeBDisposal = scopeB.ConfigureAwait(false);
         var contextA = scopeA.ServiceProvider.GetRequiredService<IDataContext>();
         var contextB = scopeB.ServiceProvider.GetRequiredService<IDataContext>();
-        var dialect = _serviceProvider.GetRequiredService<ISqlDialect>();
+        var dialect = _serviceProvider.NotNull().GetRequiredService<ISqlDialect>();
 
         using var txA = await contextA.BeginTransaction(CancellationToken.None);
         await Lock(contextA, dialect, "customer-1");
@@ -351,7 +361,7 @@ public class SubjectKeySerializationTests
 
         // A commits the claim the way the dispatcher does: the entry becomes dispatched with a
         // Pending run attached. B is started before that commit.
-        var runA = await MarkDispatched(contextA, claimedA!);
+        var runA = await MarkDispatched(contextA, claimedA.NotNull());
 
         var b = Task.Run(async () =>
         {
@@ -390,7 +400,7 @@ public class SubjectKeySerializationTests
         var first = await CreateEntry("customer-1", "first");
         var second = await CreateEntry("customer-1", "second");
 
-        var gateScope = _serviceProvider.CreateAsyncScope();
+        var gateScope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var gateScopeDisposal = gateScope.ConfigureAwait(false);
         var gate = gateScope.ServiceProvider.GetRequiredService<IDataContext>();
         // The pid is read inside the transaction: outside one, a pooled context may run each
@@ -405,7 +415,7 @@ public class SubjectKeySerializationTests
 
         // DispatchJobsJunction catches and logs a failed entry rather than throwing, so its errors
         // are the only account of why an entry ended in the wrong state.
-        _logs.ClearAllLogs();
+        _logs.NotNull().ClearAllLogs();
 
         // A claims the first entry and stops at its metadata insert, holding its claim open.
         var dispatcherA = Task.Run(() => DispatchAlone(first));
@@ -430,10 +440,12 @@ public class SubjectKeySerializationTests
             );
         }
 
-        (await EntryAsync(first.Id))!
+        (await EntryAsync(first.Id))
+            .NotNull()
             .Status.Should()
             .Be(WorkQueueStatus.Dispatched, "dispatcher errors: {0}", DispatcherErrors());
-        (await EntryAsync(second.Id))!
+        (await EntryAsync(second.Id))
+            .NotNull()
             .Status.Should()
             .Be(
                 WorkQueueStatus.Queued,
@@ -457,6 +469,7 @@ public class SubjectKeySerializationTests
             try
             {
                 var errors = _logs
+                    .NotNull()
                     .Loggers.ToList()
                     .SelectMany(l => l.Logs.ToList())
                     .Where(l =>
@@ -480,7 +493,7 @@ public class SubjectKeySerializationTests
     /// <summary>Runs one dispatch junction over a single entry, as one dispatcher would.</summary>
     private async Task DispatchAlone(WorkQueue entry)
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var junction = ActivatorUtilities.CreateInstance<DispatchJobsJunction>(
             scope.ServiceProvider
@@ -498,7 +511,7 @@ public class SubjectKeySerializationTests
 
         while (DateTime.UtcNow < deadline)
         {
-            var probe = _serviceProvider.CreateAsyncScope();
+            var probe = _serviceProvider.NotNull().CreateAsyncScope();
             await using var probeDisposal = probe.ConfigureAwait(false);
             var context = (DbContext)probe.ServiceProvider.GetRequiredService<IDataContext>();
 
@@ -545,7 +558,7 @@ public class SubjectKeySerializationTests
 
         while (DateTime.UtcNow < deadline)
         {
-            var probe = _serviceProvider.CreateAsyncScope();
+            var probe = _serviceProvider.NotNull().CreateAsyncScope();
             await using var probeDisposal = probe.ConfigureAwait(false);
             var context = (DbContext)probe.ServiceProvider.GetRequiredService<IDataContext>();
 
@@ -587,7 +600,7 @@ public class SubjectKeySerializationTests
         var metadata = Trax.Effect.Models.Metadata.Metadata.Create(
             new Trax.Effect.Models.Metadata.DTOs.CreateMetadata
             {
-                Name = claimed.TrainName!,
+                Name = claimed.TrainName.NotNull(),
                 ExternalId = claimed.ExternalId,
                 Input = null,
             }
@@ -606,7 +619,7 @@ public class SubjectKeySerializationTests
 
     private async Task RunCycle()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
         await train.Run(Unit.Default).ConfigureAwait(false);
@@ -637,14 +650,14 @@ public class SubjectKeySerializationTests
         if (createdAt is not null)
             entry.CreatedAt = createdAt.Value;
 
-        await _dataContext.Track(entry).ConfigureAwait(false);
-        await _dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        await _dataContext.NotNull().Track(entry).ConfigureAwait(false);
+        await _dataContext.NotNull().SaveChanges(CancellationToken.None).ConfigureAwait(false);
         return entry;
     }
 
     private async Task<WorkQueue?> EntryAsync(long id)
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
         return await context
@@ -655,7 +668,7 @@ public class SubjectKeySerializationTests
 
     private async Task<int> DispatchedCount()
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
         return await context
@@ -669,7 +682,7 @@ public class SubjectKeySerializationTests
 
     private async Task SetAllRunsTo(TrainState state)
     {
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
         await context

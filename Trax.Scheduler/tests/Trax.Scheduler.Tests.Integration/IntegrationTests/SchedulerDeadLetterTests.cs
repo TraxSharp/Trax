@@ -2,6 +2,7 @@ using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
@@ -360,7 +361,9 @@ public class SchedulerDeadLetterTests
         await fx
             .DataContext.WorkQueues.AsNoTracking()
             .CountAsync(q =>
-                q.Manifest!.ExternalId == externalId && q.Status == WorkQueueStatus.Queued
+                q.Manifest != null
+                && q.Manifest.ExternalId == externalId
+                && q.Status == WorkQueueStatus.Queued
             )
             .ConfigureAwait(false);
 

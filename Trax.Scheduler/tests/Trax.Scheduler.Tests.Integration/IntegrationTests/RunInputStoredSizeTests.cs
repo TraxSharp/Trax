@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Models.Manifest;
@@ -33,7 +34,7 @@ public class RunInputStoredSizeTests
 
         var ops = fx.Services.GetRequiredService<IOperationsService>();
         var result = await ops.RunTrainAsync(
-            new RunTrainInput(typeof(IRowsRunTrain).FullName!, inputJson),
+            new RunTrainInput(typeof(IRowsRunTrain).FullName.NotNull(), inputJson),
             CancellationToken.None
         );
 
@@ -56,7 +57,7 @@ public class RunInputStoredSizeTests
 
         var ops = fx.Services.GetRequiredService<IOperationsService>();
         var result = await ops.RunTrainAsync(
-            new RunTrainInput(typeof(IPaddedRunTrain).FullName!, "{}"),
+            new RunTrainInput(typeof(IPaddedRunTrain).FullName.NotNull(), "{}"),
             CancellationToken.None
         );
 
@@ -86,7 +87,10 @@ public class RunInputStoredSizeTests
 
         var ops = fx.Services.GetRequiredService<IOperationsService>();
         var result = await ops.RunTrainAsync(
-            new RunTrainInput(typeof(IRowsRunTrain).FullName!, """{"rows":[["a","b"],["c"]]}"""),
+            new RunTrainInput(
+                typeof(IRowsRunTrain).FullName.NotNull(),
+                """{"rows":[["a","b"],["c"]]}"""
+            ),
             CancellationToken.None
         );
 

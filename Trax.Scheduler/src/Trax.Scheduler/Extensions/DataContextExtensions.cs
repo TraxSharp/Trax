@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
@@ -128,7 +129,7 @@ internal static class DataContextExtensions
         if (existing != null)
         {
             // Update only scheduling-related fields, preserve runtime state
-            existing.Name = trainType.FullName!;
+            existing.Name = trainType.FullName.NotNull();
             existing.SetProperties(input);
             if (options._isEnabled is { } isEnabled)
                 existing.IsEnabled = isEnabled;
@@ -152,7 +153,7 @@ internal static class DataContextExtensions
         var manifest = new Manifest
         {
             ExternalId = externalId,
-            Name = trainType.FullName!,
+            Name = trainType.FullName.NotNull(),
             IsEnabled = options.IsEnabled,
             MaxRetries = options.MaxRetries,
             TimeoutSeconds = options.Timeout.HasValue
@@ -229,7 +230,7 @@ internal static class DataContextExtensions
 
         if (existing != null)
         {
-            existing.Name = trainType.FullName!;
+            existing.Name = trainType.FullName.NotNull();
             existing.SetProperties(input);
             if (options._isEnabled is { } isEnabled)
                 existing.IsEnabled = isEnabled;
@@ -254,7 +255,7 @@ internal static class DataContextExtensions
         var manifest = new Manifest
         {
             ExternalId = externalId,
-            Name = trainType.FullName!,
+            Name = trainType.FullName.NotNull(),
             IsEnabled = options.IsEnabled,
             MaxRetries = options.MaxRetries,
             TimeoutSeconds = options.Timeout.HasValue
@@ -338,7 +339,7 @@ internal static class DataContextExtensions
                 && existing.ScheduledAt is not null;
             var previousProperties = existing.Properties;
 
-            existing.Name = trainType.FullName!;
+            existing.Name = trainType.FullName.NotNull();
             existing.SetProperties(input);
             if (options._isEnabled is { } isEnabled)
                 existing.IsEnabled = isEnabled;
@@ -364,7 +365,7 @@ internal static class DataContextExtensions
         var manifest = new Manifest
         {
             ExternalId = externalId,
-            Name = trainType.FullName!,
+            Name = trainType.FullName.NotNull(),
             IsEnabled = options.IsEnabled,
             MaxRetries = options.MaxRetries,
             TimeoutSeconds = options.Timeout.HasValue
@@ -436,7 +437,7 @@ internal static class DataContextExtensions
                 unchangedCron && firstOccurrence is not null
                     ? firstOccurrence
                     : CronParser
-                        .Parse(schedule.CronExpression!)
+                        .Parse(schedule.CronExpression.NotNull())
                         .GetNextOccurrence(DateTime.UtcNow, TimeZoneInfo.Utc);
     }
 

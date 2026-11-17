@@ -2,6 +2,7 @@ using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
@@ -30,7 +31,7 @@ public class SqliteCleanupTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(ISchedulerTestTrain).FullName!,
+                Name = typeof(ISchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "delete-me" },
             }
@@ -58,7 +59,7 @@ public class SqliteCleanupTests : TestSetup
             var m = Metadata.Create(
                 new CreateMetadata
                 {
-                    Name = typeof(ISchedulerTestTrain).FullName!,
+                    Name = typeof(ISchedulerTestTrain).FullName.NotNull(),
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = new SchedulerTestInput
                     {
@@ -104,7 +105,7 @@ public class SqliteCleanupTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(ISchedulerTestTrain).FullName!,
+                Name = typeof(ISchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "update-me" },
             }
@@ -136,7 +137,7 @@ public class SqliteCleanupTests : TestSetup
             var m = Metadata.Create(
                 new CreateMetadata
                 {
-                    Name = typeof(ISchedulerTestTrain).FullName!,
+                    Name = typeof(ISchedulerTestTrain).FullName.NotNull(),
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = new SchedulerTestInput
                     {
@@ -197,7 +198,7 @@ public class SqliteCleanupTests : TestSetup
     [Test]
     public async Task MetadataCleanupTrain_PrunesJobDispatcherMetadata()
     {
-        var metadata = await CreateExpiredMetadata(typeof(JobDispatcherTrain).FullName!);
+        var metadata = await CreateExpiredMetadata(typeof(JobDispatcherTrain).FullName.NotNull());
 
         var train = Scope.ServiceProvider.GetRequiredService<IMetadataCleanupTrain>();
         await train.Run(new MetadataCleanupRequest());
@@ -214,7 +215,7 @@ public class SqliteCleanupTests : TestSetup
     {
         // Sqlite enforces the retry_metadata_id foreign key, so the SET NULL then DELETE path
         // must translate correctly on this dialect.
-        var metadata = await CreateExpiredMetadata(typeof(JobDispatcherTrain).FullName!);
+        var metadata = await CreateExpiredMetadata(typeof(JobDispatcherTrain).FullName.NotNull());
 
         var group = await TestSetup.CreateAndSaveManifestGroup(
             DataContext,
@@ -265,7 +266,8 @@ public class SqliteCleanupTests : TestSetup
 
         remainingMetadata.Should().BeNull("the referenced metadata should be deleted");
         survivingDeadLetter.Should().NotBeNull("the dead letter must survive");
-        survivingDeadLetter!
+        survivingDeadLetter
+            .NotNull()
             .RetryMetadataId.Should()
             .BeNull("the retry reference should be nulled");
     }
@@ -275,14 +277,18 @@ public class SqliteCleanupTests : TestSetup
     {
         // The replay links are plain columns, so the correlated checks must translate on this
         // dialect too. A run's decisions cascade with it, and a replay of a deleted run fails.
-        var queuedSource = await CreateExpiredMetadata(typeof(JobDispatcherTrain).FullName!);
-        var replayedSource = await CreateExpiredMetadata(typeof(JobDispatcherTrain).FullName!);
-        var unlinked = await CreateExpiredMetadata(typeof(JobDispatcherTrain).FullName!);
+        var queuedSource = await CreateExpiredMetadata(
+            typeof(JobDispatcherTrain).FullName.NotNull()
+        );
+        var replayedSource = await CreateExpiredMetadata(
+            typeof(JobDispatcherTrain).FullName.NotNull()
+        );
+        var unlinked = await CreateExpiredMetadata(typeof(JobDispatcherTrain).FullName.NotNull());
 
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(JobDispatcherTrain).FullName!,
+                TrainName = typeof(JobDispatcherTrain).FullName.NotNull(),
                 Input = null,
                 InputTypeName = null,
                 ReplayDecisionsOf = queuedSource.Id,
@@ -292,7 +298,7 @@ public class SqliteCleanupTests : TestSetup
         var replayer = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
                 ReplayDecisionsOf = replayedSource.Id,

@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Mediator.Services.TrainExecution;
 using Trax.Scheduler.Tests.Integration.Fakes.Trains;
@@ -37,7 +38,7 @@ public class QueueCancellationTests
         using var cts = new CancellationTokenSource();
 
         var receipt = await execution.QueueAsync(
-            typeof(ISchedulerTestTrain).FullName!,
+            typeof(ISchedulerTestTrain).FullName.NotNull(),
             """{"value":"not-recallable"}""",
             ct: cts.Token
         );
@@ -96,7 +97,7 @@ public class QueueCancellationTests
         var queue = async () =>
             await execution
                 .QueueAsync(
-                    typeof(ISchedulerTestTrain).FullName!,
+                    typeof(ISchedulerTestTrain).FullName.NotNull(),
                     """{"value":"never-queued"}""",
                     ct: cts.Token
                 )

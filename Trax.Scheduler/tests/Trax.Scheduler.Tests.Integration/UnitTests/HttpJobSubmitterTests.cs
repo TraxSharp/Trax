@@ -3,6 +3,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Utils;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.JobSubmitter;
@@ -79,13 +80,13 @@ public class HttpJobSubmitterTests
         await submitter.EnqueueAsync(42);
 
         handler.LastRequest.Should().NotBeNull();
-        handler.LastRequest!.Method.Should().Be(HttpMethod.Post);
+        handler.LastRequest.NotNull().Method.Should().Be(HttpMethod.Post);
 
-        var body = await handler.LastRequest.Content!.ReadAsStringAsync();
+        var body = await handler.LastRequest.Content.NotNull().ReadAsStringAsync();
         var request = JsonSerializer.Deserialize<RemoteJobRequest>(body, WebOptions);
 
         request.Should().NotBeNull();
-        request!.MetadataId.Should().Be(42);
+        request.NotNull().MetadataId.Should().Be(42);
         request.Input.Should().BeNull();
         request.InputType.Should().BeNull();
     }
@@ -99,7 +100,9 @@ public class HttpJobSubmitterTests
 
         handler.LastRequest.Should().NotBeNull();
         handler
-            .LastRequest!.RequestUri!.ToString()
+            .LastRequest.NotNull()
+            .RequestUri.NotNull()
+            .ToString()
             .Should()
             .Be("https://test.example.com/trax/execute");
     }
@@ -116,11 +119,11 @@ public class HttpJobSubmitterTests
 
         await submitter.EnqueueAsync(50, input);
 
-        var body = await handler.LastRequest!.Content!.ReadAsStringAsync();
+        var body = await handler.LastRequest.NotNull().Content.NotNull().ReadAsStringAsync();
         var request = JsonSerializer.Deserialize<RemoteJobRequest>(body, WebOptions);
 
         request.Should().NotBeNull();
-        request!.MetadataId.Should().Be(50);
+        request.NotNull().MetadataId.Should().Be(50);
         request.Input.Should().NotBeNull();
         request.Input.Should().Contain("hello-world");
         request.InputType.Should().Be(typeof(SchedulerTestInput).FullName);
@@ -134,7 +137,7 @@ public class HttpJobSubmitterTests
 
         await submitter.EnqueueAsync(1, input);
 
-        var body = await handler.LastRequest!.Content!.ReadAsStringAsync();
+        var body = await handler.LastRequest.NotNull().Content.NotNull().ReadAsStringAsync();
         var request = JsonSerializer.Deserialize<RemoteJobRequest>(body, WebOptions);
 
         var expectedJson = JsonSerializer.Serialize(
@@ -142,7 +145,7 @@ public class HttpJobSubmitterTests
             input.GetType(),
             TraxJsonSerializationOptions.ManifestProperties
         );
-        request!.Input.Should().Be(expectedJson);
+        request.NotNull().Input.Should().Be(expectedJson);
     }
 
     [Test]
@@ -169,10 +172,13 @@ public class HttpJobSubmitterTests
 
         await submitter.EnqueueAsync(99, cts.Token);
 
-        var body = await handler.LastRequest!.Content!.ReadAsStringAsync(CancellationToken.None);
+        var body = await handler
+            .LastRequest.NotNull()
+            .Content.NotNull()
+            .ReadAsStringAsync(CancellationToken.None);
         var request = JsonSerializer.Deserialize<RemoteJobRequest>(body, WebOptions);
 
-        request!.MetadataId.Should().Be(99);
+        request.NotNull().MetadataId.Should().Be(99);
         request.Input.Should().BeNull();
     }
 
@@ -185,10 +191,13 @@ public class HttpJobSubmitterTests
 
         await submitter.EnqueueAsync(77, input, cts.Token);
 
-        var body = await handler.LastRequest!.Content!.ReadAsStringAsync(CancellationToken.None);
+        var body = await handler
+            .LastRequest.NotNull()
+            .Content.NotNull()
+            .ReadAsStringAsync(CancellationToken.None);
         var request = JsonSerializer.Deserialize<RemoteJobRequest>(body, WebOptions);
 
-        request!.MetadataId.Should().Be(77);
+        request.NotNull().MetadataId.Should().Be(77);
         request.Input.Should().Contain("with-ct");
         request.InputType.Should().Be(typeof(SchedulerTestInput).FullName);
     }

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.SqlDialect;
@@ -80,7 +81,7 @@ internal sealed class ManifestManagerPollingService(
             // Prevents duplicate WorkQueue entries when multiple servers poll simultaneously.
             // InMemory has no transactions or advisory locks, and a single-writer database (SQLite)
             // has no leader to elect: both run without the lock.
-            if (configuration.HasDatabaseProvider && !sqlDialect!.HasSingleWriter)
+            if (configuration.HasDatabaseProvider && !sqlDialect.NotNull().HasSingleWriter)
             {
                 var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
 

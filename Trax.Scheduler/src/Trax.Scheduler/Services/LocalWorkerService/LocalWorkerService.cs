@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.RunOutcomes;
 using Trax.Effect.Data.Services.SqlDialect;
@@ -118,7 +119,7 @@ internal sealed class LocalWorkerService(
 
             var jobs = await dataContext
                 .BackgroundJobs.FromSqlRaw(
-                    sqlDialect!.DequeueBackgroundJobs(),
+                    sqlDialect.NotNull().DequeueBackgroundJobs(),
                     visibilitySeconds,
                     batchSize
                 )

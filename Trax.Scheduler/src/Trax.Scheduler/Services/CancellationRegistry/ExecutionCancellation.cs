@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
@@ -99,7 +100,7 @@ internal static class ExecutionCancellation
                 .ConfigureAwait(false);
 
         foreach (var id in onThisHost)
-            registry!.TryCancel(id);
+            registry.NotNull().TryCancel(id);
 
         if (flagged > 0)
             changeSignal?.Notify(ChangeDomain.Execution);

@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -86,7 +87,7 @@ public class NonEntityFrameworkDataContextTests
     /// <summary>Forwards every <see cref="IDataContext"/> member to the context it wraps.</summary>
     public class Decorator : DispatchProxy
     {
-        private IDataContext _inner = null!;
+        private IDataContext? _inner;
 
         public static IDataContext Wrap(IDataContext inner)
         {
@@ -99,7 +100,7 @@ public class NonEntityFrameworkDataContextTests
         {
             try
             {
-                return targetMethod!.Invoke(_inner, args);
+                return targetMethod.NotNull().Invoke(_inner.NotNull(), args);
             }
             catch (TargetInvocationException ex) when (ex.InnerException is not null)
             {

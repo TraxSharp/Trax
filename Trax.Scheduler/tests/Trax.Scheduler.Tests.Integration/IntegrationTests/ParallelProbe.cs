@@ -90,7 +90,7 @@ public static class ParallelProbe
         await _released.Task.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
     }
 
-    public static List<(string Branch, string Way)> TakenBy(long run) =>
+    public static IReadOnlyList<(string Branch, string Way)> TakenBy(long run) =>
         Taken.Where(t => t.Run == run).Select(t => (t.Branch, t.Way)).ToList();
 
     private static TaskCompletionSource New() =>

@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Scheduler.Configuration;
@@ -11,8 +12,8 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 [TestFixture]
 public class ExclusionScheduleTests
 {
-    private SchedulerConfiguration _config = null!;
-    private ILogger _logger = null!;
+    private SchedulerConfiguration? _config;
+    private ILogger? _logger;
 
     [SetUp]
     public void SetUp()
@@ -30,7 +31,12 @@ public class ExclusionScheduleTests
         var manifest = CreateCronManifest();
         manifest.SetExclusions([Exclude.DaysOfWeek(DayOfWeek.Saturday, DayOfWeek.Sunday)]);
 
-        var result = SchedulingHelpers.ShouldRunNow(manifest, saturday, _config, _logger);
+        var result = SchedulingHelpers.ShouldRunNow(
+            manifest,
+            saturday,
+            _config.NotNull(),
+            _logger.NotNull()
+        );
 
         result.Should().BeFalse("Saturday is excluded");
     }
@@ -42,7 +48,12 @@ public class ExclusionScheduleTests
         var manifest = CreateCronManifest();
         manifest.SetExclusions([Exclude.DaysOfWeek(DayOfWeek.Saturday, DayOfWeek.Sunday)]);
 
-        var result = SchedulingHelpers.ShouldRunNow(manifest, monday, _config, _logger);
+        var result = SchedulingHelpers.ShouldRunNow(
+            manifest,
+            monday,
+            _config.NotNull(),
+            _logger.NotNull()
+        );
 
         result.Should().BeTrue("Monday is not excluded and manifest has never run");
     }
@@ -56,7 +67,12 @@ public class ExclusionScheduleTests
         var manifest = CreateIntervalManifest(intervalSeconds: 60);
         manifest.SetExclusions([Exclude.Dates(new DateOnly(2026, 12, 25))]);
 
-        var result = SchedulingHelpers.ShouldRunNow(manifest, christmas, _config, _logger);
+        var result = SchedulingHelpers.ShouldRunNow(
+            manifest,
+            christmas,
+            _config.NotNull(),
+            _logger.NotNull()
+        );
 
         result.Should().BeFalse("December 25 is excluded");
     }
@@ -75,7 +91,12 @@ public class ExclusionScheduleTests
             ),
         ]);
 
-        var result = SchedulingHelpers.ShouldRunNow(manifest, maintenanceTime, _config, _logger);
+        var result = SchedulingHelpers.ShouldRunNow(
+            manifest,
+            maintenanceTime,
+            _config.NotNull(),
+            _logger.NotNull()
+        );
 
         result.Should().BeFalse("3:00 AM is within the 2:00-4:00 exclusion window");
     }
@@ -92,7 +113,12 @@ public class ExclusionScheduleTests
             Exclude.DaysOfWeek(DayOfWeek.Saturday, DayOfWeek.Sunday),
         ]);
 
-        var result = SchedulingHelpers.ShouldRunNow(manifest, saturday, _config, _logger);
+        var result = SchedulingHelpers.ShouldRunNow(
+            manifest,
+            saturday,
+            _config.NotNull(),
+            _logger.NotNull()
+        );
 
         result
             .Should()
@@ -113,7 +139,12 @@ public class ExclusionScheduleTests
             ),
         ]);
 
-        var result = SchedulingHelpers.ShouldRunNow(manifest, monday, _config, _logger);
+        var result = SchedulingHelpers.ShouldRunNow(
+            manifest,
+            monday,
+            _config.NotNull(),
+            _logger.NotNull()
+        );
 
         result
             .Should()
@@ -129,7 +160,12 @@ public class ExclusionScheduleTests
         var manifest = CreateCronManifest();
         manifest.SetExclusions([]);
 
-        var result = SchedulingHelpers.ShouldRunNow(manifest, now, _config, _logger);
+        var result = SchedulingHelpers.ShouldRunNow(
+            manifest,
+            now,
+            _config.NotNull(),
+            _logger.NotNull()
+        );
 
         result.Should().BeTrue("no exclusions should not block scheduling");
     }
@@ -150,7 +186,12 @@ public class ExclusionScheduleTests
         };
         manifest.SetExclusions([Exclude.DaysOfWeek(DayOfWeek.Saturday)]);
 
-        var result = SchedulingHelpers.ShouldRunNow(manifest, saturday, _config, _logger);
+        var result = SchedulingHelpers.ShouldRunNow(
+            manifest,
+            saturday,
+            _config.NotNull(),
+            _logger.NotNull()
+        );
 
         result.Should().BeFalse("Saturday is excluded even for Once manifests");
     }

@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -74,7 +75,8 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyn
     private static ISnapshotDraftService Drafts(IServiceScope scope) =>
         scope
             .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
-            .Service(UserStepMachine.MachineId)!;
+            .Service(UserStepMachine.MachineId)
+            .NotNull();
 
     internal Task<IReadOnlyList<InvokeDelivery>> Sweep() =>
         Reconciler.SweepOnce(CancellationToken.None);
@@ -174,7 +176,7 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyn
     }
 
     /// <summary>Every owner's row of instance <paramref name="id"/> of <paramref name="machine"/>.</summary>
-    public async Task<List<SnapshotDraft>> Rows(Guid id, string machine)
+    public async Task<IReadOnlyList<SnapshotDraft>> Rows(Guid id, string machine)
     {
         var scope = services.CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
@@ -198,7 +200,7 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyn
     }
 
     /// <summary>Every entry an instance's invoking states queued, oldest first.</summary>
-    public async Task<List<WorkQueue>> Entries(Guid instance)
+    public async Task<IReadOnlyList<WorkQueue>> Entries(Guid instance)
     {
         var scope = services.CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
@@ -143,7 +144,7 @@ internal static class RetryReplayLinks
             {
                 replayConflicts++;
                 var linked = entries.Where(e => e.ReplayDecisionsOf is not null).ToList();
-                var sources = linked.Select(e => e.ReplayDecisionsOf!.Value).ToList();
+                var sources = linked.Select(e => e.ReplayDecisionsOf.NotNull().Value).ToList();
                 var taken =
                     replayConflicts == 1
                         ? (
@@ -154,13 +155,17 @@ internal static class RetryReplayLinks
                                     && sources.Contains(q.ReplayDecisionsOf.Value)
                                     && q.Status == WorkQueueStatus.Queued
                                 )
-                                .Select(q => q.ReplayDecisionsOf!.Value)
+                                .Select(q => q.ReplayDecisionsOf.NotNull().Value)
                                 .ToListAsync(ct)
                                 .ConfigureAwait(false)
                         ).ToHashSet()
                         : sources.ToHashSet();
 
-                foreach (var entry in linked.Where(e => taken.Contains(e.ReplayDecisionsOf!.Value)))
+                foreach (
+                    var entry in linked.Where(e =>
+                        taken.Contains(e.ReplayDecisionsOf.NotNull().Value)
+                    )
+                )
                 {
                     logger.LogInformation(
                         "A queued entry already replays run {ReplayDecisionsOf}, so the entry "
@@ -180,7 +185,7 @@ internal static class RetryReplayLinks
             {
                 resumeConflicts++;
                 var linked = entries.Where(e => e.ResumeFrom is not null).ToList();
-                var sources = linked.Select(e => e.ResumeFrom!.Value).ToList();
+                var sources = linked.Select(e => e.ResumeFrom.NotNull().Value).ToList();
                 var taken =
                     resumeConflicts == 1
                         ? (
@@ -191,13 +196,15 @@ internal static class RetryReplayLinks
                                     && sources.Contains(q.ResumeFrom.Value)
                                     && q.Status == WorkQueueStatus.Queued
                                 )
-                                .Select(q => q.ResumeFrom!.Value)
+                                .Select(q => q.ResumeFrom.NotNull().Value)
                                 .ToListAsync(ct)
                                 .ConfigureAwait(false)
                         ).ToHashSet()
                         : sources.ToHashSet();
 
-                foreach (var entry in linked.Where(e => taken.Contains(e.ResumeFrom!.Value)))
+                foreach (
+                    var entry in linked.Where(e => taken.Contains(e.ResumeFrom.NotNull().Value))
+                )
                 {
                     logger.LogInformation(
                         "A queued entry already resumes run {ResumeFrom}, so the entry queued for "

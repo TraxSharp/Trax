@@ -1,4 +1,5 @@
 using Amazon.Lambda;
+using Trax.Core.Extensions;
 
 namespace Trax.Scheduler.Lambda.Configuration;
 
@@ -21,7 +22,11 @@ public class LambdaWorkerOptions
     /// </summary>
     /// <example>content-shield-runner</example>
     /// <example>arn:aws:lambda:us-east-1:123456789012:function:content-shield-runner</example>
-    public string FunctionName { get; set; } = null!;
+    public string FunctionName
+    {
+        get => field.NotNull(nameof(FunctionName));
+        set;
+    }
 
     /// <summary>
     /// Optional callback to configure the <see cref="AmazonLambdaConfig"/> used to create the Lambda client.

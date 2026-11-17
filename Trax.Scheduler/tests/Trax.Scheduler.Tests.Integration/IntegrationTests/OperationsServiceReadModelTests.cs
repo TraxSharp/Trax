@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
@@ -27,7 +28,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class OperationsServiceReadModelTests : TestSetup
 {
-    private IOperationsService _operations = null!;
+    private IOperationsService? _operations;
 
     public override async Task TestSetUp()
     {
@@ -54,10 +55,9 @@ public class OperationsServiceReadModelTests : TestSetup
         var other = await SeedManifest(group);
         await SeedRun(other, TrainState.Completed, t0.AddDays(1), t0.AddDays(1).AddMinutes(1));
 
-        var stats = await _operations.GetManifestExecutionStatsAsync(
-            manifest.Id,
-            CancellationToken.None
-        );
+        var stats = await _operations
+            .NotNull()
+            .GetManifestExecutionStatsAsync(manifest.Id, CancellationToken.None);
 
         stats
             .Should()
@@ -79,10 +79,9 @@ public class OperationsServiceReadModelTests : TestSetup
     [Test]
     public async Task Manifest_stats_for_a_manifest_with_no_runs_are_zero()
     {
-        var stats = await _operations.GetManifestExecutionStatsAsync(
-            424242,
-            CancellationToken.None
-        );
+        var stats = await _operations
+            .NotNull()
+            .GetManifestExecutionStatsAsync(424242, CancellationToken.None);
 
         stats
             .Should()
@@ -122,10 +121,12 @@ public class OperationsServiceReadModelTests : TestSetup
         await SeedRun(b, TrainState.InProgress, t0.AddHours(2));
         await SeedRun(b, TrainState.Pending, t0.AddHours(3));
 
-        var stats = await _operations.GetManifestGroupExecutionStatsAsync(
-            [empty.Id, busy.Id, idle.Id, busy.Id],
-            CancellationToken.None
-        );
+        var stats = await _operations
+            .NotNull()
+            .GetManifestGroupExecutionStatsAsync(
+                [empty.Id, busy.Id, idle.Id, busy.Id],
+                CancellationToken.None
+            );
 
         stats
             .Should()
@@ -169,6 +170,7 @@ public class OperationsServiceReadModelTests : TestSetup
     private async Task<ManifestGroupExecutionStats> StatsOf(long groupId) =>
         (
             await _operations
+                .NotNull()
                 .GetManifestGroupExecutionStatsAsync([groupId], CancellationToken.None)
                 .ConfigureAwait(false)
         ).Single();
@@ -176,10 +178,9 @@ public class OperationsServiceReadModelTests : TestSetup
     [Test]
     public async Task Group_stats_for_no_ids_are_empty()
     {
-        var stats = await _operations.GetManifestGroupExecutionStatsAsync(
-            [],
-            CancellationToken.None
-        );
+        var stats = await _operations
+            .NotNull()
+            .GetManifestGroupExecutionStatsAsync([], CancellationToken.None);
 
         stats.Should().BeEmpty();
     }
@@ -190,7 +191,9 @@ public class OperationsServiceReadModelTests : TestSetup
         var ids = Enumerable.Range(1, OperationsService.MaxBatchSize + 1).Select(i => (long)i);
 
         var act = () =>
-            _operations.GetManifestGroupExecutionStatsAsync(ids.ToList(), CancellationToken.None);
+            _operations
+                .NotNull()
+                .GetManifestGroupExecutionStatsAsync(ids.ToList(), CancellationToken.None);
 
         await act.Should().ThrowAsync<ArgumentOutOfRangeException>();
     }
@@ -234,11 +237,13 @@ public class OperationsServiceReadModelTests : TestSetup
         DataContext.Reset();
 
         var before = DateTime.UtcNow;
-        var upcoming = await _operations.GetUpcomingRunsAsync(
-            [dependent.Id, every.Id, inPausedGroup.Id, deadLettered.Id, every.Id, 424242],
-            3,
-            CancellationToken.None
-        );
+        var upcoming = await _operations
+            .NotNull()
+            .GetUpcomingRunsAsync(
+                [dependent.Id, every.Id, inPausedGroup.Id, deadLettered.Id, every.Id, 424242],
+                3,
+                CancellationToken.None
+            );
         var after = DateTime.UtcNow;
 
         upcoming
@@ -272,12 +277,12 @@ public class OperationsServiceReadModelTests : TestSetup
         var group = await CreateAndSaveManifestGroup(DataContext, $"g-{Guid.NewGuid():N}");
         var manifest = await SeedManifest(group);
 
-        (await _operations.GetUpcomingRunsAsync([], 3, CancellationToken.None)).Should().BeEmpty();
-        var upcoming = await _operations.GetUpcomingRunsAsync(
-            [manifest.Id],
-            1_000,
-            CancellationToken.None
-        );
+        (await _operations.NotNull().GetUpcomingRunsAsync([], 3, CancellationToken.None))
+            .Should()
+            .BeEmpty();
+        var upcoming = await _operations
+            .NotNull()
+            .GetUpcomingRunsAsync([manifest.Id], 1_000, CancellationToken.None);
         upcoming.Single().NextRuns.Should().HaveCount(OperationsService.MaxUpcomingRuns);
     }
 
@@ -305,10 +310,12 @@ public class OperationsServiceReadModelTests : TestSetup
         await SeedLogs(run.Id, 1, LogLevel.Error, "Beta");
         await SeedLogs(otherRun.Id, 4, LogLevel.Error, "Alpha");
 
-        var page = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id, MinimumLevel: LogLevel.Warning, Category: "Alpha"),
-            CancellationToken.None
-        );
+        var page = await _operations
+            .NotNull()
+            .GetLogsAsync(
+                new LogQuery(MetadataId: run.Id, MinimumLevel: LogLevel.Warning, Category: "Alpha"),
+                CancellationToken.None
+            );
 
         page.Items.Should().HaveCount(2);
         page.Items.Should().OnlyContain(l => l.MetadataId == run.Id);
@@ -317,10 +324,16 @@ public class OperationsServiceReadModelTests : TestSetup
         page.NextCursor.Should().Be(page.Items[^1].Id);
 
         (
-            await _operations.CountLogsAsync(
-                new LogQuery(MetadataId: run.Id, MinimumLevel: LogLevel.Warning, Category: "Alpha"),
-                CancellationToken.None
-            )
+            await _operations
+                .NotNull()
+                .CountLogsAsync(
+                    new LogQuery(
+                        MetadataId: run.Id,
+                        MinimumLevel: LogLevel.Warning,
+                        Category: "Alpha"
+                    ),
+                    CancellationToken.None
+                )
         )
             .Should()
             .Be(2);
@@ -337,24 +350,27 @@ public class OperationsServiceReadModelTests : TestSetup
         );
         await SeedLogs(run.Id, 7, LogLevel.Information, "Paged");
 
-        var first = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id, Take: 4),
-            CancellationToken.None
-        );
-        var second = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id, AfterId: first.NextCursor, Skip: 99, Take: 4),
-            CancellationToken.None
-        );
+        var first = await _operations
+            .NotNull()
+            .GetLogsAsync(new LogQuery(MetadataId: run.Id, Take: 4), CancellationToken.None);
+        var second = await _operations
+            .NotNull()
+            .GetLogsAsync(
+                new LogQuery(MetadataId: run.Id, AfterId: first.NextCursor, Skip: 99, Take: 4),
+                CancellationToken.None
+            );
 
         first.Items.Should().HaveCount(4);
         second.Items.Should().HaveCount(3, "a cursor ignores the offset");
         second.Skip.Should().Be(0);
         first.Items.Select(l => l.Id).Should().NotIntersectWith(second.Items.Select(l => l.Id));
         (
-            await _operations.CountLogsAsync(
-                new LogQuery(MetadataId: run.Id, AfterId: first.NextCursor, Take: 1),
-                CancellationToken.None
-            )
+            await _operations
+                .NotNull()
+                .CountLogsAsync(
+                    new LogQuery(MetadataId: run.Id, AfterId: first.NextCursor, Take: 1),
+                    CancellationToken.None
+                )
         )
             .Should()
             .Be(7, "the count covers the filter, not the page or the cursor");
@@ -371,14 +387,15 @@ public class OperationsServiceReadModelTests : TestSetup
         );
         await SeedLogs(run.Id, 5, LogLevel.Information, "Offset");
 
-        var all = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id, Take: 5),
-            CancellationToken.None
-        );
-        var skipped = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id, Skip: 2, Take: 5),
-            CancellationToken.None
-        );
+        var all = await _operations
+            .NotNull()
+            .GetLogsAsync(new LogQuery(MetadataId: run.Id, Take: 5), CancellationToken.None);
+        var skipped = await _operations
+            .NotNull()
+            .GetLogsAsync(
+                new LogQuery(MetadataId: run.Id, Skip: 2, Take: 5),
+                CancellationToken.None
+            );
 
         skipped.Skip.Should().Be(2);
         skipped.Items.Select(l => l.Id).Should().Equal(all.Items.Skip(2).Select(l => l.Id));
@@ -397,10 +414,9 @@ public class OperationsServiceReadModelTests : TestSetup
         );
         await SeedLogs(run.Id, OperationsService.MaxPageSize + 1, LogLevel.Information, "Clamp");
 
-        var page = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id, Take: take),
-            CancellationToken.None
-        );
+        var page = await _operations
+            .NotNull()
+            .GetLogsAsync(new LogQuery(MetadataId: run.Id, Take: take), CancellationToken.None);
 
         page.Take.Should().Be(expected);
         page.Items.Should().HaveCount(expected, "one call never materialises the whole table");
@@ -419,14 +435,18 @@ public class OperationsServiceReadModelTests : TestSetup
         await SeedLog(run.Id, "payment accepted", "Shop.Payments");
         await SeedLog(run.Id, "refused: no stock", "Shop.Stock");
 
-        var page = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id) { MessageContains = "refused" },
-            CancellationToken.None
-        );
-        var count = await _operations.CountLogsAsync(
-            new LogQuery(MetadataId: run.Id) { MessageContains = "REFUSED" },
-            CancellationToken.None
-        );
+        var page = await _operations
+            .NotNull()
+            .GetLogsAsync(
+                new LogQuery(MetadataId: run.Id) { MessageContains = "refused" },
+                CancellationToken.None
+            );
+        var count = await _operations
+            .NotNull()
+            .CountLogsAsync(
+                new LogQuery(MetadataId: run.Id) { MessageContains = "REFUSED" },
+                CancellationToken.None
+            );
 
         page.Items.Select(l => l.Message)
             .Should()
@@ -447,21 +467,25 @@ public class OperationsServiceReadModelTests : TestSetup
         await SeedLog(run.Id, "two", "Shop.Stock");
         await SeedLog(run.Id, "three", "shop.payments");
 
-        var page = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id) { CategoryContains = "PAYMENTS" },
-            CancellationToken.None
-        );
+        var page = await _operations
+            .NotNull()
+            .GetLogsAsync(
+                new LogQuery(MetadataId: run.Id) { CategoryContains = "PAYMENTS" },
+                CancellationToken.None
+            );
 
         page.Items.Select(l => l.Message).Should().BeEquivalentTo(["one", "three"]);
         (
-            await _operations.CountLogsAsync(
-                new LogQuery(MetadataId: run.Id)
-                {
-                    CategoryContains = "payments",
-                    MessageContains = "three",
-                },
-                CancellationToken.None
-            )
+            await _operations
+                .NotNull()
+                .CountLogsAsync(
+                    new LogQuery(MetadataId: run.Id)
+                    {
+                        CategoryContains = "payments",
+                        MessageContains = "three",
+                    },
+                    CancellationToken.None
+                )
         )
             .Should()
             .Be(1, "both text filters apply together");
@@ -485,10 +509,12 @@ public class OperationsServiceReadModelTests : TestSetup
         await SeedLog(run.Id, @"wrote C:\temp\out.txt", "Wildcards");
         await SeedLog(run.Id, @"wrote C:temp", "Wildcards");
 
-        var page = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id) { MessageContains = term },
-            CancellationToken.None
-        );
+        var page = await _operations
+            .NotNull()
+            .GetLogsAsync(
+                new LogQuery(MetadataId: run.Id) { MessageContains = term },
+                CancellationToken.None
+            );
 
         page.Items.Select(l => l.Message).Should().Equal(expected);
     }
@@ -504,21 +530,24 @@ public class OperationsServiceReadModelTests : TestSetup
         );
         await SeedLogs(run.Id, 7, LogLevel.Information, "Ascending");
 
-        var first = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id, Take: 4) { Order = LogOrder.OldestFirst },
-            CancellationToken.None
-        );
-        var second = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id, AfterId: first.NextCursor, Take: 4)
-            {
-                Order = LogOrder.OldestFirst,
-            },
-            CancellationToken.None
-        );
-        var newestFirst = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id, Take: 10),
-            CancellationToken.None
-        );
+        var first = await _operations
+            .NotNull()
+            .GetLogsAsync(
+                new LogQuery(MetadataId: run.Id, Take: 4) { Order = LogOrder.OldestFirst },
+                CancellationToken.None
+            );
+        var second = await _operations
+            .NotNull()
+            .GetLogsAsync(
+                new LogQuery(MetadataId: run.Id, AfterId: first.NextCursor, Take: 4)
+                {
+                    Order = LogOrder.OldestFirst,
+                },
+                CancellationToken.None
+            );
+        var newestFirst = await _operations
+            .NotNull()
+            .GetLogsAsync(new LogQuery(MetadataId: run.Id, Take: 10), CancellationToken.None);
 
         first.Items.Select(l => l.Id).Should().BeInAscendingOrder();
         second.Items.Should().HaveCount(3);
@@ -540,14 +569,18 @@ public class OperationsServiceReadModelTests : TestSetup
         );
         await SeedLogs(run.Id, 5, LogLevel.Information, "AscendingOffset");
 
-        var all = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id, Take: 5) { Order = LogOrder.OldestFirst },
-            CancellationToken.None
-        );
-        var skipped = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id, Skip: 3, Take: 5) { Order = LogOrder.OldestFirst },
-            CancellationToken.None
-        );
+        var all = await _operations
+            .NotNull()
+            .GetLogsAsync(
+                new LogQuery(MetadataId: run.Id, Take: 5) { Order = LogOrder.OldestFirst },
+                CancellationToken.None
+            );
+        var skipped = await _operations
+            .NotNull()
+            .GetLogsAsync(
+                new LogQuery(MetadataId: run.Id, Skip: 3, Take: 5) { Order = LogOrder.OldestFirst },
+                CancellationToken.None
+            );
 
         skipped.Items.Select(l => l.Id).Should().Equal(all.Items.Skip(3).Select(l => l.Id));
     }
@@ -565,14 +598,16 @@ public class OperationsServiceReadModelTests : TestSetup
         await SeedLogs(run.Id, 3, LogLevel.Information, "Empty");
 
         (
-            await _operations.CountLogsAsync(
-                new LogQuery(MetadataId: run.Id)
-                {
-                    MessageContains = term,
-                    CategoryContains = term,
-                },
-                CancellationToken.None
-            )
+            await _operations
+                .NotNull()
+                .CountLogsAsync(
+                    new LogQuery(MetadataId: run.Id)
+                    {
+                        MessageContains = term,
+                        CategoryContains = term,
+                    },
+                    CancellationToken.None
+                )
         )
             .Should()
             .Be(3);
@@ -614,28 +649,32 @@ public class OperationsServiceReadModelTests : TestSetup
                 ? matching.Order().ToList()
                 : matching.OrderDescending().ToList();
 
-        var whole = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id, Take: OperationsService.MaxPageSize)
-            {
-                MessageContains = "needle",
-                Order = order,
-            },
-            CancellationToken.None
-        );
-        whole.Items.Select(l => l.Id).Should().Equal(expected);
-
-        var paged = new List<long>();
-        long? cursor = null;
-        do
-        {
-            var page = await _operations.GetLogsAsync(
-                new LogQuery(MetadataId: run.Id, Take: 7, AfterId: cursor)
+        var whole = await _operations
+            .NotNull()
+            .GetLogsAsync(
+                new LogQuery(MetadataId: run.Id, Take: OperationsService.MaxPageSize)
                 {
                     MessageContains = "needle",
                     Order = order,
                 },
                 CancellationToken.None
             );
+        whole.Items.Select(l => l.Id).Should().Equal(expected);
+
+        var paged = new List<long>();
+        long? cursor = null;
+        do
+        {
+            var page = await _operations
+                .NotNull()
+                .GetLogsAsync(
+                    new LogQuery(MetadataId: run.Id, Take: 7, AfterId: cursor)
+                    {
+                        MessageContains = "needle",
+                        Order = order,
+                    },
+                    CancellationToken.None
+                );
             paged.AddRange(page.Items.Select(l => l.Id));
             cursor = page.Items.Count == 7 ? page.NextCursor : null;
         } while (cursor is not null);
@@ -680,7 +719,7 @@ public class OperationsServiceReadModelTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
                 ManifestId = manifest?.Id,
@@ -713,10 +752,10 @@ public class OperationsServiceReadModelTests : TestSetup
         await SeedLogs(run.Id, 5, LogLevel.Information, "Shop.Other");
         var query = new LogQuery(MetadataId: run.Id) { CategoryContains = "capped" };
 
-        var count = await _operations.CountLogsCappedAsync(query, CancellationToken.None);
+        var count = await _operations.NotNull().CountLogsCappedAsync(query, CancellationToken.None);
 
         count.Should().Be(new LogCount(expectedCount, expectedCapped));
-        (await _operations.CountLogsAsync(query, CancellationToken.None))
+        (await _operations.NotNull().CountLogsAsync(query, CancellationToken.None))
             .Should()
             .Be(matching, "the exact count is not capped");
     }
@@ -732,10 +771,12 @@ public class OperationsServiceReadModelTests : TestSetup
         );
         await SeedLogs(run.Id, OperationsService.LogCountCap + 1, LogLevel.Information, "Wide");
 
-        var count = await _operations.CountLogsCappedAsync(
-            new LogQuery(MetadataId: run.Id, Category: "Wide"),
-            CancellationToken.None
-        );
+        var count = await _operations
+            .NotNull()
+            .CountLogsCappedAsync(
+                new LogQuery(MetadataId: run.Id, Category: "Wide"),
+                CancellationToken.None
+            );
 
         count.Should().Be(new LogCount(OperationsService.LogCountCap + 1, Capped: false));
     }

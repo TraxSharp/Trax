@@ -3,6 +3,7 @@ using System.Text;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
@@ -142,7 +143,7 @@ public class SharedNonceStoreTests
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT count(*) FROM trax.runner_nonce WHERE nonce = @n";
         command.Parameters.AddWithValue("n", expired);
-        ((long)(await command.ExecuteScalarAsync())!)
+        ((long)(await command.ExecuteScalarAsync()).NotNull())
             .Should()
             .Be(0, "the store deletes expired records as it goes");
     }

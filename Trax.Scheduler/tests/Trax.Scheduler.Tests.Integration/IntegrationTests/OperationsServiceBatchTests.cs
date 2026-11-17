@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
@@ -37,9 +38,9 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class OperationsServiceBatchTests : TestSetup
 {
-    private RecordingChangeSignal _signal = null!;
-    private ICancellationRegistry _registry = null!;
-    private OperationsService _operations = null!;
+    private RecordingChangeSignal? _signal;
+    private ICancellationRegistry? _registry;
+    private OperationsService? _operations;
 
     public override async Task TestSetUp()
     {
@@ -52,7 +53,7 @@ public class OperationsServiceBatchTests : TestSetup
             new SchedulerConfiguration(),
             Substitute.For<ITrainExecutionService>(),
             Scope.ServiceProvider,
-            changeSignal: _signal
+            changeSignal: _signal.NotNull()
         );
     }
 
@@ -88,11 +89,11 @@ public class OperationsServiceBatchTests : TestSetup
         Func<OperationsService, IReadOnlyCollection<long>, Task<OperationResult>> batch
     )
     {
-        var result = await batch(_operations, []);
+        var result = await batch(_operations.NotNull(), []);
 
         result.Success.Should().BeFalse("an empty selection is a caller's mistake, not a no-op");
         result.Message.Should().Contain("No ids");
-        _signal.Domains.Should().BeEmpty();
+        _signal.NotNull().Domains.Should().BeEmpty();
     }
 
     [TestCaseSource(nameof(EveryBatch))]
@@ -102,11 +103,11 @@ public class OperationsServiceBatchTests : TestSetup
     {
         var ids = Enumerable.Range(1, OperationsService.MaxBatchSize + 1).Select(i => (long)i);
 
-        var result = await batch(_operations, ids.ToList());
+        var result = await batch(_operations.NotNull(), ids.ToList());
 
         result.Success.Should().BeFalse();
         result.Message.Should().Contain(OperationsService.MaxBatchSize.ToString());
-        _signal.Domains.Should().BeEmpty();
+        _signal.NotNull().Domains.Should().BeEmpty();
     }
 
     #endregion
@@ -122,10 +123,12 @@ public class OperationsServiceBatchTests : TestSetup
         var completed = await SeedRun(TrainState.Completed);
         var failed = await SeedRun(TrainState.Failed);
 
-        var result = await _operations.CancelExecutionsAsync(
-            [pending.Id, running.Id, completed.Id, failed.Id, 999_999],
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .CancelExecutionsAsync(
+                [pending.Id, running.Id, completed.Id, failed.Id, 999_999],
+                CancellationToken.None
+            );
 
         result.Success.Should().BeTrue(result.Message);
         result.Count.Should().Be(2);
@@ -138,17 +141,17 @@ public class OperationsServiceBatchTests : TestSetup
     {
         var running = await SeedRun(TrainState.InProgress);
         using var cts = new CancellationTokenSource();
-        _registry.Register(running.Id, cts);
+        _registry.NotNull().Register(running.Id, cts);
 
         try
         {
-            await _operations.CancelExecutionsAsync([running.Id], CancellationToken.None);
+            await _operations.NotNull().CancelExecutionsAsync([running.Id], CancellationToken.None);
 
             cts.IsCancellationRequested.Should().BeTrue("the registry cancels a local run at once");
         }
         finally
         {
-            _registry.Unregister(running.Id);
+            _registry.NotNull().Unregister(running.Id);
         }
     }
 
@@ -157,21 +160,20 @@ public class OperationsServiceBatchTests : TestSetup
     {
         var completed = await SeedRun(TrainState.Completed);
         using var cts = new CancellationTokenSource();
-        _registry.Register(completed.Id, cts);
+        _registry.NotNull().Register(completed.Id, cts);
 
         try
         {
-            var result = await _operations.CancelExecutionsAsync(
-                [completed.Id],
-                CancellationToken.None
-            );
+            var result = await _operations
+                .NotNull()
+                .CancelExecutionsAsync([completed.Id], CancellationToken.None);
 
             result.Count.Should().Be(0);
             cts.IsCancellationRequested.Should().BeFalse();
         }
         finally
         {
-            _registry.Unregister(completed.Id);
+            _registry.NotNull().Unregister(completed.Id);
         }
     }
 
@@ -181,9 +183,9 @@ public class OperationsServiceBatchTests : TestSetup
     {
         var running = await SeedRun(TrainState.InProgress);
 
-        await _operations.CancelExecutionsAsync([running.Id], CancellationToken.None);
+        await _operations.NotNull().CancelExecutionsAsync([running.Id], CancellationToken.None);
 
-        _signal.Domains.Should().Equal(ChangeDomain.Execution);
+        _signal.NotNull().Domains.Should().Equal(ChangeDomain.Execution);
     }
 
     [Test]
@@ -191,13 +193,12 @@ public class OperationsServiceBatchTests : TestSetup
     {
         var completed = await SeedRun(TrainState.Completed);
 
-        var result = await _operations.CancelExecutionsAsync(
-            [completed.Id],
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .CancelExecutionsAsync([completed.Id], CancellationToken.None);
 
         result.Count.Should().Be(0);
-        _signal.Domains.Should().BeEmpty();
+        _signal.NotNull().Domains.Should().BeEmpty();
     }
 
     #endregion
@@ -213,10 +214,9 @@ public class OperationsServiceBatchTests : TestSetup
         var queued = await SeedEntry(WorkQueueStatus.Queued);
         var dispatched = await SeedEntry(WorkQueueStatus.Dispatched);
 
-        var result = await _operations.CancelWorkQueueEntriesAsync(
-            [queued.Id, dispatched.Id],
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .CancelWorkQueueEntriesAsync([queued.Id, dispatched.Id], CancellationToken.None);
 
         result.Success.Should().BeTrue(result.Message);
         result.Count.Should().Be(1);
@@ -227,7 +227,7 @@ public class OperationsServiceBatchTests : TestSetup
         (await DataContext.WorkQueues.AsNoTracking().SingleAsync(q => q.Id == dispatched.Id))
             .Status.Should()
             .Be(WorkQueueStatus.Dispatched);
-        _signal.Domains.Should().Equal(ChangeDomain.WorkQueue);
+        _signal.NotNull().Domains.Should().Equal(ChangeDomain.WorkQueue);
     }
 
     [LeavesStuckRuns(
@@ -238,14 +238,13 @@ public class OperationsServiceBatchTests : TestSetup
     {
         var dispatched = await SeedEntry(WorkQueueStatus.Dispatched);
 
-        var result = await _operations.CancelWorkQueueEntriesAsync(
-            [dispatched.Id],
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .CancelWorkQueueEntriesAsync([dispatched.Id], CancellationToken.None);
 
         result.Success.Should().BeTrue();
         result.Count.Should().Be(0);
-        _signal.Domains.Should().BeEmpty();
+        _signal.NotNull().Domains.Should().BeEmpty();
     }
 
     #endregion
@@ -259,11 +258,9 @@ public class OperationsServiceBatchTests : TestSetup
         var on = await SeedManifest(group, enabled: true);
         var off = await SeedManifest(group, enabled: false);
 
-        var result = await _operations.SetManifestsEnabledAsync(
-            [on.Id, off.Id],
-            enabled: false,
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .SetManifestsEnabledAsync([on.Id, off.Id], enabled: false, CancellationToken.None);
 
         result.Success.Should().BeTrue(result.Message);
         result.Count.Should().Be(1, "only the enabled one changed");
@@ -271,7 +268,7 @@ public class OperationsServiceBatchTests : TestSetup
         (await DataContext.Manifests.AsNoTracking().Where(m => m.IsEnabled).CountAsync())
             .Should()
             .Be(0);
-        _signal.Domains.Should().Equal(ChangeDomain.Manifest);
+        _signal.NotNull().Domains.Should().Equal(ChangeDomain.Manifest);
     }
 
     #endregion
@@ -284,11 +281,9 @@ public class OperationsServiceBatchTests : TestSetup
         var target = await CreateAndSaveManifestGroup(DataContext, $"t-{Guid.NewGuid():N}");
         var other = await CreateAndSaveManifestGroup(DataContext, $"o-{Guid.NewGuid():N}");
 
-        var result = await _operations.SetManifestGroupsEnabledAsync(
-            [target.Id],
-            enabled: false,
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .SetManifestGroupsEnabledAsync([target.Id], enabled: false, CancellationToken.None);
 
         result.Success.Should().BeTrue(result.Message);
         result.Count.Should().Be(1);
@@ -301,7 +296,7 @@ public class OperationsServiceBatchTests : TestSetup
         (await DataContext.ManifestGroups.AsNoTracking().SingleAsync(g => g.Id == other.Id))
             .IsEnabled.Should()
             .BeTrue();
-        _signal.Domains.Should().Equal(ChangeDomain.ManifestGroup);
+        _signal.NotNull().Domains.Should().Equal(ChangeDomain.ManifestGroup);
     }
 
     [Test]
@@ -311,10 +306,9 @@ public class OperationsServiceBatchTests : TestSetup
         await CreateAndSaveManifestGroup(DataContext, $"b-{Guid.NewGuid():N}");
         await CreateAndSaveManifestGroup(DataContext, $"c-{Guid.NewGuid():N}", isEnabled: false);
 
-        var result = await _operations.SetAllManifestGroupsEnabledAsync(
-            enabled: false,
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .SetAllManifestGroupsEnabledAsync(enabled: false, CancellationToken.None);
 
         result.Success.Should().BeTrue(result.Message);
         result.Count.Should().Be(2);
@@ -322,7 +316,7 @@ public class OperationsServiceBatchTests : TestSetup
         (await DataContext.ManifestGroups.AsNoTracking().AnyAsync(g => g.IsEnabled))
             .Should()
             .BeFalse();
-        _signal.Domains.Should().Equal(ChangeDomain.ManifestGroup);
+        _signal.NotNull().Domains.Should().Equal(ChangeDomain.ManifestGroup);
     }
 
     #endregion
@@ -345,7 +339,7 @@ public class OperationsServiceBatchTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
             }
@@ -362,7 +356,7 @@ public class OperationsServiceBatchTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = null,
                 InputTypeName = null,
             }

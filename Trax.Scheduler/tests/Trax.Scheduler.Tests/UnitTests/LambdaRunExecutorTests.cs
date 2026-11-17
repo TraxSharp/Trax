@@ -7,6 +7,7 @@ using Amazon.Runtime;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Utils;
 using Trax.Scheduler.Lambda.Configuration;
 using Trax.Scheduler.Lambda.Services;
@@ -56,7 +57,7 @@ public class LambdaRunExecutorTests
         result.MetadataId.Should().Be(42);
         result.Output.Should().NotBeNull();
         result.Output.Should().BeOfType<TestRunOutput>();
-        var output = (TestRunOutput)result.Output!;
+        var output = (TestRunOutput)result.Output.NotNull();
         output.Value.Should().Be("hello");
         output.Count.Should().Be(7);
     }
@@ -89,7 +90,7 @@ public class LambdaRunExecutorTests
         var result = await RunNaming(declaredOutput, typeof(TestRunOutput).FullName)();
 
         result.Output.Should().BeOfType<TestRunOutput>();
-        ((ITestRunOutput)result.Output!).Value.Should().Be("hello");
+        ((ITestRunOutput)result.Output.NotNull()).Value.Should().Be("hello");
     }
 
     [TestCase(typeof(ITestRunOutput))]
@@ -149,7 +150,9 @@ public class LambdaRunExecutorTests
             typeof(TestRunOutput)
         );
 
-        var envelope = JsonSerializer.Deserialize<LambdaEnvelope>(client.LastRequest!.Payload)!;
+        var envelope = JsonSerializer
+            .Deserialize<LambdaEnvelope>(client.LastRequest.NotNull().Payload)
+            .NotNull();
         var verifier = new Trax.Scheduler.Services.RequestSigning.RunnerRequestVerifier(
             new Trax.Scheduler.Configuration.TraxJobRunnerOptions { SigningKey = key },
             NullLogger<Trax.Scheduler.Services.RequestSigning.RunnerRequestVerifier>.Instance,
@@ -204,7 +207,7 @@ public class LambdaRunExecutorTests
 
         // Assert
         client.LastRequest.Should().NotBeNull();
-        client.LastRequest!.InvocationType.Should().Be(InvocationType.RequestResponse);
+        client.LastRequest.NotNull().InvocationType.Should().Be(InvocationType.RequestResponse);
     }
 
     [Test]
@@ -224,7 +227,7 @@ public class LambdaRunExecutorTests
 
         // Assert
         var envelope = JsonSerializer.Deserialize<LambdaEnvelope>(
-            client.LastRequest!.Payload,
+            client.LastRequest.NotNull().Payload,
             new JsonSerializerOptions
             {
                 RespectNullableAnnotations = false,
@@ -234,7 +237,8 @@ public class LambdaRunExecutorTests
         );
 
         envelope.Should().NotBeNull();
-        envelope!
+        envelope
+            .NotNull()
             .Type.Should()
             .Be(
                 LambdaRequestType.Run,
@@ -253,7 +257,7 @@ public class LambdaRunExecutorTests
             }
         );
         request.Should().NotBeNull();
-        request!.TrainName.Should().Be("My.Train.FullName");
+        request.NotNull().TrainName.Should().Be("My.Train.FullName");
         request.InputType.Should().Be(typeof(TestRunInput).FullName);
         request.InputJson.Should().Contain("serialize-test");
     }
@@ -319,7 +323,7 @@ public class LambdaRunExecutorTests
         var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
         var data = JsonSerializer.Deserialize<TrainExceptionData>(ex.Message);
         data.Should().NotBeNull();
-        data!.Type.Should().Be("InvalidOperationException");
+        data.NotNull().Type.Should().Be("InvalidOperationException");
         data.Junction.Should().Be("ValidateInputJunction");
         data.Message.Should().Be("Validation failed");
     }
@@ -352,7 +356,8 @@ public class LambdaRunExecutorTests
 
         var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
         JsonSerializer
-            .Deserialize<TrainExceptionData>(ex.Message)!
+            .Deserialize<TrainExceptionData>(ex.Message)
+            .NotNull()
             .FailureClass.Should()
             .Be(
                 FailureClass.Conflict,
@@ -381,7 +386,8 @@ public class LambdaRunExecutorTests
 
         var ex = (await FailingRun(executor).Should().ThrowAsync<TrainException>()).Which;
         JsonSerializer
-            .Deserialize<TrainExceptionData>(ex.Message)!
+            .Deserialize<TrainExceptionData>(ex.Message)
+            .NotNull()
             .FailureClass.Should()
             .Be(FailureClass.Conflict);
     }
@@ -407,7 +413,7 @@ public class LambdaRunExecutorTests
         var executor = CreateExecutor(CreateRawMockClient(body));
 
         var ex = (await FailingRun(executor).Should().ThrowAsync<TrainException>()).Which;
-        var data = JsonSerializer.Deserialize<TrainExceptionData>(ex.Message)!;
+        var data = JsonSerializer.Deserialize<TrainExceptionData>(ex.Message).NotNull();
         data.Message.Should().Be("row changed");
         data.FailureClass.Should().Be(FailureClass.Unclassified);
     }

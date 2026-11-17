@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Services.PostgresContext;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -648,7 +649,7 @@ public class OrphanManifestPruningTests : TestSetup
                 {
                     ExternalId = "test-pending-manifest",
                     ExpectedExternalIds = externalIds,
-                    ScheduleFunc = (_, _) => Task.FromResult<Manifest>(null!),
+                    ScheduleFunc = (_, _) => Task.CompletedTask,
                 }
             );
         }
@@ -728,7 +729,7 @@ public class OrphanManifestPruningTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = manifest.GetProperties<SchedulerTestInput>(),
                 ManifestId = manifest.Id,

@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
@@ -24,7 +25,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class OperationsServiceMetricsTests : TestSetup
 {
-    private IOperationsService _operations = null!;
+    private IOperationsService? _operations;
 
     [SetUp]
     public void GetService()
@@ -32,7 +33,7 @@ public class OperationsServiceMetricsTests : TestSetup
         _operations = Scope.ServiceProvider.GetRequiredService<IOperationsService>();
     }
 
-    private static string TrainName => typeof(ISchedulerTestTrain).FullName!;
+    private static string TrainName => typeof(ISchedulerTestTrain).FullName.NotNull();
     private static string AdminTrainName => AdminTrains.FullNames[0];
 
     private async Task<Metadata> SeedMetadata(
@@ -94,11 +95,13 @@ public class OperationsServiceMetricsTests : TestSetup
     [Test]
     public async Task GetDashboardMetrics_NoData_ReturnsZeroKpis()
     {
-        var metrics = await _operations.GetDashboardMetricsAsync(
-            MetricsRange.Last24Hours,
-            hideAdminTrains: false,
-            CancellationToken.None
-        );
+        var metrics = await _operations
+            .NotNull()
+            .GetDashboardMetricsAsync(
+                MetricsRange.Last24Hours,
+                hideAdminTrains: false,
+                CancellationToken.None
+            );
 
         metrics.Kpis.ExecutionsToday.Should().Be(0);
         metrics.Kpis.SuccessRate.Should().Be(0);
@@ -121,11 +124,13 @@ public class OperationsServiceMetricsTests : TestSetup
         await SeedMetadata(TrainState.Failed, now);
         await SeedMetadata(TrainState.InProgress, now);
 
-        var metrics = await _operations.GetDashboardMetricsAsync(
-            MetricsRange.Last24Hours,
-            hideAdminTrains: false,
-            CancellationToken.None
-        );
+        var metrics = await _operations
+            .NotNull()
+            .GetDashboardMetricsAsync(
+                MetricsRange.Last24Hours,
+                hideAdminTrains: false,
+                CancellationToken.None
+            );
 
         metrics.Kpis.ExecutionsToday.Should().Be(5);
         // 3 completed / (3 completed + 1 failed) = 75%
@@ -139,11 +144,13 @@ public class OperationsServiceMetricsTests : TestSetup
     {
         await SeedMetadata(TrainState.InProgress, DateTime.UtcNow);
 
-        var metrics = await _operations.GetDashboardMetricsAsync(
-            MetricsRange.Last24Hours,
-            hideAdminTrains: false,
-            CancellationToken.None
-        );
+        var metrics = await _operations
+            .NotNull()
+            .GetDashboardMetricsAsync(
+                MetricsRange.Last24Hours,
+                hideAdminTrains: false,
+                CancellationToken.None
+            );
 
         metrics.Kpis.SuccessRate.Should().Be(0);
     }
@@ -155,11 +162,13 @@ public class OperationsServiceMetricsTests : TestSetup
         await SeedDeadLetter(DeadLetterStatus.AwaitingIntervention);
         await SeedDeadLetter(DeadLetterStatus.Acknowledged);
 
-        var metrics = await _operations.GetDashboardMetricsAsync(
-            MetricsRange.Last24Hours,
-            hideAdminTrains: false,
-            CancellationToken.None
-        );
+        var metrics = await _operations
+            .NotNull()
+            .GetDashboardMetricsAsync(
+                MetricsRange.Last24Hours,
+                hideAdminTrains: false,
+                CancellationToken.None
+            );
 
         metrics.Kpis.UnresolvedDeadLetters.Should().Be(2);
     }
@@ -173,16 +182,20 @@ public class OperationsServiceMetricsTests : TestSetup
         await SeedMetadata(TrainState.Completed, now, isAdmin: true);
         await SeedMetadata(TrainState.InProgress, now, isAdmin: true);
 
-        var withAdmin = await _operations.GetDashboardMetricsAsync(
-            MetricsRange.Last24Hours,
-            hideAdminTrains: false,
-            CancellationToken.None
-        );
-        var withoutAdmin = await _operations.GetDashboardMetricsAsync(
-            MetricsRange.Last24Hours,
-            hideAdminTrains: true,
-            CancellationToken.None
-        );
+        var withAdmin = await _operations
+            .NotNull()
+            .GetDashboardMetricsAsync(
+                MetricsRange.Last24Hours,
+                hideAdminTrains: false,
+                CancellationToken.None
+            );
+        var withoutAdmin = await _operations
+            .NotNull()
+            .GetDashboardMetricsAsync(
+                MetricsRange.Last24Hours,
+                hideAdminTrains: true,
+                CancellationToken.None
+            );
 
         withAdmin.Kpis.ExecutionsToday.Should().Be(3);
         withAdmin.Kpis.CurrentlyRunning.Should().Be(1);
@@ -197,11 +210,13 @@ public class OperationsServiceMetricsTests : TestSetup
     [Test]
     public async Task GetDashboardMetrics_ExecutionsOverTime_24h_Has24Buckets()
     {
-        var metrics = await _operations.GetDashboardMetricsAsync(
-            MetricsRange.Last24Hours,
-            hideAdminTrains: false,
-            CancellationToken.None
-        );
+        var metrics = await _operations
+            .NotNull()
+            .GetDashboardMetricsAsync(
+                MetricsRange.Last24Hours,
+                hideAdminTrains: false,
+                CancellationToken.None
+            );
 
         metrics.ExecutionsOverTime.Should().HaveCount(24);
         metrics
@@ -213,11 +228,13 @@ public class OperationsServiceMetricsTests : TestSetup
     [Test]
     public async Task GetDashboardMetrics_ExecutionsOverTime_60m_Has60Buckets()
     {
-        var metrics = await _operations.GetDashboardMetricsAsync(
-            MetricsRange.Last60Minutes,
-            hideAdminTrains: false,
-            CancellationToken.None
-        );
+        var metrics = await _operations
+            .NotNull()
+            .GetDashboardMetricsAsync(
+                MetricsRange.Last60Minutes,
+                hideAdminTrains: false,
+                CancellationToken.None
+            );
 
         metrics.ExecutionsOverTime.Should().HaveCount(60);
     }
@@ -230,11 +247,13 @@ public class OperationsServiceMetricsTests : TestSetup
         await SeedMetadata(TrainState.Completed, bucketTime);
         await SeedMetadata(TrainState.Cancelled, bucketTime);
 
-        var metrics = await _operations.GetDashboardMetricsAsync(
-            MetricsRange.Last60Minutes,
-            hideAdminTrains: false,
-            CancellationToken.None
-        );
+        var metrics = await _operations
+            .NotNull()
+            .GetDashboardMetricsAsync(
+                MetricsRange.Last60Minutes,
+                hideAdminTrains: false,
+                CancellationToken.None
+            );
 
         metrics.ExecutionsOverTime.Should().HaveCount(60);
         var sumCompleted = metrics.ExecutionsOverTime.Sum(b => b.Completed);
@@ -259,11 +278,13 @@ public class OperationsServiceMetricsTests : TestSetup
         await SeedMetadata(TrainState.Completed, bucketTime.AddMinutes(10));
         await SeedMetadata(TrainState.Failed, bucketTime.AddMinutes(20));
 
-        var metrics = await _operations.GetDashboardMetricsAsync(
-            MetricsRange.Last24Hours,
-            hideAdminTrains: false,
-            CancellationToken.None
-        );
+        var metrics = await _operations
+            .NotNull()
+            .GetDashboardMetricsAsync(
+                MetricsRange.Last24Hours,
+                hideAdminTrains: false,
+                CancellationToken.None
+            );
 
         metrics.ExecutionsOverTime.Sum(b => b.Completed).Should().Be(2);
         metrics.ExecutionsOverTime.Sum(b => b.Failed).Should().Be(1);
@@ -283,11 +304,13 @@ public class OperationsServiceMetricsTests : TestSetup
             await SeedMetadata(TrainState.Failed, now, name: "Trax.Tests.IBeta");
         await SeedMetadata(TrainState.Failed, now, name: "Trax.Tests.IGamma");
 
-        var metrics = await _operations.GetDashboardMetricsAsync(
-            MetricsRange.Last24Hours,
-            hideAdminTrains: false,
-            CancellationToken.None
-        );
+        var metrics = await _operations
+            .NotNull()
+            .GetDashboardMetricsAsync(
+                MetricsRange.Last24Hours,
+                hideAdminTrains: false,
+                CancellationToken.None
+            );
 
         metrics.TopFailures.Should().HaveCount(3);
         metrics.TopFailures[0].Should().Be(new TrainFailureCount("Trax.Tests.IBeta", 5));
@@ -312,11 +335,13 @@ public class OperationsServiceMetricsTests : TestSetup
             endTime: now.AddSeconds(1)
         );
 
-        var metrics = await _operations.GetDashboardMetricsAsync(
-            MetricsRange.Last24Hours,
-            hideAdminTrains: false,
-            CancellationToken.None
-        );
+        var metrics = await _operations
+            .NotNull()
+            .GetDashboardMetricsAsync(
+                MetricsRange.Last24Hours,
+                hideAdminTrains: false,
+                CancellationToken.None
+            );
 
         metrics.TopAverageDurations.Should().HaveCount(2);
         metrics.TopAverageDurations[0].TrainName.Should().Be("Trax.Tests.ISlow");
@@ -341,11 +366,13 @@ public class OperationsServiceMetricsTests : TestSetup
         await SeedMetadata(TrainState.Completed, now, name: "Trax.Tests.IDelta");
         await SeedMetadata(TrainState.Completed, now, name: "Trax.Tests.IEpsilon");
 
-        var metrics = await _operations.GetDashboardMetricsAsync(
-            MetricsRange.Last24Hours,
-            hideAdminTrains: false,
-            CancellationToken.None
-        );
+        var metrics = await _operations
+            .NotNull()
+            .GetDashboardMetricsAsync(
+                MetricsRange.Last24Hours,
+                hideAdminTrains: false,
+                CancellationToken.None
+            );
 
         metrics
             .ThroughputSeries.Select(s => s.TrainName)
@@ -372,11 +399,13 @@ public class OperationsServiceMetricsTests : TestSetup
         var now = DateTime.UtcNow.AddHours(-1);
         await SeedMetadata(TrainState.Completed, now, name: "Trax.Tests.ISolo");
 
-        var metrics = await _operations.GetDashboardMetricsAsync(
-            MetricsRange.Last24Hours,
-            hideAdminTrains: false,
-            CancellationToken.None
-        );
+        var metrics = await _operations
+            .NotNull()
+            .GetDashboardMetricsAsync(
+                MetricsRange.Last24Hours,
+                hideAdminTrains: false,
+                CancellationToken.None
+            );
 
         metrics.ThroughputSeries.Should().ContainSingle();
         metrics.ThroughputSeries[0].TrainName.Should().Be("Trax.Tests.ISolo");
@@ -413,13 +442,15 @@ public class OperationsServiceMetricsTests : TestSetup
         await SeedMetadata(TrainState.InProgress, t0, name);
         await SeedMetadata(TrainState.Completed, t0, endTime: t0.AddHours(1));
 
-        var series = await _operations.GetMetricSeriesAsync(
-            MetricSeriesScope.Train,
-            id: null,
-            name,
-            MetricSeriesRange.Last24Hours,
-            CancellationToken.None
-        );
+        var series = await _operations
+            .NotNull()
+            .GetMetricSeriesAsync(
+                MetricSeriesScope.Train,
+                id: null,
+                name,
+                MetricSeriesRange.Last24Hours,
+                CancellationToken.None
+            );
 
         series.BucketSeconds.Should().Be(900);
         series.Buckets.Should().HaveCount(96);
@@ -474,20 +505,24 @@ public class OperationsServiceMetricsTests : TestSetup
             await SeedMetadata(state, start, endTime: start.AddSeconds(5), manifestId: owner);
         await SeedMetadata(TrainState.Completed, start, endTime: start.AddSeconds(5));
 
-        var ofManifest = await _operations.GetMetricSeriesAsync(
-            MetricSeriesScope.Manifest,
-            manifest.Id,
-            name: null,
-            MetricSeriesRange.Last7Days,
-            CancellationToken.None
-        );
-        var ofGroup = await _operations.GetMetricSeriesAsync(
-            MetricSeriesScope.Group,
-            group.Id,
-            name: null,
-            MetricSeriesRange.Last7Days,
-            CancellationToken.None
-        );
+        var ofManifest = await _operations
+            .NotNull()
+            .GetMetricSeriesAsync(
+                MetricSeriesScope.Manifest,
+                manifest.Id,
+                name: null,
+                MetricSeriesRange.Last7Days,
+                CancellationToken.None
+            );
+        var ofGroup = await _operations
+            .NotNull()
+            .GetMetricSeriesAsync(
+                MetricSeriesScope.Group,
+                group.Id,
+                name: null,
+                MetricSeriesRange.Last7Days,
+                CancellationToken.None
+            );
 
         ofManifest.Buckets.Should().HaveCount(168);
         ofManifest.Buckets.Sum(b => b.Completed).Should().Be(1);
@@ -505,30 +540,36 @@ public class OperationsServiceMetricsTests : TestSetup
     public async Task MetricSeries_WithoutTheKeyItsScopeNeeds_IsRefused()
     {
         var train = () =>
-            _operations.GetMetricSeriesAsync(
-                MetricSeriesScope.Train,
-                42,
-                name: null,
-                MetricSeriesRange.LastHour,
-                CancellationToken.None
-            );
+            _operations
+                .NotNull()
+                .GetMetricSeriesAsync(
+                    MetricSeriesScope.Train,
+                    42,
+                    name: null,
+                    MetricSeriesRange.LastHour,
+                    CancellationToken.None
+                );
         var manifest = () =>
-            _operations.GetMetricSeriesAsync(
-                MetricSeriesScope.Manifest,
-                id: null,
-                "x",
-                MetricSeriesRange.LastHour,
-                CancellationToken.None
-            );
+            _operations
+                .NotNull()
+                .GetMetricSeriesAsync(
+                    MetricSeriesScope.Manifest,
+                    id: null,
+                    "x",
+                    MetricSeriesRange.LastHour,
+                    CancellationToken.None
+                );
 
         var thirtyDays = () =>
-            _operations.GetMetricSeriesAsync(
-                MetricSeriesScope.Train,
-                id: null,
-                "x",
-                MetricSeriesRange.Last30Days,
-                CancellationToken.None
-            );
+            _operations
+                .NotNull()
+                .GetMetricSeriesAsync(
+                    MetricSeriesScope.Train,
+                    id: null,
+                    "x",
+                    MetricSeriesRange.Last30Days,
+                    CancellationToken.None
+                );
 
         await train.Should().ThrowAsync<ArgumentException>();
         await manifest.Should().ThrowAsync<ArgumentException>();
@@ -560,7 +601,7 @@ public class OperationsServiceMetricsTests : TestSetup
     [Test]
     public void GetServerMetrics_ReturnsLivenessSnapshot()
     {
-        var metrics = _operations.GetServerMetrics();
+        var metrics = _operations.NotNull().GetServerMetrics();
 
         metrics.WorkingSetBytes.Should().BeGreaterThan(0);
         metrics.GcHeapBytes.Should().BeGreaterThan(0);

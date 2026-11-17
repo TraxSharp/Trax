@@ -2,6 +2,7 @@ using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Testing;
@@ -137,7 +138,7 @@ public class DispatchConcurrencyTests : TestSetup
             var entry = WorkQueue.Create(
                 new CreateWorkQueue
                 {
-                    TrainName = typeof(SchedulerTestTrain).FullName!,
+                    TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                     Input = manifest.Properties,
                     InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                     ManifestId = manifest.Id,
@@ -169,7 +170,7 @@ public class DispatchConcurrencyTests : TestSetup
                 var entry = WorkQueue.Create(
                     new CreateWorkQueue
                     {
-                        TrainName = typeof(SchedulerTestTrain).FullName!,
+                        TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                         Input = "{}",
                         InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                     }
@@ -260,7 +261,7 @@ public class DispatchConcurrencyTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = manifest.Properties,
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                 ManifestId = manifest.Id,

@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.EnqueueContext;
 using Trax.Effect.Models.Metadata;
@@ -120,8 +121,8 @@ internal static class RunQueueHook
 
         try
         {
-            using var hookInput = (IDisposable)enter.Invoke(train, [hookMetadata])!;
-            await ((Task)onQueue.Invoke(train, [hookMetadata, ct])!).ConfigureAwait(false);
+            using var hookInput = (IDisposable)enter.Invoke(train, [hookMetadata]).NotNull();
+            await ((Task)onQueue.Invoke(train, [hookMetadata, ct]).NotNull()).ConfigureAwait(false);
         }
         catch (TargetInvocationException ex)
         {

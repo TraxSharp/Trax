@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue;
 
@@ -39,7 +40,14 @@ internal static class SubjectSiblingQueries
                 && b.Status == WorkQueueStatus.Queued
                 && b.ConfirmedAt != null
                 && (b.ScheduledAt == null || b.ScheduledAt <= now)
-                && (b.ManifestId == null || b.Manifest!.ManifestGroup!.IsEnabled)
+                && (
+                    b.ManifestId == null
+                    || (
+                        b.Manifest != null
+                        && b.Manifest.ManifestGroup != null
+                        && b.Manifest.ManifestGroup.IsEnabled
+                    )
+                )
                 && (
                     b.Priority > entry.Priority
                     || (b.Priority == entry.Priority && b.CreatedAt < entry.CreatedAt)

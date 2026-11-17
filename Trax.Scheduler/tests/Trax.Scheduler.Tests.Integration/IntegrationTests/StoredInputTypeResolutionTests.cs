@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.SqlDialect;
@@ -60,7 +61,7 @@ public class StoredInputTypeResolutionTests : TestSetup
     [Test]
     public async Task Dispatch_does_not_read_a_work_queue_row_whose_input_type_no_train_takes()
     {
-        var entry = await SaveWorkQueueEntry(typeof(NotATrainInput).FullName!);
+        var entry = await SaveWorkQueueEntry(typeof(NotATrainInput).FullName.NotNull());
 
         await RunDispatcher();
 
@@ -88,8 +89,8 @@ public class StoredInputTypeResolutionTests : TestSetup
     {
         var entry = await SaveWorkQueueEntry(
             assemblyQualified
-                ? typeof(SchedulerTestInput).AssemblyQualifiedName!
-                : typeof(SchedulerTestInput).FullName!
+                ? typeof(SchedulerTestInput).AssemblyQualifiedName.NotNull()
+                : typeof(SchedulerTestInput).FullName.NotNull()
         );
 
         await RunDispatcher();
@@ -106,7 +107,7 @@ public class StoredInputTypeResolutionTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "stored-type" },
             }
@@ -164,7 +165,7 @@ public class StoredInputTypeResolutionTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = """{"value":"stored-type"}""",
                 InputTypeName = inputTypeName,
             }

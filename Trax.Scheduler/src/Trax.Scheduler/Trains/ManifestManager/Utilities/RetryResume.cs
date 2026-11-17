@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
@@ -115,7 +116,7 @@ internal class RetryResume(
 
             var latestIds = latestByManifest
                 .Where(l => l.Latest is not null)
-                .Select(l => l.Latest!.Value)
+                .Select(l => l.Latest.NotNull().Value)
                 .ToList();
 
             if (latestIds.Count == 0)
@@ -150,7 +151,7 @@ internal class RetryResume(
                     .Where(q => q.MetadataId != null && runIds.Contains(q.MetadataId.Value))
                     .Select(q => new
                     {
-                        MetadataId = q.MetadataId!.Value,
+                        MetadataId = q.MetadataId.NotNull().Value,
                         q.ManifestId,
                         q.Input,
                         q.InputTypeName,
@@ -163,7 +164,7 @@ internal class RetryResume(
 
             var parentIds = manifests
                 .Where(m => m.DependsOnManifestId is not null)
-                .Select(m => (long)m.DependsOnManifestId!.Value)
+                .Select(m => (long)m.DependsOnManifestId.NotNull().Value)
                 .Distinct()
                 .ToList();
             var parentSuccess =

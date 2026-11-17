@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -61,7 +62,7 @@ public class SharedInputTypeDispatchTests
     {
         public override Task<Unit> Run(SharedDispatchInput input)
         {
-            Ran[input.Tag] = typeof(TTrain).FullName!;
+            Ran[input.Tag] = typeof(TTrain).FullName.NotNull();
             return Task.FromResult(Unit.Default);
         }
     }
@@ -105,8 +106,8 @@ public class SharedInputTypeDispatchTests
 
         var names = new[]
         {
-            typeof(IFirstSharedInputTrain).FullName!,
-            typeof(ISecondSharedInputTrain).FullName!,
+            typeof(IFirstSharedInputTrain).FullName.NotNull(),
+            typeof(ISecondSharedInputTrain).FullName.NotNull(),
         };
         var runs = await fx
             .DataContext.Metadatas.AsNoTracking()
@@ -130,7 +131,7 @@ public class SharedInputTypeDispatchTests
 
         (await act.Should().ThrowAsync<InvalidOperationException>())
             .Which.Message.Should()
-            .Contain(typeof(IUnregisteredSharedInputTrain).FullName!)
+            .Contain(typeof(IUnregisteredSharedInputTrain).FullName.NotNull())
             .And.Contain("ScanAssemblies");
     }
 

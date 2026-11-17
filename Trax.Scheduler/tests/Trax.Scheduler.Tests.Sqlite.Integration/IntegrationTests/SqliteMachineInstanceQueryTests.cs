@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.SnapshotDraft;
 using Trax.Scheduler.Services.Operations;
@@ -16,8 +17,8 @@ namespace Trax.Scheduler.Tests.Sqlite.Integration.IntegrationTests;
 [TestFixture]
 public class SqliteMachineInstanceQueryTests : TestSetup
 {
-    private IOperationsService _operations = null!;
-    private string _machine = null!;
+    private IOperationsService? _operations;
+    private string? _machine;
 
     public override async Task TestSetUp()
     {
@@ -35,22 +36,27 @@ public class SqliteMachineInstanceQueryTests : TestSetup
         var user = await Seed(SnapshotOwnerKind.User, "Running", at.AddSeconds(1), id);
         await Seed(SnapshotOwnerKind.System, "Done", at.AddSeconds(2), Guid.NewGuid());
 
-        var page = await _operations.GetMachineInstancesAsync(
-            new MachineInstanceQuery(_machine, "Running"),
-            CancellationToken.None
-        );
-        var systemOnly = await _operations.GetMachineInstancesAsync(
-            new MachineInstanceQuery(_machine, OwnerKind: SnapshotOwnerKind.System),
-            CancellationToken.None
-        );
-        var counts = await _operations.GetMachineInstanceStateCountsAsync(
-            _machine,
-            CancellationToken.None
-        );
-        var looked = await _operations.GetMachineInstanceAsync(
-            new MachineInstanceKey(_machine, SnapshotOwnerKind.System, id),
-            CancellationToken.None
-        );
+        var page = await _operations
+            .NotNull()
+            .GetMachineInstancesAsync(
+                new MachineInstanceQuery(_machine.NotNull(), "Running"),
+                CancellationToken.None
+            );
+        var systemOnly = await _operations
+            .NotNull()
+            .GetMachineInstancesAsync(
+                new MachineInstanceQuery(_machine.NotNull(), OwnerKind: SnapshotOwnerKind.System),
+                CancellationToken.None
+            );
+        var counts = await _operations
+            .NotNull()
+            .GetMachineInstanceStateCountsAsync(_machine.NotNull(), CancellationToken.None);
+        var looked = await _operations
+            .NotNull()
+            .GetMachineInstanceAsync(
+                new MachineInstanceKey(_machine.NotNull(), SnapshotOwnerKind.System, id),
+                CancellationToken.None
+            );
 
         page.Items.Select(i => i.RowId).Should().Equal(user.RowId, system.RowId);
         systemOnly
@@ -65,7 +71,7 @@ public class SqliteMachineInstanceQueryTests : TestSetup
                 ("Running", SnapshotOwnerKind.User, 1L),
                 ("Running", SnapshotOwnerKind.System, 1L)
             );
-        looked!.RowId.Should().Be(system.RowId);
+        looked.NotNull().RowId.Should().Be(system.RowId);
         looked.CreatedAt.Should().Be(at);
     }
 
@@ -81,7 +87,7 @@ public class SqliteMachineInstanceQueryTests : TestSetup
             Id = id,
             OwnerKind = owner,
             UserKey = owner == SnapshotOwnerKind.User ? "sqlite-user" : null,
-            Machine = _machine,
+            Machine = _machine.NotNull(),
             Version = 1,
             State = state,
             ConcurrencyToken = Guid.NewGuid(),

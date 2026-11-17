@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
@@ -28,18 +29,18 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 )]
 public class FailureCountWindowTests : TestSetup
 {
-    private SchedulerConfiguration _config = null!;
+    private SchedulerConfiguration? _config;
     private TimeSpan _previousWindow;
 
     public override async Task TestSetUp()
     {
         await base.TestSetUp().ConfigureAwait(false);
         _config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
-        _previousWindow = _config.FailureCountWindow;
+        _previousWindow = _config.NotNull().FailureCountWindow;
     }
 
     [TearDown]
-    public void RestoreWindow() => _config.FailureCountWindow = _previousWindow;
+    public void RestoreWindow() => _config.NotNull().FailureCountWindow = _previousWindow;
 
     [Test]
     public async Task A_failure_thirty_days_ago_does_not_delay_the_next_run()
@@ -123,7 +124,7 @@ public class FailureCountWindowTests : TestSetup
     [Test]
     public async Task The_configured_window_decides_which_failures_count()
     {
-        _config.FailureCountWindow = TimeSpan.FromHours(1);
+        _config.NotNull().FailureCountWindow = TimeSpan.FromHours(1);
         var manifest = await CreateDueManifest(maxRetries: 0);
         await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddHours(-2));
 
@@ -155,7 +156,7 @@ public class FailureCountWindowTests : TestSetup
     [Test]
     public async Task A_manifests_own_window_can_count_further_back_than_the_scheduler_window()
     {
-        _config.FailureCountWindow = TimeSpan.FromHours(1);
+        _config.NotNull().FailureCountWindow = TimeSpan.FromHours(1);
         var manifest = await CreateDueManifest(maxRetries: 0, failureWindow: TimeSpan.FromDays(2));
         await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddHours(-30));
 
@@ -244,7 +245,7 @@ public class FailureCountWindowTests : TestSetup
         var run = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "window" },
                 ManifestId = manifest.Id,

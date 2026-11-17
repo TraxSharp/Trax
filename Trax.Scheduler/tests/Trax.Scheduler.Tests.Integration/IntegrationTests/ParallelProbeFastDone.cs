@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Monad;
 using Trax.Effect.Data.Extensions;
@@ -40,7 +41,7 @@ public class ParallelProbeFastDone : EffectJunction<ParallelProbeFast, ParallelP
 {
     public override Task<ParallelProbeFast> Run(ParallelProbeFast input)
     {
-        ParallelProbe.FastBranchFinished(Metadata!.TrainMetadataId);
+        ParallelProbe.FastBranchFinished(Metadata.NotNull().TrainMetadataId);
         return Task.FromResult(input);
     }
 }

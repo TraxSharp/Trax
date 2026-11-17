@@ -4,6 +4,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Utils;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.RunExecutor;
@@ -49,7 +50,7 @@ public class HttpRunExecutorTests
         result.MetadataId.Should().Be(42);
         result.Output.Should().NotBeNull();
         result.Output.Should().BeOfType<TestOutput>();
-        var output = (TestOutput)result.Output!;
+        var output = (TestOutput)result.Output.NotNull();
         output.Value.Should().Be("hello");
         output.Count.Should().Be(7);
     }
@@ -97,7 +98,7 @@ public class HttpRunExecutorTests
         );
 
         result.Output.Should().BeAssignableTo(declaredOutput);
-        ((ITestOutput)result.Output!).Value.Should().Be("hello");
+        ((ITestOutput)result.Output.NotNull()).Value.Should().Be("hello");
     }
 
     [TestCase(typeof(ITestOutput))]
@@ -222,7 +223,7 @@ public class HttpRunExecutorTests
                 .ConfigureAwait(false);
 
         var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
-        var data = JsonSerializer.Deserialize<TrainExceptionData>(ex.Message)!;
+        var data = JsonSerializer.Deserialize<TrainExceptionData>(ex.Message).NotNull();
         data.Message.Should().Be("row changed");
         data.FailureClass.Should().Be(FailureClass.Unclassified);
     }
@@ -257,7 +258,8 @@ public class HttpRunExecutorTests
 
         var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
         JsonSerializer
-            .Deserialize<TrainExceptionData>(ex.Message)!
+            .Deserialize<TrainExceptionData>(ex.Message)
+            .NotNull()
             .FailureClass.Should()
             .Be(FailureClass.Conflict);
     }
@@ -291,7 +293,7 @@ public class HttpRunExecutorTests
         // The exception message should be valid TrainExceptionData JSON
         var data = JsonSerializer.Deserialize<TrainExceptionData>(ex.Message);
         data.Should().NotBeNull();
-        data!.Type.Should().Be("InvalidOperationException");
+        data.NotNull().Type.Should().Be("InvalidOperationException");
         data.Junction.Should().Be("ValidateInputJunction");
         data.Message.Should().Be("Validation failed");
     }
@@ -318,7 +320,7 @@ public class HttpRunExecutorTests
         var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
         var data = JsonSerializer.Deserialize<TrainExceptionData>(ex.Message);
         data.Should().NotBeNull();
-        data!.Type.Should().Be("ArgumentException");
+        data.NotNull().Type.Should().Be("ArgumentException");
         data.Junction.Should().Be("ProcessDataJunction");
     }
 
@@ -347,7 +349,7 @@ public class HttpRunExecutorTests
         // The exception message should contain the structured data (type preserved)
         var data = JsonSerializer.Deserialize<TrainExceptionData>(ex.Message);
         data.Should().NotBeNull();
-        data!.Type.Should().Be("NullReferenceException");
+        data.NotNull().Type.Should().Be("NullReferenceException");
     }
 
     [Test]
@@ -397,7 +399,7 @@ public class HttpRunExecutorTests
         var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
         var data = JsonSerializer.Deserialize<TrainExceptionData>(ex.Message);
         data.Should().NotBeNull();
-        data!.Type.Should().Be("TrainException");
+        data.NotNull().Type.Should().Be("TrainException");
     }
 
     #endregion
@@ -547,7 +549,8 @@ public class HttpRunExecutorTests
             response,
             onRequest: async content =>
             {
-                capturedRequest = await content!
+                capturedRequest = await content
+                    .NotNull()
                     .ReadFromJsonAsync<RemoteRunRequest>()
                     .ConfigureAwait(false);
             }
@@ -559,7 +562,8 @@ public class HttpRunExecutorTests
         await executor.ExecuteAsync("My.Train.FullName", input, typeof(TestOutput));
 
         capturedRequest.Should().NotBeNull();
-        capturedRequest!
+        capturedRequest
+            .NotNull()
             .TrainName.Should()
             .Be(
                 "My.Train.FullName",

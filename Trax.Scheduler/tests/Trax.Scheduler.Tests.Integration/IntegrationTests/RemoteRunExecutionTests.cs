@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Utils;
 using Trax.Mediator.Services.RunExecutor;
@@ -50,7 +51,7 @@ public class RemoteRunExecutionTests : TestSetup
         result.MetadataId.Should().BeGreaterThan(0);
         result.Output.Should().NotBeNull();
         result.Output.Should().BeOfType<string>();
-        ((string)result.Output!).Should().Be("processed-integration-test");
+        ((string)result.Output.NotNull()).Should().Be("processed-integration-test");
     }
 
     [Test]
@@ -194,16 +195,16 @@ public class RemoteRunExecutionTests : TestSetup
         // Step 3: Deserialize (as HttpRunExecutor would)
         var received = JsonSerializer.Deserialize<RemoteRunResponse>(wireJson);
         received.Should().NotBeNull();
-        received!.MetadataId.Should().Be(result.MetadataId);
+        received.NotNull().MetadataId.Should().Be(result.MetadataId);
         received.ExternalId.Should().Be(result.ExternalId);
         received.IsError.Should().BeFalse();
         received.OutputType.Should().Be(typeof(string).FullName);
         received.OutputJson.Should().NotBeNull();
 
         // Step 4: Deserialize the output value
-        var resolvedType = Type.GetType(received.OutputType!)!;
+        var resolvedType = Type.GetType(received.OutputType.NotNull()).NotNull();
         var output = JsonSerializer.Deserialize(
-            received.OutputJson!,
+            received.OutputJson.NotNull(),
             resolvedType,
             TraxJsonSerializationOptions.ManifestProperties
         );
@@ -228,7 +229,7 @@ public class RemoteRunExecutionTests : TestSetup
 
         var received = JsonSerializer.Deserialize<RemoteRunResponse>(wireJson);
         received.Should().NotBeNull();
-        received!.MetadataId.Should().BeGreaterThan(0);
+        received.NotNull().MetadataId.Should().BeGreaterThan(0);
         received.OutputJson.Should().BeNull();
         received.OutputType.Should().BeNull();
         received.IsError.Should().BeFalse();
@@ -265,7 +266,7 @@ public class RemoteRunExecutionTests : TestSetup
         var received = JsonSerializer.Deserialize<RemoteRunResponse>(wireJson);
 
         received.Should().NotBeNull();
-        received!.IsError.Should().BeTrue();
+        received.NotNull().IsError.Should().BeTrue();
         received.ErrorMessage.Should().Contain("endpoint-failure");
     }
 
@@ -287,7 +288,7 @@ public class RemoteRunExecutionTests : TestSetup
         var request = new RemoteRunRequest(
             nameof(ITypedOutputSchedulerTestTrain),
             inputJson,
-            input.GetType().FullName!
+            input.GetType().FullName.NotNull()
         );
 
         var wireJson = JsonSerializer.Serialize(request);
@@ -295,22 +296,25 @@ public class RemoteRunExecutionTests : TestSetup
         // Simulate what the endpoint receives
         var received = JsonSerializer.Deserialize<RemoteRunRequest>(wireJson);
         received.Should().NotBeNull();
-        received!.TrainName.Should().Be(nameof(ITypedOutputSchedulerTestTrain));
+        received.NotNull().TrainName.Should().Be(nameof(ITypedOutputSchedulerTestTrain));
         received.InputType.Should().Be(typeof(TypedOutputSchedulerTestInput).FullName);
 
         // Verify the input can be deserialized back
         var resolvedType = Type.GetType(
-            received.InputType
-                + ", "
-                + typeof(TypedOutputSchedulerTestInput).Assembly.GetName().Name
-        )!;
+                received.InputType
+                    + ", "
+                    + typeof(TypedOutputSchedulerTestInput).Assembly.GetName().Name
+            )
+            .NotNull();
         var deserializedInput = JsonSerializer.Deserialize(
             received.InputJson,
             resolvedType,
             TraxJsonSerializationOptions.ManifestProperties
         );
         deserializedInput.Should().BeOfType<TypedOutputSchedulerTestInput>();
-        ((TypedOutputSchedulerTestInput)deserializedInput!).Value.Should().Be("client-sim");
+        ((TypedOutputSchedulerTestInput)deserializedInput.NotNull())
+            .Value.Should()
+            .Be("client-sim");
     }
 
     #endregion

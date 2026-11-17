@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
@@ -36,7 +37,7 @@ public class UnreadableQueuedInputTests : TestSetup
         var sibling = await Queue(
             subject,
             """{"value":"known"}""",
-            typeof(SchedulerTestInput).FullName!
+            typeof(SchedulerTestInput).FullName.NotNull()
         );
 
         await RunDispatcher();
@@ -123,9 +124,9 @@ public class UnreadableQueuedInputTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = """{"value": {"not": "a string"}}""",
-                InputTypeName = typeof(SchedulerTestInput).FullName!,
+                InputTypeName = typeof(SchedulerTestInput).FullName.NotNull(),
                 ManifestId = manifest.Id,
                 DeadLetterId = deadLetter.Id,
             }
@@ -153,7 +154,7 @@ public class UnreadableQueuedInputTests : TestSetup
         var entry = await Queue(
             subject: null,
             """{"value": {"not": "a string"}}""",
-            typeof(SchedulerTestInput).FullName!
+            typeof(SchedulerTestInput).FullName.NotNull()
         );
 
         await RunDispatcher();
@@ -176,7 +177,7 @@ public class UnreadableQueuedInputTests : TestSetup
         var source = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
             }
@@ -187,7 +188,7 @@ public class UnreadableQueuedInputTests : TestSetup
         var entry = await Queue(
             subject: null,
             """{"value": {"not": "a string"}}""",
-            typeof(SchedulerTestInput).FullName!,
+            typeof(SchedulerTestInput).FullName.NotNull(),
             replayDecisionsOf: source.Id
         );
 
@@ -212,7 +213,7 @@ public class UnreadableQueuedInputTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = input,
                 InputTypeName = inputTypeName,
                 SubjectKey = subject,

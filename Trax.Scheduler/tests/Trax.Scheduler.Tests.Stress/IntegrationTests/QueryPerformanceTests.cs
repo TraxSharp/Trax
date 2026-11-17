@@ -4,6 +4,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -50,8 +51,8 @@ public class QueryPerformanceTests : TestSetup
     /// </summary>
     private const int MetadataPerManifest = 100;
 
-    private IList<Manifest> _manifests = null!;
-    private ManifestGroup _group = null!;
+    private IList<Manifest>? _manifests;
+    private ManifestGroup? _group;
 
     public override async Task TestSetUp()
     {
@@ -59,13 +60,13 @@ public class QueryPerformanceTests : TestSetup
 
         // Seed baseline data: 500 manifests × 100 metadata = 50K metadata rows
         _group = await SeedManifestGroup("stress-baseline").ConfigureAwait(false);
-        _manifests = await SeedManifests(ManifestCount, _group.Id).ConfigureAwait(false);
+        _manifests = await SeedManifests(ManifestCount, _group.NotNull().Id).ConfigureAwait(false);
 
         // Mix of states: 70% completed, 20% failed, 5% in-progress, 5% pending
-        var completed = _manifests.Take(350).ToList();
-        var failed = _manifests.Skip(350).Take(100).ToList();
-        var inProgress = _manifests.Skip(450).Take(25).ToList();
-        var pending = _manifests.Skip(475).Take(25).ToList();
+        var completed = _manifests.NotNull().Take(350).ToList();
+        var failed = _manifests.NotNull().Skip(350).Take(100).ToList();
+        var inProgress = _manifests.NotNull().Skip(450).Take(25).ToList();
+        var pending = _manifests.NotNull().Skip(475).Take(25).ToList();
 
         await SeedMetadata(completed, MetadataPerManifest, TrainState.Completed)
             .ConfigureAwait(false);
@@ -275,7 +276,7 @@ public class QueryPerformanceTests : TestSetup
         // Tests the batched deletion pattern from DeleteExpiredMetadataJunction.
         // Instead of a single massive DELETE, we load IDs in batches and delete
         // associated FK rows + metadata per batch. This limits row-level lock duration.
-        var trainName = typeof(StressTestTrain).FullName!;
+        var trainName = typeof(StressTestTrain).FullName.NotNull();
         var cutoff = DateTime.UtcNow.AddMinutes(-30);
         var batchSize = 1000;
         var whitelist = new HashSet<string>(StringComparer.Ordinal) { trainName };
@@ -346,7 +347,7 @@ public class QueryPerformanceTests : TestSetup
     {
         // Small batch size (100) exercises the loop more frequently.
         // Verifies overhead from multiple round-trips is acceptable.
-        var trainName = typeof(StressTestTrain).FullName!;
+        var trainName = typeof(StressTestTrain).FullName.NotNull();
         var cutoff = DateTime.UtcNow.AddMinutes(-30);
         var batchSize = 100;
         var whitelist = new HashSet<string>(StringComparer.Ordinal) { trainName };
@@ -424,7 +425,7 @@ public class QueryPerformanceTests : TestSetup
     {
         // Query: WHERE manifest_id IN (...) AND train_state='in_progress' AND !cancellation_requested
         // Needs composite index on (manifest_id, train_state) for efficient filtering.
-        var manifestIds = _manifests.Select(m => m.Id).ToList();
+        var manifestIds = _manifests.NotNull().Select(m => m.Id).ToList();
 
         var elapsed = await AssertCompletesWithin(async () =>
         {
@@ -528,7 +529,7 @@ public class QueryPerformanceTests : TestSetup
     {
         // LoadManifestsJunction: SELECT manifests + COUNT/EXISTS subqueries on child tables
         // With 500 manifests and 50K metadata, subqueries run 500 times.
-        await SeedWorkQueues(_manifests.Take(50).ToList());
+        await SeedWorkQueues(_manifests.NotNull().Take(50).ToList());
 
         var elapsed = await AssertCompletesWithin(async () =>
         {
@@ -571,7 +572,7 @@ public class QueryPerformanceTests : TestSetup
     {
         // DeleteExpiredMetadataJunction: DELETE WHERE name IN (whitelist) AND start_time < cutoff
         // AND train_state IN (completed, failed, cancelled). Uses subquery for cascade.
-        var trainName = typeof(StressTestTrain).FullName!;
+        var trainName = typeof(StressTestTrain).FullName.NotNull();
         var cutoff = DateTime.UtcNow.AddMinutes(-30);
 
         var elapsed = await AssertCompletesWithin(
@@ -634,11 +635,12 @@ public class QueryPerformanceTests : TestSetup
         // The original production issue: this inside a transaction caused timeouts.
 
         // Add some work queues and dead letters to make cascade realistic
-        await SeedWorkQueues(_manifests.Take(100).ToList());
-        await SeedDeadLetters(_manifests.Take(50).ToList(), 1);
+        await SeedWorkQueues(_manifests.NotNull().Take(100).ToList());
+        await SeedDeadLetters(_manifests.NotNull().Take(50).ToList(), 1);
 
         // Keep 400 manifests, prune 100
         var keepIds = _manifests
+            .NotNull()
             .Take(400)
             .Select(m => m.ExternalId)
             .ToHashSet(StringComparer.Ordinal);
@@ -1046,6 +1048,7 @@ public class QueryPerformanceTests : TestSetup
         // This avoids the NOT IN(...) clause with many string parameters that caused
         // command timeouts on low-resource Postgres instances.
         var expectedIds = _manifests
+            .NotNull()
             .Take(50)
             .Select(m => m.ExternalId)
             .ToHashSet(StringComparer.Ordinal);
@@ -1132,6 +1135,7 @@ public class QueryPerformanceTests : TestSetup
         // approach would generate a massive SQL statement. The server-side filter loads
         // all 500 ID pairs (~15KB) and computes the diff in C# with O(n) HashSet lookups.
         var expectedIds = _manifests
+            .NotNull()
             .Take(ManifestCount - 50)
             .Select(m => m.ExternalId)
             .ToHashSet(StringComparer.Ordinal);
@@ -1253,7 +1257,10 @@ public class QueryPerformanceTests : TestSetup
             .ConfigureAwait(false);
 
         // The 500 baseline manifests (stress-0..stress-499) are the expected set
-        var expectedIds = _manifests.Select(m => m.ExternalId).ToHashSet(StringComparer.Ordinal);
+        var expectedIds = _manifests
+            .NotNull()
+            .Select(m => m.ExternalId)
+            .ToHashSet(StringComparer.Ordinal);
         var batchSize = SchedulerStartupService.PruneBatchSize;
 
         var elapsed = await AssertCompletesWithin(
@@ -1451,18 +1458,30 @@ public class QueryPerformanceTests : TestSetup
     public async Task LoadQueuedJobs_WithLimit_LoadsOnlyLimitedEntries()
     {
         // Seed 500 queued work queue entries (one per manifest, unique constraint)
-        await SeedWorkQueues(_manifests);
+        await SeedWorkQueues(_manifests.NotNull());
 
         var elapsed = await AssertCompletesWithin(async () =>
         {
             var limited = await DataContext
                 .WorkQueues.AsNoTracking()
-                .Include(q => q.Manifest)
-                    .ThenInclude(m => m!.ManifestGroup)
+                .Include(
+                    $"{nameof(Trax.Effect.Models.WorkQueue.WorkQueue.Manifest)}.{nameof(Trax.Effect.Models.Manifest.Manifest.ManifestGroup)}"
+                )
                 .Where(q => q.Status == WorkQueueStatus.Queued)
-                .Where(q => q.ManifestId == null || q.Manifest!.ManifestGroup!.IsEnabled)
+                .Where(q =>
+                    q.ManifestId == null
+                    || (
+                        q.Manifest != null
+                        && q.Manifest.ManifestGroup != null
+                        && q.Manifest.ManifestGroup.IsEnabled
+                    )
+                )
                 .Where(q => q.ScheduledAt == null || q.ScheduledAt <= DateTime.UtcNow)
-                .OrderByDescending(q => q.Manifest != null ? q.Manifest.ManifestGroup!.Priority : 0)
+                .OrderByDescending(q =>
+                    q.Manifest != null && q.Manifest.ManifestGroup != null
+                        ? q.Manifest.ManifestGroup.Priority
+                        : 0
+                )
                 .ThenByDescending(q => q.Priority)
                 .ThenBy(q => q.CreatedAt)
                 .Take(100)
@@ -1486,18 +1505,30 @@ public class QueryPerformanceTests : TestSetup
     public async Task LoadQueuedJobs_WithoutLimit_LoadsAllEntries()
     {
         // Seed 500 queued work queue entries
-        await SeedWorkQueues(_manifests);
+        await SeedWorkQueues(_manifests.NotNull());
 
         var elapsed = await AssertCompletesWithin(async () =>
         {
             var all = await DataContext
                 .WorkQueues.AsNoTracking()
-                .Include(q => q.Manifest)
-                    .ThenInclude(m => m!.ManifestGroup)
+                .Include(
+                    $"{nameof(Trax.Effect.Models.WorkQueue.WorkQueue.Manifest)}.{nameof(Trax.Effect.Models.Manifest.Manifest.ManifestGroup)}"
+                )
                 .Where(q => q.Status == WorkQueueStatus.Queued)
-                .Where(q => q.ManifestId == null || q.Manifest!.ManifestGroup!.IsEnabled)
+                .Where(q =>
+                    q.ManifestId == null
+                    || (
+                        q.Manifest != null
+                        && q.Manifest.ManifestGroup != null
+                        && q.Manifest.ManifestGroup.IsEnabled
+                    )
+                )
                 .Where(q => q.ScheduledAt == null || q.ScheduledAt <= DateTime.UtcNow)
-                .OrderByDescending(q => q.Manifest != null ? q.Manifest.ManifestGroup!.Priority : 0)
+                .OrderByDescending(q =>
+                    q.Manifest != null && q.Manifest.ManifestGroup != null
+                        ? q.Manifest.ManifestGroup.Priority
+                        : 0
+                )
                 .ThenByDescending(q => q.Priority)
                 .ThenBy(q => q.CreatedAt)
                 .ToListAsync()

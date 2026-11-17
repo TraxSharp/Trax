@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 using static Trax.StateMachine.Rules;
@@ -27,7 +28,10 @@ public sealed class StrandingStepMachine : Machine<StepState, StepTrigger>
 
         m.In(StepState.Running)
             .Invokes<IInvokedStepTrain, InvokedStepInput, InvokedStepOutput>(ctx =>
-                new(ctx["mode"]!.GetValue<string>(), ctx["note"]!.GetValue<string>())
+                new(
+                    ctx["mode"].NotNull().GetValue<string>(),
+                    ctx["note"].NotNull().GetValue<string>()
+                )
             )
             .OnDone(
                 StepState.Done,
@@ -41,7 +45,7 @@ public sealed class StrandingStepMachine : Machine<StepState, StepTrigger>
 
         m.In(StepState.Chained)
             .Invokes<IInvokedStepTrain, InvokedStepInput, InvokedStepOutput>(ctx =>
-                new(ctx["missing"]!.GetValue<string>(), "")
+                new(ctx["missing"].NotNull().GetValue<string>(), "")
             )
             .OnDone(StepState.Done, when: Input((InvokedStepOutput o) => o.Accepted).IsTrue())
             .OnFailed(StepState.Failed)

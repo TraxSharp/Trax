@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using HostHeartbeatRow = Trax.Effect.Models.HostHeartbeat.HostHeartbeat;
@@ -53,7 +54,7 @@ public partial class OperationsService
         var deadLettersRead = Read(db =>
             db.DeadLetters.AsNoTracking()
                 .Where(d => d.Status == DeadLetterStatus.AwaitingIntervention)
-                .GroupBy(d => new { d.Manifest!.Name, d.Reason })
+                .GroupBy(d => new { Name = d.Manifest != null ? d.Manifest.Name : null, d.Reason })
                 .Select(g => new
                 {
                     g.Key.Name,
@@ -132,14 +133,14 @@ public partial class OperationsService
 
         var deadLetters = (await deadLettersRead.ConfigureAwait(false))
             .Select(g => new AttentionDeadLetterGroup(
-                g.Name,
+                g.Name.NotNull(),
                 g.Reason,
                 g.Count,
                 DateTime.SpecifyKind(g.Oldest, DateTimeKind.Utc),
                 ConsoleLink(
                     "/runs/dead-letters",
                     ("status", "AWAITING_INTERVENTION"),
-                    ("train", g.Name),
+                    ("train", g.Name.NotNull()),
                     ("reason", g.Reason)
                 )
             ))

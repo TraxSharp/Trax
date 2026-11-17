@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
@@ -32,9 +33,9 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class OperationsServiceInMemoryTests
 {
-    private RecordingChangeSignal _signal = null!;
-    private SchedulerE2EFixture _fx = null!;
-    private IOperationsService _operations = null!;
+    private RecordingChangeSignal? _signal;
+    private SchedulerE2EFixture? _fx;
+    private IOperationsService? _operations;
 
     [SetUp]
     public void SetUp()
@@ -42,13 +43,17 @@ public class OperationsServiceInMemoryTests
         _signal = new RecordingChangeSignal();
         _fx = SchedulerE2EFixture.CreateInMemory(
             _ => { },
-            services => services.AddSingleton<ITraxChangeSignal>(_signal)
+            services => services.AddSingleton<ITraxChangeSignal>(_signal.NotNull())
         );
-        _operations = _fx.Services.GetRequiredService<IOperationsService>();
+        _operations = _fx.NotNull().Services.GetRequiredService<IOperationsService>();
     }
 
     [TearDown]
-    public async Task TearDown() => await _fx.DisposeAsync();
+    public async Task TearDown()
+    {
+        if (_fx is not null)
+            await _fx.DisposeAsync();
+    }
 
     [Test]
     public async Task Cancel_executions_flags_pending_and_in_progress_runs_and_skips_the_rest()
@@ -57,10 +62,9 @@ public class OperationsServiceInMemoryTests
         var running = await SeedRun(TrainState.InProgress);
         var completed = await SeedRun(TrainState.Completed);
 
-        var result = await _operations.CancelExecutionsAsync(
-            [pending.Id, running.Id, completed.Id],
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .CancelExecutionsAsync([pending.Id, running.Id, completed.Id], CancellationToken.None);
 
         result.Success.Should().BeTrue(result.Message);
         result
@@ -70,7 +74,7 @@ public class OperationsServiceInMemoryTests
                 "the operations surface runs on InMemory (docs/adr/0007-the-operations-surface-runs-on-inmemory.md)"
             );
         (await Flagged()).Should().BeEquivalentTo([pending.Id, running.Id]);
-        _signal.Domains.Should().Equal(ChangeDomain.Execution);
+        _signal.NotNull().Domains.Should().Equal(ChangeDomain.Execution);
     }
 
     [Test]
@@ -79,19 +83,18 @@ public class OperationsServiceInMemoryTests
         var queued = await SeedEntry(WorkQueueStatus.Queued);
         var dispatched = await SeedEntry(WorkQueueStatus.Dispatched);
 
-        var result = await _operations.CancelWorkQueueEntriesAsync(
-            [queued.Id, dispatched.Id],
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .CancelWorkQueueEntriesAsync([queued.Id, dispatched.Id], CancellationToken.None);
 
         result.Success.Should().BeTrue(result.Message);
         result.Count.Should().Be(1);
-        var statuses = await _fx
+        var statuses = await _fx.NotNull()
             .DataContext.WorkQueues.AsNoTracking()
             .ToDictionaryAsync(q => q.Id, q => q.Status);
         statuses[queued.Id].Should().Be(WorkQueueStatus.Cancelled);
         statuses[dispatched.Id].Should().Be(WorkQueueStatus.Dispatched);
-        _signal.Domains.Should().Equal(ChangeDomain.WorkQueue);
+        _signal.NotNull().Domains.Should().Equal(ChangeDomain.WorkQueue);
     }
 
     [Test]
@@ -101,18 +104,16 @@ public class OperationsServiceInMemoryTests
         var on = await SeedManifest(group, enabled: true);
         var off = await SeedManifest(group, enabled: false);
 
-        var result = await _operations.SetManifestsEnabledAsync(
-            [on.Id, off.Id],
-            enabled: false,
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .SetManifestsEnabledAsync([on.Id, off.Id], enabled: false, CancellationToken.None);
 
         result.Success.Should().BeTrue(result.Message);
         result.Count.Should().Be(1, "only the enabled one changed");
-        (await _fx.DataContext.Manifests.AsNoTracking().AnyAsync(m => m.IsEnabled))
+        (await _fx.NotNull().DataContext.Manifests.AsNoTracking().AnyAsync(m => m.IsEnabled))
             .Should()
             .BeFalse();
-        _signal.Domains.Should().Equal(ChangeDomain.Manifest);
+        _signal.NotNull().Domains.Should().Equal(ChangeDomain.Manifest);
     }
 
     [Test]
@@ -121,23 +122,25 @@ public class OperationsServiceInMemoryTests
         var target = await SeedGroup("target", enabled: true);
         var other = await SeedGroup("other", enabled: true);
 
-        var result = await _operations.SetManifestGroupsEnabledAsync(
-            [target.Id],
-            enabled: false,
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .SetManifestGroupsEnabledAsync([target.Id], enabled: false, CancellationToken.None);
 
         result.Success.Should().BeTrue(result.Message);
         result.Count.Should().Be(1);
-        var fresh = await _fx
+        var fresh = await _fx.NotNull()
             .DataContext.ManifestGroups.AsNoTracking()
             .SingleAsync(g => g.Id == target.Id);
         fresh.IsEnabled.Should().BeFalse();
         fresh.UpdatedAt.Should().BeAfter(target.UpdatedAt);
-        (await _fx.DataContext.ManifestGroups.AsNoTracking().SingleAsync(g => g.Id == other.Id))
+        (
+            await _fx.NotNull()
+                .DataContext.ManifestGroups.AsNoTracking()
+                .SingleAsync(g => g.Id == other.Id)
+        )
             .IsEnabled.Should()
             .BeTrue();
-        _signal.Domains.Should().Equal(ChangeDomain.ManifestGroup);
+        _signal.NotNull().Domains.Should().Equal(ChangeDomain.ManifestGroup);
     }
 
     [Test]
@@ -147,14 +150,13 @@ public class OperationsServiceInMemoryTests
         await SeedGroup("b", enabled: true);
         await SeedGroup("c", enabled: false);
 
-        var result = await _operations.SetAllManifestGroupsEnabledAsync(
-            enabled: false,
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .SetAllManifestGroupsEnabledAsync(enabled: false, CancellationToken.None);
 
         result.Success.Should().BeTrue(result.Message);
         result.Count.Should().Be(2);
-        (await _fx.DataContext.ManifestGroups.AsNoTracking().AnyAsync(g => g.IsEnabled))
+        (await _fx.NotNull().DataContext.ManifestGroups.AsNoTracking().AnyAsync(g => g.IsEnabled))
             .Should()
             .BeFalse();
     }
@@ -167,11 +169,11 @@ public class OperationsServiceInMemoryTests
         var running = await SeedRun(TrainState.InProgress, manifest.Id);
         await SeedRun(TrainState.Completed, manifest.Id);
 
-        var flagged = await _fx.Scheduler.CancelAsync(manifest.ExternalId);
+        var flagged = await _fx.NotNull().Scheduler.CancelAsync(manifest.ExternalId);
 
         flagged.Should().Be(1);
         (await Flagged()).Should().Equal(running.Id);
-        _signal.Domains.Should().Equal(ChangeDomain.Execution);
+        _signal.NotNull().Domains.Should().Equal(ChangeDomain.Execution);
     }
 
     [Test]
@@ -185,7 +187,7 @@ public class OperationsServiceInMemoryTests
         );
         await SeedRun(TrainState.InProgress, (await SeedManifest(other, enabled: true)).Id);
 
-        var flagged = await _fx.Scheduler.CancelGroupAsync(group.Id);
+        var flagged = await _fx.NotNull().Scheduler.CancelGroupAsync(group.Id);
 
         flagged.Should().Be(1);
         (await Flagged()).Should().Equal(pending.Id);
@@ -209,15 +211,12 @@ public class OperationsServiceInMemoryTests
             )
         );
 
-        var result = await _fx.Scheduler.TriggerAsync(
-            queued.ExternalId,
-            askAfresh: false,
-            CancellationToken.None
-        );
+        var result = await _fx.NotNull()
+            .Scheduler.TriggerAsync(queued.ExternalId, askAfresh: false, CancellationToken.None);
 
         result.Created.Should().BeFalse();
         result.MovedForward.Should().BeTrue();
-        var released = await _fx
+        var released = await _fx.NotNull()
             .DataContext.WorkQueues.AsNoTracking()
             .SingleAsync(w => w.Id == waiting.Id);
         released
@@ -236,10 +235,9 @@ public class OperationsServiceInMemoryTests
         await SeedManifest(second, enabled: true);
         var running = await SeedRun(TrainState.InProgress, a.Id);
 
-        var cancelled = await _operations.CancelManifestGroupsAsync(
-            [first.Id, second.Id],
-            CancellationToken.None
-        );
+        var cancelled = await _operations
+            .NotNull()
+            .CancelManifestGroupsAsync([first.Id, second.Id], CancellationToken.None);
 
         cancelled.Count.Should().Be(1);
         (await Flagged()).Should().Equal(running.Id);
@@ -269,19 +267,20 @@ public class OperationsServiceInMemoryTests
                 )
             );
 
-        var page = await _operations.GetLogsAsync(
-            new LogQuery
-            {
-                MessageContains = "disk",
-                CategoryContains = "STORAGE",
-                Order = LogOrder.OldestFirst,
-            },
-            CancellationToken.None
-        );
-        var percent = await _operations.CountLogsAsync(
-            new LogQuery { MessageContains = "50%" },
-            CancellationToken.None
-        );
+        var page = await _operations
+            .NotNull()
+            .GetLogsAsync(
+                new LogQuery
+                {
+                    MessageContains = "disk",
+                    CategoryContains = "STORAGE",
+                    Order = LogOrder.OldestFirst,
+                },
+                CancellationToken.None
+            );
+        var percent = await _operations
+            .NotNull()
+            .CountLogsAsync(new LogQuery { MessageContains = "50%" }, CancellationToken.None);
 
         page.Items.Select(l => l.Message)
             .Should()
@@ -298,33 +297,38 @@ public class OperationsServiceInMemoryTests
     )
     {
         for (var i = 0; i < matching; i++)
-            await _fx.DataContext.Track(
-                Trax.Effect.Models.Log.Log.Create(
-                    new Trax.Effect.Models.Log.DTOs.CreateLog
-                    {
-                        Level = Microsoft.Extensions.Logging.LogLevel.Information,
-                        Message = string.Create(CultureInfo.InvariantCulture, $"capped line {i}"),
-                        CategoryName = "App.Capped",
-                        EventId = 0,
-                    }
-                )
-            );
-        await _fx.DataContext.SaveChanges(CancellationToken.None);
-        _fx.DataContext.Reset();
+            await _fx.NotNull()
+                .DataContext.Track(
+                    Trax.Effect.Models.Log.Log.Create(
+                        new Trax.Effect.Models.Log.DTOs.CreateLog
+                        {
+                            Level = Microsoft.Extensions.Logging.LogLevel.Information,
+                            Message = string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"capped line {i}"
+                            ),
+                            CategoryName = "App.Capped",
+                            EventId = 0,
+                        }
+                    )
+                );
+        await _fx.NotNull().DataContext.SaveChanges(CancellationToken.None);
+        _fx.NotNull().DataContext.Reset();
 
         (
-            await _operations.CountLogsCappedAsync(
-                new LogQuery { MessageContains = "CAPPED LINE" },
-                CancellationToken.None
-            )
+            await _operations
+                .NotNull()
+                .CountLogsCappedAsync(
+                    new LogQuery { MessageContains = "CAPPED LINE" },
+                    CancellationToken.None
+                )
         )
             .Should()
             .Be(new LogCount(expectedCount, expectedCapped));
         (
-            await _operations.CountLogsCappedAsync(
-                new LogQuery(Category: "App.Capped"),
-                CancellationToken.None
-            )
+            await _operations
+                .NotNull()
+                .CountLogsCappedAsync(new LogQuery(Category: "App.Capped"), CancellationToken.None)
         )
             .Should()
             .Be(new LogCount(matching, Capped: false), "a count without a text filter is exact");
@@ -339,16 +343,18 @@ public class OperationsServiceInMemoryTests
             var run = await SeedRun(TrainState.Completed);
             run.StartTime = start;
             run.EndTime = start.AddSeconds(seconds);
-            _fx.DataContext.Metadatas.Update(run);
+            _fx.NotNull().DataContext.Metadatas.Update(run);
         }
-        await _fx.DataContext.SaveChanges(CancellationToken.None);
-        _fx.DataContext.Reset();
+        await _fx.NotNull().DataContext.SaveChanges(CancellationToken.None);
+        _fx.NotNull().DataContext.Reset();
 
-        var metrics = await _operations.GetDashboardMetricsAsync(
-            MetricsRange.Last60Minutes,
-            hideAdminTrains: false,
-            CancellationToken.None
-        );
+        var metrics = await _operations
+            .NotNull()
+            .GetDashboardMetricsAsync(
+                MetricsRange.Last60Minutes,
+                hideAdminTrains: false,
+                CancellationToken.None
+            );
 
         metrics.TopAverageDurations.Should().ContainSingle();
         metrics.TopAverageDurations[0].AverageMilliseconds.Should().BeApproximately(15000, 1);
@@ -358,7 +364,7 @@ public class OperationsServiceInMemoryTests
     #region Helpers
 
     private async Task<List<long>> Flagged() =>
-        await _fx
+        await _fx.NotNull()
             .DataContext.Metadatas.AsNoTracking()
             .Where(m => m.CancellationRequested)
             .Select(m => m.Id)
@@ -368,10 +374,10 @@ public class OperationsServiceInMemoryTests
     private async Task<T> Save<T>(T entity)
         where T : class, Trax.Effect.Models.IModel
     {
-        await _fx.DataContext.Track(entity).ConfigureAwait(false);
-        await _fx.DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
-        _fx.DataContext.Reset();
-        _signal.Clear();
+        await _fx.NotNull().DataContext.Track(entity).ConfigureAwait(false);
+        await _fx.NotNull().DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        _fx.NotNull().DataContext.Reset();
+        _signal.NotNull().Clear();
         return entity;
     }
 
@@ -407,7 +413,7 @@ public class OperationsServiceInMemoryTests
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
                 ManifestId = manifestId,
@@ -422,7 +428,7 @@ public class OperationsServiceInMemoryTests
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = null,
                 InputTypeName = null,
             }

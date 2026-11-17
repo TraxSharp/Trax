@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue;
@@ -59,8 +60,8 @@ public class TriggerAlreadyQueuedTests
         return await fx
             .DataContext.WorkQueues.AsNoTracking()
             .Where(w => w.Status == WorkQueueStatus.Queued && w.Manifest != null)
-            .GroupBy(w => w.Manifest!.ExternalId)
-            .ToDictionaryAsync(g => g.Key, g => g.Count(), StringComparer.Ordinal)
+            .GroupBy(w => w.Manifest != null ? w.Manifest.ExternalId : null)
+            .ToDictionaryAsync(g => g.Key.NotNull(), g => g.Count(), StringComparer.Ordinal)
             .ConfigureAwait(false);
     }
 
@@ -139,7 +140,7 @@ public class TriggerAlreadyQueuedTests
             .Select(m => new ManifestDispatchView
             {
                 Manifest = m,
-                ManifestGroup = m.ManifestGroup,
+                ManifestGroup = m.ManifestGroup.NotNull(),
                 FailedCount = 0,
                 HasAwaitingDeadLetter = false,
                 HasQueuedWork = false,
@@ -165,9 +166,9 @@ public class TriggerAlreadyQueuedTests
                 WorkQueue.Create(
                     new CreateWorkQueue
                     {
-                        TrainName = typeof(ISchedulerTestTrain).FullName!,
+                        TrainName = typeof(ISchedulerTestTrain).FullName.NotNull(),
                         Input = "{}",
-                        InputTypeName = typeof(SchedulerTestInput).FullName!,
+                        InputTypeName = typeof(SchedulerTestInput).FullName.NotNull(),
                     }
                 )
             );
@@ -343,7 +344,10 @@ public class TriggerAlreadyQueuedTests
                 );
                 await using (command.ConfigureAwait(false))
                 {
-                    if ((long)(await command.ExecuteScalarAsync().ConfigureAwait(false))! > 0)
+                    if (
+                        (long)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull()
+                        > 0
+                    )
                         return true;
 
                     // determinism: polls the condition, bounded by the deadline above.

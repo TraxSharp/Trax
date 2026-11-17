@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 
@@ -55,7 +56,7 @@ internal static class ManifestPruner
                     && batch.Contains(m.ManifestId.Value)
                     && (m.TrainState == TrainState.Pending || m.TrainState == TrainState.InProgress)
                 )
-                .Select(m => m.ManifestId!.Value)
+                .Select(m => m.ManifestId.GetValueOrDefault())
                 .Distinct()
                 .ToListAsync(ct)
                 .ConfigureAwait(false);

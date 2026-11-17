@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Monad;
 using Trax.Effect.Data.Extensions;
@@ -45,12 +46,12 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [NonParallelizable]
 public class ParallelManifestRunTests
 {
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     // A host built for one test, in place of the shared one. Disposed by that test.
     private IServiceProvider? _override;
 
-    private IServiceProvider Provider => _override ?? _provider;
+    private IServiceProvider Provider => _override ?? _provider.NotNull();
 
     [OneTimeSetUp]
     public void BuildProvider() => _provider = BuildProvider(TimeSpan.Zero);
@@ -80,7 +81,11 @@ public class ParallelManifestRunTests
             .BuildServiceProvider();
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.DisposeAsync();
+    public async Task DisposeProvider()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [SetUp]
     public async Task Clean()
@@ -355,7 +360,7 @@ public class ParallelManifestRunTests
             (
                 await scope
                     .ServiceProvider.GetRequiredService<ITraxScheduler>()
-                    .RequeueDeadLetterAsync(deadLetter!.Id, askAfresh)
+                    .RequeueDeadLetterAsync(deadLetter.NotNull().Id, askAfresh)
                     .ConfigureAwait(false)
             )
                 .Success.Should()

@@ -1,3 +1,5 @@
+using Trax.Core.Extensions;
+
 namespace Trax.Scheduler.Configuration;
 
 /// <summary>
@@ -88,7 +90,7 @@ public class MetadataCleanupConfiguration
     /// </summary>
     /// <typeparam name="TTrain">The train class type to clean up</typeparam>
     public void AddTrainType<TTrain>()
-        where TTrain : class => Add(typeof(TTrain).FullName!, retention: null);
+        where TTrain : class => Add(typeof(TTrain).FullName.NotNull(), retention: null);
 
     /// <summary>
     /// Adds a train type to the cleanup whitelist by its class name, retained for
@@ -105,7 +107,7 @@ public class MetadataCleanupConfiguration
     /// retention.
     /// </exception>
     public void AddTrainType<TTrain>(TimeSpan retention)
-        where TTrain : class => Add(typeof(TTrain).FullName!, retention);
+        where TTrain : class => Add(typeof(TTrain).FullName.NotNull(), retention);
 
     /// <summary>
     /// Adds a train type to the cleanup whitelist by name string, retained for

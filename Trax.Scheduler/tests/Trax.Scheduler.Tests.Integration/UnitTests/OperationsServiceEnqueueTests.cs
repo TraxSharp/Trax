@@ -7,15 +7,19 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using NUnit.Framework;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Mediator.Configuration;
 using Trax.Mediator.Exceptions;
+using Trax.Mediator.Services.ConcurrencyLimiter;
+using Trax.Mediator.Services.RunExecutor;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.Operations;
+using Trax.Testing;
 
 namespace Trax.Scheduler.Tests.Integration.UnitTests;
 
@@ -41,10 +45,10 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 [TestFixture]
 public class OperationsServiceEnqueueTests
 {
-    private ITrainDiscoveryService _discovery = null!;
-    private ITrainExecutionService _execution = null!;
-    private CapturingLogger _logger = null!;
-    private OperationsService _service = null!;
+    private ITrainDiscoveryService? _discovery;
+    private ITrainExecutionService? _execution;
+    private CapturingLogger? _logger;
+    private OperationsService? _service;
 
     public record ProbeInput
     {
@@ -67,10 +71,10 @@ public class OperationsServiceEnqueueTests
                     InputType = typeof(ProbeInput),
                     OutputType = typeof(object),
                     Lifetime = ServiceLifetime.Scoped,
-                    ServiceTypeName = typeof(IProbeTrain).FullName!,
-                    ImplementationTypeName = typeof(IProbeTrain).FullName!,
-                    InputTypeName = typeof(ProbeInput).FullName!,
-                    OutputTypeName = typeof(object).FullName!,
+                    ServiceTypeName = typeof(IProbeTrain).FullName.NotNull(),
+                    ImplementationTypeName = typeof(IProbeTrain).FullName.NotNull(),
+                    InputTypeName = typeof(ProbeInput).FullName.NotNull(),
+                    OutputTypeName = typeof(object).FullName.NotNull(),
                     RequiredPolicies = [],
                     RequiredRoles = [],
                     IsQuery = false,
@@ -83,6 +87,7 @@ public class OperationsServiceEnqueueTests
 
         _execution = Substitute.For<ITrainExecutionService>();
         _execution
+            .NotNull()
             .QueueAsync(
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -97,13 +102,14 @@ public class OperationsServiceEnqueueTests
             discovery,
             Substitute.For<IDataContextProviderFactory>(),
             new SchedulerConfiguration(),
-            _execution,
-            logger: _logger
+            _execution.NotNull(),
+            logger: _logger.NotNull()
         );
     }
 
     private void EnqueueThrows(Exception ex) =>
         _execution
+            .NotNull()
             .QueueAsync(
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -114,22 +120,23 @@ public class OperationsServiceEnqueueTests
             .Returns<Task<QueueTrainResult>>(_ => throw ex);
 
     private Task<OperationResult> Queue(QueueTrainInput input) =>
-        _service.QueueTrainAsync(input, CancellationToken.None);
+        _service.NotNull().QueueTrainAsync(input, CancellationToken.None);
 
     [Test]
     public async Task Queueing_goes_through_the_execution_service()
     {
         var result = await Queue(
-            new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}")
+            new QueueTrainInput(typeof(IProbeTrain).FullName.NotNull(), "{\"customerId\":1}")
         );
 
         result.Success.Should().BeTrue();
         result.Id.Should().Be(42, "the id comes from the entry the mediator created");
 
         await _execution
+            .NotNull()
             .Received(1)
             .QueueAsync(
-                typeof(IProbeTrain).FullName!,
+                typeof(IProbeTrain).FullName.NotNull(),
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<DateTime?>(),
@@ -143,13 +150,14 @@ public class OperationsServiceEnqueueTests
         var when = DateTime.UtcNow.AddHours(3);
 
         await Queue(
-            new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}")
+            new QueueTrainInput(typeof(IProbeTrain).FullName.NotNull(), "{\"customerId\":1}")
             {
                 ScheduledAt = when,
             }
         );
 
         await _execution
+            .NotNull()
             .Received(1)
             .QueueAsync(
                 Arg.Any<string>(),
@@ -164,13 +172,14 @@ public class OperationsServiceEnqueueTests
     public async Task Priority_is_carried_through()
     {
         await Queue(
-            new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}")
+            new QueueTrainInput(typeof(IProbeTrain).FullName.NotNull(), "{\"customerId\":1}")
             {
                 Priority = 7,
             }
         );
 
         await _execution
+            .NotNull()
             .Received(1)
             .QueueAsync(
                 Arg.Any<string>(),
@@ -185,6 +194,7 @@ public class OperationsServiceEnqueueTests
     public async Task An_authorization_failure_is_not_flattened_into_a_failed_result()
     {
         _execution
+            .NotNull()
             .QueueAsync(
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -195,7 +205,12 @@ public class OperationsServiceEnqueueTests
             .Returns<Task<QueueTrainResult>>(_ => throw new UnauthorizedAccessException("nope"));
 
         var act = async () =>
-            await Queue(new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}"))
+            await Queue(
+                    new QueueTrainInput(
+                        typeof(IProbeTrain).FullName.NotNull(),
+                        "{\"customerId\":1}"
+                    )
+                )
                 .ConfigureAwait(false);
 
         await act.Should()
@@ -212,13 +227,13 @@ public class OperationsServiceEnqueueTests
         // input's size may reach the caller, the same promise Trax.Api's error filter makes.
         var mediatorConfiguration = new Trax.Mediator.Configuration.MediatorConfiguration();
         var service = new OperationsService(
-            _discovery,
+            _discovery.NotNull(),
             Substitute.For<IDataContextProviderFactory>(),
             new SchedulerConfiguration(),
             new TrainExecutionService(
-                _discovery,
-                runExecutor: null!,
-                concurrencyLimiter: null!,
+                _discovery.NotNull(),
+                runExecutor: Null.Of<IRunExecutor>(),
+                concurrencyLimiter: Null.Of<IConcurrencyLimiter>(),
                 Substitute.For<IDataContextProviderFactory>(),
                 mediatorConfiguration,
                 new ServiceCollection().BuildServiceProvider()
@@ -230,7 +245,7 @@ public class OperationsServiceEnqueueTests
             + "\"}";
 
         var result = await service.QueueTrainAsync(
-            new QueueTrainInput(typeof(IProbeTrain).FullName!, oversized),
+            new QueueTrainInput(typeof(IProbeTrain).FullName.NotNull(), oversized),
             CancellationToken.None
         );
 
@@ -253,6 +268,7 @@ public class OperationsServiceEnqueueTests
 
         result.Success.Should().BeFalse();
         await _execution
+            .NotNull()
             .DidNotReceive()
             .QueueAsync(
                 Arg.Any<string>(),
@@ -273,26 +289,29 @@ public class OperationsServiceEnqueueTests
             .ThrowsAsync(new NpgsqlException("Failed to connect to 10.0.0.5:5432"));
 
         var mediator = new TrainExecutionService(
-            _discovery,
-            runExecutor: null!,
-            concurrencyLimiter: null!,
+            _discovery.NotNull(),
+            runExecutor: Null.Of<IRunExecutor>(),
+            concurrencyLimiter: Null.Of<IConcurrencyLimiter>(),
             data,
             new MediatorConfiguration(),
             new ServiceCollection().BuildServiceProvider()
         );
         var service = new OperationsService(
-            _discovery,
+            _discovery.NotNull(),
             data,
             new SchedulerConfiguration(),
             mediator,
-            logger: _logger
+            logger: _logger.NotNull()
         );
 
         OperationResult? result = null;
         var act = async () =>
             result = await service
                 .QueueTrainAsync(
-                    new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}"),
+                    new QueueTrainInput(
+                        typeof(IProbeTrain).FullName.NotNull(),
+                        "{\"customerId\":1}"
+                    ),
                     CancellationToken.None
                 )
                 .ConfigureAwait(false);
@@ -304,6 +323,7 @@ public class OperationsServiceEnqueueTests
             );
         result.Should().BeNull("no result may carry the exception's message to the caller");
         _logger
+            .NotNull()
             .Errors.Should()
             .ContainSingle("the failure is logged where an operator can see it")
             .Which.Should()
@@ -321,7 +341,12 @@ public class OperationsServiceEnqueueTests
         );
 
         var act = async () =>
-            await Queue(new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}"))
+            await Queue(
+                    new QueueTrainInput(
+                        typeof(IProbeTrain).FullName.NotNull(),
+                        "{\"customerId\":1}"
+                    )
+                )
                 .ConfigureAwait(false);
 
         await act.Should()
@@ -341,7 +366,12 @@ public class OperationsServiceEnqueueTests
         );
 
         var act = async () =>
-            await Queue(new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}"))
+            await Queue(
+                    new QueueTrainInput(
+                        typeof(IProbeTrain).FullName.NotNull(),
+                        "{\"customerId\":1}"
+                    )
+                )
                 .ConfigureAwait(false);
 
         await act.Should()
@@ -354,7 +384,7 @@ public class OperationsServiceEnqueueTests
     public async Task A_missing_authorization_service_is_thrown_rather_than_reported_as_a_refusal()
     {
         var missing = new TrainAuthorizationNotConfiguredException(
-            typeof(IProbeTrain).FullName!,
+            typeof(IProbeTrain).FullName.NotNull(),
             "Train 'IProbeTrain' declares [TraxAuthorize] but no ITrainAuthorizationService is registered."
         );
         EnqueueThrows(missing);
@@ -362,7 +392,10 @@ public class OperationsServiceEnqueueTests
         OperationResult? result = null;
         var act = async () =>
             result = await Queue(
-                    new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}")
+                    new QueueTrainInput(
+                        typeof(IProbeTrain).FullName.NotNull(),
+                        "{\"customerId\":1}"
+                    )
                 )
                 .ConfigureAwait(false);
 
@@ -377,6 +410,7 @@ public class OperationsServiceEnqueueTests
             .BeSameAs(missing);
         result.Should().BeNull();
         _logger
+            .NotNull()
             .Errors.Should()
             .ContainSingle("the misconfiguration is logged where an operator can see it")
             .Which.Should()
@@ -388,21 +422,24 @@ public class OperationsServiceEnqueueTests
     {
         EnqueueThrows(
             new TrainAuthorizationNotConfiguredException(
-                typeof(IProbeTrain).FullName!,
+                typeof(IProbeTrain).FullName.NotNull(),
                 "Train 'IProbeTrain' declares [TraxAuthorize] but no ITrainAuthorizationService is registered."
             )
         );
         var service = new OperationsService(
-            _discovery,
+            _discovery.NotNull(),
             Substitute.For<IDataContextProviderFactory>(),
             new SchedulerConfiguration(),
-            _execution
+            _execution.NotNull()
         );
 
         var act = async () =>
             await service
                 .QueueTrainAsync(
-                    new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}"),
+                    new QueueTrainInput(
+                        typeof(IProbeTrain).FullName.NotNull(),
+                        "{\"customerId\":1}"
+                    ),
                     CancellationToken.None
                 )
                 .ConfigureAwait(false);
@@ -419,7 +456,7 @@ public class OperationsServiceEnqueueTests
         EnqueueThrows(new TrainException("Customer 1 is on hold."));
 
         var result = await Queue(
-            new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}")
+            new QueueTrainInput(typeof(IProbeTrain).FullName.NotNull(), "{\"customerId\":1}")
         );
 
         result.Success.Should().BeFalse();
@@ -429,7 +466,7 @@ public class OperationsServiceEnqueueTests
                 "The enqueue was refused: Customer 1 is on hold.",
                 "a plain TrainException's message is the train author's, written for the caller"
             );
-        _logger.Errors.Should().BeEmpty("a refusal is an answer, not a server fault");
+        _logger.NotNull().Errors.Should().BeEmpty("a refusal is an answer, not a server fault");
     }
 
     [Test]
@@ -439,7 +476,7 @@ public class OperationsServiceEnqueueTests
         EnqueueThrows(thrown);
 
         var result = await Queue(
-            new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}")
+            new QueueTrainInput(typeof(IProbeTrain).FullName.NotNull(), "{\"customerId\":1}")
         );
 
         result.Success.Should().BeFalse("it is still a refusal, not a server fault");
@@ -451,6 +488,7 @@ public class OperationsServiceEnqueueTests
             );
         result.Message.Should().NotContain("secret-host");
         _logger
+            .NotNull()
             .Warnings.Should()
             .ContainSingle("the refusal's real exception is logged for an operator")
             .Which.Should()
@@ -463,7 +501,7 @@ public class OperationsServiceEnqueueTests
         EnqueueThrows(new DerivedTrainException("secret-host:6379 did not answer"));
 
         var result = await Queue(
-            new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}")
+            new QueueTrainInput(typeof(IProbeTrain).FullName.NotNull(), "{\"customerId\":1}")
         );
 
         result.Success.Should().BeFalse();
@@ -474,11 +512,14 @@ public class OperationsServiceEnqueueTests
     public async Task A_hook_that_runs_past_its_limit_is_reported_with_the_mediators_message()
     {
         EnqueueThrows(
-            new QueueHookTimeoutException(typeof(IProbeTrain).FullName!, TimeSpan.FromSeconds(5))
+            new QueueHookTimeoutException(
+                typeof(IProbeTrain).FullName.NotNull(),
+                TimeSpan.FromSeconds(5)
+            )
         );
 
         var result = await Queue(
-            new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}")
+            new QueueTrainInput(typeof(IProbeTrain).FullName.NotNull(), "{\"customerId\":1}")
         );
 
         result.Success.Should().BeFalse();
@@ -490,10 +531,10 @@ public class OperationsServiceEnqueueTests
     [Test]
     public async Task A_cancelled_deferred_entry_is_still_reported_as_a_refusal()
     {
-        EnqueueThrows(new QueuedWorkCancelledException(7, typeof(IProbeTrain).FullName!));
+        EnqueueThrows(new QueuedWorkCancelledException(7, typeof(IProbeTrain).FullName.NotNull()));
 
         var result = await Queue(
-            new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}")
+            new QueueTrainInput(typeof(IProbeTrain).FullName.NotNull(), "{\"customerId\":1}")
         );
 
         result.Success.Should().BeFalse();

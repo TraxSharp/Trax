@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
@@ -49,7 +50,7 @@ public class SubjectSiblingQueriesTests
         entry.CreatedAt = Now.AddMinutes(-ageMinutes);
         entry.ConfirmedAt = confirmed ? Now.AddMinutes(-ageMinutes) : null;
 
-        typeof(WorkQueue).GetProperty(nameof(WorkQueue.Id))!.SetValue(entry, id);
+        typeof(WorkQueue).GetProperty(nameof(WorkQueue.Id)).NotNull().SetValue(entry, id);
 
         return entry;
     }

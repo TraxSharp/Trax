@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Extensions;
@@ -48,10 +49,10 @@ public class MaxActiveJobsTests
 {
     private const int MaxActiveJobsLimit = 5;
 
-    private ServiceProvider _serviceProvider = null!;
+    private ServiceProvider? _serviceProvider;
     private AsyncServiceScope _scope;
-    private IJobDispatcherTrain _train = null!;
-    private IDataContext _dataContext = null!;
+    private IJobDispatcherTrain? _train;
+    private IDataContext? _dataContext;
 
     [OneTimeSetUp]
     public async Task RunBeforeAnyTests()
@@ -88,16 +89,20 @@ public class MaxActiveJobsTests
     }
 
     [OneTimeTearDown]
-    public async Task RunAfterAnyTests() => await _serviceProvider.DisposeAsync();
+    public async Task RunAfterAnyTests()
+    {
+        if (_serviceProvider is not null)
+            await _serviceProvider.DisposeAsync();
+    }
 
     [SetUp]
     public async Task TestSetUp()
     {
-        _scope = _serviceProvider.CreateAsyncScope();
+        _scope = _serviceProvider.NotNull().CreateAsyncScope();
         _train = _scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
         _dataContext = _scope.ServiceProvider.GetRequiredService<IDataContext>();
 
-        await TestSetup.CleanupDatabase(_dataContext);
+        await TestSetup.CleanupDatabase(_dataContext.NotNull());
     }
 
     [TearDown]
@@ -138,13 +143,13 @@ public class MaxActiveJobsTests
         }
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - No entries should be dispatched
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         foreach (var entry in queuedEntries)
         {
-            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+            var updated = await _dataContext.NotNull().WorkQueues.FirstAsync(q => q.Id == entry.Id);
             updated.Status.Should().Be(WorkQueueStatus.Queued, "active jobs are at limit");
         }
     }
@@ -172,14 +177,14 @@ public class MaxActiveJobsTests
         }
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Exactly 2 dispatched (5 - 3 = 2 slots)
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         var dispatchedCount = 0;
         foreach (var entry in entries)
         {
-            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+            var updated = await _dataContext.NotNull().WorkQueues.FirstAsync(q => q.Id == entry.Id);
             if (updated.Status == WorkQueueStatus.Dispatched)
                 dispatchedCount++;
         }
@@ -210,14 +215,14 @@ public class MaxActiveJobsTests
         }
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Exactly 1 dispatched
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         var dispatchedCount = 0;
         foreach (var entry in entries)
         {
-            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+            var updated = await _dataContext.NotNull().WorkQueues.FirstAsync(q => q.Id == entry.Id);
             if (updated.Status == WorkQueueStatus.Dispatched)
                 dispatchedCount++;
         }
@@ -266,13 +271,13 @@ public class MaxActiveJobsTests
         }
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - No entries dispatched
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         foreach (var entry in entries)
         {
-            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+            var updated = await _dataContext.NotNull().WorkQueues.FirstAsync(q => q.Id == entry.Id);
             updated
                 .Status.Should()
                 .Be(
@@ -310,13 +315,13 @@ public class MaxActiveJobsTests
         }
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         foreach (var entry in entries)
         {
-            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+            var updated = await _dataContext.NotNull().WorkQueues.FirstAsync(q => q.Id == entry.Id);
             updated
                 .Status.Should()
                 .Be(WorkQueueStatus.Queued, "InProgress jobs count toward the limit");
@@ -346,13 +351,13 @@ public class MaxActiveJobsTests
         }
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - All 3 dispatched
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         foreach (var entry in entries)
         {
-            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+            var updated = await _dataContext.NotNull().WorkQueues.FirstAsync(q => q.Id == entry.Id);
             updated
                 .Status.Should()
                 .Be(
@@ -385,13 +390,13 @@ public class MaxActiveJobsTests
         }
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - All 3 dispatched
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         foreach (var entry in entries)
         {
-            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+            var updated = await _dataContext.NotNull().WorkQueues.FirstAsync(q => q.Id == entry.Id);
             updated
                 .Status.Should()
                 .Be(
@@ -419,14 +424,14 @@ public class MaxActiveJobsTests
         }
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Exactly MaxActiveJobsLimit dispatched
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         var dispatchedCount = 0;
         foreach (var entry in entries)
         {
-            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+            var updated = await _dataContext.NotNull().WorkQueues.FirstAsync(q => q.Id == entry.Id);
             if (updated.Status == WorkQueueStatus.Dispatched)
                 dispatchedCount++;
         }
@@ -461,13 +466,13 @@ public class MaxActiveJobsTests
         }
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         foreach (var entry in entries)
         {
-            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+            var updated = await _dataContext.NotNull().WorkQueues.FirstAsync(q => q.Id == entry.Id);
             updated.Status.Should().Be(WorkQueueStatus.Queued, "system is already over the limit");
         }
     }
@@ -480,11 +485,11 @@ public class MaxActiveJobsTests
         var entry = await CreateAndSaveWorkQueueEntry(manifest);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
-        _dataContext.Reset();
-        var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+        _dataContext.NotNull().Reset();
+        var updated = await _dataContext.NotNull().WorkQueues.FirstAsync(q => q.Id == entry.Id);
         updated.Status.Should().Be(WorkQueueStatus.Dispatched, "there was capacity to dispatch");
     }
 
@@ -519,14 +524,14 @@ public class MaxActiveJobsTests
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - The high-priority entry should be dispatched (not the low-priority one)
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
 
-        var updatedHighPriority = await _dataContext.WorkQueues.FirstAsync(q =>
-            q.Id == highPriorityEntry.Id
-        );
+        var updatedHighPriority = await _dataContext
+            .NotNull()
+            .WorkQueues.FirstAsync(q => q.Id == highPriorityEntry.Id);
         updatedHighPriority
             .Status.Should()
             .Be(
@@ -534,9 +539,9 @@ public class MaxActiveJobsTests
                 "higher-priority entries should be dispatched before lower-priority ones"
             );
 
-        var updatedLowPriority = await _dataContext.WorkQueues.FirstAsync(q =>
-            q.Id == lowPriorityEntry.Id
-        );
+        var updatedLowPriority = await _dataContext
+            .NotNull()
+            .WorkQueues.FirstAsync(q => q.Id == lowPriorityEntry.Id);
         updatedLowPriority
             .Status.Should()
             .Be(
@@ -569,12 +574,14 @@ public class MaxActiveJobsTests
         var secondEntry = await CreateAndSaveWorkQueueEntry(secondManifest, priority: 10);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - The first entry (earlier CreatedAt) should be dispatched
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
 
-        var updatedFirst = await _dataContext.WorkQueues.FirstAsync(q => q.Id == firstEntry.Id);
+        var updatedFirst = await _dataContext
+            .NotNull()
+            .WorkQueues.FirstAsync(q => q.Id == firstEntry.Id);
         updatedFirst
             .Status.Should()
             .Be(
@@ -582,7 +589,9 @@ public class MaxActiveJobsTests
                 "with same priority, earlier CreatedAt should be dispatched first (FIFO)"
             );
 
-        var updatedSecond = await _dataContext.WorkQueues.FirstAsync(q => q.Id == secondEntry.Id);
+        var updatedSecond = await _dataContext
+            .NotNull()
+            .WorkQueues.FirstAsync(q => q.Id == secondEntry.Id);
         updatedSecond
             .Status.Should()
             .Be(
@@ -618,14 +627,14 @@ public class MaxActiveJobsTests
         }
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Exactly one dispatched
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         var dispatchedCount = 0;
         foreach (var entry in entries)
         {
-            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+            var updated = await _dataContext.NotNull().WorkQueues.FirstAsync(q => q.Id == entry.Id);
             if (updated.Status == WorkQueueStatus.Dispatched)
                 dispatchedCount++;
         }
@@ -677,14 +686,14 @@ public class MaxActiveJobsTests
         }
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Only 1 dispatched (4 active, limit 5)
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         var dispatchedCount = 0;
         foreach (var entry in entries)
         {
-            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+            var updated = await _dataContext.NotNull().WorkQueues.FirstAsync(q => q.Id == entry.Id);
             if (updated.Status == WorkQueueStatus.Dispatched)
                 dispatchedCount++;
         }
@@ -721,13 +730,13 @@ public class MaxActiveJobsTests
         }
 
         // Act - Run first cycle (at limit, nothing should dispatch)
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - No entries dispatched from first cycle
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         foreach (var entry in entries)
         {
-            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+            var updated = await _dataContext.NotNull().WorkQueues.FirstAsync(q => q.Id == entry.Id);
             updated.Status.Should().Be(WorkQueueStatus.Queued, "limit was reached in first cycle");
         }
 
@@ -735,12 +744,13 @@ public class MaxActiveJobsTests
         foreach (var activeManifest in activeManifests.Take(2))
         {
             var metadata = await _dataContext
+                .NotNull()
                 .Metadatas.Where(m => m.ManifestId == activeManifest.Id)
                 .FirstAsync();
             metadata.TrainState = TrainState.Completed;
         }
-        await _dataContext.SaveChanges(CancellationToken.None);
-        _dataContext.Reset();
+        await _dataContext.NotNull().SaveChanges(CancellationToken.None);
+        _dataContext.NotNull().Reset();
 
         // Create a fresh scope for the second cycle (scoped services return the same instance within a scope)
         if (_train is IDisposable disposable)
@@ -749,19 +759,19 @@ public class MaxActiveJobsTests
             dataContextDisposable.Dispose();
         await _scope.DisposeAsync().ConfigureAwait(false);
 
-        _scope = _serviceProvider.CreateAsyncScope();
+        _scope = _serviceProvider.NotNull().CreateAsyncScope();
         _train = _scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
         _dataContext = _scope.ServiceProvider.GetRequiredService<IDataContext>();
 
         // Act - Run second cycle (2 slots available)
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - 2 entries dispatched in second cycle
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         var dispatchedCount = 0;
         foreach (var entry in entries)
         {
-            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+            var updated = await _dataContext.NotNull().WorkQueues.FirstAsync(q => q.Id == entry.Id);
             if (updated.Status == WorkQueueStatus.Dispatched)
                 dispatchedCount++;
         }
@@ -839,7 +849,7 @@ public class MaxActiveJobsTests
             var metadata = Metadata.Create(
                 new CreateMetadata
                 {
-                    Name = typeof(SchedulerTestTrain).FullName!,
+                    Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = new SchedulerTestInput
                     {
@@ -883,7 +893,7 @@ public class MaxActiveJobsTests
             var entry = WorkQueue.Create(
                 new CreateWorkQueue
                 {
-                    TrainName = typeof(SchedulerTestTrain).FullName!,
+                    TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                     Input = manifest.Properties,
                     InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                     ManifestId = manifest.Id,
@@ -988,7 +998,7 @@ public class MaxActiveJobsTests
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "ExcludedActive" },
                 ManifestId = activeManifest.Id,
@@ -1021,7 +1031,7 @@ public class MaxActiveJobsTests
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = queuedManifest.Properties,
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                 ManifestId = queuedManifest.Id,
@@ -1068,12 +1078,12 @@ public class MaxActiveJobsTests
         // Act — Use the main ServiceProvider which has MaxActiveJobs=5 (not 1)
         // This test uses the shared provider (MaxActiveJobs=5), so 1 active is below limit
         // The purpose is a contrast test: without exclusion, active jobs DO count
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert — With MaxActiveJobs=5 and 1 active, entry should dispatch (4 slots)
         // This proves non-excluded trains are counted (just have capacity here)
-        _dataContext.Reset();
-        var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+        _dataContext.NotNull().Reset();
+        var updated = await _dataContext.NotNull().WorkQueues.FirstAsync(q => q.Id == entry.Id);
         updated
             .Status.Should()
             .Be(
@@ -1089,7 +1099,7 @@ public class MaxActiveJobsTests
     private async Task<Manifest> CreateAndSaveManifest(string inputValue = "TestValue")
     {
         var group = await TestSetup
-            .CreateAndSaveManifestGroup(_dataContext, name: $"group-{Guid.NewGuid():N}")
+            .CreateAndSaveManifestGroup(_dataContext.NotNull(), name: $"group-{Guid.NewGuid():N}")
             .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
@@ -1105,9 +1115,9 @@ public class MaxActiveJobsTests
 
         manifest.ManifestGroupId = group.Id;
 
-        await _dataContext.Track(manifest).ConfigureAwait(false);
-        await _dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
-        _dataContext.Reset();
+        await _dataContext.NotNull().Track(manifest).ConfigureAwait(false);
+        await _dataContext.NotNull().SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        _dataContext.NotNull().Reset();
 
         return manifest;
     }
@@ -1117,7 +1127,7 @@ public class MaxActiveJobsTests
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = manifest.GetProperties<SchedulerTestInput>(),
                 ManifestId = manifest.Id,
@@ -1126,9 +1136,9 @@ public class MaxActiveJobsTests
 
         metadata.TrainState = state;
 
-        await _dataContext.Track(metadata).ConfigureAwait(false);
-        await _dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
-        _dataContext.Reset();
+        await _dataContext.NotNull().Track(metadata).ConfigureAwait(false);
+        await _dataContext.NotNull().SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        _dataContext.NotNull().Reset();
 
         return metadata;
     }
@@ -1138,7 +1148,7 @@ public class MaxActiveJobsTests
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = manifest.Properties,
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                 ManifestId = manifest.Id,
@@ -1146,9 +1156,9 @@ public class MaxActiveJobsTests
             }
         );
 
-        await _dataContext.Track(entry).ConfigureAwait(false);
-        await _dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
-        _dataContext.Reset();
+        await _dataContext.NotNull().Track(entry).ConfigureAwait(false);
+        await _dataContext.NotNull().SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        _dataContext.NotNull().Reset();
 
         return entry;
     }

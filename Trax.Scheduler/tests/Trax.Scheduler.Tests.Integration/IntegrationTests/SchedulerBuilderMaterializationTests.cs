@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Scheduler.Configuration;
@@ -40,7 +41,7 @@ public class SchedulerBuilderMaterializationTests
             .DataContext.Manifests.AsNoTracking()
             .FirstOrDefaultAsync(m => m.ExternalId == "ext-schedule");
         manifest.Should().NotBeNull();
-        manifest!.IsEnabled.Should().BeTrue();
+        manifest.NotNull().IsEnabled.Should().BeTrue();
         manifest.ScheduleType.Should().Be(ScheduleType.Interval);
         manifest.IntervalSeconds.Should().Be(300);
     }
@@ -62,7 +63,7 @@ public class SchedulerBuilderMaterializationTests
             .DataContext.Manifests.AsNoTracking()
             .FirstOrDefaultAsync(m => m.ExternalId == "ext-explicit");
         manifest.Should().NotBeNull();
-        manifest!.IntervalSeconds.Should().Be(600);
+        manifest.NotNull().IntervalSeconds.Should().Be(600);
     }
 
     [Test]
@@ -83,9 +84,9 @@ public class SchedulerBuilderMaterializationTests
             .DataContext.Manifests.AsNoTracking()
             .FirstOrDefaultAsync(m => m.ExternalId == "ext-once");
         manifest.Should().NotBeNull();
-        manifest!.ScheduleType.Should().Be(ScheduleType.Once);
+        manifest.NotNull().ScheduleType.Should().Be(ScheduleType.Once);
         manifest.ScheduledAt.Should().NotBeNull();
-        manifest.ScheduledAt!.Value.Should().BeAfter(before);
+        manifest.ScheduledAt.NotNull().Value.Should().BeAfter(before);
     }
 
     [Test]
@@ -272,7 +273,7 @@ public class SchedulerBuilderMaterializationTests
             .Include(m => m.ManifestGroup)
             .FirstAsync(m => m.ExternalId == "ext-grouped");
 
-        manifest.ManifestGroup.Name.Should().Be("my-group");
+        manifest.ManifestGroup.NotNull().Name.Should().Be("my-group");
         manifest.ManifestGroup.MaxActiveJobs.Should().Be(7);
         manifest.ManifestGroup.Priority.Should().Be(3);
     }

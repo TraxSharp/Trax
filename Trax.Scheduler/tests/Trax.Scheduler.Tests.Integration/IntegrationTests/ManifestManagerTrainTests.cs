@@ -2,6 +2,7 @@ using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
@@ -34,7 +35,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class ManifestManagerTrainTests : TestSetup
 {
-    private IManifestManagerTrain _train = null!;
+    private IManifestManagerTrain? _train;
 
     public override async Task TestSetUp()
     {
@@ -62,7 +63,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - The train should complete without errors
         // Since the manifest is interval-based and never ran, a work queue entry should be created
@@ -85,7 +86,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - No work queue entry should be created for the disabled manifest
         DataContext.Reset();
@@ -116,7 +117,7 @@ public class ManifestManagerTrainTests : TestSetup
         await CreateAndSaveMetadata(manifest, TrainState.Failed);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - A dead letter should be created
         DataContext.Reset();
@@ -144,7 +145,7 @@ public class ManifestManagerTrainTests : TestSetup
         await CreateAndSaveMetadata(manifest, TrainState.Failed);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - No dead letter should be created
         DataContext.Reset();
@@ -167,7 +168,7 @@ public class ManifestManagerTrainTests : TestSetup
             maxRetries: -1
         );
 
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         DataContext.Reset();
         var deadLetters = await DataContext
@@ -196,7 +197,7 @@ public class ManifestManagerTrainTests : TestSetup
         await CreateAndSaveDeadLetter(manifest, DeadLetterStatus.AwaitingIntervention);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - No duplicate dead letter should be created
         DataContext.Reset();
@@ -221,7 +222,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - A work queue entry should be created for the job
         DataContext.Reset();
@@ -247,11 +248,11 @@ public class ManifestManagerTrainTests : TestSetup
         var trackedManifest = await DataContext.Manifests.FirstAsync(m => m.Id == manifest.Id);
         trackedManifest.LastSuccessfulRun = DateTime.UtcNow;
         await DataContext.SaveChanges(CancellationToken.None);
-        var lastRunBefore = trackedManifest.LastSuccessfulRun!.Value;
+        var lastRunBefore = trackedManifest.LastSuccessfulRun.NotNull().Value;
         DataContext.Reset();
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - No work queue entry should be created since interval hasn't elapsed
         DataContext.Reset();
@@ -282,7 +283,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - A work queue entry should be created
         DataContext.Reset();
@@ -301,7 +302,7 @@ public class ManifestManagerTrainTests : TestSetup
         var manifest = await CreateAndSaveManifest(scheduleType: ScheduleType.None);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - No work queue entry should be created
         DataContext.Reset();
@@ -321,7 +322,7 @@ public class ManifestManagerTrainTests : TestSetup
         var manifest = await CreateAndSaveManifest(scheduleType: ScheduleType.OnDemand);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - No work queue entry should be created (OnDemand is for bulk operations only)
         DataContext.Reset();
@@ -346,7 +347,7 @@ public class ManifestManagerTrainTests : TestSetup
         await CreateAndSaveDeadLetter(manifest, DeadLetterStatus.AwaitingIntervention);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - No work queue entry should be created
         DataContext.Reset();
@@ -371,7 +372,7 @@ public class ManifestManagerTrainTests : TestSetup
         await CreateAndSaveMetadata(manifest, TrainState.Pending);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - No work queue entry should be created (active metadata prevents queueing)
         DataContext.Reset();
@@ -399,7 +400,7 @@ public class ManifestManagerTrainTests : TestSetup
         await CreateAndSaveMetadata(manifest, TrainState.InProgress);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - No work queue entry should be created (active metadata prevents queueing)
         DataContext.Reset();
@@ -426,7 +427,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -435,7 +436,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         workQueueEntry.Should().NotBeNull();
-        workQueueEntry!.ManifestId.Should().Be(manifest.Id);
+        workQueueEntry.NotNull().ManifestId.Should().Be(manifest.Id);
     }
 
     [Test]
@@ -448,7 +449,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - WorkQueue entry should have correct train name and Queued status
         DataContext.Reset();
@@ -457,7 +458,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         workQueueEntry.Should().NotBeNull();
-        workQueueEntry!.TrainName.Should().Be(typeof(SchedulerTestTrain).FullName);
+        workQueueEntry.NotNull().TrainName.Should().Be(typeof(SchedulerTestTrain).FullName);
         workQueueEntry.Status.Should().Be(WorkQueueStatus.Queued);
     }
 
@@ -483,7 +484,7 @@ public class ManifestManagerTrainTests : TestSetup
         try
         {
             // Act
-            await _train.Run(Unit.Default);
+            await _train.NotNull().Run(Unit.Default);
 
             // Assert
             DataContext.Reset();
@@ -522,7 +523,7 @@ public class ManifestManagerTrainTests : TestSetup
         try
         {
             // Act
-            await _train.Run(Unit.Default);
+            await _train.NotNull().Run(Unit.Default);
 
             // Assert
             DataContext.Reset();
@@ -568,20 +569,24 @@ public class ManifestManagerTrainTests : TestSetup
         try
         {
             // Act
-            await _train.Run(Unit.Default);
+            await _train.NotNull().Run(Unit.Default);
 
             // Assert
             DataContext.Reset();
             var groupAEntries = await DataContext
                 .WorkQueues.Include(q => q.Manifest)
                 .Where(q =>
-                    q.Status == WorkQueueStatus.Queued && q.Manifest!.ManifestGroupId == groupA.Id
+                    q.Status == WorkQueueStatus.Queued
+                    && q.Manifest != null
+                    && q.Manifest.ManifestGroupId == groupA.Id
                 )
                 .CountAsync();
             var groupBEntries = await DataContext
                 .WorkQueues.Include(q => q.Manifest)
                 .Where(q =>
-                    q.Status == WorkQueueStatus.Queued && q.Manifest!.ManifestGroupId == groupB.Id
+                    q.Status == WorkQueueStatus.Queued
+                    && q.Manifest != null
+                    && q.Manifest.ManifestGroupId == groupB.Id
                 )
                 .CountAsync();
 
@@ -622,7 +627,7 @@ public class ManifestManagerTrainTests : TestSetup
         try
         {
             // Act
-            await _train.Run(Unit.Default);
+            await _train.NotNull().Run(Unit.Default);
 
             // Assert — each group should get exactly 5 entries (20 / 4)
             DataContext.Reset();
@@ -632,7 +637,8 @@ public class ManifestManagerTrainTests : TestSetup
                     .WorkQueues.Include(q => q.Manifest)
                     .Where(q =>
                         q.Status == WorkQueueStatus.Queued
-                        && q.Manifest!.ManifestGroupId == group.Id
+                        && q.Manifest != null
+                        && q.Manifest.ManifestGroupId == group.Id
                     )
                     .CountAsync();
 
@@ -679,20 +685,24 @@ public class ManifestManagerTrainTests : TestSetup
         try
         {
             // Act
-            await _train.Run(Unit.Default);
+            await _train.NotNull().Run(Unit.Default);
 
             // Assert
             DataContext.Reset();
             var groupAEntries = await DataContext
                 .WorkQueues.Include(q => q.Manifest)
                 .Where(q =>
-                    q.Status == WorkQueueStatus.Queued && q.Manifest!.ManifestGroupId == groupA.Id
+                    q.Status == WorkQueueStatus.Queued
+                    && q.Manifest != null
+                    && q.Manifest.ManifestGroupId == groupA.Id
                 )
                 .CountAsync();
             var groupBEntries = await DataContext
                 .WorkQueues.Include(q => q.Manifest)
                 .Where(q =>
-                    q.Status == WorkQueueStatus.Queued && q.Manifest!.ManifestGroupId == groupB.Id
+                    q.Status == WorkQueueStatus.Queued
+                    && q.Manifest != null
+                    && q.Manifest.ManifestGroupId == groupB.Id
                 )
                 .CountAsync();
 
@@ -726,7 +736,7 @@ public class ManifestManagerTrainTests : TestSetup
         try
         {
             // Act
-            await _train.Run(Unit.Default);
+            await _train.NotNull().Run(Unit.Default);
 
             // Assert
             DataContext.Reset();
@@ -767,7 +777,7 @@ public class ManifestManagerTrainTests : TestSetup
         try
         {
             // Act
-            await _train.Run(Unit.Default);
+            await _train.NotNull().Run(Unit.Default);
 
             // Assert — all 10 should be processed (no truncation)
             DataContext.Reset();
@@ -810,7 +820,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -858,7 +868,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -893,7 +903,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         // Act & Assert - The train should complete successfully without throwing
-        var act = async () => await _train.Run(Unit.Default).ConfigureAwait(false);
+        var act = async () => await _train.NotNull().Run(Unit.Default).ConfigureAwait(false);
         await act.Should().NotThrowAsync();
     }
 
@@ -908,7 +918,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         // Act & Assert - Should complete without throwing
-        var act = async () => await _train.Run(Unit.Default).ConfigureAwait(false);
+        var act = async () => await _train.NotNull().Run(Unit.Default).ConfigureAwait(false);
         await act.Should().NotThrowAsync();
     }
 
@@ -922,11 +932,11 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         // Act - Run the train twice (first creates queue entry, second should skip)
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Recreate train for second run (fresh scope)
         _train = Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Only one work queue entry should exist (double-queue prevention)
         DataContext.Reset();
@@ -955,7 +965,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         // Act - Should not throw
-        var act = async () => await _train.Run(Unit.Default).ConfigureAwait(false);
+        var act = async () => await _train.NotNull().Run(Unit.Default).ConfigureAwait(false);
 
         // Assert
         await act.Should().NotThrowAsync();
@@ -972,7 +982,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Should not create work queue entry due to invalid interval
         DataContext.Reset();
@@ -994,7 +1004,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -1016,7 +1026,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -1054,7 +1064,7 @@ public class ManifestManagerTrainTests : TestSetup
         var dependent = await CreateAndSaveDependentManifest(parent, inputValue: "Dependent");
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Dependent should be queued
         DataContext.Reset();
@@ -1094,7 +1104,7 @@ public class ManifestManagerTrainTests : TestSetup
         DataContext.Reset();
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Dependent should NOT be queued (already ran after parent)
         DataContext.Reset();
@@ -1118,7 +1128,7 @@ public class ManifestManagerTrainTests : TestSetup
         var dependent = await CreateAndSaveDependentManifest(parent, inputValue: "Dependent");
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Dependent should NOT be queued (parent hasn't succeeded yet)
         DataContext.Reset();
@@ -1152,7 +1162,7 @@ public class ManifestManagerTrainTests : TestSetup
         await CreateAndSaveDeadLetter(dependent, DeadLetterStatus.AwaitingIntervention);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Dependent should NOT be queued (has dead letter)
         DataContext.Reset();
@@ -1186,7 +1196,7 @@ public class ManifestManagerTrainTests : TestSetup
         await CreateAndSaveMetadata(dependent, TrainState.Pending);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Dependent should NOT be queued (has active execution)
         DataContext.Reset();
@@ -1220,7 +1230,7 @@ public class ManifestManagerTrainTests : TestSetup
         await CreateAndSaveWorkQueueEntry(dependent);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Should NOT create a duplicate queue entry
         DataContext.Reset();
@@ -1254,7 +1264,7 @@ public class ManifestManagerTrainTests : TestSetup
         var manifestC = await CreateAndSaveDependentManifest(manifestB, inputValue: "C");
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -1290,7 +1300,7 @@ public class ManifestManagerTrainTests : TestSetup
         var dormant = await CreateAndSaveDormantDependentManifest(parent, inputValue: "Dormant");
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - DormantDependent should NOT have any work queue entries
         DataContext.Reset();
@@ -1334,7 +1344,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -1383,7 +1393,7 @@ public class ManifestManagerTrainTests : TestSetup
         var dependent = await CreateAndSaveDependentManifest(parent, inputValue: "Dependent");
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Dependent should NOT be queued because parent has no successful metadata
         DataContext.Reset();
@@ -1418,7 +1428,7 @@ public class ManifestManagerTrainTests : TestSetup
         var dependent = await CreateAndSaveDependentManifest(parent, inputValue: "Dependent");
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Dependent should be queued (timestamp backed by real metadata)
         DataContext.Reset();
@@ -1454,7 +1464,7 @@ public class ManifestManagerTrainTests : TestSetup
         var dependent = await CreateAndSaveDependentManifest(parent, inputValue: "Dependent");
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Dependent should NOT be queued
         DataContext.Reset();
@@ -1495,7 +1505,7 @@ public class ManifestManagerTrainTests : TestSetup
         var dependent = await CreateAndSaveDependentManifest(parent, inputValue: "Dependent");
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Dependent should NOT be queued
         DataContext.Reset();
@@ -1532,7 +1542,7 @@ public class ManifestManagerTrainTests : TestSetup
         var manifestC = await CreateAndSaveDependentManifest(manifestB, inputValue: "C");
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Neither B nor C should be queued
         DataContext.Reset();
@@ -1574,7 +1584,7 @@ public class ManifestManagerTrainTests : TestSetup
         var dependent = await CreateAndSaveDependentManifest(parent, inputValue: "Dependent");
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Dependent should be queued (at least one Completed metadata exists)
         DataContext.Reset();
@@ -1605,7 +1615,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - A work queue entry should be created
         DataContext.Reset();
@@ -1631,7 +1641,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - No work queue entry should be created
         DataContext.Reset();
@@ -1661,7 +1671,7 @@ public class ManifestManagerTrainTests : TestSetup
         DataContext.Reset();
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - No work queue entry should be created
         DataContext.Reset();
@@ -1698,7 +1708,7 @@ public class ManifestManagerTrainTests : TestSetup
         DataContext.Reset();
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -1734,7 +1744,7 @@ public class ManifestManagerTrainTests : TestSetup
         DataContext.Reset();
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -1770,7 +1780,7 @@ public class ManifestManagerTrainTests : TestSetup
         DataContext.Reset();
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -1810,7 +1820,7 @@ public class ManifestManagerTrainTests : TestSetup
         DataContext.Reset();
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Should NOT be queued because NextScheduledRun is in the future
         DataContext.Reset();
@@ -1843,7 +1853,7 @@ public class ManifestManagerTrainTests : TestSetup
         DataContext.Reset();
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Should be queued because NextScheduledRun has passed
         DataContext.Reset();
@@ -1873,7 +1883,7 @@ public class ManifestManagerTrainTests : TestSetup
         DataContext.Reset();
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Should be queued because never ran (fallback: lastRun is null → fire immediately)
         DataContext.Reset();
@@ -1911,7 +1921,7 @@ public class ManifestManagerTrainTests : TestSetup
         await CreateAndSaveDeadLetter(manifest, DeadLetterStatus.Retried, resolvedAt: oldTime);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - no new dead letter should be created (old failures are "forgiven")
         DataContext.Reset();
@@ -1966,7 +1976,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - only 1 post-resolution failure, below maxRetries=2
         DataContext.Reset();
@@ -2026,7 +2036,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - 3 post-resolution failures > maxRetries=2, new dead letter created
         DataContext.Reset();
@@ -2076,7 +2086,7 @@ public class ManifestManagerTrainTests : TestSetup
         await CreateAndSaveMetadata(manifest, TrainState.Failed, startTime: dl2Time.AddMinutes(5));
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - only 1 failure after most recent resolution, below threshold
         DataContext.Reset();
@@ -2107,7 +2117,7 @@ public class ManifestManagerTrainTests : TestSetup
         await CreateAndSaveDeadLetter(manifest, DeadLetterStatus.Acknowledged, resolvedAt: oldTime);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - acknowledged dead letter resets count just like retried
         DataContext.Reset();
@@ -2135,7 +2145,7 @@ public class ManifestManagerTrainTests : TestSetup
         await CreateAndSaveMetadata(manifest, TrainState.Failed);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - backward compatible: all failures counted, dead letter created
         DataContext.Reset();
@@ -2167,7 +2177,7 @@ public class ManifestManagerTrainTests : TestSetup
         await CreateAndSaveDeadLetter(manifest, DeadLetterStatus.AwaitingIntervention);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - only the original dead letter exists (no duplicate)
         DataContext.Reset();
@@ -2220,7 +2230,7 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - only 1 post-resolution failure, below maxRetries=2
         DataContext.Reset();
@@ -2251,7 +2261,7 @@ public class ManifestManagerTrainTests : TestSetup
         await CreateAndSaveDeadLetter(manifest, DeadLetterStatus.Retried, resolvedAt: null);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - null ResolvedAt means the NOT EXISTS subquery doesn't match,
         // so all failures count. A new dead letter should be created.
@@ -2307,7 +2317,7 @@ public class ManifestManagerTrainTests : TestSetup
         await CreateAndSaveMetadata(manifest, TrainState.Failed, startTime: dl2Time.AddMinutes(5));
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - only 1 failure after most recent resolution, below maxRetries=2
         DataContext.Reset();
@@ -2436,7 +2446,7 @@ public class ManifestManagerTrainTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = manifest.GetProperties<SchedulerTestInput>(),
                 ManifestId = manifest.Id,

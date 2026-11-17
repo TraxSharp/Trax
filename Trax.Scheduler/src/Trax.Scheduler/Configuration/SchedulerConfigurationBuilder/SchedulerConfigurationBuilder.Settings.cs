@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.WorkQueue;
@@ -172,7 +173,7 @@ public partial class SchedulerConfigurationBuilder
     public SchedulerConfigurationBuilder ExcludeFromMaxActiveJobs<TTrain>()
         where TTrain : class
     {
-        _configuration.ExcludedTrainTypeNames.Add(typeof(TTrain).FullName!);
+        _configuration.ExcludedTrainTypeNames.Add(typeof(TTrain).FullName.NotNull());
         return this;
     }
 

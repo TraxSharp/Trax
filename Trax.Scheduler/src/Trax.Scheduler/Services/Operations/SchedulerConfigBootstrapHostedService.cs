@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Utilities;
@@ -250,7 +251,8 @@ internal sealed class SchedulerConfigBootstrapHostedService : IHostedService, ID
         foreach (var setting in SchedulerSettings.All)
         {
             if (
-                !setting.AppliesTo(target) || !_configured!.TryGetValue(setting.Name, out var value)
+                !setting.AppliesTo(target)
+                || !_configured.NotNull().TryGetValue(setting.Name, out var value)
             )
                 continue;
 

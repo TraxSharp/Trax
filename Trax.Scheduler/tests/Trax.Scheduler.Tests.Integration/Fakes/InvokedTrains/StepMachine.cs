@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 using static Trax.StateMachine.Rules;
@@ -35,7 +36,10 @@ public abstract class StepMachine : Machine<StepState, StepTrigger>
 
         m.In(StepState.Running)
             .Invokes<IInvokedStepTrain, InvokedStepInput, InvokedStepOutput>(ctx =>
-                new(ctx["mode"]!.GetValue<string>(), ctx["note"]!.GetValue<string>())
+                new(
+                    ctx["mode"].NotNull().GetValue<string>(),
+                    ctx["note"].NotNull().GetValue<string>()
+                )
             )
             .OnDone(
                 System ? StepState.Chained : StepState.Done,
@@ -53,7 +57,7 @@ public abstract class StepMachine : Machine<StepState, StepTrigger>
 
         m.In(StepState.Chained)
             .Invokes<IInvokedStepTrain, InvokedStepInput, InvokedStepOutput>(ctx =>
-                new(InvokedStepModes.Ok, "next:" + ctx["note"]!.GetValue<string>())
+                new(InvokedStepModes.Ok, "next:" + ctx["note"].NotNull().GetValue<string>())
             )
             .OnDone(
                 StepState.Done,

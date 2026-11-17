@@ -2,6 +2,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Monad;
 using Trax.Effect.Data.InMemory.Extensions;
@@ -49,15 +50,15 @@ public class RemoteParallelFailureTests
             ).Which;
 
         var response = TraxRequestHandler.BuildErrorResponse(failure);
-        var wire = JsonSerializer.Deserialize<RemoteRunResponse>(
-            JsonSerializer.Serialize(response)
-        )!;
+        var wire = JsonSerializer
+            .Deserialize<RemoteRunResponse>(JsonSerializer.Serialize(response))
+            .NotNull();
         var rebuilt = HttpRunExecutor.BuildExceptionFromErrorResponse(wire);
 
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(IRemoteBranchesTrain).FullName!,
+                Name = typeof(IRemoteBranchesTrain).FullName.NotNull(),
                 ExternalId = "remote",
                 Input = null,
             }

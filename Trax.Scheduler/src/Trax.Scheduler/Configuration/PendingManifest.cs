@@ -25,11 +25,7 @@ internal sealed class PendingManifest
     /// The closure is invoked with an <see cref="ITraxScheduler"/> instance to perform
     /// the actual scheduling operation.
     /// </remarks>
-    public required Func<
-        ITraxScheduler,
-        CancellationToken,
-        Task<Manifest>
-    > ScheduleFunc { get; init; }
+    public required Func<ITraxScheduler, CancellationToken, Task> ScheduleFunc { get; init; }
 
     /// <summary>
     /// Gets or sets the external ID for logging and debugging purposes.

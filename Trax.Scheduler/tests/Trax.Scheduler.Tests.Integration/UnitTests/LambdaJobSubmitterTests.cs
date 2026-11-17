@@ -5,6 +5,7 @@ using Amazon.Lambda.Model;
 using Amazon.Runtime;
 using AwesomeAssertions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Utils;
 using Trax.Scheduler.Lambda.Configuration;
 using Trax.Scheduler.Lambda.Services;
@@ -57,7 +58,9 @@ public class LambdaJobSubmitterTests
 
         await submitter.EnqueueAsync(42);
 
-        var envelope = JsonSerializer.Deserialize<LambdaEnvelope>(client.LastRequest!.Payload)!;
+        var envelope = JsonSerializer
+            .Deserialize<LambdaEnvelope>(client.LastRequest.NotNull().Payload)
+            .NotNull();
         (
             await new Trax.Scheduler.Services.RequestSigning.RunnerRequestVerifier(
                 new Trax.Scheduler.Configuration.TraxJobRunnerOptions { SigningKey = key },
@@ -87,7 +90,8 @@ public class LambdaJobSubmitterTests
         await submitter.EnqueueAsync(42);
 
         JsonSerializer
-            .Deserialize<LambdaEnvelope>(client.LastRequest!.Payload)!
+            .Deserialize<LambdaEnvelope>(client.LastRequest.NotNull().Payload)
+            .NotNull()
             .Signature.Should()
             .BeNull();
     }
@@ -121,19 +125,19 @@ public class LambdaJobSubmitterTests
         // Assert
         client.LastRequest.Should().NotBeNull();
         var envelope = JsonSerializer.Deserialize<LambdaEnvelope>(
-            client.LastRequest!.Payload,
+            client.LastRequest.NotNull().Payload,
             WebOptions
         );
 
         envelope.Should().NotBeNull();
-        envelope!.Type.Should().Be(LambdaRequestType.Execute);
+        envelope.NotNull().Type.Should().Be(LambdaRequestType.Execute);
 
         var request = JsonSerializer.Deserialize<RemoteJobRequest>(
             envelope.PayloadJson,
             WebOptions
         );
         request.Should().NotBeNull();
-        request!.MetadataId.Should().Be(42);
+        request.NotNull().MetadataId.Should().Be(42);
         request.Input.Should().BeNull();
         request.InputType.Should().BeNull();
     }
@@ -148,7 +152,7 @@ public class LambdaJobSubmitterTests
         await submitter.EnqueueAsync(42);
 
         // Assert
-        client.LastRequest!.InvocationType.Should().Be(InvocationType.Event);
+        client.LastRequest.NotNull().InvocationType.Should().Be(InvocationType.Event);
     }
 
     [Test]
@@ -164,7 +168,8 @@ public class LambdaJobSubmitterTests
 
         // Assert
         client
-            .LastRequest!.FunctionName.Should()
+            .LastRequest.NotNull()
+            .FunctionName.Should()
             .Be("arn:aws:lambda:us-east-1:123456789:function:my-fn");
     }
 
@@ -184,17 +189,17 @@ public class LambdaJobSubmitterTests
 
         // Assert
         var envelope = JsonSerializer.Deserialize<LambdaEnvelope>(
-            client.LastRequest!.Payload,
+            client.LastRequest.NotNull().Payload,
             WebOptions
         );
 
         var request = JsonSerializer.Deserialize<RemoteJobRequest>(
-            envelope!.PayloadJson,
+            envelope.NotNull().PayloadJson,
             WebOptions
         );
 
         request.Should().NotBeNull();
-        request!.MetadataId.Should().Be(50);
+        request.NotNull().MetadataId.Should().Be(50);
         request.Input.Should().NotBeNull();
         request.Input.Should().Contain("hello-world");
         request.InputType.Should().Be(typeof(SchedulerTestInput).FullName);
@@ -212,12 +217,12 @@ public class LambdaJobSubmitterTests
 
         // Assert
         var envelope = JsonSerializer.Deserialize<LambdaEnvelope>(
-            client.LastRequest!.Payload,
+            client.LastRequest.NotNull().Payload,
             WebOptions
         );
 
         var request = JsonSerializer.Deserialize<RemoteJobRequest>(
-            envelope!.PayloadJson,
+            envelope.NotNull().PayloadJson,
             WebOptions
         );
 
@@ -226,7 +231,7 @@ public class LambdaJobSubmitterTests
             input.GetType(),
             TraxJsonSerializationOptions.ManifestProperties
         );
-        request!.Input.Should().Be(expectedJson);
+        request.NotNull().Input.Should().Be(expectedJson);
     }
 
     [Test]
@@ -260,16 +265,16 @@ public class LambdaJobSubmitterTests
 
         // Assert
         var envelope = JsonSerializer.Deserialize<LambdaEnvelope>(
-            client.LastRequest!.Payload,
+            client.LastRequest.NotNull().Payload,
             WebOptions
         );
 
         var request = JsonSerializer.Deserialize<RemoteJobRequest>(
-            envelope!.PayloadJson,
+            envelope.NotNull().PayloadJson,
             WebOptions
         );
 
-        request!.MetadataId.Should().Be(99);
+        request.NotNull().MetadataId.Should().Be(99);
         request.Input.Should().BeNull();
     }
 

@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Sqlite.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
@@ -25,7 +26,7 @@ namespace Trax.Scheduler.Tests.Sqlite.Integration.UnitTests;
 [TestFixture]
 public class SqliteSchedulerBuilderTests
 {
-    private string _dbPath = null!;
+    private string? _dbPath;
 
     [SetUp]
     public void SetUp()
@@ -36,12 +37,12 @@ public class SqliteSchedulerBuilderTests
     [TearDown]
     public void TearDown()
     {
-        if (File.Exists(_dbPath))
-            File.Delete(_dbPath);
-        var walPath = _dbPath + "-wal";
+        if (File.Exists(_dbPath.NotNull()))
+            File.Delete(_dbPath.NotNull());
+        var walPath = _dbPath.NotNull() + "-wal";
         if (File.Exists(walPath))
             File.Delete(walPath);
-        var shmPath = _dbPath + "-shm";
+        var shmPath = _dbPath.NotNull() + "-shm";
         if (File.Exists(shmPath))
             File.Delete(shmPath);
     }
@@ -51,7 +52,7 @@ public class SqliteSchedulerBuilderTests
         var services = new ServiceCollection();
         services.AddLogging(x => x.SetMinimumLevel(LogLevel.Warning));
         services.AddTrax(trax =>
-            trax.AddEffects(effects => effects.UseSqlite($"Data Source={_dbPath}"))
+            trax.AddEffects(effects => effects.UseSqlite($"Data Source={_dbPath.NotNull()}"))
                 .AddMediator(typeof(AssemblyMarker).Assembly)
                 .AddScheduler(scheduler => scheduler.UseInMemoryWorkers())
         );

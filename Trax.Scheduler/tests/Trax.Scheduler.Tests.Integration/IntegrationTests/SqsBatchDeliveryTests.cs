@@ -4,6 +4,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -34,8 +35,8 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class SqsBatchDeliveryTests
 {
-    private ServiceProvider _serviceProvider = null!;
-    private IDataContext _dataContext = null!;
+    private ServiceProvider? _serviceProvider;
+    private IDataContext? _dataContext;
     private AsyncServiceScope _scope;
     private readonly List<string> _keys = [];
 
@@ -61,14 +62,18 @@ public class SqsBatchDeliveryTests
     }
 
     [OneTimeTearDown]
-    public async Task RunAfterAnyTests() => await _serviceProvider.DisposeAsync();
+    public async Task RunAfterAnyTests()
+    {
+        if (_serviceProvider is not null)
+            await _serviceProvider.DisposeAsync();
+    }
 
     [SetUp]
     public async Task TestSetUp()
     {
-        _scope = _serviceProvider.CreateAsyncScope();
+        _scope = _serviceProvider.NotNull().CreateAsyncScope();
         _dataContext = _scope.ServiceProvider.GetRequiredService<IDataContext>();
-        await TestSetup.CleanupDatabase(_dataContext);
+        await TestSetup.CleanupDatabase(_dataContext.NotNull());
     }
 
     [TearDown]
@@ -89,7 +94,7 @@ public class SqsBatchDeliveryTests
         var (second, _) = await PendingRun();
         var (third, thirdKey) = await PendingRun(fail: true);
 
-        var handler = new SqsJobRunnerHandler(_serviceProvider);
+        var handler = new SqsJobRunnerHandler(_serviceProvider.NotNull());
         var batch = new SQSEvent
         {
             Records =
@@ -110,7 +115,7 @@ public class SqsBatchDeliveryTests
         DeliveryProbeTrain.Runs[firstKey].Should().Be(1);
         DeliveryProbeTrain.Runs[thirdKey].Should().Be(1, "a record after a bad one still runs");
 
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         (await StateOf(second)).Should().Be(TrainState.Pending);
         (await StateOf(third)).Should().Be(TrainState.Failed);
     }
@@ -119,7 +124,7 @@ public class SqsBatchDeliveryTests
     public async Task A_record_naming_a_run_that_does_not_exist_is_reported()
     {
         var (run, key) = await PendingRun();
-        var handler = new SqsJobRunnerHandler(_serviceProvider);
+        var handler = new SqsJobRunnerHandler(_serviceProvider.NotNull());
         var batch = new SQSEvent
         {
             Records = [Record("m1", run, key), Record("m2", run + 1_000_000, "missing")],
@@ -138,7 +143,7 @@ public class SqsBatchDeliveryTests
     public async Task A_redelivered_record_whose_run_already_completed_is_acknowledged()
     {
         var (run, key) = await PendingRun();
-        var handler = new SqsJobRunnerHandler(_serviceProvider);
+        var handler = new SqsJobRunnerHandler(_serviceProvider.NotNull());
         var batch = new SQSEvent { Records = [Record("m1", run, key)] };
 
         (await handler.HandleBatchAsync(batch)).BatchItemFailures.Should().BeEmpty();
@@ -157,7 +162,7 @@ public class SqsBatchDeliveryTests
         var (second, _) = await PendingRun();
         var (third, thirdKey) = await PendingRun();
 
-        var handler = new SqsJobRunnerHandler(_serviceProvider);
+        var handler = new SqsJobRunnerHandler(_serviceProvider.NotNull());
         var batch = new SQSEvent
         {
             Records =
@@ -178,6 +183,7 @@ public class SqsBatchDeliveryTests
     private async Task<TrainState> StateOf(long metadataId) =>
         (
             await _dataContext
+                .NotNull()
                 .Metadatas.AsNoTracking()
                 .SingleAsync(m => m.Id == metadataId)
                 .ConfigureAwait(false)
@@ -190,14 +196,14 @@ public class SqsBatchDeliveryTests
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(IDeliveryProbeTrain).FullName!,
+                Name = typeof(IDeliveryProbeTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
             }
         );
-        await _dataContext.Track(metadata).ConfigureAwait(false);
-        await _dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
-        _dataContext.Reset();
+        await _dataContext.NotNull().Track(metadata).ConfigureAwait(false);
+        await _dataContext.NotNull().SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        _dataContext.NotNull().Reset();
         _probeInputs[key] = new DeliveryProbeInput { Key = key, Fail = fail };
         return (metadata.Id, key);
     }

@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
@@ -23,7 +24,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class OperationsServiceWorkQueueDetailTests : TestSetup
 {
-    private IOperationsService _operations = null!;
+    private IOperationsService? _operations;
 
     public override async Task TestSetUp()
     {
@@ -32,7 +33,7 @@ public class OperationsServiceWorkQueueDetailTests : TestSetup
     }
 
     private Task<WorkQueueEntryDetail?> Detail(long id) =>
-        _operations.GetWorkQueueEntryDetailAsync(id, CancellationToken.None);
+        _operations.NotNull().GetWorkQueueEntryDetailAsync(id, CancellationToken.None);
 
     private async Task<long> AddEntry(
         string? subject,
@@ -48,7 +49,7 @@ public class OperationsServiceWorkQueueDetailTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(ISchedulerTestTrain).FullName!,
+                TrainName = typeof(ISchedulerTestTrain).FullName.NotNull(),
                 InputTypeName = inputTypeName ?? "Other.App.SubjectInput",
                 Input = input,
                 SubjectKey = subject,
@@ -71,7 +72,7 @@ public class OperationsServiceWorkQueueDetailTests : TestSetup
         var run = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(ISchedulerTestTrain).FullName!,
+                Name = typeof(ISchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
             }
@@ -96,7 +97,7 @@ public class OperationsServiceWorkQueueDetailTests : TestSetup
         var detail = await Detail(id);
 
         detail.Should().NotBeNull();
-        detail!.Id.Should().Be(id);
+        detail.NotNull().Id.Should().Be(id);
         detail.TrainName.Should().Be(typeof(ISchedulerTestTrain).FullName);
         detail.Status.Should().Be(WorkQueueStatus.Queued);
         detail.Priority.Should().Be(4);
@@ -115,7 +116,7 @@ public class OperationsServiceWorkQueueDetailTests : TestSetup
 
         var detail = await Detail(id);
 
-        detail!.Input.Should().Be("""{"_redacted":true}""");
+        detail.NotNull().Input.Should().Be("""{"_redacted":true}""");
     }
 
     [LeavesStuckRuns(
@@ -131,7 +132,7 @@ public class OperationsServiceWorkQueueDetailTests : TestSetup
 
         var detail = await Detail(waiting);
 
-        detail!.SubjectHeldBy.Should().Be(holder);
+        detail.NotNull().SubjectHeldBy.Should().Be(holder);
         older.Should().BePositive();
         detail
             .SubjectQueuedBehind.Should()
@@ -147,7 +148,7 @@ public class OperationsServiceWorkQueueDetailTests : TestSetup
 
         var detail = await Detail(waiting);
 
-        detail!.SubjectHeldBy.Should().BeNull();
+        detail.NotNull().SubjectHeldBy.Should().BeNull();
         detail.SubjectQueuedBehind.Should().BeNull();
     }
 
@@ -163,9 +164,9 @@ public class OperationsServiceWorkQueueDetailTests : TestSetup
         );
         var ordinary = await AddEntry("customer-5");
 
-        (await Detail(younger))!.SubjectQueuedBehind.Should().Be(older);
-        (await Detail(older))!.SubjectQueuedBehind.Should().BeNull();
-        (await Detail(ordinary))!.SubjectQueuedBehind.Should().Be(urgent);
+        (await Detail(younger)).NotNull().SubjectQueuedBehind.Should().Be(older);
+        (await Detail(older)).NotNull().SubjectQueuedBehind.Should().BeNull();
+        (await Detail(ordinary)).NotNull().SubjectQueuedBehind.Should().Be(urgent);
     }
 
     [Test]
@@ -174,7 +175,8 @@ public class OperationsServiceWorkQueueDetailTests : TestSetup
         await AddEntry("customer-6", priority: 9, scheduledAt: DateTime.UtcNow.AddDays(1));
         var dueNow = await AddEntry("customer-6");
 
-        (await Detail(dueNow))!
+        (await Detail(dueNow))
+            .NotNull()
             .SubjectQueuedBehind.Should()
             .BeNull("dispatch does not offer an entry before it is due");
     }
@@ -193,9 +195,9 @@ public class OperationsServiceWorkQueueDetailTests : TestSetup
         var d1 = await Detail(dispatched);
         var d2 = await Detail(noSubject);
 
-        d1!.SubjectHeldBy.Should().BeNull();
+        d1.NotNull().SubjectHeldBy.Should().BeNull();
         d1.SubjectQueuedBehind.Should().BeNull();
-        d2!.SubjectHeldBy.Should().BeNull();
+        d2.NotNull().SubjectHeldBy.Should().BeNull();
         d2.SubjectQueuedBehind.Should().BeNull();
     }
 

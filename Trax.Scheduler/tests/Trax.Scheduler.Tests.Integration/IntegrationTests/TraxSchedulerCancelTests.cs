@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
@@ -26,8 +27,8 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class TraxSchedulerCancelTests : TestSetup
 {
-    private ITraxScheduler _scheduler = null!;
-    private ICancellationRegistry _registry = null!;
+    private ITraxScheduler? _scheduler;
+    private ICancellationRegistry? _registry;
 
     public override async Task TestSetUp()
     {
@@ -46,7 +47,7 @@ public class TraxSchedulerCancelTests : TestSetup
         var manifest = await CreateManifestWithMetadata(TrainState.InProgress);
 
         // Act
-        var count = await _scheduler.CancelAsync(manifest.ExternalId);
+        var count = await _scheduler.NotNull().CancelAsync(manifest.ExternalId);
 
         // Assert
         count.Should().Be(1);
@@ -65,7 +66,7 @@ public class TraxSchedulerCancelTests : TestSetup
         var manifest = await CreateManifestWithMetadata(TrainState.Completed);
 
         // Act
-        var count = await _scheduler.CancelAsync(manifest.ExternalId);
+        var count = await _scheduler.NotNull().CancelAsync(manifest.ExternalId);
 
         // Assert
         count.Should().Be(0);
@@ -83,7 +84,7 @@ public class TraxSchedulerCancelTests : TestSetup
         );
 
         // Act
-        var count = await _scheduler.CancelAsync(manifest.ExternalId);
+        var count = await _scheduler.NotNull().CancelAsync(manifest.ExternalId);
 
         // Assert
         count.Should().Be(2);
@@ -100,7 +101,7 @@ public class TraxSchedulerCancelTests : TestSetup
     public async Task CancelAsync_NonexistentExternalId_ThrowsInvalidOperation()
     {
         // Act
-        var act = () => _scheduler.CancelAsync("nonexistent-id");
+        var act = () => _scheduler.NotNull().CancelAsync("nonexistent-id");
 
         // Assert
         await act.Should().ThrowAsync<InvalidOperationException>();
@@ -120,19 +121,19 @@ public class TraxSchedulerCancelTests : TestSetup
 
         // Register a CTS so we can verify TryCancel is called
         using var cts = new CancellationTokenSource();
-        _registry.Register(metadata.Id, cts);
+        _registry.NotNull().Register(metadata.Id, cts);
 
         try
         {
             // Act
-            await _scheduler.CancelAsync(manifest.ExternalId, CancellationToken.None);
+            await _scheduler.NotNull().CancelAsync(manifest.ExternalId, CancellationToken.None);
 
             // Assert — the CTS should have been cancelled via the registry
             cts.IsCancellationRequested.Should().BeTrue();
         }
         finally
         {
-            _registry.Unregister(metadata.Id);
+            _registry.NotNull().Unregister(metadata.Id);
         }
     }
 
@@ -146,7 +147,7 @@ public class TraxSchedulerCancelTests : TestSetup
             TrainState.Completed
         );
 
-        var count = await _scheduler.CancelAsync(manifest.ExternalId);
+        var count = await _scheduler.NotNull().CancelAsync(manifest.ExternalId);
 
         count
             .Should()
@@ -177,7 +178,7 @@ public class TraxSchedulerCancelTests : TestSetup
         var manifest = await CreateManifestInGroup(group);
         var pending = await CreateMetadataForManifest(manifest, TrainState.Pending);
 
-        var count = await _scheduler.CancelGroupAsync(group.Id);
+        var count = await _scheduler.NotNull().CancelGroupAsync(group.Id);
 
         count.Should().Be(1);
         DataContext.Reset();
@@ -203,7 +204,7 @@ public class TraxSchedulerCancelTests : TestSetup
         await CreateMetadataForManifest(manifest2, TrainState.InProgress);
 
         // Act
-        var count = await _scheduler.CancelGroupAsync(group.Id);
+        var count = await _scheduler.NotNull().CancelGroupAsync(group.Id);
 
         // Assert
         count.Should().Be(2);
@@ -226,7 +227,7 @@ public class TraxSchedulerCancelTests : TestSetup
         );
 
         // Act
-        var count = await _scheduler.CancelGroupAsync(group.Id);
+        var count = await _scheduler.NotNull().CancelGroupAsync(group.Id);
 
         // Assert
         count.Should().Be(0);
@@ -248,7 +249,7 @@ public class TraxSchedulerCancelTests : TestSetup
         await CreateMetadataForManifest(manifest, TrainState.Failed);
 
         // Act
-        var count = await _scheduler.CancelGroupAsync(group.Id);
+        var count = await _scheduler.NotNull().CancelGroupAsync(group.Id);
 
         // Assert
         count.Should().Be(1);
@@ -343,7 +344,7 @@ public class TraxSchedulerCancelTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "CancelTest" },
                 ManifestId = manifest.Id,

@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
@@ -22,7 +23,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class TraxSchedulerUntypedAndEdgeTests : TestSetup
 {
-    private TraxScheduler _scheduler = null!;
+    private TraxScheduler? _scheduler;
 
     public override async Task TestSetUp()
     {
@@ -39,13 +40,15 @@ public class TraxSchedulerUntypedAndEdgeTests : TestSetup
     {
         var externalId = $"untyped-{Guid.NewGuid():N}";
 
-        var manifest = await _scheduler.ScheduleAsyncUntyped(
-            typeof(SchedulerTestTrain),
-            typeof(SchedulerTestInput),
-            externalId,
-            new SchedulerTestInput { Value = "x" },
-            Interval
-        );
+        var manifest = await _scheduler
+            .NotNull()
+            .ScheduleAsyncUntyped(
+                typeof(SchedulerTestTrain),
+                typeof(SchedulerTestInput),
+                externalId,
+                new SchedulerTestInput { Value = "x" },
+                Interval
+            );
 
         manifest.ExternalId.Should().Be(externalId);
         manifest.Name.Should().Be(typeof(SchedulerTestTrain).FullName);
@@ -57,39 +60,45 @@ public class TraxSchedulerUntypedAndEdgeTests : TestSetup
     {
         var externalId = $"untyped-once-{Guid.NewGuid():N}";
 
-        var manifest = await _scheduler.ScheduleOnceAsyncUntyped(
-            typeof(SchedulerTestTrain),
-            typeof(SchedulerTestInput),
-            externalId,
-            new SchedulerTestInput(),
-            TimeSpan.FromMinutes(30)
-        );
+        var manifest = await _scheduler
+            .NotNull()
+            .ScheduleOnceAsyncUntyped(
+                typeof(SchedulerTestTrain),
+                typeof(SchedulerTestInput),
+                externalId,
+                new SchedulerTestInput(),
+                TimeSpan.FromMinutes(30)
+            );
 
         manifest.ScheduleType.Should().Be(ScheduleType.Once);
         manifest.ScheduledAt.Should().NotBeNull();
-        manifest.ScheduledAt!.Value.Should().BeAfter(DateTime.UtcNow.AddMinutes(25));
+        manifest.ScheduledAt.NotNull().Value.Should().BeAfter(DateTime.UtcNow.AddMinutes(25));
     }
 
     [Test]
     public async Task ScheduleDependentAsyncUntyped_NewParent_PersistsDependent()
     {
         var parentId = $"u-parent-{Guid.NewGuid():N}";
-        await _scheduler.ScheduleAsyncUntyped(
-            typeof(SchedulerTestTrain),
-            typeof(SchedulerTestInput),
-            parentId,
-            new SchedulerTestInput(),
-            Interval
-        );
+        await _scheduler
+            .NotNull()
+            .ScheduleAsyncUntyped(
+                typeof(SchedulerTestTrain),
+                typeof(SchedulerTestInput),
+                parentId,
+                new SchedulerTestInput(),
+                Interval
+            );
 
         var childId = $"u-child-{Guid.NewGuid():N}";
-        var dep = await _scheduler.ScheduleDependentAsyncUntyped(
-            typeof(SchedulerTestTrain),
-            typeof(SchedulerTestInput),
-            childId,
-            new SchedulerTestInput(),
-            parentId
-        );
+        var dep = await _scheduler
+            .NotNull()
+            .ScheduleDependentAsyncUntyped(
+                typeof(SchedulerTestTrain),
+                typeof(SchedulerTestInput),
+                childId,
+                new SchedulerTestInput(),
+                parentId
+            );
 
         dep.ScheduleType.Should().Be(ScheduleType.Dependent);
         dep.DependsOnManifestId.Should().NotBeNull();
@@ -100,6 +109,7 @@ public class TraxSchedulerUntypedAndEdgeTests : TestSetup
     {
         var act = async () =>
             await _scheduler
+                .NotNull()
                 .ScheduleDependentAsyncUntyped(
                     typeof(SchedulerTestTrain),
                     typeof(SchedulerTestInput),
@@ -115,13 +125,15 @@ public class TraxSchedulerUntypedAndEdgeTests : TestSetup
     [Test]
     public async Task ScheduleManyAsyncUntyped_EmptySources_ReturnsEmptyWithoutTransaction()
     {
-        var result = await _scheduler.ScheduleManyAsyncUntyped<string>(
-            typeof(SchedulerTestTrain),
-            typeof(SchedulerTestInput),
-            sources: Array.Empty<string>(),
-            map: s => (s, new SchedulerTestInput { Value = s }),
-            schedule: Interval
-        );
+        var result = await _scheduler
+            .NotNull()
+            .ScheduleManyAsyncUntyped<string>(
+                typeof(SchedulerTestTrain),
+                typeof(SchedulerTestInput),
+                sources: Array.Empty<string>(),
+                map: s => (s, new SchedulerTestInput { Value = s }),
+                schedule: Interval
+            );
 
         result.Should().BeEmpty();
     }
@@ -132,14 +144,16 @@ public class TraxSchedulerUntypedAndEdgeTests : TestSetup
         var prefix = $"u-many-{Guid.NewGuid():N}";
         var sources = new[] { "a", "b", "c" };
 
-        var result = await _scheduler.ScheduleManyAsyncUntyped<string>(
-            typeof(SchedulerTestTrain),
-            typeof(SchedulerTestInput),
-            sources: sources,
-            map: s => ($"{prefix}-{s}", new SchedulerTestInput { Value = s }),
-            schedule: Interval,
-            options: o => o.PrunePrefix(prefix)
-        );
+        var result = await _scheduler
+            .NotNull()
+            .ScheduleManyAsyncUntyped<string>(
+                typeof(SchedulerTestTrain),
+                typeof(SchedulerTestInput),
+                sources: sources,
+                map: s => ($"{prefix}-{s}", new SchedulerTestInput { Value = s }),
+                schedule: Interval,
+                options: o => o.PrunePrefix(prefix)
+            );
 
         result.Should().HaveCount(3);
         DataContext.Reset();
@@ -153,13 +167,15 @@ public class TraxSchedulerUntypedAndEdgeTests : TestSetup
     [Test]
     public async Task ScheduleManyDependentAsyncUntyped_EmptySources_ReturnsEmpty()
     {
-        var result = await _scheduler.ScheduleManyDependentAsyncUntyped<string>(
-            typeof(SchedulerTestTrain),
-            typeof(SchedulerTestInput),
-            sources: Array.Empty<string>(),
-            map: s => (s, new SchedulerTestInput()),
-            dependsOn: _ => "n/a"
-        );
+        var result = await _scheduler
+            .NotNull()
+            .ScheduleManyDependentAsyncUntyped<string>(
+                typeof(SchedulerTestTrain),
+                typeof(SchedulerTestInput),
+                sources: Array.Empty<string>(),
+                map: s => (s, new SchedulerTestInput()),
+                dependsOn: _ => "n/a"
+            );
 
         result.Should().BeEmpty();
     }
@@ -171,6 +187,7 @@ public class TraxSchedulerUntypedAndEdgeTests : TestSetup
 
         var act = async () =>
             await _scheduler
+                .NotNull()
                 .ScheduleManyDependentAsyncUntyped(
                     typeof(SchedulerTestTrain),
                     typeof(SchedulerTestInput),
@@ -195,22 +212,26 @@ public class TraxSchedulerUntypedAndEdgeTests : TestSetup
         var prefix = $"u-many-dep-ok-{Guid.NewGuid():N}";
         var parentId = $"{prefix}-parent";
 
-        await _scheduler.ScheduleAsyncUntyped(
-            typeof(SchedulerTestTrain),
-            typeof(SchedulerTestInput),
-            parentId,
-            new SchedulerTestInput(),
-            Interval
-        );
+        await _scheduler
+            .NotNull()
+            .ScheduleAsyncUntyped(
+                typeof(SchedulerTestTrain),
+                typeof(SchedulerTestInput),
+                parentId,
+                new SchedulerTestInput(),
+                Interval
+            );
 
-        var result = await _scheduler.ScheduleManyDependentAsyncUntyped<string>(
-            typeof(SchedulerTestTrain),
-            typeof(SchedulerTestInput),
-            sources: new[] { "x", "y" },
-            map: s => ($"{prefix}-{s}", new SchedulerTestInput { Value = s }),
-            dependsOn: _ => parentId,
-            options: o => o.PrunePrefix(prefix)
-        );
+        var result = await _scheduler
+            .NotNull()
+            .ScheduleManyDependentAsyncUntyped<string>(
+                typeof(SchedulerTestTrain),
+                typeof(SchedulerTestInput),
+                sources: new[] { "x", "y" },
+                map: s => ($"{prefix}-{s}", new SchedulerTestInput { Value = s }),
+                dependsOn: _ => parentId,
+                options: o => o.PrunePrefix(prefix)
+            );
 
         result.Should().HaveCount(2);
         result.Should().AllSatisfy(m => m.ScheduleType.Should().Be(ScheduleType.Dependent));
@@ -223,16 +244,13 @@ public class TraxSchedulerUntypedAndEdgeTests : TestSetup
     [Test]
     public async Task ScheduleManyAsync_EmptySources_ReturnsEmpty()
     {
-        var result = await _scheduler.ScheduleManyAsync<
-            ISchedulerTestTrain,
-            SchedulerTestInput,
-            Unit,
-            string
-        >(
-            sources: Array.Empty<string>(),
-            map: s => (s, new SchedulerTestInput { Value = s }),
-            schedule: Interval
-        );
+        var result = await _scheduler
+            .NotNull()
+            .ScheduleManyAsync<ISchedulerTestTrain, SchedulerTestInput, Unit, string>(
+                sources: Array.Empty<string>(),
+                map: s => (s, new SchedulerTestInput { Value = s }),
+                schedule: Interval
+            );
 
         result.Should().BeEmpty();
     }
@@ -240,16 +258,13 @@ public class TraxSchedulerUntypedAndEdgeTests : TestSetup
     [Test]
     public async Task ScheduleManyDependentAsync_EmptySources_ReturnsEmpty()
     {
-        var result = await _scheduler.ScheduleManyDependentAsync<
-            ISchedulerTestTrain,
-            SchedulerTestInput,
-            Unit,
-            string
-        >(
-            sources: Array.Empty<string>(),
-            map: s => (s, new SchedulerTestInput()),
-            dependsOn: _ => "x"
-        );
+        var result = await _scheduler
+            .NotNull()
+            .ScheduleManyDependentAsync<ISchedulerTestTrain, SchedulerTestInput, Unit, string>(
+                sources: Array.Empty<string>(),
+                map: s => (s, new SchedulerTestInput()),
+                dependsOn: _ => "x"
+            );
 
         result.Should().BeEmpty();
     }
@@ -261,6 +276,7 @@ public class TraxSchedulerUntypedAndEdgeTests : TestSetup
 
         var act = async () =>
             await _scheduler
+                .NotNull()
                 .ScheduleManyDependentAsync<ISchedulerTestTrain, SchedulerTestInput, Unit, string>(
                     sources: new[] { "a" },
                     map: s => ($"{prefix}-{s}", new SchedulerTestInput()),
@@ -281,6 +297,7 @@ public class TraxSchedulerUntypedAndEdgeTests : TestSetup
     {
         var act = async () =>
             await _scheduler
+                .NotNull()
                 .ScheduleDependentAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
                     "typed-child",
                     new SchedulerTestInput(),
@@ -299,6 +316,7 @@ public class TraxSchedulerUntypedAndEdgeTests : TestSetup
 
         var act = async () =>
             await _scheduler
+                .NotNull()
                 .ScheduleManyAsync<ISchedulerTestTrain, SchedulerTestInput, Unit, string>(
                     sources: new[] { "a", "b" },
                     map: s => ($"{prefix}-{s}", new SchedulerTestInput()),
@@ -324,7 +342,7 @@ public class TraxSchedulerUntypedAndEdgeTests : TestSetup
     [Test]
     public async Task TriggerGroupAsync_NoMatchingManifests_ReturnsZero()
     {
-        var count = await _scheduler.TriggerGroupAsync(groupId: -9999);
+        var count = await _scheduler.NotNull().TriggerGroupAsync(groupId: -9999);
         count.Should().Be(0);
     }
 
@@ -368,7 +386,7 @@ public class TraxSchedulerUntypedAndEdgeTests : TestSetup
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
-        var triggered = await _scheduler.TriggerGroupAsync(group.Id);
+        var triggered = await _scheduler.NotNull().TriggerGroupAsync(group.Id);
         triggered.Should().Be(1);
 
         var queued = await DataContext
@@ -406,7 +424,7 @@ public class TraxSchedulerUntypedAndEdgeTests : TestSetup
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
-        var cancelled = await _scheduler.CancelAsync(manifest.ExternalId);
+        var cancelled = await _scheduler.NotNull().CancelAsync(manifest.ExternalId);
         cancelled.Should().Be(0);
     }
 
@@ -417,7 +435,7 @@ public class TraxSchedulerUntypedAndEdgeTests : TestSetup
             DataContext,
             name: $"cg-{Guid.NewGuid():N}"
         );
-        var cancelled = await _scheduler.CancelGroupAsync(group.Id);
+        var cancelled = await _scheduler.NotNull().CancelGroupAsync(group.Id);
         cancelled.Should().Be(0);
     }
 

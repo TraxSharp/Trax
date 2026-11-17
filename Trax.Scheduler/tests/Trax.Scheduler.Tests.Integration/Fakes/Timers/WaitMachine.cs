@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Tests.Integration.Fakes.InvokedTrains;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
@@ -28,7 +29,10 @@ public sealed class WaitMachine : Machine<WaitState, WaitTrigger>
 
         m.In(WaitState.Fetching)
             .Invokes<IInvokedStepTrain, InvokedStepInput, InvokedStepOutput>(ctx =>
-                new(ctx["mode"]!.GetValue<string>(), ctx["note"]!.GetValue<string>())
+                new(
+                    ctx["mode"].NotNull().GetValue<string>(),
+                    ctx["note"].NotNull().GetValue<string>()
+                )
             )
             .OnDone(WaitState.Fetched)
             .OnFailed(WaitState.Failed)

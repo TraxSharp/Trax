@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
@@ -36,7 +37,7 @@ public class CheckpointCleanupTests(ClusterStore store)
     private static readonly TimeSpan Expired = TimeSpan.FromHours(2);
 
     private readonly ResearchDecider _decider = new();
-    private ResearchCluster _cluster = null!;
+    private ResearchCluster? _cluster;
 
     [OneTimeSetUp]
     public async Task CreateCluster() =>
@@ -52,14 +53,18 @@ public class CheckpointCleanupTests(ClusterStore store)
         );
 
     [OneTimeTearDown]
-    public async Task DisposeCluster() => await _cluster.DisposeAsync();
+    public async Task DisposeCluster()
+    {
+        if (_cluster is not null)
+            await _cluster.DisposeAsync();
+    }
 
     [SetUp]
     public async Task Reset()
     {
         ResearchProbe.Reset();
         _decider.Reset();
-        await _cluster.Reset();
+        await _cluster.NotNull().Reset();
     }
 
     [TearDown]
@@ -68,25 +73,27 @@ public class CheckpointCleanupTests(ClusterStore store)
     [Test]
     public async Task Cleanup_keeps_a_source_run_while_a_queued_resume_names_it()
     {
-        var manifest = await _cluster.Manifest("kept", maxRetries: 0);
+        var manifest = await _cluster.NotNull().Manifest("kept", maxRetries: 0);
         var source = await Crash(manifest);
-        var resume = await _cluster.Operation(o =>
-            o.ResumeExecutionAsync(source.Id, from: null, CancellationToken.None)
-        );
+        var resume = await _cluster
+            .NotNull()
+            .Operation(o => o.ResumeExecutionAsync(source.Id, from: null, CancellationToken.None));
         resume.Success.Should().BeTrue(resume.Message);
-        await _cluster.Host.Age(source.Id, Expired);
+        await _cluster.NotNull().Host.Age(source.Id, Expired);
 
         await Cleanup();
 
         (await Exists(source.Id)).Should().BeTrue($"a queued resume needs its checkpoints ({Adr})");
-        (await _cluster.Checkpoints(source.Id)).Should().NotBeEmpty();
+        (await _cluster.NotNull().Checkpoints(source.Id)).Should().NotBeEmpty();
 
         // The operator cancels the resume: nothing will read the link again, the run goes, and
         // the cancelled entry no longer names it.
         (
-            await _cluster.Operation(o =>
-                o.CancelWorkQueueEntryAsync(resume.Id!.Value, CancellationToken.None)
-            )
+            await _cluster
+                .NotNull()
+                .Operation(o =>
+                    o.CancelWorkQueueEntryAsync(resume.Id.NotNull().Value, CancellationToken.None)
+                )
         )
             .Success.Should()
             .BeTrue();
@@ -94,18 +101,18 @@ public class CheckpointCleanupTests(ClusterStore store)
         await Cleanup();
 
         (await Exists(source.Id)).Should().BeFalse();
-        (await _cluster.Entry(resume.Id!.Value)).ResumeFrom.Should().BeNull();
-        (await _cluster.ResumesOfMissingRuns()).Should().BeEmpty();
+        (await _cluster.NotNull().Entry(resume.Id.NotNull().Value)).ResumeFrom.Should().BeNull();
+        (await _cluster.NotNull().ResumesOfMissingRuns()).Should().BeEmpty();
     }
 
     [Test]
     public async Task Cleanup_keeps_a_source_run_while_a_run_that_stays_resumes_it_and_deletes_both_once_expired()
     {
-        var manifest = await _cluster.Manifest("lineage");
+        var manifest = await _cluster.NotNull().Manifest("lineage");
         var source = await Crash(manifest);
-        var resumed = await _cluster.Cycle(manifest);
+        var resumed = await _cluster.NotNull().Cycle(manifest);
         resumed.ResumeFrom.Should().Be(source.Id);
-        await _cluster.Host.Age(source.Id, Expired);
+        await _cluster.NotNull().Host.Age(source.Id, Expired);
 
         await Cleanup();
 
@@ -113,26 +120,26 @@ public class CheckpointCleanupTests(ClusterStore store)
             .Should()
             .BeTrue("the run that resumed it has not expired, and may itself be resumed");
 
-        await _cluster.Host.Age(resumed.Id, Expired);
+        await _cluster.NotNull().Host.Age(resumed.Id, Expired);
         await Cleanup();
 
         (await Exists(source.Id)).Should().BeFalse("both expired, so both go together");
         (await Exists(resumed.Id)).Should().BeFalse();
-        (await _cluster.ResumesOfMissingRuns()).Should().BeEmpty();
+        (await _cluster.NotNull().ResumesOfMissingRuns()).Should().BeEmpty();
     }
 
     [Test]
     public async Task Cleanup_deletes_a_runs_checkpoints_with_it()
     {
-        var manifest = await _cluster.Manifest("gone", maxRetries: 0);
+        var manifest = await _cluster.NotNull().Manifest("gone", maxRetries: 0);
         var source = await Crash(manifest);
-        (await _cluster.Checkpoints(source.Id)).Should().NotBeEmpty();
-        await _cluster.Host.Age(source.Id, Expired);
+        (await _cluster.NotNull().Checkpoints(source.Id)).Should().NotBeEmpty();
+        await _cluster.NotNull().Host.Age(source.Id, Expired);
 
         await Cleanup();
 
         (await Exists(source.Id)).Should().BeFalse();
-        (await _cluster.Checkpoints(source.Id))
+        (await _cluster.NotNull().Checkpoints(source.Id))
             .Should()
             .BeEmpty($"a run's checkpoints are deleted with it ({Adr})");
     }
@@ -140,16 +147,16 @@ public class CheckpointCleanupTests(ClusterStore store)
     [Test]
     public async Task A_manifest_prune_leaves_no_resume_naming_a_deleted_run()
     {
-        var manifest = await _cluster.Manifest("pruned", maxRetries: 0);
+        var manifest = await _cluster.NotNull().Manifest("pruned", maxRetries: 0);
         var source = await Crash(manifest);
 
         // An operator's resume belongs to no manifest, so the prune keeps it and clears its link.
-        var resume = await _cluster.Operation(o =>
-            o.ResumeExecutionAsync(source.Id, from: null, CancellationToken.None)
-        );
+        var resume = await _cluster
+            .NotNull()
+            .Operation(o => o.ResumeExecutionAsync(source.Id, from: null, CancellationToken.None));
         resume.Success.Should().BeTrue(resume.Message);
 
-        var scope = _cluster.Host.Services.CreateAsyncScope();
+        var scope = _cluster.NotNull().Host.Services.CreateAsyncScope();
         await using (scope.ConfigureAwait(false))
         {
             var (pruned, _) = await ManifestPruner.PruneAsync(
@@ -162,16 +169,16 @@ public class CheckpointCleanupTests(ClusterStore store)
         }
 
         (await Exists(source.Id)).Should().BeFalse();
-        var entry = await _cluster.Entry(resume.Id!.Value);
+        var entry = await _cluster.NotNull().Entry(resume.Id.NotNull().Value);
         entry.ResumeFrom.Should().BeNull("it now reruns from the top");
         entry.ResumeAt.Should().BeNull();
-        (await _cluster.ResumesOfMissingRuns()).Should().BeEmpty();
+        (await _cluster.NotNull().ResumesOfMissingRuns()).Should().BeEmpty();
     }
 
     private async Task<Metadata> Crash(Effect.Models.Manifest.Manifest manifest)
     {
         ResearchProbe.FailIn = nameof(SummarizeLong);
-        var failed = await _cluster.Cycle(manifest).ConfigureAwait(false);
+        var failed = await _cluster.NotNull().Cycle(manifest).ConfigureAwait(false);
         failed.TrainState.Should().Be(TrainState.Failed);
         ResearchProbe.Reset();
         return failed;
@@ -179,7 +186,7 @@ public class CheckpointCleanupTests(ClusterStore store)
 
     private async Task Cleanup()
     {
-        var scope = _cluster.Host.Services.CreateAsyncScope();
+        var scope = _cluster.NotNull().Host.Services.CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         await scope
             .ServiceProvider.GetRequiredService<IMetadataCleanupTrain>()
@@ -188,5 +195,5 @@ public class CheckpointCleanupTests(ClusterStore store)
     }
 
     private Task<bool> Exists(long runId) =>
-        _cluster.With(d => d.Metadatas.AsNoTracking().AnyAsync(m => m.Id == runId));
+        _cluster.NotNull().With(d => d.Metadatas.AsNoTracking().AnyAsync(m => m.Id == runId));
 }

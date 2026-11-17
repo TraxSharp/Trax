@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Scheduler.Configuration;
 
@@ -67,7 +68,7 @@ internal static class RunTimeouts
 
         var unmanifestedRootIds = roots
             .Values.Where(r => r is { ManifestId: null })
-            .Select(r => r!.Id)
+            .Select(r => r.NotNull().Id)
             .Distinct()
             .ToList();
 
@@ -79,7 +80,7 @@ internal static class RunTimeouts
                     .WorkQueues.Where(q =>
                         q.MetadataId != null && unmanifestedRootIds.Contains(q.MetadataId.Value)
                     )
-                    .Select(q => q.MetadataId!.Value)
+                    .Select(q => q.MetadataId.NotNull().Value)
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false)
             );
@@ -119,7 +120,7 @@ internal static class RunTimeouts
         Dictionary<long, TimedRun> known
     ) =>
         runs.Where(r => r.ParentId is { } p && !known.ContainsKey(p))
-            .Select(r => r.ParentId!.Value)
+            .Select(r => r.ParentId.NotNull().Value)
             .Distinct()
             .ToList();
 

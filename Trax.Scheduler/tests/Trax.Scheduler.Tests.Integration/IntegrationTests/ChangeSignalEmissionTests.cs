@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Effect.Models.DeadLetter;
 using Trax.Effect.Models.DeadLetter.DTOs;
 using Trax.Effect.Services.ChangeSignal;
@@ -75,7 +76,7 @@ public class ChangeSignalEmissionTests
         return dl;
     }
 
-    private static string TrainName => typeof(ISchedulerTestTrain).FullName!;
+    private static string TrainName => typeof(ISchedulerTestTrain).FullName.NotNull();
 
     #region OperationsService
 
@@ -112,7 +113,7 @@ public class ChangeSignalEmissionTests
         );
         recording.Clear();
 
-        await ops.CancelWorkQueueEntryAsync(queued.Id!.Value, CancellationToken.None);
+        await ops.CancelWorkQueueEntryAsync(queued.Id.NotNull().Value, CancellationToken.None);
 
         recording.Domains.Should().ContainSingle().Which.Should().Be(ChangeDomain.WorkQueue);
     }

@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Services.Scheduling;
 using Trax.Scheduler.Tests.Integration.Fakes.Trains;
 using Trax.Scheduler.Tests.Integration.Fixtures;
@@ -37,7 +38,11 @@ public class NewCronFirstRunIntegrationTests
             .Should()
             .BeFalse("the first occurrence is two hours away");
 
-        var expected = CronParser.Parse(manifest.CronExpression!).GetNextOccurrence(before)!.Value;
+        var expected = CronParser
+            .Parse(manifest.CronExpression.NotNull())
+            .GetNextOccurrence(before)
+            .NotNull()
+            .Value;
         manifest.NextScheduledRun.Should().Be(expected);
     }
 }

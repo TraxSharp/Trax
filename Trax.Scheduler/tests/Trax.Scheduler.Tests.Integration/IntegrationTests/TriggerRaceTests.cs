@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -44,7 +45,7 @@ public class TriggerRaceTests : TestSetup
         scheduler.AfterTriggerCollision = async (attempt, ct) =>
         {
             if (attempt == 1)
-                await DispatchAsync(manifest, collided!.Value, ct).ConfigureAwait(false);
+                await DispatchAsync(manifest, collided.NotNull().Value, ct).ConfigureAwait(false);
         };
 
         var result = await scheduler.TriggerAsync(manifest.ExternalId, askAfresh: false);
@@ -52,7 +53,7 @@ public class TriggerRaceTests : TestSetup
         collided.Should().NotBeNull();
         result.Created.Should().BeTrue("the entry it met was dispatched, so its place was free");
         result.AlreadyDispatched.Should().BeFalse();
-        result.WorkQueueId.Should().NotBe(collided!.Value);
+        result.WorkQueueId.Should().NotBe(collided.NotNull().Value);
         DataContext.Reset();
         var queued = await DataContext
             .WorkQueues.AsNoTracking()

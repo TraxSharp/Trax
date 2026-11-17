@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
@@ -47,7 +48,7 @@ public class PruneWithNestedRunsTests : TestSetup
             {
                 ExternalId = "still-configured",
                 ExpectedExternalIds = ["still-configured"],
-                ScheduleFunc = (_, _) => Task.FromResult<Manifest>(null!),
+                ScheduleFunc = (_, _) => Task.CompletedTask,
             }
         );
         var startup = new SchedulerStartupService(
@@ -144,7 +145,7 @@ public class PruneWithNestedRunsTests : TestSetup
             .FirstOrDefaultAsync(m => m.Id == childRunId)
             .ConfigureAwait(false);
         child.Should().NotBeNull("a nested run outlives the run that started it");
-        child!.ParentId.Should().BeNull();
+        child.NotNull().ParentId.Should().BeNull();
     }
 
     private SchedulerStartupService CreateStartupService(string configuredExternalId)
@@ -161,7 +162,7 @@ public class PruneWithNestedRunsTests : TestSetup
             {
                 ExternalId = configuredExternalId,
                 ExpectedExternalIds = [configuredExternalId],
-                ScheduleFunc = (_, _) => Task.FromResult<Manifest>(null!),
+                ScheduleFunc = (_, _) => Task.CompletedTask,
             }
         );
         return new SchedulerStartupService(
@@ -204,7 +205,7 @@ public class PruneWithNestedRunsTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "run" },
                 ManifestId = manifestId,

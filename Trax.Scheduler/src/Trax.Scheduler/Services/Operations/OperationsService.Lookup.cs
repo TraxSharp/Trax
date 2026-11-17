@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 
 namespace Trax.Scheduler.Services.Operations;
@@ -190,7 +191,7 @@ public partial class OperationsService
                         .Select(d => new
                         {
                             d.Id,
-                            Name = d.Manifest!.Name,
+                            Name = d.Manifest != null ? d.Manifest.Name : null,
                             d.Status,
                         })
                         .ToListAsync(ct)
@@ -247,7 +248,7 @@ public partial class OperationsService
                 .Take(LookupMatchCap)
                 .Select(r => new LookupMatch(
                     LookupKind.Train,
-                    r.ServiceType.FullName!,
+                    r.ServiceType.FullName.NotNull(),
                     r.ServiceTypeName,
                     "name"
                 ))

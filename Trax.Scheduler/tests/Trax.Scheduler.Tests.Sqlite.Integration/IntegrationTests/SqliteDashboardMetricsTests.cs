@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
@@ -17,7 +18,7 @@ namespace Trax.Scheduler.Tests.Sqlite.Integration.IntegrationTests;
 [TestFixture]
 public class SqliteDashboardMetricsTests : TestSetup
 {
-    private IOperationsService _operations = null!;
+    private IOperationsService? _operations;
 
     public override async Task TestSetUp()
     {
@@ -50,11 +51,9 @@ public class SqliteDashboardMetricsTests : TestSetup
             parentId: (await Seed("Trax.Tests.IParent", TrainState.Failed, start, start)).Id
         );
 
-        var metrics = await _operations.GetDashboardMetricsAsync(
-            range,
-            hideAdminTrains: false,
-            CancellationToken.None
-        );
+        var metrics = await _operations
+            .NotNull()
+            .GetDashboardMetricsAsync(range, hideAdminTrains: false, CancellationToken.None);
 
         metrics.Kpis.CurrentlyRunning.Should().Be(1);
         metrics.ExecutionsOverTime.Should().HaveCount(buckets);
@@ -85,11 +84,13 @@ public class SqliteDashboardMetricsTests : TestSetup
         await Seed("Trax.Tests.IUser", TrainState.Completed, start, start.AddSeconds(2));
         await Seed(AdminTrains.FullNames[0], TrainState.Completed, start, start.AddSeconds(9));
 
-        var metrics = await _operations.GetDashboardMetricsAsync(
-            MetricsRange.Last24Hours,
-            hideAdminTrains: true,
-            CancellationToken.None
-        );
+        var metrics = await _operations
+            .NotNull()
+            .GetDashboardMetricsAsync(
+                MetricsRange.Last24Hours,
+                hideAdminTrains: true,
+                CancellationToken.None
+            );
 
         metrics.TopAverageDurations.Should().ContainSingle();
         metrics.TopAverageDurations[0].TrainName.Should().Be("Trax.Tests.IUser");
@@ -109,13 +110,15 @@ public class SqliteDashboardMetricsTests : TestSetup
         await Seed("Trax.Tests.ISeries", TrainState.Failed, start, start.AddSeconds(1));
         await Seed("Trax.Tests.IOther", TrainState.Completed, start, start.AddSeconds(9));
 
-        var series = await _operations.GetMetricSeriesAsync(
-            MetricSeriesScope.Train,
-            id: null,
-            "Trax.Tests.ISeries",
-            MetricSeriesRange.Last7Days,
-            CancellationToken.None
-        );
+        var series = await _operations
+            .NotNull()
+            .GetMetricSeriesAsync(
+                MetricSeriesScope.Train,
+                id: null,
+                "Trax.Tests.ISeries",
+                MetricSeriesRange.Last7Days,
+                CancellationToken.None
+            );
 
         var bucket = series.Buckets.Single(b => b.Start == start);
         bucket.Completed.Should().Be(2);

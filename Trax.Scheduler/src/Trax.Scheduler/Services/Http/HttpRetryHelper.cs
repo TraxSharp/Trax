@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.RequestSigning;
 
@@ -109,7 +110,7 @@ internal static class HttpRetryHelper
             await Task.Delay(delay, ct).ConfigureAwait(false);
         }
 
-        return response!;
+        return response.NotNull();
     }
 
     /// <summary>

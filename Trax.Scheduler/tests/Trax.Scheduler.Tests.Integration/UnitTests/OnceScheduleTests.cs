@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Scheduler.Configuration;
@@ -11,8 +12,8 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 [TestFixture]
 public class OnceScheduleTests
 {
-    private SchedulerConfiguration _config = null!;
-    private ILogger _logger = null!;
+    private SchedulerConfiguration? _config;
+    private ILogger? _logger;
 
     [SetUp]
     public void SetUp()
@@ -36,7 +37,12 @@ public class OnceScheduleTests
         var now = DateTime.UtcNow;
 
         // Act
-        var result = SchedulingHelpers.ShouldRunNow(manifest, now, _config, _logger);
+        var result = SchedulingHelpers.ShouldRunNow(
+            manifest,
+            now,
+            _config.NotNull(),
+            _logger.NotNull()
+        );
 
         // Assert
         result.Should().BeTrue("ScheduledAt is in the past and the manifest has never run");
@@ -57,7 +63,12 @@ public class OnceScheduleTests
         var now = DateTime.UtcNow;
 
         // Act
-        var result = SchedulingHelpers.ShouldRunNow(manifest, now, _config, _logger);
+        var result = SchedulingHelpers.ShouldRunNow(
+            manifest,
+            now,
+            _config.NotNull(),
+            _logger.NotNull()
+        );
 
         // Assert
         result.Should().BeFalse("ScheduledAt is in the future");
@@ -78,7 +89,12 @@ public class OnceScheduleTests
         var now = DateTime.UtcNow;
 
         // Act
-        var result = SchedulingHelpers.ShouldRunNow(manifest, now, _config, _logger);
+        var result = SchedulingHelpers.ShouldRunNow(
+            manifest,
+            now,
+            _config.NotNull(),
+            _logger.NotNull()
+        );
 
         // Assert
         result.Should().BeFalse("ScheduledAt is null so the manifest cannot be scheduled");
@@ -100,7 +116,12 @@ public class OnceScheduleTests
         var now = DateTime.UtcNow;
 
         // Act
-        var result = SchedulingHelpers.ShouldRunNow(manifest, now, _config, _logger);
+        var result = SchedulingHelpers.ShouldRunNow(
+            manifest,
+            now,
+            _config.NotNull(),
+            _logger.NotNull()
+        );
 
         // Assert
         result

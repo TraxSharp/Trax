@@ -4,6 +4,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -49,11 +50,19 @@ namespace Trax.Scheduler.Tests.Stress.Fixtures;
 [Category("Stress")]
 public abstract class TestSetup
 {
-    private ServiceProvider ServiceProvider { get; set; } = null!;
+    private ServiceProvider ServiceProvider
+    {
+        get => field.NotNull(nameof(ServiceProvider));
+        set;
+    }
 
     protected AsyncServiceScope Scope { get; private set; }
 
-    protected IDataContext DataContext { get; private set; } = null!;
+    protected IDataContext DataContext
+    {
+        get => field.NotNull(nameof(DataContext));
+        private set;
+    }
 
     /// <summary>
     /// Maximum time a single query should take under load. Tests fail if exceeded.
@@ -218,7 +227,7 @@ public abstract class TestSetup
                 var metadata = Metadata.Create(
                     new CreateMetadata
                     {
-                        Name = typeof(StressTestTrain).FullName!,
+                        Name = typeof(StressTestTrain).FullName.NotNull(),
                         ExternalId = Guid.NewGuid().ToString("N"),
                         Input = new StressTestInput
                         {

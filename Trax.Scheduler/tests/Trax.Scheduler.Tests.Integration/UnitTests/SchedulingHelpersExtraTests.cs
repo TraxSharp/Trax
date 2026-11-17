@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
@@ -338,7 +339,7 @@ public class SchedulingHelpersExtraTests
         var result = Invoke(m);
         result.Should().NotBeNull();
         // base = last + 60s, variance ∈ [0, 10s]
-        result!.Value.Should().BeOnOrAfter(m.LastSuccessfulRun.Value.AddSeconds(60));
+        result.NotNull().Value.Should().BeOnOrAfter(m.LastSuccessfulRun.Value.AddSeconds(60));
         result.Value.Should().BeOnOrBefore(m.LastSuccessfulRun.Value.AddSeconds(70));
     }
 
@@ -353,7 +354,7 @@ public class SchedulingHelpersExtraTests
 
         var result = Invoke(m);
         result.Should().NotBeNull();
-        result!.Value.Hour.Should().Be(13);
+        result.NotNull().Value.Hour.Should().Be(13);
     }
 
     [Test]
@@ -383,10 +384,12 @@ public class SchedulingHelpersExtraTests
 
     private static DateTime? Invoke(Manifest m)
     {
-        var method = typeof(SchedulingHelpers).GetMethod(
-            "ComputeNextScheduledRun",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static
-        )!;
+        var method = typeof(SchedulingHelpers)
+            .GetMethod(
+                "ComputeNextScheduledRun",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static
+            )
+            .NotNull();
         return (DateTime?)method.Invoke(null, new object[] { m });
     }
 

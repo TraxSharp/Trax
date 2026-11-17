@@ -4,6 +4,7 @@ using System.ComponentModel;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Configuration;
 
 namespace Trax.Scheduler.Services.RequestSigning;
@@ -352,7 +353,8 @@ public sealed class RunnerRequestVerifier
             return RunnerRequestVerdict.Stale;
 
         // Remembered until the timestamp itself goes stale; after that freshness refuses it.
-        var recorded = await _nonces!
+        var recorded = await _nonces
+            .NotNull()
             .TryRecordAsync(
                 nonce,
                 DateTimeOffset.FromUnixTimeSeconds(timestamp + skew),

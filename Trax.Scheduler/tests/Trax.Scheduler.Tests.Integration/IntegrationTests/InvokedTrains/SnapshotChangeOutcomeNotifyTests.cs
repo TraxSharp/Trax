@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Effect.Models.SnapshotDraft;
 using Trax.Scheduler.Tests.Integration.Fakes.InvokedTrains;
 using Trax.Scheduler.Tests.Integration.Fixtures;
@@ -26,45 +27,50 @@ public class SnapshotChangeOutcomeNotifyTests
     private const string Adr =
         "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md";
 
-    private InvokeCluster _cluster = null!;
+    private InvokeCluster? _cluster;
 
     // Registers the machines: their hook and their reconciler. No scheduler.
-    private ClusterHost _api = null!;
+    private ClusterHost? _api;
 
     // A second API host over the same database.
-    private ClusterHost _api2 = null!;
+    private ClusterHost? _api2;
 
     // Dispatches and runs trains, and registers no machines, so nothing it runs is delivered by a hook.
-    private ClusterHost _worker = null!;
+    private ClusterHost? _worker;
 
     // Dispatches and runs trains and registers the machines, so its hook delivers each outcome at once.
-    private ClusterHost _full = null!;
+    private ClusterHost? _full;
 
     [OneTimeSetUp]
     public async Task CreateCluster()
     {
         _cluster = await InvokeCluster.Create(ClusterStore.Postgres);
-        _api = _cluster.Host(machines: true, scheduler: false);
-        _api2 = _cluster.Host(machines: true, scheduler: false);
-        _worker = _cluster.Host(machines: false, scheduler: true);
-        _full = _cluster.Host(machines: true, scheduler: true);
+        _api = _cluster.NotNull().Host(machines: true, scheduler: false);
+        _api2 = _cluster.NotNull().Host(machines: true, scheduler: false);
+        _worker = _cluster.NotNull().Host(machines: false, scheduler: true);
+        _full = _cluster.NotNull().Host(machines: true, scheduler: true);
     }
 
     [OneTimeTearDown]
     public async Task DisposeCluster()
     {
-        await _api.DisposeAsync();
-        await _api2.DisposeAsync();
-        await _worker.DisposeAsync();
-        await _full.DisposeAsync();
-        await _cluster.DisposeAsync();
+        if (_api is not null)
+            await _api.DisposeAsync();
+        if (_api2 is not null)
+            await _api2.DisposeAsync();
+        if (_worker is not null)
+            await _worker.DisposeAsync();
+        if (_full is not null)
+            await _full.DisposeAsync();
+        if (_cluster is not null)
+            await _cluster.DisposeAsync();
     }
 
     [SetUp]
     public async Task Reset()
     {
         InvokedStepGate.Reset();
-        await _cluster.Reset();
+        await _cluster.NotNull().Reset();
     }
 
     [TearDown]
@@ -73,13 +79,15 @@ public class SnapshotChangeOutcomeNotifyTests
     [Test]
     public async Task An_outcome_applied_by_the_hook_notifies_once()
     {
-        var instance = await _api.Start(StepMachine.Context(InvokedStepModes.Ok));
+        var instance = await _api.NotNull().Start(StepMachine.Context(InvokedStepModes.Ok));
         var started = await SystemRow(instance.Id);
-        await using var listener = await SnapshotNoticeSession.Open(_cluster.ConnectionString);
+        await using var listener = await SnapshotNoticeSession.Open(
+            _cluster.NotNull().ConnectionString
+        );
         // A fresh LISTEN can be handed notices committed just before it; only what the act sends counts.
         await listener.Drain();
 
-        await _full.DispatchAndRun(started.InvokeToken!);
+        await _full.NotNull().DispatchAndRun(started.InvokeToken.NotNull());
         (await SystemRow(instance.Id)).State.Should().Be("Done", "the run's own host applied it");
 
         (await listener.Drain())
@@ -99,14 +107,16 @@ public class SnapshotChangeOutcomeNotifyTests
     [Test]
     public async Task An_outcome_applied_by_the_reconciler_on_a_second_host_notifies_once()
     {
-        var instance = await _api.Start(StepMachine.Context(InvokedStepModes.Ok));
+        var instance = await _api.NotNull().Start(StepMachine.Context(InvokedStepModes.Ok));
         var started = await SystemRow(instance.Id);
-        await _worker.DispatchAndRun(started.InvokeToken!);
-        await using var listener = await SnapshotNoticeSession.Open(_cluster.ConnectionString);
+        await _worker.NotNull().DispatchAndRun(started.InvokeToken.NotNull());
+        await using var listener = await SnapshotNoticeSession.Open(
+            _cluster.NotNull().ConnectionString
+        );
         // A fresh LISTEN can be handed notices committed just before it; only what the act sends counts.
         await listener.Drain();
 
-        (await _api2.Sweep())
+        (await _api2.NotNull().Sweep())
             .Should()
             .ContainSingle()
             .Which.Should()
@@ -127,5 +137,5 @@ public class SnapshotChangeOutcomeNotifyTests
     }
 
     private async Task<SnapshotDraft> SystemRow(Guid id) =>
-        (await _api.Row(id, SystemStepMachine.MachineId).ConfigureAwait(false))!;
+        (await _api.NotNull().Row(id, SystemStepMachine.MachineId).ConfigureAwait(false)).NotNull();
 }

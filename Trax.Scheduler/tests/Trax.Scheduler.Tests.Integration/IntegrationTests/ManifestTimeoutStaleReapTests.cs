@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
@@ -23,7 +24,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class ManifestTimeoutStaleReapTests : TestSetup
 {
-    private SchedulerConfiguration _config = null!;
+    private SchedulerConfiguration? _config;
     private TimeSpan _previousStale;
     private TimeSpan _previousDefault;
 
@@ -31,17 +32,17 @@ public class ManifestTimeoutStaleReapTests : TestSetup
     {
         await base.TestSetUp().ConfigureAwait(false);
         _config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
-        _previousStale = _config.StaleInProgressTimeout;
-        _previousDefault = _config.DefaultJobTimeout;
-        _config.StaleInProgressTimeout = TimeSpan.FromMinutes(60);
-        _config.DefaultJobTimeout = TimeSpan.FromMinutes(20);
+        _previousStale = _config.NotNull().StaleInProgressTimeout;
+        _previousDefault = _config.NotNull().DefaultJobTimeout;
+        _config.NotNull().StaleInProgressTimeout = TimeSpan.FromMinutes(60);
+        _config.NotNull().DefaultJobTimeout = TimeSpan.FromMinutes(20);
     }
 
     [TearDown]
     public void RestoreTimeouts()
     {
-        _config.StaleInProgressTimeout = _previousStale;
-        _config.DefaultJobTimeout = _previousDefault;
+        _config.NotNull().StaleInProgressTimeout = _previousStale;
+        _config.NotNull().DefaultJobTimeout = _previousDefault;
     }
 
     [LeavesStuckRuns(
@@ -107,8 +108,8 @@ public class ManifestTimeoutStaleReapTests : TestSetup
     {
         // The grace (stale minus default) would be -30 minutes; it counts as none, so a run is
         // never failed before its own manifest's timeout.
-        _config.StaleInProgressTimeout = TimeSpan.FromMinutes(30);
-        _config.DefaultJobTimeout = TimeSpan.FromMinutes(60);
+        _config.NotNull().StaleInProgressTimeout = TimeSpan.FromMinutes(30);
+        _config.NotNull().DefaultJobTimeout = TimeSpan.FromMinutes(60);
         var run = await CreateInProgressRun(TimeSpan.FromHours(3), startedMinutesAgo);
 
         await RunManifestManager();
@@ -152,7 +153,7 @@ public class ManifestTimeoutStaleReapTests : TestSetup
         var run = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "long" },
                 ManifestId = manifest.Id,

@@ -2,6 +2,7 @@ using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
 using Trax.Effect.Models.DeadLetter.DTOs;
@@ -48,7 +49,7 @@ public class ResilienceStressTests : TestSetup
         var group = await SeedManifestGroup("cleanup-scale");
         var manifest = (await SeedManifests(1, group.Id))[0];
 
-        var dispatcherName = typeof(JobDispatcherTrain).FullName!;
+        var dispatcherName = typeof(JobDispatcherTrain).FullName.NotNull();
         var expired = DateTime.UtcNow.AddHours(-2);
 
         await SeedAdminMetadata(dispatcherName, dispatcherRows, expired);

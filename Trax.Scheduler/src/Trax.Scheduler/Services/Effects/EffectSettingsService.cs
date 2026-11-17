@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.EffectProviderFactory;
 using Trax.Effect.Services.EffectRegistry;
@@ -126,7 +127,7 @@ public sealed class EffectSettingsService(IServiceProvider services) : IEffectSe
             else if (TryConvert(property, text, configuration, out var value, out var error))
                 converted.Add((property, value));
             else
-                errors[name] = error!;
+                errors[name] = error.NotNull();
         }
 
         if (errors.Count > 0)
@@ -185,7 +186,8 @@ public sealed class EffectSettingsService(IServiceProvider services) : IEffectSe
     private static string FullNameOf(Type factoryType) => factoryType.FullName ?? factoryType.Name;
 
     private Type? FindFactory(string fullName) =>
-        _registry!
+        _registry
+            .NotNull()
             .GetAll()
             .Keys.FirstOrDefault(t =>
                 string.Equals(FullNameOf(t), fullName, StringComparison.Ordinal)

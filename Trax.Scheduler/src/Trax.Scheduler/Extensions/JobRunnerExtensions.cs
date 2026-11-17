@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Extensions;
@@ -192,7 +193,7 @@ public static class JobRunnerExtensions
                         )
                         .ConfigureAwait(false);
                     if (request is null)
-                        return refused!;
+                        return refused.NotNull();
 
                     try
                     {
@@ -264,7 +265,7 @@ public static class JobRunnerExtensions
                         )
                         .ConfigureAwait(false);
                     if (request is null)
-                        return refused!;
+                        return refused.NotNull();
 
                     RemoteRunResponse response;
                     try

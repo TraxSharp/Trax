@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.SnapshotDraft;
 using Trax.Mediator.Services.TrainBus;
@@ -19,29 +20,31 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests.InvokedTrains;
 [NonParallelizable]
 public class InvokedRunTests(ClusterStore store)
 {
-    private InvokeCluster _cluster = null!;
+    private InvokeCluster? _cluster;
 
-    private ClusterHost _full = null!;
+    private ClusterHost? _full;
 
     [OneTimeSetUp]
     public async Task CreateCluster()
     {
         _cluster = await InvokeCluster.Create(store);
-        _full = _cluster.Host(machines: true, scheduler: true);
+        _full = _cluster.NotNull().Host(machines: true, scheduler: true);
     }
 
     [OneTimeTearDown]
     public async Task DisposeCluster()
     {
-        await _full.DisposeAsync();
-        await _cluster.DisposeAsync();
+        if (_full is not null)
+            await _full.DisposeAsync();
+        if (_cluster is not null)
+            await _cluster.DisposeAsync();
     }
 
     [SetUp]
     public async Task Reset()
     {
         InvokedStepGate.Reset();
-        await _cluster.Reset();
+        await _cluster.NotNull().Reset();
     }
 
     [Test]
@@ -50,22 +53,27 @@ public class InvokedRunTests(ClusterStore store)
         // Bob holds an instance with the same id: the owner is the one the run recorded, not either.
         var id = Guid.NewGuid();
         await StepMachine.Seed(
-            _full.Services,
+            _full.NotNull().Services,
             "bob",
             id,
             UserStepMachine.MachineId,
             "Idle",
             StepMachine.Context(InvokedStepModes.Ok)
         );
-        await _full.EnterRunning("alice", id, StepMachine.Context(InvokedStepModes.Owner));
+        await _full
+            .NotNull()
+            .EnterRunning("alice", id, StepMachine.Context(InvokedStepModes.Owner));
 
-        var token = (await AliceRow(id)).InvokeToken!;
-        var runId = await _full.DispatchAndRun(token);
+        var token = (await AliceRow(id)).InvokeToken.NotNull();
+        var runId = await _full.NotNull().DispatchAndRun(token);
 
-        (await _full.Run(runId)).TrainState.Should().Be(TrainState.Completed);
+        (await _full.NotNull().Run(runId)).TrainState.Should().Be(TrainState.Completed);
         var row = await AliceRow(id);
         row.State.Should().Be("Done");
-        JsonNode.Parse(row.Context)!["artifact"]!
+        JsonNode
+            .Parse(row.Context)
+            .NotNull()["artifact"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be("owner:alice", "the junction reads the owner of the instance that invoked it");
@@ -74,14 +82,14 @@ public class InvokedRunTests(ClusterStore store)
     [Test]
     public async Task Resolving_it_outside_an_invoked_run_throws()
     {
-        await using (var scope = _full.Services.CreateAsyncScope())
+        await using (var scope = _full.NotNull().Services.CreateAsyncScope())
             scope
                 .Invoking(s => s.ServiceProvider.GetRequiredService<InvokedRun>())
                 .Should()
                 .Throw<InvalidOperationException>();
 
         // A train run directly, not by a machine, cannot read an owner either.
-        await using var run = _full.Services.CreateAsyncScope();
+        await using var run = _full.NotNull().Services.CreateAsyncScope();
         await run
             .ServiceProvider.GetRequiredService<ITrainBus>()
             .Awaiting(bus =>
@@ -94,7 +102,7 @@ public class InvokedRunTests(ClusterStore store)
     }
 
     private async Task<SnapshotDraft> AliceRow(Guid id) =>
-        (await _full.Rows(id, UserStepMachine.MachineId).ConfigureAwait(false)).Single(r =>
-            string.Equals(r.UserKey, "alice", StringComparison.Ordinal)
+        (await _full.NotNull().Rows(id, UserStepMachine.MachineId).ConfigureAwait(false)).Single(
+            r => string.Equals(r.UserKey, "alice", StringComparison.Ordinal)
         );
 }

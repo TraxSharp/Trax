@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Extensions;
@@ -35,9 +36,9 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class DispatchShutdownTests
 {
-    private ServiceProvider _serviceProvider = null!;
+    private ServiceProvider? _serviceProvider;
     private AsyncServiceScope _scope;
-    private IDataContext _dataContext = null!;
+    private IDataContext? _dataContext;
 
     [OneTimeSetUp]
     public void RunBeforeAnyTests()
@@ -65,14 +66,18 @@ public class DispatchShutdownTests
     }
 
     [OneTimeTearDown]
-    public async Task RunAfterAnyTests() => await _serviceProvider.DisposeAsync();
+    public async Task RunAfterAnyTests()
+    {
+        if (_serviceProvider is not null)
+            await _serviceProvider.DisposeAsync();
+    }
 
     [SetUp]
     public async Task TestSetUp()
     {
-        _scope = _serviceProvider.CreateAsyncScope();
+        _scope = _serviceProvider.NotNull().CreateAsyncScope();
         _dataContext = _scope.ServiceProvider.GetRequiredService<IDataContext>();
-        await TestSetup.CleanupDatabase(_dataContext);
+        await TestSetup.CleanupDatabase(_dataContext.NotNull());
     }
 
     [TearDown]
@@ -91,7 +96,7 @@ public class DispatchShutdownTests
         using var stopping = new CancellationTokenSource();
         ShutdownDuringSubmit.Stopping = stopping;
 
-        await using (var cycleScope = _serviceProvider.CreateAsyncScope())
+        await using (var cycleScope = _serviceProvider.NotNull().CreateAsyncScope())
         {
             var train = cycleScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
             try
@@ -106,14 +111,16 @@ public class DispatchShutdownTests
 
         stopping.IsCancellationRequested.Should().BeTrue("the submitter stopped the host");
 
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         var queued = await _dataContext
+            .NotNull()
             .WorkQueues.AsNoTracking()
             .SingleAsync(q => q.Id == entry.Id, cancellationToken: CancellationToken.None);
         queued.Status.Should().Be(WorkQueueStatus.Queued, "the job was never delivered");
         queued.MetadataId.Should().BeNull();
 
         var run = await _dataContext
+            .NotNull()
             .Metadatas.AsNoTracking()
             .SingleAsync(
                 m => m.ManifestId == entry.ManifestId,
@@ -125,7 +132,7 @@ public class DispatchShutdownTests
     private async Task<WorkQueue> Queue()
     {
         var group = await TestSetup
-            .CreateAndSaveManifestGroup(_dataContext, name: $"group-{Guid.NewGuid():N}")
+            .CreateAndSaveManifestGroup(_dataContext.NotNull(), name: $"group-{Guid.NewGuid():N}")
             .ConfigureAwait(false);
         var manifest = Manifest.Create(
             new CreateManifest
@@ -138,21 +145,21 @@ public class DispatchShutdownTests
             }
         );
         manifest.ManifestGroupId = group.Id;
-        await _dataContext.Track(manifest).ConfigureAwait(false);
-        await _dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        await _dataContext.NotNull().Track(manifest).ConfigureAwait(false);
+        await _dataContext.NotNull().SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = manifest.Properties,
                 InputTypeName = typeof(SchedulerTestInput).FullName,
                 ManifestId = manifest.Id,
             }
         );
-        await _dataContext.Track(entry).ConfigureAwait(false);
-        await _dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
-        _dataContext.Reset();
+        await _dataContext.NotNull().Track(entry).ConfigureAwait(false);
+        await _dataContext.NotNull().SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        _dataContext.NotNull().Reset();
         return entry;
     }
 

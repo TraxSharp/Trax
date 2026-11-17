@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using NSubstitute;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -46,12 +47,12 @@ public class DecisionRecordingStartupCheckTests
                 .ThrowAsync<InvalidOperationException>()
         ).Which;
 
-        refusal.Message.Should().Contain(typeof(IDecisionProbeTrain).FullName!);
+        refusal.Message.Should().Contain(typeof(IDecisionProbeTrain).FullName.NotNull());
         refusal.Message.Should().Contain("AddDecisionRecording()");
         refusal
             .Message.Should()
             .NotContain(
-                typeof(ISchedulerTestTrain).FullName!,
+                typeof(ISchedulerTestTrain).FullName.NotNull(),
                 "a train that asks no decider has nothing to replay"
             );
     }

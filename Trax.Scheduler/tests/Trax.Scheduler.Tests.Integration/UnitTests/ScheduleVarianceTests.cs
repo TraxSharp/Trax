@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Scheduler.Configuration;
@@ -12,8 +13,8 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 [TestFixture]
 public class ScheduleVarianceTests
 {
-    private SchedulerConfiguration _config = null!;
-    private ILogger _logger = null!;
+    private SchedulerConfiguration? _config;
+    private ILogger? _logger;
 
     [SetUp]
     public void SetUp()
@@ -44,7 +45,7 @@ public class ScheduleVarianceTests
         {
             var result = SchedulingHelpers.ComputeNextScheduledRun(manifest);
             result.Should().NotBeNull();
-            result!.Value.Should().BeOnOrAfter(baseNext);
+            result.NotNull().Value.Should().BeOnOrAfter(baseNext);
             result.Value.Should().BeOnOrBefore(maxNext);
         }
     }
@@ -68,7 +69,7 @@ public class ScheduleVarianceTests
         {
             var result = SchedulingHelpers.ComputeNextScheduledRun(manifest);
             result.Should().NotBeNull();
-            result!.Value.Should().BeOnOrAfter(baseCronNext);
+            result.NotNull().Value.Should().BeOnOrAfter(baseCronNext);
             result.Value.Should().BeOnOrBefore(maxNext);
         }
     }
@@ -145,7 +146,7 @@ public class ScheduleVarianceTests
 
         var result = SchedulingHelpers.ComputeNextScheduledRun(manifest);
         result.Should().NotBeNull();
-        result!.Value.Should().BeOnOrAfter(baseNext);
+        result.NotNull().Value.Should().BeOnOrAfter(baseNext);
         result.Value.Should().BeOnOrBefore(maxNext);
     }
 
@@ -179,7 +180,10 @@ public class ScheduleVarianceTests
             NextScheduledRun = now.AddMinutes(3), // in the future
         };
 
-        SchedulingHelpers.ShouldRunNow(manifest, now, _config, _logger).Should().BeFalse();
+        SchedulingHelpers
+            .ShouldRunNow(manifest, now, _config.NotNull(), _logger.NotNull())
+            .Should()
+            .BeFalse();
     }
 
     [Test]
@@ -195,7 +199,10 @@ public class ScheduleVarianceTests
             NextScheduledRun = now.AddMinutes(-1), // in the past
         };
 
-        SchedulingHelpers.ShouldRunNow(manifest, now, _config, _logger).Should().BeTrue();
+        SchedulingHelpers
+            .ShouldRunNow(manifest, now, _config.NotNull(), _logger.NotNull())
+            .Should()
+            .BeTrue();
     }
 
     [Test]
@@ -212,7 +219,10 @@ public class ScheduleVarianceTests
         };
 
         // 6 min since last run, interval is 5 min -> should run
-        SchedulingHelpers.ShouldRunNow(manifest, now, _config, _logger).Should().BeTrue();
+        SchedulingHelpers
+            .ShouldRunNow(manifest, now, _config.NotNull(), _logger.NotNull())
+            .Should()
+            .BeTrue();
     }
 
     [Test]
@@ -228,7 +238,10 @@ public class ScheduleVarianceTests
             NextScheduledRun = now.AddMinutes(60), // still in the future (3:30am)
         };
 
-        SchedulingHelpers.ShouldRunNow(manifest, now, _config, _logger).Should().BeFalse();
+        SchedulingHelpers
+            .ShouldRunNow(manifest, now, _config.NotNull(), _logger.NotNull())
+            .Should()
+            .BeFalse();
     }
 
     [Test]
@@ -244,7 +257,10 @@ public class ScheduleVarianceTests
             NextScheduledRun = new DateTime(2026, 3, 10, 3, 10, 0, DateTimeKind.Utc), // 3:10am, now is 3:20am
         };
 
-        SchedulingHelpers.ShouldRunNow(manifest, now, _config, _logger).Should().BeTrue();
+        SchedulingHelpers
+            .ShouldRunNow(manifest, now, _config.NotNull(), _logger.NotNull())
+            .Should()
+            .BeTrue();
     }
 
     [Test]
@@ -264,7 +280,10 @@ public class ScheduleVarianceTests
         var exclusion = Exclude.DaysOfWeek(DayOfWeek.Tuesday);
         manifest.SetExclusions([exclusion]);
 
-        SchedulingHelpers.ShouldRunNow(manifest, now, _config, _logger).Should().BeFalse();
+        SchedulingHelpers
+            .ShouldRunNow(manifest, now, _config.NotNull(), _logger.NotNull())
+            .Should()
+            .BeFalse();
     }
 
     [Test]
@@ -287,7 +306,10 @@ public class ScheduleVarianceTests
         };
 
         // DoNothing: most recent boundary is 12:20, sinceBoundary = 150s > 30s → skip
-        SchedulingHelpers.ShouldRunNow(manifest, now, _config, _logger).Should().BeFalse();
+        SchedulingHelpers
+            .ShouldRunNow(manifest, now, _config.NotNull(), _logger.NotNull())
+            .Should()
+            .BeFalse();
     }
 
     [Test]
@@ -305,7 +327,10 @@ public class ScheduleVarianceTests
             NextScheduledRun = now.AddMinutes(-15), // overdue way past threshold, but FireOnceNow
         };
 
-        SchedulingHelpers.ShouldRunNow(manifest, now, _config, _logger).Should().BeTrue();
+        SchedulingHelpers
+            .ShouldRunNow(manifest, now, _config.NotNull(), _logger.NotNull())
+            .Should()
+            .BeTrue();
     }
 
     #endregion

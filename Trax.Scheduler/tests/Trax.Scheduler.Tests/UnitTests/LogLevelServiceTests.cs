@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.LogLevels;
 
@@ -16,9 +17,9 @@ namespace Trax.Scheduler.Tests.UnitTests;
 [TestFixture]
 public class LogLevelServiceTests
 {
-    private IConfigurationRoot _configuration = null!;
-    private ServiceProvider _services = null!;
-    private ILogLevelService _levels = null!;
+    private IConfigurationRoot? _configuration;
+    private ServiceProvider? _services;
+    private ILogLevelService? _levels;
 
     [SetUp]
     public void SetUp()
@@ -36,9 +37,9 @@ public class LogLevelServiceTests
             .Build();
 
         var services = new ServiceCollection()
-            .AddSingleton<IConfiguration>(_configuration)
+            .AddSingleton<IConfiguration>(_configuration.NotNull())
             .AddLogging(b =>
-                b.AddConfiguration(_configuration.GetSection("Logging"))
+                b.AddConfiguration(_configuration.NotNull().GetSection("Logging"))
                     .AddProvider(new AllLevelsProvider())
             );
         SchedulerConfigurationBuilder.RegisterLogLevelOverrides(services);
@@ -48,16 +49,16 @@ public class LogLevelServiceTests
         );
 
         _services = services.BuildServiceProvider();
-        _levels = _services.GetRequiredService<ILogLevelService>();
+        _levels = _services.NotNull().GetRequiredService<ILogLevelService>();
     }
 
     [TearDown]
-    public void TearDown() => _services.Dispose();
+    public void TearDown() => _services?.Dispose();
 
     [Test]
     public void Levels_list_the_configured_categories_default_first()
     {
-        var levels = _levels.GetLogLevels();
+        var levels = _levels.NotNull().GetLogLevels();
 
         levels
             .Select(l => l.Category)
@@ -77,16 +78,22 @@ public class LogLevelServiceTests
     [Test]
     public void A_level_set_here_reaches_the_loggers_and_reads_back_overridden()
     {
-        var logger = _services.GetRequiredService<ILoggerFactory>().CreateLogger("Trax.Orders");
+        var logger = _services
+            .NotNull()
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger("Trax.Orders");
         logger.IsEnabled(LogLevel.Debug).Should().BeFalse();
 
-        var result = _levels.SetLogLevels([new LogLevelChange("trax.orders", LogLevel.Debug)]);
+        var result = _levels
+            .NotNull()
+            .SetLogLevels([new LogLevelChange("trax.orders", LogLevel.Debug)]);
 
         result.Success.Should().BeTrue(result.Message);
         result.Count.Should().Be(1);
         result.NotApplied.Should().BeEmpty();
         logger.IsEnabled(LogLevel.Debug).Should().BeTrue("the logger factory re-read its filters");
         var entry = _levels
+            .NotNull()
             .GetLogLevels()
             .Single(l => string.Equals(l.Category, "Trax.Orders", StringComparison.Ordinal));
         entry.Level.Should().Be(LogLevel.Debug);
@@ -97,11 +104,12 @@ public class LogLevelServiceTests
     [Test]
     public void A_level_set_here_survives_a_configuration_reload()
     {
-        _levels.SetLogLevels([new LogLevelChange("Microsoft", LogLevel.Trace)]);
+        _levels.NotNull().SetLogLevels([new LogLevelChange("Microsoft", LogLevel.Trace)]);
 
-        _configuration.Reload();
+        _configuration.NotNull().Reload();
 
         _levels
+            .NotNull()
             .GetLogLevels()
             .Single(l => string.Equals(l.Category, "Microsoft", StringComparison.Ordinal))
             .Level.Should()
@@ -111,7 +119,7 @@ public class LogLevelServiceTests
     [Test]
     public void A_category_the_host_filters_itself_is_reported_not_applied()
     {
-        var result = _levels.SetLogLevels([new LogLevelChange("Pinned", LogLevel.Debug)]);
+        var result = _levels.NotNull().SetLogLevels([new LogLevelChange("Pinned", LogLevel.Debug)]);
 
         result.Success.Should().BeTrue();
         result.NotApplied.Should().Equal("Pinned");
@@ -121,24 +129,34 @@ public class LogLevelServiceTests
     [Test]
     public void An_unconfigured_category_refuses_the_whole_list()
     {
-        var result = _levels.SetLogLevels([
-            new LogLevelChange("Trax.Orders", LogLevel.Debug),
-            new LogLevelChange("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Trace),
-        ]);
+        var result = _levels
+            .NotNull()
+            .SetLogLevels([
+                new LogLevelChange("Trax.Orders", LogLevel.Debug),
+                new LogLevelChange(
+                    "Microsoft.EntityFrameworkCore.Database.Command",
+                    LogLevel.Trace
+                ),
+            ]);
 
         result.Success.Should().BeFalse();
         result.Message.Should().Contain("Microsoft.EntityFrameworkCore.Database.Command");
-        _levels.GetLogLevels().Should().OnlyContain(l => !l.Overridden, "nothing was set");
+        _levels
+            .NotNull()
+            .GetLogLevels()
+            .Should()
+            .OnlyContain(l => !l.Overridden, "nothing was set");
     }
 
     [Test]
     public void An_undefined_level_or_an_empty_list_is_refused()
     {
         _levels
+            .NotNull()
             .SetLogLevels([new LogLevelChange("Default", (LogLevel)42)])
             .Success.Should()
             .BeFalse();
-        _levels.SetLogLevels([]).Success.Should().BeFalse();
+        _levels.NotNull().SetLogLevels([]).Success.Should().BeFalse();
     }
 
     /// <summary>

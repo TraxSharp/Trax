@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Trains.MetadataCleanup;
 using Trax.Scheduler.Utilities;
@@ -26,7 +27,7 @@ internal sealed class MetadataCleanupPollingService(
     /// </summary>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var cleanupConfig = configuration.MetadataCleanup!;
+        var cleanupConfig = configuration.MetadataCleanup.NotNull();
 
         logger.LogInformation(
             "MetadataCleanupPollingService starting with interval {Interval}, retention {Retention}, whitelist [{Whitelist}]",

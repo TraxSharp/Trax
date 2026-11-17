@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
@@ -239,7 +240,7 @@ public class ChangeSignalEmissionPostgresTests
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(ISchedulerTestTrain).FullName!,
+                Name = typeof(ISchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput(),
                 ManifestId = manifest.Id,

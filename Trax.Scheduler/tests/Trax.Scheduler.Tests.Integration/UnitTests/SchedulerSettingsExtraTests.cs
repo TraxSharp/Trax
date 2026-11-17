@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Enums;
@@ -142,7 +143,7 @@ public class SchedulerSettingsExtraTests
 
         var opts = provider.GetService<RemoteRunOptions>();
         opts.Should().NotBeNull();
-        opts!.BaseUrl.Should().Be("https://run.example.com/");
+        opts.NotNull().BaseUrl.Should().Be("https://run.example.com/");
     }
 
     [Test]

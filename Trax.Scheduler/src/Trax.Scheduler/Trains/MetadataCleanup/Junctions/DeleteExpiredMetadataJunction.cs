@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
@@ -51,7 +52,7 @@ internal sealed class DeleteExpiredMetadataJunction(
 {
     public override async Task<Unit> Run(MetadataCleanupRequest input)
     {
-        var cleanupConfig = configuration.MetadataCleanup!;
+        var cleanupConfig = configuration.MetadataCleanup.NotNull();
         var plan = MetadataRetentionPlan.Build(cleanupConfig, discoveryService, out var conflicts);
 
         // A conflict is refused at startup by MetadataCleanupConfigurationValidator, so reaching
@@ -522,7 +523,10 @@ internal sealed class DeleteExpiredMetadataJunction(
                 if (own is not null)
                     await own.CommitAsync(ct).ConfigureAwait(false);
                 else
-                    await outer!.ReleaseSavepointAsync(savepoint, ct).ConfigureAwait(false);
+                    await outer
+                        .NotNull()
+                        .ReleaseSavepointAsync(savepoint, ct)
+                        .ConfigureAwait(false);
                 return (metadata, workQueues, logs);
             }
 
@@ -530,7 +534,7 @@ internal sealed class DeleteExpiredMetadataJunction(
             if (own is not null)
                 await own.RollbackAsync(ct).ConfigureAwait(false);
             else
-                await outer!.RollbackToSavepointAsync(savepoint, ct).ConfigureAwait(false);
+                await outer.NotNull().RollbackToSavepointAsync(savepoint, ct).ConfigureAwait(false);
             return null;
         }
         catch
@@ -538,7 +542,8 @@ internal sealed class DeleteExpiredMetadataJunction(
             if (own is not null)
                 await own.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
             else
-                await outer!
+                await outer
+                    .NotNull()
                     .RollbackToSavepointAsync(savepoint, CancellationToken.None)
                     .ConfigureAwait(false);
             throw;

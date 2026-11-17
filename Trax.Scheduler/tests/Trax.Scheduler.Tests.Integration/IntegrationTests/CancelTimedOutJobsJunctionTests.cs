@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
@@ -21,7 +22,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class CancelTimedOutJobsJunctionTests : TestSetup
 {
-    private IManifestManagerTrain _train = null!;
+    private IManifestManagerTrain? _train;
 
     public override async Task TestSetUp()
     {
@@ -51,7 +52,7 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -76,7 +77,7 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -108,7 +109,7 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -145,7 +146,7 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
         DataContext.Reset();
 
         // Act — should complete without errors (idempotent)
-        var act = async () => await _train.Run(Unit.Default).ConfigureAwait(false);
+        var act = async () => await _train.NotNull().Run(Unit.Default).ConfigureAwait(false);
         await act.Should().NotThrowAsync();
     }
 
@@ -157,7 +158,7 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
         await CreateMetadata(manifest, TrainState.Completed);
 
         // Act
-        var act = async () => await _train.Run(Unit.Default).ConfigureAwait(false);
+        var act = async () => await _train.NotNull().Run(Unit.Default).ConfigureAwait(false);
         await act.Should().NotThrowAsync();
     }
 
@@ -178,7 +179,7 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert — no dead letter created (cancelled, not failed)
         DataContext.Reset();
@@ -225,7 +226,7 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "TimeoutTest" },
                 ManifestId = manifest.Id,

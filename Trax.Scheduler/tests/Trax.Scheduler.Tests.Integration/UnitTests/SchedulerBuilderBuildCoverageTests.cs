@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.InMemory.Extensions;
@@ -189,7 +190,9 @@ public class SchedulerBuilderBuildCoverageTests
         // The [TraxRemote]-marked train must have been discovered and registered as an
         // attribute-routed train. GetSubmitterType returns the submitter for it via the
         // attribute fallback once the default has been set.
-        var attributeSubmitter = routing.GetSubmitterType(typeof(IRemoteCoverageTrain).FullName!);
+        var attributeSubmitter = routing.GetSubmitterType(
+            typeof(IRemoteCoverageTrain).FullName.NotNull()
+        );
         attributeSubmitter
             .Should()
             .NotBeNull(

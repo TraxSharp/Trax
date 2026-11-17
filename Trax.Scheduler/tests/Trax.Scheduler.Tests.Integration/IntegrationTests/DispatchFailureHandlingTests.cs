@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Extensions;
@@ -43,9 +44,9 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class DispatchFailureHandlingTests
 {
-    private ServiceProvider _serviceProvider = null!;
+    private ServiceProvider? _serviceProvider;
     private AsyncServiceScope _scope;
-    private IDataContext _dataContext = null!;
+    private IDataContext? _dataContext;
     private readonly LifecycleRecorder _lifecycle = new();
 
     [OneTimeSetUp]
@@ -92,15 +93,16 @@ public class DispatchFailureHandlingTests
     [OneTimeTearDown]
     public async Task RunAfterAnyTests()
     {
-        await _serviceProvider.DisposeAsync();
+        if (_serviceProvider is not null)
+            await _serviceProvider.DisposeAsync();
     }
 
     [SetUp]
     public async Task TestSetUp()
     {
-        _scope = _serviceProvider.CreateAsyncScope();
+        _scope = _serviceProvider.NotNull().CreateAsyncScope();
         _dataContext = _scope.ServiceProvider.GetRequiredService<IDataContext>();
-        await TestSetup.CleanupDatabase(_dataContext);
+        await TestSetup.CleanupDatabase(_dataContext.NotNull());
         _lifecycle.Clear();
     }
 
@@ -119,7 +121,7 @@ public class DispatchFailureHandlingTests
         var manifest = await CreateAndSaveManifest();
         var entry = await CreateAndSaveWorkQueueEntry(manifest);
 
-        var trainScope = _serviceProvider.CreateAsyncScope();
+        var trainScope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var trainScopeDisposal = trainScope.ConfigureAwait(false);
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
@@ -130,13 +132,15 @@ public class DispatchFailureHandlingTests
             d.Dispose();
 
         // Assert — Metadata should exist and be Failed
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         var metadata = await _dataContext
+            .NotNull()
             .Metadatas.AsNoTracking()
             .FirstOrDefaultAsync(m => m.ManifestId == manifest.Id);
 
         metadata.Should().NotBeNull("metadata should have been created before enqueue attempt");
-        metadata!
+        metadata
+            .NotNull()
             .TrainState.Should()
             .Be(TrainState.Failed, "metadata should be marked Failed on enqueue failure");
     }
@@ -148,7 +152,7 @@ public class DispatchFailureHandlingTests
         var manifest = await CreateAndSaveManifest();
         await CreateAndSaveWorkQueueEntry(manifest);
 
-        var trainScope = _serviceProvider.CreateAsyncScope();
+        var trainScope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var trainScopeDisposal = trainScope.ConfigureAwait(false);
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
@@ -159,8 +163,9 @@ public class DispatchFailureHandlingTests
             d.Dispose();
 
         // Assert
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         var metadata = await _dataContext
+            .NotNull()
             .Metadatas.AsNoTracking()
             .FirstAsync(m => m.ManifestId == manifest.Id);
 
@@ -175,7 +180,7 @@ public class DispatchFailureHandlingTests
         var manifest = await CreateAndSaveManifest();
         await CreateAndSaveWorkQueueEntry(manifest);
 
-        var trainScope = _serviceProvider.CreateAsyncScope();
+        var trainScope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var trainScopeDisposal = trainScope.ConfigureAwait(false);
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
@@ -186,8 +191,9 @@ public class DispatchFailureHandlingTests
             d.Dispose();
 
         // Assert
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         var metadata = await _dataContext
+            .NotNull()
             .Metadatas.AsNoTracking()
             .FirstAsync(m => m.ManifestId == manifest.Id);
 
@@ -201,7 +207,7 @@ public class DispatchFailureHandlingTests
         var manifest = await CreateAndSaveManifest();
         var entry = await CreateAndSaveWorkQueueEntry(manifest);
 
-        var trainScope = _serviceProvider.CreateAsyncScope();
+        var trainScope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var trainScopeDisposal = trainScope.ConfigureAwait(false);
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
@@ -212,8 +218,9 @@ public class DispatchFailureHandlingTests
             d.Dispose();
 
         // Assert — with MaxDispatchAttempts > 0 (default: 5), the entry is requeued
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         var updatedEntry = await _dataContext
+            .NotNull()
             .WorkQueues.AsNoTracking()
             .FirstAsync(q => q.Id == entry.Id);
 
@@ -236,7 +243,7 @@ public class DispatchFailureHandlingTests
         var manifest3 = await CreateAndSaveManifest(inputValue: "Third");
         var entry3 = await CreateAndSaveWorkQueueEntry(manifest3);
 
-        var trainScope = _serviceProvider.CreateAsyncScope();
+        var trainScope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var trainScopeDisposal = trainScope.ConfigureAwait(false);
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
@@ -247,11 +254,13 @@ public class DispatchFailureHandlingTests
             d.Dispose();
 
         // Assert — all entries should have been attempted (metadata created for each)
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         var metadataCount = await _dataContext
+            .NotNull()
             .Metadatas.AsNoTracking()
             .Where(m =>
-                new[] { manifest1.Id, manifest2.Id, manifest3.Id }.Contains(m.ManifestId!.Value)
+                m.ManifestId != null
+                && new[] { manifest1.Id, manifest2.Id, manifest3.Id }.Contains(m.ManifestId.Value)
             )
             .CountAsync();
 
@@ -261,9 +270,11 @@ public class DispatchFailureHandlingTests
 
         // All metadata should be Failed
         var allMetadata = await _dataContext
+            .NotNull()
             .Metadatas.AsNoTracking()
             .Where(m =>
-                new[] { manifest1.Id, manifest2.Id, manifest3.Id }.Contains(m.ManifestId!.Value)
+                m.ManifestId != null
+                && new[] { manifest1.Id, manifest2.Id, manifest3.Id }.Contains(m.ManifestId.Value)
             )
             .ToListAsync();
 
@@ -283,7 +294,7 @@ public class DispatchFailureHandlingTests
         var manifest = await CreateAndSaveManifest();
         await CreateAndSaveWorkQueueEntry(manifest);
 
-        var trainScope = _serviceProvider.CreateAsyncScope();
+        var trainScope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var trainScopeDisposal = trainScope.ConfigureAwait(false);
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
@@ -303,7 +314,7 @@ public class DispatchFailureHandlingTests
         var manifest = await CreateAndSaveManifest();
         await CreateAndSaveWorkQueueEntry(manifest);
 
-        var trainScope = _serviceProvider.CreateAsyncScope();
+        var trainScope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var trainScopeDisposal = trainScope.ConfigureAwait(false);
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
@@ -314,8 +325,9 @@ public class DispatchFailureHandlingTests
             d.Dispose();
 
         // Assert — no Pending metadata should exist
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         var pendingCount = await _dataContext
+            .NotNull()
             .Metadatas.AsNoTracking()
             .Where(m => m.ManifestId == manifest.Id && m.TrainState == TrainState.Pending)
             .CountAsync();
@@ -346,17 +358,22 @@ public class DispatchFailureHandlingTests
         }
 
         // Assert - the job has not failed, only three deliveries of it have
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         var deadLetters = await _dataContext
+            .NotNull()
             .DeadLetters.AsNoTracking()
             .CountAsync(d => d.ManifestId == manifest.Id);
         deadLetters.Should().Be(0, "dispatch attempts remain, so the job has not failed yet");
 
-        var queued = await _dataContext.WorkQueues.AsNoTracking().FirstAsync(q => q.Id == entry.Id);
+        var queued = await _dataContext
+            .NotNull()
+            .WorkQueues.AsNoTracking()
+            .FirstAsync(q => q.Id == entry.Id);
         queued.Status.Should().Be(WorkQueueStatus.Queued);
         queued.DispatchAttempts.Should().Be(3);
 
         var attempts = await _dataContext
+            .NotNull()
             .Metadatas.AsNoTracking()
             .Where(m => m.ManifestId == manifest.Id)
             .ToListAsync();
@@ -380,8 +397,11 @@ public class DispatchFailureHandlingTests
         await RunDispatcherCycle();
         await RunDispatcherCycle();
 
-        _dataContext.Reset();
-        var queued = await _dataContext.WorkQueues.AsNoTracking().FirstAsync(q => q.Id == entry.Id);
+        _dataContext.NotNull().Reset();
+        var queued = await _dataContext
+            .NotNull()
+            .WorkQueues.AsNoTracking()
+            .FirstAsync(q => q.Id == entry.Id);
         queued.DispatchAttempts.Should().Be(1, "the second cycle came before the backoff ended");
         queued.ScheduledAt.Should().BeAfter(DateTime.UtcNow);
         queued
@@ -392,7 +412,7 @@ public class DispatchFailureHandlingTests
     [Test]
     public async Task The_attempt_that_exhausts_dispatch_attempts_counts_as_a_failure()
     {
-        var config = _serviceProvider.GetRequiredService<SchedulerConfiguration>();
+        var config = _serviceProvider.NotNull().GetRequiredService<SchedulerConfiguration>();
         var originalMax = config.MaxDispatchAttempts;
         config.MaxDispatchAttempts = 2;
 
@@ -405,8 +425,9 @@ public class DispatchFailureHandlingTests
             await ElapseDispatchBackoff();
             await RunDispatcherCycle();
 
-            _dataContext.Reset();
+            _dataContext.NotNull().Reset();
             var attempts = await _dataContext
+                .NotNull()
                 .Metadatas.AsNoTracking()
                 .Where(m => m.ManifestId == manifest.Id)
                 .OrderBy(m => m.Id)
@@ -427,7 +448,7 @@ public class DispatchFailureHandlingTests
     [Test]
     public async Task A_run_that_fails_dispatch_for_good_publishes_its_failure_once()
     {
-        var config = _serviceProvider.GetRequiredService<SchedulerConfiguration>();
+        var config = _serviceProvider.NotNull().GetRequiredService<SchedulerConfiguration>();
         var originalMax = config.MaxDispatchAttempts;
         config.MaxDispatchAttempts = 2;
 
@@ -444,8 +465,9 @@ public class DispatchFailureHandlingTests
             await ElapseDispatchBackoff();
             await RunDispatcherCycle();
 
-            _dataContext.Reset();
+            _dataContext.NotNull().Reset();
             var failed = await _dataContext
+                .NotNull()
                 .Metadatas.AsNoTracking()
                 .Where(m => m.ManifestId == manifest.Id)
                 .OrderByDescending(m => m.Id)
@@ -466,7 +488,7 @@ public class DispatchFailureHandlingTests
     [Test]
     public async Task A_dispatch_failure_with_requeue_off_publishes_the_failure()
     {
-        var config = _serviceProvider.GetRequiredService<SchedulerConfiguration>();
+        var config = _serviceProvider.NotNull().GetRequiredService<SchedulerConfiguration>();
         var originalMax = config.MaxDispatchAttempts;
         config.MaxDispatchAttempts = 0;
 
@@ -498,15 +520,15 @@ public class DispatchFailureHandlingTests
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = """{"value":{"not":"a string"}}""",
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                 ManifestId = manifest.Id,
             }
         );
-        await _dataContext.Track(entry);
-        await _dataContext.SaveChanges(CancellationToken.None);
-        _dataContext.Reset();
+        await _dataContext.NotNull().Track(entry);
+        await _dataContext.NotNull().SaveChanges(CancellationToken.None);
+        _dataContext.NotNull().Reset();
 
         await RunDispatcherCycle();
 
@@ -522,7 +544,7 @@ public class DispatchFailureHandlingTests
     [Test]
     public async Task A_dispatch_failure_is_published_without_the_runners_detail()
     {
-        var config = _serviceProvider.GetRequiredService<SchedulerConfiguration>();
+        var config = _serviceProvider.NotNull().GetRequiredService<SchedulerConfiguration>();
         var originalMax = config.MaxDispatchAttempts;
         config.MaxDispatchAttempts = 0;
 
@@ -533,8 +555,9 @@ public class DispatchFailureHandlingTests
 
             await RunDispatcherCycle();
 
-            _dataContext.Reset();
+            _dataContext.NotNull().Reset();
             var row = await _dataContext
+                .NotNull()
                 .Metadatas.AsNoTracking()
                 .FirstAsync(m => m.ManifestId == manifest.Id);
             row.FailureReason.Should()
@@ -567,20 +590,21 @@ public class DispatchFailureHandlingTests
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = """{"value":{"not":"a string"}}""",
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                 ManifestId = manifest.Id,
             }
         );
-        await _dataContext.Track(entry);
-        await _dataContext.SaveChanges(CancellationToken.None);
-        _dataContext.Reset();
+        await _dataContext.NotNull().Track(entry);
+        await _dataContext.NotNull().SaveChanges(CancellationToken.None);
+        _dataContext.NotNull().Reset();
 
         await RunDispatcherCycle();
 
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         var row = await _dataContext
+            .NotNull()
             .Metadatas.AsNoTracking()
             .FirstAsync(m => m.ManifestId == manifest.Id);
         row.FailureReason.Should().NotContain(nameof(SchedulerTestInput));
@@ -600,7 +624,7 @@ public class DispatchFailureHandlingTests
     [Test]
     public async Task A_hook_that_hangs_on_a_dispatch_failure_does_not_stall_dispatch()
     {
-        var config = _serviceProvider.GetRequiredService<SchedulerConfiguration>();
+        var config = _serviceProvider.NotNull().GetRequiredService<SchedulerConfiguration>();
         var originalMax = config.MaxDispatchAttempts;
         var originalTimeout = Scheduler
             .Trains
@@ -627,8 +651,9 @@ public class DispatchFailureHandlingTests
                 .Should()
                 .NotThrowAsync("a hook that never returns is abandoned after the timeout");
 
-            _dataContext.Reset();
+            _dataContext.NotNull().Reset();
             var failed = await _dataContext
+                .NotNull()
                 .Metadatas.AsNoTracking()
                 .Where(m => m.ManifestId == manifest1.Id || m.ManifestId == manifest2.Id)
                 .CountAsync(m => m.TrainState == TrainState.Failed);
@@ -645,7 +670,7 @@ public class DispatchFailureHandlingTests
 
     private async Task RunDispatcherCycle()
     {
-        var trainScope = _serviceProvider.CreateAsyncScope();
+        var trainScope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var trainScopeDisposal = trainScope.ConfigureAwait(false);
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
         await train.Run(Unit.Default).ConfigureAwait(false);
@@ -653,7 +678,7 @@ public class DispatchFailureHandlingTests
 
     private async Task RunManifestManagerCycle()
     {
-        var trainScope = _serviceProvider.CreateAsyncScope();
+        var trainScope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var trainScopeDisposal = trainScope.ConfigureAwait(false);
         var train = trainScope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
         await train.Run(Unit.Default).ConfigureAwait(false);
@@ -673,7 +698,7 @@ public class DispatchFailureHandlingTests
         // Act — run dispatcher twice, both times will fail
         for (var i = 0; i < 2; i++)
         {
-            var trainScope = _serviceProvider.CreateAsyncScope();
+            var trainScope = _serviceProvider.NotNull().CreateAsyncScope();
             await using var trainScopeDisposal = trainScope.ConfigureAwait(false);
             var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
             await train.Run(Unit.Default);
@@ -683,8 +708,9 @@ public class DispatchFailureHandlingTests
         }
 
         // Assert — dispatch_attempts should be 2 after two failed attempts
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         var updatedEntry = await _dataContext
+            .NotNull()
             .WorkQueues.AsNoTracking()
             .FirstAsync(q => q.Id == entry.Id);
 
@@ -702,7 +728,7 @@ public class DispatchFailureHandlingTests
         // Act — run dispatcher twice
         for (var i = 0; i < 2; i++)
         {
-            var trainScope = _serviceProvider.CreateAsyncScope();
+            var trainScope = _serviceProvider.NotNull().CreateAsyncScope();
             await using var trainScopeDisposal = trainScope.ConfigureAwait(false);
             var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
             await train.Run(Unit.Default);
@@ -712,8 +738,9 @@ public class DispatchFailureHandlingTests
         }
 
         // Assert — should have 2 separate Failed metadata rows (one per attempt)
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         var metadataRecords = await _dataContext
+            .NotNull()
             .Metadatas.AsNoTracking()
             .Where(m => m.ManifestId == manifest.Id)
             .ToListAsync();
@@ -726,7 +753,7 @@ public class DispatchFailureHandlingTests
     public async Task Dispatch_WhenMaxDispatchAttemptsExhausted_StaysDispatched()
     {
         // Arrange — set MaxDispatchAttempts to 2 via the configuration
-        var config = _serviceProvider.GetRequiredService<SchedulerConfiguration>();
+        var config = _serviceProvider.NotNull().GetRequiredService<SchedulerConfiguration>();
         var originalMax = config.MaxDispatchAttempts;
         config.MaxDispatchAttempts = 2;
 
@@ -738,7 +765,7 @@ public class DispatchFailureHandlingTests
             // Act — run dispatcher 3 times (exceeds max of 2)
             for (var i = 0; i < 3; i++)
             {
-                var trainScope = _serviceProvider.CreateAsyncScope();
+                var trainScope = _serviceProvider.NotNull().CreateAsyncScope();
                 await using var trainScopeDisposal = trainScope.ConfigureAwait(false);
                 var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
                 await train.Run(Unit.Default);
@@ -748,8 +775,9 @@ public class DispatchFailureHandlingTests
             }
 
             // Assert — after exhausting attempts, entry stays Dispatched
-            _dataContext.Reset();
+            _dataContext.NotNull().Reset();
             var updatedEntry = await _dataContext
+                .NotNull()
                 .WorkQueues.AsNoTracking()
                 .FirstAsync(q => q.Id == entry.Id);
 
@@ -758,6 +786,7 @@ public class DispatchFailureHandlingTests
 
             // Should have exactly 2 metadata rows (not 3, because third attempt wasn't dispatched)
             var metadataCount = await _dataContext
+                .NotNull()
                 .Metadatas.AsNoTracking()
                 .Where(m => m.ManifestId == manifest.Id)
                 .CountAsync();
@@ -773,7 +802,7 @@ public class DispatchFailureHandlingTests
     public async Task Dispatch_WhenMaxDispatchAttemptsZero_DoesNotRequeue()
     {
         // Arrange — disable requeue (pre-1.2.0 behavior)
-        var config = _serviceProvider.GetRequiredService<SchedulerConfiguration>();
+        var config = _serviceProvider.NotNull().GetRequiredService<SchedulerConfiguration>();
         var originalMax = config.MaxDispatchAttempts;
         config.MaxDispatchAttempts = 0;
 
@@ -782,7 +811,7 @@ public class DispatchFailureHandlingTests
             var manifest = await CreateAndSaveManifest();
             var entry = await CreateAndSaveWorkQueueEntry(manifest);
 
-            var trainScope = _serviceProvider.CreateAsyncScope();
+            var trainScope = _serviceProvider.NotNull().CreateAsyncScope();
             await using var trainScopeDisposal = trainScope.ConfigureAwait(false);
             var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
             await train.Run(Unit.Default);
@@ -790,8 +819,9 @@ public class DispatchFailureHandlingTests
                 d.Dispose();
 
             // Assert — entry stays Dispatched (no requeue)
-            _dataContext.Reset();
+            _dataContext.NotNull().Reset();
             var updatedEntry = await _dataContext
+                .NotNull()
                 .WorkQueues.AsNoTracking()
                 .FirstAsync(q => q.Id == entry.Id);
 
@@ -812,7 +842,7 @@ public class DispatchFailureHandlingTests
     private async Task<Manifest> CreateAndSaveManifest(string inputValue = "TestValue")
     {
         var group = await TestSetup
-            .CreateAndSaveManifestGroup(_dataContext, name: $"group-{Guid.NewGuid():N}")
+            .CreateAndSaveManifestGroup(_dataContext.NotNull(), name: $"group-{Guid.NewGuid():N}")
             .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
@@ -827,9 +857,9 @@ public class DispatchFailureHandlingTests
         );
         manifest.ManifestGroupId = group.Id;
 
-        await _dataContext.Track(manifest).ConfigureAwait(false);
-        await _dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
-        _dataContext.Reset();
+        await _dataContext.NotNull().Track(manifest).ConfigureAwait(false);
+        await _dataContext.NotNull().SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        _dataContext.NotNull().Reset();
 
         return manifest;
     }
@@ -840,8 +870,9 @@ public class DispatchFailureHandlingTests
     /// </summary>
     private async Task ElapseDispatchBackoff()
     {
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         await _dataContext
+            .NotNull()
             .WorkQueues.Where(q => q.ScheduledAt != null)
             .ExecuteUpdateAsync(s => s.SetProperty(q => q.ScheduledAt, (DateTime?)null))
             .ConfigureAwait(false);
@@ -852,16 +883,16 @@ public class DispatchFailureHandlingTests
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = manifest.Properties,
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                 ManifestId = manifest.Id,
             }
         );
 
-        await _dataContext.Track(entry).ConfigureAwait(false);
-        await _dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
-        _dataContext.Reset();
+        await _dataContext.NotNull().Track(entry).ConfigureAwait(false);
+        await _dataContext.NotNull().SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        _dataContext.NotNull().Reset();
 
         return entry;
     }

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -33,8 +34,8 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [NonParallelizable]
 public class RequeueReplayEndToEndTests
 {
-    private ServiceProvider _provider = null!;
-    private ScriptedDecider _decider = null!;
+    private ServiceProvider? _provider;
+    private ScriptedDecider? _decider;
 
     [OneTimeSetUp]
     public void BuildProvider()
@@ -43,7 +44,7 @@ public class RequeueReplayEndToEndTests
 
         _provider = new ServiceCollection()
             .AddLogging(x => x.SetMinimumLevel(LogLevel.Warning))
-            .AddSingleton<IDecider>(_decider)
+            .AddSingleton<IDecider>(_decider.NotNull())
             .AddTrax(trax =>
                 trax.AddEffects(effects =>
                         effects
@@ -62,7 +63,11 @@ public class RequeueReplayEndToEndTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.DisposeAsync();
+    public async Task DisposeProvider()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [SetUp]
     public async Task Clean()
@@ -70,7 +75,7 @@ public class RequeueReplayEndToEndTests
         DecisionProbe.Reset();
         Answer(ProbeLane.Slow, ProbeSize.Large);
 
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         await TestSetup.CleanupDatabase(scope.ServiceProvider.GetRequiredService<IDataContext>());
     }
@@ -81,10 +86,10 @@ public class RequeueReplayEndToEndTests
     [Test]
     public async Task A_requeued_run_takes_the_tracks_the_run_it_repeats_took_without_asking()
     {
-        var before = _decider.Requests.Count;
+        var before = _decider.NotNull().Requests.Count;
         var original = await RunFreshAsync("repeat");
         DecisionProbe.TracksOf("repeat").Should().Equal("Slow", "Large");
-        var asked = _decider.Requests.Count;
+        var asked = _decider.NotNull().Requests.Count;
         (asked - before).Should().Be(2, "the original asked both questions");
 
         // A decider asked now would send the run down the other tracks.
@@ -97,7 +102,7 @@ public class RequeueReplayEndToEndTests
             .TracksOf("repeat")
             .Should()
             .Equal(["Slow", "Large", "Slow", "Large"], "the requeue repeats the original's tracks");
-        _decider.Requests.Should().HaveCount(asked, "a replayed decision asks nothing");
+        _decider.NotNull().Requests.Should().HaveCount(asked, "a replayed decision asks nothing");
         (await DecisionsOf(requeued.Id))
             .Should()
             .HaveCount(2)
@@ -118,7 +123,7 @@ public class RequeueReplayEndToEndTests
 
         DecisionProbe.FailAt = ProbeFailure.None;
         Answer(ProbeLane.Fast, ProbeSize.Small);
-        var asked = _decider.Requests.Count;
+        var asked = _decider.NotNull().Requests.Count;
         var third = await RequeueAndRunAsync(second.Id);
 
         third.TrainState.Should().Be(TrainState.Completed, third.FailureReason);
@@ -129,7 +134,7 @@ public class RequeueReplayEndToEndTests
             .TracksOf("chain")
             .Should()
             .Equal(["Slow", "Large", "Slow", "Large"], "the third run repeats the first's tracks");
-        _decider.Requests.Should().HaveCount(asked, "nothing was asked afresh");
+        _decider.NotNull().Requests.Should().HaveCount(asked, "nothing was asked afresh");
     }
 
     [Test]
@@ -150,7 +155,7 @@ public class RequeueReplayEndToEndTests
 
         DecisionProbe.FailAt = ProbeFailure.None;
         Answer(ProbeLane.Fast, ProbeSize.Small);
-        var asked = _decider.Requests.Count;
+        var asked = _decider.NotNull().Requests.Count;
         var third = await RequeueAndRunAsync(second.Id);
 
         third.TrainState.Should().Be(TrainState.Completed, third.FailureReason);
@@ -161,31 +166,32 @@ public class RequeueReplayEndToEndTests
                 ["Slow", "Large", "Slow", "Slow", "Large"],
                 "the lane comes from the second run and the size from the first"
             );
-        _decider.Requests.Should().HaveCount(asked, "nothing was asked afresh");
+        _decider.NotNull().Requests.Should().HaveCount(asked, "nothing was asked afresh");
     }
 
-    private void Answer(ProbeLane lane, ProbeSize size) => _decider.Choose(lane).Choose(size);
+    private void Answer(ProbeLane lane, ProbeSize size) =>
+        _decider.NotNull().Choose(lane).Choose(size);
 
     /// <summary>Queues the probe train with a fresh input, dispatches it, and returns its run's id.</summary>
     private async Task<long> RunFreshAsync(string value)
     {
         long entryId;
 
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using (scope.ConfigureAwait(false))
         {
             var queued = await scope
                 .ServiceProvider.GetRequiredService<IOperationsService>()
                 .QueueTrainAsync(
                     new QueueTrainInput(
-                        typeof(IDecisionProbeTrain).FullName!,
+                        typeof(IDecisionProbeTrain).FullName.NotNull(),
                         $$"""{"Value":"{{value}}"}"""
                     ),
                     CancellationToken.None
                 )
                 .ConfigureAwait(false);
             queued.Success.Should().BeTrue(queued.Message);
-            entryId = queued.Id!.Value;
+            entryId = queued.Id.NotNull().Value;
         }
 
         var run = await DispatchAsync(entryId).ConfigureAwait(false);
@@ -198,7 +204,7 @@ public class RequeueReplayEndToEndTests
     {
         long entryId;
 
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using (scope.ConfigureAwait(false))
         {
             var requeued = await scope
@@ -206,7 +212,7 @@ public class RequeueReplayEndToEndTests
                 .RequeueExecutionAsync(metadataId, CancellationToken.None)
                 .ConfigureAwait(false);
             requeued.Success.Should().BeTrue(requeued.Message);
-            entryId = requeued.Id!.Value;
+            entryId = requeued.Id.NotNull().Value;
         }
 
         return await DispatchAsync(entryId).ConfigureAwait(false);
@@ -214,14 +220,14 @@ public class RequeueReplayEndToEndTests
 
     private async Task<Metadata> DispatchAsync(long entryId)
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using (scope.ConfigureAwait(false))
             await scope
                 .ServiceProvider.GetRequiredService<IJobDispatcherTrain>()
                 .Run(Unit.Default, CancellationToken.None)
                 .ConfigureAwait(false);
 
-        var read = _provider.CreateAsyncScope();
+        var read = _provider.NotNull().CreateAsyncScope();
         await using var readDisposal = read.ConfigureAwait(false);
         var data = read.ServiceProvider.GetRequiredService<IDataContext>();
         var entry = await data
@@ -240,7 +246,7 @@ public class RequeueReplayEndToEndTests
         long metadataId
     )
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
 
         return await scope

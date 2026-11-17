@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Scheduler.Services.TraxScheduler;
@@ -247,7 +248,6 @@ public partial class SchedulerConfigurationBuilder
                             ct
                         )
                         .ConfigureAwait(false);
-                    return results.FirstOrDefault()!;
                 },
             }
         );
@@ -317,7 +317,7 @@ public partial class SchedulerConfigurationBuilder
 
         foreach (var item in itemList)
         {
-            var parentExtId = item.DependsOn ?? rootExternalId!;
+            var parentExtId = item.DependsOn ?? rootExternalId.NotNull();
             _externalIdToGroupId[item.Id] = resolved._groupId ?? item.Id;
             _dependencyEdges.Add((parentExtId, item.Id));
         }
@@ -337,13 +337,12 @@ public partial class SchedulerConfigurationBuilder
                             inputType,
                             itemList,
                             item => (item.Id, item.Input),
-                            item => item.DependsOn ?? rootExternalId!,
+                            item => item.DependsOn ?? rootExternalId.NotNull(),
                             options,
                             configureEach: null,
                             ct
                         )
                         .ConfigureAwait(false);
-                    return results.FirstOrDefault()!;
                 },
             }
         );
@@ -420,13 +419,12 @@ public partial class SchedulerConfigurationBuilder
                             inputType,
                             itemList,
                             item => (item.Id, item.Input),
-                            item => item.DependsOn!,
+                            item => item.DependsOn.NotNull(),
                             options,
                             configureEach: null,
                             ct
                         )
                         .ConfigureAwait(false);
-                    return results.FirstOrDefault()!;
                 },
             }
         );

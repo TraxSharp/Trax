@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Tests.Stress.Fixtures;
 
@@ -187,7 +188,7 @@ public class LogQueryStressTests : TestSetup
 
     private static async Task Measure(string label, IOperationsService operations, LogQuery query)
     {
-        LogPage page = null!;
+        LogPage? page = null;
         var elapsed = await AssertCompletesWithin(async () =>
                 page = await operations
                     .GetLogsAsync(query, CancellationToken.None)
@@ -198,7 +199,7 @@ public class LogQueryStressTests : TestSetup
             .Out.WriteLineAsync(
                 string.Create(
                     CultureInfo.InvariantCulture,
-                    $"{label}: {elapsed.TotalMilliseconds:F0} ms, {page.Items.Count} row(s)"
+                    $"{label}: {elapsed.TotalMilliseconds:F0} ms, {page.NotNull().Items.Count} row(s)"
                 )
             )
             .ConfigureAwait(false);
@@ -210,7 +211,7 @@ public class LogQueryStressTests : TestSetup
         LogQuery query
     )
     {
-        LogCount count = null!;
+        LogCount? count = null;
         var elapsed = await AssertCompletesWithin(
                 async () =>
                     count = await operations
@@ -223,7 +224,7 @@ public class LogQueryStressTests : TestSetup
             .Out.WriteLineAsync(
                 string.Create(
                     CultureInfo.InvariantCulture,
-                    $"{label}: {elapsed.TotalMilliseconds:F0} ms, {count.Count:N0}{(count.Capped ? "+" : "")}"
+                    $"{label}: {elapsed.TotalMilliseconds:F0} ms, {count.NotNull().Count:N0}{(count.NotNull().Capped ? "+" : "")}"
                 )
             )
             .ConfigureAwait(false);

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Sqlite.Extensions;
@@ -26,7 +27,7 @@ public class MetadataCleanupDefaultTests
 {
     private static readonly TimeSpan Bound = TimeSpan.FromSeconds(30);
 
-    private string _dbPath = null!;
+    private string? _dbPath;
 
     [SetUp]
     public void SetUp() =>
@@ -36,8 +37,8 @@ public class MetadataCleanupDefaultTests
     public void TearDown()
     {
         foreach (var suffix in new[] { "", "-wal", "-shm" })
-            if (File.Exists(_dbPath + suffix))
-                File.Delete(_dbPath + suffix);
+            if (File.Exists(_dbPath.NotNull() + suffix))
+                File.Delete(_dbPath.NotNull() + suffix);
     }
 
     [Test]
@@ -46,7 +47,7 @@ public class MetadataCleanupDefaultTests
         var services = new ServiceCollection();
         services.AddLogging(x => x.SetMinimumLevel(LogLevel.Warning));
         services.AddTrax(trax =>
-            trax.AddEffects(effects => effects.UseSqlite($"Data Source={_dbPath}"))
+            trax.AddEffects(effects => effects.UseSqlite($"Data Source={_dbPath.NotNull()}"))
                 .AddMediator(typeof(AssemblyMarker).Assembly)
                 .AddScheduler(scheduler => scheduler)
         );
@@ -56,7 +57,7 @@ public class MetadataCleanupDefaultTests
         var run = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(IJobDispatcherTrain).FullName!,
+                Name = typeof(IJobDispatcherTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
             }
@@ -76,7 +77,7 @@ public class MetadataCleanupDefaultTests
             .SingleOrDefault();
         cleanup.Should().NotBeNull("a scheduler on a database cleans up its own runs by default");
 
-        await cleanup!.StartAsync(CancellationToken.None);
+        await cleanup.NotNull().StartAsync(CancellationToken.None);
         try
         {
             await Gone(provider, run.Id).WaitAsync(Bound);

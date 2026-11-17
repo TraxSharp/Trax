@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Effect.Models.SchedulerConfig;
 using Trax.Scheduler.Configuration;
 
@@ -168,8 +169,8 @@ internal static class SchedulerSettings
             nameof(SchedulerConfig.LocalWorkerCount),
             r => r.LocalWorkerCount is { } v ? (true, v) : (false, 0),
             (r, v) => r.LocalWorkerCount = v,
-            t => t.Workers!.WorkerCount,
-            (t, v) => t.Workers!.WorkerCount = v,
+            t => t.Workers.NotNull().WorkerCount,
+            (t, v) => t.Workers.NotNull().WorkerCount = v,
             i =>
                 i.ClearLocalWorkerCount ? (true, Environment.ProcessorCount)
                 : i.LocalWorkerCount is { } v ? (true, v)
@@ -181,8 +182,8 @@ internal static class SchedulerSettings
             nameof(SchedulerConfig.MetadataCleanupInterval),
             r => r.MetadataCleanupInterval is { } v ? (true, v) : (false, default),
             (r, v) => r.MetadataCleanupInterval = v,
-            t => t.Configuration.MetadataCleanup!.CleanupInterval,
-            (t, v) => t.Configuration.MetadataCleanup!.CleanupInterval = v,
+            t => t.Configuration.MetadataCleanup.NotNull().CleanupInterval,
+            (t, v) => t.Configuration.MetadataCleanup.NotNull().CleanupInterval = v,
             i => Patch(i.MetadataCleanupInterval),
             (v, n) => Check(SchedulerConfigLimits.TimerInterval, v, n),
             t => t.Configuration.MetadataCleanup is not null
@@ -191,8 +192,8 @@ internal static class SchedulerSettings
             nameof(SchedulerConfig.MetadataCleanupRetention),
             r => r.MetadataCleanupRetention is { } v ? (true, v) : (false, default),
             (r, v) => r.MetadataCleanupRetention = v,
-            t => t.Configuration.MetadataCleanup!.RetentionPeriod,
-            (t, v) => t.Configuration.MetadataCleanup!.RetentionPeriod = v,
+            t => t.Configuration.MetadataCleanup.NotNull().RetentionPeriod,
+            (t, v) => t.Configuration.MetadataCleanup.NotNull().RetentionPeriod = v,
             i => Patch(i.MetadataCleanupRetention),
             (v, n) => Check(SchedulerConfigLimits.PositiveDuration, v, n),
             t => t.Configuration.MetadataCleanup is not null

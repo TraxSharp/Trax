@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Metadata = Trax.Effect.Models.Metadata.Metadata;
@@ -197,7 +198,7 @@ public partial class OperationsService
                 m.StartTime.Date,
                 Hour = m.StartTime.Hour / hourDiv,
                 Minute = m.StartTime.Minute / minuteDiv,
-                Ms = (m.EndTime!.Value - m.StartTime).TotalMilliseconds,
+                Ms = (m.EndTime.GetValueOrDefault() - m.StartTime).TotalMilliseconds,
             })
             .Select(x => new
             {
@@ -251,7 +252,7 @@ public partial class OperationsService
                     m.StartTime.Date,
                     Hour = m.StartTime.Hour / hourDiv,
                     Minute = m.StartTime.Minute / minuteDiv,
-                    Ms = (m.EndTime!.Value.Ticks - m.StartTime.Ticks) / ticksPerMs,
+                    Ms = (m.EndTime.GetValueOrDefault().Ticks - m.StartTime.Ticks) / ticksPerMs,
                 })
                 .Select(x => new
                 {

@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
@@ -31,9 +32,9 @@ public class OperationsServiceRecordedDecisionsTests : TestSetup
         Large,
     }
 
-    private const string SensitiveKey = nameof(WithheldRefundTier);
+    private static readonly string SensitiveKey = typeof(WithheldRefundTier).Name;
 
-    private IOperationsService _operations = null!;
+    private IOperationsService? _operations;
 
     public override async Task TestSetUp()
     {
@@ -50,18 +51,12 @@ public class OperationsServiceRecordedDecisionsTests : TestSetup
             await SeedDecision(run.Id, "Priority", i);
         await SeedDecision(other.Id, "Priority", 0);
 
-        var first = await _operations.GetRecordedDecisionsAsync(
-            run.Id,
-            afterId: null,
-            take: 3,
-            CancellationToken.None
-        );
-        var second = await _operations.GetRecordedDecisionsAsync(
-            run.Id,
-            first.NextCursor,
-            take: 3,
-            CancellationToken.None
-        );
+        var first = await _operations
+            .NotNull()
+            .GetRecordedDecisionsAsync(run.Id, afterId: null, take: 3, CancellationToken.None);
+        var second = await _operations
+            .NotNull()
+            .GetRecordedDecisionsAsync(run.Id, first.NextCursor, take: 3, CancellationToken.None);
 
         first.Items.Select(d => d.Occurrence).Should().Equal(0, 1, 2);
         second.Items.Select(d => d.Occurrence).Should().Equal(3, 4);
@@ -76,12 +71,9 @@ public class OperationsServiceRecordedDecisionsTests : TestSetup
     [Test]
     public async Task A_run_with_no_decisions_reads_an_empty_page()
     {
-        var page = await _operations.GetRecordedDecisionsAsync(
-            999_999,
-            afterId: null,
-            take: 25,
-            CancellationToken.None
-        );
+        var page = await _operations
+            .NotNull()
+            .GetRecordedDecisionsAsync(999_999, afterId: null, take: 25, CancellationToken.None);
 
         page.Items.Should().BeEmpty();
         page.NextCursor.Should().BeNull();
@@ -94,12 +86,9 @@ public class OperationsServiceRecordedDecisionsTests : TestSetup
         var run = await SeedRun();
         await SeedDecision(run.Id, "Priority", 0);
 
-        var page = await _operations.GetRecordedDecisionsAsync(
-            run.Id,
-            afterId: null,
-            take,
-            CancellationToken.None
-        );
+        var page = await _operations
+            .NotNull()
+            .GetRecordedDecisionsAsync(run.Id, afterId: null, take, CancellationToken.None);
 
         page.Take.Should().Be(expected);
     }
@@ -117,12 +106,9 @@ public class OperationsServiceRecordedDecisionsTests : TestSetup
         );
         await SeedDecision(run.Id, "Priority", 0);
 
-        var page = await _operations.GetRecordedDecisionsAsync(
-            run.Id,
-            afterId: null,
-            take: 25,
-            CancellationToken.None
-        );
+        var page = await _operations
+            .NotNull()
+            .GetRecordedDecisionsAsync(run.Id, afterId: null, take: 25, CancellationToken.None);
 
         var withheld = page.Items[0];
         withheld.AnswerWithheld.Should().BeTrue();
@@ -151,18 +137,12 @@ public class OperationsServiceRecordedDecisionsTests : TestSetup
         await SeedDecision(run.Id, "Courier", 0);
         await SeedDecision(run.Id, "Courier", 1);
 
-        var all = await _operations.GetRecordedDecisionsAsync(
-            run.Id,
-            afterId: null,
-            take: 25,
-            CancellationToken.None
-        );
-        var fromCursor = await _operations.GetRecordedDecisionsAsync(
-            run.Id,
-            all.Items[2].Id,
-            take: 25,
-            CancellationToken.None
-        );
+        var all = await _operations
+            .NotNull()
+            .GetRecordedDecisionsAsync(run.Id, afterId: null, take: 25, CancellationToken.None);
+        var fromCursor = await _operations
+            .NotNull()
+            .GetRecordedDecisionsAsync(run.Id, all.Items[2].Id, take: 25, CancellationToken.None);
 
         all.Items[0].TrackWithheld.Should().BeFalse("it was decided before the track");
         all.Items[1].Routes.Should().BeNull("the track is the withheld answer");
@@ -185,7 +165,7 @@ public class OperationsServiceRecordedDecisionsTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
             }

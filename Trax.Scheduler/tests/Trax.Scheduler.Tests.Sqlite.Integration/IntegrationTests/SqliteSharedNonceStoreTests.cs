@@ -4,6 +4,7 @@ using AwesomeAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Sqlite.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
@@ -22,7 +23,7 @@ namespace Trax.Scheduler.Tests.Sqlite.Integration.IntegrationTests;
 public class SqliteSharedNonceStoreTests
 {
     private static readonly byte[] Key = Enumerable.Range(1, 32).Select(i => (byte)i).ToArray();
-    private string _dbPath = null!;
+    private string? _dbPath;
 
     [SetUp]
     public void CreateDatabasePath() =>
@@ -32,15 +33,15 @@ public class SqliteSharedNonceStoreTests
     public void DeleteDatabase()
     {
         foreach (var suffix in new[] { "", "-wal", "-shm" })
-            if (File.Exists(_dbPath + suffix))
-                File.Delete(_dbPath + suffix);
+            if (File.Exists(_dbPath.NotNull() + suffix))
+                File.Delete(_dbPath.NotNull() + suffix);
     }
 
     private ServiceProvider RunnerInstance() =>
         new ServiceCollection()
             .AddLogging()
             .AddTrax(trax =>
-                trax.AddEffects(effects => effects.UseSqlite($"Data Source={_dbPath}"))
+                trax.AddEffects(effects => effects.UseSqlite($"Data Source={_dbPath.NotNull()}"))
                     .AddMediator(typeof(AssemblyMarker).Assembly, typeof(JobRunnerTrain).Assembly)
             )
             .AddTraxJobRunner(runner => runner.SigningKey = Key)
@@ -166,7 +167,7 @@ public class SqliteSharedNonceStoreTests
 
     private async Task<long> Scalar(string sql)
     {
-        var connection = new SqliteConnection($"Data Source={_dbPath}");
+        var connection = new SqliteConnection($"Data Source={_dbPath.NotNull()}");
         await using (connection.ConfigureAwait(false))
         {
             await connection.OpenAsync().ConfigureAwait(false);

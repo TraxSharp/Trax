@@ -3,6 +3,7 @@ using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Services.DataContext;
@@ -149,30 +150,35 @@ public sealed class ResearchCluster : IAsyncDisposable
     public Task<WorkQueue> Entry(long id) =>
         With(data => data.WorkQueues.AsNoTracking().SingleAsync(q => q.Id == id));
 
-    public Task<List<Effect.Models.Checkpoint.Checkpoint>> Checkpoints(long runId) =>
-        With(data =>
-            data.Checkpoints.AsNoTracking().Where(c => c.MetadataId == runId).ToListAsync()
-        );
+    public async Task<IReadOnlyList<Effect.Models.Checkpoint.Checkpoint>> Checkpoints(long runId) =>
+        await With(data =>
+                data.Checkpoints.AsNoTracking().Where(c => c.MetadataId == runId).ToListAsync()
+            )
+            .ConfigureAwait(false);
 
     /// <summary>
     /// The run's junction events, once the host's writer has written every step queued before
     /// the call: it writes in the background, so a read straight after a run can miss its last.
     /// </summary>
-    public async Task<List<Effect.Models.JunctionRun.JunctionRun>> JunctionRuns(long runId)
+    public async Task<IReadOnlyList<Effect.Models.JunctionRun.JunctionRun>> JunctionRuns(long runId)
     {
         // The writer's flush is internal to Trax.Effect.Data, which this assembly cannot see.
         var writer = Host.Services.GetRequiredService(
-            typeof(Effect.Data.Extensions.ServiceExtensions).Assembly.GetType(
-                "Trax.Effect.Data.JunctionEvents.JunctionRunWriter",
-                throwOnError: true
-            )!
+            typeof(Effect.Data.Extensions.ServiceExtensions)
+                .Assembly.GetType(
+                    "Trax.Effect.Data.JunctionEvents.JunctionRunWriter",
+                    throwOnError: true
+                )
+                .NotNull()
         );
         await (
             (Task)
                 writer
                     .GetType()
-                    .GetMethod("FlushAsync", BindingFlags.Instance | BindingFlags.NonPublic)!
-                    .Invoke(writer, [CancellationToken.None])!
+                    .GetMethod("FlushAsync", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .NotNull()
+                    .Invoke(writer, [CancellationToken.None])
+                    .NotNull()
         )
             .WaitAsync(TimeSpan.FromSeconds(30))
             .ConfigureAwait(false);
@@ -208,31 +214,42 @@ public sealed class ResearchCluster : IAsyncDisposable
     /// Every work queue and run row whose <c>resume_from</c> names no run, which
     /// <c>TraxInvariants</c> reports as <c>resume-from-missing-run</c>.
     /// </summary>
-    public async Task<List<string>> ResumesOfMissingRuns() =>
+    public async Task<IReadOnlyList<string>> ResumesOfMissingRuns() =>
         await With(async data =>
-                (
-                    await data
-                        .WorkQueues.AsNoTracking()
-                        .Where(q =>
-                            q.ResumeFrom != null && !data.Metadatas.Any(m => m.Id == q.ResumeFrom)
-                        )
-                        .Select(q => "work_queue " + q.Id + " resumes " + q.ResumeFrom)
-                        .ToListAsync()
-                        .ConfigureAwait(false)
-                )
-                    .Concat(
-                        await data
-                            .Metadatas.AsNoTracking()
-                            .Where(r =>
-                                r.ResumeFrom != null
-                                && !data.Metadatas.Any(m => m.Id == r.ResumeFrom)
-                            )
-                            .Select(r => "metadata " + r.Id + " resumes " + r.ResumeFrom)
-                            .ToListAsync()
-                            .ConfigureAwait(false)
+            {
+                var entries = await data
+                    .WorkQueues.AsNoTracking()
+                    .Where(q =>
+                        q.ResumeFrom != null && !data.Metadatas.Any(m => m.Id == q.ResumeFrom)
                     )
-                    .ToList()
-            )
+                    .Select(q => new { q.Id, q.ResumeFrom })
+                    .ToListAsync()
+                    .ConfigureAwait(false);
+                var runs = await data
+                    .Metadatas.AsNoTracking()
+                    .Where(r =>
+                        r.ResumeFrom != null && !data.Metadatas.Any(m => m.Id == r.ResumeFrom)
+                    )
+                    .Select(r => new { r.Id, r.ResumeFrom })
+                    .ToListAsync()
+                    .ConfigureAwait(false);
+                return entries
+                    .Select(q =>
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"work_queue {q.Id} resumes {q.ResumeFrom}"
+                        )
+                    )
+                    .Concat(
+                        runs.Select(r =>
+                            string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"metadata {r.Id} resumes {r.ResumeFrom}"
+                            )
+                        )
+                    )
+                    .ToList();
+            })
             .ConfigureAwait(false);
 
     public Task Reset() => Cluster.Reset();

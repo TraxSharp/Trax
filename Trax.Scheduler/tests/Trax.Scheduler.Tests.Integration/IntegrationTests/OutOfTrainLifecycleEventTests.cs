@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -45,9 +46,9 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [NonParallelizable]
 public class OutOfTrainLifecycleEventTests
 {
-    private static readonly string TrainName = typeof(ISchedulerTestTrain).FullName!;
+    private static readonly string TrainName = typeof(ISchedulerTestTrain).FullName.NotNull();
 
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
     private readonly LifecycleRecorder _lifecycle = new();
 
     [OneTimeSetUp]
@@ -76,18 +77,22 @@ public class OutOfTrainLifecycleEventTests
             )
             .BuildServiceProvider();
 
-        var config = _provider.GetRequiredService<SchedulerConfiguration>();
+        var config = _provider.NotNull().GetRequiredService<SchedulerConfiguration>();
         config.StalePendingTimeout = TimeSpan.FromMinutes(1);
         config.StaleInProgressTimeout = TimeSpan.FromMinutes(1);
     }
 
     [OneTimeTearDown]
-    public async Task RunAfterAnyTests() => await _provider.DisposeAsync();
+    public async Task RunAfterAnyTests()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [SetUp]
     public async Task TestSetUp()
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         await TestSetup.CleanupDatabase(scope.ServiceProvider.GetRequiredService<IDataContext>());
         _lifecycle.Clear();
@@ -105,10 +110,10 @@ public class OutOfTrainLifecycleEventTests
         // The real leader path: the reapers write inside the leader transaction, and their events
         // go out once it commits.
         var polling = new ManifestManagerPollingService(
-            _provider,
-            _provider.GetRequiredService<SchedulerConfiguration>(),
+            _provider.NotNull(),
+            _provider.NotNull().GetRequiredService<SchedulerConfiguration>(),
             NullLogger<ManifestManagerPollingService>.Instance,
-            _provider.GetRequiredService<ISqlDialect>()
+            _provider.NotNull().GetRequiredService<ISqlDialect>()
         );
 
         await polling.RunManifestManager(CancellationToken.None);
@@ -146,10 +151,10 @@ public class OutOfTrainLifecycleEventTests
         _lifecycle.MeetOnFailed(TimeSpan.FromSeconds(5));
 
         var polling = new ManifestManagerPollingService(
-            _provider,
-            _provider.GetRequiredService<SchedulerConfiguration>(),
+            _provider.NotNull(),
+            _provider.NotNull().GetRequiredService<SchedulerConfiguration>(),
             NullLogger<ManifestManagerPollingService>.Instance,
-            _provider.GetRequiredService<ISqlDialect>()
+            _provider.NotNull().GetRequiredService<ISqlDialect>()
         );
         await polling.RunManifestManager(CancellationToken.None);
 
@@ -171,7 +176,7 @@ public class OutOfTrainLifecycleEventTests
     {
         var pending = await SeedRunAsync(TrainState.Pending, DateTime.UtcNow);
 
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using (scope.ConfigureAwait(false))
         {
             var result = await scope
@@ -188,7 +193,7 @@ public class OutOfTrainLifecycleEventTests
         // delivery of the same job finds it Cancelled already.
         for (var delivery = 0; delivery < 2; delivery++)
         {
-            var deliveryScope = _provider.CreateAsyncScope();
+            var deliveryScope = _provider.NotNull().CreateAsyncScope();
             await using var scopeDisposal = deliveryScope.ConfigureAwait(false);
             await deliveryScope
                 .ServiceProvider.GetRequiredService<IJobRunnerTrain>()
@@ -217,7 +222,7 @@ public class OutOfTrainLifecycleEventTests
 
         for (var start = 0; start < 2; start++)
         {
-            var scope = _provider.CreateAsyncScope();
+            var scope = _provider.NotNull().CreateAsyncScope();
             await using var scopeDisposal = scope.ConfigureAwait(false);
             await new SchedulerStartupService(
                 scope.ServiceProvider,
@@ -238,7 +243,7 @@ public class OutOfTrainLifecycleEventTests
     [Test]
     public async Task A_run_whose_submit_fails_publishes_Failed_once_without_the_submitters_detail()
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var operations = scope.ServiceProvider.GetRequiredService<IOperationsService>();
 
@@ -268,7 +273,7 @@ public class OutOfTrainLifecycleEventTests
 
     private async Task<long> SeedRunAsync(TrainState state, DateTime startTime)
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
@@ -295,7 +300,7 @@ public class OutOfTrainLifecycleEventTests
 
     private async Task<List<Metadata>> StoredRunsAsync()
     {
-        var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Utils;
 using Trax.Mediator.Services.RunExecutor;
 using Trax.Mediator.Services.TrainExecution;
@@ -72,7 +73,11 @@ internal sealed class HttpRunExecutor(
             TraxJsonSerializationOptions.ManifestProperties
         );
 
-        var request = new RemoteRunRequest(trainName, inputJson, input.GetType().FullName!);
+        var request = new RemoteRunRequest(
+            trainName,
+            inputJson,
+            input.GetType().FullName.NotNull()
+        );
 
         string? requestSignature = null;
         using var httpResponse = await HttpRetryHelper

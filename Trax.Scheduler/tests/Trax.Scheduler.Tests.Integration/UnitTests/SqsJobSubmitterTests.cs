@@ -3,6 +3,7 @@ using System.Text.Json;
 using Amazon.SQS;
 using Amazon.SQS.Model;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Effect.Utils;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Sqs.Configuration;
@@ -48,7 +49,7 @@ public class SqsJobSubmitterTests
 
         await submitter.EnqueueAsync(42);
 
-        var attribute = client.LastRequest!.MessageAttributes[
+        var attribute = client.LastRequest.NotNull().MessageAttributes[
             Trax.Scheduler.Services.RequestSigning.RunnerRequestSignature.HeaderName
         ];
         (
@@ -79,7 +80,7 @@ public class SqsJobSubmitterTests
 
         await submitter.EnqueueAsync(42);
 
-        client.LastRequest!.MessageAttributes.Should().BeNullOrEmpty();
+        client.LastRequest.NotNull().MessageAttributes.Should().BeNullOrEmpty();
     }
 
     #endregion
@@ -111,12 +112,12 @@ public class SqsJobSubmitterTests
         // Assert
         client.LastRequest.Should().NotBeNull();
         var request = JsonSerializer.Deserialize<RemoteJobRequest>(
-            client.LastRequest!.MessageBody,
+            client.LastRequest.NotNull().MessageBody,
             WebOptions
         );
 
         request.Should().NotBeNull();
-        request!.MetadataId.Should().Be(42);
+        request.NotNull().MetadataId.Should().Be(42);
         request.Input.Should().BeNull();
         request.InputType.Should().BeNull();
     }
@@ -132,7 +133,7 @@ public class SqsJobSubmitterTests
         await submitter.EnqueueAsync(42);
 
         // Assert
-        client.LastRequest!.QueueUrl.Should().Be(queueUrl);
+        client.LastRequest.NotNull().QueueUrl.Should().Be(queueUrl);
     }
 
     #endregion
@@ -151,12 +152,12 @@ public class SqsJobSubmitterTests
 
         // Assert
         var request = JsonSerializer.Deserialize<RemoteJobRequest>(
-            client.LastRequest!.MessageBody,
+            client.LastRequest.NotNull().MessageBody,
             WebOptions
         );
 
         request.Should().NotBeNull();
-        request!.MetadataId.Should().Be(50);
+        request.NotNull().MetadataId.Should().Be(50);
         request.Input.Should().NotBeNull();
         request.Input.Should().Contain("hello-world");
         request.InputType.Should().Be(typeof(SchedulerTestInput).FullName);
@@ -174,7 +175,7 @@ public class SqsJobSubmitterTests
 
         // Assert
         var request = JsonSerializer.Deserialize<RemoteJobRequest>(
-            client.LastRequest!.MessageBody,
+            client.LastRequest.NotNull().MessageBody,
             WebOptions
         );
 
@@ -183,7 +184,7 @@ public class SqsJobSubmitterTests
             input.GetType(),
             TraxJsonSerializationOptions.ManifestProperties
         );
-        request!.Input.Should().Be(expectedJson);
+        request.NotNull().Input.Should().Be(expectedJson);
     }
 
     [Test]
@@ -217,11 +218,11 @@ public class SqsJobSubmitterTests
 
         // Assert
         var request = JsonSerializer.Deserialize<RemoteJobRequest>(
-            client.LastRequest!.MessageBody,
+            client.LastRequest.NotNull().MessageBody,
             WebOptions
         );
 
-        request!.MetadataId.Should().Be(99);
+        request.NotNull().MetadataId.Should().Be(99);
         request.Input.Should().BeNull();
     }
 
@@ -271,7 +272,7 @@ public class SqsJobSubmitterTests
         await submitter.EnqueueAsync(42);
 
         // Assert
-        client.LastRequest!.MessageGroupId.Should().NotBeNullOrEmpty();
+        client.LastRequest.NotNull().MessageGroupId.Should().NotBeNullOrEmpty();
         client.LastRequest.MessageDeduplicationId.Should().NotBeNullOrEmpty();
     }
 
@@ -288,7 +289,7 @@ public class SqsJobSubmitterTests
         await submitter.EnqueueAsync(42);
 
         // Assert
-        client.LastRequest!.MessageGroupId.Should().Be("my-group");
+        client.LastRequest.NotNull().MessageGroupId.Should().Be("my-group");
     }
 
     [Test]
@@ -301,7 +302,7 @@ public class SqsJobSubmitterTests
         await submitter.EnqueueAsync(42);
 
         // Assert
-        client.LastRequest!.MessageGroupId.Should().BeNull();
+        client.LastRequest.NotNull().MessageGroupId.Should().BeNull();
         client.LastRequest.MessageDeduplicationId.Should().BeNull();
     }
 

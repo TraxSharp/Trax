@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue;
@@ -25,23 +26,24 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class ResolveStaleStagedEntriesJunctionTests : TestSetup
 {
-    private IManifestManagerTrain _train = null!;
-    private SchedulerConfiguration _config = null!;
+    private IManifestManagerTrain? _train;
+    private SchedulerConfiguration? _config;
 
     public override async Task TestSetUp()
     {
         await base.TestSetUp().ConfigureAwait(false);
         _train = Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
         _config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
-        _config.StaleStagedEntryTimeout = TimeSpan.FromMinutes(10);
-        _config.PromoteStaleStagedEntries = false;
+        _config.NotNull().StaleStagedEntryTimeout = TimeSpan.FromMinutes(10);
+        _config.NotNull().PromoteStaleStagedEntries = false;
     }
 
     [TearDown]
     public void ResolveStaleStagedEntriesJunctionTestsTearDown()
     {
-        _config.StaleStagedEntryTimeout = new SchedulerConfiguration().StaleStagedEntryTimeout;
-        _config.PromoteStaleStagedEntries = false;
+        _config.NotNull().StaleStagedEntryTimeout =
+            new SchedulerConfiguration().StaleStagedEntryTimeout;
+        _config.NotNull().PromoteStaleStagedEntries = false;
 
         if (_train is IDisposable disposable)
             disposable.Dispose();
@@ -52,7 +54,7 @@ public class ResolveStaleStagedEntriesJunctionTests : TestSetup
     {
         var stale = await Stage(age: TimeSpan.FromMinutes(30));
 
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         (await Load(stale))
             .Status.Should()
@@ -67,7 +69,7 @@ public class ResolveStaleStagedEntriesJunctionTests : TestSetup
     {
         var recent = await Stage(age: TimeSpan.FromMinutes(1));
 
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         var entry = await Load(recent);
         entry.Status.Should().Be(WorkQueueStatus.Queued, "its hook may still be running");
@@ -77,10 +79,10 @@ public class ResolveStaleStagedEntriesJunctionTests : TestSetup
     [Test]
     public async Task A_host_that_opts_in_promotes_stale_staged_entries()
     {
-        _config.PromoteStaleStagedEntries = true;
+        _config.NotNull().PromoteStaleStagedEntries = true;
         var stale = await Stage(age: TimeSpan.FromMinutes(30));
 
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         var entry = await Load(stale);
         entry.Status.Should().Be(WorkQueueStatus.Queued);
@@ -92,7 +94,7 @@ public class ResolveStaleStagedEntriesJunctionTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = "{}",
                 InputTypeName = typeof(SchedulerTestInput).FullName,
                 DeferPromotion = true,

@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.JunctionEvents;
@@ -46,9 +47,9 @@ public class RemoteParallelRunTests(ClusterStore store)
 {
     private const string WorkerUrl = "http://worker.test/trax/execute";
 
-    private InvokeCluster _cluster = null!;
-    private IHost _worker = null!;
-    private ClusterHost _scheduler = null!;
+    private InvokeCluster? _cluster;
+    private IHost? _worker;
+    private ClusterHost? _scheduler;
 
     [OneTimeSetUp]
     public async Task CreateHosts()
@@ -66,8 +67,10 @@ public class RemoteParallelRunTests(ClusterStore store)
                             trax.AddEffects(effects =>
                                     (
                                         store == ClusterStore.Postgres
-                                            ? effects.UsePostgres(_cluster.ConnectionString)
-                                            : effects.UseSqlite(_cluster.ConnectionString)
+                                            ? effects.UsePostgres(
+                                                _cluster.NotNull().ConnectionString
+                                            )
+                                            : effects.UseSqlite(_cluster.NotNull().ConnectionString)
                                     )
                                         .SaveTrainParameters()
                                         .AddJunctionEvents()
@@ -95,29 +98,31 @@ public class RemoteParallelRunTests(ClusterStore store)
             )
             .StartAsync();
 
-        var toWorker = _worker.GetTestServer().CreateHandler();
-        _scheduler = _cluster.Host(
-            machines: false,
-            scheduler: true,
-            scheduling: s =>
-                s.OverrideSubmitter(x =>
-                    x.AddScoped<IJobSubmitter>(_ => new HttpJobSubmitter(
-                        new HttpClient(toWorker, disposeHandler: false)
-                        {
-                            BaseAddress = new Uri(WorkerUrl),
-                            Timeout = TimeSpan.FromSeconds(30),
-                        },
-                        new RemoteWorkerOptions
-                        {
-                            BaseUrl = WorkerUrl,
-                            Retry = new HttpRetryOptions { MaxRetries = 0 },
-                        },
-                        NullLogger<HttpJobSubmitter>.Instance
-                    ))
-                ),
-            // No junction events here: every junction_run row the test reads is the worker's.
-            data: d => d.SaveTrainParameters()
-        );
+        var toWorker = _worker.NotNull().GetTestServer().CreateHandler();
+        _scheduler = _cluster
+            .NotNull()
+            .Host(
+                machines: false,
+                scheduler: true,
+                scheduling: s =>
+                    s.OverrideSubmitter(x =>
+                        x.AddScoped<IJobSubmitter>(_ => new HttpJobSubmitter(
+                            new HttpClient(toWorker, disposeHandler: false)
+                            {
+                                BaseAddress = new Uri(WorkerUrl),
+                                Timeout = TimeSpan.FromSeconds(30),
+                            },
+                            new RemoteWorkerOptions
+                            {
+                                BaseUrl = WorkerUrl,
+                                Retry = new HttpRetryOptions { MaxRetries = 0 },
+                            },
+                            NullLogger<HttpJobSubmitter>.Instance
+                        ))
+                    ),
+                // No junction events here: every junction_run row the test reads is the worker's.
+                data: d => d.SaveTrainParameters()
+            );
     }
 
     [OneTimeTearDown]
@@ -125,23 +130,25 @@ public class RemoteParallelRunTests(ClusterStore store)
     {
         if (_worker is not null)
         {
-            await _worker.StopAsync();
-            _worker.Dispose();
+            await _worker.NotNull().StopAsync();
+            _worker?.Dispose();
         }
         if (_scheduler is not null)
-            await _scheduler.DisposeAsync();
-        await _cluster.DisposeAsync();
+            if (_scheduler is not null)
+                await _scheduler.DisposeAsync();
+        if (_cluster is not null)
+            await _cluster.DisposeAsync();
     }
 
     [SetUp]
-    public Task Reset() => _cluster.Reset();
+    public Task Reset() => _cluster.NotNull().Reset();
 
     [Test]
     public async Task A_parallel_train_runs_end_to_end_on_a_remote_worker()
     {
         var (manifest, entry) = await Queue(new ParallelRemoteInput { Topic = "rail" });
 
-        var scope = _scheduler.Services.CreateAsyncScope();
+        var scope = _scheduler.NotNull().Services.CreateAsyncScope();
         await using (scope.ConfigureAwait(false))
             await scope
                 .ServiceProvider.GetRequiredService<IJobDispatcherTrain>()
@@ -203,7 +210,7 @@ public class RemoteParallelRunTests(ClusterStore store)
 
     private async Task<(Manifest, WorkQueue)> Queue(ParallelRemoteInput input)
     {
-        var scope = _scheduler.Services.CreateAsyncScope();
+        var scope = _scheduler.NotNull().Services.CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var data = scope.ServiceProvider.GetRequiredService<IDataContext>();
         var group = await TestSetup
@@ -227,7 +234,7 @@ public class RemoteParallelRunTests(ClusterStore store)
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(IParallelRemoteTrain).FullName!,
+                TrainName = typeof(IParallelRemoteTrain).FullName.NotNull(),
                 Input = JsonSerializer.Serialize(
                     input,
                     TraxJsonSerializationOptions.ManifestProperties
@@ -248,18 +255,24 @@ public class RemoteParallelRunTests(ClusterStore store)
     private async Task<List<JunctionRun>> JunctionRuns(long runId)
     {
         // The writer's flush is internal to Trax.Effect.Data, which this assembly cannot see.
-        var writer = _worker.Services.GetRequiredService(
-            typeof(Effect.Data.Extensions.ServiceExtensions).Assembly.GetType(
-                "Trax.Effect.Data.JunctionEvents.JunctionRunWriter",
-                throwOnError: true
-            )!
-        );
+        var writer = _worker
+            .NotNull()
+            .Services.GetRequiredService(
+                typeof(Effect.Data.Extensions.ServiceExtensions)
+                    .Assembly.GetType(
+                        "Trax.Effect.Data.JunctionEvents.JunctionRunWriter",
+                        throwOnError: true
+                    )
+                    .NotNull()
+            );
         await (
             (Task)
                 writer
                     .GetType()
-                    .GetMethod("FlushAsync", BindingFlags.Instance | BindingFlags.NonPublic)!
-                    .Invoke(writer, [CancellationToken.None])!
+                    .GetMethod("FlushAsync", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .NotNull()
+                    .Invoke(writer, [CancellationToken.None])
+                    .NotNull()
         )
             .WaitAsync(TimeSpan.FromSeconds(30))
             .ConfigureAwait(false);
@@ -270,7 +283,7 @@ public class RemoteParallelRunTests(ClusterStore store)
 
     private async Task<T> With<T>(Func<IDataContext, Task<T>> read)
     {
-        var scope = _scheduler.Services.CreateAsyncScope();
+        var scope = _scheduler.NotNull().Services.CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         return await read(scope.ServiceProvider.GetRequiredService<IDataContext>())
             .ConfigureAwait(false);

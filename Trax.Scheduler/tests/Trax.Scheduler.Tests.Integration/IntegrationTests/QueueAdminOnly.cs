@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Attributes;
@@ -18,7 +19,11 @@ public class QueueAdminOnly(ITrainExecutionService trains) : Junction<QueuesGate
     public override async Task<Unit> Run(QueuesGatedInput input)
     {
         await trains
-            .QueueAsync(typeof(IAdminOnlyTrain).FullName!, "{}", ct: CancellationToken.None)
+            .QueueAsync(
+                typeof(IAdminOnlyTrain).FullName.NotNull(),
+                "{}",
+                ct: CancellationToken.None
+            )
             .ConfigureAwait(false);
         return Unit.Default;
     }

@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
@@ -62,7 +63,7 @@ public class UseRemoteWorkersBuilderTests
         using var scope = provider.CreateScope();
         var submitter = scope
             .ServiceProvider.GetRequiredService<JobSubmitterRoutingConfiguration>()
-            .ResolveSubmitter(scope.ServiceProvider, typeof(ITestRemoteTrain).FullName!);
+            .ResolveSubmitter(scope.ServiceProvider, typeof(ITestRemoteTrain).FullName.NotNull());
         submitter.Should().BeOfType<HttpJobSubmitter>();
     }
 
@@ -174,7 +175,7 @@ public class UseRemoteWorkersBuilderTests
 
         // Assert — only [TraxRemote] trains would reach it, and ITestRemoteTrain is not one
         var routing = provider.GetRequiredService<JobSubmitterRoutingConfiguration>();
-        routing.GetRegistration(typeof(ITestRemoteTrain).FullName!).Should().BeNull();
+        routing.GetRegistration(typeof(ITestRemoteTrain).FullName.NotNull()).Should().BeNull();
     }
 
     /// <summary>The HTTP client of the first <c>UseRemoteWorkers</c> registration.</summary>

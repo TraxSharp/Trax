@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.RunOutcomes;
 using Trax.Effect.Enums;
@@ -76,7 +77,7 @@ internal sealed class LoadMetadataJunction(
             );
 
         if (AdminTrains.Includes(registration))
-            throw SchedulerTrain(input.MetadataId, registration.ServiceType.FullName!);
+            throw SchedulerTrain(input.MetadataId, registration.ServiceType.FullName.NotNull());
 
         if (metadata is { TrainState: TrainState.Pending, CancellationRequested: true })
             await RecordCancelledBeforeStartAsync(metadata).ConfigureAwait(false);
@@ -87,7 +88,10 @@ internal sealed class LoadMetadataJunction(
             metadata.Id
         );
 
-        return (metadata, new ResolvedTrainInput(input.Input, registration.ServiceType.FullName!));
+        return (
+            metadata,
+            new ResolvedTrainInput(input.Input, registration.ServiceType.FullName.NotNull())
+        );
     }
 
     /// <summary>

@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
 using Trax.Effect.Models.DeadLetter.DTOs;
@@ -37,9 +38,9 @@ public class NoDispatcherRefusalTests
         "nothing dispatches a queued run without a database provider "
         + "(docs/adr/0019-a-queued-run-is-refused-where-nothing-dispatches-it.md)";
 
-    private RecordingChangeSignal _signal = null!;
-    private SchedulerE2EFixture _fx = null!;
-    private IOperationsService _operations = null!;
+    private RecordingChangeSignal? _signal;
+    private SchedulerE2EFixture? _fx;
+    private IOperationsService? _operations;
 
     [SetUp]
     public void SetUp()
@@ -47,21 +48,27 @@ public class NoDispatcherRefusalTests
         _signal = new RecordingChangeSignal();
         _fx = SchedulerE2EFixture.CreateInMemory(
             _ => { },
-            services => services.AddSingleton<ITraxChangeSignal>(_signal)
+            services => services.AddSingleton<ITraxChangeSignal>(_signal.NotNull())
         );
-        _operations = _fx.Services.GetRequiredService<IOperationsService>();
+        _operations = _fx.NotNull().Services.GetRequiredService<IOperationsService>();
     }
 
     [TearDown]
-    public async Task TearDown() => await _fx.DisposeAsync();
+    public async Task TearDown()
+    {
+        if (_fx is not null)
+            await _fx.DisposeAsync();
+    }
 
     [Test]
     public async Task Queueing_a_train_is_refused()
     {
-        var result = await _operations.QueueTrainAsync(
-            new QueueTrainInput(typeof(ISchedulerTestTrain).FullName!),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .QueueTrainAsync(
+                new QueueTrainInput(typeof(ISchedulerTestTrain).FullName.NotNull()),
+                CancellationToken.None
+            );
 
         result.Success.Should().BeFalse(Because);
         result.Message.Should().Be(OperationsService.NoDispatcherMessage);
@@ -74,17 +81,19 @@ public class NoDispatcherRefusalTests
         var run = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(ISchedulerTestTrain).FullName!,
+                Name = typeof(ISchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
             }
         );
         run.Input = """{"Value":"requeue"}""";
-        await _fx.DataContext.Track(run);
-        await _fx.DataContext.SaveChanges(CancellationToken.None);
-        _fx.DataContext.Reset();
+        await _fx.NotNull().DataContext.Track(run);
+        await _fx.NotNull().DataContext.SaveChanges(CancellationToken.None);
+        _fx.NotNull().DataContext.Reset();
 
-        var result = await _operations.RequeueExecutionAsync(run.Id, CancellationToken.None);
+        var result = await _operations
+            .NotNull()
+            .RequeueExecutionAsync(run.Id, CancellationToken.None);
 
         result.Success.Should().BeFalse(Because);
         result.Message.Should().Be(OperationsService.NoDispatcherMessage);
@@ -101,8 +110,8 @@ public class NoDispatcherRefusalTests
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };
-        await _fx.DataContext.Track(group);
-        await _fx.DataContext.SaveChanges(CancellationToken.None);
+        await _fx.NotNull().DataContext.Track(group);
+        await _fx.NotNull().DataContext.SaveChanges(CancellationToken.None);
         var manifest = Manifest.Create(
             new CreateManifest
             {
@@ -114,26 +123,25 @@ public class NoDispatcherRefusalTests
             }
         );
         manifest.ManifestGroupId = group.Id;
-        await _fx.DataContext.Track(manifest);
-        await _fx.DataContext.SaveChanges(CancellationToken.None);
-        _fx.DataContext.Reset();
-        _signal.Clear();
+        await _fx.NotNull().DataContext.Track(manifest);
+        await _fx.NotNull().DataContext.SaveChanges(CancellationToken.None);
+        _fx.NotNull().DataContext.Reset();
+        _signal.NotNull().Clear();
 
-        var single = await _operations.TriggerManifestAsync(
-            manifest.ExternalId,
-            delay: null,
-            askAfresh: false,
-            CancellationToken.None
-        );
-        var batch = await _operations.TriggerManifestsAsync(
-            [manifest.Id],
-            askAfresh: false,
-            CancellationToken.None
-        );
-        var groups = await _operations.TriggerManifestGroupsAsync(
-            [group.Id],
-            CancellationToken.None
-        );
+        var single = await _operations
+            .NotNull()
+            .TriggerManifestAsync(
+                manifest.ExternalId,
+                delay: null,
+                askAfresh: false,
+                CancellationToken.None
+            );
+        var batch = await _operations
+            .NotNull()
+            .TriggerManifestsAsync([manifest.Id], askAfresh: false, CancellationToken.None);
+        var groups = await _operations
+            .NotNull()
+            .TriggerManifestGroupsAsync([group.Id], CancellationToken.None);
 
         single.Success.Should().BeFalse(Because);
         single.Message.Should().Be(OperationsService.NoDispatcherMessage);
@@ -148,10 +156,15 @@ public class NoDispatcherRefusalTests
     [Test]
     public async Task Running_a_train_now_is_still_allowed()
     {
-        var result = await _operations.RunTrainAsync(
-            new RunTrainInput(typeof(ISchedulerTestTrain).FullName!, """{"value":"now"}"""),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .RunTrainAsync(
+                new RunTrainInput(
+                    typeof(ISchedulerTestTrain).FullName.NotNull(),
+                    """{"value":"now"}"""
+                ),
+                CancellationToken.None
+            );
 
         result.Message.Should().NotBe(OperationsService.NoDispatcherMessage);
     }
@@ -169,8 +182,8 @@ public class NoDispatcherRefusalTests
                 Properties = new SchedulerTestInput { Value = "dead" },
             }
         );
-        await _fx.DataContext.Track(manifest);
-        await _fx.DataContext.SaveChanges(CancellationToken.None);
+        await _fx.NotNull().DataContext.Track(manifest);
+        await _fx.NotNull().DataContext.SaveChanges(CancellationToken.None);
         var deadLetter = DeadLetter.Create(
             new CreateDeadLetter
             {
@@ -179,17 +192,18 @@ public class NoDispatcherRefusalTests
                 RetryCount = 3,
             }
         );
-        await _fx.DataContext.Track(deadLetter);
-        await _fx.DataContext.SaveChanges(CancellationToken.None);
-        _fx.DataContext.Reset();
-        _signal.Clear();
+        await _fx.NotNull().DataContext.Track(deadLetter);
+        await _fx.NotNull().DataContext.SaveChanges(CancellationToken.None);
+        _fx.NotNull().DataContext.Reset();
+        _signal.NotNull().Clear();
 
-        var scheduler = _fx.Services.GetRequiredService<ITraxScheduler>();
+        var scheduler = _fx.NotNull().Services.GetRequiredService<ITraxScheduler>();
         var single = await scheduler.RequeueDeadLetterAsync(deadLetter.Id);
         var batch = await scheduler.RequeueDeadLettersAsync([deadLetter.Id]);
         var all = await scheduler.RequeueAllDeadLettersAsync();
 
-        var jobs = (DeadLetterRequeueJobs)_fx.Services.GetRequiredService<IDeadLetterRequeueJobs>();
+        var jobs = (DeadLetterRequeueJobs)
+            _fx.NotNull().Services.GetRequiredService<IDeadLetterRequeueJobs>();
         var job = await jobs.StartAsync();
         await jobs.Current;
 
@@ -199,9 +213,9 @@ public class NoDispatcherRefusalTests
         batch.Message.Should().Be(OperationsService.NoDispatcherMessage);
         all.Count.Should().Be(0);
         all.Message.Should().Be(OperationsService.NoDispatcherMessage);
-        jobs.Get(job.Id)!.Message.Should().Be(OperationsService.NoDispatcherMessage);
+        jobs.Get(job.Id).NotNull().Message.Should().Be(OperationsService.NoDispatcherMessage);
         await NothingWasQueued();
-        (await _fx.DataContext.DeadLetters.AsNoTracking().SingleAsync())
+        (await _fx.NotNull().DataContext.DeadLetters.AsNoTracking().SingleAsync())
             .Status.Should()
             .Be(DeadLetterStatus.AwaitingIntervention, Because);
     }
@@ -209,21 +223,24 @@ public class NoDispatcherRefusalTests
     [Test]
     public async Task A_caller_the_train_refuses_is_told_that_rather_than_what_store_the_host_has()
     {
-        await _fx.DisposeAsync();
+        if (_fx is not null)
+            await _fx.DisposeAsync();
         _fx = SchedulerE2EFixture.CreateInMemory(
             _ => { },
             services =>
                 services
-                    .AddSingleton<ITraxChangeSignal>(_signal)
+                    .AddSingleton<ITraxChangeSignal>(_signal.NotNull())
                     .AddSingleton<ITrainAuthorizationService, RefusingAuthorization>()
         );
-        _operations = _fx.Services.GetRequiredService<IOperationsService>();
+        _operations = _fx.NotNull().Services.GetRequiredService<IOperationsService>();
 
         var queue = () =>
-            _operations.QueueTrainAsync(
-                new QueueTrainInput(typeof(ISchedulerTestTrain).FullName!),
-                CancellationToken.None
-            );
+            _operations
+                .NotNull()
+                .QueueTrainAsync(
+                    new QueueTrainInput(typeof(ISchedulerTestTrain).FullName.NotNull()),
+                    CancellationToken.None
+                );
 
         await queue.Should().ThrowAsync<UnauthorizedAccessException>();
         await NothingWasQueued();
@@ -239,9 +256,14 @@ public class NoDispatcherRefusalTests
 
     private async Task NothingWasQueued()
     {
-        (await _fx.DataContext.WorkQueues.AsNoTracking().CountAsync().ConfigureAwait(false))
+        (
+            await _fx.NotNull()
+                .DataContext.WorkQueues.AsNoTracking()
+                .CountAsync()
+                .ConfigureAwait(false)
+        )
             .Should()
             .Be(0, Because);
-        _signal.Domains.Should().NotContain(ChangeDomain.WorkQueue);
+        _signal.NotNull().Domains.Should().NotContain(ChangeDomain.WorkQueue);
     }
 }

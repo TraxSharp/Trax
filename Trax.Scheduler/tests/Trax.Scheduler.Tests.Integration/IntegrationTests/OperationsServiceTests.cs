@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue;
@@ -20,7 +21,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class OperationsServiceTests : TestSetup
 {
-    private IOperationsService _operations = null!;
+    private IOperationsService? _operations;
 
     [SetUp]
     public void GetService()
@@ -28,17 +29,19 @@ public class OperationsServiceTests : TestSetup
         _operations = Scope.ServiceProvider.GetRequiredService<IOperationsService>();
     }
 
-    private static string TrainName => typeof(ISchedulerTestTrain).FullName!;
+    private static string TrainName => typeof(ISchedulerTestTrain).FullName.NotNull();
 
     #region QueueTrainAsync
 
     [Test]
     public async Task QueueTrainAsync_HappyPath_PersistsEntry()
     {
-        var result = await _operations.QueueTrainAsync(
-            new QueueTrainInput(TrainName, """{"value":"hello"}""", Priority: 5),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .QueueTrainAsync(
+                new QueueTrainInput(TrainName, """{"value":"hello"}""", Priority: 5),
+                CancellationToken.None
+            );
 
         result.Success.Should().BeTrue();
         result.Id.Should().NotBeNull();
@@ -56,10 +59,12 @@ public class OperationsServiceTests : TestSetup
     [Test]
     public async Task QueueTrainAsync_AnOrdinaryEnqueue_ReplaysNothing()
     {
-        await _operations.QueueTrainAsync(
-            new QueueTrainInput(TrainName, """{"value":"fresh"}"""),
-            CancellationToken.None
-        );
+        await _operations
+            .NotNull()
+            .QueueTrainAsync(
+                new QueueTrainInput(TrainName, """{"value":"fresh"}"""),
+                CancellationToken.None
+            );
 
         DataContext.WorkQueues.Single().ReplayDecisionsOf.Should().BeNull();
     }
@@ -67,10 +72,9 @@ public class OperationsServiceTests : TestSetup
     [Test]
     public async Task QueueTrainAsync_NullInputJson_PersistsAnEmptyInput()
     {
-        var result = await _operations.QueueTrainAsync(
-            new QueueTrainInput(TrainName),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .QueueTrainAsync(new QueueTrainInput(TrainName), CancellationToken.None);
 
         result.Success.Should().BeTrue();
         DataContext
@@ -82,10 +86,12 @@ public class OperationsServiceTests : TestSetup
     [Test]
     public async Task QueueTrainAsync_WhitespaceInputJson_PersistsAnEmptyInput()
     {
-        var result = await _operations.QueueTrainAsync(
-            new QueueTrainInput(TrainName, InputJson: "   "),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .QueueTrainAsync(
+                new QueueTrainInput(TrainName, InputJson: "   "),
+                CancellationToken.None
+            );
 
         result.Success.Should().BeTrue();
         DataContext.WorkQueues.Single().Input.Should().NotBeNull();
@@ -96,10 +102,12 @@ public class OperationsServiceTests : TestSetup
     {
         var when = DateTime.UtcNow.AddMinutes(10);
 
-        await _operations.QueueTrainAsync(
-            new QueueTrainInput(TrainName, ScheduledAt: when),
-            CancellationToken.None
-        );
+        await _operations
+            .NotNull()
+            .QueueTrainAsync(
+                new QueueTrainInput(TrainName, ScheduledAt: when),
+                CancellationToken.None
+            );
 
         DataContext
             .WorkQueues.Single()
@@ -110,10 +118,9 @@ public class OperationsServiceTests : TestSetup
     [Test]
     public async Task QueueTrainAsync_EmptyTrainName_ReturnsFailure()
     {
-        var result = await _operations.QueueTrainAsync(
-            new QueueTrainInput(""),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .QueueTrainAsync(new QueueTrainInput(""), CancellationToken.None);
 
         result.Success.Should().BeFalse();
         result.Message.Should().Contain("TrainName");
@@ -123,10 +130,9 @@ public class OperationsServiceTests : TestSetup
     [Test]
     public async Task QueueTrainAsync_WhitespaceTrainName_ReturnsFailure()
     {
-        var result = await _operations.QueueTrainAsync(
-            new QueueTrainInput("   "),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .QueueTrainAsync(new QueueTrainInput("   "), CancellationToken.None);
 
         result.Success.Should().BeFalse();
         DataContext.WorkQueues.Should().BeEmpty();
@@ -135,10 +141,12 @@ public class OperationsServiceTests : TestSetup
     [Test]
     public async Task QueueTrainAsync_UnknownTrainName_ReturnsFailureNoInsert()
     {
-        var result = await _operations.QueueTrainAsync(
-            new QueueTrainInput("Trax.Unknown.IDoesNotExist"),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .QueueTrainAsync(
+                new QueueTrainInput("Trax.Unknown.IDoesNotExist"),
+                CancellationToken.None
+            );
 
         result.Success.Should().BeFalse();
         result.Message.Should().Contain("Unknown train");
@@ -148,10 +156,12 @@ public class OperationsServiceTests : TestSetup
     [Test]
     public async Task QueueTrainAsync_InvalidJson_ReturnsFailureNoInsert()
     {
-        var result = await _operations.QueueTrainAsync(
-            new QueueTrainInput(TrainName, InputJson: "{not valid json"),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .QueueTrainAsync(
+                new QueueTrainInput(TrainName, InputJson: "{not valid json"),
+                CancellationToken.None
+            );
 
         result.Success.Should().BeFalse();
         result.Message.Should().Contain("Invalid InputJson");
@@ -161,10 +171,12 @@ public class OperationsServiceTests : TestSetup
     [Test]
     public async Task QueueTrainAsync_JsonNullLiteral_ReturnsFailure()
     {
-        var result = await _operations.QueueTrainAsync(
-            new QueueTrainInput(TrainName, InputJson: "null"),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .QueueTrainAsync(
+                new QueueTrainInput(TrainName, InputJson: "null"),
+                CancellationToken.None
+            );
 
         result.Success.Should().BeFalse();
         result.Message.Should().Contain("null");
@@ -174,10 +186,12 @@ public class OperationsServiceTests : TestSetup
     [Test]
     public async Task QueueTrainAsync_PriorityOver31_IsClamped()
     {
-        await _operations.QueueTrainAsync(
-            new QueueTrainInput(TrainName, Priority: 9999),
-            CancellationToken.None
-        );
+        await _operations
+            .NotNull()
+            .QueueTrainAsync(
+                new QueueTrainInput(TrainName, Priority: 9999),
+                CancellationToken.None
+            );
 
         DataContext.WorkQueues.Single().Priority.Should().Be(WorkQueue.MaxPriority);
     }
@@ -185,10 +199,9 @@ public class OperationsServiceTests : TestSetup
     [Test]
     public async Task QueueTrainAsync_PriorityNegative_IsClamped()
     {
-        await _operations.QueueTrainAsync(
-            new QueueTrainInput(TrainName, Priority: -50),
-            CancellationToken.None
-        );
+        await _operations
+            .NotNull()
+            .QueueTrainAsync(new QueueTrainInput(TrainName, Priority: -50), CancellationToken.None);
 
         DataContext.WorkQueues.Single().Priority.Should().Be(WorkQueue.MinPriority);
     }
@@ -205,7 +218,9 @@ public class OperationsServiceTests : TestSetup
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
-        var result = await _operations.CancelWorkQueueEntryAsync(queued.Id, CancellationToken.None);
+        var result = await _operations
+            .NotNull()
+            .CancelWorkQueueEntryAsync(queued.Id, CancellationToken.None);
 
         result.Success.Should().BeTrue();
         result.Id.Should().Be(queued.Id);
@@ -218,7 +233,9 @@ public class OperationsServiceTests : TestSetup
     [Test]
     public async Task CancelWorkQueueEntryAsync_MissingId_ReturnsFailure()
     {
-        var result = await _operations.CancelWorkQueueEntryAsync(99999, CancellationToken.None);
+        var result = await _operations
+            .NotNull()
+            .CancelWorkQueueEntryAsync(99999, CancellationToken.None);
 
         result.Success.Should().BeFalse();
         result.Message.Should().Contain("not found");
@@ -233,7 +250,9 @@ public class OperationsServiceTests : TestSetup
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
-        var result = await _operations.CancelWorkQueueEntryAsync(entry.Id, CancellationToken.None);
+        var result = await _operations
+            .NotNull()
+            .CancelWorkQueueEntryAsync(entry.Id, CancellationToken.None);
 
         result.Success.Should().BeFalse();
         result.Message.Should().Contain("Cancelled");
@@ -251,7 +270,9 @@ public class OperationsServiceTests : TestSetup
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
-        var result = await _operations.CancelWorkQueueEntryAsync(entry.Id, CancellationToken.None);
+        var result = await _operations
+            .NotNull()
+            .CancelWorkQueueEntryAsync(entry.Id, CancellationToken.None);
 
         result.Success.Should().BeFalse();
         result.Message.Should().Contain("Dispatched");

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -33,7 +34,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [Property("adr", "Trax.Docs/adr/0037-run-now-applies-the-same-per-record-checks-as-queueing.md")]
 public class OperationsServiceRunQueueChecksTests
 {
-    private ServiceProvider _serviceProvider = null!;
+    private ServiceProvider? _serviceProvider;
     private AsyncServiceScope _scope;
 
     [OneTimeSetUp]
@@ -55,12 +56,16 @@ public class OperationsServiceRunQueueChecksTests
     }
 
     [OneTimeTearDown]
-    public async Task RunAfterAnyTests() => await _serviceProvider.DisposeAsync();
+    public async Task RunAfterAnyTests()
+    {
+        if (_serviceProvider is not null)
+            await _serviceProvider.DisposeAsync();
+    }
 
     [SetUp]
     public async Task TestSetUp()
     {
-        _scope = _serviceProvider.CreateAsyncScope();
+        _scope = _serviceProvider.NotNull().CreateAsyncScope();
         await TestSetup.CleanupDatabase(_scope.ServiceProvider.GetRequiredService<IDataContext>());
         TenantScopedTrain.Seen.Clear();
     }
@@ -72,7 +77,10 @@ public class OperationsServiceRunQueueChecksTests
         _scope.ServiceProvider.GetRequiredService<IOperationsService>();
 
     private Task<OperationResult> Run(Type train, string json) =>
-        Operations.RunTrainAsync(new RunTrainInput(train.FullName!, json), CancellationToken.None);
+        Operations.RunTrainAsync(
+            new RunTrainInput(train.FullName.NotNull(), json),
+            CancellationToken.None
+        );
 
     private async Task<int> RunsOf(Type train)
     {
@@ -173,17 +181,17 @@ public class OperationsServiceRunQueueChecksTests
         : ServiceTrain<TenantInput, Unit>,
             ITenantScopedTrain
     {
-        public static readonly List<SeenByHook> Seen = [];
+        public static readonly IList<SeenByHook> Seen = [];
 
         protected override Task OnQueue(Metadata metadata, CancellationToken ct)
         {
-            if (!string.Equals(TrainInput.Tenant, "mine", StringComparison.Ordinal))
+            if (!string.Equals(TrainInput.NotNull().Tenant, "mine", StringComparison.Ordinal))
                 throw new TrainException("Record belongs to another tenant.");
 
             Seen.Add(
                 new SeenByHook(
                     metadata.ExternalId,
-                    TrainInput.Tenant,
+                    TrainInput.NotNull().Tenant,
                     enqueueContext.Current is not null
                 )
             );
@@ -202,7 +210,8 @@ public class OperationsServiceRunQueueChecksTests
 
     public class SubjectKeyedTrain : ServiceTrain<SubjectInput, Unit>, ISubjectKeyedTrain
     {
-        protected override string? QueueSubjectKey(Metadata metadata) => TrainInput.Subject;
+        protected override string? QueueSubjectKey(Metadata metadata) =>
+            TrainInput.NotNull().Subject;
 
         protected override Task<Either<Exception, Unit>> Junctions() => Task.FromResult(Resolve());
     }

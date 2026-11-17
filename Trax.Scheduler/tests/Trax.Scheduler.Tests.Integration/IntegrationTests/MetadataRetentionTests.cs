@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
@@ -298,15 +299,18 @@ public class MetadataRetentionTests : TestSetup
         );
 
         var cleanup = NewCleanup();
-        cleanup.AddTrainType(typeof(IFakeRetentionTrain).FullName!, TimeSpan.FromDays(30));
-        cleanup.AddTrainType(typeof(FakeRetentionTrain).FullName!, TimeSpan.FromMinutes(1));
+        cleanup.AddTrainType(typeof(IFakeRetentionTrain).FullName.NotNull(), TimeSpan.FromDays(30));
+        cleanup.AddTrainType(
+            typeof(FakeRetentionTrain).FullName.NotNull(),
+            TimeSpan.FromMinutes(1)
+        );
 
         var byInterface = await Seed(
-            typeof(IFakeRetentionTrain).FullName!,
+            typeof(IFakeRetentionTrain).FullName.NotNull(),
             DateTime.UtcNow.AddHours(-1)
         );
         var byClass = await Seed(
-            typeof(FakeRetentionTrain).FullName!,
+            typeof(FakeRetentionTrain).FullName.NotNull(),
             DateTime.UtcNow.AddHours(-1)
         );
 
@@ -320,8 +324,11 @@ public class MetadataRetentionTests : TestSetup
     public async Task Validator_InterfaceAndClassNamesDisagree_RefusesAtStartup()
     {
         var cleanup = NewCleanup();
-        cleanup.AddTrainType(typeof(IFakeRetentionTrain).FullName!, TimeSpan.FromDays(30));
-        cleanup.AddTrainType(typeof(FakeRetentionTrain).FullName!, TimeSpan.FromMinutes(1));
+        cleanup.AddTrainType(typeof(IFakeRetentionTrain).FullName.NotNull(), TimeSpan.FromDays(30));
+        cleanup.AddTrainType(
+            typeof(FakeRetentionTrain).FullName.NotNull(),
+            TimeSpan.FromMinutes(1)
+        );
 
         var validator = new MetadataCleanupConfigurationValidator(
             new SingleServiceProvider(
@@ -341,7 +348,7 @@ public class MetadataRetentionTests : TestSetup
     public async Task Validator_ConsistentConfiguration_StartsCleanly()
     {
         var cleanup = NewCleanup();
-        cleanup.AddTrainType(typeof(IFakeRetentionTrain).FullName!, TimeSpan.FromDays(30));
+        cleanup.AddTrainType(typeof(IFakeRetentionTrain).FullName.NotNull(), TimeSpan.FromDays(30));
 
         var validator = new MetadataCleanupConfigurationValidator(
             new SingleServiceProvider(

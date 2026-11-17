@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
@@ -17,23 +18,24 @@ namespace Trax.Scheduler.Tests.Sqlite.Integration.IntegrationTests;
 [TestFixture]
 public class SqliteManifestManagerTests : TestSetup
 {
-    private IManifestManagerTrain _train = null!;
-    private SchedulerConfiguration _config = null!;
+    private IManifestManagerTrain? _train;
+    private SchedulerConfiguration? _config;
 
     public override async Task TestSetUp()
     {
         await base.TestSetUp().ConfigureAwait(false);
         _train = Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
         _config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
-        _config.StaleStagedEntryTimeout = TimeSpan.FromMinutes(10);
-        _config.PromoteStaleStagedEntries = false;
+        _config.NotNull().StaleStagedEntryTimeout = TimeSpan.FromMinutes(10);
+        _config.NotNull().PromoteStaleStagedEntries = false;
     }
 
     [TearDown]
     public async Task ManifestManagerTestsTearDown()
     {
-        _config.StaleStagedEntryTimeout = new SchedulerConfiguration().StaleStagedEntryTimeout;
-        _config.PromoteStaleStagedEntries = false;
+        _config.NotNull().StaleStagedEntryTimeout =
+            new SchedulerConfiguration().StaleStagedEntryTimeout;
+        _config.NotNull().PromoteStaleStagedEntries = false;
 
         if (_train is IDisposable disposable)
             disposable.Dispose();
@@ -52,7 +54,7 @@ public class SqliteManifestManagerTests : TestSetup
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -81,7 +83,7 @@ public class SqliteManifestManagerTests : TestSetup
         DataContext.Reset();
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -103,7 +105,7 @@ public class SqliteManifestManagerTests : TestSetup
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -138,7 +140,7 @@ public class SqliteManifestManagerTests : TestSetup
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -169,7 +171,7 @@ public class SqliteManifestManagerTests : TestSetup
         var justInsideTimeout = await Stage(age: TimeSpan.FromMinutes(9));
         var confirmed = await Stage(age: TimeSpan.FromDays(1), confirm: true);
 
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         (await Load(daysOld)).Status.Should().Be(WorkQueueStatus.Cancelled);
         (await Load(justPastTimeout)).Status.Should().Be(WorkQueueStatus.Cancelled);
@@ -186,11 +188,11 @@ public class SqliteManifestManagerTests : TestSetup
     [Test]
     public async Task ManifestManager_StaleStagedEntry_IsPromotedWhenTheHostOptsIn()
     {
-        _config.PromoteStaleStagedEntries = true;
+        _config.NotNull().PromoteStaleStagedEntries = true;
         var stale = await Stage(age: TimeSpan.FromMinutes(11));
         var recent = await Stage(age: TimeSpan.FromMinutes(9));
 
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         var promoted = await Load(stale);
         promoted.Status.Should().Be(WorkQueueStatus.Queued);
@@ -203,7 +205,7 @@ public class SqliteManifestManagerTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = "{}",
                 InputTypeName = typeof(SchedulerTestInput).FullName,
                 DeferPromotion = !confirm,

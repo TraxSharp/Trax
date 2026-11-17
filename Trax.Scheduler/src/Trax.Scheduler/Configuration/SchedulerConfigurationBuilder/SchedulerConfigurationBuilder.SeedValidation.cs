@@ -1,3 +1,5 @@
+using Trax.Core.Extensions;
+
 namespace Trax.Scheduler.Configuration;
 
 public partial class SchedulerConfigurationBuilder
@@ -218,7 +220,8 @@ public partial class SchedulerConfigurationBuilder
         );
     }
 
-    private static string Describe<T>(T value) => value is null ? "none" : value.ToString()!;
+    private static string Describe<T>(T value) =>
+        value is null ? "none" : value.ToString().NotNull();
 
     // Only ever given a batch's description ("batch '…'", "the batch starting '…'"), never empty.
     private static string Capitalise(string text) => char.ToUpperInvariant(text[0]) + text[1..];

@@ -1,6 +1,7 @@
 namespace Trax.Scheduler.Trains.ManifestManager.Utilities;
 
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Scheduler.Configuration;
@@ -356,7 +357,7 @@ internal static class SchedulingHelpers
         ILogger logger
     )
     {
-        var intervalSeconds = manifest.IntervalSeconds!.Value;
+        var intervalSeconds = manifest.IntervalSeconds.NotNull().Value;
 
         // If never run, always fire immediately
         if (anchor.LastRun is not { } lastRun)
@@ -422,7 +423,7 @@ internal static class SchedulingHelpers
         // one of those either, and it must not run once and then never again.
         if (anchor.LastRun is null && anchor.NextScheduledRun is null)
             return CronParser
-                .TryParse(manifest.CronExpression!)
+                .TryParse(manifest.CronExpression.NotNull())
                 ?.GetNextOccurrence(now, TimeZoneInfo.Utc)
                 is not null;
 
@@ -434,7 +435,7 @@ internal static class SchedulingHelpers
         }
         else
         {
-            var parsed = CronParser.TryParse(manifest.CronExpression!);
+            var parsed = CronParser.TryParse(manifest.CronExpression.NotNull());
             if (parsed is null)
             {
                 logger.LogWarning(
@@ -445,7 +446,10 @@ internal static class SchedulingHelpers
                 return false;
             }
 
-            var nextDue = parsed.GetNextOccurrence(anchor.LastRun!.Value, TimeZoneInfo.Utc);
+            var nextDue = parsed.GetNextOccurrence(
+                anchor.LastRun.NotNull().Value,
+                TimeZoneInfo.Utc
+            );
             if (nextDue is null)
                 return false;
 
@@ -473,7 +477,7 @@ internal static class SchedulingHelpers
 
         // DoNothing: find the most recent cron occurrence before now and check threshold.
         // When NextScheduledRun was used, we need to re-parse the cron expression for boundary evaluation.
-        var cronParsed = CronParser.TryParse(manifest.CronExpression!);
+        var cronParsed = CronParser.TryParse(manifest.CronExpression.NotNull());
         if (cronParsed is null)
             return false;
 

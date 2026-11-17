@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Scheduler.Services.TraxScheduler;
@@ -239,7 +240,7 @@ public sealed class DeadLetterRequeueJobs : IDeadLetterRequeueJobs
         var expiredBefore = _time.GetUtcNow().UtcDateTime - Retention;
         var finished = _jobs
             .Values.Where(j => j.FinishedAt is not null)
-            .Select(j => (j.Id, FinishedAt: j.FinishedAt!.Value))
+            .Select(j => (j.Id, FinishedAt: j.FinishedAt.NotNull().Value))
             .OrderBy(j => j.FinishedAt)
             .ToList();
 

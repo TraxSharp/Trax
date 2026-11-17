@@ -14,5 +14,5 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 /// <summary>Input for <see cref="IRowsRunTrain"/>.</summary>
 public record RowsRunInput : IManifestProperties
 {
-    public List<List<string>> Rows { get; set; } = [];
+    public IList<IList<string>> Rows { get; set; } = [];
 }

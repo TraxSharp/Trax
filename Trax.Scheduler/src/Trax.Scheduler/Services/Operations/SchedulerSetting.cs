@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Effect.Models.SchedulerConfig;
 using Trax.Scheduler.Configuration;
 
@@ -31,8 +32,8 @@ internal sealed class SchedulerSetting<T>(
 
     public void WriteRow(SchedulerConfig row, object? value)
     {
-        row.SetOverride(name, (T)value!);
-        writeColumn?.Invoke(row, (T)value!);
+        row.SetOverride(name, (T)value.NotNull());
+        writeColumn?.Invoke(row, (T)value.NotNull());
     }
 
     public bool TryReadLegacyRow(SchedulerConfig row, out object? value)
@@ -51,9 +52,9 @@ internal sealed class SchedulerSetting<T>(
     public object? ReadLive(SchedulerSettingsTarget target) => readLive(target);
 
     public void WriteLive(SchedulerSettingsTarget target, object? value) =>
-        writeLive(target, (T)value!);
+        writeLive(target, (T)value.NotNull());
 
-    public string? Check(object? value) => check?.Invoke((T)value!, name);
+    public string? Check(object? value) => check?.Invoke((T)value.NotNull(), name);
 
     public bool TryReadPatch(UpdateSchedulerConfigInput input, out object? value)
     {

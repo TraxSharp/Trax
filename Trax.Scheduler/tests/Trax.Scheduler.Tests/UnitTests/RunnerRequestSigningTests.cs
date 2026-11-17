@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.Http;
@@ -331,7 +332,8 @@ public class RunnerRequestSigningTests
                     RespectNullableAnnotations = false,
                     RespectRequiredConstructorParameters = false,
                 }
-            )!
+            )
+            .NotNull()
             .MetadataId.Should()
             .Be(7);
     }
@@ -558,12 +560,9 @@ public class RunnerRequestSigningTests
             timestamp,
             nonce
         );
-        var response = RunnerRequestSignature.CreateResponse(
-            Key,
-            RunnerRequestPurpose.Run,
-            request,
-            Body
-        )!;
+        var response = RunnerRequestSignature
+            .CreateResponse(Key, RunnerRequestPurpose.Run, request, Body)
+            .NotNull();
         var requestMac = request[(request.IndexOf(",s=", StringComparison.Ordinal) + 3)..];
         var responseMac = response[(response.IndexOf(",s=", StringComparison.Ordinal) + 3)..];
 
@@ -645,7 +644,8 @@ public class RunnerRequestSigningTests
         )
         {
             var body = await request
-                .Content!.ReadAsByteArrayAsync(cancellationToken)
+                .Content.NotNull()
+                .ReadAsByteArrayAsync(cancellationToken)
                 .ConfigureAwait(false);
             var signature = request.Headers.TryGetValues(
                 RunnerRequestSignature.HeaderName,

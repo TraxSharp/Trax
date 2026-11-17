@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
@@ -27,23 +28,23 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class RetryDueTimeClockTests : TestSetup
 {
-    private SchedulerConfiguration _config = null!;
+    private SchedulerConfiguration? _config;
     private TimeSpan _previousDelay;
 
     public override async Task TestSetUp()
     {
         await base.TestSetUp().ConfigureAwait(false);
         _config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
-        _previousDelay = _config.DefaultRetryDelay;
+        _previousDelay = _config.NotNull().DefaultRetryDelay;
     }
 
     [TearDown]
-    public void RestoreDelay() => _config.DefaultRetryDelay = _previousDelay;
+    public void RestoreDelay() => _config.NotNull().DefaultRetryDelay = _previousDelay;
 
     [Test]
     public async Task A_retry_with_no_backoff_stores_no_time_and_dispatches_on_the_next_poll()
     {
-        _config.DefaultRetryDelay = TimeSpan.Zero;
+        _config.NotNull().DefaultRetryDelay = TimeSpan.Zero;
         var manifest = await CreateManifestWhoseLastRunFailed();
 
         await RunManifestManager();
@@ -99,7 +100,7 @@ public class RetryDueTimeClockTests : TestSetup
         var run = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "clock" },
                 ManifestId = manifest.Id,

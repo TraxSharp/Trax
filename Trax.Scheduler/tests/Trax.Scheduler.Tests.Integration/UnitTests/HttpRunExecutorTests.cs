@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NUnit.Framework;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.Http;
 using Trax.Scheduler.Services.RunExecutor;
@@ -71,7 +72,7 @@ public class HttpRunExecutorTests
             );
         result.ExternalId.Should().Be("ext-42");
         result.Output.Should().BeOfType<SimpleOutput>();
-        ((SimpleOutput)result.Output!).Value.Should().Be("ok");
+        ((SimpleOutput)result.Output.NotNull()).Value.Should().Be("ok");
     }
 
     [Test]

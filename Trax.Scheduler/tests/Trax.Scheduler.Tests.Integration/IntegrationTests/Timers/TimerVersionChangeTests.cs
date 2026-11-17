@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Effect.Models.SnapshotDraft;
 using Trax.Scheduler.Tests.Integration.Fakes.Timers;
 using Trax.Scheduler.Tests.Integration.Fixtures;
@@ -28,57 +29,64 @@ public class TimerVersionChangeTests(ClusterStore store)
     private const string Adr =
         "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md";
 
-    private InvokeCluster _cluster = null!;
-    private TimerDb _db = null!;
+    private InvokeCluster? _cluster;
+    private TimerDb? _db;
 
-    private ClusterHost _v1 = null!;
-    private ClusterHost _v2WithoutTimer = null!;
-    private ClusterHost _v2LongerTimer = null!;
-    private ClusterHost _v2SameTimer = null!;
+    private ClusterHost? _v1;
+    private ClusterHost? _v2WithoutTimer;
+    private ClusterHost? _v2LongerTimer;
+    private ClusterHost? _v2SameTimer;
 
     [OneTimeSetUp]
     public async Task CreateCluster()
     {
         _cluster = await InvokeCluster.Create(store);
-        _db = new TimerDb(_cluster);
-        _v1 = _cluster.Host(machines: true, scheduler: false, TimerHosts.Publishing);
+        _db = new TimerDb(_cluster.NotNull());
+        _v1 = _cluster.NotNull().Host(machines: true, scheduler: false, TimerHosts.Publishing);
         _v2WithoutTimer = Deployed(ReminderShape.V2WithoutTimer);
         _v2LongerTimer = Deployed(ReminderShape.V2LongerTimer);
         _v2SameTimer = Deployed(ReminderShape.V2SameTimer);
 
         ClusterHost Deployed(ReminderShape shape) =>
-            _cluster.Host(
-                machines: true,
-                scheduler: false,
-                TimerHosts.All(TimerHosts.Publishing, TimerHosts.Deploy(shape))
-            );
+            _cluster
+                .NotNull()
+                .Host(
+                    machines: true,
+                    scheduler: false,
+                    TimerHosts.All(TimerHosts.Publishing, TimerHosts.Deploy(shape))
+                );
     }
 
     [OneTimeTearDown]
     public async Task DisposeCluster()
     {
-        await _v1.DisposeAsync();
-        await _v2WithoutTimer.DisposeAsync();
-        await _v2LongerTimer.DisposeAsync();
-        await _v2SameTimer.DisposeAsync();
-        await _cluster.DisposeAsync();
+        if (_v1 is not null)
+            await _v1.DisposeAsync();
+        if (_v2WithoutTimer is not null)
+            await _v2WithoutTimer.DisposeAsync();
+        if (_v2LongerTimer is not null)
+            await _v2LongerTimer.DisposeAsync();
+        if (_v2SameTimer is not null)
+            await _v2SameTimer.DisposeAsync();
+        if (_cluster is not null)
+            await _cluster.DisposeAsync();
     }
 
     [SetUp]
-    public Task Reset() => _cluster.Reset();
+    public Task Reset() => _cluster.NotNull().Reset();
 
     [Test]
     public async Task A_v2_without_the_timer_clears_a_stale_due_at_and_does_not_fire()
     {
-        var (_, id, row) = await OpenReview(_v1);
-        await _db.MakeDue(row);
+        var (_, id, row) = await OpenReview(_v1.NotNull());
+        await _db.NotNull().MakeDue(row);
 
-        (await _v2WithoutTimer.FireTimers())
+        (await _v2WithoutTimer.NotNull().FireTimers())
             .Should()
             .NotContain(r => r.InstanceId == id && r.Outcome == TimerFireResult.Fired);
 
         (await Reminder(id)).State.Should().Be(nameof(ReminderState.Review));
-        (await _db.DueAt(row))
+        (await _db.NotNull().DueAt(row))
             .Should()
             .BeNull(
                 $"a due time the definition no longer declares is cleared by the sweep. See {Adr}"
@@ -88,17 +96,17 @@ public class TimerVersionChangeTests(ClusterStore store)
     [Test]
     public async Task A_changed_duration_keeps_the_due_at_set_at_entry()
     {
-        var (_, id, row) = await OpenReview(_v1);
-        var due = await _db.DueAt(row);
+        var (_, id, row) = await OpenReview(_v1.NotNull());
+        var due = await _db.NotNull().DueAt(row);
         due.Should().NotBeNull("version 1 armed its ten-minute timer");
 
-        (await _v2LongerTimer.FireTimers()).Should().NotContain(r => r.InstanceId == id);
-        (await _db.DueAt(row))
+        (await _v2LongerTimer.NotNull().FireTimers()).Should().NotContain(r => r.InstanceId == id);
+        (await _db.NotNull().DueAt(row))
             .Should()
             .Be(due, $"the duration is read at entry, never again. See {Adr}");
 
-        await _db.MakeDue(row);
-        (await _v2LongerTimer.FireTimers())
+        await _db.NotNull().MakeDue(row);
+        (await _v2LongerTimer.NotNull().FireTimers())
             .Should()
             .ContainSingle(r => r.InstanceId == id && r.Outcome == TimerFireResult.Fired);
         (await Reminder(id)).State.Should().Be(nameof(ReminderState.Expired));
@@ -107,10 +115,10 @@ public class TimerVersionChangeTests(ClusterStore store)
     [Test]
     public async Task A_v1_host_does_not_fire_a_row_written_by_v2()
     {
-        var (_, id, row) = await OpenReview(_v2SameTimer, version: 2);
-        await _db.MakeDue(row);
+        var (_, id, row) = await OpenReview(_v2SameTimer.NotNull(), version: 2);
+        await _db.NotNull().MakeDue(row);
 
-        var fires = await _v1.FireTimers();
+        var fires = await _v1.NotNull().FireTimers();
         fires
             .Should()
             .ContainSingle(r => r.InstanceId == id)
@@ -121,7 +129,7 @@ public class TimerVersionChangeTests(ClusterStore store)
             );
         (await Reminder(id)).State.Should().Be(nameof(ReminderState.Review));
 
-        (await _v2SameTimer.FireTimers())
+        (await _v2SameTimer.NotNull().FireTimers())
             .Should()
             .ContainSingle(r => r.InstanceId == id && r.Outcome == TimerFireResult.Fired);
     }
@@ -129,17 +137,17 @@ public class TimerVersionChangeTests(ClusterStore store)
     [Test]
     public async Task A_migrated_snapshot_keeps_its_due_at_when_the_state_survives()
     {
-        var (user, id, row) = await OpenReview(_v1);
-        var due = await _db.DueAt(row);
+        var (user, id, row) = await OpenReview(_v1.NotNull());
+        var due = await _db.NotNull().DueAt(row);
         due.Should().NotBeNull();
 
-        (await _v2SameTimer.Load(user, id)).Should().BeOfType<LoadResult.Loaded>();
-        (await _db.DueAt(row))
+        (await _v2SameTimer.NotNull().Load(user, id)).Should().BeOfType<LoadResult.Loaded>();
+        (await _db.NotNull().DueAt(row))
             .Should()
             .Be(due, $"Review survives the migration, and so does its timer's due time. See {Adr}");
 
-        await _db.MakeDue(row);
-        (await _v2SameTimer.FireTimers())
+        await _db.NotNull().MakeDue(row);
+        (await _v2SameTimer.NotNull().FireTimers())
             .Should()
             .ContainSingle(r => r.InstanceId == id && r.Outcome == TimerFireResult.Fired);
         (await Reminder(id)).State.Should().Be(nameof(ReminderState.Expired));
@@ -159,5 +167,5 @@ public class TimerVersionChangeTests(ClusterStore store)
     }
 
     private async Task<SnapshotDraft> Reminder(Guid id) =>
-        (await _v1.Row(id, ReminderMachine.MachineId).ConfigureAwait(false))!;
+        (await _v1.NotNull().Row(id, ReminderMachine.MachineId).ConfigureAwait(false)).NotNull();
 }

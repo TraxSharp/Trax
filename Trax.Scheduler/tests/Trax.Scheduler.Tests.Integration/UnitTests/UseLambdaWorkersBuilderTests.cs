@@ -1,6 +1,7 @@
 using Amazon.Lambda;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
@@ -49,7 +50,7 @@ public class UseLambdaWorkersBuilderTests
         // Assert
         var options = provider.GetService<LambdaWorkerOptions>();
         options.Should().NotBeNull();
-        options!.FunctionName.Should().Be("my-function");
+        options.NotNull().FunctionName.Should().Be("my-function");
     }
 
     [Test]
@@ -139,7 +140,7 @@ public class UseLambdaWorkersBuilderTests
         var options = provider.GetRequiredService<LambdaWorkerOptions>();
         options.ConfigureLambdaClient.Should().NotBeNull();
 
-        options.ConfigureLambdaClient!(new Amazon.Lambda.AmazonLambdaConfig());
+        options.ConfigureLambdaClient.NotNull()(new Amazon.Lambda.AmazonLambdaConfig());
         callbackInvoked.Should().BeTrue();
     }
 
@@ -180,7 +181,7 @@ public class UseLambdaWorkersBuilderTests
         // Assert
         var options = provider.GetService<LambdaRunOptions>();
         options.Should().NotBeNull();
-        options!.FunctionName.Should().Be("my-runner");
+        options.NotNull().FunctionName.Should().Be("my-runner");
     }
 
     #endregion

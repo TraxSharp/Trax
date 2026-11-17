@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
@@ -131,7 +132,7 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
 
         var latestIds = latestByManifest
             .Where(l => l.Latest is not null)
-            .Select(l => l.Latest!.Value)
+            .Select(l => l.Latest.NotNull().Value)
             .ToList();
 
         if (latestIds.Count == 0)
@@ -161,7 +162,7 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
                 .Where(q => q.MetadataId != null && runIds.Contains(q.MetadataId.Value))
                 .Select(q => new
                 {
-                    MetadataId = q.MetadataId!.Value,
+                    MetadataId = q.MetadataId.NotNull().Value,
                     q.ManifestId,
                     q.Input,
                     q.InputTypeName,
@@ -184,7 +185,7 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
                     && runIds.Contains(r.ReplayDecisionsOf.Value)
                     && !r.ReplayAbandoned
                 )
-                .Select(r => r.ReplayDecisionsOf!.Value)
+                .Select(r => r.ReplayDecisionsOf.GetValueOrDefault())
                 .Distinct()
                 .ToListAsync(ct)
                 .ConfigureAwait(false)
@@ -197,7 +198,7 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
                     && runIds.Contains(q.ReplayDecisionsOf.Value)
                     && q.Status == WorkQueueStatus.Queued
                 )
-                .Select(q => q.ReplayDecisionsOf!.Value)
+                .Select(q => q.ReplayDecisionsOf.GetValueOrDefault())
                 .Distinct()
                 .ToListAsync(ct)
                 .ConfigureAwait(false)
@@ -207,7 +208,7 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
         // the failed run was dispatched, the next run is a new firing, not a retry of that one.
         var parentIds = manifests
             .Where(m => m.DependsOnManifestId is not null)
-            .Select(m => (long)m.DependsOnManifestId!.Value)
+            .Select(m => (long)m.DependsOnManifestId.NotNull().Value)
             .Distinct()
             .ToList();
         var parentSuccess =

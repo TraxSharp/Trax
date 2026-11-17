@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Utils;
@@ -50,10 +51,10 @@ public class TraxRequestHandlerTests
 
         result.MetadataId.Should().Be(100);
         jobRunner.ReceivedRequest.Should().NotBeNull();
-        jobRunner.ReceivedRequest!.MetadataId.Should().Be(100);
+        jobRunner.ReceivedRequest.NotNull().MetadataId.Should().Be(100);
         jobRunner.ReceivedRequest.Input.Should().NotBeNull();
         jobRunner.ReceivedRequest.Input.Should().BeOfType<TestInput>();
-        var receivedInput = (TestInput)jobRunner.ReceivedRequest.Input!;
+        var receivedInput = (TestInput)jobRunner.ReceivedRequest.Input.NotNull();
         receivedInput.Name.Should().Be("hello");
         receivedInput.Value.Should().Be(42);
     }
@@ -69,7 +70,7 @@ public class TraxRequestHandlerTests
 
         result.MetadataId.Should().Be(200);
         jobRunner.ReceivedRequest.Should().NotBeNull();
-        jobRunner.ReceivedRequest!.MetadataId.Should().Be(200);
+        jobRunner.ReceivedRequest.NotNull().MetadataId.Should().Be(200);
         jobRunner.ReceivedRequest.Input.Should().BeNull();
     }
 
@@ -144,7 +145,7 @@ public class TraxRequestHandlerTests
         var request = new RemoteRunRequest(
             TrainName: "My.Namespace.IMyTrain",
             InputJson: """{"name":"test"}""",
-            InputType: typeof(TestInput).FullName!
+            InputType: typeof(TestInput).FullName.NotNull()
         );
         var handler = CreateHandler(executionService: executionService);
 
@@ -157,11 +158,11 @@ public class TraxRequestHandlerTests
         response.OutputJson.Should().NotBeNull();
 
         var deserialized = JsonSerializer.Deserialize<TestOutput>(
-            response.OutputJson!,
+            response.OutputJson.NotNull(),
             TraxJsonSerializationOptions.ManifestProperties
         );
         deserialized.Should().NotBeNull();
-        deserialized!.Result.Should().Be("success");
+        deserialized.NotNull().Result.Should().Be("success");
         deserialized.Count.Should().Be(7);
     }
 
@@ -175,7 +176,7 @@ public class TraxRequestHandlerTests
         var request = new RemoteRunRequest(
             TrainName: "My.UnitTrain",
             InputJson: "{}",
-            InputType: typeof(TestInput).FullName!
+            InputType: typeof(TestInput).FullName.NotNull()
         );
         var handler = CreateHandler(executionService: executionService);
 
@@ -201,7 +202,7 @@ public class TraxRequestHandlerTests
         var request = new RemoteRunRequest(
             TrainName: "My.FailingTrain",
             InputJson: "{}",
-            InputType: typeof(TestInput).FullName!
+            InputType: typeof(TestInput).FullName.NotNull()
         );
         var handler = CreateHandler(executionService: executionService);
 
@@ -235,7 +236,7 @@ public class TraxRequestHandlerTests
         var request = new RemoteRunRequest(
             TrainName: "My.FailingTrain",
             InputJson: "{}",
-            InputType: typeof(TestInput).FullName!
+            InputType: typeof(TestInput).FullName.NotNull()
         );
         var handler = CreateHandler(executionService: executionService);
 
@@ -257,7 +258,7 @@ public class TraxRequestHandlerTests
         var request = new RemoteRunRequest(
             TrainName: "My.Train",
             InputJson: "{}",
-            InputType: typeof(TestInput).FullName!
+            InputType: typeof(TestInput).FullName.NotNull()
         );
         var handler = CreateHandler(executionService: executionService);
 
@@ -278,7 +279,7 @@ public class TraxRequestHandlerTests
         var request = new RemoteRunRequest(
             TrainName: "My.Train",
             InputJson: "{}",
-            InputType: typeof(TestInput).FullName!
+            InputType: typeof(TestInput).FullName.NotNull()
         );
         var handler = CreateHandler(executionService: executionService);
 
@@ -350,7 +351,7 @@ public class TraxRequestHandlerTests
 
         var response = await handler.RunTrainAsync(
             new RemoteRunRequest(
-                typeof(Trax.Scheduler.Trains.JobRunner.IJobRunnerTrain).FullName!,
+                typeof(Trax.Scheduler.Trains.JobRunner.IJobRunnerTrain).FullName.NotNull(),
                 "{}",
                 "ignored"
             )

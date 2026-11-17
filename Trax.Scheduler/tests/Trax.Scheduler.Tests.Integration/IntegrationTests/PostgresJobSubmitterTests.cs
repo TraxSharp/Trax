@@ -2,6 +2,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Models.BackgroundJob;
@@ -48,7 +49,7 @@ public class PostgresJobSubmitterTests : TestSetup
         );
 
         job.Should().NotBeNull();
-        job!.MetadataId.Should().Be(42);
+        job.NotNull().MetadataId.Should().Be(42);
         job.Input.Should().BeNull();
         job.InputType.Should().BeNull();
         job.FetchedAt.Should().BeNull();
@@ -123,7 +124,7 @@ public class PostgresJobSubmitterTests : TestSetup
         );
 
         job.Should().NotBeNull();
-        job!.MetadataId.Should().Be(50);
+        job.NotNull().MetadataId.Should().Be(50);
         job.Input.Should().NotBeNull();
         job.Input.Should().Contain("hello-world");
         job.InputType.Should().NotBeNull();
@@ -146,7 +147,7 @@ public class PostgresJobSubmitterTests : TestSetup
         );
 
         job.Should().NotBeNull();
-        job!.InputType.Should().Contain("SchedulerTestInput");
+        job.NotNull().InputType.Should().Contain("SchedulerTestInput");
     }
 
     [Test]
@@ -166,15 +167,15 @@ public class PostgresJobSubmitterTests : TestSetup
         );
 
         job.Should().NotBeNull();
-        job!.Input.Should().NotBeNull();
+        job.NotNull().Input.Should().NotBeNull();
 
         var deserialized = JsonSerializer.Deserialize<SchedulerTestInput>(
-            job.Input!,
+            job.Input.NotNull(),
             TraxJsonSerializationOptions.ManifestProperties
         );
 
         deserialized.Should().NotBeNull();
-        deserialized!.Value.Should().Be("round-trip-test");
+        deserialized.NotNull().Value.Should().Be("round-trip-test");
     }
 
     [Test]
@@ -194,15 +195,15 @@ public class PostgresJobSubmitterTests : TestSetup
         );
 
         job.Should().NotBeNull();
-        job!.Input.Should().NotBeNull();
+        job.NotNull().Input.Should().NotBeNull();
 
         var deserialized = JsonSerializer.Deserialize<SchedulerTestInput>(
-            job.Input!,
+            job.Input.NotNull(),
             TraxJsonSerializationOptions.ManifestProperties
         );
 
         deserialized.Should().NotBeNull();
-        deserialized!.Value.Should().Be("complex with special chars: <>&\"'");
+        deserialized.NotNull().Value.Should().Be("complex with special chars: <>&\"'");
     }
 
     #endregion
@@ -225,7 +226,9 @@ public class PostgresJobSubmitterTests : TestSetup
         );
 
         job.Should().NotBeNull();
-        job!.FetchedAt.Should().BeNull("newly enqueued jobs should be available for worker claim");
+        job.NotNull()
+            .FetchedAt.Should()
+            .BeNull("newly enqueued jobs should be available for worker claim");
     }
 
     [Test]
@@ -245,7 +248,7 @@ public class PostgresJobSubmitterTests : TestSetup
         );
 
         job.Should().NotBeNull();
-        job!.CreatedAt.Should().BeOnOrAfter(beforeEnqueue.AddSeconds(-1));
+        job.NotNull().CreatedAt.Should().BeOnOrAfter(beforeEnqueue.AddSeconds(-1));
         job.CreatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(10));
     }
 
@@ -272,7 +275,7 @@ public class PostgresJobSubmitterTests : TestSetup
             j.Id == long.Parse(jobId, System.Globalization.CultureInfo.InvariantCulture)
         );
         job.Should().NotBeNull();
-        job!.Priority.Should().Be(20, "priority should be stored in the background job");
+        job.NotNull().Priority.Should().Be(20, "priority should be stored in the background job");
     }
 
     [Test]
@@ -296,7 +299,7 @@ public class PostgresJobSubmitterTests : TestSetup
             j.Id == long.Parse(jobId, System.Globalization.CultureInfo.InvariantCulture)
         );
         job.Should().NotBeNull();
-        job!.Priority.Should().Be(15, "priority should be stored with input");
+        job.NotNull().Priority.Should().Be(15, "priority should be stored with input");
         job.Input.Should().NotBeNull("input should also be stored");
     }
 
@@ -318,7 +321,7 @@ public class PostgresJobSubmitterTests : TestSetup
             j.Id == long.Parse(jobId, System.Globalization.CultureInfo.InvariantCulture)
         );
         job.Should().NotBeNull();
-        job!.Priority.Should().Be(0, "non-priority overload should default to 0");
+        job.NotNull().Priority.Should().Be(0, "non-priority overload should default to 0");
     }
 
     #endregion

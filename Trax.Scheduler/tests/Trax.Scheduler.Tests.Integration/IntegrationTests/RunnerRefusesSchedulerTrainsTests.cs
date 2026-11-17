@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
@@ -43,7 +44,7 @@ public class RunnerRefusesSchedulerTrainsTests : TestSetup
             }
         )
         {
-            yield return type.FullName!;
+            yield return type.FullName.NotNull();
             yield return type.Name;
         }
     }
@@ -76,9 +77,9 @@ public class RunnerRefusesSchedulerTrainsTests : TestSetup
     {
         var response = await Handler.RunTrainAsync(
             new RemoteRunRequest(
-                typeof(Fakes.Trains.ISchedulerTestTrain).FullName!,
+                typeof(Fakes.Trains.ISchedulerTestTrain).FullName.NotNull(),
                 """{"value":"runs"}""",
-                typeof(Fakes.Trains.SchedulerTestInput).FullName!
+                typeof(Fakes.Trains.SchedulerTestInput).FullName.NotNull()
             )
         );
 
@@ -91,7 +92,7 @@ public class RunnerRefusesSchedulerTrainsTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(IMetadataCleanupTrain).FullName!,
+                Name = typeof(IMetadataCleanupTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new MetadataCleanupRequest(),
             }
@@ -159,7 +160,7 @@ public class RunnerRefusesSchedulerTrainsTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(IManifestManagerTrain).FullName!,
+                Name = typeof(IManifestManagerTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = Unit.Default,
             }

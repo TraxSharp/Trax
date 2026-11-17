@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.Extensions;
@@ -32,7 +33,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [Property("adr", "Trax.Docs/adr/0017-a-callers-enqueue-goes-through-the-mediator.md")]
 public class OperationsServiceAuthorizationTests
 {
-    private ServiceProvider _serviceProvider = null!;
+    private ServiceProvider? _serviceProvider;
     private AsyncServiceScope _scope;
 
     [OneTimeSetUp]
@@ -55,12 +56,16 @@ public class OperationsServiceAuthorizationTests
     }
 
     [OneTimeTearDown]
-    public async Task RunAfterAnyTests() => await _serviceProvider.DisposeAsync();
+    public async Task RunAfterAnyTests()
+    {
+        if (_serviceProvider is not null)
+            await _serviceProvider.DisposeAsync();
+    }
 
     [SetUp]
     public async Task TestSetUp()
     {
-        _scope = _serviceProvider.CreateAsyncScope();
+        _scope = _serviceProvider.NotNull().CreateAsyncScope();
         await TestSetup.CleanupDatabase(_scope.ServiceProvider.GetRequiredService<IDataContext>());
     }
 
@@ -76,7 +81,10 @@ public class OperationsServiceAuthorizationTests
         var act = async () =>
             await Operations
                 .QueueTrainAsync(
-                    new QueueTrainInput(typeof(IGuardedTrain).FullName!, "{\"Value\":\"x\"}"),
+                    new QueueTrainInput(
+                        typeof(IGuardedTrain).FullName.NotNull(),
+                        "{\"Value\":\"x\"}"
+                    ),
                     CancellationToken.None
                 )
                 .ConfigureAwait(false);
@@ -93,7 +101,7 @@ public class OperationsServiceAuthorizationTests
         var act = async () =>
             await Operations
                 .QueueTrainAsync(
-                    new QueueTrainInput(typeof(IGuardedTrain).FullName!, "{not json"),
+                    new QueueTrainInput(typeof(IGuardedTrain).FullName.NotNull(), "{not json"),
                     CancellationToken.None
                 )
                 .ConfigureAwait(false);
@@ -109,7 +117,7 @@ public class OperationsServiceAuthorizationTests
     public async Task Malformed_input_from_a_caller_who_may_run_the_train_is_a_failed_result()
     {
         var result = await Operations.QueueTrainAsync(
-            new QueueTrainInput(typeof(IOpenTrain).FullName!, "{not json"),
+            new QueueTrainInput(typeof(IOpenTrain).FullName.NotNull(), "{not json"),
             CancellationToken.None
         );
 
@@ -121,7 +129,7 @@ public class OperationsServiceAuthorizationTests
     public async Task An_enqueue_the_train_refuses_is_a_failed_result_not_an_error()
     {
         var result = await Operations.QueueTrainAsync(
-            new QueueTrainInput(typeof(IRefusingHookTrain).FullName!, "{}"),
+            new QueueTrainInput(typeof(IRefusingHookTrain).FullName.NotNull(), "{}"),
             CancellationToken.None
         );
 
@@ -138,7 +146,10 @@ public class OperationsServiceAuthorizationTests
         var act = async () =>
             await Operations
                 .RunTrainAsync(
-                    new RunTrainInput(typeof(IGuardedTrain).FullName!, "{\"value\":\"x\"}"),
+                    new RunTrainInput(
+                        typeof(IGuardedTrain).FullName.NotNull(),
+                        "{\"value\":\"x\"}"
+                    ),
                     CancellationToken.None
                 )
                 .ConfigureAwait(false);
@@ -155,7 +166,7 @@ public class OperationsServiceAuthorizationTests
     public async Task A_run_resolved_from_the_host_runs_the_train_on_its_submitter()
     {
         var result = await Operations.RunTrainAsync(
-            new RunTrainInput(typeof(IOpenTrain).FullName!, "{\"value\":\"x\"}"),
+            new RunTrainInput(typeof(IOpenTrain).FullName.NotNull(), "{\"value\":\"x\"}"),
             CancellationToken.None
         );
 

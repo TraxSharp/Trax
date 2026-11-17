@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
@@ -56,7 +57,7 @@ public class JobRunnerTrainTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = input,
                 ManifestId = null,
@@ -106,7 +107,7 @@ public class JobRunnerTrainTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(CancelsItsRunnerTrain).FullName!,
+                Name = typeof(CancelsItsRunnerTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = input,
                 ManifestId = manifest.Id,
@@ -172,7 +173,7 @@ public class JobRunnerTrainTests : TestSetup
         );
 
         updatedManifest.Should().NotBeNull();
-        updatedManifest!.LastSuccessfulRun.Should().NotBeNull();
+        updatedManifest.NotNull().LastSuccessfulRun.Should().NotBeNull();
         updatedManifest
             .LastSuccessfulRun.Should()
             .BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(10));
@@ -198,7 +199,7 @@ public class JobRunnerTrainTests : TestSetup
         );
 
         updatedManifest.Should().NotBeNull();
-        updatedManifest!.LastSuccessfulRun.Should().NotBeNull();
+        updatedManifest.NotNull().LastSuccessfulRun.Should().NotBeNull();
         updatedManifest.LastSuccessfulRun.Should().BeOnOrAfter(beforeExecution);
         updatedManifest.LastSuccessfulRun.Should().BeOnOrBefore(afterExecution.AddSeconds(1));
     }
@@ -222,7 +223,7 @@ public class JobRunnerTrainTests : TestSetup
         );
 
         updatedManifest.Should().NotBeNull();
-        updatedManifest!.LastSuccessfulRun.Should().NotBeNull();
+        updatedManifest.NotNull().LastSuccessfulRun.Should().NotBeNull();
     }
 
     #endregion
@@ -264,7 +265,7 @@ public class JobRunnerTrainTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(ISchedulerTestTrain).FullName!,
+                Name = typeof(ISchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = manifest.GetProperties<SchedulerTestInput>(),
                 ManifestId = manifest.Id,
@@ -289,7 +290,7 @@ public class JobRunnerTrainTests : TestSetup
         var metadata = await CreateAndSaveMetadata(
             manifest,
             TrainState.Pending,
-            name: typeof(ISchedulerTestTrain).FullName!
+            name: typeof(ISchedulerTestTrain).FullName.NotNull()
         );
 
         var act = async () =>
@@ -368,7 +369,7 @@ public class JobRunnerTrainTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = name ?? typeof(SchedulerTestTrain).FullName!,
+                Name = name ?? typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = manifest.GetProperties<SchedulerTestInput>(),
                 ManifestId = manifest.Id,

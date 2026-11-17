@@ -23,6 +23,9 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 /// Train NOT carrying [TraxRemote], used only to provide a ForTrain target so a
 /// RoutedSubmitterRegistration is created and the attribute-discovery loop runs.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal sealed class NonRemoteCoverageTrain
     : ServiceTrain<NonRemoteCoverageInput, Unit>,
         INonRemoteCoverageTrain

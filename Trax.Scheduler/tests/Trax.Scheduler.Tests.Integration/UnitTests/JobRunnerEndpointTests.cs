@@ -8,6 +8,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.JobSubmitter;
@@ -108,7 +109,7 @@ public class JobRunnerEndpointTests
         var body = await response
             .Content.ReadFromJsonAsync<RemoteJobResponse>()
             .ConfigureAwait(false);
-        body!.MetadataId.Should().Be(42);
+        body.NotNull().MetadataId.Should().Be(42);
         body.IsError.Should().BeFalse();
         body.ErrorMessage.Should().BeNull();
     }
@@ -134,7 +135,7 @@ public class JobRunnerEndpointTests
         var body = await response
             .Content.ReadFromJsonAsync<RemoteJobResponse>()
             .ConfigureAwait(false);
-        body!.MetadataId.Should().Be(7);
+        body.NotNull().MetadataId.Should().Be(7);
         body.IsError.Should().BeTrue();
         body.ErrorMessage.Should().NotContain("downstream sink unavailable");
         body.StackTrace.Should().BeNull();
@@ -195,7 +196,7 @@ public class JobRunnerEndpointTests
         var body = await response
             .Content.ReadFromJsonAsync<RemoteRunResponse>()
             .ConfigureAwait(false);
-        body!.MetadataId.Should().Be(99);
+        body.NotNull().MetadataId.Should().Be(99);
         body.ExternalId.Should().Be("ext-99");
         body.OutputJson.Should().Be("{\"k\":1}");
         body.IsError.Should().BeFalse();
@@ -223,7 +224,7 @@ public class JobRunnerEndpointTests
         var body = await response
             .Content.ReadFromJsonAsync<RemoteRunResponse>()
             .ConfigureAwait(false);
-        body!.IsError.Should().BeTrue();
+        body.NotNull().IsError.Should().BeTrue();
         body.ErrorMessage.Should().NotContain("downstream slow");
         body.StackTrace.Should().BeNull();
         body.ExceptionType.Should().Be(nameof(TimeoutException));

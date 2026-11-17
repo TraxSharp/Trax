@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -155,7 +156,7 @@ public class LocalWorkerServiceTests : TestSetup
 
         updatedMetadata.Should().NotBeNull();
         // The JobRunnerTrain should have run the train
-        updatedMetadata!.TrainState.Should().NotBe(TrainState.Pending);
+        updatedMetadata.NotNull().TrainState.Should().NotBe(TrainState.Pending);
     }
 
     #endregion
@@ -590,7 +591,7 @@ public class LocalWorkerServiceTests : TestSetup
         DataContext.Reset();
         var remainingJob = await DataContext.BackgroundJobs.FirstOrDefaultAsync(j => j.Id == jobId);
         remainingJob.Should().NotBeNull("recently claimed job should not be reclaimed");
-        remainingJob!.FetchedAt.Should().NotBeNull();
+        remainingJob.NotNull().FetchedAt.Should().NotBeNull();
     }
 
     #endregion
@@ -994,12 +995,15 @@ public class LocalWorkerServiceTests : TestSetup
             .EndTime.Should()
             .NotBeNull("high-priority job should have completed")
             .And.BeBefore(
-                medMeta.EndTime!.Value,
+                medMeta.EndTime.NotNull().Value,
                 "high-priority job should complete before medium"
             );
         medMeta
             .EndTime.Should()
-            .BeBefore(lowMeta.EndTime!.Value, "medium-priority job should complete before low");
+            .BeBefore(
+                lowMeta.EndTime.NotNull().Value,
+                "medium-priority job should complete before low"
+            );
     }
 
     [Test]
@@ -1097,9 +1101,9 @@ public class LocalWorkerServiceTests : TestSetup
 
         m1.EndTime.Should()
             .NotBeNull()
-            .And.BeOnOrBefore(m2.EndTime!.Value, "FIFO: job1 should complete before job2");
+            .And.BeOnOrBefore(m2.EndTime.NotNull().Value, "FIFO: job1 should complete before job2");
         m2.EndTime.Should()
-            .BeOnOrBefore(m3.EndTime!.Value, "FIFO: job2 should complete before job3");
+            .BeOnOrBefore(m3.EndTime.NotNull().Value, "FIFO: job2 should complete before job3");
     }
 
     [Test]
@@ -1193,9 +1197,10 @@ public class LocalWorkerServiceTests : TestSetup
         highMeta.EndTime.Should().NotBeNull("high-priority job should have completed");
         lowMeta.EndTime.Should().NotBeNull("low-priority job should have completed");
         highMeta
-            .EndTime!.Value.Should()
+            .EndTime.NotNull()
+            .Value.Should()
             .BeBefore(
-                lowMeta.EndTime!.Value,
+                lowMeta.EndTime.NotNull().Value,
                 "high-priority job should execute before low-priority despite being created later"
             );
     }
@@ -1209,7 +1214,7 @@ public class LocalWorkerServiceTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "worker-test" },
             }

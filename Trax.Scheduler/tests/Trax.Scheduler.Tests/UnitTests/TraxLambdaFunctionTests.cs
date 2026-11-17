@@ -12,6 +12,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -62,7 +63,7 @@ public class TraxLambdaFunctionTests
         var result = await fn.FunctionHandler(envelope, CreateContext());
 
         result.Should().BeOfType<RemoteJobResponse>();
-        var response = (RemoteJobResponse)result!;
+        var response = (RemoteJobResponse)result.NotNull();
         response.MetadataId.Should().Be(42);
         response.IsError.Should().BeFalse();
         fn.Handler.ExecuteCalls.Should().HaveCount(1);
@@ -82,7 +83,7 @@ public class TraxLambdaFunctionTests
 
         var result = await fn.FunctionHandler(envelope, CreateContext());
 
-        var response = (RemoteJobResponse)result!;
+        var response = (RemoteJobResponse)result.NotNull();
         response.MetadataId.Should().Be(7);
         response.IsError.Should().BeTrue();
         response.ErrorMessage.Should().NotContain("boom");
@@ -121,7 +122,7 @@ public class TraxLambdaFunctionTests
 
         var result = await fn.FunctionHandler(envelope, CreateContext());
 
-        var response = (RemoteRunResponse)result!;
+        var response = (RemoteRunResponse)result.NotNull();
         response.MetadataId.Should().Be(99);
         fn.Handler.RunCalls.Should().HaveCount(1);
         fn.Handler.RunCalls[0].TrainName.Should().Be("My.Train");
@@ -749,7 +750,7 @@ public class TraxLambdaFunctionTests
         var payload = await response.Content.ReadAsStringAsync();
         var parsed = JsonSerializer.Deserialize<RemoteJobResponse>(payload, JsonOptions);
         parsed.Should().NotBeNull();
-        parsed!.MetadataId.Should().Be(11);
+        parsed.NotNull().MetadataId.Should().Be(11);
         parsed.IsError.Should().BeFalse();
     }
 
@@ -770,7 +771,7 @@ public class TraxLambdaFunctionTests
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var payload = await response.Content.ReadAsStringAsync();
         var parsed = JsonSerializer.Deserialize<RemoteRunResponse>(payload, JsonOptions);
-        parsed!.MetadataId.Should().Be(22);
+        parsed.NotNull().MetadataId.Should().Be(22);
     }
 
     [Test]
@@ -788,7 +789,7 @@ public class TraxLambdaFunctionTests
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var payload = await response.Content.ReadAsStringAsync();
         var parsed = JsonSerializer.Deserialize<RemoteJobResponse>(payload, JsonOptions);
-        parsed!.IsError.Should().BeTrue();
+        parsed.NotNull().IsError.Should().BeTrue();
         parsed.ErrorMessage.Should().NotContain("inner-fail");
     }
 
@@ -835,7 +836,9 @@ public class TraxLambdaFunctionTests
         );
 
         var response = (RemoteJobResponse)
-            (await fn.FunctionHandler(envelope, CreateContext(TimeSpan.FromMilliseconds(100))))!;
+            (
+                await fn.FunctionHandler(envelope, CreateContext(TimeSpan.FromMilliseconds(100)))
+            ).NotNull();
 
         response.IsError.Should().BeTrue();
         (await fn.RunStateAsync(metadataId))

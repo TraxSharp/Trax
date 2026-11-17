@@ -48,11 +48,11 @@ public class OperationsServiceRunTests
     private ServiceProvider? _provider;
 
     private ServiceProvider Provider => _provider.NotNull();
-    private IJobSubmitter _submitter = null!;
-    private CapturingLogger _logger = null!;
-    private OperationsService _service = null!;
+    private IJobSubmitter? _submitter;
+    private CapturingLogger? _logger;
+    private OperationsService? _service;
     private ITrainAuthorizationService? _authorization;
-    private ITrainExecutionService _execution = null!;
+    private ITrainExecutionService? _execution;
 
     public record ProbeInput
     {
@@ -70,6 +70,7 @@ public class OperationsServiceRunTests
     {
         _submitter = Substitute.For<IJobSubmitter>();
         _submitter
+            .NotNull()
             .EnqueueAsync(Arg.Any<long>(), Arg.Any<object>(), Arg.Any<CancellationToken>())
             .Returns("job-1");
         _authorization = null;
@@ -92,7 +93,7 @@ public class OperationsServiceRunTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory()));
-        services.AddSingleton(_submitter);
+        services.AddSingleton(_submitter.NotNull());
         services.AddSingleton<ITrustedExecutionScope, TrustedExecutionScope>();
         var mediatorConfiguration = new MediatorConfiguration();
         services.AddSingleton(mediatorConfiguration);
@@ -122,6 +123,7 @@ public class OperationsServiceRunTests
         );
         _execution = Substitute.For<ITrainExecutionService>();
         _execution
+            .NotNull()
             .PrepareAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(call =>
                 mediator.PrepareAsync(
@@ -135,9 +137,9 @@ public class OperationsServiceRunTests
             discovery,
             Provider.GetRequiredService<IDataContextProviderFactory>(),
             new SchedulerConfiguration(),
-            _execution,
+            _execution.NotNull(),
             Provider,
-            logger: _logger
+            logger: _logger.NotNull()
         );
     }
 
@@ -149,10 +151,10 @@ public class OperationsServiceRunTests
             InputType = typeof(ProbeInput),
             OutputType = typeof(object),
             Lifetime = ServiceLifetime.Scoped,
-            ServiceTypeName = serviceType.FullName!,
-            ImplementationTypeName = serviceType.FullName!,
-            InputTypeName = typeof(ProbeInput).FullName!,
-            OutputTypeName = typeof(object).FullName!,
+            ServiceTypeName = serviceType.FullName.NotNull(),
+            ImplementationTypeName = serviceType.FullName.NotNull(),
+            InputTypeName = typeof(ProbeInput).FullName.NotNull(),
+            OutputTypeName = typeof(object).FullName.NotNull(),
             RequiredPolicies = [],
             RequiredRoles = [],
             HasAuthorizeAttribute = guarded,
@@ -164,7 +166,7 @@ public class OperationsServiceRunTests
         };
 
     private Task<OperationResult> Run(Type train, string? json, CancellationToken ct = default) =>
-        _service.RunTrainAsync(new RunTrainInput(train.FullName!, json), ct);
+        _service.NotNull().RunTrainAsync(new RunTrainInput(train.FullName.NotNull(), json), ct);
 
     private async Task<List<Trax.Effect.Models.Metadata.Metadata>> Runs()
     {
@@ -179,6 +181,7 @@ public class OperationsServiceRunTests
     {
         object? submitted = null;
         _submitter
+            .NotNull()
             .EnqueueAsync(
                 Arg.Any<long>(),
                 Arg.Do<object>(input => submitted = input),
@@ -195,6 +198,7 @@ public class OperationsServiceRunTests
         run.TrainState.Should().Be(TrainState.Pending);
         submitted.Should().BeEquivalentTo(new ProbeInput { CustomerId = 7 });
         await _submitter
+            .NotNull()
             .Received(1)
             .EnqueueAsync(run.Id, Arg.Any<object>(), Arg.Any<CancellationToken>());
     }
@@ -206,6 +210,7 @@ public class OperationsServiceRunTests
 
         result.Success.Should().BeTrue(result.Message);
         await _submitter
+            .NotNull()
             .Received(1)
             .EnqueueAsync(
                 Arg.Any<long>(),
@@ -221,6 +226,7 @@ public class OperationsServiceRunTests
     {
         object? submitted = null;
         _submitter
+            .NotNull()
             .EnqueueAsync(
                 Arg.Any<long>(),
                 Arg.Do<object>(input => submitted = input),
@@ -253,7 +259,7 @@ public class OperationsServiceRunTests
             .BeFalse("an ambiguous input is refused, never resolved to its last value (docs/0023)");
         result.Message.Should().StartWith("Invalid InputJson");
         (await Runs()).Should().BeEmpty();
-        _submitter.ReceivedCalls().Should().BeEmpty();
+        _submitter.NotNull().ReceivedCalls().Should().BeEmpty();
     }
 
     [Test]
@@ -262,6 +268,7 @@ public class OperationsServiceRunTests
         using var cts = new CancellationTokenSource();
         var submitCancelled = true;
         _submitter
+            .NotNull()
             .EnqueueAsync(Arg.Any<long>(), Arg.Any<object>(), Arg.Any<CancellationToken>())
             .Returns(async call =>
             {
@@ -289,13 +296,14 @@ public class OperationsServiceRunTests
         var act = async () => await Run(typeof(IProbeTrain), "{}", cts.Token).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
-        _submitter.ReceivedCalls().Should().BeEmpty();
+        _submitter.NotNull().ReceivedCalls().Should().BeEmpty();
     }
 
     [Test]
     public async Task A_submit_that_fails_after_a_runner_started_the_run_is_a_success()
     {
         _submitter
+            .NotNull()
             .EnqueueAsync(Arg.Any<long>(), Arg.Any<object>(), Arg.Any<CancellationToken>())
             .Returns<Task<string>>(async call =>
             {
@@ -319,7 +327,7 @@ public class OperationsServiceRunTests
         var run = (await Runs()).Should().ContainSingle().Subject;
         result.Id.Should().Be(run.Id);
         run.TrainState.Should().Be(TrainState.InProgress, "the runner owns its outcome");
-        _logger.Errors.Should().BeEmpty();
+        _logger.NotNull().Errors.Should().BeEmpty();
     }
 
     [Test]
@@ -327,6 +335,7 @@ public class OperationsServiceRunTests
     {
         var failure = new InvalidOperationException("the worker queue is unreachable");
         _submitter
+            .NotNull()
             .EnqueueAsync(Arg.Any<long>(), Arg.Any<object>(), Arg.Any<CancellationToken>())
             .Returns<Task<string>>(_ => throw failure);
 
@@ -345,7 +354,7 @@ public class OperationsServiceRunTests
             .Be(TrainState.Failed, "no job exists to move it out of Pending, so it is failed now");
         run.EndTime.Should().NotBeNull();
         run.FailureReason.Should().Contain("the worker queue is unreachable");
-        _logger.Errors.Should().ContainSingle().Which.Should().BeSameAs(failure);
+        _logger.NotNull().Errors.Should().ContainSingle().Which.Should().BeSameAs(failure);
     }
 
     [Test]
@@ -356,7 +365,7 @@ public class OperationsServiceRunTests
         result.Success.Should().BeFalse();
         result.Message.Should().StartWith("Invalid InputJson");
         (await Runs()).Should().BeEmpty();
-        _submitter.ReceivedCalls().Should().BeEmpty();
+        _submitter.NotNull().ReceivedCalls().Should().BeEmpty();
     }
 
     [Test]
@@ -372,10 +381,9 @@ public class OperationsServiceRunTests
     [Test]
     public async Task An_unknown_train_is_a_failed_result()
     {
-        var result = await _service.RunTrainAsync(
-            new RunTrainInput("No.Such.ITrain", "{}"),
-            CancellationToken.None
-        );
+        var result = await _service
+            .NotNull()
+            .RunTrainAsync(new RunTrainInput("No.Such.ITrain", "{}"), CancellationToken.None);
 
         result.Success.Should().BeFalse();
         result.Message.Should().Contain("Unknown train");
@@ -385,10 +393,9 @@ public class OperationsServiceRunTests
     [Test]
     public async Task A_missing_train_name_is_a_failed_result()
     {
-        var result = await _service.RunTrainAsync(
-            new RunTrainInput(" ", "{}"),
-            CancellationToken.None
-        );
+        var result = await _service
+            .NotNull()
+            .RunTrainAsync(new RunTrainInput(" ", "{}"), CancellationToken.None);
 
         result.Success.Should().BeFalse();
         result.Message.Should().Be("TrainName is required.");
@@ -403,7 +410,7 @@ public class OperationsServiceRunTests
 
         result.Success.Should().BeFalse();
         (await Runs()).Should().BeEmpty();
-        _submitter.ReceivedCalls().Should().BeEmpty();
+        _submitter.NotNull().ReceivedCalls().Should().BeEmpty();
     }
 
     [Test]
@@ -424,7 +431,7 @@ public class OperationsServiceRunTests
             )
             .ConfigureAwait(false);
         (await Runs().ConfigureAwait(false)).Should().BeEmpty();
-        _submitter.ReceivedCalls().Should().BeEmpty();
+        _submitter.NotNull().ReceivedCalls().Should().BeEmpty();
     }
 
     [Test]
@@ -448,17 +455,23 @@ public class OperationsServiceRunTests
         result.Success.Should().BeFalse("docs/0023: a property given twice is refused");
         result.Message.Should().StartWith("Invalid InputJson");
         await _execution
+            .NotNull()
             .Received(1)
-            .PrepareAsync(typeof(IProbeTrain).FullName!, json, Arg.Any<CancellationToken>());
+            .PrepareAsync(
+                typeof(IProbeTrain).FullName.NotNull(),
+                json,
+                Arg.Any<CancellationToken>()
+            );
     }
 
     [Test]
     public async Task A_train_the_mediator_cannot_find_is_an_unknown_train()
     {
         _execution
+            .NotNull()
             .PrepareAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns<Task<PreparedTrain>>(_ =>
-                throw new TrainNotFoundException(typeof(IProbeTrain).FullName!)
+                throw new TrainNotFoundException(typeof(IProbeTrain).FullName.NotNull())
             );
 
         var result = await Run(typeof(IProbeTrain), "{}");
@@ -488,7 +501,10 @@ public class OperationsServiceRunTests
         await BuildAsync(services =>
             {
                 var routing = new JobSubmitterRoutingConfiguration();
-                routing.AddRoute(typeof(IRoutedTrain).FullName!, typeof(RecordingSubmitter));
+                routing.AddRoute(
+                    typeof(IRoutedTrain).FullName.NotNull(),
+                    typeof(RecordingSubmitter)
+                );
                 services.AddSingleton(routing);
                 services.AddSingleton(routed);
             })
@@ -497,8 +513,9 @@ public class OperationsServiceRunTests
         var result = await Run(typeof(IRoutedTrain), "{}").ConfigureAwait(false);
 
         result.Success.Should().BeTrue(result.Message);
-        routed.Submitted.Should().ContainSingle().Which.Should().Be(result.Id!.Value);
+        routed.Submitted.Should().ContainSingle().Which.Should().Be(result.Id.NotNull().Value);
         _submitter
+            .NotNull()
             .ReceivedCalls()
             .Should()
             .BeEmpty("the job dispatcher would send this train to its routed submitter too");
@@ -517,7 +534,7 @@ public class OperationsServiceRunTests
         var act = async () =>
             await service
                 .RunTrainAsync(
-                    new RunTrainInput(typeof(IProbeTrain).FullName!),
+                    new RunTrainInput(typeof(IProbeTrain).FullName.NotNull()),
                     CancellationToken.None
                 )
                 .ConfigureAwait(false);
@@ -527,7 +544,7 @@ public class OperationsServiceRunTests
 
     public sealed class RecordingSubmitter : IJobSubmitter
     {
-        public List<long> Submitted { get; } = [];
+        public IList<long> Submitted { get; } = [];
 
         public Task<string> EnqueueAsync(long metadataId) => Record(metadataId);
 

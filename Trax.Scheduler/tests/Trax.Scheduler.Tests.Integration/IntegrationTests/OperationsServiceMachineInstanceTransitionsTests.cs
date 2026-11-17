@@ -2,6 +2,7 @@ using System.Reflection;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.SnapshotDraft;
 using Trax.Effect.Models.SnapshotTransition;
@@ -21,8 +22,8 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class OperationsServiceMachineInstanceTransitionsTests : TestSetup
 {
-    private IOperationsService _operations = null!;
-    private string _machine = null!;
+    private IOperationsService? _operations;
+    private string? _machine;
 
     public override async Task TestSetUp()
     {
@@ -34,7 +35,7 @@ public class OperationsServiceMachineInstanceTransitionsTests : TestSetup
     [TearDown]
     public async Task DeleteDrafts() =>
         await DataContext
-            .SnapshotDrafts.Where(x => x.Machine.StartsWith(_machine))
+            .SnapshotDrafts.Where(x => x.Machine.StartsWith(_machine.NotNull()))
             .ExecuteDeleteAsync();
 
     private async Task<SnapshotDraft> Seed(
@@ -49,7 +50,7 @@ public class OperationsServiceMachineInstanceTransitionsTests : TestSetup
             Id = Guid.NewGuid(),
             OwnerKind = owner,
             UserKey = owner == SnapshotOwnerKind.User ? $"user-{Guid.NewGuid():N}" : null,
-            Machine = machine ?? _machine,
+            Machine = machine ?? _machine.NotNull(),
             Version = 1,
             State = state,
             Context = """{"secret":"never shown"}""",
@@ -119,18 +120,22 @@ public class OperationsServiceMachineInstanceTransitionsTests : TestSetup
             Row(5, SnapshotTransitionKind.Command, "Archive", "Expired", "Done", t0.AddMinutes(9))
         );
 
-        var first = await _operations.GetMachineInstanceTransitionsAsync(
-            KeyOf(instance),
-            beforeRevision: null,
-            take: 2,
-            CancellationToken.None
-        );
-        var second = await _operations.GetMachineInstanceTransitionsAsync(
-            KeyOf(instance),
-            first!.NextCursor,
-            take: 2,
-            CancellationToken.None
-        );
+        var first = await _operations
+            .NotNull()
+            .GetMachineInstanceTransitionsAsync(
+                KeyOf(instance),
+                beforeRevision: null,
+                take: 2,
+                CancellationToken.None
+            );
+        var second = await _operations
+            .NotNull()
+            .GetMachineInstanceTransitionsAsync(
+                KeyOf(instance),
+                first.NotNull().NextCursor,
+                take: 2,
+                CancellationToken.None
+            );
 
         first.Items.Select(t => t.Revision).Should().Equal(5, 3);
         first.NextCursor.Should().Be(3, "another page follows");
@@ -143,7 +148,7 @@ public class OperationsServiceMachineInstanceTransitionsTests : TestSetup
         first.Items[1].Trigger.Should().Be("Review.after");
         first.Items[1].FromState.Should().Be("Review");
         first.Items[1].ToState.Should().Be("Expired");
-        second!.Items.Select(t => t.Revision).Should().Equal(2, 1);
+        second.NotNull().Items.Select(t => t.Revision).Should().Equal(2, 1);
         second.NextCursor.Should().BeNull("the oldest is on this page");
         second.Items[1].PreviousAt.Should().BeNull("nothing came before the start");
     }
@@ -158,7 +163,7 @@ public class OperationsServiceMachineInstanceTransitionsTests : TestSetup
         var child = await Seed(
             SnapshotOwnerKind.System,
             "Packing",
-            machine: _machine + "-child",
+            machine: _machine.NotNull() + "-child",
             spawnedBy: spawned
         );
         var at = DateTimeOffset.UtcNow;
@@ -184,19 +189,24 @@ public class OperationsServiceMachineInstanceTransitionsTests : TestSetup
 
         try
         {
-            var page = await _operations.GetMachineInstanceTransitionsAsync(
-                KeyOf(instance),
-                beforeRevision: null,
-                25,
-                CancellationToken.None
-            );
-            var byRevision = page!.Items.ToDictionary(t => t.Revision);
+            var page = await _operations
+                .NotNull()
+                .GetMachineInstanceTransitionsAsync(
+                    KeyOf(instance),
+                    beforeRevision: null,
+                    25,
+                    CancellationToken.None
+                );
+            var byRevision = page.NotNull().Items.ToDictionary(t => t.Revision);
 
-            byRevision[1].StartedRun!.ExecutionId.Should().NotBeNull();
-            byRevision[1].StartedRun!.TrainState.Should().Be(TrainState.Completed);
-            byRevision[2].StartedRun!.ExecutionId.Should().BeNull("the run is still queued");
-            byRevision[2].StartedRun!.TrainState.Should().Be(TrainState.Pending);
-            byRevision[2].StartedRun!.WorkQueueEntryId.Should().NotBeNull();
+            byRevision[1].StartedRun.NotNull().ExecutionId.Should().NotBeNull();
+            byRevision[1].StartedRun.NotNull().TrainState.Should().Be(TrainState.Completed);
+            byRevision[2]
+                .StartedRun.NotNull()
+                .ExecutionId.Should()
+                .BeNull("the run is still queued");
+            byRevision[2].StartedRun.NotNull().TrainState.Should().Be(TrainState.Pending);
+            byRevision[2].StartedRun.NotNull().WorkQueueEntryId.Should().NotBeNull();
             byRevision[3].StartedRun.Should().BeNull();
             byRevision[3]
                 .StartedChild.Should()
@@ -245,27 +255,39 @@ public class OperationsServiceMachineInstanceTransitionsTests : TestSetup
             Row(2, SnapshotTransitionKind.Save, trigger: null, "Locked", "Locked", at)
         );
 
-        var page = await _operations.GetMachineInstanceTransitionsAsync(
-            KeyOf(mine),
-            beforeRevision: null,
-            25,
-            CancellationToken.None
-        );
-        var noRow = () =>
-            _operations.GetMachineInstanceTransitionsAsync(
-                new MachineInstanceKey(_machine, SnapshotOwnerKind.User, id),
+        var page = await _operations
+            .NotNull()
+            .GetMachineInstanceTransitionsAsync(
+                KeyOf(mine),
                 beforeRevision: null,
                 25,
                 CancellationToken.None
             );
-        var missing = await _operations.GetMachineInstanceTransitionsAsync(
-            new MachineInstanceKey(_machine, SnapshotOwnerKind.System, Guid.NewGuid()),
-            beforeRevision: null,
-            25,
-            CancellationToken.None
-        );
+        var noRow = () =>
+            _operations
+                .NotNull()
+                .GetMachineInstanceTransitionsAsync(
+                    new MachineInstanceKey(_machine.NotNull(), SnapshotOwnerKind.User, id),
+                    beforeRevision: null,
+                    25,
+                    CancellationToken.None
+                );
+        var missing = await _operations
+            .NotNull()
+            .GetMachineInstanceTransitionsAsync(
+                new MachineInstanceKey(
+                    _machine.NotNull(),
+                    SnapshotOwnerKind.System,
+                    Guid.NewGuid()
+                ),
+                beforeRevision: null,
+                25,
+                CancellationToken.None
+            );
 
-        page!.Items.Should().ContainSingle("the history is the row's, never another user's");
+        page.NotNull()
+            .Items.Should()
+            .ContainSingle("the history is the row's, never another user's");
         page.Items[0].Actor.Should().Be(SnapshotTransitionActor.Owner);
         await noRow
             .Should()

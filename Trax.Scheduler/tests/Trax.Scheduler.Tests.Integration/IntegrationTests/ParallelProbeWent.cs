@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Monad;
 using Trax.Effect.Data.Extensions;
@@ -40,7 +41,7 @@ public class ParallelProbeWent(string way) : EffectJunction<ParallelProbeInput, 
     public override Task<Unit> Run(ParallelProbeInput input)
     {
         ParallelProbe.Taken.Enqueue(
-            (Metadata!.TrainMetadataId, ChainGraph.CurrentBranchPath ?? "", way)
+            (Metadata.NotNull().TrainMetadataId, ChainGraph.CurrentBranchPath ?? "", way)
         );
         return Task.FromResult(Unit.Default);
     }

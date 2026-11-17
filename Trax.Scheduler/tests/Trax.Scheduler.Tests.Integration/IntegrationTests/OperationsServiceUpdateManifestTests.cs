@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
@@ -23,7 +24,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class OperationsServiceUpdateManifestTests : TestSetup
 {
-    private IOperationsService _operations = null!;
+    private IOperationsService? _operations;
 
     [SetUp]
     public void GetService() =>
@@ -67,11 +68,13 @@ public class OperationsServiceUpdateManifestTests : TestSetup
     {
         var manifest = await SeedCronManifest();
 
-        var result = await _operations.UpdateManifestAsync(
-            manifest.Id,
-            new ManifestUpdate(MaxRetries: 9, CronExpression: cron),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .UpdateManifestAsync(
+                manifest.Id,
+                new ManifestUpdate(MaxRetries: 9, CronExpression: cron),
+                CancellationToken.None
+            );
 
         result.Success.Should().BeFalse();
         result.Message.Should().Contain(reason);
@@ -92,15 +95,17 @@ public class OperationsServiceUpdateManifestTests : TestSetup
     {
         var manifest = await SeedCronManifest();
 
-        var result = await _operations.UpdateManifestAsync(
-            manifest.Id,
-            new ManifestUpdate(
-                MaxRetries: maxRetries,
-                Priority: priority,
-                TimeoutSeconds: timeoutSeconds
-            ),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .UpdateManifestAsync(
+                manifest.Id,
+                new ManifestUpdate(
+                    MaxRetries: maxRetries,
+                    Priority: priority,
+                    TimeoutSeconds: timeoutSeconds
+                ),
+                CancellationToken.None
+            );
 
         result.Success.Should().BeFalse();
         result.Message.Should().Contain(field);
@@ -111,11 +116,13 @@ public class OperationsServiceUpdateManifestTests : TestSetup
     {
         var manifest = await SeedCronManifest();
 
-        var result = await _operations.UpdateManifestAsync(
-            manifest.Id,
-            new ManifestUpdate(ScheduleType: ScheduleType.Dependent),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .UpdateManifestAsync(
+                manifest.Id,
+                new ManifestUpdate(ScheduleType: ScheduleType.Dependent),
+                CancellationToken.None
+            );
 
         result.Success.Should().BeFalse();
         result.Message.Should().Contain("parent manifest");
@@ -126,17 +133,19 @@ public class OperationsServiceUpdateManifestTests : TestSetup
     {
         var manifest = await SeedCronManifest();
 
-        var result = await _operations.UpdateManifestAsync(
-            manifest.Id,
-            new ManifestUpdate(
-                IsEnabled: false,
-                MaxRetries: 5,
-                Priority: 7,
-                TimeoutSeconds: 30,
-                CronExpression: "*/15 * * * *"
-            ),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .UpdateManifestAsync(
+                manifest.Id,
+                new ManifestUpdate(
+                    IsEnabled: false,
+                    MaxRetries: 5,
+                    Priority: 7,
+                    TimeoutSeconds: 30,
+                    CronExpression: "*/15 * * * *"
+                ),
+                CancellationToken.None
+            );
 
         result.Success.Should().BeTrue(result.Message);
         result.Id.Should().Be(manifest.Id);
@@ -153,11 +162,13 @@ public class OperationsServiceUpdateManifestTests : TestSetup
     {
         var manifest = await SeedCronManifest("99 * * * *");
 
-        var result = await _operations.UpdateManifestAsync(
-            manifest.Id,
-            new ManifestUpdate(IsEnabled: false),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .UpdateManifestAsync(
+                manifest.Id,
+                new ManifestUpdate(IsEnabled: false),
+                CancellationToken.None
+            );
 
         result.Success.Should().BeTrue(result.Message);
         (await Reload(manifest.Id)).IsEnabled.Should().BeFalse();
@@ -166,11 +177,13 @@ public class OperationsServiceUpdateManifestTests : TestSetup
     [Test]
     public async Task An_unknown_manifest_is_refused()
     {
-        var result = await _operations.UpdateManifestAsync(
-            long.MaxValue,
-            new ManifestUpdate(IsEnabled: false),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .UpdateManifestAsync(
+                long.MaxValue,
+                new ManifestUpdate(IsEnabled: false),
+                CancellationToken.None
+            );
 
         result.Success.Should().BeFalse();
         result.Message.Should().Contain("not found");

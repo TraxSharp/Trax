@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -22,15 +23,31 @@ namespace Trax.Scheduler.Tests.Integration.Fixtures;
 [TestFixture]
 public abstract class TestSetup
 {
-    private ServiceProvider ServiceProvider { get; set; } = null!;
+    private ServiceProvider ServiceProvider
+    {
+        get => field.NotNull(nameof(ServiceProvider));
+        set;
+    }
 
     public AsyncServiceScope Scope { get; private set; }
 
-    public ITrainBus TrainBus { get; private set; } = null!;
+    public ITrainBus TrainBus
+    {
+        get => field.NotNull(nameof(TrainBus));
+        private set;
+    }
 
-    public IJobRunnerTrain JobRunner { get; private set; } = null!;
+    public IJobRunnerTrain JobRunner
+    {
+        get => field.NotNull(nameof(JobRunner));
+        private set;
+    }
 
-    public IDataContext DataContext { get; private set; } = null!;
+    public IDataContext DataContext
+    {
+        get => field.NotNull(nameof(DataContext));
+        private set;
+    }
 
     [OneTimeSetUp]
     public async Task RunBeforeAnyTests()

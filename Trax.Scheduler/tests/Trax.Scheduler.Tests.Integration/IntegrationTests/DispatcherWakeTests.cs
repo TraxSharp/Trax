@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -53,22 +54,22 @@ public class DispatcherWakeTests
     private const string ListenerApplicationName = "trax_queued_work_listener";
     private const string Channel = "trax_queued_work";
 
-    private ServiceProvider _dispatcherHost = null!;
+    private ServiceProvider? _dispatcherHost;
     private List<IHostedService> _running = [];
-    private ServiceProvider _apiHost = null!;
+    private ServiceProvider? _apiHost;
     private readonly SignalCounter _cycles = new();
     private readonly SignalCounter _subscriptions = new();
     private readonly SignalCounter _notices = new();
 
     /// <summary>The dispatcher host's listener, which the host owns and disposes.</summary>
     private QueuedWorkListenerService Listener =>
-        _dispatcherHost.GetRequiredService<QueuedWorkListenerService>();
+        _dispatcherHost.NotNull().GetRequiredService<QueuedWorkListenerService>();
 
     [SetUp]
     public async Task SetUp()
     {
         _apiHost = BuildApiHost();
-        var scope = _apiHost.CreateAsyncScope();
+        var scope = _apiHost.NotNull().CreateAsyncScope();
         await using (scope.ConfigureAwait(false))
             await TestSetup.CleanupDatabase(
                 scope.ServiceProvider.GetRequiredService<IDataContext>()
@@ -82,6 +83,7 @@ public class DispatcherWakeTests
         // scheduler host (startup validation over every train in this assembly, the manifest
         // manager) has nothing to do with the wake.
         _running = _dispatcherHost
+            .NotNull()
             .GetServices<IHostedService>()
             .Where(s => s is JobDispatcherPollingService or QueuedWorkListenerService)
             .ToList();
@@ -100,8 +102,10 @@ public class DispatcherWakeTests
     {
         foreach (var service in _running)
             await service.StopAsync(CancellationToken.None);
-        await _dispatcherHost.DisposeAsync();
-        await _apiHost.DisposeAsync();
+        if (_dispatcherHost is not null)
+            await _dispatcherHost.DisposeAsync();
+        if (_apiHost is not null)
+            await _apiHost.DisposeAsync();
         NpgsqlConnection.ClearAllPools();
     }
 
@@ -140,7 +144,7 @@ public class DispatcherWakeTests
 
         var noticesBefore = Listener.Notices;
 
-        var scope = _apiHost.CreateAsyncScope();
+        var scope = _apiHost.NotNull().CreateAsyncScope();
         await using (scope.ConfigureAwait(false))
         {
             var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
@@ -149,7 +153,7 @@ public class DispatcherWakeTests
                 WorkQueue.Create(
                     new CreateWorkQueue
                     {
-                        TrainName = typeof(ISchedulerTestTrain).FullName!,
+                        TrainName = typeof(ISchedulerTestTrain).FullName.NotNull(),
                         Input = "{}",
                         InputTypeName = typeof(SchedulerTestInput).FullName,
                     }
@@ -186,7 +190,7 @@ public class DispatcherWakeTests
             );
             await using var terminateDisposal = terminate.ConfigureAwait(false);
             terminate.Parameters.AddWithValue("name", ListenerApplicationName);
-            var terminated = (long)(await terminate.ExecuteScalarAsync())!;
+            var terminated = (long)(await terminate.ExecuteScalarAsync()).NotNull();
             terminated.Should().Be(1, "the dispatcher host holds one listening session");
         }
 
@@ -202,11 +206,15 @@ public class DispatcherWakeTests
 
     private async Task<long> QueueFromApiHostAsync()
     {
-        var scope = _apiHost.CreateAsyncScope();
+        var scope = _apiHost.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
         var result = await execution
-            .QueueAsync(typeof(ISchedulerTestTrain).FullName!, "{}", ct: CancellationToken.None)
+            .QueueAsync(
+                typeof(ISchedulerTestTrain).FullName.NotNull(),
+                "{}",
+                ct: CancellationToken.None
+            )
             .ConfigureAwait(false);
         return result.WorkQueueId;
     }
@@ -249,13 +257,17 @@ public class DispatcherWakeTests
 
     private async Task<bool> IsDispatchedAsync(long workQueueId)
     {
-        var scope = _apiHost.CreateAsyncScope();
+        var scope = _apiHost.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
         var entry = await dataContext
             .WorkQueues.AsNoTracking()
             .Where(w => w.Id == workQueueId)
-            .Select(w => new { w.Status, RunState = (TrainState?)w.Metadata!.TrainState })
+            .Select(w => new
+            {
+                w.Status,
+                RunState = w.Metadata != null ? (TrainState?)w.Metadata.TrainState : null,
+            })
             .SingleAsync()
             .ConfigureAwait(false);
         return entry.Status == WorkQueueStatus.Dispatched
@@ -316,7 +328,7 @@ public class DispatcherWakeTests
             );
 
         var dispatcher = services.Last(d => d.ServiceType == typeof(IJobDispatcherTrain));
-        var create = dispatcher.ImplementationFactory!;
+        var create = dispatcher.ImplementationFactory.NotNull();
         services.Remove(dispatcher);
         services.AddScoped<IJobDispatcherTrain>(sp => new CountedDispatcher(
             (IJobDispatcherTrain)create(sp),

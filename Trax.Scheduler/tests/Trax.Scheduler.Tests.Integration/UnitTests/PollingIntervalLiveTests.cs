@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.DeadLetterCleanupPollingService;
@@ -130,7 +131,7 @@ public class PollingIntervalLiveTests
         FakeDeadLetterCleanupTrain? train = null;
         train = new FakeDeadLetterCleanupTrain(() =>
         {
-            if (train!.Runs == 1)
+            if (train.NotNull().Runs == 1)
                 first.TrySetResult();
             else
                 second.TrySetResult();

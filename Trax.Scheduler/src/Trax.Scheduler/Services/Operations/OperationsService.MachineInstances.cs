@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Utils;
@@ -753,7 +754,7 @@ public partial class OperationsService
                 .SnapshotDrafts.AsNoTracking()
                 .Where(x => waiting.Contains(x.RowId) && x.InvokeToken != null)
                 .Select(x => new { x.RowId, x.InvokeToken })
-                .ToDictionaryAsync(x => x.RowId, x => x.InvokeToken!, ct)
+                .ToDictionaryAsync(x => x.RowId, x => x.InvokeToken.NotNull(), ct)
                 .ConfigureAwait(false);
             var held = tokens.Values.Distinct(StringComparer.Ordinal).ToList();
             if (held.Count > 0)
