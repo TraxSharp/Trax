@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Trax.Effect.Attributes;
+using Trax.Effect.Configuration.ClientExport;
 using Trax.Effect.Configuration.Deploy;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Configuration.TraxEffectBuilder;
@@ -68,17 +69,25 @@ public static class ServiceExtensions
     public static IServiceCollection AddTrax(
         this IServiceCollection services,
         Action<TraxBuilder> configure
-    ) => services.AddTrax(configure, TraxDeployExport.Requested, TraxMigrate.Requested);
+    ) =>
+        services.AddTrax(
+            configure,
+            TraxDeployExport.Requested,
+            TraxMigrate.Requested,
+            TraxClientExport.Requested
+        );
 
     /// <param name="services">The service collection.</param>
     /// <param name="configure">Configures the Trax builder.</param>
     /// <param name="exportsDeploy">Whether the process was started with <c>--trax-export-deploy</c>.</param>
     /// <param name="migrates">Whether the process was started with <c>--trax-migrate</c>.</param>
+    /// <param name="exportsClient">Whether the process was started with <c>--trax-export-client</c>.</param>
     internal static IServiceCollection AddTrax(
         this IServiceCollection services,
         Action<TraxBuilder> configure,
         bool exportsDeploy,
-        bool migrates
+        bool migrates,
+        bool exportsClient
     )
     {
         var registry = new EffectRegistry();
@@ -106,8 +115,8 @@ public static class ServiceExtensions
             builder.EffectConfiguration
             ?? new Trax.Effect.Configuration.TraxEffectConfiguration.TraxEffectConfiguration();
 
-        // A process started to export its deploy manifest or to migrate exits through RunTraxAsync. The gates that
-        // refuse to serve otherwise go in whatever its data provider, including none.
+        // A process started to export its deploy or client manifest, or to migrate, exits through RunTraxAsync. The
+        // gates that refuse to serve otherwise go in whatever its data provider, including none.
         if (exportsDeploy)
             services.TryAddEnumerable(
                 ServiceDescriptor.Singleton<IHostedService, DeployExportServeGate>()
@@ -115,6 +124,10 @@ public static class ServiceExtensions
         if (migrates)
             services.TryAddEnumerable(
                 ServiceDescriptor.Singleton<IHostedService, MigrateServeGate>()
+            );
+        if (exportsClient)
+            services.TryAddEnumerable(
+                ServiceDescriptor.Singleton<IHostedService, ClientExportServeGate>()
             );
 
         // Marker so AddTraxGraphQL() can verify AddTrax() was called

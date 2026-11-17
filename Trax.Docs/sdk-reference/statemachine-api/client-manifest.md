@@ -49,9 +49,9 @@ Three namespaces: `ClientManifest` and its records are in `Trax.StateMachine`; `
   writes, so a configuration production refuses fails the export too. No other hosted service starts: nothing
   listens, sweeps, registers documents or opens a database. A host that seeds data at startup checks
   `TraxClientExport.Requested` first.
-- **Started to export, never serves.** A host started with `--trax-export-client` whose provider skipped its
-  migration refuses to start if it serves anyway, because it calls `app.Run()` rather than `RunTraxAsync`: its
-  database was not migrated. The refusal names `RunTraxAsync`.
+- **Started to export, never serves.** A host started with `--trax-export-client` refuses to start if it serves
+  anyway, because it calls `app.Run()` rather than `RunTraxAsync`, whatever its data provider, including none: an
+  exporting process skips its migration. The refusal names `RunTraxAsync`.
 - **Only what a client sends.** The manifest lists the documents the host generates (each exposed machine's, and
   `runProgress`'s), never one under `operations`, and each exposed train's and query model's field and arguments.
   `Types` holds the SDL of the types those documents reach, and every type an exposed train's or query model's

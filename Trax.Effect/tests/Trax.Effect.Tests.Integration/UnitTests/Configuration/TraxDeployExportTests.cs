@@ -67,7 +67,8 @@ public class TraxDeployExportTests
         services.AddTrax(
             trax => trax.AddEffects(effects => effects.UseInMemory()),
             exportsDeploy: true,
-            migrates: false
+            migrates: false,
+            exportsClient: false
         );
 
         services
@@ -82,7 +83,12 @@ public class TraxDeployExportTests
     public void An_exporting_host_with_no_data_provider_refuses_to_serve()
     {
         var services = new ServiceCollection();
-        services.AddTrax(trax => trax.AddEffects(), exportsDeploy: true, migrates: false);
+        services.AddTrax(
+            trax => trax.AddEffects(),
+            exportsDeploy: true,
+            migrates: false,
+            exportsClient: false
+        );
 
         services
             .Should()
