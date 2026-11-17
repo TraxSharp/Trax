@@ -310,6 +310,52 @@ public class AwsStackTemplateTests
     }
 
     [Test]
+    public void Production_keeps_its_user_pool()
+    {
+        var template = Build();
+        var pool = (JsonObject)template["Resources"]!["UserPool"]!;
+        var group = (JsonObject)template["Resources"]!["OperatorGroup"]!;
+
+        ((string)pool["DeletionPolicy"]!).Should().Be("Retain");
+        ((string)pool["UpdateReplacePolicy"]!).Should().Be("Retain");
+        ((string)pool["Properties"]!["DeletionProtection"]!).Should().Be("ACTIVE");
+        ((string)group["DeletionPolicy"]!)
+            .Should()
+            .Be("Retain", "deleting the group would drop every membership in the kept pool");
+        // A pool a destroy kept is passed back in, and the stack creates none.
+        template["Parameters"]![AwsStack.UserPoolParameter]!["Default"]!
+            .GetValue<string>()
+            .Should()
+            .Be("");
+        ((string)pool["Condition"]!).Should().Be("CreateUserPool");
+        ((string)group["Condition"]!).Should().Be("CreateUserPool");
+        Properties(template, "UserPoolClient")["UserPoolId"]!
+            .ToJsonString()
+            .Should()
+            .Contain(AwsStack.UserPoolParameter);
+        template["Outputs"]!["UserPoolId"]!["Value"]!
+            .ToJsonString()
+            .Should()
+            .Contain(AwsStack.UserPoolParameter);
+    }
+
+    [Test]
+    public void A_try_environment_keeps_no_user_pool()
+    {
+        var template = Build(File_(DeployEnvironment.Try));
+        var pool = (JsonObject)template["Resources"]!["UserPool"]!;
+
+        pool.ContainsKey("DeletionPolicy").Should().BeFalse();
+        pool.ContainsKey("UpdateReplacePolicy").Should().BeFalse();
+        pool.ContainsKey("Condition").Should().BeFalse();
+        ((JsonObject)pool["Properties"]!).ContainsKey("DeletionProtection").Should().BeFalse();
+        ((JsonObject)template["Parameters"]!)
+            .ContainsKey(AwsStack.UserPoolParameter)
+            .Should()
+            .BeFalse();
+    }
+
+    [Test]
     public void An_existing_network_creates_no_VPC()
     {
         var file = File_();

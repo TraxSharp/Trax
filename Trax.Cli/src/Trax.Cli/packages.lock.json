@@ -20,6 +20,15 @@
           "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
         }
       },
+      "AWSSDK.CognitoIdentityProvider": {
+        "type": "Direct",
+        "requested": "[4.0.106, )",
+        "resolved": "4.0.106",
+        "contentHash": "MFKs/Mu5nO2TdRKv5fIrKb+v59A0lApRNM3ObrbBnSDZboa/en9BnUsM+KRgUav+jn2pe2PhgqllkB45qm/X1A==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
+        }
+      },
       "AWSSDK.EC2": {
         "type": "Direct",
         "requested": "[4.0.126.2, )",
@@ -61,6 +70,15 @@
         "requested": "[4.0.101.1, )",
         "resolved": "4.0.101.1",
         "contentHash": "rZnMaqiYwDzbvTqeO7dWhqxEn96RleyR9KN6GYeWispPt9NQPRDUcfYZarvG7Eba5NvDNomhpcQJSNO+VoteGQ==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
+        }
+      },
+      "AWSSDK.SimpleSystemsManagement": {
+        "type": "Direct",
+        "requested": "[4.0.104.1, )",
+        "resolved": "4.0.104.1",
+        "contentHash": "krzwvPcmMBVuBZ1fhruesVZLOTXbIttFMotP81nkwmJ2TI8nk+Mam8fwiwpHAkIdbAUu0QQneK53+bhLzT0X7g==",
         "dependencies": {
           "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
         }

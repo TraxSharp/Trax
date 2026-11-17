@@ -108,6 +108,8 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         }
         if (existing?.Parameters.ContainsKey(AwsStack.ProtectParameter) is true)
             first[AwsStack.ProtectParameter] = "true";
+        if (KeepsItsUserPool(env))
+            first[AwsStack.UserPoolParameter] = await UserPoolAsync(stack, existing, ct);
         say(existing is null ? $"Creating {stack}..." : $"Updating {stack}...");
         await aws.DeployAsync(stack, template, first, tags, say, ct);
 
@@ -147,15 +149,41 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         }
         if (first.ContainsKey(AwsStack.ProtectParameter))
             second[AwsStack.ProtectParameter] = "true";
+        if (first.TryGetValue(AwsStack.UserPoolParameter, out var pool))
+            second[AwsStack.UserPoolParameter] = pool;
         say($"Rolling the services onto {tag}...");
         await aws.DeployAsync(stack, template, second, tags, say, ct);
 
         return (await aws.DescribeStackAsync(stack, ct))!.Outputs.GetValueOrDefault("Url");
     }
 
+    /// <summary>Whether the environment's user pool outlives its stack: production's Cognito pool.</summary>
+    private static bool KeepsItsUserPool(DeployEnvironment env) =>
+        env.Profile == DeployEnvironment.Production && env.Auth is { Kind: DeployAuth.Cognito };
+
     /// <summary>
-    /// Deletes the environment's stack. Production's database is unprotected first and keeps a final snapshot;
-    /// with <paramref name="deleteData"/> the images and the app's secrets go too.
+    /// The pool a deploy passes the stack: the one the stack already uses, or on a new stack the one an earlier
+    /// destroy kept, or empty to create one.
+    /// </summary>
+    private async Task<string> UserPoolAsync(
+        string stack,
+        AwsStackState? existing,
+        CancellationToken ct
+    )
+    {
+        if (existing is not null)
+            // A stack keeps the pool it has: switching would take the one it created out of the stack.
+            return existing.Parameters.GetValueOrDefault(AwsStack.UserPoolParameter) ?? "";
+        var kept = await aws.GetParameterAsync(UserPoolRecord(stack), ct);
+        if (kept is not null)
+            say($"Signing in against the user pool {kept}, which the last destroy kept.");
+        return kept ?? "";
+    }
+
+    /// <summary>
+    /// Deletes the environment's stack. Production's database is unprotected first and keeps a final snapshot, and
+    /// production's user pool is kept and recorded for the next deploy; with <paramref name="deleteData"/> the pool,
+    /// the images and the app's secrets go too.
     /// </summary>
     public async Task DestroyAsync(
         DeployFile file,
@@ -164,9 +192,17 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         CancellationToken ct
     )
     {
-        file.Environment(environment);
+        var env = file.Environment(environment);
         var stack = file.StackName(environment);
         var existing = await aws.DescribeStackAsync(stack, ct);
+        var record = UserPoolRecord(stack);
+        var pool = KeepsItsUserPool(env)
+            ? existing?.Outputs.GetValueOrDefault("UserPoolId")
+                ?? await aws.GetParameterAsync(record, ct)
+            : null;
+        // Recorded before the stack goes, so a destroy that stops partway still leaves the pool findable.
+        if (pool is not null && !deleteData)
+            await aws.PutParameterAsync(record, pool, Tags(file, environment), ct);
         if (existing is null)
             say($"{stack} does not exist.");
         else
@@ -189,6 +225,28 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
                     "The database left a final snapshot, which RDS keeps until you delete it (RDS console, "
                         + "Snapshots)."
                 );
+        }
+        if (pool is not null)
+        {
+            if (deleteData)
+            {
+                await aws.DeleteUserPoolAsync(pool, ct);
+                await aws.DeleteParameterAsync(record, ct);
+                say($"Deleted the user pool {pool} and every user in it.");
+            }
+            else
+            {
+                var users = await aws.UserCountAsync(pool, ct);
+                say(
+                    users is null
+                        ? $"The user pool {pool} recorded in {record} no longer exists; the next deploy creates one."
+                        : $"Kept the user pool {pool} with its {users} users (Cognito's estimate), recorded in "
+                            + $"{record}. The next deploy of {environment} signs in against it; "
+                            + $"'trax deploy destroy --env {environment} --delete-data' deletes it."
+                );
+                if (users is null)
+                    await aws.DeleteParameterAsync(record, ct);
+            }
         }
         if (!deleteData)
             return;
@@ -244,6 +302,12 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
                 : $"{stack} belongs to app '{owner}', not '{file.App}'. Rename this app or its environment."
         );
     }
+
+    /// <summary>
+    /// The SSM parameter a destroy records a kept user pool's id in, which the next deploy of the environment reads:
+    /// <c>/&lt;stack&gt;/user-pool</c>.
+    /// </summary>
+    public static string UserPoolRecord(string stack) => $"/{stack}/user-pool";
 
     /// <summary>The ECR repository of a service: <c>trax/&lt;stack&gt;/&lt;service&gt;</c>.</summary>
     public static string Repository(string stack, string service) => $"trax/{stack}/{service}";

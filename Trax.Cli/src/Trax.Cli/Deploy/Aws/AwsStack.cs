@@ -18,6 +18,12 @@ internal static class AwsStack
     /// <summary>Production only: "true" keeps the database from being deleted, until destroy turns it off.</summary>
     public const string ProtectParameter = "Protect";
 
+    /// <summary>
+    /// Production with Cognito only: the id of a user pool an earlier destroy kept, which the stack signs in against
+    /// instead of creating one; empty to create one.
+    /// </summary>
+    public const string UserPoolParameter = "ExistingUserPool";
+
     public const string MigrateContainer = "migrate";
 
     /// <summary>The address range of a VPC the stack creates; also the networks hosts trust forwarded headers from.</summary>
@@ -230,7 +236,7 @@ internal static class AwsStack
 
         // ---- Sign-in ---------------------------------------------------------------------------------------
         if (env.Auth is { Kind: DeployAuth.Cognito })
-            AddCognito(resources, outputs, stack);
+            AddCognito(resources, outputs, parameters, stack, production);
 
         // ---- ECS -------------------------------------------------------------------------------------------
         resources["Cluster"] = Resource(
@@ -277,7 +283,13 @@ internal static class AwsStack
             environment.Add(
                 (
                     auth.AuthorityKey,
-                    Sub("https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}")
+                    new JsonObject
+                    {
+                        ["Fn::Sub"] = new JsonArray(
+                            "https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}",
+                            new JsonObject { ["UserPool"] = UserPoolId(parameters) }
+                        ),
+                    }
                 )
             );
             environment.Add((auth.AudienceKey, Ref("UserPoolClient")));
@@ -442,6 +454,11 @@ internal static class AwsStack
             conditions["Protected"] = new JsonObject
             {
                 ["Fn::Equals"] = new JsonArray(Ref(ProtectParameter), "true"),
+            };
+        if (parameters.ContainsKey(UserPoolParameter))
+            conditions[CreateUserPool] = new JsonObject
+            {
+                ["Fn::Equals"] = new JsonArray(Ref(UserPoolParameter), ""),
             };
         return conditions;
     }
@@ -878,9 +895,36 @@ internal static class AwsStack
         resources["Database"] = database;
     }
 
-    private static void AddCognito(JsonObject resources, JsonObject outputs, string stack)
+    private const string CreateUserPool = "CreateUserPool";
+
+    /// <summary>The pool the stack signs in against: the one it creates, or the one a destroy kept.</summary>
+    private static JsonNode UserPoolId(JsonObject parameters) =>
+        parameters.ContainsKey(UserPoolParameter)
+            ? If(CreateUserPool, Ref("UserPool"), Ref(UserPoolParameter))
+            : Ref("UserPool");
+
+    /// <summary>
+    /// The sign-in. Production's pool and its Operator group are protected and kept when the stack is deleted, so a
+    /// destroy without --delete-data keeps every user; the next deploy passes the kept pool's id in
+    /// <see cref="UserPoolParameter"/>, and the stack then creates neither and uses that pool.
+    /// </summary>
+    private static void AddCognito(
+        JsonObject resources,
+        JsonObject outputs,
+        JsonObject parameters,
+        string stack,
+        bool production
+    )
     {
-        resources["UserPool"] = Resource(
+        if (production)
+            parameters[UserPoolParameter] = new JsonObject
+            {
+                ["Type"] = "String",
+                ["Default"] = "",
+                ["Description"] =
+                    "The id of a user pool an earlier destroy kept, to sign in against instead of creating one.",
+            };
+        var pool = Resource(
             "AWS::Cognito::UserPool",
             new JsonObject
             {
@@ -904,11 +948,12 @@ internal static class AwsStack
                 },
             }
         );
+        resources["UserPool"] = pool;
         resources["UserPoolClient"] = Resource(
             "AWS::Cognito::UserPoolClient",
             new JsonObject
             {
-                ["UserPoolId"] = Ref("UserPool"),
+                ["UserPoolId"] = UserPoolId(parameters),
                 ["ClientName"] = $"{stack}-api",
                 ["GenerateSecret"] = false,
                 ["ExplicitAuthFlows"] = new JsonArray(
@@ -919,7 +964,7 @@ internal static class AwsStack
                 ["EnableTokenRevocation"] = true,
             }
         );
-        resources["OperatorGroup"] = Resource(
+        var group = Resource(
             "AWS::Cognito::UserPoolGroup",
             new JsonObject
             {
@@ -928,7 +973,18 @@ internal static class AwsStack
                 ["Description"] = "May use the operations namespace and the console.",
             }
         );
-        outputs["UserPoolId"] = Output(Ref("UserPool"));
+        resources["OperatorGroup"] = group;
+        if (production)
+        {
+            ((JsonObject)pool["Properties"]!)["DeletionProtection"] = "ACTIVE";
+            foreach (var kept in new[] { pool, group })
+            {
+                kept["Condition"] = CreateUserPool;
+                kept["DeletionPolicy"] = "Retain";
+                kept["UpdateReplacePolicy"] = "Retain";
+            }
+        }
+        outputs["UserPoolId"] = Output(UserPoolId(parameters));
         outputs["UserPoolClientId"] = Output(Ref("UserPoolClient"));
     }
 

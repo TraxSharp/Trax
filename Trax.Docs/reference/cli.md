@@ -758,7 +758,7 @@ needed: the stack is CloudFormation that trax generates, and the images are buil
 | `domain`, `hostedZoneId` | Production's host name. With the Route 53 zone, the certificate is validated and the name pointed at the load balancer by the stack; without it, CloudFormation waits for the validation record you add. |
 | `network` | `vpcId`, `cidr`, two or more `publicSubnets` and `privateSubnets`: deploy into an existing VPC instead of creating one. |
 | `databaseSecretArn` | A Secrets Manager secret holding a whole Postgres connection string: use an existing database instead of creating one. On RDS, it can verify the server with `SSL Mode=VerifyFull;Root Certificate=/app/trax/rds-global-bundle.pem`, the bundle every image carries. |
-| `auth` | `{ "kind": "cognito" }` creates a user pool, an app client and an `Operator` group, and sets `Auth__Authority` and `Auth__Audience` (`authorityKey`, `audienceKey` rename them). Leave it out to give an existing issuer in `settings`. |
+| `auth` | `{ "kind": "cognito" }` creates a user pool, an app client and an `Operator` group, and sets `Auth__Authority` and `Auth__Audience` (`authorityKey`, `audienceKey` rename them). In `production` the pool and the group have deletion protection and are kept when the stack is deleted; see `destroy` below. Leave it out to give an existing issuer in `settings`. |
 | `settings` | A value for each name the file lists under `settings`. |
 | `counts` | Copies per service here, over the file's `count`. |
 
@@ -792,12 +792,18 @@ trax deploy secret list --env production
 trax deploy --env production
 trax deploy status --env production
 trax deploy logs hub --env production --follow          # or migrate
-trax deploy destroy --env production     # asks for the stack's name; --delete-data also deletes images and secrets
+trax deploy destroy --env production     # asks for the stack's name; --delete-data also deletes the user pool, images and secrets
 ```
 
 `destroy` turns a production database's deletion protection off, then deletes the stack; the database leaves a
 final snapshot, which RDS keeps until you delete it. A secret `--delete-data` deleted can be recovered for seven days, and
 `secret set` restores it with the new value, so the environment can be deployed again the same day.
+
+A production Cognito user pool outlives `destroy`, with its users, their MFA and their groups. `destroy` records
+its id in the SSM parameter `/<stack>/user-pool` and prints it with the number of users in it, and the next deploy
+of that environment signs in against that pool instead of creating one, so the `sub` claims stored with the data
+still match. With `--delete-data`, `destroy` deletes the pool, every user in it, and the record. A `try`
+environment's pool is deleted with its stack.
 
 ## SDK Reference
 

@@ -79,6 +79,9 @@ docker compose down                       # compose; add -v to drop the database
 trax deploy destroy --env production      # AWS; production's database leaves a final snapshot
 ```
 
+In production, `destroy` keeps the Cognito user pool and its users, and the next deploy of the environment signs in
+against it again. `destroy --delete-data` deletes the pool and every user in it.
+
 ## SDK Reference
 
 > [TraxMigrate](/docs/sdk-reference/configuration/trax-migrate) | [DeployManifest](/docs/sdk-reference/configuration/deploy-manifest) | [UsePostgres](/docs/sdk-reference/configuration/use-postgres)
