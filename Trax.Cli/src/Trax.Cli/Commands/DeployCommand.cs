@@ -17,7 +17,7 @@ internal static class DeployCommand
         var target = new Option<string?>("--target")
         {
             Description =
-                "Where to deploy: compose writes a compose stack for any docker or podman host; aws deploys the "
+                "Where to deploy: compose writes a compose stack for a rootless podman host; aws deploys the "
                 + "--env environment. Default: aws when --env is given, else compose.",
         };
         var env = DeployAwsCommands.EnvOption(required: false);
@@ -229,8 +229,7 @@ internal static class DeployCommand
                 }
 
             Console.WriteLine(
-                $"Copy {ComposeTarget.EnvExampleFile} to .env, fill it in, then run 'docker compose up -d' "
-                    + $"(or 'podman compose up -d') in {dir}."
+                $"Copy {ComposeTarget.EnvExampleFile} to .env, fill it in, then run 'podman compose up -d' in {dir}."
             );
             return 0;
         }

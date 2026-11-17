@@ -212,6 +212,13 @@ internal sealed partial class DeployFile
                         $"service '{name}' has port {port}, which service '{ports[port]}' has too."
                     )
                 );
+            if (service.Memory < ServiceHardening.MinimumMemoryMiB)
+                throw new InvalidOperationException(
+                    Problem(
+                        $"service '{name}' has memory {service.Memory}; it must be at least "
+                            + $"{ServiceHardening.MinimumMemoryMiB} (MiB)."
+                    )
+                );
             if (service.Count < 1)
                 throw new InvalidOperationException(
                     Problem($"service '{name}' has count {service.Count}; it must be at least 1.")
@@ -338,6 +345,9 @@ internal sealed class DeployService
     /// no other service has.
     /// </summary>
     public int? Port { get; set; }
+
+    /// <summary>The memory each copy may use, in MiB. Without it, 1024.</summary>
+    public int? Memory { get; set; }
 }
 
 /// <summary>The names under <c>ConnectionStrings:</c> a host reads, which the deployment sets.</summary>
