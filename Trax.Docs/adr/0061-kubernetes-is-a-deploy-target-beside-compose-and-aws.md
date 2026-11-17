@@ -59,8 +59,8 @@ and ECS stays as the cheapest way onto AWS. Decided 2026-11-16 and 2026-11-17.
 
 ## Exemplars
 
-**Unenforced:** the Kubernetes target and the foundation split land in the pull requests that follow this one;
-their tests (`DeployKubernetesTests`, `AwsStackTemplateTests`) are named here when they do.
+**Unenforced:** the Kubernetes target and the foundation split land in the pull requests that follow this one,
+and the tests that hold them to it are named here when they do.
 
 ## Changelog
 
