@@ -72,4 +72,10 @@
   <ItemGroup>
     <PackageReference Include="DotNet.ReproducibleBuilds" PrivateAssets="All" />
   </ItemGroup>
+
+  <!-- The analyzer profile (.globalconfig at the repository root): Meziantou.Analyzer's default
+       rules, every one an error, in src and tests alike. No project and no file opts out. -->
+  <ItemGroup>
+    <PackageReference Include="Meziantou.Analyzer" PrivateAssets="All" />
+  </ItemGroup>
 </Project>
