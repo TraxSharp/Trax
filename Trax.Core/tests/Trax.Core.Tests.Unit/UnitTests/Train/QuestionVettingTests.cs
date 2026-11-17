@@ -227,7 +227,9 @@ public class QuestionVettingTests : TestSetup
         public Task<DecisionResult> Decide(DecisionRequest request, CancellationToken ct)
         {
             Asked++;
-            return Task.FromResult(new DecisionResult(new Dictionary<string, Answer>()));
+            return Task.FromResult(
+                new DecisionResult(new Dictionary<string, Answer>(StringComparer.Ordinal))
+            );
         }
     }
 
@@ -240,7 +242,9 @@ public class QuestionVettingTests : TestSetup
             declared.Questions.OfType<YesNoQuestion>().Select(_ => problem);
 
         public Task<DecisionResult> Decide(DecisionRequest request, CancellationToken ct) =>
-            Task.FromResult(new DecisionResult(new Dictionary<string, Answer>()));
+            Task.FromResult(
+                new DecisionResult(new Dictionary<string, Answer>(StringComparer.Ordinal))
+            );
     }
 
     private sealed class Services : IServiceProvider
@@ -264,12 +268,12 @@ public class QuestionVettingTests : TestSetup
             _registered.TryGetValue(serviceType, out var make) ? make() : null;
     }
 
-    private class Start : Junction<string, string>
+    private sealed class Start : Junction<string, string>
     {
         public override Task<string> Run(string input) => Task.FromResult(input);
     }
 
-    private class StringToBool : Junction<string, bool>
+    private sealed class StringToBool : Junction<string, bool>
     {
         public override Task<bool> Run(string input) => Task.FromResult(true);
     }

@@ -20,7 +20,11 @@ internal static class MoqExtensions
     public static bool IsMoqProxy(this Type type)
     {
         return type.BaseType?.Assembly.FullName != null
-            && type.BaseType.Assembly.FullName.Split(", ").FirstOrDefault() == "Moq";
+            && string.Equals(
+                type.BaseType.Assembly.FullName.Split(", ").FirstOrDefault(),
+                "Moq",
+                StringComparison.Ordinal
+            );
     }
 
     /// <summary>

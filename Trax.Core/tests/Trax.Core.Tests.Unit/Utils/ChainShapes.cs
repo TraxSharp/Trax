@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Reflection;
 using CsCheck;
 using Trax.Core.Decisions;
@@ -75,7 +76,12 @@ internal static class ChainShapes
                             {
                                 Branches = fork
                                     .Branches.Select(b => new Branch(
-                                        b.Name is "" ? $"b{names++}" : b.Name,
+                                        b.Name is ""
+                                            ? string.Create(
+                                                CultureInfo.InvariantCulture,
+                                                $"b{names++}"
+                                            )
+                                            : b.Name,
                                         Walk(b.Body, cursor)
                                     ))
                                     .ToList(),
@@ -116,11 +122,13 @@ internal static class ChainShapes
 
     public static string Describe(IReadOnlyList<Element> chain) =>
         string.Join(
-            " ",
+            ' ',
             chain.Select(e =>
                 e switch
                 {
-                    Link s => s.Fails ? $"!{s.Id}" : $"{s.Id}",
+                    Link s => s.Fails
+                        ? string.Create(CultureInfo.InvariantCulture, $"!{s.Id}")
+                        : string.Create(CultureInfo.InvariantCulture, $"{s.Id}"),
                     Fork f => $"Parallel[{f.Policy}]("
                         + string.Join(
                             " | ",
@@ -223,12 +231,17 @@ internal static class ChainShapes
         }
     }
 
-    public static string Value(string from, int id) => $"{from}>{id}";
+    public static string Value(string from, int id) =>
+        string.Create(CultureInfo.InvariantCulture, $"{from}>{id}");
 
-    public static string Fault(int id) => $"fault {id}";
+    public static string Fault(int id) =>
+        string.Create(CultureInfo.InvariantCulture, $"fault {id}");
 
     private static string Snapshot(IEnumerable<KeyValuePair<int, string>> values) =>
-        string.Join(";", values.Select(v => $"{v.Key}={v.Value}"));
+        string.Join(
+            ';',
+            values.Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.Key}={v.Value}"))
+        );
 
     #endregion
 
@@ -254,15 +267,15 @@ internal static class ChainShapes
     // Six markers make 216 distinct slot types, more than a generated chain is allowed to use.
     public sealed class D0;
 
-    public sealed class D1;
+    public static class D1;
 
-    public sealed class D2;
+    public static class D2;
 
-    public sealed class D3;
+    public static class D3;
 
-    public sealed class D4;
+    public static class D4;
 
-    public sealed class D5;
+    public static class D5;
 
     public sealed record Slot<TA, TB, TC>(int Id, string Value) : ISlot;
 
@@ -293,13 +306,13 @@ internal static class ChainShapes
         where TIn : ISlot
         where TOut : ISlot
     {
-        public override Task<TOut> Run(TIn input)
+        public override async Task<TOut> Run(TIn input)
         {
             var branch = ChainGraph.CurrentBranchPath;
             run.Ran.Enqueue((step.Id, ChainGraph.CurrentNodeId, branch));
 
             if (run.CancelAt is { } cancel && cancel.Id == step.Id)
-                cancel.Source.Cancel();
+                await cancel.Source.CancelAsync().ConfigureAwait(false);
 
             if (step.Fails)
             {
@@ -307,9 +320,8 @@ internal static class ChainShapes
                 throw new InvalidOperationException(Fault(step.Id));
             }
 
-            return Task.FromResult(
-                (TOut)Activator.CreateInstance(typeof(TOut), step.Id, Value(input.Value, step.Id))!
-            );
+            return (TOut)
+                Activator.CreateInstance(typeof(TOut), step.Id, Value(input.Value, step.Id))!;
         }
     }
 
@@ -380,7 +392,7 @@ internal static class ChainShapes
 
         private async Task<Either<Exception, string>> RunAndKeep()
         {
-            var monad = await Build(Start(), Shape, run);
+            var monad = await Build(Start(), Shape, run).ConfigureAwait(false);
 
             if (monad.Exception is null)
                 Snapshot = ChainShapes.Snapshot(
@@ -395,80 +407,4 @@ internal static class ChainShapes
     }
 
     #endregion
-}
-
-/// <summary>
-/// How a run ended, in the terms the concurrency laws compare: the value or the failure, and for
-/// a failed <c>Parallel</c> the branches that failed and the ones stopped by a sibling, read
-/// through every nested <c>Parallel</c>.
-/// </summary>
-internal sealed record Outcome(Either<Exception, string> Result, string? Snapshot)
-{
-    public bool IsRight => Result.IsRight;
-
-    public Exception? Failure => Result.IsLeft ? Result.Swap().ValueUnsafe() : null;
-
-    public bool Cancelled => Failure is OperationCanceledException;
-
-    /// <summary>The paths of the branches the outermost failed <c>Parallel</c> reports as failed.</summary>
-    public IReadOnlySet<string> FailedBranches =>
-        Failure is BranchesFailedException f ? f.Failures.Select(b => b.Branch).ToHashSet() : [];
-
-    /// <summary>The paths of every branch a sibling's failure stopped, at any depth.</summary>
-    public IReadOnlySet<string> Stopped
-    {
-        get
-        {
-            var stopped = new HashSet<string>();
-            Walk(Failure);
-            return stopped;
-
-            void Walk(Exception? e)
-            {
-                if (e is not BranchesFailedException f)
-                    return;
-                stopped.UnionWith(f.CancelledBySibling);
-                foreach (var failed in f.Failures)
-                    Walk(failed.Exception);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Every failure at the bottom of the failure, with the path of the branch it happened in
-    /// (empty outside every branch): a failed <c>Parallel</c> is read through to what its branches
-    /// failed with.
-    /// </summary>
-    public IReadOnlySet<(string Branch, string Message)> Leaves
-    {
-        get
-        {
-            var leaves = new HashSet<(string, string)>();
-            if (Failure is { } failure)
-                Walk(failure, "");
-            return leaves;
-
-            void Walk(Exception e, string path)
-            {
-                if (e is BranchesFailedException f)
-                    foreach (var failed in f.Failures)
-                        Walk(failed.Exception, failed.Branch);
-                else
-                    leaves.Add((path, e.Message));
-            }
-        }
-    }
-
-    public static async Task<Outcome> Of(Train<string, string> train, string input)
-    {
-        var result = await train.RunEither(input);
-        return new Outcome(result, (train as ChainShapes.ShapeTrain)?.Snapshot);
-    }
-
-    public override string ToString() =>
-        IsRight
-            ? $"Right({Snapshot ?? Result.ValueUnsafe()})"
-            : $"Left({Failure!.GetType().Name}: failed [{string.Join(", ", FailedBranches.Order())}], "
-                + $"stopped [{string.Join(", ", Stopped.Order())}], "
-                + $"leaves [{string.Join(", ", Leaves.Select(l => $"{l.Branch}:{l.Message}").Order())}])";
 }

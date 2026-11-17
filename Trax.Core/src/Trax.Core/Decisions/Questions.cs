@@ -162,7 +162,10 @@ public sealed class Questions<TState>
 
     internal Questions<TState> Add(QuestionSpec spec)
     {
-        if (_specs.FirstOrDefault(s => s.Key == spec.Key) is { } earlier)
+        if (
+            _specs.FirstOrDefault(s => string.Equals(s.Key, spec.Key, StringComparison.Ordinal)) is
+            { } earlier
+        )
             _problems.Add(
                 earlier.On == spec.On
                     ? $"asks about '{spec.On.ReadableName()}' twice. Ask each question once; its "

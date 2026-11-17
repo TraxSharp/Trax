@@ -222,7 +222,7 @@ public class JunctionResolutionMessageTests : TestSetup
 
     private static async Task<TOut> Result<TOut>(Train<string, TOut> train)
     {
-        var result = await train.RunEither("hello");
+        var result = await train.RunEither("hello").ConfigureAwait(false);
 
         result.IsRight.Should().BeTrue(result.IsLeft ? result.Swap().ValueUnsafe().Message : "");
 
@@ -231,7 +231,7 @@ public class JunctionResolutionMessageTests : TestSetup
 
     private static async Task<string> FailureMessage<TOut>(Train<string, TOut> train, string input)
     {
-        var result = await train.RunEither(input);
+        var result = await train.RunEither(input).ConfigureAwait(false);
 
         result.IsLeft.Should().BeTrue();
         var exception = result.Swap().ValueUnsafe();
@@ -256,67 +256,67 @@ public class JunctionResolutionMessageTests : TestSetup
 
     private abstract class AbstractJunction : Junction<string, int>;
 
-    private class NeedsStringAndWidget : Junction<(string, Widget), int>
+    private sealed class NeedsStringAndWidget : Junction<(string, Widget), int>
     {
         public override Task<int> Run((string, Widget) input) => Task.FromResult(1);
     }
 
-    private class TupleConstructorJunction((string, Widget) pair) : Junction<string, int>
+    private sealed class TupleConstructorJunction((string, Widget) pair) : Junction<string, int>
     {
         public override Task<int> Run(string input) => Task.FromResult(pair.Item1.Length);
     }
 
-    private class LoggerJunction(ILogger<LoggerJunction> logger) : Junction<string, int>
+    private sealed class LoggerJunction(ILogger<LoggerJunction> logger) : Junction<string, int>
     {
         public override Task<int> Run(string input) => Task.FromResult(logger.GetHashCode());
     }
 
-    private class Zero : Junction<string, int>
+    private sealed class Zero : Junction<string, int>
     {
         public override Task<int> Run(string input) => Task.FromResult(0);
     }
 
-    private class False : Junction<string, bool>
+    private sealed class False : Junction<string, bool>
     {
         public override Task<bool> Run(string input) => Task.FromResult(false);
     }
 
-    private class EmptyGuid : Junction<string, Guid>
+    private sealed class EmptyGuid : Junction<string, Guid>
     {
         public override Task<Guid> Run(string input) => Task.FromResult(Guid.Empty);
     }
 
-    private class NeedsClockWithContainerTrain : WithEmptyContainer<int>
+    private sealed class NeedsClockWithContainerTrain : WithEmptyContainer<int>
     {
         protected override Task<Either<Exception, int>> Junctions() =>
             Chain<ClockJunction>().Resolve();
     }
 
-    private class MissingTupleInputTrain : WithEmptyContainer<int>
+    private sealed class MissingTupleInputTrain : WithEmptyContainer<int>
     {
         protected override Task<Either<Exception, int>> Junctions() =>
             Chain<NeedsStringAndWidget>().Resolve();
     }
 
-    private class MissingTupleConstructorArgumentTrain : Train<string, int>
+    private sealed class MissingTupleConstructorArgumentTrain : Train<string, int>
     {
         protected override Task<Either<Exception, int>> Junctions() =>
             Chain<TupleConstructorJunction>().Resolve();
     }
 
-    private class NeedsLoggerTrain : Train<string, int>
+    private sealed class NeedsLoggerTrain : Train<string, int>
     {
         protected override Task<Either<Exception, int>> Junctions() =>
             Chain<LoggerJunction>().Resolve();
     }
 
-    private class NeedsLoggerWithContainerTrain : WithEmptyContainer<int>
+    private sealed class NeedsLoggerWithContainerTrain : WithEmptyContainer<int>
     {
         protected override Task<Either<Exception, int>> Junctions() =>
             Chain<LoggerJunction>().Resolve();
     }
 
-    private class NeedsLoggerWithFactoryTrain : Train<string, int>
+    private sealed class NeedsLoggerWithFactoryTrain : Train<string, int>
     {
         protected override Task<Either<Exception, int>> Junctions() =>
             AddServices<ILoggerFactory>(NullLoggerFactory.Instance)
@@ -324,23 +324,23 @@ public class JunctionResolutionMessageTests : TestSetup
                 .Resolve();
     }
 
-    private class AbstractJunctionTrain : Train<string, int>
+    private sealed class AbstractJunctionTrain : Train<string, int>
     {
         protected override Task<Either<Exception, int>> Junctions() =>
             Chain<AbstractJunction>().Resolve();
     }
 
-    private class ProducesZeroTrain : Train<string, int>
+    private sealed class ProducesZeroTrain : Train<string, int>
     {
         protected override Task<Either<Exception, int>> Junctions() => Chain<Zero>().Resolve();
     }
 
-    private class ProducesFalseTrain : Train<string, bool>
+    private sealed class ProducesFalseTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() => Chain<False>().Resolve();
     }
 
-    private class ProducesEmptyGuidTrain : Train<string, Guid>
+    private sealed class ProducesEmptyGuidTrain : Train<string, Guid>
     {
         protected override Task<Either<Exception, Guid>> Junctions() =>
             Chain<EmptyGuid>().Resolve();
@@ -350,12 +350,12 @@ public class JunctionResolutionMessageTests : TestSetup
 
     public interface IWidgetJunction : IJunction<string, int>;
 
-    private class ClockJunction(IClock clock) : Junction<string, int>
+    private sealed class ClockJunction(IClock clock) : Junction<string, int>
     {
         public override Task<int> Run(string input) => Task.FromResult(clock.GetHashCode());
     }
 
-    private class TwoConstructors : Junction<string, int>
+    private sealed class TwoConstructors : Junction<string, int>
     {
         public TwoConstructors() { }
 
@@ -364,7 +364,7 @@ public class JunctionResolutionMessageTests : TestSetup
         public override Task<int> Run(string input) => Task.FromResult(input.Length);
     }
 
-    private class NoPublicConstructor : Junction<string, int>
+    private sealed class NoPublicConstructor : Junction<string, int>
     {
         private NoPublicConstructor() { }
 
@@ -373,71 +373,71 @@ public class JunctionResolutionMessageTests : TestSetup
         public override Task<int> Run(string input) => Task.FromResult(input.Length);
     }
 
-    private class NeedsWidget : Junction<Widget, int>
+    private sealed class NeedsWidget : Junction<Widget, int>
     {
         public override Task<int> Run(Widget input) => Task.FromResult(1);
     }
 
-    private class NeedsClockTrain : Train<string, int>
+    private sealed class NeedsClockTrain : Train<string, int>
     {
         protected override Task<Either<Exception, int>> Junctions() =>
             Chain<ClockJunction>().Resolve();
     }
 
-    private class TwoConstructorChainTrain : Train<string, int>
+    private sealed class TwoConstructorChainTrain : Train<string, int>
     {
         protected override Task<Either<Exception, int>> Junctions() =>
             Chain<TwoConstructors>().Resolve();
     }
 
-    private class TwoConstructorShortCircuitTrain : Train<string, int>
+    private sealed class TwoConstructorShortCircuitTrain : Train<string, int>
     {
         protected override Task<Either<Exception, int>> Junctions() =>
             ShortCircuit<TwoConstructors>().Resolve();
     }
 
-    private class NoPublicConstructorTrain : Train<string, int>
+    private sealed class NoPublicConstructorTrain : Train<string, int>
     {
         protected override Task<Either<Exception, int>> Junctions() =>
             Chain<NoPublicConstructor>().Resolve();
     }
 
-    private class TwoConstructorInstanceTrain : Train<string, int>
+    private sealed class TwoConstructorInstanceTrain : Train<string, int>
     {
         protected override Task<Either<Exception, int>> Junctions() =>
             Chain(new TwoConstructors()).Resolve();
     }
 
-    private class MissingInputTrain : Train<string, int>
+    private sealed class MissingInputTrain : Train<string, int>
     {
         protected override Task<Either<Exception, int>> Junctions() =>
             Chain<NeedsWidget>().Resolve();
     }
 
-    private class MissingShortCircuitInputTrain : Train<string, int>
+    private sealed class MissingShortCircuitInputTrain : Train<string, int>
     {
         protected override Task<Either<Exception, int>> Junctions() =>
             ShortCircuit<NeedsWidget>().Resolve();
     }
 
-    private class MissingIChainTrain : Train<string, int>
+    private sealed class MissingIChainTrain : Train<string, int>
     {
         protected override Task<Either<Exception, int>> Junctions() =>
             IChain<IWidgetJunction>().Resolve();
     }
 
-    private class ResultNeverProducedTrain : Train<string, Widget>
+    private sealed class ResultNeverProducedTrain : Train<string, Widget>
     {
         protected override Task<Either<Exception, Widget>> Junctions() =>
             Task.FromResult(Resolve());
     }
 
-    private class ValueResultNeverProducedTrain : Train<string, Guid>
+    private sealed class ValueResultNeverProducedTrain : Train<string, Guid>
     {
         protected override Task<Either<Exception, Guid>> Junctions() => Task.FromResult(Resolve());
     }
 
-    private class ExtractFromMissingTrain : Train<string, string>
+    private sealed class ExtractFromMissingTrain : Train<string, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Task.FromResult(Extract<Widget, string>().Resolve());

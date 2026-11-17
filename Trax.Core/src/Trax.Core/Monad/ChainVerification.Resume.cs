@@ -3,81 +3,6 @@ using Trax.Core.Functional;
 
 namespace Trax.Core.Monad;
 
-/// <summary>
-/// Whether a run can resume, and from where: the plan when it can, the reason when it cannot.
-/// </summary>
-/// <param name="RefusalCode">Why it cannot, as a stable code, or null when it can. See <see cref="ResumeRefusals"/>.</param>
-/// <param name="Refusal">Why it cannot, phrased for an operator, or null when it can.</param>
-/// <param name="Target">The node the resumed run skips to, or null to run the main chain from the top.</param>
-/// <param name="Inclusive">True when the target is a checkpoint the run restores rather than runs.</param>
-/// <param name="MainCheckpoint">The checkpoint the main chain restores, or null.</param>
-/// <param name="BranchCheckpoints">The checkpoint each branch restores, by branch path.</param>
-/// <param name="StateTypes">Each restored checkpoint's declared state type, by node id.</param>
-/// <param name="TrackTypes">
-/// The <see cref="TrackTaken{TKey}"/> types each restored checkpoint can hold, by node id: one
-/// for every routing step before it on its path.
-/// </param>
-internal sealed record ResumeOutcome(
-    string? RefusalCode,
-    string? Refusal,
-    string? Target,
-    bool Inclusive,
-    string? MainCheckpoint,
-    IReadOnlyDictionary<string, string> BranchCheckpoints,
-    IReadOnlyDictionary<string, Type> StateTypes,
-    IReadOnlyDictionary<string, IReadOnlyList<Type>> TrackTypes
-)
-{
-    /// <summary>True when the run can resume as planned.</summary>
-    public bool CanResume => RefusalCode is null;
-
-    internal static ResumeOutcome Refused(string code, string reason) =>
-        new(
-            code,
-            reason,
-            null,
-            false,
-            null,
-            new Dictionary<string, string>(),
-            new Dictionary<string, Type>(),
-            new Dictionary<string, IReadOnlyList<Type>>()
-        );
-}
-
-/// <summary>The codes a refused resume carries, each with its own reason.</summary>
-internal static class ResumeRefusals
-{
-    /// <summary>The run wrote no checkpoint that covers the point.</summary>
-    public const string NoCheckpoint = "no-checkpoint";
-
-    /// <summary>The chain declares no step with that id.</summary>
-    public const string UnknownStep = "unknown-step";
-
-    /// <summary>The id names a step a run cannot start at: an extraction, a seed or the end.</summary>
-    public const string NotAStep = "not-a-step";
-
-    /// <summary>The point is inside a <c>Parallel</c> branch; a branch resumes from its own checkpoint.</summary>
-    public const string InsideABranch = "inside-a-branch";
-
-    /// <summary>The point is in a track of a routing step after the checkpoint, which the run would not ask.</summary>
-    public const string OffThePath = "off-the-path";
-
-    /// <summary>A step from the point on needs a type nothing restores or produces.</summary>
-    public const string MissingInput = "missing-input";
-
-    /// <summary>
-    /// A step from the point on reads a type a skipped step overwrote, which the checkpoint does
-    /// not hold: a resumed run would read an older value.
-    /// </summary>
-    public const string StaleValue = "stale-value";
-
-    /// <summary>The chain changed since the checkpoint was written.</summary>
-    public const string ChainChanged = "chain-changed";
-
-    /// <summary>The checkpoint's state type changed shape since it was written.</summary>
-    public const string StateChanged = "state-changed";
-}
-
 public static partial class ChainVerification
 {
     /// <summary>
@@ -114,16 +39,19 @@ public static partial class ChainVerification
     )
     {
         var nodes = Walk(chain);
-        var byId = nodes.ToDictionary(n => n.Id);
+        var byId = nodes.ToDictionary(n => n.Id, StringComparer.Ordinal);
 
         var checkpoints = nodes
-            .Where(n => n.Step.Kind == ChainStepKind.Checkpoint && written.Contains(n.Id))
+            .Where(n =>
+                n.Step.Kind == ChainStepKind.Checkpoint
+                && written.Contains(n.Id, StringComparer.Ordinal)
+            )
             .ToList();
 
         var latestInBranch = checkpoints
             .Where(n => n.BranchPath is not null)
-            .GroupBy(n => n.BranchPath!)
-            .ToDictionary(g => g.Key, g => g.MaxBy(n => n.Order)!);
+            .GroupBy(n => n.BranchPath!, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.MaxBy(n => n.Order)!, StringComparer.Ordinal);
 
         Node? main;
         string? target;
@@ -133,7 +61,7 @@ public static partial class ChainVerification
         if (resumeAt is null)
         {
             main = checkpoints.Where(n => n.BranchPath is null).MaxBy(n => n.Order);
-            branchCheckpoints = BranchesThatHold(nodes, byId, latestInBranch, main, null);
+            branchCheckpoints = BranchesThatHold(nodes, byId, latestInBranch, main, point: null);
 
             if (main is null && branchCheckpoints.Count == 0)
                 return ResumeOutcome.Refused(
@@ -168,7 +96,7 @@ public static partial class ChainVerification
                 point.Step.Kind is ChainStepKind.Switch or ChainStepKind.Gate or ChainStepKind.Scale
                 && point.Order > 0
                 && nodes[point.Order - 1] is { Step.Kind: ChainStepKind.Decide } question
-                && question.Scope == point.Scope
+                && string.Equals(question.Scope, point.Scope, StringComparison.Ordinal)
                 && question.Step.Out == point.Step.In
             )
             {
@@ -214,10 +142,11 @@ public static partial class ChainVerification
             restored.Add(main);
         restored.AddRange(branchCheckpoints.Values);
 
-        var stateTypes = restored.ToDictionary(n => n.Id, n => n.Step.In!);
+        var stateTypes = restored.ToDictionary(n => n.Id, n => n.Step.In!, StringComparer.Ordinal);
         var trackTypes = restored.ToDictionary(
             n => n.Id,
-            n => (IReadOnlyList<Type>)TracksBefore(nodes, n, withheld).ToList()
+            n => (IReadOnlyList<Type>)TracksBefore(nodes, n, withheld).ToList(),
+            StringComparer.Ordinal
         );
 
         // The walk: Memory as the resumed run starts, then every step from the point on.
@@ -240,7 +169,8 @@ public static partial class ChainVerification
                     (
                         b.Value.Id,
                         (IReadOnlyList<Type>)[stateTypes[b.Value.Id], .. trackTypes[b.Value.Id]]
-                    )
+                    ),
+                StringComparer.Ordinal
             )
         );
 
@@ -260,16 +190,16 @@ public static partial class ChainVerification
         if (faults.Count > 0)
             return ResumeOutcome.Refused(
                 walk.ReadStale ? ResumeRefusals.StaleValue : ResumeRefusals.MissingInput,
-                string.Join(" ", faults.Select(f => f.Reason))
+                string.Join(' ', faults.Select(f => f.Reason))
             );
 
         return new ResumeOutcome(
-            null,
-            null,
+            RefusalCode: null,
+            Refusal: null,
             target,
             inclusive,
             main?.Id,
-            branchCheckpoints.ToDictionary(b => b.Key, b => b.Value.Id),
+            branchCheckpoints.ToDictionary(b => b.Key, b => b.Value.Id, StringComparer.Ordinal),
             stateTypes,
             trackTypes
         );
@@ -343,7 +273,7 @@ public static partial class ChainVerification
                 byId.TryGetValue(b.Key[..b.Key.LastIndexOf('/')], out var parallel)
                 && (
                     point is not null
-                        ? parallel.Id == point.Id
+                        ? string.Equals(parallel.Id, point.Id, StringComparison.Ordinal)
                         : parallel.Order > (main?.Order ?? -1)
                             && nodes
                                 .Skip((main?.Order ?? -1) + 1)
@@ -353,7 +283,7 @@ public static partial class ChainVerification
                                 )
                 )
             )
-            .ToDictionary(b => b.Key, b => b.Value);
+            .ToDictionary(b => b.Key, b => b.Value, StringComparer.Ordinal);
 
     /// <summary>
     /// The ids of every step of the chain, its tracks' and its branches', in the order a run
@@ -374,7 +304,7 @@ public static partial class ChainVerification
     private static List<Node> Walk(ChainRecorder chain)
     {
         var nodes = new List<Node>();
-        Visit(chain, new ChainNodeScope(""), null);
+        Visit(chain, new ChainNodeScope(""), branchPath: null);
         return nodes;
 
         void Visit(ChainRecorder steps, ChainNodeScope scope, string? branchPath)
@@ -416,69 +346,4 @@ public static partial class ChainVerification
             )
             .Select(n => n.Step.Out!)
             .Distinct();
-}
-
-/// <summary>
-/// Where a resume walk is: the point it skips to, whether it has reached it, and what each branch
-/// restores.
-/// </summary>
-internal sealed class ResumeWalk(
-    string? target,
-    bool inclusive,
-    IReadOnlyCollection<Type> restores,
-    IReadOnlyDictionary<string, (string Checkpoint, IReadOnlyList<Type> Restores)> branches
-)
-{
-    /// <summary>What the checkpoint this walk starts from restores, as it was when it was taken.</summary>
-    public System.Collections.Generic.HashSet<Type> Restores { get; } = [.. restores];
-
-    /// <summary>The types a skipped step wrote that nothing restores.</summary>
-    public System.Collections.Generic.HashSet<Type> Stale { get; } = [];
-
-    /// <summary>True once a step from the point on read a stale type, here or in a branch.</summary>
-    public bool ReadStale { get; private set; }
-
-    /// <summary>The walk a branch's walk started from, which learns that a branch read a stale type.</summary>
-    private ResumeWalk? _parent;
-
-    /// <summary>Whether <paramref name="type"/> is stale, noting that a step read it.</summary>
-    public bool ReadsStale(Type type)
-    {
-        if (!Stale.Contains(type))
-            return false;
-
-        for (var walk = this; walk is not null; walk = walk._parent)
-            walk.ReadStale = true;
-
-        return true;
-    }
-
-    public string Target { get; } = target ?? "";
-
-    public bool Inclusive { get; } = inclusive;
-
-    public bool Skipping { get; set; } = target is not null;
-
-    /// <summary>
-    /// The walk of the branch at <paramref name="path"/>: from its own checkpoint when it has one,
-    /// whose state and routes go into <paramref name="memory"/>, else from its start. A type a
-    /// skipped step before the <c>Parallel</c> overwrote is stale in the branch too, unless the
-    /// branch's own checkpoint holds it.
-    /// </summary>
-    public ResumeWalk ForBranch(string path, System.Collections.Generic.HashSet<Type> memory)
-    {
-        ResumeWalk walk;
-
-        if (branches.TryGetValue(path, out var restored))
-        {
-            memory.UnionWith(restored.Restores);
-            walk = new ResumeWalk(restored.Checkpoint, true, restored.Restores, branches);
-        }
-        else
-            walk = new ResumeWalk(null, false, [], branches);
-
-        walk._parent = this;
-        walk.Stale.UnionWith(Stale.Where(t => !walk.Restores.Contains(t)));
-        return walk;
-    }
 }

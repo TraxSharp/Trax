@@ -93,37 +93,7 @@ internal static class ReflectionHelpers
         if (GenericMethodCache.TryGetValue(cacheKey, out var cached))
             return cached;
 
-        return GenericMethodCache.GetOrAdd(
-            cacheKey,
-            _ =>
-            {
-                var methods = monad
-                    .GetType()
-                    .GetMethods(
-                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
-                    )
-                    .Where(m =>
-                        m is { Name: "ShortCircuitJunction", IsGenericMethodDefinition: true }
-                    )
-                    .Where(m => m.GetGenericArguments().Length == 3)
-                    .Where(m => m.GetParameters().Length == parameterCount)
-                    .ToList();
-
-                switch (methods.Count)
-                {
-                    case > 1:
-                        throw new InvalidOperationException(
-                            "More than one Generic 'ShortCircuitJunction' method found."
-                        );
-                    case 0:
-                        throw new InvalidOperationException(
-                            "Suitable 'ShortCircuitJunction' method not found."
-                        );
-                }
-
-                return methods.First().MakeGenericMethod(typeof(TJunction), tIn, tOut);
-            }
-        );
+        return GenericMethodCache.GetOrAdd(cacheKey, FindGenericJunctionMethod);
     }
 
     /// <summary>
@@ -149,35 +119,46 @@ internal static class ReflectionHelpers
         if (GenericMethodCache.TryGetValue(cacheKey, out var cached))
             return cached;
 
-        return GenericMethodCache.GetOrAdd(
-            cacheKey,
-            _ =>
-            {
-                var methods = monad
-                    .GetType()
-                    .GetMethods(
-                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
-                    )
-                    .Where(m => m is { Name: "ChainJunction", IsGenericMethodDefinition: true })
-                    .Where(m => m.GetGenericArguments().Length == 3)
-                    .Where(m => m.GetParameters().Length == parameterCount)
-                    .ToList();
+        return GenericMethodCache.GetOrAdd(cacheKey, FindGenericJunctionMethod);
+    }
 
-                switch (methods.Count)
-                {
-                    case > 1:
-                        throw new InvalidOperationException(
-                            "More than one Generic 'ChainJunction' method found."
-                        );
-                    case 0:
-                        throw new InvalidOperationException(
-                            "Suitable 'ChainJunction' method not found."
-                        );
-                }
+    /// <summary>
+    /// The one generic method of the owner type with the key's name, three type arguments and the
+    /// key's parameter count, closed over the key's junction, input and output types.
+    /// </summary>
+    private static MethodInfo FindGenericJunctionMethod(
+        (
+            Type OwnerType,
+            string MethodName,
+            Type JunctionType,
+            Type TIn,
+            Type TOut,
+            int ParamCount
+        ) key
+    )
+    {
+        var methods = key
+            .OwnerType.GetMethods(
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+            )
+            .Where(m =>
+                m.IsGenericMethodDefinition
+                && string.Equals(m.Name, key.MethodName, StringComparison.Ordinal)
+                && m.GetGenericArguments().Length == 3
+                && m.GetParameters().Length == key.ParamCount
+            )
+            .ToList();
 
-                return methods.First().MakeGenericMethod(typeof(TJunction), tIn, tOut);
-            }
-        );
+        return methods.Count switch
+        {
+            > 1 => throw new InvalidOperationException(
+                $"More than one Generic '{key.MethodName}' method found."
+            ),
+            0 => throw new InvalidOperationException(
+                $"Suitable '{key.MethodName}' method not found."
+            ),
+            _ => methods[0].MakeGenericMethod(key.JunctionType, key.TIn, key.TOut),
+        };
     }
 
     /// <summary>
@@ -201,7 +182,7 @@ internal static class ReflectionHelpers
 
         rightValue = eitherType
             .GetMethod(nameof(Either<object, object>.ValueUnsafe))!
-            .Invoke(eitherObject, null);
+            .Invoke(eitherObject, parameters: null);
         return true;
     }
 }

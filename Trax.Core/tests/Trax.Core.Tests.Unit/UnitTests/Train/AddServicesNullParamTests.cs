@@ -445,35 +445,35 @@ public class AddServicesNullParamTests : TestSetup
         failure.Message.Should().Contain("position 2 of 3");
     }
 
-    private interface ITestService1 { }
+    private interface ITestService1;
 
-    private interface ITestService2 { }
+    private interface ITestService2;
 
-    private interface ITestService3 { }
+    private interface ITestService3;
 
-    private interface ITestService4 { }
+    private interface ITestService4;
 
-    private interface ITestService5 { }
+    private interface ITestService5;
 
-    private interface ITestService6 { }
+    private interface ITestService6;
 
-    private interface ITestService7 { }
+    private interface ITestService7;
 
-    private class TestService1 : ITestService1 { }
+    private sealed class TestService1 : ITestService1;
 
-    private class TestService2 : ITestService2 { }
+    private sealed class TestService2 : ITestService2;
 
-    private class TestService3 : ITestService3 { }
+    private sealed class TestService3 : ITestService3;
 
-    private class TestService4 : ITestService4 { }
+    private sealed class TestService4 : ITestService4;
 
-    private class TestService5 : ITestService5 { }
+    private sealed class TestService5 : ITestService5;
 
-    private class TestService6 : ITestService6 { }
+    private sealed class TestService6 : ITestService6;
 
-    private class TestService7 : ITestService7 { }
+    private sealed class TestService7 : ITestService7;
 
-    private class TestTrain : Train<int, string>
+    private sealed class TestTrain : Train<int, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             throw new NotImplementedException();

@@ -65,13 +65,13 @@ public class ExtractInstanceMemberTests : TestSetup
         public Currency Currency { get; init; } = null!;
     }
 
-    private class TestTrain : Train<Order, Currency>
+    private sealed class TestTrain : Train<Order, Currency>
     {
         protected override Task<Either<Exception, Currency>> Junctions() =>
             throw new NotImplementedException();
     }
 
-    private class BagTrain : Train<Bag, Currency>
+    private sealed class BagTrain : Train<Bag, Currency>
     {
         protected override Task<Either<Exception, Currency>> Junctions() =>
             throw new NotImplementedException();

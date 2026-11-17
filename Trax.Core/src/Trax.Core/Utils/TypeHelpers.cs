@@ -32,7 +32,7 @@ internal static class TypeHelpers
         }
 
         var name = type.Name;
-        var tick = name.IndexOf('`');
+        var tick = name.IndexOf('`', StringComparison.Ordinal);
 
         if (tick >= 0)
             name = name[..tick];

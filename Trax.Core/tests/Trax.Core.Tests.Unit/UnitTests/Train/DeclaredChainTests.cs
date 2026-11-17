@@ -81,9 +81,9 @@ public class DeclaredChainTests : TestSetup
 
         train.DeclaredChain();
 
-        (await train.Run("hello"))
+        (await train.Run("hello", CancellationToken.None))
             .Should()
-            .Be(true, "reading a chain must not leave the train in a declaring state");
+            .Be(expected: true, "reading a chain must not leave the train in a declaring state");
     }
 
     [Test]
@@ -112,7 +112,7 @@ public class DeclaredChainTests : TestSetup
                     typeof(int)
                 ),
                 new ChainStep(ChainStepKind.Chain, typeof(IntToBool), typeof(int), typeof(bool)),
-                new ChainStep(ChainStepKind.Resolve, null, null, typeof(bool))
+                new ChainStep(ChainStepKind.Resolve, Junction: null, In: null, typeof(bool))
             );
     }
 
@@ -121,8 +121,12 @@ public class DeclaredChainTests : TestSetup
     {
         var steps = new SeedingTrain().DeclaredChain().Steps;
 
-        steps[0].Should().Be(new ChainStep(ChainStepKind.Seed, null, null, typeof(ICounter)));
-        steps[1].Should().Be(new ChainStep(ChainStepKind.Seed, null, null, typeof(int)));
+        steps[0]
+            .Should()
+            .Be(new ChainStep(ChainStepKind.Seed, Junction: null, In: null, typeof(ICounter)));
+        steps[1]
+            .Should()
+            .Be(new ChainStep(ChainStepKind.Seed, Junction: null, In: null, typeof(int)));
     }
 
     [Test]
@@ -209,7 +213,10 @@ public class DeclaredChainTests : TestSetup
     {
         var chain = new ServiceAssignedLaterTrain().DeclaredChain();
 
-        chain.Steps[0].Should().Be(new ChainStep(ChainStepKind.Seed, null, null, typeof(ICounter)));
+        chain
+            .Steps[0]
+            .Should()
+            .Be(new ChainStep(ChainStepKind.Seed, Junction: null, In: null, typeof(ICounter)));
         chain.Steps.Select(s => s.Kind).Should().EndWith(ChainStepKind.Resolve);
     }
 
@@ -257,10 +264,10 @@ public class DeclaredChainTests : TestSetup
                     typeof(string),
                     typeof(int)
                 ),
-                new ChainStep(ChainStepKind.Resolve, null, null, typeof(int))
+                new ChainStep(ChainStepKind.Resolve, Junction: null, In: null, typeof(int))
             );
 
-        (await train.Run("hello"))
+        (await train.Run("hello", CancellationToken.None))
             .Should()
             .Be(5, "the instances the declaration named are the ones the run executes");
     }
@@ -282,7 +289,12 @@ public class DeclaredChainTests : TestSetup
                 typeof(string),
                 typeof(Trax.Core.Functional.Unit)
             ),
-            new ChainStep(ChainStepKind.Resolve, null, null, typeof(Trax.Core.Functional.Unit)),
+            new ChainStep(
+                ChainStepKind.Resolve,
+                Junction: null,
+                In: null,
+                typeof(Trax.Core.Functional.Unit)
+            ),
         };
 
         new UnitInstanceFirstTrain().DeclaredChain().Steps.Should().Equal(expected);
@@ -342,17 +354,17 @@ public class DeclaredChainTests : TestSetup
         return refusals;
     }
 
-    private class StringLength : Junction<string, int>
+    private sealed class StringLength : Junction<string, int>
     {
         public override Task<int> Run(string input) => Task.FromResult(input.Length);
     }
 
-    private class IntToBool : Junction<int, bool>
+    private sealed class IntToBool : Junction<int, bool>
     {
         public override Task<bool> Run(int input) => Task.FromResult(input > 0);
     }
 
-    private class CountingJunction : Junction<string, int>
+    private sealed class CountingJunction : Junction<string, int>
     {
         public static int Runs;
 
@@ -363,55 +375,55 @@ public class DeclaredChainTests : TestSetup
         }
     }
 
-    private class NeedsADependency(string required) : Junction<string, int>
+    private sealed class NeedsADependency(string required) : Junction<string, int>
     {
         public override Task<int> Run(string input) => Task.FromResult(required.Length);
     }
 
-    private record Wrapper(string Value);
+    private sealed record Wrapper(string Value);
 
-    private class ThreeStepTrain : Train<string, bool>
+    private sealed class ThreeStepTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<StringLength>().Chain<IntToBool>().Resolve();
     }
 
-    private class CountingTrain : Train<string, int>
+    private sealed class CountingTrain : Train<string, int>
     {
         protected override Task<Either<Exception, int>> Junctions() =>
             Chain<CountingJunction>().Resolve();
     }
 
-    private class UnconstructibleTrain : Train<string, int>
+    private sealed class UnconstructibleTrain : Train<string, int>
     {
         protected override Task<Either<Exception, int>> Junctions() =>
             Chain<NeedsADependency>().Resolve();
     }
 
-    private class MixedTrain : Train<Wrapper, string>
+    private sealed class MixedTrain : Train<Wrapper, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             ShortCircuit<WrapperPassthrough>().Extract<Wrapper, string>().Resolve();
     }
 
-    private class WrapperPassthrough : Junction<Wrapper, Wrapper>
+    private sealed class WrapperPassthrough : Junction<Wrapper, Wrapper>
     {
         public override Task<Wrapper> Run(Wrapper input) => Task.FromResult(input);
     }
 
     private interface ICounter;
 
-    private class Counter : ICounter;
+    private sealed class Counter : ICounter;
 
-    private record Holder(int Count);
+    private sealed record Holder(int Count);
 
-    private class ExplicitTypedTrain : Train<string, bool>
+    private sealed class ExplicitTypedTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<StringLength, string, int>().Chain<IntToBool, int, bool>().Resolve();
     }
 
-    private class ServiceAssignedLaterTrain : Train<string, bool>
+    private sealed class ServiceAssignedLaterTrain : Train<string, bool>
     {
         // Assigned after the chain is declared, as a lifecycle hook would.
         private readonly ICounter? _counter = null;
@@ -420,7 +432,7 @@ public class DeclaredChainTests : TestSetup
             AddServices(_counter).Chain<StringLength>().Chain<IntToBool>().Resolve();
     }
 
-    private class SeedingTrain : Train<string, bool>
+    private sealed class SeedingTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             AddServices<ICounter>(new Counter())
@@ -429,13 +441,13 @@ public class DeclaredChainTests : TestSetup
                 .Resolve();
     }
 
-    private class AsyncWrapperTrain : Train<string, bool>
+    private sealed class AsyncWrapperTrain : Train<string, bool>
     {
         protected override async Task<Either<Exception, bool>> Junctions() =>
-            await Chain<StringLength>().Chain<IntToBool>().Resolve();
+            await Chain<StringLength>().Chain<IntToBool>().Resolve().ConfigureAwait(false);
     }
 
-    private class AwaitingTrain : Train<string, bool>
+    private sealed class AwaitingTrain : Train<string, bool>
     {
         // Never completes. Task.Yield raced the check: on a fast thread pool the rest of the body
         // could finish before DeclaredChain looked, and the declaration then read as complete.
@@ -443,91 +455,91 @@ public class DeclaredChainTests : TestSetup
 
         protected override async Task<Either<Exception, bool>> Junctions()
         {
-            await Never.Task;
-            return await Chain<StringLength>().Chain<IntToBool>().Resolve();
+            await Never.Task.ConfigureAwait(false);
+            return await Chain<StringLength>().Chain<IntToBool>().Resolve().ConfigureAwait(false);
         }
     }
 
-    private class DirectReturnTrain : Train<string, bool>
+    private sealed class DirectReturnTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Task.FromResult<Either<Exception, bool>>(true);
     }
 
-    private class ValueResolvingTrain : Train<string, bool>
+    private sealed class ValueResolvingTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
-            Chain<StringLength>().Resolve(true);
+            Chain<StringLength>().Resolve(returnType: true);
     }
 
-    private class ThrowingAsyncTrain : Train<string, bool>
+    private sealed class ThrowingAsyncTrain : Train<string, bool>
     {
         protected override async Task<Either<Exception, bool>> Junctions()
         {
             // An already-completed await keeps the body synchronous, so the throw lands in a
             // finished task rather than propagating out of the call.
-            await Task.CompletedTask;
+            await Task.CompletedTask.ConfigureAwait(false);
             throw new InvalidOperationException("declaration failed");
         }
     }
 
-    private class ClassIChainTrain : Train<string, bool>
+    private sealed class ClassIChainTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             IChain<StringLength>().Chain<IntToBool>().Resolve();
     }
 
-    private class ClassServiceTrain : Train<string, bool>
+    private sealed class ClassServiceTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             AddServices(new Counter()).Chain<StringLength>().Chain<IntToBool>().Resolve();
     }
 
-    private class FreshMonadTrain : Train<string, int>
+    private sealed class FreshMonadTrain : Train<string, int>
     {
         protected override Task<Either<Exception, int>> Junctions() =>
             NewMonad().Chain<CountingJunction>().Resolve();
     }
 
-    private class NotAJunction;
+    private sealed class NotAJunction;
 
-    private class NotAJunctionTrain : Train<string, int>
+    private sealed class NotAJunctionTrain : Train<string, int>
     {
         protected override Task<Either<Exception, int>> Junctions() =>
             Chain<NotAJunction>().Chain<StringLength>().Resolve();
     }
 
-    private class StringToUnit : Junction<string, Trax.Core.Functional.Unit>
+    private sealed class StringToUnit : Junction<string, Trax.Core.Functional.Unit>
     {
         public override Task<Trax.Core.Functional.Unit> Run(string input) =>
             Task.FromResult(Trax.Core.Functional.Unit.Default);
     }
 
-    private class InstanceTrain : Train<string, int>
+    private sealed class InstanceTrain : Train<string, int>
     {
         protected override Task<Either<Exception, int>> Junctions() =>
             ShortCircuit(new CountingJunction()).Chain(new CountingJunction()).Resolve();
     }
 
-    private class UnitInstanceFirstTrain : Train<string, Trax.Core.Functional.Unit>
+    private sealed class UnitInstanceFirstTrain : Train<string, Trax.Core.Functional.Unit>
     {
         protected override Task<Either<Exception, Trax.Core.Functional.Unit>> Junctions() =>
             Chain<StringToUnit, string>(new StringToUnit()).Chain<StringToUnit, string>().Resolve();
     }
 
-    private class UnitParameterlessFirstTrain : Train<string, Trax.Core.Functional.Unit>
+    private sealed class UnitParameterlessFirstTrain : Train<string, Trax.Core.Functional.Unit>
     {
         protected override Task<Either<Exception, Trax.Core.Functional.Unit>> Junctions() =>
             Chain<StringToUnit, string>().Chain<StringToUnit, string>(new StringToUnit()).Resolve();
     }
 
-    private class GatedFailingTrain(Task gate) : Train<string, bool>
+    private sealed class GatedFailingTrain(Task gate) : Train<string, bool>
     {
         public const string Failure = "failed after the declaration was read";
 
         protected override async Task<Either<Exception, bool>> Junctions()
         {
-            await gate;
+            await gate.ConfigureAwait(false);
             throw new InvalidOperationException(Failure);
         }
     }

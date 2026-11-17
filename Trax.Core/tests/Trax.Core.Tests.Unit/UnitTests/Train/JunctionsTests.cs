@@ -15,7 +15,7 @@ public class JunctionsTests : TestSetup
     {
         var train = new SingleChainTrain();
 
-        var result = await train.Run("hello");
+        var result = await train.Run("hello", CancellationToken.None);
 
         result.Should().Be(5);
     }
@@ -25,9 +25,9 @@ public class JunctionsTests : TestSetup
     {
         var train = new MultiChainTrain();
 
-        var result = await train.Run("hello");
+        var result = await train.Run("hello", CancellationToken.None);
 
-        result.Should().Be(true);
+        result.Should().Be(expected: true);
     }
 
     [Test]
@@ -61,7 +61,8 @@ public class JunctionsTests : TestSetup
     {
         var train = new ThrowingChainTrain();
 
-        var act = async () => await train.Run("hello");
+        var act = async () =>
+            await train.Run("hello", CancellationToken.None).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<Exception>().WithMessage("*junction failed*");
     }
@@ -86,7 +87,7 @@ public class JunctionsTests : TestSetup
     {
         var train = new ExtractTrain();
 
-        var result = await train.Run(new Wrapper("extracted"));
+        var result = await train.Run(new Wrapper("extracted"), CancellationToken.None);
 
         result.Should().Be("extracted");
     }
@@ -100,7 +101,7 @@ public class JunctionsTests : TestSetup
     {
         var train = new RunInternalTrain();
 
-        var result = await train.Run("hello");
+        var result = await train.Run("hello", CancellationToken.None);
 
         result.Should().Be(5);
     }
@@ -162,60 +163,60 @@ public class JunctionsTests : TestSetup
 
     #region Fakes
 
-    private class StringLengthJunction : Junction<string, int>
+    private sealed class StringLengthJunction : Junction<string, int>
     {
         public override async Task<int> Run(string input) => input.Length;
     }
 
-    private class IntToBoolJunction : Junction<int, bool>
+    private sealed class IntToBoolJunction : Junction<int, bool>
     {
         public override async Task<bool> Run(int input) => input > 0;
     }
 
-    private class ThrowingJunction : Junction<string, int>
+    private sealed class ThrowingJunction : Junction<string, int>
     {
         public override Task<int> Run(string input) =>
             throw new InvalidOperationException("junction failed");
     }
 
-    private class IdentityJunction : Junction<string, string>
+    private sealed class IdentityJunction : Junction<string, string>
     {
         public override async Task<string> Run(string input) => input;
     }
 
-    private record Wrapper(string Value);
+    private sealed record Wrapper(string Value);
 
-    private class SingleChainTrain : Train<string, int>
+    private sealed class SingleChainTrain : Train<string, int>
     {
         protected override Task<Either<Exception, int>> Junctions() =>
             Chain<StringLengthJunction>().Resolve();
     }
 
-    private class MultiChainTrain : Train<string, bool>
+    private sealed class MultiChainTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<StringLengthJunction>().Chain<IntToBoolJunction>().Resolve();
     }
 
-    private class ThrowingChainTrain : Train<string, int>
+    private sealed class ThrowingChainTrain : Train<string, int>
     {
         protected override Task<Either<Exception, int>> Junctions() =>
             Chain<ThrowingJunction>().Resolve();
     }
 
-    private class MissingRefReturnTypeTrain : Train<string, List<string>>
+    private sealed class MissingRefReturnTypeTrain : Train<string, List<string>>
     {
         protected override Task<Either<Exception, List<string>>> Junctions() =>
             Chain<IdentityJunction>().Resolve();
     }
 
-    private class ExtractTrain : Train<Wrapper, string>
+    private sealed class ExtractTrain : Train<Wrapper, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Task.FromResult(Extract<Wrapper, string>().Resolve());
     }
 
-    private class RunInternalTrain : Train<string, int>
+    private sealed class RunInternalTrain : Train<string, int>
     {
         protected override Task<Either<Exception, int>> Junctions() =>
             Chain<StringLengthJunction>().Resolve();

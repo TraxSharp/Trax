@@ -7,74 +7,6 @@ using Trax.Core.Utils;
 
 namespace Trax.Core.Monad;
 
-/// <summary>
-/// Where a run's checkpoints are stored. Trax.Effect implements it over the run's database; a
-/// train run without one, as a plain <c>Train</c> is, takes no checkpoint and the step does
-/// nothing.
-/// </summary>
-internal interface ICheckpointStore
-{
-    /// <summary>
-    /// Stores <paramref name="checkpoint"/>. A failure it throws fails the step, classified as the
-    /// exception says.
-    /// </summary>
-    Task Write(CheckpointTaken checkpoint, CancellationToken cancellationToken);
-}
-
-/// <summary>A checkpoint a run reached, as the store is handed it.</summary>
-/// <param name="Train">The train running, for a store that records which run took it.</param>
-/// <param name="ExternalId">The run's external id.</param>
-/// <param name="NodeId">The checkpoint's node id, with the branch's path inside it.</param>
-/// <param name="BranchPath">The <c>Parallel</c> branch it is in, or null.</param>
-/// <param name="StateType">The state type the chain declares, which the value is stored as.</param>
-/// <param name="State">The state in Memory.</param>
-/// <param name="Tracks">Every <see cref="TrackTaken{TKey}"/> in Memory: the routes taken before it.</param>
-/// <param name="Services">The scope the step runs in, for a store that must look at it.</param>
-internal sealed record CheckpointTaken(
-    object Train,
-    string ExternalId,
-    string NodeId,
-    string? BranchPath,
-    Type StateType,
-    object State,
-    IReadOnlyList<object> Tracks,
-    IServiceProvider? Services
-);
-
-/// <summary>
-/// What a resumed run restores and where it starts: the node it skips to, and the checkpoint each
-/// chain or branch restores. Built by Trax.Effect from <see cref="ChainVerification.CheckResume"/>
-/// and the stored rows.
-/// </summary>
-/// <param name="Target">
-/// The node the run skips to, or null to run the main chain from the top (when only branches have
-/// checkpoints to restore).
-/// </param>
-/// <param name="Inclusive">
-/// True to skip the target as well (a checkpoint, restored rather than run); false to run it.
-/// </param>
-/// <param name="Restored">
-/// The checkpoint each chain restores, keyed by branch path, with the main chain under the empty
-/// string.
-/// </param>
-internal sealed record ResumePlan(
-    string? Target,
-    bool Inclusive,
-    IReadOnlyDictionary<string, RestoredCheckpoint> Restored
-);
-
-/// <summary>A stored checkpoint, read back.</summary>
-/// <param name="NodeId">The checkpoint's node id.</param>
-/// <param name="StateType">The declared state type, which it goes into Memory under.</param>
-/// <param name="State">The state.</param>
-/// <param name="Tracks">The routes taken before it, as <see cref="TrackTaken{TKey}"/> values.</param>
-internal sealed record RestoredCheckpoint(
-    string NodeId,
-    Type StateType,
-    object State,
-    IReadOnlyList<object> Tracks
-);
-
 /// <summary>The chain steps the train methods of the same name call.</summary>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/train-methods/checkpoint">SDK reference</seealso>
 public partial class Monad<TInput, TReturn>
@@ -175,16 +107,16 @@ public partial class Monad<TInput, TReturn>
         if (recorder.AfterShortCircuit)
             recorder.RefuseStep(
                 ChainStepKind.Checkpoint,
-                null,
+                junction: null,
                 $"{step} comes after a ShortCircuit on the same path. A short circuit's value is "
                     + "kept outside Memory, so a run resumed here would lose it. Checkpoint before "
                     + "the ShortCircuit, or after a step that does not need it."
             );
 
         foreach (var problem in CheckpointState.Problems(typeof(TState)))
-            recorder.RefuseStep(ChainStepKind.Checkpoint, null, $"{step}: {problem}");
+            recorder.RefuseStep(ChainStepKind.Checkpoint, junction: null, $"{step}: {problem}");
 
-        recorder.Record(ChainStepKind.Checkpoint, null, typeof(TState), null);
+        recorder.Record(ChainStepKind.Checkpoint, junction: null, typeof(TState), tOut: null);
         return new MonadTask<TInput, TReturn>(Task.FromResult(this));
     }
 
@@ -203,7 +135,7 @@ public partial class Monad<TInput, TReturn>
 
         var id = Nodes.Peek(key);
 
-        if (!resume.Inclusive && id == resume.Target)
+        if (!resume.Inclusive && string.Equals(id, resume.Target, StringComparison.Ordinal))
         {
             Resuming = null;
             return false;
@@ -211,7 +143,7 @@ public partial class Monad<TInput, TReturn>
 
         Nodes.Next(key);
 
-        if (resume.Inclusive && id == resume.Target)
+        if (resume.Inclusive && string.Equals(id, resume.Target, StringComparison.Ordinal))
             Resuming = null;
 
         return true;
@@ -233,7 +165,7 @@ public partial class Monad<TInput, TReturn>
         var key = ChainNodeScope.RoutingKey(kind, typeof(TKey));
         var id = Nodes.Peek(key);
 
-        if (!resume.Inclusive && id == resume.Target)
+        if (!resume.Inclusive && string.Equals(id, resume.Target, StringComparison.Ordinal))
         {
             Resuming = null;
             return null;
@@ -247,8 +179,12 @@ public partial class Monad<TInput, TReturn>
         // The track is named in the resume point's id, so the run goes down the one it is in.
         var name = resume.Target[(id.Length + 1)..].Split('/')[0];
         var taken =
-            tracks.Tracks.Find(t => t.Name == name)
-            ?? (tracks.Fallback?.Name == name ? tracks.Fallback : null);
+            tracks.Tracks.Find(t => string.Equals(t.Name, name, StringComparison.Ordinal))
+            ?? (
+                string.Equals(tracks.Fallback?.Name, name, StringComparison.Ordinal)
+                    ? tracks.Fallback
+                    : null
+            );
 
         if (taken is null)
             return Refuse(
@@ -284,7 +220,10 @@ public partial class Monad<TInput, TReturn>
 
         var keys = specs.Select(s => ChainNodeScope.DecideKey(s.DecisionType)).ToList();
 
-        if (!resume.Inclusive && Nodes.PeekMany(keys).Contains(resume.Target))
+        if (
+            !resume.Inclusive
+            && Nodes.PeekMany(keys).Contains(resume.Target, StringComparer.Ordinal)
+        )
         {
             Resuming = null;
             return false;

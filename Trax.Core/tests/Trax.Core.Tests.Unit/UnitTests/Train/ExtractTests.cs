@@ -96,12 +96,12 @@ public class ExtractTests : TestSetup
         monad.Memory.Should().NotBeNull();
     }
 
-    private class TestClass
+    private sealed class TestClass
     {
         public string TestString { get; set; } = null!;
     }
 
-    private class TestTrain : Train<int, string>
+    private sealed class TestTrain : Train<int, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             throw new NotImplementedException();

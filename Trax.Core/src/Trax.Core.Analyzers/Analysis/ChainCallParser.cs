@@ -5,23 +5,6 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace Trax.Core.Analyzers.Analysis;
 
 /// <summary>
-/// Represents a single call in the fluent train chain.
-/// </summary>
-internal readonly struct ChainCall
-{
-    public string MethodName { get; }
-    public InvocationExpressionSyntax Invocation { get; }
-    public IMethodSymbol Method { get; }
-
-    public ChainCall(string methodName, InvocationExpressionSyntax invocation, IMethodSymbol method)
-    {
-        MethodName = methodName;
-        Invocation = invocation;
-        Method = method;
-    }
-}
-
-/// <summary>
 /// Parses a fluent train chain by unwinding the nested InvocationExpression syntax tree
 /// into an ordered list of calls: [Activate, Chain&lt;A&gt;, Chain&lt;B&gt;, ..., Resolve].
 /// </summary>

@@ -3,4 +3,4 @@ using Trax.Core.Tests.Integration.Examples.Brewery.Junctions.Prepare;
 
 namespace Trax.Core.Tests.Integration.Examples.Brewery.Junctions.Bottle;
 
-public interface IBottle : IJunction<BrewingJug, List<GlassBottle>> { }
+public interface IBottle : IJunction<BrewingJug, List<GlassBottle>>;

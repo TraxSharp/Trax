@@ -604,7 +604,7 @@ internal static class StateDigest
                 ? Refused
                 : Fields(type, collection, Kind.Collection);
 
-        return Fields(type, null, Kind.Fields);
+        return Fields(type, collection: null, Kind.Fields);
     }
 
     /// <summary>
@@ -652,7 +652,7 @@ internal static class StateDigest
                 if (field.FieldType.IsPointer || field.FieldType.IsByRefLike)
                     return Refused;
 
-                fields.Add(new FieldPlan(field, null));
+                fields.Add(new FieldPlan(field, Spread: null));
             }
         }
 
@@ -793,7 +793,7 @@ internal static class StateDigest
         if (type.IsGenericType && !type.IsGenericTypeDefinition)
             return Identity(type.GetGenericTypeDefinition())
                 + "["
-                + string.Join(",", type.GetGenericArguments().Select(a => $"[{Identity(a)}]"))
+                + string.Join(',', type.GetGenericArguments().Select(a => $"[{Identity(a)}]"))
                 + "]";
 
         return $"{type.FullName ?? type.Name}, {type.Assembly.GetName().Name}";
@@ -904,7 +904,7 @@ internal static class StateDigest
         && type != typeof(string)
         && type.Namespace is { } ns
         && ns.StartsWith("System.Collections", StringComparison.Ordinal)
-        && ns != "System.Collections.Specialized"
+        && !string.Equals(ns, "System.Collections.Specialized", StringComparison.Ordinal)
         // A default ImmutableArray cannot be enumerated; its one field, an array, can be read.
         && !(type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ImmutableArray<>))
         && IsFramework(type.Assembly);
@@ -916,12 +916,12 @@ internal static class StateDigest
     private static bool EnumeratesByItsOwnCode(Type type) =>
         !type.IsInterface
         && type.GetInterfaces()
-            .Where(i =>
-                i == typeof(IEnumerable)
-                || (i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>))
-            )
             .Any(i =>
-                type.GetInterfaceMap(i)
+                (
+                    i == typeof(IEnumerable)
+                    || (i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>))
+                )
+                && type.GetInterfaceMap(i)
                     .TargetMethods.Any(m => !IsFramework(m.DeclaringType!.Assembly))
             );
 
@@ -930,8 +930,8 @@ internal static class StateDigest
         || assembly.GetName().Name is { } name
             && (
                 name.StartsWith("System.", StringComparison.Ordinal)
-                || name == "System"
-                || name == "netstandard"
+                || string.Equals(name, "System", StringComparison.Ordinal)
+                || string.Equals(name, "netstandard", StringComparison.Ordinal)
             );
 
     /// <summary>

@@ -76,7 +76,10 @@ public class ResolveTests : TestSetup
         // Assert
         result.Should().NotBeNull();
         result.IsRight.Should().BeTrue();
-        result.ValueUnsafe().Should().Be(input.ToString());
+        result
+            .ValueUnsafe()
+            .Should()
+            .Be(input.ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
 
     [Theory]
@@ -119,36 +122,37 @@ public class ResolveTests : TestSetup
         result.ValueUnsafe().Should().Be("stated result");
     }
 
-    private class TestTrain : Train<int, int>
+    private sealed class TestTrain : Train<int, int>
     {
         protected override Task<Either<Exception, int>> Junctions() =>
             throw new NotImplementedException();
     }
 
-    private class TestStringTrain : Train<int, string>
+    private sealed class TestStringTrain : Train<int, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             throw new NotImplementedException();
     }
 
-    private class TestObjectTrain : Train<object, object>
+    private sealed class TestObjectTrain : Train<object, object>
     {
         protected override Task<Either<Exception, object>> Junctions() =>
             throw new NotImplementedException();
     }
 
-    private class TestTupleTrain : Train<Trax.Core.Functional.Unit, (int, string)>
+    private sealed class TestTupleTrain : Train<Trax.Core.Functional.Unit, (int, string)>
     {
         protected override Task<Either<Exception, (int, string)>> Junctions() =>
             throw new NotImplementedException();
     }
 
-    private class TestShortCircuitJunction : Junction<int, string>
+    private sealed class TestShortCircuitJunction : Junction<int, string>
     {
-        public override async Task<string> Run(int input) => input.ToString();
+        public override async Task<string> Run(int input) =>
+            input.ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
 
-    private class FailingJunction : Junction<int, string>
+    private sealed class FailingJunction : Junction<int, string>
     {
         public const string Failure = "the junction failed";
 

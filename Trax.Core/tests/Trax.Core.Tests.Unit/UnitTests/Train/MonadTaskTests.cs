@@ -182,19 +182,19 @@ public class MonadTaskTests : TestSetup
 
     #region Test fixtures
 
-    private class HasInner
+    private sealed class HasInner
     {
         public string Inner { get; set; } = "payload";
     }
 
-    private class DoneJunction : Junction<string, string>
+    private sealed class DoneJunction : Junction<string, string>
     {
         public override Task<string> Run(string input) => Task.FromResult($"{input}-done");
 
         public DoneJunction() { }
     }
 
-    private class UnitJunction : Junction<string, Trax.Core.Functional.Unit>
+    private sealed class UnitJunction : Junction<string, Trax.Core.Functional.Unit>
     {
         public override Task<Trax.Core.Functional.Unit> Run(string input) =>
             Task.FromResult(Trax.Core.Functional.Unit.Default);
@@ -202,42 +202,42 @@ public class MonadTaskTests : TestSetup
         public UnitJunction() { }
     }
 
-    private class ShortCircuitJunction : Junction<string, string>
+    private sealed class ShortCircuitJunction : Junction<string, string>
     {
         public override Task<string> Run(string input) => Task.FromResult("shorted");
 
         public ShortCircuitJunction() { }
     }
 
-    private interface IS1 { }
+    private interface IS1;
 
-    private interface IS2 { }
+    private interface IS2;
 
-    private interface IS3 { }
+    private interface IS3;
 
-    private interface IS4 { }
+    private interface IS4;
 
-    private interface IS5 { }
+    private interface IS5;
 
-    private interface IS6 { }
+    private interface IS6;
 
-    private interface IS7 { }
+    private interface IS7;
 
-    private class S1 : IS1 { }
+    private sealed class S1 : IS1;
 
-    private class S2 : IS2 { }
+    private sealed class S2 : IS2;
 
-    private class S3 : IS3 { }
+    private sealed class S3 : IS3;
 
-    private class S4 : IS4 { }
+    private sealed class S4 : IS4;
 
-    private class S5 : IS5 { }
+    private sealed class S5 : IS5;
 
-    private class S6 : IS6 { }
+    private sealed class S6 : IS6;
 
-    private class S7 : IS7 { }
+    private sealed class S7 : IS7;
 
-    private class TestTrain : Train<string, string>
+    private sealed class TestTrain : Train<string, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             throw new NotImplementedException();

@@ -4,4 +4,4 @@ using Trax.Core.Tests.Integration.Examples.Brewery.Junctions.Prepare;
 
 namespace Trax.Core.Tests.Integration.Examples.Brewery;
 
-public interface ICider : IRoute<Ingredients, List<GlassBottle>> { }
+public interface ICider : IRoute<Ingredients, List<GlassBottle>>;

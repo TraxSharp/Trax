@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using AwesomeAssertions;
 using Trax.Core.Exceptions;
@@ -57,11 +58,13 @@ public class ParallelInterleavingTests : TestSetup
         foreach (var policy in Enum.GetValues<BranchFailurePolicy>())
         {
             var chain = Flat(lengths, policy);
-            var branches = lengths.Select((_, i) => $"Parallel#0/b{i}").ToList();
+            var branches = lengths
+                .Select((_, i) => string.Create(CultureInfo.InvariantCulture, $"Parallel#0/b{i}"))
+                .ToList();
             var faultPoints = branches
                 .SelectMany((b, i) => Enumerable.Range(0, lengths[i]).Select(k => (b, k)))
                 .Select(p => ((string Branch, int Index)?)p)
-                .Prepend(null)
+                .Prepend(element: null)
                 .ToList();
             var mismatches = new List<string>();
             var runs = 0;
@@ -87,12 +90,19 @@ public class ParallelInterleavingTests : TestSetup
                 {
                     var where =
                         $"[{policy}] fault {fault?.ToString() ?? "none"}, "
-                        + $"order {string.Join(" ", run.Runner.Trace)}";
+                        + $"order {string.Join(' ', run.Runner.Trace)}";
 
                     foreach (var difference in Differences(run.Result, oracle))
                         mismatches.Add($"{where}: {difference}");
 
-                    if (run.Result.IsRight && run.Result.Snapshot != expected.Snapshot)
+                    if (
+                        run.Result.IsRight
+                        && !string.Equals(
+                            run.Result.Snapshot,
+                            expected.Snapshot,
+                            StringComparison.Ordinal
+                        )
+                    )
                         mismatches.Add(
                             $"{where}: Memory {run.Result.Snapshot}, not {expected.Snapshot}"
                         );
@@ -108,21 +118,29 @@ public class ParallelInterleavingTests : TestSetup
                         policy == BranchFailurePolicy.WaitForAll
                             ? []
                             : branches
-                                .Except(finished.Take(finished.IndexOf(f.Branch)))
-                                .Where(b => b != f.Branch)
-                                .ToHashSet();
+                                .Except(
+                                    finished.Take(finished.IndexOf(f.Branch)),
+                                    StringComparer.Ordinal
+                                )
+                                .Where(b => !string.Equals(b, f.Branch, StringComparison.Ordinal))
+                                .ToHashSet(StringComparer.Ordinal);
 
                     if (!run.Result.Stopped.SetEquals(predicted))
                         mismatches.Add(
-                            $"{where}: stopped [{string.Join(", ", run.Result.Stopped.Order())}], "
-                                + $"not [{string.Join(", ", predicted.Order())}]"
+                            $"{where}: stopped [{string.Join(", ", run.Result.Stopped.Order(StringComparer.Ordinal))}], "
+                                + $"not [{string.Join(", ", predicted.Order(StringComparer.Ordinal))}]"
                         );
                 }
             }
 
-            TestContext.Out.WriteLine(
-                $"{string.Join(",", lengths)} [{policy}]: {runs} runs over {faultPoints.Count} failure points"
-            );
+            await TestContext
+                .Out.WriteLineAsync(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{string.Join(',', lengths)} [{policy}]: {runs} runs over {faultPoints.Count} failure points"
+                    )
+                )
+                .ConfigureAwait(false);
             mismatches
                 .Should()
                 .BeEmpty(
@@ -141,7 +159,12 @@ public class ParallelInterleavingTests : TestSetup
         foreach (var policy in Enum.GetValues<BranchFailurePolicy>())
         foreach (
             var at in lengths.SelectMany(
-                (n, i) => Enumerable.Range(0, n).Select(k => ($"Parallel#0/b{i}", k))
+                (n, i) =>
+                    Enumerable
+                        .Range(0, n)
+                        .Select(k =>
+                            (string.Create(CultureInfo.InvariantCulture, $"Parallel#0/b{i}"), k)
+                        )
             )
         )
         {
@@ -155,7 +178,10 @@ public class ParallelInterleavingTests : TestSetup
                         BranchRunner = runner,
                         CancellationToken = cts.Token,
                     };
-                    return await Outcome.Of(train, "x").WaitAsync(Hang);
+                    return await Outcome
+                        .Of(train, "x")
+                        .WaitAsync(Hang, CancellationToken.None)
+                        .ConfigureAwait(false);
                 },
                 (branch, index) =>
                 {
@@ -196,7 +222,7 @@ public class ParallelInterleavingTests : TestSetup
         }
 
         explored
-            .Select(e => string.Join(" ", e.Runner.Trace))
+            .Select(e => string.Join(' ', e.Runner.Trace))
             .Should()
             .OnlyHaveUniqueItems("every sequence of choices is a different interleaving");
     }
@@ -212,7 +238,7 @@ public class ParallelInterleavingTests : TestSetup
         // handed the same dictionary. In order, the count ends at 2; interleaved as read, read,
         // write, write, one increment is lost. The suite has to find that order.
         var oracle = await Outcome.Of(
-            new RacyTrain(new Dictionary<string, int> { ["n"] = 0 })
+            new RacyTrain(new Dictionary<string, int>(StringComparer.Ordinal) { ["n"] = 0 })
             {
                 BranchRunner = new SequentialBranchRunner(),
             },
@@ -221,7 +247,10 @@ public class ParallelInterleavingTests : TestSetup
 
         var explored = await Interleavings.Every(runner =>
             Outcome.Of(
-                new RacyTrain(new Dictionary<string, int> { ["n"] = 0 }) { BranchRunner = runner },
+                new RacyTrain(new Dictionary<string, int>(StringComparer.Ordinal) { ["n"] = 0 })
+                {
+                    BranchRunner = runner,
+                },
                 "x"
             )
         );
@@ -300,7 +329,7 @@ public class ParallelInterleavingTests : TestSetup
                 lengths
                     .Select(n => new Branch(
                         "",
-                        Enumerable.Range(0, n).Select(_ => (Element)new Link(false)).ToList()
+                        Enumerable.Range(0, n).Select(_ => (Element)new Link(Fails: false)).ToList()
                     ))
                     .ToList(),
                 policy
@@ -313,7 +342,12 @@ public class ParallelInterleavingTests : TestSetup
             : (branch, index) =>
             {
                 if ((branch, index) == f)
-                    throw new InvalidOperationException($"injected at {branch}#{index}");
+                    throw new InvalidOperationException(
+                        string.Create(
+                            global::System.Globalization.CultureInfo.InvariantCulture,
+                            $"injected at {branch}#{index}"
+                        )
+                    );
             };
 
     private static Task<Outcome> Run(IReadOnlyList<Element> chain, IBranchRunner runner) =>
@@ -328,9 +362,15 @@ public class ParallelInterleavingTests : TestSetup
             yield return $"{run}, where in order it is {oracle}";
         else if (run.IsRight)
         {
-            if (run.Result.ValueUnsafe() != oracle.Result.ValueUnsafe())
+            if (
+                !string.Equals(
+                    run.Result.ValueUnsafe(),
+                    oracle.Result.ValueUnsafe(),
+                    StringComparison.Ordinal
+                )
+            )
                 yield return $"returned {run.Result.ValueUnsafe()}, not {oracle.Result.ValueUnsafe()}";
-            if (run.Snapshot != oracle.Snapshot)
+            if (!string.Equals(run.Snapshot, oracle.Snapshot, StringComparison.Ordinal))
                 yield return $"Memory {run.Snapshot}, not {oracle.Snapshot}";
         }
         else if (!run.FailedBranches.SetEquals(oracle.FailedBranches))
@@ -377,13 +417,20 @@ public class ParallelInterleavingTests : TestSetup
     private sealed class Total(Dictionary<string, int> shared) : Junction<(WroteA, WroteB), string>
     {
         public override Task<string> Run((WroteA, WroteB) input) =>
-            Task.FromResult(shared["n"].ToString());
+            Task.FromResult(
+                shared["n"].ToString(System.Globalization.CultureInfo.InvariantCulture)
+            );
     }
 
     private sealed class RacyTrain(Dictionary<string, int> shared) : Train<string, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
-            Chain(new ReadsCount<string>(shared, n => n.ToString()))
+            Chain(
+                    new ReadsCount<string>(
+                        shared,
+                        n => n.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    )
+                )
                 .Parallel(p =>
                     p.Branch(
                             "a",
@@ -420,9 +467,11 @@ public class ParallelInterleavingTests : TestSetup
     private sealed class BlocksUntil(TaskCompletionSource signal, TimeSpan wait)
         : Junction<string, ReadA>
     {
-        public override Task<ReadA> Run(string input) =>
-            signal.Task.Wait(wait)
-                ? Task.FromResult(new ReadA(1))
+        public override Task<ReadA> Run(string input) => Task.FromResult(WaitForTheSibling());
+
+        private ReadA WaitForTheSibling() =>
+            signal.Task.Wait(wait, CancellationToken.None)
+                ? new ReadA(1)
                 : throw new TimeoutException("the sibling never ran");
     }
 
@@ -469,7 +518,7 @@ public class ParallelInterleavingTests : TestSetup
     {
         public override async Task<TOut> Run(string input)
         {
-            await meeting.Arrive();
+            await meeting.Arrive().ConfigureAwait(false);
             return value;
         }
     }

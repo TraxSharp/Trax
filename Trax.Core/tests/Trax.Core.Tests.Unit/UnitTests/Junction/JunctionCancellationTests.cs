@@ -32,7 +32,7 @@ public class JunctionCancellationTests : TestSetup
     {
         // Arrange
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync().ConfigureAwait(false);
         var junction = new CountingJunction();
         var train = new TestTrain();
         train.CancellationToken = cts.Token;
@@ -43,7 +43,7 @@ public class JunctionCancellationTests : TestSetup
         var act = () => junction.RailwayJunction(input, train);
 
         // Assert
-        await act.Should().ThrowAsync<OperationCanceledException>();
+        await act.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
         junction.ExecutionCount.Should().Be(0);
     }
 
@@ -52,7 +52,7 @@ public class JunctionCancellationTests : TestSetup
     {
         // Arrange
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync().ConfigureAwait(false);
         var junction = new CountingJunction();
         var train = new TestTrain();
         train.CancellationToken = cts.Token;
@@ -60,7 +60,7 @@ public class JunctionCancellationTests : TestSetup
         Either<Exception, string> input = new InvalidOperationException("previous failure");
 
         // Act
-        var result = await junction.RailwayJunction(input, train);
+        var result = await junction.RailwayJunction(input, train).ConfigureAwait(false);
 
         // Assert — short-circuits without throwing OperationCanceledException
         result.IsLeft.Should().BeTrue();
@@ -185,7 +185,7 @@ public class JunctionCancellationTests : TestSetup
 
     #region Test Helpers
 
-    private class TokenVerifyingStep : Junction<string, string>
+    private sealed class TokenVerifyingStep : Junction<string, string>
     {
         public bool TokenWasSetBeforeRun { get; private set; }
 
@@ -196,7 +196,7 @@ public class JunctionCancellationTests : TestSetup
         }
     }
 
-    private class CountingJunction : Junction<string, string>
+    private sealed class CountingJunction : Junction<string, string>
     {
         public int ExecutionCount { get; private set; }
 
@@ -207,27 +207,27 @@ public class JunctionCancellationTests : TestSetup
         }
     }
 
-    private class CancellingStep : Junction<string, string>
+    private sealed class CancellingStep : Junction<string, string>
     {
         private readonly CancellationTokenSource _cts;
 
         public CancellingStep(CancellationTokenSource cts) => _cts = cts;
 
-        public override Task<string> Run(string input)
+        public override async Task<string> Run(string input)
         {
-            _cts.Cancel();
+            await _cts.CancelAsync().ConfigureAwait(false);
             CancellationToken.ThrowIfCancellationRequested();
-            return Task.FromResult(input);
+            return input;
         }
     }
 
-    private class ThrowingStep : Junction<string, string>
+    private sealed class ThrowingStep : Junction<string, string>
     {
         public override Task<string> Run(string input) =>
             throw new InvalidOperationException("test error");
     }
 
-    private class TestTrain : Train<string, string>
+    private sealed class TestTrain : Train<string, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             throw new NotImplementedException();

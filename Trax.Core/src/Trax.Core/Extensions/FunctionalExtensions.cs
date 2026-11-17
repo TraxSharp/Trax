@@ -30,7 +30,7 @@ public static class FunctionalExtensions
     internal static async Task<R> Unwrap<L, R>(this Task<Either<L, R>> option)
         where L : Exception
     {
-        var result = await option;
+        var result = await option.ConfigureAwait(false);
         return result.Unwrap();
     }
 
@@ -69,8 +69,15 @@ public static class FunctionalExtensions
         TupleCache.GetOrAdd(
             type,
             t =>
-                (t.IsGenericType && t.FullName?.StartsWith("System.ValueTuple`") == true)
-                || t.FullName?.StartsWith("System.Runtime.CompilerServices.ITuple") == true
+                (
+                    t.IsGenericType
+                    && t.FullName?.StartsWith("System.ValueTuple`", StringComparison.Ordinal)
+                        == true
+                )
+                || t.FullName?.StartsWith(
+                    "System.Runtime.CompilerServices.ITuple",
+                    StringComparison.Ordinal
+                ) == true
         );
 
     /// <summary>

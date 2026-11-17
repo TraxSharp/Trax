@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -6,32 +7,6 @@ using Trax.Core.Extensions;
 using Trax.Core.Functional;
 
 namespace Trax.Core.Monad;
-
-/// <summary>
-/// One thing wrong with a declared chain.
-/// </summary>
-/// <param name="StepIndex">Position of the offending step, counting from zero.</param>
-/// <param name="Kind">Which chain primitive declared the step.</param>
-/// <param name="Junction">The junction the step names, or null for a step that names none.</param>
-/// <param name="Reason">What is wrong, phrased for whoever has to fix it.</param>
-/// <remarks>
-/// A refusal about the chain as a whole, rather than one step, has a <see cref="StepIndex"/> one
-/// past the last step, <see cref="ChainStepKind.Resolve"/> as its kind and no junction.
-/// </remarks>
-public readonly record struct ChainFault(
-    int StepIndex,
-    ChainStepKind Kind,
-    Type? Junction,
-    string Reason
-)
-{
-    /// <summary>
-    /// True when the fault is one of <see cref="ChainRecorder.Refusals"/>: something reading the
-    /// chain refused, rather than a type the replay found missing. A refused step records no
-    /// output, so later faults may be its consequences rather than faults of their own.
-    /// </summary>
-    public bool IsRefusal { get; init; }
-}
 
 /// <summary>
 /// Replays a declared chain over the types Memory would hold, without running anything.
@@ -125,7 +100,12 @@ public static partial class ChainVerification
 
         if (TooManyTupleElements(input) is { } inputShape)
             faults.Add(
-                new ChainFault(0, ChainStepKind.Seed, null, $"the train's input {inputShape}")
+                new ChainFault(
+                    0,
+                    ChainStepKind.Seed,
+                    Junction: null,
+                    $"the train's input {inputShape}"
+                )
             );
 
         Replay(
@@ -185,7 +165,12 @@ public static partial class ChainVerification
         // A fault inside a track is reported at the routing step, saying which track and step.
         ChainFault Fault(int i, ChainStepKind kind, Type? junction, string reason) =>
             track is { } t
-                ? new ChainFault(t.SwitchIndex, t.Kind, junction, $"{t.Prefix}step {i}: {reason}")
+                ? new ChainFault(
+                    t.SwitchIndex,
+                    t.Kind,
+                    junction,
+                    string.Create(CultureInfo.InvariantCulture, $"{t.Prefix}step {i}: {reason}")
+                )
                 : new ChainFault(i, kind, junction, reason);
 
         for (var i = 0; i < steps.Count; i++)
@@ -208,7 +193,7 @@ public static partial class ChainVerification
                         Fault(
                             i,
                             step.Kind,
-                            null,
+                            junction: null,
                             walk?.ReadsStale(state) == true
                                 ? $"'{id}' checkpoints '{Name(state)}', which a step before the "
                                     + "resume point overwrote and no checkpoint before it holds, "
@@ -242,7 +227,7 @@ public static partial class ChainVerification
                             Fault(
                                 i,
                                 step.Kind,
-                                null,
+                                junction: null,
                                 $"the chain ends without '{Name(output)}' in Memory, so there is "
                                     + "nothing for Resolve to return. Chain a junction that "
                                     + "produces it."
@@ -265,7 +250,7 @@ public static partial class ChainVerification
                             Fault(
                                 i,
                                 step.Kind,
-                                null,
+                                junction: null,
                                 $"extracts from '{Name(source)}', which nothing before it puts in "
                                     + "Memory. Extract does not fall back to the container."
                             )
@@ -401,7 +386,7 @@ public static partial class ChainVerification
                         Fault(
                             i,
                             step.Kind,
-                            null,
+                            junction: null,
                             $"the resume point '{w.Target}' is never reached on this path."
                         )
                     );
@@ -414,7 +399,7 @@ public static partial class ChainVerification
                 case ChainStepKind.Switch:
                 case ChainStepKind.Gate:
                 case ChainStepKind.Scale:
-                    if (!w.Inclusive && id == w.Target)
+                    if (!w.Inclusive && string.Equals(id, w.Target, StringComparison.Ordinal))
                     {
                         w.Skipping = false;
                         return false;
@@ -431,7 +416,14 @@ public static partial class ChainVerification
                     // The run goes down the one track its resume point is in, and the chain after
                     // the routing step continues from what that track produced.
                     var name = w.Target[(id.Length + 1)..].Split('/')[0];
-                    if (chain.TracksAt(i).FirstOrDefault(t => t.Name == name) is { } taken)
+                    if (
+                        chain
+                            .TracksAt(i)
+                            .FirstOrDefault(t =>
+                                string.Equals(t.Name, name, StringComparison.Ordinal)
+                            ) is
+                        { } taken
+                    )
                         Replay(
                             taken.Steps,
                             memory,
@@ -450,7 +442,7 @@ public static partial class ChainVerification
                     return true;
 
                 default:
-                    if (id != w.Target)
+                    if (!string.Equals(id, w.Target, StringComparison.Ordinal))
                     {
                         if (step.Kind == ChainStepKind.Parallel)
                             foreach (var branch in chain.TracksAt(i))
@@ -569,14 +561,13 @@ public static partial class ChainVerification
                     var written in Outputs(declared.Steps)
                         .SelectMany(o => o.IsTuple() ? o.GetGenericArguments() : [o])
                         .Distinct()
-                        .Where(fork.Contains)
-                        .Where(Merged)
+                        .Where(x => fork.Contains(x) && Merged(x))
                 )
                     faults.Add(
                         Fault(
                             i,
                             step.Kind,
-                            null,
+                            junction: null,
                             $"branch '{declared.Name}' produces '{Name(written)}', which was in "
                                 + "Memory before the Parallel. A branch adds to Memory; one that "
                                 + "replaced a value would race its siblings reading it. Produce a "
@@ -598,7 +589,7 @@ public static partial class ChainVerification
                                 Fault(
                                     i,
                                     step.Kind,
-                                    null,
+                                    junction: null,
                                     $"branches '{producedBy[added]}' and '{declared.Name}' both "
                                         + $"produce '{Name(added)}', so the join has two values "
                                         + "for one type. Have one branch produce it, or give each "
@@ -615,13 +606,13 @@ public static partial class ChainVerification
                 if (
                     !fork.Contains(input)
                     && producedBy.TryGetValue(input, out var sibling)
-                    && sibling != branch
+                    && !string.Equals(sibling, branch, StringComparison.Ordinal)
                 )
                     faults.Add(
                         Fault(
                             i,
                             step.Kind,
-                            null,
+                            junction: null,
                             $"branch '{branch}' needs '{Name(input)}', which only branch "
                                 + $"'{sibling}' produces. Branches run at the same time and see "
                                 + "only what was in Memory before the Parallel. Produce it "

@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using CsCheck;
 using Trax.Core.Monad;
@@ -51,8 +52,9 @@ public class ParallelLawsTests : TestSetup
             .SampleAsync(
                 async Task (IReadOnlyList<Element> chain, int seed) =>
                 {
-                    var inOrder = await Run(chain, new SequentialBranchRunner());
-                    var scheduled = await RunScheduled(chain, seed);
+                    var inOrder = await Run(chain, new SequentialBranchRunner())
+                        .ConfigureAwait(false);
+                    var scheduled = await RunScheduled(chain, seed).ConfigureAwait(false);
 
                     Violations(chain, inOrder.Outcome, inOrder.Log)
                         .Should()
@@ -65,19 +67,25 @@ public class ParallelLawsTests : TestSetup
                     Agrees(chain, scheduled.Outcome, inOrder.Outcome, scheduled.Replay);
 
                     await OnThePool(
-                        async () =>
-                        {
-                            var pool = await Run(chain, ThreadPoolBranchRunner.Instance);
-                            Violations(chain, pool.Outcome, pool.Log)
-                                .Should()
-                                .BeEmpty($"every run keeps the laws of Parallel ({Adr})");
-                            Agrees(chain, pool.Outcome, inOrder.Outcome, "on the thread pool");
-                        },
-                        scheduled.Replay
-                    );
+                            async () =>
+                            {
+                                var pool = await Run(chain, ThreadPoolBranchRunner.Instance)
+                                    .ConfigureAwait(false);
+                                Violations(chain, pool.Outcome, pool.Log)
+                                    .Should()
+                                    .BeEmpty($"every run keeps the laws of Parallel ({Adr})");
+                                Agrees(chain, pool.Outcome, inOrder.Outcome, "on the thread pool");
+                            },
+                            scheduled.Replay
+                        )
+                        .ConfigureAwait(false);
                 },
                 iter: 1000,
-                print: t => $"seed {t.Item2}: {Describe(t.Item1)}"
+                print: t =>
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"seed {t.Item2}: {Describe(t.Item1)}"
+                    )
             );
 
     [Test]
@@ -90,26 +98,35 @@ public class ParallelLawsTests : TestSetup
                 {
                     var (chain, at, seed) = t;
                     var choices = new Choices(seed);
-                    (await KeepsTheLawsWhenCancelled(chain, at, choices.Runner()))
+                    (
+                        await KeepsTheLawsWhenCancelled(chain, at, choices.Runner())
+                            .ConfigureAwait(false)
+                    )
                         .Should()
                         .BeEmpty(choices.ToString());
 
                     await OnThePool(
-                        async () =>
-                            (
-                                await KeepsTheLawsWhenCancelled(
-                                    chain,
-                                    at,
-                                    ThreadPoolBranchRunner.Instance
+                            async () =>
+                                (
+                                    await KeepsTheLawsWhenCancelled(
+                                            chain,
+                                            at,
+                                            ThreadPoolBranchRunner.Instance
+                                        )
+                                        .ConfigureAwait(false)
                                 )
-                            )
-                                .Should()
-                                .BeEmpty("on the thread pool"),
-                        choices.ToString()
-                    );
+                                    .Should()
+                                    .BeEmpty("on the thread pool"),
+                            choices.ToString()
+                        )
+                        .ConfigureAwait(false);
                 },
                 iter: 1000,
-                print: t => $"seed {t.seed}, cancel at {t.at}: {Describe(t.chain)}"
+                print: t =>
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"seed {t.seed}, cancel at {t.at}: {Describe(t.chain)}"
+                    )
             );
 
     /// <summary>
@@ -130,7 +147,10 @@ public class ParallelLawsTests : TestSetup
             BranchRunner = runner,
         };
 
-        var outcome = await Outcome.Of(train, "x").WaitAsync(Hang);
+        var outcome = await Outcome
+            .Of(train, "x")
+            .WaitAsync(Hang, CancellationToken.None)
+            .ConfigureAwait(false);
 
         return outcome.Cancelled
             ? []
@@ -156,8 +176,9 @@ public class ParallelLawsTests : TestSetup
                         new Fork([new Branch("", body)], BranchFailurePolicy.WaitForAll),
                     ]);
 
-                    var plain = await Run(alone, new SequentialBranchRunner());
-                    var parallel = await RunScheduled(wrapped, seed);
+                    var plain = await Run(alone, new SequentialBranchRunner())
+                        .ConfigureAwait(false);
+                    var parallel = await RunScheduled(wrapped, seed).ConfigureAwait(false);
                     Same(
                         alone,
                         plain.Outcome,
@@ -166,16 +187,22 @@ public class ParallelLawsTests : TestSetup
                     );
 
                     await OnThePool(
-                        async () =>
-                        {
-                            var pool = await Run(wrapped, ThreadPoolBranchRunner.Instance);
-                            Same(alone, plain.Outcome, pool.Outcome, "Parallel(a) is a");
-                        },
-                        parallel.Replay
-                    );
+                            async () =>
+                            {
+                                var pool = await Run(wrapped, ThreadPoolBranchRunner.Instance)
+                                    .ConfigureAwait(false);
+                                Same(alone, plain.Outcome, pool.Outcome, "Parallel(a) is a");
+                            },
+                            parallel.Replay
+                        )
+                        .ConfigureAwait(false);
                 },
                 iter: 500,
-                print: t => $"seed {t.Item2}: {Describe(Number(t.Item1))}"
+                print: t =>
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"seed {t.Item2}: {Describe(Number(t.Item1))}"
+                    )
             );
 
     [Test]
@@ -215,24 +242,30 @@ public class ParallelLawsTests : TestSetup
                     const string law =
                         "Parallel(a, Parallel(b, c)) is Parallel(a, b, c), but for node ids";
 
-                    var one = await RunScheduled(nested, seed);
-                    var other = await RunScheduled(flat, seed);
+                    var one = await RunScheduled(nested, seed).ConfigureAwait(false);
+                    var other = await RunScheduled(flat, seed).ConfigureAwait(false);
                     var replay = $"nested {one.Replay}; flat {other.Replay}";
                     Same(flat, one.Outcome, other.Outcome, $"{law}; {replay}");
 
                     await OnThePool(
-                        async () =>
-                        {
-                            var poolOne = await Run(nested, ThreadPoolBranchRunner.Instance);
-                            var poolOther = await Run(flat, ThreadPoolBranchRunner.Instance);
-                            Same(flat, poolOne.Outcome, poolOther.Outcome, law);
-                        },
-                        replay
-                    );
+                            async () =>
+                            {
+                                var poolOne = await Run(nested, ThreadPoolBranchRunner.Instance)
+                                    .ConfigureAwait(false);
+                                var poolOther = await Run(flat, ThreadPoolBranchRunner.Instance)
+                                    .ConfigureAwait(false);
+                                Same(flat, poolOne.Outcome, poolOther.Outcome, law);
+                            },
+                            replay
+                        )
+                        .ConfigureAwait(false);
                 },
                 iter: 500,
                 print: t =>
-                    $"seed {t.Item4}; a: {Describe(Number(t.Item1))}; b: {Describe(Number(t.Item2))}; c: {Describe(Number(t.Item3))}"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"seed {t.Item4}; a: {Describe(Number(t.Item1))}; b: {Describe(Number(t.Item2))}; c: {Describe(Number(t.Item3))}"
+                    )
             );
 
     [Test]
@@ -251,28 +284,38 @@ public class ParallelLawsTests : TestSetup
                     var reordered =
                         (IReadOnlyList<Element>)[((Fork)chain[0]) with { Branches = shuffled }];
 
-                    var declared = await RunScheduled(chain, seed);
-                    var swapped = await RunScheduled(reordered, seed);
+                    var declared = await RunScheduled(chain, seed).ConfigureAwait(false);
+                    var swapped = await RunScheduled(reordered, seed).ConfigureAwait(false);
                     var replay = $"declared {declared.Replay}; swapped {swapped.Replay}";
                     Same(chain, declared.Outcome, swapped.Outcome, $"the join commutes; {replay}");
 
                     await OnThePool(
-                        async () =>
-                        {
-                            var poolDeclared = await Run(chain, ThreadPoolBranchRunner.Instance);
-                            var poolSwapped = await Run(reordered, ThreadPoolBranchRunner.Instance);
-                            Same(
-                                chain,
-                                poolDeclared.Outcome,
-                                poolSwapped.Outcome,
-                                "the join commutes"
-                            );
-                        },
-                        replay
-                    );
+                            async () =>
+                            {
+                                var poolDeclared = await Run(chain, ThreadPoolBranchRunner.Instance)
+                                    .ConfigureAwait(false);
+                                var poolSwapped = await Run(
+                                        reordered,
+                                        ThreadPoolBranchRunner.Instance
+                                    )
+                                    .ConfigureAwait(false);
+                                Same(
+                                    chain,
+                                    poolDeclared.Outcome,
+                                    poolSwapped.Outcome,
+                                    "the join commutes"
+                                );
+                            },
+                            replay
+                        )
+                        .ConfigureAwait(false);
                 },
                 iter: 500,
-                print: t => $"seed {t.seed}: {Describe(t.chain)}"
+                print: t =>
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"seed {t.seed}: {Describe(t.chain)}"
+                    )
             );
 
     [Test]
@@ -297,20 +340,26 @@ public class ParallelLawsTests : TestSetup
                         .BeEmpty("a generated chain is one the startup check accepts");
                     ids.Should().OnlyHaveUniqueItems($"a node id names one step ({Adr})");
 
-                    var scheduled = await RunScheduled(chain, seed);
+                    var scheduled = await RunScheduled(chain, seed).ConfigureAwait(false);
                     EveryJunctionReportsItsNode(ids, scheduled.Log, scheduled.Replay);
 
                     await OnThePool(
-                        async () =>
-                        {
-                            var (_, log) = await Run(chain, ThreadPoolBranchRunner.Instance);
-                            EveryJunctionReportsItsNode(ids, log, "on the thread pool");
-                        },
-                        scheduled.Replay
-                    );
+                            async () =>
+                            {
+                                var (_, log) = await Run(chain, ThreadPoolBranchRunner.Instance)
+                                    .ConfigureAwait(false);
+                                EveryJunctionReportsItsNode(ids, log, "on the thread pool");
+                            },
+                            scheduled.Replay
+                        )
+                        .ConfigureAwait(false);
                 },
                 iter: 500,
-                print: t => $"seed {t.Item2}: {Describe(t.Item1)}"
+                print: t =>
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"seed {t.Item2}: {Describe(t.Item1)}"
+                    )
             );
 
     private static void EveryJunctionReportsItsNode(List<string> ids, RunLog log, string run)
@@ -454,7 +503,7 @@ public class ParallelLawsTests : TestSetup
     )
     {
         var choices = new Choices(seed);
-        var (outcome, log) = await Run(chain, choices.Runner());
+        var (outcome, log) = await Run(chain, choices.Runner()).ConfigureAwait(false);
         return (outcome, log, choices.ToString());
     }
 
@@ -468,7 +517,7 @@ public class ParallelLawsTests : TestSetup
     {
         try
         {
-            await law();
+            await law().ConfigureAwait(false);
         }
         catch (Exception e)
         {
@@ -507,7 +556,8 @@ public class ParallelLawsTests : TestSetup
         var log = new RunLog();
         var outcome = await Outcome
             .Of(new ShapeTrain(chain, log) { BranchRunner = runner }, "x")
-            .WaitAsync(Hang);
+            .WaitAsync(Hang)
+            .ConfigureAwait(false);
         return (outcome, log);
     }
 
@@ -524,7 +574,7 @@ public class ParallelLawsTests : TestSetup
         {
             if (expected.Faults.Count > 0)
                 yield return $"succeeded, though junctions [{string.Join(", ", expected.Faults)}] fail";
-            else if (outcome.Snapshot != expected.Snapshot)
+            else if (!string.Equals(outcome.Snapshot, expected.Snapshot, StringComparison.Ordinal))
                 yield return $"ended with {outcome.Snapshot}, not {expected.Snapshot}";
             yield break;
         }
@@ -536,7 +586,12 @@ public class ParallelLawsTests : TestSetup
         }
 
         var failed = outcome
-            .Leaves.Select(l => int.Parse(l.Message["fault ".Length..]))
+            .Leaves.Select(l =>
+                int.Parse(
+                    l.Message["fault ".Length..],
+                    System.Globalization.CultureInfo.InvariantCulture
+                )
+            )
             .ToHashSet();
 
         if (failed.Count == 0)
@@ -551,12 +606,17 @@ public class ParallelLawsTests : TestSetup
         // stopped: that branch's failures are its own, and the branch is not a failure.
         var stopped = outcome.Stopped;
         var carried = log
-            .Threw.Where(t => !stopped.Any(s => t.Branch == s || t.Branch.StartsWith(s + "/")))
+            .Threw.Where(t =>
+                !stopped.Any(s =>
+                    string.Equals(t.Branch, s, StringComparison.Ordinal)
+                    || t.Branch.StartsWith(s + "/", StringComparison.Ordinal)
+                )
+            )
             .ToHashSet();
 
         if (!outcome.Leaves.SetEquals(carried))
             yield return $"carries {outcome}, but what failed was "
-                + $"[{string.Join(", ", carried.Select(c => $"{c.Branch}:{c.Message}").Order())}]";
+                + $"[{string.Join(", ", carried.Select(c => $"{c.Branch}:{c.Message}").Order(StringComparer.Ordinal))}]";
     }
 
     /// <summary>Two runs that must agree but for node ids: on the result, Memory and what failed.</summary>

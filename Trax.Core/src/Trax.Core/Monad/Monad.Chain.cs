@@ -330,7 +330,7 @@ public partial class Monad<TInput, TReturn>
                 junction,
                 $"{kind} names {junction.Name}, which does not implement IJunction<TIn, TOut>."
             );
-            Recorder.Record(kind, junction, null, null);
+            Recorder.Record(kind, junction, tIn: null, tOut: null);
 
             return new MonadTask<TInput, TReturn>(Task.FromResult(this));
         }

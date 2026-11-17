@@ -383,7 +383,11 @@ public class DecisionTests : TestSetup
             "Run_Refuses_AConfidenceAboveOne"
         );
         yield return new TestCaseData(
-            new ChoiceAnswer("Left", 1, new Dictionary<string, double> { ["Left"] = -0.1 }),
+            new ChoiceAnswer(
+                "Left",
+                1,
+                new Dictionary<string, double>(StringComparer.Ordinal) { ["Left"] = -0.1 }
+            ),
             "probability for 'Left'"
         ).SetName("Run_Refuses_ANegativeProbability");
         yield return new TestCaseData(new YesNoAnswer(0.9), "not a choice").SetName(
@@ -639,46 +643,46 @@ public class DecisionTests : TestSetup
     }
 
     /// <summary>Passes the input through, so a chain can start with any step after it.</summary>
-    private class Start : Junction<string, string>
+    private sealed class Start : Junction<string, string>
     {
         public override Task<string> Run(string input) => Task.FromResult(input);
     }
 
-    private class StringToInt : Junction<string, int>
+    private sealed class StringToInt : Junction<string, int>
     {
         public override Task<int> Run(string input) => Task.FromResult(input.Length);
     }
 
-    private class StringToBool : Junction<string, bool>
+    private sealed class StringToBool : Junction<string, bool>
     {
         public override Task<bool> Run(string input) => Task.FromResult(true);
     }
 
-    private class IntToBool : Junction<int, bool>
+    private sealed class IntToBool : Junction<int, bool>
     {
         public override Task<bool> Run(int input) => Task.FromResult(input > 0);
     }
 
-    private class Explodes : Junction<string, bool>
+    private sealed class Explodes : Junction<string, bool>
     {
         public override Task<bool> Run(string input) =>
             throw new InvalidOperationException("this track was not chosen");
     }
 
-    private class Fails : Junction<string, string>
+    private sealed class Fails : Junction<string, string>
     {
         public override Task<string> Run(string input) =>
             throw new InvalidOperationException("upstream failed");
     }
 
     /// <summary>Records which track ran, and produces the value the next step reads.</summary>
-    private class Says(string track) : Junction<string, Heard.Marker>
+    private sealed class Says(string track) : Junction<string, Heard.Marker>
     {
         /// <summary>The track that ran, by the run's input, so parallel tests do not collide.</summary>
         public static System.Collections.Concurrent.ConcurrentDictionary<
             string,
             string
-        > Ran { get; } = new();
+        > Ran { get; } = new(StringComparer.Ordinal);
 
         public override Task<Heard.Marker> Run(string input)
         {
@@ -687,14 +691,14 @@ public class DecisionTests : TestSetup
         }
     }
 
-    private class Heard : Junction<Heard.Marker, bool>
+    private sealed class Heard : Junction<Heard.Marker, bool>
     {
         public sealed class Marker;
 
         public override Task<bool> Run(Marker input) => Task.FromResult(true);
     }
 
-    private class NotAJunction;
+    private sealed class NotAJunction;
 
     public interface IInner;
 
@@ -715,17 +719,17 @@ public class DecisionTests : TestSetup
     /// <summary>A state JSON copies: a record read back through its constructor, with a list.</summary>
     public sealed record Parcel(string Id, decimal Weight, IReadOnlyList<string> Tags);
 
-    private class StringToHolder : Junction<string, Holder>
+    private sealed class StringToHolder : Junction<string, Holder>
     {
         public override Task<Holder> Run(string input) => Task.FromResult(new Holder());
     }
 
-    private class StringToCallback : Junction<string, Callback>
+    private sealed class StringToCallback : Junction<string, Callback>
     {
         public override Task<Callback> Run(string input) => Task.FromResult(new Callback());
     }
 
-    private class StringToParcel : Junction<string, Parcel>
+    private sealed class StringToParcel : Junction<string, Parcel>
     {
         public override Task<Parcel> Run(string input) =>
             Task.FromResult(new Parcel(input, 1m, ["fragile"]));

@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using CsCheck;
 using Trax.Core.Monad;
@@ -16,7 +17,8 @@ namespace Trax.Core.Tests.Unit.UnitTests.Train;
 public class ChainGraphPropertyTests
 {
     // A small alphabet, so a generated sequence repeats keys often and the ordinals are exercised.
-    private static readonly Gen<string> Key = Gen.Int[0, 5].Select(i => $"Junction{i}");
+    private static readonly Gen<string> Key = Gen.Int[0, 5]
+        .Select(i => string.Create(CultureInfo.InvariantCulture, $"Junction{i}"));
 
     private static readonly Gen<List<string>> Keys = Key.List[0, 40];
 

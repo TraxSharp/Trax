@@ -93,7 +93,7 @@ public abstract class Junction<TIn, TOut> : IJunction<TIn, TOut>
         try
         {
             // Execute the junction and return its result as Right
-            Result = await Run(previousOutput.ValueUnsafe());
+            Result = await Run(previousOutput.ValueUnsafe()).ConfigureAwait(false);
 
             return Result;
         }

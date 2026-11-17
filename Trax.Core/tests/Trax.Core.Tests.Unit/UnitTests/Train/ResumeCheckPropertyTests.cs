@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Reflection;
 using AwesomeAssertions;
 using CsCheck;
@@ -66,12 +67,17 @@ public class ResumeCheckPropertyTests : TestSetup
                     ops,
                     new Services().With<ICheckpointStore>(store),
                     Rounds.All(1)
-                ).RunEither(new V0(1));
+                )
+                    .RunEither(new V0(1))
+                    .ConfigureAwait(false);
                 full.IsRight.Should().BeTrue("a generated chain is valid by construction");
 
                 var written = store.Taken.Select(t => t.NodeId).ToList();
                 var chain = new GeneratedTrain(ops, new Services(), Rounds.All(1)).DeclaredChain();
-                var points = ChainVerification.NodeOrder(chain).Where(Startable).Prepend(null);
+                var points = ChainVerification
+                    .NodeOrder(chain)
+                    .Where(Startable)
+                    .Prepend(element: null);
 
                 foreach (var point in points)
                 {
@@ -87,7 +93,8 @@ public class ResumeCheckPropertyTests : TestSetup
                     if (outcome.CanResume)
                     {
                         var rounds = Rounds.All(2);
-                        var resumed = await Resumed(ops, Plan(outcome, store), rounds);
+                        var resumed = await Resumed(ops, Plan(outcome, store), rounds)
+                            .ConfigureAwait(false);
                         resumed
                             .IsRight.Should()
                             .BeTrue(
@@ -105,7 +112,9 @@ public class ResumeCheckPropertyTests : TestSetup
                                 ops,
                                 new Services(),
                                 rounds.RanAgain()
-                            ).RunEither(new V0(1));
+                            )
+                                .RunEither(new V0(1))
+                                .ConfigureAwait(false);
 
                             resumed
                                 .ValueUnsafe()
@@ -118,11 +127,15 @@ public class ResumeCheckPropertyTests : TestSetup
                         }
                     }
                     else if (
-                        outcome.RefusalCode == ResumeRefusals.MissingInput
-                        && Forced(chain, store, written, point) is { } forcedPlan
+                        string.Equals(
+                            outcome.RefusalCode,
+                            ResumeRefusals.MissingInput,
+                            StringComparison.Ordinal
+                        ) && Forced(chain, store, written, point) is { } forcedPlan
                     )
                     {
-                        var forced = await Resumed(ops, forcedPlan, Rounds.All(2));
+                        var forced = await Resumed(ops, forcedPlan, Rounds.All(2))
+                            .ConfigureAwait(false);
                         forced
                             .IsLeft.Should()
                             .BeTrue(
@@ -133,11 +146,13 @@ public class ResumeCheckPropertyTests : TestSetup
                 }
             },
             iter: 400,
-            print: ops => string.Join(" ", ops)
+            print: ops => string.Join(' ', ops)
         );
 
     private static bool Startable(string? id) =>
-        id is not null && !id.StartsWith("Seed<", StringComparison.Ordinal) && id != "Resolve#0";
+        id is not null
+        && !id.StartsWith("Seed<", StringComparison.Ordinal)
+        && !string.Equals(id, "Resolve#0", StringComparison.Ordinal);
 
     private static Task<Either<Exception, Out>> Resumed(Op[] ops, ResumePlan plan, Rounds rounds) =>
         new GeneratedTrain(ops, new Services().With<ICheckpointStore>(new Store()), rounds)
@@ -147,7 +162,7 @@ public class ResumeCheckPropertyTests : TestSetup
 
     private static ResumePlan Plan(ResumeOutcome outcome, Store store)
     {
-        var restored = new Dictionary<string, RestoredCheckpoint>();
+        var restored = new Dictionary<string, RestoredCheckpoint>(StringComparer.Ordinal);
         if (outcome.MainCheckpoint is { } main)
             restored[""] = store.Restored(main);
         foreach (var (branch, node) in outcome.BranchCheckpoints)
@@ -169,24 +184,26 @@ public class ResumeCheckPropertyTests : TestSetup
     )
     {
         var order = ChainVerification.NodeOrder(chain).ToList();
-        var mainWritten = written.Where(w => !w.Contains('/')).ToList();
+        var mainWritten = written.Where(w => !w.Contains('/', StringComparison.Ordinal)).ToList();
         var limit = point is null ? order.Count : order.IndexOf(point);
         var main = mainWritten.Where(w => order.IndexOf(w) < limit).MaxBy(order.IndexOf);
-        var restored = new Dictionary<string, RestoredCheckpoint>();
+        var restored = new Dictionary<string, RestoredCheckpoint>(StringComparer.Ordinal);
         if (main is not null)
             restored[""] = store.Restored(main);
 
         if (point is null)
-            return written.Any(w => w.Contains('/')) ? null : new ResumePlan(main, true, restored);
+            return written.Any(w => w.Contains('/', StringComparison.Ordinal))
+                ? null
+                : new ResumePlan(main, Inclusive: true, restored);
 
         foreach (
             var branch in written
                 .Where(w => w.StartsWith(point + "/", StringComparison.Ordinal))
-                .GroupBy(w => w[..w.LastIndexOf('/')])
+                .GroupBy(w => w[..w.LastIndexOf('/')], StringComparer.Ordinal)
         )
             restored[branch.Key] = store.Restored(branch.MaxBy(order.IndexOf)!);
 
-        return new ResumePlan(point, false, restored);
+        return new ResumePlan(point, Inclusive: false, restored);
     }
 
     public enum OpKind
@@ -229,7 +246,7 @@ public class ResumeCheckPropertyTests : TestSetup
                 A1 => "A1",
                 A2 => "A2",
                 B1 => "B1",
-                _ => $"V{index}",
+                _ => string.Create(CultureInfo.InvariantCulture, $"V{index}"),
             };
     }
 

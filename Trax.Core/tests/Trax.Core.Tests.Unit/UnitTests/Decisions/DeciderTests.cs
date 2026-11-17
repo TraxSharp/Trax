@@ -18,14 +18,14 @@ public class DeciderTests : TestSetup
     private static readonly ChoiceQuestion LaneQuestion = new(
         QuestionKey.For<Lane>(),
         "Which lane?",
-        [new Criterion("Left", null), new Criterion("Right", null)]
+        [new Criterion("Left", Description: null), new Criterion("Right", Description: null)]
     );
 
     private static readonly YesNoQuestion FlagQuestion = new(
         QuestionKey.For<Flag>(),
         "Is the flag up?",
-        null,
-        null
+        Yes: null,
+        No: null
     );
 
     #region CascadingDecider
@@ -109,10 +109,10 @@ public class DeciderTests : TestSetup
         QuestionKey.For<Temperature>(),
         "How warm?",
         [
-            new Criterion("Freezing", null),
-            new Criterion("Cold", null),
-            new Criterion("Mild", null),
-            new Criterion("Hot", null),
+            new Criterion("Freezing", Description: null),
+            new Criterion("Cold", Description: null),
+            new Criterion("Mild", Description: null),
+            new Criterion("Hot", Description: null),
         ]
     );
 
@@ -126,7 +126,11 @@ public class DeciderTests : TestSetup
         yield return Case(
             "AProbabilityOutsideZeroToOne",
             LaneQuestion,
-            new ChoiceAnswer("Left", 1, new Dictionary<string, double> { ["Left"] = 2 })
+            new ChoiceAnswer(
+                "Left",
+                1,
+                new Dictionary<string, double>(StringComparer.Ordinal) { ["Left"] = 2 }
+            )
         );
         yield return Case("AnotherKindOfAnswer", LaneQuestion, new YesNoAnswer(0.99));
         yield return Case("AYesNoAboveOne", FlagQuestion, new YesNoAnswer(1.5));
@@ -214,8 +218,8 @@ public class DeciderTests : TestSetup
 
         var result = await rules.Decide(
             Request(
-                new YesNoQuestion(QuestionKey.For<Wrapper<Flag>>(), "?", null, null),
-                new YesNoQuestion(QuestionKey.For<Wrapper<Lane>>(), "?", null, null)
+                new YesNoQuestion(QuestionKey.For<Wrapper<Flag>>(), "?", Yes: null, No: null),
+                new YesNoQuestion(QuestionKey.For<Wrapper<Lane>>(), "?", Yes: null, No: null)
             ),
             default
         );
@@ -357,7 +361,7 @@ public class DeciderTests : TestSetup
         }
     }
 
-    private class StringToBool : Junction<string, bool>
+    private sealed class StringToBool : Junction<string, bool>
     {
         public override Task<bool> Run(string input) => Task.FromResult(true);
     }

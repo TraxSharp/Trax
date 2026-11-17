@@ -1,35 +1,7 @@
+using System.Globalization;
 using Trax.Core.Monad;
 
 namespace Trax.Core.Tests.Unit.Utils;
-
-/// <summary>
-/// Runs a <c>Parallel</c> step's branches one after another in declared order, each to its end
-/// before the next starts, on the caller's thread. The oracle a concurrent run is compared with.
-/// </summary>
-/// <param name="atJunction">
-/// Called before each junction a branch runs, with the branch's path and the junction's index in
-/// that branch from 0. What it throws fails the branch there; it may also cancel the run.
-/// </param>
-internal sealed class SequentialBranchRunner(Action<string, int>? atJunction = null) : IBranchRunner
-{
-    private readonly Dictionary<string, int> _junctions = [];
-
-    public BranchExecution Execution => BranchExecution.Sequential;
-
-    public Task Start(string branch, Func<Task> run) => run();
-
-    public Task BeforeJunction(string branch, string node)
-    {
-        int index;
-        lock (_junctions)
-            index = _junctions[branch] = _junctions.GetValueOrDefault(branch, -1) + 1;
-
-        atJunction?.Invoke(branch, index);
-        return Task.CompletedTask;
-    }
-
-    public Task Join(string? parent, Task branches) => branches;
-}
 
 /// <summary>
 /// Runs a <c>Parallel</c> step's branches one step at a time, in an order a test chooses. Only
@@ -131,7 +103,7 @@ internal sealed class ScheduledBranchRunner(
         await go.Task.ConfigureAwait(false);
 
         lock (_gate)
-            _trace.Add($"{branch}#{index}");
+            _trace.Add(string.Create(CultureInfo.InvariantCulture, $"{branch}#{index}"));
 
         atJunction?.Invoke(branch, index);
     }
@@ -199,55 +171,4 @@ internal sealed class ScheduledBranchRunner(
 
     private static TaskCompletionSource Signal() =>
         new(TaskCreationOptions.RunContinuationsAsynchronously);
-}
-
-/// <summary>
-/// Enumerates every interleaving a <see cref="ScheduledBranchRunner"/> can produce for one run,
-/// by replaying it with every sequence of choices: a depth-first search over the choice points,
-/// where each run follows a prefix and then always takes the first candidate.
-/// </summary>
-internal static class Interleavings
-{
-    public sealed record Explored<T>(
-        IReadOnlyList<int> Choices,
-        ScheduledBranchRunner Runner,
-        T Result
-    );
-
-    public static async Task<List<Explored<T>>> Every<T>(
-        Func<ScheduledBranchRunner, Task<T>> run,
-        Action<string, int>? atJunction = null
-    )
-    {
-        var explored = new List<Explored<T>>();
-        var pending = new Stack<int[]>();
-        pending.Push([]);
-
-        while (pending.Count > 0)
-        {
-            var prefix = pending.Pop();
-            var taken = new List<int>();
-            var options = new List<int>();
-
-            var runner = new ScheduledBranchRunner(
-                ready =>
-                {
-                    var choice = taken.Count < prefix.Length ? prefix[taken.Count] : 0;
-                    taken.Add(choice);
-                    options.Add(ready.Count);
-                    return choice;
-                },
-                atJunction
-            );
-
-            var result = await run(runner).ConfigureAwait(false);
-            explored.Add(new Explored<T>(taken, runner, result));
-
-            for (var point = prefix.Length; point < taken.Count; point++)
-            for (var other = 1; other < options[point]; other++)
-                pending.Push([.. taken.Take(point), other]);
-        }
-
-        return explored;
-    }
 }

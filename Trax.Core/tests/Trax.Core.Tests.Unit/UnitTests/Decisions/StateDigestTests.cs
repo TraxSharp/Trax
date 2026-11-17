@@ -69,7 +69,11 @@ public class StateDigestTests : TestSetup
         yield return Shape("AList", a => new List<Order> { new(1), new(a) });
         yield return Shape(
             "ADictionary",
-            a => new Dictionary<string, decimal> { ["one"] = 1, ["amount"] = a }
+            a => new Dictionary<string, decimal>(StringComparer.Ordinal)
+            {
+                ["one"] = 1,
+                ["amount"] = a,
+            }
         );
     }
 
@@ -185,7 +189,7 @@ public class StateDigestTests : TestSetup
     {
         yield return Pinned(
             "Null",
-            null,
+            state: null,
             "s1:6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d",
             "k1:e711546e3faad4c7c4aa756bc26cad6abea8241984a0f6b0839c70ca61c4ef88"
         );
@@ -215,12 +219,7 @@ public class StateDigestTests : TestSetup
         );
         yield return Pinned(
             "ADictionary",
-            new Dictionary<string, int>
-            {
-                ["a"] = 1,
-                ["b"] = 2,
-                ["c"] = 3,
-            },
+            DefaultComparerDictionary(("a", 1), ("b", 2), ("c", 3)),
             "s1:4120c1e843459babb3cb5758c2d7268e308f9ff3474c4da12647e0b4f585eb18",
             "k1:75934e5313e5cc9b6dcdaf253306aa66a3e08d5faf95a9dc0eefa1ce9bfdf895"
         );
@@ -237,7 +236,20 @@ public class StateDigestTests : TestSetup
                 new DateTimeOffset(2026, 10, 3, 12, 0, 0, TimeSpan.FromHours(2)),
                 1.5d,
                 DayOfWeek.Friday,
-                Guid.Parse("0f8fad5b-d9cb-469f-a165-70867728950e"),
+                new Guid(
+                    0xf8fad5b,
+                    0xd9cb,
+                    0x469f,
+                    0xa1,
+                    0x65,
+                    0x70,
+                    0x86,
+                    0x77,
+                    0x28,
+                    0x95,
+                    0xe
+                ) /* 0f8fad5b-d9cb-469f-a165-70867728950e */
+                ,
                 new Uri("https://example.com/a"),
                 CultureInfo.InvariantCulture,
                 (Int128)1 << 64
@@ -245,6 +257,20 @@ public class StateDigestTests : TestSetup
             "s1:f2485a1565a9807206e30b584c5d2b7709f7ea56075bc9f97bbb40a5b56d08c4",
             "k1:8f74fa90608f3a95dbaa2291b0d05b18eb360c042af18b583ff25c9c2fdc348f"
         );
+    }
+
+    // A dictionary given no comparer, which is what the pinned digest is of. Written over any key
+    // type because the build asks every dictionary keyed by string to name its comparer, and
+    // naming one changes the digest.
+    private static Dictionary<TKey, TValue> DefaultComparerDictionary<TKey, TValue>(
+        params (TKey Key, TValue Value)[] entries
+    )
+        where TKey : notnull
+    {
+        var dictionary = new Dictionary<TKey, TValue>();
+        foreach (var (key, value) in entries)
+            dictionary[key] = value;
+        return dictionary;
     }
 
     private static TestCaseData Pinned(string name, object? state, string unkeyed, string keyed) =>
@@ -447,9 +473,14 @@ public class StateDigestTests : TestSetup
     public void Of_UnorderedCollectionsFilledInAnotherOrder_HashAlike()
     {
         StateDigest
-            .Of(new Dictionary<string, int> { ["a"] = 1, ["b"] = 2 })
+            .Of(new Dictionary<string, int>(StringComparer.Ordinal) { ["a"] = 1, ["b"] = 2 })
             .Should()
-            .Be(StateDigest.Of(new Dictionary<string, int> { ["b"] = 2, ["a"] = 1 }), Adr);
+            .Be(
+                StateDigest.Of(
+                    new Dictionary<string, int>(StringComparer.Ordinal) { ["b"] = 2, ["a"] = 1 }
+                ),
+                Adr
+            );
         StateDigest
             .Of(new HashSet<object> { new Order(1), new Customer("ann") })
             .Should()
@@ -458,12 +489,23 @@ public class StateDigestTests : TestSetup
                 "an element's encoding does not depend on which types its siblings wrote first"
             );
         StateDigest
-            .Of(ImmutableHashSet.CreateRange(Enumerable.Range(0, 100).Select(i => $"k{i}")))
+            .Of(
+                ImmutableHashSet.CreateRange(
+                    StringComparer.Ordinal,
+                    Enumerable
+                        .Range(0, 100)
+                        .Select(i => string.Create(CultureInfo.InvariantCulture, $"k{i}"))
+                )
+            )
             .Should()
             .Be(
                 StateDigest.Of(
                     ImmutableHashSet.CreateRange(
-                        Enumerable.Range(0, 100).Reverse().Select(i => $"k{i}")
+                        StringComparer.Ordinal,
+                        Enumerable
+                            .Range(0, 100)
+                            .Reverse()
+                            .Select(i => string.Create(CultureInfo.InvariantCulture, $"k{i}"))
                     )
                 )
             );
@@ -724,8 +766,21 @@ public class StateDigestTests : TestSetup
         yield return Differ("TimeOnly", new TimeOnly(1, 0), new TimeOnly(1, 0, 1));
         yield return Differ(
             "Guid",
-            Guid.Parse("00000000-0000-0000-0000-000000000001"),
-            Guid.Parse("00000000-0000-0000-0000-000000000002")
+            new Guid(
+                0x0,
+                0x0,
+                0x0,
+                0x0,
+                0x0,
+                0x0,
+                0x0,
+                0x0,
+                0x0,
+                0x0,
+                0x1
+            ) /* 00000000-0000-0000-0000-000000000001 */
+            ,
+            new Guid(0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x2) /* 00000000-0000-0000-0000-000000000002 */
         );
         yield return Differ(
             "Uri",
@@ -743,7 +798,7 @@ public class StateDigestTests : TestSetup
             CultureInfo.GetCultureInfo("fr-FR").CompareInfo
         );
         yield return Differ("Char", 'a', 'b');
-        yield return Differ("Bool", true, false);
+        yield return Differ("Bool", one: true, other: false);
         yield return Differ("String", "a", "b");
     }
 
@@ -807,7 +862,7 @@ public class StateDigestTests : TestSetup
 
     public unsafe struct Fixed
     {
-        public fixed int Values[4];
+        public InlineArray4<int> Values;
     }
 
     public sealed class TaggedUri(string uri, string tag) : Uri(uri)

@@ -84,7 +84,7 @@ public class JunctionFailureClassTests : TestSetup
         // was built with, often a remote system's response body. Trax never rebuilds a recorded
         // failure as a derived type, so its message is not a record.
         var data = await DataAfterFailing(
-            new UpstreamError(RecordJson(((int)FailureClass.Transient).ToString()))
+            new UpstreamErrorException(RecordJson(((int)FailureClass.Transient).ToString()))
         );
 
         data.FailureClass.Should()
@@ -93,7 +93,7 @@ public class JunctionFailureClassTests : TestSetup
             );
     }
 
-    private sealed class UpstreamError(string body) : TrainException(body);
+    private sealed class UpstreamErrorException(string body) : TrainException(body);
 
     [Test]
     public async Task AnUndefinedClassInTheMessage_IsCarriedAsUnclassified()
@@ -130,13 +130,15 @@ public class JunctionFailureClassTests : TestSetup
 
     private static async Task<TrainExceptionData> DataAfterFailing(Exception failure)
     {
-        var result = await new Throwing(failure).RailwayJunction(1, UnitTrain.Create());
+        var result = await new Throwing(failure)
+            .RailwayJunction(1, UnitTrain.Create())
+            .ConfigureAwait(false);
 
         result.IsLeft.Should().BeTrue();
         return (TrainExceptionData)result.Swap().ValueUnsafe().Data["TrainExceptionData"]!;
     }
 
-    private class Throwing(Exception failure) : Junction<int, int>
+    private sealed class Throwing(Exception failure) : Junction<int, int>
     {
         public override Task<int> Run(int input) => throw failure;
     }

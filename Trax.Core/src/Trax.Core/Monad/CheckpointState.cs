@@ -16,7 +16,7 @@ namespace Trax.Core.Monad;
 /// The rules follow System.Text.Json's defaults, which the store writes with: public properties
 /// are written, fields are not, and a value is read back through a setter, an init accessor or a
 /// constructor parameter of the same name. Every class reached must be sealed, because a derived
-/// instance would be read back as its declared type, and no member may be typed <c>object</c> or
+/// instance would be read back as its declared type, and no member may be typed <see langword="object"/> or
 /// an interface other than a framework collection, because nothing says what to read it back as.
 /// </remarks>
 internal static class CheckpointState
@@ -117,8 +117,10 @@ internal static class CheckpointState
         shape.Append('{');
         foreach (
             var property in type.GetProperties(BindingFlags.Instance | BindingFlags.Public)
-                .Where(p => p.GetIndexParameters().Length == 0)
-                .Where(p => p.GetCustomAttribute<JsonIgnoreAttribute>() is null)
+                .Where(p =>
+                    p.GetIndexParameters().Length == 0
+                    && !Attribute.IsDefined(p, typeof(JsonIgnoreAttribute))
+                )
                 .OrderBy(p => JsonName(p), StringComparer.Ordinal)
         )
         {
@@ -249,7 +251,7 @@ internal static class CheckpointState
             {
                 if (BackedProperty(t, field) is { } property)
                 {
-                    if (property.GetCustomAttribute<JsonIgnoreAttribute>() is not null)
+                    if (Attribute.IsDefined(property, typeof(JsonIgnoreAttribute)))
                         problems.Add(
                             $"'{at}.{property.Name}' is ignored by the serializer, so it is lost "
                                 + "when the state is stored. Remove the [JsonIgnore] or the property."
@@ -271,7 +273,7 @@ internal static class CheckpointState
                     continue;
                 }
 
-                if (field.GetCustomAttribute<CompilerGeneratedAttribute>() is not null)
+                if (Attribute.IsDefined(field, typeof(CompilerGeneratedAttribute)))
                     continue;
 
                 problems.Add(
@@ -283,8 +285,10 @@ internal static class CheckpointState
 
         foreach (
             var property in type.GetProperties(BindingFlags.Instance | BindingFlags.Public)
-                .Where(p => p.GetIndexParameters().Length == 0)
-                .Where(p => p.GetCustomAttribute<JsonIgnoreAttribute>() is null)
+                .Where(p =>
+                    p.GetIndexParameters().Length == 0
+                    && !Attribute.IsDefined(p, typeof(JsonIgnoreAttribute))
+                )
         )
             Visit(property.PropertyType, $"{at}.{property.Name}", problems, seen);
     }
@@ -294,7 +298,7 @@ internal static class CheckpointState
         field.Name.StartsWith('<')
         && field.Name.EndsWith(">k__BackingField", StringComparison.Ordinal)
             ? declaring.GetProperty(
-                field.Name[1..field.Name.IndexOf('>')],
+                field.Name[1..field.Name.IndexOf('>', StringComparison.Ordinal)],
                 BindingFlags.Instance
                     | BindingFlags.Public
                     | BindingFlags.NonPublic

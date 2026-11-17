@@ -28,7 +28,7 @@ public class CancellationTokenTests : TestSetup
         var train = new TokenCapturingTrain();
 
         // Act
-        await train.Run("input");
+        await train.Run("input", CancellationToken.None);
 
         // Assert
         train.CapturedToken.Should().Be(CancellationToken.None);
@@ -57,7 +57,7 @@ public class CancellationTokenTests : TestSetup
         var train = new SingleJunctionTrain(junction);
 
         // Act
-        await train.Run("input");
+        await train.Run("input", CancellationToken.None);
 
         // Assert
         junction.CapturedToken.Should().Be(CancellationToken.None);
@@ -69,11 +69,11 @@ public class CancellationTokenTests : TestSetup
         // RunEither reports cancellation as Left rather than throwing; ServiceTrain relies on it
         // to record the run. The docs say so, and this pins it.
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync().ConfigureAwait(false);
         var junction = new CountingJunction();
         var train = new SingleJunctionTrain(junction) { CancellationToken = cts.Token };
 
-        var result = await train.RunEither("input");
+        var result = await train.RunEither("input").ConfigureAwait(false);
 
         result.IsLeft.Should().BeTrue();
         HasCancellationException(result.Swap().ValueUnsafe()).Should().BeTrue();
@@ -85,7 +85,7 @@ public class CancellationTokenTests : TestSetup
     {
         // Arrange
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync().ConfigureAwait(false);
         var junction = new CountingJunction();
         var train = new SingleJunctionTrain(junction);
 
@@ -94,7 +94,7 @@ public class CancellationTokenTests : TestSetup
         Exception? caught = null;
         try
         {
-            await train.Run("input", cts.Token);
+            await train.Run("input", cts.Token).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -163,7 +163,7 @@ public class CancellationTokenTests : TestSetup
     {
         // Arrange
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync().ConfigureAwait(false);
         var junction = new TokenCapturingJunction();
         var train = new SingleJunctionTrain(junction);
 
@@ -171,7 +171,7 @@ public class CancellationTokenTests : TestSetup
         Exception? caught = null;
         try
         {
-            await train.Run("input", cts.Token);
+            await train.Run("input", cts.Token).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -217,7 +217,7 @@ public class CancellationTokenTests : TestSetup
 
     #region Test Helpers
 
-    private class TokenCapturingTrain : Train<string, string>
+    private sealed class TokenCapturingTrain : Train<string, string>
     {
         public CancellationToken CapturedToken { get; private set; }
 
@@ -228,7 +228,7 @@ public class CancellationTokenTests : TestSetup
         }
     }
 
-    private class TokenCapturingJunction : Junction<string, string>
+    private sealed class TokenCapturingJunction : Junction<string, string>
     {
         public CancellationToken CapturedToken { get; private set; }
 
@@ -239,7 +239,7 @@ public class CancellationTokenTests : TestSetup
         }
     }
 
-    private class TokenCapturingPassthroughJunction : Junction<string, string>
+    private sealed class TokenCapturingPassthroughJunction : Junction<string, string>
     {
         public CancellationToken CapturedToken { get; private set; }
 
@@ -250,7 +250,7 @@ public class CancellationTokenTests : TestSetup
         }
     }
 
-    private class CountingJunction : Junction<string, string>
+    private sealed class CountingJunction : Junction<string, string>
     {
         public int ExecutionCount { get; private set; }
 
@@ -261,34 +261,34 @@ public class CancellationTokenTests : TestSetup
         }
     }
 
-    private class CancellationTriggerJunction : Junction<string, string>
+    private sealed class CancellationTriggerJunction : Junction<string, string>
     {
         private readonly CancellationTokenSource _cts;
         public int ExecutionCount { get; private set; }
 
         public CancellationTriggerJunction(CancellationTokenSource cts) => _cts = cts;
 
-        public override Task<string> Run(string input)
+        public override async Task<string> Run(string input)
         {
             ExecutionCount++;
-            _cts.Cancel();
-            return Task.FromResult(input);
+            await _cts.CancelAsync().ConfigureAwait(false);
+            return input;
         }
     }
 
-    private class SlowJunction : Junction<string, string>
+    private sealed class SlowJunction : Junction<string, string>
     {
         public override async Task<string> Run(string input)
         {
             // determinism: this delay exists to be cancelled by the supplied CancellationToken.
             // The test verifies that cancelling the token shortcuts the delay, so the duration
             // is an upper bound, not a fixed wait.
-            await Task.Delay(TimeSpan.FromSeconds(10), CancellationToken);
+            await Task.Delay(TimeSpan.FromSeconds(10), CancellationToken).ConfigureAwait(false);
             return input;
         }
     }
 
-    private class SingleJunctionTrain : Train<string, string>
+    private sealed class SingleJunctionTrain : Train<string, string>
     {
         private readonly Junction<string, string> _junction;
 
@@ -298,7 +298,7 @@ public class CancellationTokenTests : TestSetup
             Chain(_junction).Resolve();
     }
 
-    private class TwoJunctionTrain : Train<string, string>
+    private sealed class TwoJunctionTrain : Train<string, string>
     {
         private readonly Junction<string, string> _junction1;
         private readonly Junction<string, string> _junction2;

@@ -3,24 +3,6 @@ using Trax.Core.Train;
 namespace Trax.Core.Monad;
 
 /// <summary>
-/// What a <c>Parallel</c> step does to its other branches when one of them fails.
-/// </summary>
-public enum BranchFailurePolicy
-{
-    /// <summary>
-    /// Cancel the other branches as soon as one fails, and fail the step once they have stopped.
-    /// The default: a failed step is retried as a whole, so finishing the siblings' work is waste.
-    /// </summary>
-    CancelSiblings,
-
-    /// <summary>
-    /// Let every branch finish, then fail the step with every branch that failed. For branches
-    /// whose own work is worth finishing, or whose failures are all worth seeing at once.
-    /// </summary>
-    WaitForAll,
-}
-
-/// <summary>
 /// Declares the branches of a <c>Parallel</c> step: a fixed set of chains that run side by side
 /// within one run, each on its own copy of Memory, and join before the step after it.
 /// </summary>
@@ -56,12 +38,15 @@ public sealed class Branches<TInput, TReturn>
 
         if (string.IsNullOrWhiteSpace(name))
             Problems.Add("declares a branch with no name. Name every branch.");
-        else if (name.Contains('/') || name.Contains('#'))
+        else if (
+            name.Contains('/', StringComparison.Ordinal)
+            || name.Contains('#', StringComparison.Ordinal)
+        )
             Problems.Add(
                 $"names a branch '{name}', and a branch name cannot contain '/' or '#': they "
                     + "separate the parts of a step's id."
             );
-        else if (Declared.Any(b => b.Name == name))
+        else if (Declared.Exists(b => string.Equals(b.Name, name, StringComparison.Ordinal)))
             Problems.Add($"declares the branch '{name}' twice. Name each branch once.");
 
         Declared.Add(
@@ -87,50 +72,4 @@ public sealed class Branches<TInput, TReturn>
         Declared.Count == 0
             ? Problems.Append("declares no branches. Add one with Branch.")
             : Problems;
-}
-
-/// <summary>One declared branch: its name and its chain.</summary>
-internal sealed record DeclaredBranch<TInput, TReturn>(
-    string Name,
-    Func<MonadTask<TInput, TReturn>, MonadTask<TInput, TReturn>> Body
-)
-{
-    /// <summary>
-    /// True when the branch's name is refused (empty, repeated, or holding a separator), so its
-    /// steps could not have ids of their own and it is left out of the recorded chain.
-    /// </summary>
-    public bool Refused { get; init; }
-}
-
-/// <summary>
-/// The branch running on this async flow: the token its junctions honour and the scope its
-/// services come from. Unset outside a branch.
-/// </summary>
-internal static class RunningBranch
-{
-    private static readonly AsyncLocal<(
-        object Train,
-        CancellationToken Token,
-        IServiceProvider? Services
-    )?> Current = new();
-
-    /// <summary>
-    /// The branch's token for a junction of <paramref name="train"/>, or null outside a branch of
-    /// it. A train run inside a branch's junction keeps its own token.
-    /// </summary>
-    public static CancellationToken? TokenFor(object train) =>
-        Current.Value is { } branch && ReferenceEquals(branch.Train, train) ? branch.Token : null;
-
-    /// <summary>
-    /// The branch's own scope for <paramref name="train"/>, or null outside a branch of it or
-    /// for a run with no container. A scoped service is not made to be used from two threads, so
-    /// what a branch's steps resolve comes from here rather than from the run's scope.
-    /// </summary>
-    public static IServiceProvider? ServicesFor(object train) =>
-        Current.Value is { } branch && ReferenceEquals(branch.Train, train)
-            ? branch.Services
-            : null;
-
-    public static void Enter(object train, CancellationToken token, IServiceProvider? services) =>
-        Current.Value = (train, token, services);
 }
