@@ -384,10 +384,11 @@ internal sealed class InvokeOutcomeDelivery(
             {
                 w.Status,
                 w.MetadataId,
-                State = (TrainState?)w.Metadata.NotNull().TrainState,
-                w.Metadata.FailureException,
-                w.Metadata.InvokeOutput,
-                Oversize = (bool?)w.Metadata.InvokeOutputOversize,
+                // Every column of the run is null when the entry names none; the join is a left join.
+                State = w.Metadata == null ? null : (TrainState?)w.Metadata.TrainState,
+                FailureException = w.Metadata == null ? null : w.Metadata.FailureException,
+                InvokeOutput = w.Metadata == null ? null : w.Metadata.InvokeOutput,
+                Oversize = w.Metadata == null ? null : (bool?)w.Metadata.InvokeOutputOversize,
             })
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
