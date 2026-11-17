@@ -149,3 +149,4 @@ node_modules/
 # MSBuild static graph restore cache
 *.csproj.lscache
 
+src/Trax.Analyzers.Package/configuration/census/

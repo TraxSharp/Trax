@@ -28,7 +28,6 @@ public class BanTests
         ["P:System.DateTime.Today"] = "var x = System.DateTime.Today;",
         ["P:System.DateTimeOffset.Now"] = "var x = System.DateTimeOffset.Now;",
         ["P:System.DateTimeOffset.UtcNow"] = "var x = System.DateTimeOffset.UtcNow;",
-        ["P:System.TimeProvider.System"] = "var x = System.TimeProvider.System.GetUtcNow();",
         ["P:System.Environment.TickCount"] = "var x = System.Environment.TickCount;",
         ["P:System.Environment.TickCount64"] = "var x = System.Environment.TickCount64;",
         ["M:System.Diagnostics.Stopwatch.GetTimestamp"] =
@@ -100,6 +99,7 @@ public class BanTests
             .NotBeEmpty();
     }
 
+    [TestCase("var x = System.TimeProvider.System.GetUtcNow();")]
     [TestCase("var x = new System.Random(42).Next();")]
     [TestCase("var x = System.Security.Cryptography.RandomNumberGenerator.GetInt32(10);")]
     [TestCase("string? maybe = null; var length = maybe?.Length ?? 0;")]

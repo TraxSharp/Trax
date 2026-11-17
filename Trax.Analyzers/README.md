@@ -25,7 +25,7 @@ A whole group, with an MSBuild property in the project or `Directory.Build.props
 |---|---|
 | `TraxAnalyzers` | the whole profile |
 | `TraxAnalyzersTests` | the profile and the bans in test projects |
-| `TraxBanClock` | `DateTime.Now` and friends, `TimeProvider.System`, `Stopwatch` |
+| `TraxBanClock` | `DateTime.Now` and friends, `Stopwatch`, the tick counts |
 | `TraxBanRandom` | `Random.Shared`, `new Random()` |
 | `TraxBanConsole` | `System.Console` |
 | `TraxBanProcessExit` | `Environment.Exit`, `Environment.FailFast` |

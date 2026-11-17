@@ -7,7 +7,7 @@
        TraxAnalysisLevel        the profile to apply; pin it to keep a later release from adding
                                 errors to your build. Default: the newest this package ships
        TraxAnalyzersTests       false leaves test projects (IsTestProject) out of the profile
-       TraxBanClock             DateTime.Now and friends, TimeProvider.System, Stopwatch
+       TraxBanClock             DateTime.Now and friends, Stopwatch, the tick counts
        TraxBanRandom            Random.Shared and new Random()
        TraxBanConsole           System.Console
        TraxBanProcessExit       Environment.Exit and FailFast
