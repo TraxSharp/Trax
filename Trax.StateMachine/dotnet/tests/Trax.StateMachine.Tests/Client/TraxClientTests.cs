@@ -549,8 +549,15 @@ public class TraxClientTests
         var pending = PendingTimer(stream)!;
         stream.Dispose();
 
-        IsDisposed(ended).Should().BeTrue("its delay ended and the stream was subscribed again");
-        IsDisposed(pending).Should().BeTrue("the stream was disposed while it was pending");
+        // A source is cancelled at once and disposed once its callbacks ran, on the thread pool.
+        SpinWait
+            .SpinUntil(() => IsDisposed(ended), Wait)
+            .Should()
+            .BeTrue("its delay ended and the stream was subscribed again");
+        SpinWait
+            .SpinUntil(() => IsDisposed(pending), Wait)
+            .Should()
+            .BeTrue("the stream was disposed while it was pending");
     }
 
     // The source of the resubscribe delay pending now, read from the stream's private field.

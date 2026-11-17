@@ -33,8 +33,8 @@ internal static partial class Names
     internal static partial Regex TrainName();
 
     [GeneratedRegex(
-        @"\A([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\.([A-Za-z_][A-Za-z0-9_]*)\z",
-        RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture
+        @"\A(?<machine>[a-z][a-z0-9]*(?:-[a-z0-9]+)*)\.(?<member>[A-Za-z_][A-Za-z0-9_]*)\z",
+        RegexOptions.CultureInvariant
     )]
     internal static partial Regex ViewSource();
 

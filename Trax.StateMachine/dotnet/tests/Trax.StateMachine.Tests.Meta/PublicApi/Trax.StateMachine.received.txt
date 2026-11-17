@@ -657,7 +657,7 @@ namespace Trax.StateMachine
         public required string Machine { get; init; }
         public required string State { get; init; }
         public required int Version { get; init; }
-        public bool Equals(Trax.StateMachine.Snapshot? other) { }
+        public bool Equals([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] Trax.StateMachine.Snapshot? other) { }
         public override int GetHashCode() { }
     }
     public sealed class SnapshotMachine<TState, TTrigger>

@@ -308,8 +308,8 @@ namespace Trax.StateMachine.Persistence
     public sealed class MachineKey : System.IEquatable<Trax.StateMachine.Persistence.MachineKey>
     {
         public System.Collections.Generic.IReadOnlyList<string> Parts { get; }
-        public bool Equals(Trax.StateMachine.Persistence.MachineKey? other) { }
-        public override bool Equals(object? obj) { }
+        public bool Equals([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] Trax.StateMachine.Persistence.MachineKey? other) { }
+        public override bool Equals([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] object? obj) { }
         public override int GetHashCode() { }
         public override string ToString() { }
         public static Trax.StateMachine.Persistence.MachineKey Of(params string[] parts) { }

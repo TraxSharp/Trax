@@ -16,8 +16,8 @@ namespace Trax.StateMachine;
 internal static partial class IsoDuration
 {
     [GeneratedRegex(
-        @"^P(?!$)(?:([0-9]{1,9})D)?(?:T(?=[0-9])(?:([0-9]{1,9})H)?(?:([0-9]{1,9})M)?(?:([0-9]{1,9})(?:\.([0-9]{1,7}))?S)?)?\z",
-        RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture
+        @"^P(?!$)(?:(?<days>[0-9]{1,9})D)?(?:T(?=[0-9])(?:(?<hours>[0-9]{1,9})H)?(?:(?<minutes>[0-9]{1,9})M)?(?:(?<seconds>[0-9]{1,9})(?:\.(?<fraction>[0-9]{1,7}))?S)?)?\z",
+        RegexOptions.CultureInvariant
     )]
     private static partial Regex Pattern();
 
@@ -34,6 +34,7 @@ internal static partial class IsoDuration
         // Every component is at most nine digits, so the total in ticks fits a decimal, and anything past what a
         // TimeSpan holds is refused rather than wrapped.
         // A component that does not read as a number is refused, never thrown, whatever the pattern let through.
+        // Every group is named, so the five are numbered 1 to 5 in the order they open: days to the fraction.
         var parts = new decimal[6];
         for (var group = 1; group <= 5; group++)
         {

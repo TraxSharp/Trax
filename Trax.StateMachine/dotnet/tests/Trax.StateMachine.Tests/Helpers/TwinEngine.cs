@@ -199,6 +199,7 @@ public static class TwinEngine
         // The test owns its wait (ADR 0014): the script finishes well within it, or the test fails. The wait is on
         // the real clock, since the script runs in real time.
         using var hang = new CancellationTokenSource();
+        // allowed-delay: a hang guard, not a wait; the conversation ending is the signal.
         var answered =
             await Task.WhenAny(conversation, Task.Delay(timeout, TimeProvider.System, hang.Token))
                 .ConfigureAwait(false) == conversation;

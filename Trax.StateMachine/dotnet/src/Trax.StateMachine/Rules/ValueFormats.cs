@@ -133,7 +133,7 @@ internal static partial class ValueFormats
         if (!m.Success || !IsDay(m, 1) || !IsClock(m, 4))
             return false;
         var local = MinuteOf(m);
-        if (m.Groups[8].Success)
+        if (m.Groups["sign"].Success)
         {
             var hours = Number(m, 9);
             var minutes = Number(m, 10);
@@ -141,11 +141,11 @@ internal static partial class ValueFormats
                 return false;
             var offset =
                 (hours * 60 + minutes)
-                * (string.Equals(m.Groups[8].Value, "-", StringComparison.Ordinal) ? -1 : 1);
+                * (string.Equals(m.Groups["sign"].Value, "-", StringComparison.Ordinal) ? -1 : 1);
             return local - offset >= 0 && local - offset <= LastMinute;
         }
         return zoneless
-            || m.Groups[7].Success
+            || m.Groups["utc"].Success
             || (local >= 24 * 60 && local <= LastMinute - 24 * 60);
     }
 
@@ -186,6 +186,7 @@ internal static partial class ValueFormats
     private static bool IsClock(Match m, int first) =>
         Number(m, first) < 24 && Number(m, first + 1) < 60 && Number(m, first + 2) < 60;
 
+    // The patterns name every group, so a group's number is its place among them, counted from 1.
     private static int Number(Match m, int group)
     {
         var n = 0;
@@ -201,20 +202,20 @@ internal static partial class ValueFormats
     private static partial Regex UuidPattern();
 
     [GeneratedRegex(
-        "^([0-9]{4})-([0-9]{2})-([0-9]{2})\\z",
-        RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture
+        "^(?<year>[0-9]{4})-(?<month>[0-9]{2})-(?<day>[0-9]{2})\\z",
+        RegexOptions.CultureInvariant
     )]
     private static partial Regex DatePattern();
 
     [GeneratedRegex(
-        "^([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\\.[0-9]{1,7})?\\z",
-        RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture
+        "^(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})(?:\\.[0-9]{1,7})?\\z",
+        RegexOptions.CultureInvariant
     )]
     private static partial Regex TimePattern();
 
     [GeneratedRegex(
-        "^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\\.[0-9]{1,7})?(?:(Z)|([+-])([0-9]{2}):([0-9]{2}))?\\z",
-        RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture
+        "^(?<year>[0-9]{4})-(?<month>[0-9]{2})-(?<day>[0-9]{2})T(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})(?:\\.[0-9]{1,7})?(?:(?<utc>Z)|(?<sign>[+-])(?<offsetHours>[0-9]{2}):(?<offsetMinutes>[0-9]{2}))?\\z",
+        RegexOptions.CultureInvariant
     )]
     private static partial Regex DateTimePattern();
 
@@ -234,7 +235,7 @@ internal static partial class ValueFormats
         var match = SchemePattern().Match(value);
         if (!match.Success)
             return false;
-        var scheme = match.Groups[1].Value.ToLowerInvariant();
+        var scheme = match.Groups["scheme"].Value.ToLowerInvariant();
         var rest = value[match.Length..];
         if (string.Equals(scheme, "mailto", StringComparison.Ordinal))
         {
@@ -355,10 +356,7 @@ internal static partial class ValueFormats
     // A path, query or fragment: unreserved and reserved characters but "#", and %HH escapes.
     private static bool IsUriText(string text) => UriTextPattern().IsMatch(text);
 
-    [GeneratedRegex(
-        "^([A-Za-z][A-Za-z0-9+.\\-]+):",
-        RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture
-    )]
+    [GeneratedRegex("^(?<scheme>[A-Za-z][A-Za-z0-9+.\\-]+):", RegexOptions.CultureInvariant)]
     private static partial Regex SchemePattern();
 
     [GeneratedRegex("^[A-Za-z0-9._+\\-]+\\z", RegexOptions.CultureInvariant)]

@@ -56,7 +56,14 @@ internal static partial class Views
                     labels[state] = labelsAt[state].Text(label, 1, 200);
                 }
             }
-            shown.Add(new ViewField(name, match.Groups[1].Value, match.Groups[2].Value, labels));
+            shown.Add(
+                new ViewField(
+                    name,
+                    match.Groups["machine"].Value,
+                    match.Groups["member"].Value,
+                    labels
+                )
+            );
         }
         return (list, shown);
     }
