@@ -699,7 +699,7 @@ trax deploy --target compose --build
 | Key | Meaning |
 |---|---|
 | `app` | Lower case, a letter first, then letters, digits or dashes. Names the database, its user and the images. |
-| `services` | Each deployed project, relative to the file, under its service name. `port` is the loopback port compose publishes a hub's HTTP on. `count` is how many copies run; a service whose host runs the `api` or `scheduler` role runs one. `init` names a lone project `hub` and several by the last part of their names. |
+| `services` | Each deployed project, relative to the file, under its service name. `port` is the loopback port compose publishes a hub's HTTP on. `count` is how many copies run; a service whose host runs the `api` or `scheduler` role runs one. `memory` is the memory each copy may use, in MiB, at least 128; 1024 when left out. `init` names a lone project `hub` and several by the last part of their names. |
 | `connectionStrings` | The name under `ConnectionStrings:` the hosts read Postgres from, and the name they read RabbitMQ's settings under. Default `Trax` and `RabbitMq`. |
 | `settings`, `secrets` | Configuration the deployment must supply, as environment names (`__` for `:`). Every one is required. |
 
@@ -708,7 +708,7 @@ leaving out test projects, and refuses to replace an existing file without `--fo
 
 ### `--target compose`
 
-Writes `compose.yaml` and `.env.example` beside `trax.deploy.json` (or into `--out`), for docker or podman
+Writes `compose.yaml` and `.env.example` beside `trax.deploy.json` (or into `--out`), for rootless podman
 compose:
 
 - `database`, Postgres 17, with the app's name as database and user;
@@ -719,9 +719,13 @@ compose:
   published on `127.0.0.1` only, on its `port` or the first port from 8080 no other service names. No other service
   publishes a port, so a `port` on one is refused, and so are two services with the same `port`.
 
-The Trax services drop every Linux capability and run with `no-new-privileges`; Postgres and RabbitMQ get
-`no-new-privileges`. Nothing is reachable from other machines until something in front of the stack (a reverse
-proxy, `tailscale serve`) decides who may reach it.
+Every service drops every Linux capability and runs with `no-new-privileges`, `userns_mode: nomap` (the deploying
+user's own uid is not mapped into the container, so an escape does not land as them), `pids_limit: 512` and a
+`mem_limit`: the service's `memory`, 1024 MiB for Postgres and 512 MiB for RabbitMQ. Postgres gets back `CHOWN`,
+`DAC_OVERRIDE`, `FOWNER`, `SETGID` and `SETUID`, and RabbitMQ the same less `FOWNER`, which their entrypoints need to
+take their data directories and drop to their own users. docker compose refuses `nomap`.
+Nothing is reachable from other machines until something in front of the stack (a reverse proxy, `tailscale serve`)
+decides who may reach it.
 
 Every password, setting and secret is `${NAME:?set NAME}`, so compose stops when one is missing; `.env.example`
 lists them. No password is written into a connection string or a URI, so one holding `/`, `;` or `@` arrives

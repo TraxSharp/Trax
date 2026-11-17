@@ -86,6 +86,7 @@ public class DeployComposeTests
             .Be(
                 """
                 # Written by `trax deploy --target compose` from trax.deploy.json. Running it again overwrites this file.
+                # For rootless podman: every service runs with userns_mode nomap, which docker compose does not accept.
                 # Passwords, settings and secrets come from the environment, or from a .env file beside this one: copy
                 # .env.example to .env and fill it in. Never commit the .env.
 
@@ -111,8 +112,19 @@ public class DeployComposeTests
                     healthcheck:
                       test: ["CMD", "pg_isready", "-U", "orders"]
                       interval: 5s
+                    cap_drop:
+                      - ALL
+                    cap_add:
+                      - CHOWN
+                      - DAC_OVERRIDE
+                      - FOWNER
+                      - SETGID
+                      - SETUID
                     security_opt:
                       - no-new-privileges:true
+                    userns_mode: nomap
+                    pids_limit: 512
+                    mem_limit: 1024m
                     restart: unless-stopped
 
                   rabbitmq:
@@ -123,8 +135,18 @@ public class DeployComposeTests
                     healthcheck:
                       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
                       interval: 5s
+                    cap_drop:
+                      - ALL
+                    cap_add:
+                      - CHOWN
+                      - DAC_OVERRIDE
+                      - SETGID
+                      - SETUID
                     security_opt:
                       - no-new-privileges:true
+                    userns_mode: nomap
+                    pids_limit: 512
+                    mem_limit: 512m
                     restart: unless-stopped
 
                   # The new version migrates the database once, before any service of it starts.
@@ -136,6 +158,9 @@ public class DeployComposeTests
                       - ALL
                     security_opt:
                       - no-new-privileges:true
+                    userns_mode: nomap
+                    pids_limit: 512
+                    mem_limit: 1024m
                     depends_on:
                       database:
                         condition: service_healthy
@@ -152,6 +177,9 @@ public class DeployComposeTests
                       - ALL
                     security_opt:
                       - no-new-privileges:true
+                    userns_mode: nomap
+                    pids_limit: 512
+                    mem_limit: 1024m
                     depends_on:
                       migrate:
                         condition: service_completed_successfully
@@ -168,6 +196,9 @@ public class DeployComposeTests
                       - ALL
                     security_opt:
                       - no-new-privileges:true
+                    userns_mode: nomap
+                    pids_limit: 512
+                    mem_limit: 1024m
                     deploy:
                       replicas: 2
                     depends_on:
@@ -497,6 +528,44 @@ public class DeployComposeTests
         read.Should().BeEquivalentTo(File_());
     }
 
+    [Test]
+    public void A_service_runs_in_the_memory_it_names()
+    {
+        var file = File_();
+        file.Services["worker"].Memory = 2048;
+
+        var compose = ComposeTarget.Render(file, Exports())[0].Content.ReplaceLineEndings("\n");
+
+        Block(compose, "worker").Should().Contain("    mem_limit: 2048m\n");
+        Block(compose, "hub").Should().Contain("    mem_limit: 1024m\n");
+    }
+
+    [Test]
+    public void Every_service_drops_every_capability_and_adds_back_only_its_own()
+    {
+        var compose = ComposeTarget.Render(File_(), Exports())[0].Content.ReplaceLineEndings("\n");
+
+        foreach (var service in new[] { "database", "rabbitmq", "migrate", "hub", "worker" })
+        {
+            var block = Block(compose, service);
+            block.Should().Contain("    cap_drop:\n      - ALL\n", service);
+            block.Should().Contain("    userns_mode: nomap\n", service);
+            block.Should().Contain("    pids_limit: 512\n", service);
+            block.Should().MatchRegex(@"    mem_limit: \d+m\n", service);
+        }
+        Block(compose, "hub").Should().NotContain("cap_add");
+        Block(compose, "worker").Should().NotContain("cap_add");
+    }
+
+    /// <summary>The lines of one service in a rendered compose file, up to the next service.</summary>
+    private static string Block(string compose, string service)
+    {
+        var start = compose.IndexOf($"\n  {service}:\n", StringComparison.Ordinal);
+        start.Should().BeGreaterThan(0, $"the stack has a {service} service");
+        var end = compose.IndexOf("\n\n", start + 1, StringComparison.Ordinal);
+        return compose[start..(end < 0 ? compose.Length : end)];
+    }
+
     [TestCase(
         """{ "version": 1, "app": "Orders", "services": { "hub": { "project": "Orders/Orders.csproj" } } }""",
         "*app 'Orders'*"
@@ -517,6 +586,10 @@ public class DeployComposeTests
     [TestCase(
         """{ "version": 1, "app": "orders", "services": { "hub": { "project": "Orders/Orders.csproj", "port": 8080 }, "worker": { "project": "Orders.Worker/Orders.Worker.csproj", "port": 8080 } } }""",
         "*'worker'*port 8080*'hub'*"
+    )]
+    [TestCase(
+        """{ "version": 1, "app": "orders", "services": { "hub": { "project": "Orders/Orders.csproj", "memory": 32 } } }""",
+        "*service 'hub' has memory 32*"
     )]
     [TestCase("""{ "version": 2, "app": "orders", "services": {} }""", "*version 2*")]
     public void A_file_that_cannot_be_deployed_is_refused_naming_the_problem(
