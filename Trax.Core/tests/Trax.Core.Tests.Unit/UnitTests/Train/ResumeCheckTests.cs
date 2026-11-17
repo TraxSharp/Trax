@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
@@ -151,11 +152,13 @@ public class ResumeCheckTests : TestSetup
         var fingerprint = CheckpointState.Fingerprint(typeof(Checked));
 
         ChainVerification
-            .CheckStored(Checkpoint, "a", "b", fingerprint, typeof(Checked))!
+            .CheckStored(Checkpoint, "a", "b", fingerprint, typeof(Checked))
+            .NotNull()
             .RefusalCode.Should()
             .Be(ResumeRefusals.ChainChanged, Adr);
         ChainVerification
-            .CheckStored(Checkpoint, "a", "a", "old", typeof(Checked))!
+            .CheckStored(Checkpoint, "a", "a", "old", typeof(Checked))
+            .NotNull()
             .RefusalCode.Should()
             .Be(ResumeRefusals.StateChanged, Adr);
         ChainVerification

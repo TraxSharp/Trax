@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
@@ -179,7 +180,7 @@ namespace Trax.Core.Tests.Unit.UnitTests.Decisions
 
             var failure = result.Swap().ValueUnsafe();
             failure.Message.Should().Contain("under the same question key 'RefundChoice'");
-            ((TrainExceptionData)failure.Data["TrainExceptionData"]!)
+            ((TrainExceptionData)failure.Data["TrainExceptionData"].NotNull())
                 .FailureClass.Should()
                 .Be(FailureClass.Permanent);
             decider.Requests.Should().ContainSingle("the second question is never asked");

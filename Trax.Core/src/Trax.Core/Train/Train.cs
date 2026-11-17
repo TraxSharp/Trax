@@ -304,7 +304,7 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
             );
 
         ActiveRecorder?.NoteRootCall(call, startsAJunction);
-        return _monad!;
+        return _monad.NotNull();
     }
 
     #region Protected chain methods (Junctions API)

@@ -101,7 +101,7 @@ public partial class Monad<TInput, TReturn>
 
     private MonadTask<TInput, TReturn> RecordCheckpoint<TState>()
     {
-        var recorder = Recorder!;
+        var recorder = Recorder.NotNull();
         var step = $"Checkpoint<{typeof(TState).ReadableName()}>";
 
         if (recorder.AfterShortCircuit)

@@ -52,7 +52,7 @@ public class AddTupleToMemoryTests : TestSetup
         var monad = train.Activate(input);
 
         // Act
-        Assert.Throws<TrainException>(() => monad.AddTupleToMemory((ITuple)null!));
+        Assert.Throws<TrainException>(() => monad.AddTupleToMemory(Null.Of<ITuple>()));
     }
 
     [Theory]

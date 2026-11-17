@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
 using System.Reflection;
+using Trax.Core.Extensions;
 using Trax.Core.Utils;
 
 namespace Trax.Core.Decisions;
@@ -27,7 +28,7 @@ internal sealed class ScoreSpec<TLevel>(string? asking) : QuestionSpec
     public override Question ToQuestion() =>
         new ScoreQuestion(
             Key,
-            _instructions!,
+            _instructions.NotNull(),
             Levels
                 .Select(l => new Criterion(l.ToString(), EnumMembers<TLevel>.Description(l)))
                 .ToList()

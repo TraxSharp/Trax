@@ -1,4 +1,5 @@
 using System.Reflection;
+using Trax.Core.Extensions;
 using Trax.Core.Utils;
 
 namespace Trax.Core.Decisions;
@@ -73,7 +74,7 @@ public static class QuestionKey
     private static string Name(Type type, Type[] arguments)
     {
         if (type.IsArray)
-            return For(type.GetElementType()!) + "[]";
+            return For(type.GetElementType().NotNull()) + "[]";
 
         if (type.IsGenericParameter)
             return type.Name;

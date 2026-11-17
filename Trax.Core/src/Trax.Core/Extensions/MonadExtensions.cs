@@ -56,7 +56,7 @@ internal static class MonadExtensions
         if (cached is null)
         {
             monad.Exception ??= new TrainException(
-                JunctionConstructorProblem(junctionType, monad.Train.GetType())!
+                JunctionConstructorProblem(junctionType, monad.Train.GetType()).NotNull()
             );
             return null;
         }

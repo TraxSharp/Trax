@@ -194,13 +194,13 @@ public partial class Monad<TInput, TReturn>
                         junction: null,
                         NullServiceMessage(i, typeArray, whileRecording: true)
                     );
-                else if (services[i]!.GetType().IsValueType)
+                else if (services[i].NotNull().GetType().IsValueType)
                     // A struct passed as an interface is boxed, and the runtime refuses it.
                     Recorder.RefuseStep(
                         ChainStepKind.Seed,
                         junction: null,
                         $"AddServices<{serviceType.Name}> received a value of the struct type "
-                            + $"{services[i]!.GetType().Name}; a service must be a class."
+                            + $"{services[i].NotNull().GetType().Name}; a service must be a class."
                     );
 
                 // A value is stored under an interface it implements; the runtime refuses a
@@ -244,7 +244,7 @@ public partial class Monad<TInput, TReturn>
         // chain can find.
         for (var i = 0; i < typeArray.Length; i++)
         {
-            var service = services[i]!;
+            var service = services[i].NotNull();
 
             // A Moq mock goes under the type it mocks.
             if (service.GetType().IsMoqProxy())

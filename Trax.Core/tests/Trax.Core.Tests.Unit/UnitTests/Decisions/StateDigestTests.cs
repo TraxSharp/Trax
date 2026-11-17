@@ -10,6 +10,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 using AwesomeAssertions;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 
 namespace Trax.Core.Tests.Unit.UnitTests.Decisions;
 
@@ -293,7 +294,10 @@ public class StateDigestTests : TestSetup
     [Test]
     public void StateHashKey_RefusesAShortOrMissingKey_AndCopiesIt()
     {
-        FluentActions.Invoking(() => new StateHashKey(null!)).Should().Throw<ArgumentException>();
+        FluentActions
+            .Invoking(() => new StateHashKey(Null.Of<byte[]>()))
+            .Should()
+            .Throw<ArgumentException>();
         FluentActions
             .Invoking(() => new StateHashKey(new byte[31]))
             .Should()
@@ -840,7 +844,7 @@ public class StateDigestTests : TestSetup
             .Identity(typeof(List<Order>))
             .Should()
             .Contain("System.Private.CoreLib")
-            .And.Contain(typeof(Order).Assembly.GetName().Name!);
+            .And.Contain(typeof(Order).Assembly.GetName().Name.NotNull());
     }
 
     public sealed class Fork
@@ -896,7 +900,7 @@ public class StateDigestTests : TestSetup
 
     public sealed class Checkout
     {
-        public Payment Payment { get; set; } = null!;
+        public required Payment Payment { get; set; }
     }
 
     public interface IPayment;
@@ -905,7 +909,7 @@ public class StateDigestTests : TestSetup
 
     public sealed class Wallet
     {
-        public IPayment Payment { get; set; } = null!;
+        public required IPayment Payment { get; set; }
     }
 
     public sealed class IgnoredOrder
@@ -936,7 +940,7 @@ public class StateDigestTests : TestSetup
 
     public sealed class HoldsAType
     {
-        public Type Kind { get; set; } = null!;
+        public required Type Kind { get; set; }
     }
 
     public sealed class HoldsAStream

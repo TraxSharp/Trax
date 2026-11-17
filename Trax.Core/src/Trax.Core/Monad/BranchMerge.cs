@@ -2,6 +2,7 @@ using System.Runtime.ExceptionServices;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Train;
 using Trax.Core.Utils;
@@ -42,6 +43,8 @@ internal static class BranchMerge
             added[type] = added.ContainsKey(type) ? null : value;
         }
 
-        return added.Where(a => a.Value is not null).ToDictionary(a => a.Key, a => a.Value!);
+        return added
+            .Where(a => a.Value is not null)
+            .ToDictionary(a => a.Key, a => a.Value.NotNull());
     }
 }

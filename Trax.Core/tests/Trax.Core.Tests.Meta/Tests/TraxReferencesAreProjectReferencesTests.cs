@@ -1,3 +1,5 @@
+using Trax.Core.Extensions;
+
 namespace Trax.Core.Tests.Meta.Tests;
 
 /// <summary>
@@ -58,7 +60,7 @@ public class TraxReferencesAreProjectReferencesTests
                 Directory.EnumerateFiles(src, "*.csproj", SearchOption.AllDirectories)
             )
             .Select(Path.GetFileNameWithoutExtension)
-            .Select(name => name!)
+            .Select(name => name.NotNull())
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     private static bool IsTemplateContent(string path) =>

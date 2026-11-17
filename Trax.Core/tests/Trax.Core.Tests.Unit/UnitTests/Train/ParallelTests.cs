@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Trax.Core;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
@@ -181,7 +182,7 @@ public class ParallelTests : TestSetup
         failure.CancelledBySibling.Should().BeEmpty();
         joined.Joined.Should().BeFalse("a failed step stops the chain");
 
-        var data = (TrainExceptionData)failure.Data["TrainExceptionData"]!;
+        var data = (TrainExceptionData)failure.Data["TrainExceptionData"].NotNull();
         data.Type.Should().Be(nameof(BranchesFailedException));
         data.FailureClass.Should()
             .Be(FailureClass.Permanent, $"one permanent failure makes the step permanent ({Adr})");
@@ -229,7 +230,7 @@ public class ParallelTests : TestSetup
             .Subject;
         failure.Failures.Select(f => f.Branch).Should().Equal("Parallel#0/fails");
         failure.CancelledBySibling.Should().Equal(["Parallel#0/waits"], $"({Adr})");
-        ((TrainExceptionData)failure.Data["TrainExceptionData"]!)
+        ((TrainExceptionData)failure.Data["TrainExceptionData"].NotNull())
             .FailureClass.Should()
             .Be(FailureClass.Transient, "a branch stopped by its sibling adds no class");
     }
@@ -711,7 +712,7 @@ public class ParallelTests : TestSetup
         public void Note()
         {
             lock (Steps)
-                Steps.Add((ChainGraph.CurrentNodeId!, ChainGraph.CurrentBranchPath));
+                Steps.Add((ChainGraph.CurrentNodeId.NotNull(), ChainGraph.CurrentBranchPath));
         }
     }
 

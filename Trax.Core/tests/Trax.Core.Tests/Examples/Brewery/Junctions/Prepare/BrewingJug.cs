@@ -12,5 +12,5 @@ public class BrewingJug : IBrewingJug
 
     public bool IsBrewed { get; set; }
 
-    public Ingredients Ingredients { get; set; } = null!;
+    public required Ingredients Ingredients { get; set; }
 }

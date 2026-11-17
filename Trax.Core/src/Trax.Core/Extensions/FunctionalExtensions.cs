@@ -98,6 +98,27 @@ public static class FunctionalExtensions
     }
 
     /// <summary>
+    /// The value, or an <see cref="InvalidOperationException"/> naming the caller's expression when
+    /// it is null. Write it where the null-forgiving operator (!) would have gone: the assumption
+    /// is the same, and it fails at the line that made it instead of somewhere after.
+    /// </summary>
+    /// <typeparam name="T">The type of the value</typeparam>
+    /// <param name="value">The value that must not be null</param>
+    /// <param name="valueExpr">Auto-captured caller argument expression</param>
+    /// <returns>The value, known not to be null</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the value is null</exception>
+    public static T NotNull<T>(
+        [NotNull] this T? value,
+        [CallerArgumentExpression(nameof(value))] string? valueExpr = null
+    )
+    {
+        if (value is null)
+            throw new InvalidOperationException($"{valueExpr} is null");
+
+        return value;
+    }
+
+    /// <summary>
     /// Asserts that a selector applied to each element of the collection produces a non-null value.
     /// Use for validating that navigation properties are loaded on a collection of entities.
     /// </summary>

@@ -6,9 +6,14 @@ namespace Trax.Core.Testing.Tests;
 [TestFixture]
 public sealed class RepoConventionGuardFixtureSelfTest : RepoConventionGuardFixture
 {
-    private TempRepo _repo = null!;
+    private TempRepo? _repo;
 
-    protected override ArchitectureGuardOptions Options => new() { RepoRootOverride = _repo.Root };
+    // NUnit runs the one-time setup before it reads Options for any test.
+    private TempRepo Repo =>
+        _repo
+        ?? throw new InvalidOperationException("The one-time setup has not created the repo.");
+
+    protected override ArchitectureGuardOptions Options => new() { RepoRootOverride = Repo.Root };
 
     [OneTimeSetUp]
     public void CreateConformingRepo() =>
@@ -28,5 +33,5 @@ public sealed class RepoConventionGuardFixtureSelfTest : RepoConventionGuardFixt
             );
 
     [OneTimeTearDown]
-    public void Cleanup() => _repo.Dispose();
+    public void Cleanup() => _repo?.Dispose();
 }

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AwesomeAssertions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Junction;
 using Trax.Core.Tests.Unit.Utils;
 
@@ -135,7 +136,7 @@ public class JunctionFailureClassTests : TestSetup
             .ConfigureAwait(false);
 
         result.IsLeft.Should().BeTrue();
-        return (TrainExceptionData)result.Swap().ValueUnsafe().Data["TrainExceptionData"]!;
+        return (TrainExceptionData)result.Swap().ValueUnsafe().Data["TrainExceptionData"].NotNull();
     }
 
     private sealed class Throwing(Exception failure) : Junction<int, int>

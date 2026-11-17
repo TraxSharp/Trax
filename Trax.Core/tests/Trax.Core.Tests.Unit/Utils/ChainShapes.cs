@@ -4,6 +4,7 @@ using System.Reflection;
 using CsCheck;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
@@ -321,14 +322,15 @@ internal static class ChainShapes
             }
 
             return (TOut)
-                Activator.CreateInstance(typeof(TOut), step.Id, Value(input.Value, step.Id))!;
+                Activator
+                    .CreateInstance(typeof(TOut), step.Id, Value(input.Value, step.Id))
+                    .NotNull();
         }
     }
 
-    private static readonly MethodInfo ChainOne = typeof(ChainShapes).GetMethod(
-        nameof(ChainJunction),
-        BindingFlags.NonPublic | BindingFlags.Static
-    )!;
+    private static readonly MethodInfo ChainOne = typeof(ChainShapes)
+        .GetMethod(nameof(ChainJunction), BindingFlags.NonPublic | BindingFlags.Static)
+        .NotNull();
 
     private static MonadTask<string, string> ChainJunction<TIn, TOut>(
         MonadTask<string, string> chain,
@@ -354,7 +356,8 @@ internal static class ChainShapes
             Link step => (MonadTask<string, string>)
                 ChainOne
                     .MakeGenericMethod(SlotType(step.From), SlotType(step.Id))
-                    .Invoke(null, [chain, step, run])!,
+                    .Invoke(null, [chain, step, run])
+                    .NotNull(),
             Fork fork => chain.Parallel(p =>
                 fork.Branches.Aggregate(
                         p,

@@ -333,6 +333,7 @@ namespace Trax.Core.Extensions
     {
         public static void AssertEachLoaded<T, U>([System.Diagnostics.CodeAnalysis.NotNull] this System.Collections.Generic.IEnumerable<T> values, System.Func<T, U> selector, [System.Runtime.CompilerServices.CallerArgumentExpression("values")] string? valuesExpr = null, [System.Runtime.CompilerServices.CallerArgumentExpression("selector")] string? selectorExpr = null) { }
         public static void AssertLoaded<T>([System.Diagnostics.CodeAnalysis.NotNull] this T? value, [System.Runtime.CompilerServices.CallerArgumentExpression("value")] string? valueExpr = null) { }
+        public static T NotNull<T>([System.Diagnostics.CodeAnalysis.NotNull] this T? value, [System.Runtime.CompilerServices.CallerArgumentExpression("value")] string? valueExpr = null) { }
     }
 }
 namespace Trax.Core.Functional

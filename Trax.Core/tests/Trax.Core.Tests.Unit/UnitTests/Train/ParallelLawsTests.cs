@@ -1,6 +1,7 @@
 using System.Globalization;
 using AwesomeAssertions;
 using CsCheck;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Core.Tests.Unit.Utils;
 using static Trax.Core.Tests.Unit.Utils.ChainShapes;
@@ -366,7 +367,8 @@ public class ParallelLawsTests : TestSetup
     {
         foreach (var (_, node, branch) in log.Ran)
         {
-            ids.Should().Contain(node!, $"a running junction says which node it is; {run}");
+            ids.Should()
+                .Contain(node.NotNull(), $"a running junction says which node it is; {run}");
             if (branch is not null)
                 node.Should().StartWith(branch + "/", $"a branch's steps are inside it; {run}");
         }

@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
 using System.Reflection;
+using Trax.Core.Extensions;
 using Trax.Core.Utils;
 
 namespace Trax.Core.Decisions;
@@ -21,7 +22,7 @@ internal sealed class YesNoSpec<TQuestion>(string? asking, string? yes, string? 
     public override string? Problem => Unworded(typeof(TQuestion), _instructions);
 
     public override Question ToQuestion() =>
-        new YesNoQuestion(Key, _instructions!, yes ?? Attribute?.Yes, no ?? Attribute?.No);
+        new YesNoQuestion(Key, _instructions.NotNull(), yes ?? Attribute?.Yes, no ?? Attribute?.No);
 
     public override object ToDecision(Answer answer)
     {

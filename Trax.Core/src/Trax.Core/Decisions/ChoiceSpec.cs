@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
 using System.Reflection;
+using Trax.Core.Extensions;
 using Trax.Core.Utils;
 
 namespace Trax.Core.Decisions;
@@ -30,7 +31,7 @@ internal sealed class ChoiceSpec<TTrack>(
     public override Question ToQuestion() =>
         new ChoiceQuestion(
             Key,
-            _instructions!,
+            _instructions.NotNull(),
             _offered
                 .Select(o => new Criterion(
                     o.Option.ToString(),

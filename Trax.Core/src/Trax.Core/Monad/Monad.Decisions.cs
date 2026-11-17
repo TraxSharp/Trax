@@ -486,7 +486,7 @@ public partial class Monad<TInput, TReturn>
             // being decided, so there is nothing to compare.
             var request = new DecisionRequest(
                 train,
-                state!,
+                state.NotNull(),
                 pending.Select(s => questionsAsked[s.Key]).ToList()
             );
 
@@ -505,7 +505,7 @@ public partial class Monad<TInput, TReturn>
             if (shadowDeciders.Exists(s => s.Shadow is not null))
                 try
                 {
-                    snapshot = StateCopy.Snapshot(state!);
+                    snapshot = StateCopy.Snapshot(state.NotNull());
                 }
                 catch (Exception e)
                 {
@@ -523,13 +523,13 @@ public partial class Monad<TInput, TReturn>
                         Decider: s.Type,
                         Asked: s.Shadow is null
                             ? Task.FromResult(new ShadowResult(s.Type, Answers: null, s.Error))
-                        : snapshot is null ? Unasked(s.Type, s.Shadow, uncopied!)
+                        : snapshot is null ? Unasked(s.Type, s.Shadow, uncopied.NotNull())
                         : AskShadow(
                             s.Type,
                             s.Shadow,
                             request,
                             snapshot,
-                            state!.GetType(),
+                            state.NotNull().GetType(),
                             shadowing.Token
                         )
                     )
@@ -597,7 +597,7 @@ public partial class Monad<TInput, TReturn>
                         occurrences[spec.Key],
                         fingerprints[spec.Key],
                         answer,
-                        deciderType!,
+                        deciderType.NotNull(),
                         $"the decider {reason}"
                     )
                     {
@@ -1212,7 +1212,7 @@ public partial class Monad<TInput, TReturn>
         string step
     )
     {
-        var recorder = Recorder!;
+        var recorder = Recorder.NotNull();
 
         foreach (var problem in questions.Problems)
             recorder.RefuseStep(ChainStepKind.Decide, questions.Decider, $"{step} {problem}");
@@ -1321,13 +1321,15 @@ public partial class Monad<TInput, TReturn>
             }
 
             foreach (var problem in problems)
-                Recorder!.RefuseRecordedStep(
-                    first,
-                    ChainStepKind.Decide,
-                    type,
-                    $"{step}: the {role} '{vetter.GetType().ReadableName()}' cannot answer it: "
-                        + problem
-                );
+                Recorder
+                    .NotNull()
+                    .RefuseRecordedStep(
+                        first,
+                        ChainStepKind.Decide,
+                        type,
+                        $"{step}: the {role} '{vetter.GetType().ReadableName()}' cannot answer it: "
+                            + problem
+                    );
         }
     }
 
@@ -1339,7 +1341,7 @@ public partial class Monad<TInput, TReturn>
         IEnumerable<string> problems
     )
     {
-        var recorder = Recorder!;
+        var recorder = Recorder.NotNull();
 
         foreach (var problem in problems)
             recorder.RefuseStep(kind, junction: null, $"{step} {problem}");
@@ -1379,7 +1381,7 @@ public partial class Monad<TInput, TReturn>
     private ChainRecorder RecordTrack(DeclaredTrack<TInput, TReturn> track)
     {
         var outer = Recorder;
-        var steps = new ChainRecorder(outer!);
+        var steps = new ChainRecorder(outer.NotNull());
         Recorder = steps;
 
         try
@@ -1471,7 +1473,7 @@ public partial class Monad<TInput, TReturn>
         {
             return Optional<ILoggerFactory>()
                 ?.CreateLogger("Trax.Core.Parallel")
-                .BeginScope(new BranchScope(BranchPath!));
+                .BeginScope(new BranchScope(BranchPath.NotNull()));
         }
         catch
         {

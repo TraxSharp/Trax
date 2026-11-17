@@ -25,7 +25,7 @@ public class InitializeJunctionTests : TestSetup
         // Assert
         junction.Should().NotBeNull();
 
-        var result = await junction!.Run(input);
+        var result = await junction.NotNull().Run(input);
         result.Should().Be(input.ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
 
