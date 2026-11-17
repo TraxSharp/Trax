@@ -94,8 +94,9 @@ public class SystemInstanceStartFailureTests(StoreProvider provider)
     /// <summary>
     /// Wraps the registered <see cref="IMachineInstanceStore"/>, and while <see cref="Hide"/> is set answers every
     /// read of a system instance with nothing, as though the row had just been deleted.
+    /// Public and not sealed: DispatchProxy derives the proxy from it.
     /// </summary>
-    internal sealed class HidingStore : DispatchProxy
+    public class HidingStore : DispatchProxy
     {
         public static bool Hide { get; set; }
 
