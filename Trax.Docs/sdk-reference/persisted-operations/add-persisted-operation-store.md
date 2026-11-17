@@ -47,6 +47,10 @@ public sealed class PersistedOperationStoreBuilder
         string connectionString,
         Action<RabbitMqInvalidationOptions> configure);
     public PersistedOperationStoreBuilder UseRabbitMqInvalidation(string connectionString);
+    public PersistedOperationStoreBuilder UseRabbitMqInvalidation(
+        IConfiguration configuration,
+        Action<RabbitMqInvalidationOptions> configure,
+        string name = "RabbitMq");
     public PersistedOperationStoreBuilder SingleNode();
     public PersistedOperationStoreBuilder GateManagement(string? policy = null, string? roles = null);
     public PersistedOperationStoreBuilder GateManagementToAuthenticatedUsers();
@@ -64,6 +68,7 @@ public sealed class PersistedOperationStoreBuilder
 |-----------------------------------------|-------------|
 | `UseRabbitMqInvalidation(connectionString, configure)` | Broadcast every change over the broker the GraphQL nodes use with their own `UseRabbitMqInvalidation`, so each empties its caches, signed with the key they share (`configure` sets `SigningKey`; see [Signing and transport](/docs/sdk-reference/persisted-operations/persisted-operations-builder#signing-and-transport)). Throws `ArgumentException` for a blank connection string |
 | `UseRabbitMqInvalidation(connectionString)` | The same with no key, which refuses the start until one is set through the overload above |
+| `UseRabbitMqInvalidation(configuration, configure, name)` | The first overload with the broker read from configuration, as [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persisted-operations-builder) reads it: `ConnectionStrings:{name}`, or `{name}:Host` and `{name}:Port`, with `{name}:UserName` and `{name}:Password` set apart from the URI |
 | `SingleNode()` | Declare that no other process caches these operations: this one serves them itself, or nothing serves them while it writes. Nothing checks the claim; a GraphQL node elsewhere sees a change only when its cached entry reaches its maximum age |
 | `GateManagement(policy, roles)` | Declare who may manage documents through this process's surfaces, the dashboard's pages. The same rules as [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations)' `GateManagement`: a policy or roles is required, a comma-separated role list is any of, repeated calls are all of. Without it the dashboard shows no management pages. Code calling the service with no person behind it is not gated |
 | `GateManagementToAuthenticatedUsers()` | Let any authenticated person manage documents through the dashboard. Prefer `GateManagement` |

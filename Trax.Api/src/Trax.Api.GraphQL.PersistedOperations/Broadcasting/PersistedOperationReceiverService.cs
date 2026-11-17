@@ -88,7 +88,7 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
         if (invalidation.Problem(_options.RabbitMqConnectionString) is { } problem)
             throw new InvalidOperationException(problem);
 
-        var factory = new ConnectionFactory { Uri = new Uri(_options.RabbitMqConnectionString) };
+        var factory = invalidation.CreateConnectionFactory(_options.RabbitMqConnectionString);
         _connection = await factory.CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
         _connection.ConnectionShutdownAsync += (_, args) =>
             args.Initiator == ShutdownInitiator.Application

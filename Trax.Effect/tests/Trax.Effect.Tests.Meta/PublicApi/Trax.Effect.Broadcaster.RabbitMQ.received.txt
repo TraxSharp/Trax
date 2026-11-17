@@ -3,6 +3,7 @@ namespace Trax.Effect.Broadcaster.RabbitMQ.Extensions
     public static class RabbitMqBroadcasterExtensions
     {
         public static Trax.Effect.Configuration.BroadcasterBuilder.BroadcasterBuilder UseRabbitMq(this Trax.Effect.Configuration.BroadcasterBuilder.BroadcasterBuilder builder, string connectionString, System.Action<Trax.Effect.Broadcaster.RabbitMQ.RabbitMqBroadcasterOptions>? configure = null) { }
+        public static Trax.Effect.Configuration.BroadcasterBuilder.BroadcasterBuilder UseRabbitMq(this Trax.Effect.Configuration.BroadcasterBuilder.BroadcasterBuilder builder, Microsoft.Extensions.Configuration.IConfiguration configuration, System.Action<Trax.Effect.Broadcaster.RabbitMQ.RabbitMqBroadcasterOptions>? configure = null, string name = "RabbitMq") { }
     }
 }
 namespace Trax.Effect.Broadcaster.RabbitMQ
@@ -16,9 +17,11 @@ namespace Trax.Effect.Broadcaster.RabbitMQ
         public string ExchangeName { get; set; }
         public string? JunctionExchangeName { get; set; }
         public System.TimeSpan MaxClockSkew { get; set; }
+        public string? Password { get; set; }
         public ushort PrefetchCount { get; set; }
         public byte[]? SigningKey { get; set; }
         public bool UnsignedMessagesAllowed { get; }
+        public string? UserName { get; set; }
         public Trax.Effect.Broadcaster.RabbitMQ.RabbitMqBroadcasterOptions AllowUnsignedMessages() { }
     }
     public class RabbitMqTrainEventReceiver : System.IAsyncDisposable, Trax.Effect.Services.TrainEventBroadcaster.ITrainEventReceiver

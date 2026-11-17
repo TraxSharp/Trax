@@ -700,7 +700,7 @@ trax deploy --target compose --build
 |---|---|
 | `app` | Lower case, a letter first, then letters, digits or dashes. Names the database, its user and the images. |
 | `services` | Each deployed project, relative to the file, under its service name. `port` is the loopback port compose publishes a hub's HTTP on. `count` is how many copies run; a service whose host runs the `api` or `scheduler` role runs one. `init` names a lone project `hub` and several by the last part of their names. |
-| `connectionStrings` | The names under `ConnectionStrings:` the hosts read Postgres and RabbitMQ from. Default `Trax` and `RabbitMq`. |
+| `connectionStrings` | The name under `ConnectionStrings:` the hosts read Postgres from, and the name they read RabbitMQ's settings under. Default `Trax` and `RabbitMq`. |
 | `settings`, `secrets` | Configuration the deployment must supply, as environment names (`__` for `:`). Every one is required. |
 
 `init` makes a service of every web or console project under the directory that references a `Trax.*` package,
@@ -724,7 +724,13 @@ The Trax services drop every Linux capability and run with `no-new-privileges`; 
 proxy, `tailscale serve`) decides who may reach it.
 
 Every password, setting and secret is `${NAME:?set NAME}`, so compose stops when one is missing; `.env.example`
-lists them. Images are `<app>-<service>:${TRAX_IMAGE_TAG:-latest}`; `--build` builds each with
+lists them. No password is written into a connection string or a URI, so one holding `/`, `;` or `@` arrives
+intact: the Postgres password is `PGPASSWORD`, which Npgsql reads when the connection string has none, and
+RabbitMQ is `RabbitMq__Host`, `RabbitMq__UserName` and `RabbitMq__Password` (under the `rabbitMq` name in
+`connectionStrings`), with no `ConnectionStrings__RabbitMq`. A host reads those with
+`UseRabbitMq(builder.Configuration)` and `UseRabbitMqInvalidation(builder.Configuration, ...)`; see
+[UseRabbitMq](/docs/sdk-reference/configuration/use-rabbit-mq#reading-the-broker-from-configuration). Images are
+`<app>-<service>:${TRAX_IMAGE_TAG:-latest}`; `--build` builds each with
 `dotnet publish -t:PublishContainer` under that name. A host that keeps its runs anywhere but Postgres is refused,
 and so is a `compose.yaml` trax did not write.
 

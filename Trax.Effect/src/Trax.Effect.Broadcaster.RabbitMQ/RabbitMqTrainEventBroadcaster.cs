@@ -455,12 +455,9 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
 
     private async Task<IConnection> ConnectAsync(CancellationToken ct)
     {
-        var factory = new ConnectionFactory
-        {
-            Uri = new Uri(_options.ConnectionString),
-            RequestedConnectionTimeout = ConnectTimeout,
-            AutomaticRecoveryEnabled = false,
-        };
+        var factory = _options.CreateConnectionFactory();
+        factory.RequestedConnectionTimeout = ConnectTimeout;
+        factory.AutomaticRecoveryEnabled = false;
         return await factory.CreateConnectionAsync(ct);
     }
 

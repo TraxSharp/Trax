@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Configuration.BroadcasterBuilder;
 using Trax.Effect.Services.TrainEventBroadcaster;
@@ -39,9 +40,60 @@ public static class RabbitMqBroadcasterExtensions
         this BroadcasterBuilder builder,
         string connectionString,
         Action<RabbitMqBroadcasterOptions>? configure = null
+    ) =>
+        builder.UseRabbitMq(
+            new RabbitMqBroadcasterOptions { ConnectionString = connectionString },
+            configure
+        );
+
+    /// <summary>
+    /// Configures RabbitMQ as the transport for cross-process lifecycle event broadcasting, with the
+    /// broker read from configuration under <paramref name="name"/>.
+    /// </summary>
+    /// <param name="builder">The broadcaster builder.</param>
+    /// <param name="configuration">The host's configuration.</param>
+    /// <param name="configure">Optional callback to customize RabbitMQ options.</param>
+    /// <param name="name">The name the settings are under. Defaults to <c>RabbitMq</c>.</param>
+    /// <returns>The same builder, for chaining.</returns>
+    /// <remarks>
+    /// The broker is <c>ConnectionStrings:{name}</c>, an AMQP URI, when it is set; otherwise
+    /// <c>{name}:Host</c>, with <c>{name}:Port</c> (default 5672), reached over plain
+    /// <c>amqp://</c>. <c>{name}:UserName</c> and <c>{name}:Password</c>, when set, take the place of
+    /// any user and password in the URI, so a password never has to be encoded into one. A host
+    /// passing a full URI keeps working: a deployment that sets the parts separately sets no
+    /// connection string. Everything else, and every refusal, is as for
+    /// <see cref="UseRabbitMq(BroadcasterBuilder, string, Action{RabbitMqBroadcasterOptions}?)"/>.
+    /// </remarks>
+    /// <exception cref="ArgumentException">
+    /// Neither <c>ConnectionStrings:{name}</c> nor <c>{name}:Host</c> is set, <c>{name}:Port</c> is
+    /// not a port, or the options are refused as by the overload taking a connection string.
+    /// </exception>
+    public static BroadcasterBuilder UseRabbitMq(
+        this BroadcasterBuilder builder,
+        IConfiguration configuration,
+        Action<RabbitMqBroadcasterOptions>? configure = null,
+        string name = "RabbitMq"
     )
     {
-        var options = new RabbitMqBroadcasterOptions { ConnectionString = connectionString };
+        ArgumentNullException.ThrowIfNull(configuration);
+        var (connectionString, userName, password) = RabbitMqSettings.Read(configuration, name);
+        return builder.UseRabbitMq(
+            new RabbitMqBroadcasterOptions
+            {
+                ConnectionString = connectionString,
+                UserName = userName,
+                Password = password,
+            },
+            configure
+        );
+    }
+
+    private static BroadcasterBuilder UseRabbitMq(
+        this BroadcasterBuilder builder,
+        RabbitMqBroadcasterOptions options,
+        Action<RabbitMqBroadcasterOptions>? configure
+    )
+    {
         configure?.Invoke(options);
 
         if (options.PrefetchCount == 0)
