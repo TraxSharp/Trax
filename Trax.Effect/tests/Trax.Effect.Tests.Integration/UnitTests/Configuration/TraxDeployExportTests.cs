@@ -72,7 +72,8 @@ public class TraxDeployExportTests
                 effects.SkipMigrations().UsePostgres(UnreachableConnectionString)
             )
         );
-        await using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var manifest = await DeployManifestExport.BuildAsync(
             provider,
@@ -90,7 +91,8 @@ public class TraxDeployExportTests
     {
         var services = new ServiceCollection();
         services.AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory()));
-        await using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var manifest = await DeployManifestExport.BuildAsync(
             provider,

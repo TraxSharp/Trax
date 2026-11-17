@@ -59,7 +59,8 @@ public class UnrequestedCancellationTests
     [Test]
     public async Task A_cancellation_the_trains_token_requested_is_recorded_cancelled()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (TokenCancelledTrain)
             scope.ServiceProvider.GetRequiredService<ITokenCancelledTrain>();
         using var cts = new CancellationTokenSource();
@@ -77,7 +78,8 @@ public class UnrequestedCancellationTests
     [Test]
     public async Task A_cancellation_the_trains_token_did_not_request_is_a_transient_failure()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (UnrequestedTrain)scope.ServiceProvider.GetRequiredService<IUnrequestedTrain>();
 
         var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
@@ -102,7 +104,8 @@ public class UnrequestedCancellationTests
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
 
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (HttpTimeoutTrain)scope.ServiceProvider.GetRequiredService<IHttpTimeoutTrain>();
         HttpTimeoutTrain.Target = new Uri(
             $"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}/"
@@ -121,7 +124,8 @@ public class UnrequestedCancellationTests
     public async Task A_classifier_answer_for_an_unrequested_cancellation_wins()
     {
         Classifier.Result = FailureClass.Permanent;
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (UnrequestedTrain)scope.ServiceProvider.GetRequiredService<IUnrequestedTrain>();
 
         var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
@@ -139,7 +143,8 @@ public class UnrequestedCancellationTests
     [Test]
     public async Task A_cancellation_requested_through_the_persisted_flag_is_recorded_cancelled()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (FlagCancelledTrain)
             scope.ServiceProvider.GetRequiredService<IFlagCancelledTrain>();
 
@@ -159,7 +164,8 @@ public class UnrequestedCancellationTests
     private static async Task<Metadata> PersistedRow(IServiceScope scope, long id)
     {
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         return await context
             .Metadatas.AsNoTracking()
@@ -209,11 +215,11 @@ public class UnrequestedCancellationTests
         /// <summary>Cancels the caller's source, then observes the train's token.</summary>
         public class CancelsTheCallerJunction : EffectJunction<Unit, Unit>
         {
-            public override Task<Unit> Run(Unit input)
+            public override async Task<Unit> Run(Unit input)
             {
-                Source!.Cancel();
+                await Source!.CancelAsync().ConfigureAwait(false);
                 CancellationToken.ThrowIfCancellationRequested();
-                return Task.FromResult(input);
+                return input;
             }
         }
     }
@@ -266,7 +272,8 @@ public class UnrequestedCancellationTests
             public override async Task<Unit> Run(Unit input)
             {
                 var id = Metadata!.TrainMetadataId;
-                using var context = (IDataContext)factory.Create();
+                var context = (IDataContext)factory.Create();
+                await using var contextDisposal = context.ConfigureAwait(false);
                 var row = await context
                     .Metadatas.SingleAsync(m => m.Id == id)
                     .ConfigureAwait(false);

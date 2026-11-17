@@ -25,7 +25,8 @@ public class DecisionPageIndexTests : TestSetup
     [Test]
     public async Task A_runs_first_page_of_decisions_reads_the_run_and_id_index()
     {
-        using var context = (DbContext)DataContextFactory.Create();
+        var context = (DbContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         await context.Database.OpenConnectionAsync();
         var transaction = await context.Database.BeginTransactionAsync();
         await using var transactionDisposal = transaction.ConfigureAwait(false);

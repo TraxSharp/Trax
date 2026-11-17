@@ -127,7 +127,8 @@ public class DecisionRecordingTests
     {
         Decider.Use(new ScriptedDecider().Choose(Fulfilment.ManualCheck));
 
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (RouteThenFail)scope.ServiceProvider.GetRequiredService<IRouteThenFail>();
 
         var run = () => train.Run(new Order("o3", 9000m));
@@ -328,7 +329,7 @@ public class DecisionRecordingTests
     [Test]
     public async Task A_replay_bound_longer_than_the_calendar_replays_answers_of_any_age()
     {
-        await using var provider = DecisionTrains
+        var provider = DecisionTrains
             .Register(new ServiceCollection(), Decider)
             .AddTrax(trax =>
                 trax.AddEffects(effects =>
@@ -338,6 +339,7 @@ public class DecisionRecordingTests
                 )
             )
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         Decider.Use(new ScriptedDecider().Choose(Fulfilment.ManualCheck));
         var original = await RunOn(provider, new Order("o-forever", 20m), replayDecisionsOf: null);
         var decider = Decider.Use(new ScriptedDecider().Choose(Fulfilment.Standard));
@@ -354,7 +356,7 @@ public class DecisionRecordingTests
     [Test]
     public async Task A_journal_the_host_registers_itself_replays_for_the_configured_bound()
     {
-        await using var provider = DecisionTrains
+        var provider = DecisionTrains
             .Register(new ServiceCollection(), Decider)
             .AddSingleton<DecisionJournal>()
             .AddTrax(trax =>
@@ -365,6 +367,7 @@ public class DecisionRecordingTests
                 )
             )
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         provider
             .GetRequiredService<DecisionJournal>()
@@ -382,11 +385,12 @@ public class DecisionRecordingTests
         services.AddSingleton<IDecisionObserver>(_ =>
             throw new InvalidOperationException("the audit sink is not configured")
         );
-        await using var provider = services
+        var provider = services
             .AddTrax(trax =>
                 trax.AddEffects(effects => effects.UseInMemory().AddDecisionRecording())
             )
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         var gate = provider.GetServices<IHostedService>().OfType<DecisionObserverCheck>().Single();
 
         for (var i = 0; i < 2; i++)
@@ -398,7 +402,8 @@ public class DecisionRecordingTests
                 .WithMessage("*could not be built*the audit sink is not configured*");
         }
 
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train =
             (ServiceTrain<Order, string>)
                 (object)scope.ServiceProvider.GetRequiredService<IRouteOrder>();
@@ -429,10 +434,11 @@ public class DecisionRecordingTests
     [Test]
     public async Task A_manifest_retry_on_a_host_that_records_no_decisions_asks_afresh()
     {
-        await using var provider = DecisionTrains
+        var provider = DecisionTrains
             .Register(new ServiceCollection(), Decider)
             .AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory()))
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         var decider = Decider.Use(new ScriptedDecider().Choose(Fulfilment.Standard));
 
         var retry = await RunOn(
@@ -443,7 +449,8 @@ public class DecisionRecordingTests
         );
 
         decider.Requests.Should().ContainSingle();
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var row = await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .Metadatas.AsNoTracking()
@@ -663,7 +670,8 @@ public class DecisionRecordingTests
         bool storeInput = false
     )
     {
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train =
             (ServiceTrain<Order, string>)
                 (object)scope.ServiceProvider.GetRequiredService<IRouteOrder>();
@@ -689,7 +697,7 @@ public class DecisionRecordingTests
     [Test]
     public async Task The_replay_bound_is_configurable()
     {
-        await using var provider = DecisionTrains
+        var provider = DecisionTrains
             .Register(new ServiceCollection(), Decider)
             .AddTrax(trax =>
                 trax.AddEffects(effects =>
@@ -699,6 +707,7 @@ public class DecisionRecordingTests
                 )
             )
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         provider
             .GetRequiredService<DecisionJournal>()
@@ -915,7 +924,8 @@ public class DecisionRecordingTests
 
         var (train, _) = await Run<IRouteOrder>(new Order("o-marked", 20m));
 
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
         (await context.Metadatas.AsNoTracking().SingleAsync(m => m.Id == train.Metadata!.Id))
             .DecisionsRecorded.Should()
@@ -1145,7 +1155,8 @@ public class DecisionRecordingTests
         var failedRequeue = await Seed<IRouteOrder>(replayDecisionsOf: decided.Metadata!.Id);
         var undecided = await Seed<IRouteOrder>(replayDecisionsOf: null, decisionsRecorded: true);
 
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
         (await context.HasDecisionsToReplay(decided.Metadata.Id, CancellationToken.None))
@@ -1224,7 +1235,8 @@ public class DecisionRecordingTests
         var (original, failing) = Start<IRouteOrder>(new Order("o-refused-requeue", 20m));
         await failing.Should().ThrowAsync<TrainException>();
 
-        using (var scope = _provider.CreateScope())
+        var scope = _provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             (
                 await scope
                     .ServiceProvider.GetRequiredService<IDataContext>()
@@ -1364,7 +1376,8 @@ public class DecisionRecordingTests
     {
         if (replayDecisionsOf is null)
         {
-            using var scope = _provider.CreateScope();
+            var scope = _provider.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             var train = scope.ServiceProvider.GetRequiredService<TTrain>();
             return (train, await train.Run(order).ConfigureAwait(false));
         }
@@ -1380,7 +1393,7 @@ public class DecisionRecordingTests
     )
         where TTrain : class, IServiceTrain<Order, string>
     {
-        var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
         var train =
             (ServiceTrain<Order, string>)(object)scope.ServiceProvider.GetRequiredService<TTrain>();
 
@@ -1398,7 +1411,7 @@ public class DecisionRecordingTests
             (TTrain)(object)train,
             async () =>
             {
-                using (scope)
+                await using (scope.ConfigureAwait(false))
                     return await train.Run(order, metadata).ConfigureAwait(false);
             }
         );
@@ -1414,7 +1427,8 @@ public class DecisionRecordingTests
         long? manifestId = null
     )
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
         var metadata = Metadata.Create(
@@ -1437,7 +1451,8 @@ public class DecisionRecordingTests
 
     private async Task Relink(long metadataId, long replayDecisionsOf)
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
         var metadata = await context
@@ -1449,7 +1464,8 @@ public class DecisionRecordingTests
 
     private async Task Forget(long metadataId, int occurrence)
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
         context.RecordedDecisions.RemoveRange(
@@ -1466,7 +1482,8 @@ public class DecisionRecordingTests
         Action<Models.RecordedDecision.RecordedDecision> change
     )
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
         foreach (var decision in context.RecordedDecisions.Where(d => d.MetadataId == metadataId))
@@ -1477,7 +1494,8 @@ public class DecisionRecordingTests
 
     private async Task<List<Models.RecordedDecision.RecordedDecision>> Recorded(long metadataId)
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
         return await context

@@ -385,7 +385,8 @@ public class JunctionEventsTests
     /// <summary>The junction events of a persisted run of the lane train.</summary>
     private async Task<JunctionEventRun> PersistedRun()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
         var metadata = Metadata.Create(
             new CreateMetadata
@@ -411,16 +412,18 @@ public class JunctionEventsTests
     public async Task The_decision_log_withholds_the_answer_to_a_sensitive_question()
     {
         var logger = new CapturingJournalLogger();
-        await using var provider = JunctionEventTrains
+        var provider = JunctionEventTrains
             .Register(new ServiceCollection(), Decider)
             .AddSingleton<ILogger<DecisionJournal>>(logger)
             .AddTrax(trax =>
                 trax.AddEffects(effects => effects.UseInMemory().AddDecisionRecording())
             )
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         Decider.Use(new ScriptedDecider().Choose(CustomsTier.Red, 0.99));
 
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         await scope
             .ServiceProvider.GetRequiredService<ICustomsTrain>()
             .Run(JunctionEventTrains.Parcel());
@@ -438,16 +441,18 @@ public class JunctionEventsTests
     public async Task The_decision_log_withholds_the_decisions_of_a_withheld_track()
     {
         var logger = new CapturingJournalLogger();
-        await using var provider = JunctionEventTrains
+        var provider = JunctionEventTrains
             .Register(new ServiceCollection(), Decider)
             .AddSingleton<ILogger<DecisionJournal>>(logger)
             .AddTrax(trax =>
                 trax.AddEffects(effects => effects.UseInMemory().AddDecisionRecording())
             )
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         Decider.Use(new ScriptedDecider().Choose(CustomsTier.Red, 0.99).Choose(Lane.Express, 0.9));
 
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         await scope
             .ServiceProvider.GetRequiredService<IInspectionTrain>()
             .Run(JunctionEventTrains.Parcel());
@@ -474,13 +479,14 @@ public class JunctionEventsTests
     public async Task The_decision_log_withholds_why_a_sensitive_answer_was_not_replayed()
     {
         var logger = new CapturingJournalLogger();
-        await using var provider = JunctionEventTrains
+        var provider = JunctionEventTrains
             .Register(new ServiceCollection(), Decider)
             .AddSingleton<ILogger<DecisionJournal>>(logger)
             .AddTrax(trax =>
                 trax.AddEffects(effects => effects.UseInMemory().AddDecisionRecording())
             )
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         var journal = provider.GetRequiredService<DecisionJournal>();
 
         // Outside a run, so it is logged only.
@@ -674,11 +680,11 @@ public class JunctionEventsTests
     public async Task Each_step_carries_the_id_the_trains_graph_draws_for_it()
     {
         Decider.Use(new ScriptedDecider().Choose(Lane.Express, 0.9));
-        var graph = GraphOf<ILaneTrain>();
+        var graph = await GraphOf<ILaneTrain>().ConfigureAwait(false);
 
-        var (metadataId, _) = await Run<ILaneTrain>();
+        var (metadataId, _) = await Run<ILaneTrain>().ConfigureAwait(false);
 
-        var rows = await Rows(metadataId);
+        var rows = await Rows(metadataId).ConfigureAwait(false);
         rows.Select(r => (r.Position, r.NodeId))
             .Should()
             .Equal(
@@ -763,13 +769,15 @@ public class JunctionEventsTests
         // database context threw "a second operation was started", which was swallowed, and the
         // event was lost.
         BranchMeeting.Reset();
-        await using var provider = new ServiceCollection()
+        var provider = new ServiceCollection()
             .AddScopedTraxRoute<IMeetingTrain, MeetingTrain>()
             .AddScoped<IJunctionEventHandler, OneAtATimeHandler>()
             .AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory().AddJunctionEvents()))
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IMeetingTrain>();
         await train.Run(Unit.Default);
 
@@ -786,14 +794,16 @@ public class JunctionEventsTests
     public async Task Junction_events_are_off_unless_the_host_asks_for_them()
     {
         var handler = new CapturingHandler();
-        await using var provider = JunctionEventTrains
+        var provider = JunctionEventTrains
             .Register(new ServiceCollection(), Decider)
             .AddSingleton<IJunctionEventHandler>(handler)
             .AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory()))
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         Decider.Use(new ScriptedDecider().Choose(Lane.Express, 0.9));
 
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<ILaneTrain>();
         await train.Run(JunctionEventTrains.Parcel());
 
@@ -805,15 +815,17 @@ public class JunctionEventsTests
     [Test]
     public async Task A_handler_or_broadcaster_that_throws_does_not_change_the_run()
     {
-        await using var provider = JunctionEventTrains
+        var provider = JunctionEventTrains
             .Register(new ServiceCollection(), Decider)
             .AddSingleton<IJunctionEventHandler, ThrowingHandler>()
             .AddSingleton<ITrainEventBroadcaster, ThrowingBroadcaster>()
             .AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory().AddJunctionEvents()))
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         Decider.Use(new ScriptedDecider().Choose(Lane.Express, 0.9));
 
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<ILaneTrain>();
         var output = await train.Run(JunctionEventTrains.Parcel());
 
@@ -837,7 +849,7 @@ public class JunctionEventsTests
         // Registered before AddTrax: it used to win, and silently turn decision recording off.
         services.AddSingleton<IDecisionObserver>(observer);
 
-        await using var provider = services
+        var provider = services
             .AddSingleton<IJunctionEventHandler>(handler)
             .AddTrax(trax =>
                 trax.AddEffects(effects =>
@@ -845,9 +857,11 @@ public class JunctionEventsTests
                 )
             )
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         Decider.Use(new ScriptedDecider().Choose(Lane.Express, 0.9));
 
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<ILaneTrain>();
         await train.Run(JunctionEventTrains.Parcel());
 
@@ -864,7 +878,7 @@ public class JunctionEventsTests
     public async Task An_observer_registered_after_AddTrax_refuses_the_host_and_every_recorded_run()
     {
         var observer = new CountingObserver();
-        await using var provider = JunctionEventTrains
+        var provider = JunctionEventTrains
             .Register(new ServiceCollection(), Decider)
             .AddTrax(trax =>
                 trax.AddEffects(effects =>
@@ -873,6 +887,7 @@ public class JunctionEventsTests
             )
             .AddSingleton<IDecisionObserver>(observer)
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         Decider.Use(new ScriptedDecider().Choose(Lane.Express, 0.9));
 
         var gate = provider
@@ -889,7 +904,8 @@ public class JunctionEventsTests
             )
             .WithMessage("*before AddTrax*");
 
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<ILaneTrain>();
         var run = async () => await train.Run(JunctionEventTrains.Parcel()).ConfigureAwait(false);
         await run.Should().ThrowAsync<InvalidOperationException>().WithMessage("*before AddTrax*");
@@ -901,12 +917,13 @@ public class JunctionEventsTests
     {
         var handler = new CapturingHandler();
         var observer = new CountingObserver();
-        await using var provider = JunctionEventTrains
+        var provider = JunctionEventTrains
             .Register(new ServiceCollection(), Decider)
             .AddSingleton<IJunctionEventHandler>(handler)
             .AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory().AddJunctionEvents()))
             .AddSingleton<IDecisionObserver>(observer)
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         Decider.Use(new ScriptedDecider().Choose(CustomsTier.Red, 0.99));
 
         var gate = provider.GetServices<IHostedService>().OfType<DecisionObserverCheck>().Single();
@@ -918,7 +935,8 @@ public class JunctionEventsTests
             )
             .WithMessage("*JunctionEventDecisionObserver*before AddTrax*");
 
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<ICustomsThenStampTrain>();
         var run = async () => await train.Run(JunctionEventTrains.Parcel()).ConfigureAwait(false);
         await run.Should().ThrowAsync<InvalidOperationException>().WithMessage("*before AddTrax*");
@@ -938,15 +956,17 @@ public class JunctionEventsTests
             .Register(new ServiceCollection(), Decider)
             .AddSingleton<IDecisionObserver>(observer)
             .AddSingleton<IJunctionEventHandler>(handler);
-        await using var provider = services
+        var provider = services
             .AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory().AddJunctionEvents()))
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         Decider.Use(new ScriptedDecider().Choose(CustomsTier.Red, 0.99));
 
         var gate = provider.GetServices<IHostedService>().OfType<DecisionObserverCheck>().Single();
         await gate.Invoking(g => g.StartingAsync(CancellationToken.None)).Should().NotThrowAsync();
 
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<ICustomsThenStampTrain>();
         await train.Run(JunctionEventTrains.Parcel());
 
@@ -966,7 +986,7 @@ public class JunctionEventsTests
     [Test]
     public async Task A_best_effort_observer_that_cannot_be_built_is_left_out()
     {
-        await using var provider = JunctionEventTrains
+        var provider = JunctionEventTrains
             .Register(new ServiceCollection(), Decider)
             .AddSingleton<IDecisionObserver, UnbuildableObserver>()
             .AddTrax(trax =>
@@ -975,6 +995,7 @@ public class JunctionEventsTests
                 )
             )
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         Decider.Use(new ScriptedDecider().Choose(Lane.Express, 0.9));
 
         var gate = provider.GetServices<IHostedService>().OfType<DecisionObserverCheck>().Single();
@@ -982,7 +1003,8 @@ public class JunctionEventsTests
             .Should()
             .NotThrowAsync("an observer that is best effort cannot stop decisions being recorded");
 
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<ILaneTrain>();
         (await train.Run(JunctionEventTrains.Parcel())).Should().Be("loaded|stamped");
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
@@ -994,11 +1016,12 @@ public class JunctionEventsTests
     [Test]
     public async Task A_required_observer_that_cannot_be_built_refuses_the_host()
     {
-        await using var provider = JunctionEventTrains
+        var provider = JunctionEventTrains
             .Register(new ServiceCollection(), Decider)
             .AddSingleton<IDecisionObserver, UnbuildableRequiredObserver>()
             .AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory().AddJunctionEvents()))
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var gate = provider.GetServices<IHostedService>().OfType<DecisionObserverCheck>().Single();
         await gate.Invoking(g => g.StartingAsync(CancellationToken.None))
@@ -1014,13 +1037,15 @@ public class JunctionEventsTests
         var services = JunctionEventTrains.Register(new ServiceCollection(), Decider);
         services.AddSingleton<IDecisionObserver, FailingRequiredObserver>();
 
-        await using var provider = services
+        var provider = services
             .AddSingleton<IJunctionEventHandler>(handler)
             .AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory().AddJunctionEvents()))
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         Decider.Use(new ScriptedDecider().Choose(Lane.Express, 0.9));
 
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<ILaneTrain>();
         var run = async () => await train.Run(JunctionEventTrains.Parcel()).ConfigureAwait(false);
 
@@ -1064,12 +1089,13 @@ public class JunctionEventsTests
     public async Task A_run_whose_attempt_cannot_be_read_still_runs_and_carries_none()
     {
         var handler = new CapturingHandler();
-        await using var provider = JunctionEventTrains
+        var provider = JunctionEventTrains
             .Register(new ServiceCollection(), Decider)
             .AddSingleton<IJunctionEventHandler>(handler)
             .AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory().AddJunctionEvents()))
             .AddSingleton<IRunAttempts, BrokenRunAttempts>()
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         Decider.Use(new ScriptedDecider().Choose(Lane.Express, 0.9));
 
         var metadataId = await RunForManifest(provider, manifestId: 424242);
@@ -1108,12 +1134,13 @@ public class JunctionEventsTests
     public async Task A_run_does_not_wait_long_on_an_attempt_that_never_comes()
     {
         var handler = new CapturingHandler();
-        await using var provider = JunctionEventTrains
+        var provider = JunctionEventTrains
             .Register(new ServiceCollection(), Decider)
             .AddSingleton<IJunctionEventHandler>(handler)
             .AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory().AddJunctionEvents()))
             .AddSingleton<IRunAttempts, HangingRunAttempts>()
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         provider.GetRequiredService<JunctionEventPublisher>().AttemptTimeout =
             TimeSpan.FromMilliseconds(50);
         Decider.Use(new ScriptedDecider().Choose(Lane.Express, 0.9));
@@ -1137,7 +1164,8 @@ public class JunctionEventsTests
     /// </summary>
     private async Task<long> SeedManifestRuns(params TrainState[] runs)
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
         var manifest = Manifest.Create(new CreateManifest { Name = typeof(ILaneTrain) });
         await context.Track(manifest).ConfigureAwait(false);
@@ -1185,7 +1213,8 @@ public class JunctionEventsTests
 
     private static async Task<long> RunForManifest(IServiceProvider provider, long manifestId)
     {
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (LaneTrain)scope.ServiceProvider.GetRequiredService<ILaneTrain>();
         var input = JunctionEventTrains.Parcel();
         var metadata = Metadata.Create(
@@ -1206,7 +1235,8 @@ public class JunctionEventsTests
     private async Task<(long MetadataId, string? Output)> Run<TTrain>(bool expectFailure = false)
         where TTrain : class, IServiceTrain<Parcel, string>
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<TTrain>();
         string? output = null;
 
@@ -1224,7 +1254,8 @@ public class JunctionEventsTests
 
     private async Task<List<JunctionRun>> Rows(long metadataId)
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
         return await context
             .JunctionRuns.AsNoTracking()
@@ -1234,10 +1265,11 @@ public class JunctionEventsTests
     }
 
     /// <summary>The graph of a fresh instance of the train, as a tool reading it would draw it.</summary>
-    private ChainGraph GraphOf<TTrain>()
+    private async Task<ChainGraph> GraphOf<TTrain>()
         where TTrain : class, IServiceTrain<Parcel, string>
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train =
             (ServiceTrain<Parcel, string>)
                 (object)scope.ServiceProvider.GetRequiredService<TTrain>();

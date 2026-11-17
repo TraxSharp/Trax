@@ -79,9 +79,10 @@ public class CheckpointWriteTests(CheckpointStoreKind store)
         CheckpointProbe.Reset();
         await _host.Delete([.. _runs]);
 
-        await using var context = await _host
+        var context = await _host
             .Services.GetRequiredService<IDataContextProviderFactory>()
             .CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var dirty = await context
             .ManifestGroups.Where(g => g.Name.StartsWith(CheckpointWriteNames.DirtyGroup))
             .ToListAsync();

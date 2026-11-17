@@ -194,7 +194,7 @@ public class ParallelRunTests
     public async Task A_run_cancelled_by_its_caller_while_branches_run_is_recorded_cancelled()
     {
         using var cancel = new CancellationTokenSource();
-        var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
         var train =
             (ServiceTrain<ParOrder, string>)
                 (object)scope.ServiceProvider.GetRequiredService<IParWaitTrain>();
@@ -215,7 +215,7 @@ public class ParallelRunTests
             .Should()
             .HaveCount(2)
             .And.OnlyContain(r => r.State == JunctionRunState.Cancelled);
-        scope.Dispose();
+        await scope.DisposeAsync();
     }
 
     [Test]
@@ -250,7 +250,8 @@ public class ParallelRunTests
     )
         where TTrain : class, IServiceTrain<ParOrder, string>
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train =
             (ServiceTrain<ParOrder, string>)
                 (object)scope.ServiceProvider.GetRequiredService<TTrain>();
@@ -273,7 +274,8 @@ public class ParallelRunTests
     private async Task<ServiceTrain<ParOrder, string>> Fail<TTrain>()
         where TTrain : class, IServiceTrain<ParOrder, string>
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train =
             (ServiceTrain<ParOrder, string>)
                 (object)scope.ServiceProvider.GetRequiredService<TTrain>();
@@ -288,7 +290,8 @@ public class ParallelRunTests
 
     private async Task<List<JunctionRun>> Rows(long metadataId)
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
         return await context
             .JunctionRuns.AsNoTracking()
@@ -299,7 +302,8 @@ public class ParallelRunTests
 
     private async Task<List<RecordedDecision>> Recorded(long metadataId)
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
         return await context
             .RecordedDecisions.AsNoTracking()

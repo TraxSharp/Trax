@@ -82,11 +82,12 @@ public class JunctionEventRoutingTests
     {
         var trainHandler = Substitute.For<ITrainEventHandler>();
         var junctionHandler = Substitute.For<IJunctionEventHandler>();
-        await using var services = new ServiceCollection()
+        var services = new ServiceCollection()
             .AddSingleton(trainHandler)
             .AddSingleton(junctionHandler)
             .AddSingleton<BroadcastInstance>()
             .BuildServiceProvider();
+        await using var servicesDisposal = services.ConfigureAwait(false);
         var (deliver, service) = await Start(services);
 
         await deliver(Message("JunctionFailed", Step), CancellationToken.None);
@@ -121,11 +122,12 @@ public class JunctionEventRoutingTests
     {
         var trainHandler = Substitute.For<ITrainEventHandler>();
         var junctionHandler = Substitute.For<IJunctionEventHandler>();
-        await using var services = new ServiceCollection()
+        var services = new ServiceCollection()
             .AddSingleton(trainHandler)
             .AddSingleton(junctionHandler)
             .AddSingleton<BroadcastInstance>()
             .BuildServiceProvider();
+        await using var servicesDisposal = services.ConfigureAwait(false);
         var (deliver, service) = await Start(services);
 
         await deliver(Message("Decided"), CancellationToken.None);

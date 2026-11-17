@@ -42,8 +42,10 @@ public class SignalRConcurrencyTests
     [Test]
     public async Task ParallelDispatch_AllMessagesDelivered_NoLoss()
     {
-        await using var server = await SignalRTestServer.StartAsync();
-        await using var connection = server.CreateClient();
+        var server = await SignalRTestServer.StartAsync();
+        await using var serverDisposal = server.ConfigureAwait(false);
+        var connection = server.CreateClient();
+        await using var connectionDisposal = connection.ConfigureAwait(false);
 
         var received = new ConcurrentBag<TraxClientEvent>();
         connection.On<TraxClientEvent>("TrainEvent", evt => received.Add(evt));
@@ -69,10 +71,10 @@ public class SignalRConcurrencyTests
     [Test]
     public async Task ParallelDispatch_FilterApplied_OnlyMatchingEventsDelivered()
     {
-        await using var server = await SignalRTestServer.StartAsync(opts =>
-            opts.OnlyForEvents("Completed")
-        );
-        await using var connection = server.CreateClient();
+        var server = await SignalRTestServer.StartAsync(opts => opts.OnlyForEvents("Completed"));
+        await using var serverDisposal = server.ConfigureAwait(false);
+        var connection = server.CreateClient();
+        await using var connectionDisposal = connection.ConfigureAwait(false);
 
         var received = new ConcurrentBag<TraxClientEvent>();
         connection.On<TraxClientEvent>("TrainEvent", evt => received.Add(evt));

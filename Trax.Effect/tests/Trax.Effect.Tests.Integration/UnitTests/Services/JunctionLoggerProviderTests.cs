@@ -243,7 +243,10 @@ public class JunctionLoggerProviderTests
     [Test]
     public async Task AfterJunctionExecution_OutputHoldingAType_WritesAPlaceholderInsteadOfThrowing()
     {
-        var (train, junction) = BuildTypedPair<HoldsAType>(new HoldsAType { T = typeof(string) });
+        var (train, junction) = await BuildTypedPair<HoldsAType>(
+                new HoldsAType { T = typeof(string) }
+            )
+            .ConfigureAwait(false);
 
         var provider = new JunctionLoggerProvider(
             TestConfig(serializeJunctionData: true),
@@ -255,7 +258,8 @@ public class JunctionLoggerProviderTests
                 .ConfigureAwait(false);
 
         await act.Should()
-            .NotThrowAsync("the junction already succeeded; logging it must not fail the train");
+            .NotThrowAsync("the junction already succeeded; logging it must not fail the train")
+            .ConfigureAwait(false);
         junction.Metadata!.OutputJson.Should().Contain("\"_unserializable\":true");
     }
 
@@ -266,7 +270,7 @@ public class JunctionLoggerProviderTests
         var cursor = deep;
         for (var i = 0; i < 10; i++)
             cursor = cursor.Next = new Nested();
-        var (train, junction) = BuildTypedPair(deep);
+        var (train, junction) = await BuildTypedPair(deep).ConfigureAwait(false);
 
         var provider = new JunctionLoggerProvider(
             TestConfig(serializeJunctionData: true),
@@ -277,14 +281,14 @@ public class JunctionLoggerProviderTests
                 .AfterJunctionExecution(junction, train, CancellationToken.None)
                 .ConfigureAwait(false);
 
-        await act.Should().NotThrowAsync();
+        await act.Should().NotThrowAsync().ConfigureAwait(false);
         junction.Metadata!.OutputJson.Should().Contain("\"_unserializable\":true");
     }
 
     [Test]
     public async Task AfterJunctionExecution_OutputOverTheCeiling_IsTruncated()
     {
-        var (train, junction) = BuildTypedPair(new string('x', 4096));
+        var (train, junction) = await BuildTypedPair(new string('x', 4096)).ConfigureAwait(false);
         var policy = new FixedOutputPolicy(1024);
 
         var provider = new JunctionLoggerProvider(
@@ -292,7 +296,9 @@ public class JunctionLoggerProviderTests
             NullLogger<JunctionLoggerProvider>.Instance,
             policy
         );
-        await provider.AfterJunctionExecution(junction, train, CancellationToken.None);
+        await provider
+            .AfterJunctionExecution(junction, train, CancellationToken.None)
+            .ConfigureAwait(false);
 
         junction.Metadata!.OutputJson.Should().Be(TraxBoundedJson.TruncatedPlaceholder(1024));
         policy.AskedFor.Should().Equal(train.TrainName);
@@ -301,14 +307,17 @@ public class JunctionLoggerProviderTests
     [Test]
     public async Task AfterJunctionExecution_ForATrainWhoseOutputIsExcluded_SerializesNothing()
     {
-        var (train, junction) = BuildTypedPair("keep me out of the log");
+        var (train, junction) = await BuildTypedPair("keep me out of the log")
+            .ConfigureAwait(false);
 
         var provider = new JunctionLoggerProvider(
             TestConfig(serializeJunctionData: true),
             NullLogger<JunctionLoggerProvider>.Instance,
             new FixedOutputPolicy(ceiling: null)
         );
-        await provider.AfterJunctionExecution(junction, train, CancellationToken.None);
+        await provider
+            .AfterJunctionExecution(junction, train, CancellationToken.None)
+            .ConfigureAwait(false);
 
         junction.Metadata!.OutputJson.Should().BeNull();
     }
@@ -361,7 +370,9 @@ public class JunctionLoggerProviderTests
         public override Task<T> Run(string input) => Task.FromResult(value);
     }
 
-    private static (TestTrain train, ReturnsJunction<T> junction) BuildTypedPair<T>(T value)
+    private static async Task<(TestTrain train, ReturnsJunction<T> junction)> BuildTypedPair<T>(
+        T value
+    )
     {
         var (train, _) = BuildPair(typeof(T).Name);
         var junction = new ReturnsJunction<T>(value);
@@ -381,10 +392,9 @@ public class JunctionLoggerProviderTests
                     train.Metadata!
                 )
             );
-        junction
+        await junction
             .RailwayJunction(Either<Exception, string>.Right("in"), train)
-            .GetAwaiter()
-            .GetResult();
+            .ConfigureAwait(false);
         return (train, junction);
     }
 

@@ -219,9 +219,10 @@ internal sealed class JunctionRunWriter
 
     private async Task WriteAsync(IReadOnlyList<Item> steps)
     {
-        using var context = await _contexts
+        var context = await _contexts
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         // Only a junction's end updates a row; every other step is a row of its own. The rows the
         // batch's ends update are read in one query, so a batch costs two round trips whatever its

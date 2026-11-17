@@ -91,7 +91,8 @@ public class TrainInstanceReuseTests : TestSetup
     private async Task<List<TrainState>> Rows(string name)
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         return await context
             .Metadatas.AsNoTracking()

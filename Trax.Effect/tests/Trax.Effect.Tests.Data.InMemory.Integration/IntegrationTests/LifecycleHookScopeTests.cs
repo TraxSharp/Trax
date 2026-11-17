@@ -41,11 +41,13 @@ public class LifecycleHookScopeTests
     [Test]
     public async Task A_hook_with_a_scoped_dependency_gets_the_runs_scope_not_the_root()
     {
-        await using var provider = Build(validateScopes: false);
+        var provider = Build(validateScopes: false);
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         foreach (var _ in Enumerable.Range(0, 2))
         {
-            using var scope = provider.CreateScope();
+            var scope = provider.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             await scope.ServiceProvider.GetRequiredService<IAuditedTrain>().Run(Unit.Default);
         }
 
@@ -63,8 +65,10 @@ public class LifecycleHookScopeTests
     public async Task A_hook_with_a_scoped_dependency_runs_when_the_container_validates_scopes()
     {
         // ASP.NET Core turns ValidateScopes on in Development.
-        await using var provider = Build(validateScopes: true);
-        using var scope = provider.CreateScope();
+        var provider = Build(validateScopes: true);
+        await using var providerDisposal = provider.ConfigureAwait(false);
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
 
         var run = async () =>
             await scope

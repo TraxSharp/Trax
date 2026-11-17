@@ -26,7 +26,8 @@ public class QueuedReplayUniquenessTests : TestSetup
     public async Task A_second_queued_replay_of_one_run_is_refused()
     {
         var source = Random.Shared.NextInt64(1_000_000_000, long.MaxValue);
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         await context.Track(Replaying(source));
         await context.SaveChanges(CancellationToken.None);
 
@@ -43,7 +44,8 @@ public class QueuedReplayUniquenessTests : TestSetup
     public async Task A_dispatched_replay_does_not_count_against_a_queued_one()
     {
         var source = Random.Shared.NextInt64(1_000_000_000, long.MaxValue);
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var dispatched = Replaying(source);
         dispatched.Status = WorkQueueStatus.Dispatched;
         await context.Track(dispatched);

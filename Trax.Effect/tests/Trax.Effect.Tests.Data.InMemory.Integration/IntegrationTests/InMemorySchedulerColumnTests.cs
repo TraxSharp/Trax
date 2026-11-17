@@ -32,7 +32,8 @@ public class InMemorySchedulerColumnTests : TestSetup
     {
         long manifestId,
             entryId;
-        using (var context = await NewContext())
+        var context = await NewContext();
+        await using (context.ConfigureAwait(false))
         {
             var manifest = Manifest.Create(
                 new CreateManifest
@@ -66,7 +67,8 @@ public class InMemorySchedulerColumnTests : TestSetup
             entryId = entry.Id;
         }
 
-        using var readBack = await NewContext();
+        var readBack = await NewContext();
+        await using var readBackDisposal = readBack.ConfigureAwait(false);
         var storedManifest = await readBack
             .Manifests.AsNoTracking()
             .SingleAsync(m => m.Id == manifestId);

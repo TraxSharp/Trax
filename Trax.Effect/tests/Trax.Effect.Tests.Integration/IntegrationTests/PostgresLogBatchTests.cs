@@ -88,7 +88,8 @@ public class PostgresLogBatchTests : TestSetup
 
     private async Task<int> CountStored()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         return await context
             .Logs.AsNoTracking()
             .CountAsync(l => l.Category == Category)

@@ -28,22 +28,24 @@ public class PostgresEnumVocabularyTests
     private static readonly NpgsqlSnakeCaseNameTranslator Translator = new();
 
     /// <summary>Enum name to Postgres type name, from the data source mapping.</summary>
-    private static Dictionary<string, string> DataSourceMappings() =>
+    private static async Task<Dictionary<string, string>> DataSourceMappings() =>
         Regex
             .Matches(
-                File.ReadAllText(Path.Combine(Extensions, "ModelBuilderExtensions.cs")),
+                await File.ReadAllTextAsync(Path.Combine(Extensions, "ModelBuilderExtensions.cs"))
+                    .ConfigureAwait(false),
                 @"npgsqlDataSourceBuilder\.MapEnum<(\w+)>\(""trax\.(\w+)""\)"
             )
             .ToDictionary(m => m.Groups[1].Value, m => m.Groups[2].Value);
 
     [Test]
-    public void Every_mapping_list_names_the_same_enums()
+    public async Task Every_mapping_list_names_the_same_enums()
     {
-        var dataSource = DataSourceMappings().Keys.ToHashSet();
+        var dataSource = (await DataSourceMappings().ConfigureAwait(false)).Keys.ToHashSet();
 
         var model = Regex
             .Matches(
-                File.ReadAllText(Path.Combine(Extensions, "ModelBuilderExtensions.cs")),
+                await File.ReadAllTextAsync(Path.Combine(Extensions, "ModelBuilderExtensions.cs"))
+                    .ConfigureAwait(false),
                 @"HasPostgresEnum<(\w+)>"
             )
             .Select(m => m.Groups[1].Value)
@@ -51,7 +53,8 @@ public class PostgresEnumVocabularyTests
 
         var options = Regex
             .Matches(
-                File.ReadAllText(Path.Combine(Extensions, "ServiceExtensions.cs")),
+                await File.ReadAllTextAsync(Path.Combine(Extensions, "ServiceExtensions.cs"))
+                    .ConfigureAwait(false),
                 @"o\.MapEnum<(\w+)>\(""(\w+)"",\s*""trax""\)"
             )
             .Select(m => m.Groups[1].Value)
@@ -70,7 +73,7 @@ public class PostgresEnumVocabularyTests
     }
 
     [Test]
-    public void Every_mapped_enum_matches_the_labels_its_migrations_create()
+    public async Task Every_mapped_enum_matches_the_labels_its_migrations_create()
     {
         var sql = string.Join(
             '\n',
@@ -85,7 +88,7 @@ public class PostgresEnumVocabularyTests
 
         var mismatches = new List<string>();
 
-        foreach (var (enumName, pgName) in DataSourceMappings())
+        foreach (var (enumName, pgName) in await DataSourceMappings().ConfigureAwait(false))
         {
             var labels = new HashSet<string>(StringComparer.Ordinal);
 

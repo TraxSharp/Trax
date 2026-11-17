@@ -102,7 +102,8 @@ public class SqliteJunctionRunTests
     public async Task Each_row_stores_the_id_the_trains_graph_draws_for_its_step()
     {
         ChainGraph graph;
-        using (var scope = _provider.CreateScope())
+        var scope = _provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var fresh = (LiteStepsTrain)scope.ServiceProvider.GetRequiredService<ILiteStepsTrain>();
             graph = ChainGraph.From(
@@ -137,7 +138,8 @@ public class SqliteJunctionRunTests
 
     private async Task<long> Run()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (LiteStepsTrain)scope.ServiceProvider.GetRequiredService<ILiteStepsTrain>();
         var run = async () => await train.Run(new LiteItem(3)).ConfigureAwait(false);
         await run.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
@@ -149,9 +151,10 @@ public class SqliteJunctionRunTests
     private async Task<List<JunctionRun>> Rows(long metadataId)
     {
         var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory
+        var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         return await context
             .JunctionRuns.AsNoTracking()
             .ForRun(metadataId)
@@ -162,9 +165,10 @@ public class SqliteJunctionRunTests
     private async Task Delete(long metadataId)
     {
         var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory
+        var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         await context
             .Metadatas.Where(m => m.Id == metadataId)
             .ExecuteDeleteAsync()

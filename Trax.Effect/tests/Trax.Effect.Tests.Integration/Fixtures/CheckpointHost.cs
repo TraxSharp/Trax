@@ -121,7 +121,8 @@ public sealed class CheckpointHost : IAsyncDisposable
     )
         where TTrain : class, IServiceTrain<string, string>
     {
-        using var scope = Services.CreateScope();
+        var scope = Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train =
             (ServiceTrain<string, string>)
                 (object)scope.ServiceProvider.GetRequiredService<TTrain>();

@@ -23,7 +23,8 @@ public class MetadataExternalIdLookupTests : TestSetup
     [Test]
     public async Task A_linq_lookup_by_external_id_reads_the_index()
     {
-        using var context = (DbContext)DataContextFactory.Create();
+        var context = (DbContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var externalId = Guid.NewGuid().ToString("N");
 
         var plan = await Explain(
@@ -44,7 +45,8 @@ public class MetadataExternalIdLookupTests : TestSetup
         var wanted = await Persist(Guid.NewGuid().ToString("N"));
         await Persist(Guid.NewGuid().ToString("N"));
 
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var found = await context
             .Metadatas.AsNoTracking()
             .Where(m => m.ExternalId == wanted.ExternalId)
@@ -63,7 +65,8 @@ public class MetadataExternalIdLookupTests : TestSetup
         var stored = await Persist(Guid.NewGuid().ToString("N"));
         var longer = stored.ExternalId + "extra";
 
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var found = await context.Metadatas.AsNoTracking().AnyAsync(m => m.ExternalId == longer);
 
         found.Should().BeFalse();
@@ -75,7 +78,8 @@ public class MetadataExternalIdLookupTests : TestSetup
         var stored = await Persist(Guid.NewGuid().ToString("N"));
         var prefix = stored.ExternalId[..8];
 
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var found = await context.Metadatas.AsNoTracking().AnyAsync(m => m.ExternalId == prefix);
 
         found.Should().BeFalse();
@@ -88,7 +92,8 @@ public class MetadataExternalIdLookupTests : TestSetup
         // the caller wrote still finds the run.
         var stored = await Persist("short-id");
 
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var found = await context
             .Metadatas.AsNoTracking()
             .Where(m => m.ExternalId == "short-id")
@@ -100,7 +105,8 @@ public class MetadataExternalIdLookupTests : TestSetup
 
     private async Task<Metadata> Persist(string externalId)
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var metadata = Metadata.Create(
             new CreateMetadata
             {

@@ -59,7 +59,8 @@ public class InputRecordedAtStartTests
     [Test]
     public async Task The_row_is_in_progress_with_its_input_while_the_body_runs()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IObservedTrain>();
 
         await train.Run(new StartInput(42));
@@ -76,7 +77,8 @@ public class InputRecordedAtStartTests
     [Test]
     public async Task An_excluded_input_is_not_written_at_start_either()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IExcludedTrain>();
 
         await train.Run(new StartInput(7));
@@ -102,7 +104,8 @@ public class InputRecordedAtStartTests
         public override async Task<Unit> Run(StartInput input)
         {
             var id = Metadata!.TrainMetadataId;
-            using var context = (IDataContext)factory.Create();
+            var context = (IDataContext)factory.Create();
+            await using var contextDisposal = context.ConfigureAwait(false);
             var row = await context
                 .Metadatas.AsNoTracking()
                 .SingleAsync(m => m.Id == id)

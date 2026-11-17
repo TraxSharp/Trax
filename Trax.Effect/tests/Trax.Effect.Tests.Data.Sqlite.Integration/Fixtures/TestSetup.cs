@@ -18,7 +18,7 @@ public abstract class TestSetup
     private ServiceProvider ServiceProvider { get; set; } = null!;
     private string _dbPath = null!;
 
-    public IServiceScope Scope { get; private set; } = null!;
+    public AsyncServiceScope Scope { get; private set; }
 
     [OneTimeSetUp]
     public async Task RunBeforeAnyTests()
@@ -60,13 +60,13 @@ public abstract class TestSetup
     [SetUp]
     public virtual async Task TestSetUp()
     {
-        Scope = ServiceProvider.CreateScope();
+        Scope = ServiceProvider.CreateAsyncScope();
     }
 
     [TearDown]
     public async Task TestTearDown()
     {
-        Scope.Dispose();
+        await Scope.DisposeAsync().ConfigureAwait(false);
     }
 
     public abstract ServiceProvider ConfigureServices(IServiceCollection services);

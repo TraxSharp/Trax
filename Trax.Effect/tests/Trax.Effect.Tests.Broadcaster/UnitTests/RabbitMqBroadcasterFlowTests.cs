@@ -22,7 +22,7 @@ public class RabbitMqBroadcasterFlowTests
         );
 
         Ambient.Value = "the creating run";
-        await using var broadcaster = new RabbitMqTrainEventBroadcaster(
+        var broadcaster = new RabbitMqTrainEventBroadcaster(
             new RabbitMqBroadcasterOptions
             {
                 ConnectionString = "amqp://localhost/unused",
@@ -37,6 +37,7 @@ public class RabbitMqBroadcasterFlowTests
             },
             firstRetryDelay: TimeSpan.FromMilliseconds(10)
         );
+        await using var broadcasterDisposal = broadcaster.ConfigureAwait(false);
         Ambient.Value = null;
 
         await broadcaster.PublishAsync(

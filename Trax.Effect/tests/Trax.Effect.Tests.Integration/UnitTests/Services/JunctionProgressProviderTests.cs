@@ -63,10 +63,13 @@ public class JunctionProgressProviderTests
     public async Task BeforeJunctionExecution_SetsCurrentlyRunningJunction()
     {
         // Arrange
-        var (train, junction) = CreateTestTrainAndJunction("ProcessDataJunction");
+        var (train, junction) = await CreateTestTrainAndJunction("ProcessDataJunction")
+            .ConfigureAwait(false);
 
         // Act
-        await _provider.BeforeJunctionExecution(junction, train, CancellationToken.None);
+        await _provider
+            .BeforeJunctionExecution(junction, train, CancellationToken.None)
+            .ConfigureAwait(false);
 
         // Assert
         train.Metadata!.CurrentlyRunningJunction.Should().Be("ProcessDataJunction");
@@ -76,11 +79,14 @@ public class JunctionProgressProviderTests
     public async Task BeforeJunctionExecution_SetsJunctionStartedAt()
     {
         // Arrange
-        var (train, junction) = CreateTestTrainAndJunction("ProcessDataJunction");
+        var (train, junction) = await CreateTestTrainAndJunction("ProcessDataJunction")
+            .ConfigureAwait(false);
         var before = DateTime.UtcNow;
 
         // Act
-        await _provider.BeforeJunctionExecution(junction, train, CancellationToken.None);
+        await _provider
+            .BeforeJunctionExecution(junction, train, CancellationToken.None)
+            .ConfigureAwait(false);
 
         // Assert
         train.Metadata!.JunctionStartedAt.Should().NotBeNull();
@@ -91,11 +97,14 @@ public class JunctionProgressProviderTests
     [Test]
     public async Task BeforeJunctionExecution_WritesTheProgressColumnsToTheRow()
     {
-        var (train, junction) = CreateTestTrainAndJunction("ProcessDataJunction");
+        var (train, junction) = await CreateTestTrainAndJunction("ProcessDataJunction")
+            .ConfigureAwait(false);
 
-        await _provider.BeforeJunctionExecution(junction, train, CancellationToken.None);
+        await _provider
+            .BeforeJunctionExecution(junction, train, CancellationToken.None)
+            .ConfigureAwait(false);
 
-        var row = await StoredRow(train);
+        var row = await StoredRow(train).ConfigureAwait(false);
         row.CurrentlyRunningJunction.Should().Be("ProcessDataJunction");
         row.JunctionStartedAt.Should().NotBeNull();
     }
@@ -103,9 +112,12 @@ public class JunctionProgressProviderTests
     [Test]
     public async Task BeforeJunctionExecution_DoesNotSaveThroughTheEffectRunner()
     {
-        var (train, junction) = CreateTestTrainAndJunction("ProcessDataJunction");
+        var (train, junction) = await CreateTestTrainAndJunction("ProcessDataJunction")
+            .ConfigureAwait(false);
 
-        await _provider.BeforeJunctionExecution(junction, train, CancellationToken.None);
+        await _provider
+            .BeforeJunctionExecution(junction, train, CancellationToken.None)
+            .ConfigureAwait(false);
 
         _fakeEffectRunner
             .SaveChangesCallCount.Should()
@@ -147,26 +159,30 @@ public class JunctionProgressProviderTests
     {
         // The write carries every caller's change, so no one caller's token may cancel it. The
         // caller stops waiting; the run settles the write before its terminal write.
-        var (train, junction) = CreateTestTrainAndJunction("ProcessDataJunction");
+        var (train, junction) = await CreateTestTrainAndJunction("ProcessDataJunction")
+            .ConfigureAwait(false);
         var gate = _factory.Hold();
         using var cts = new CancellationTokenSource();
 
         var before = _provider.BeforeJunctionExecution(junction, train, cts.Token);
-        await _factory.Entered.WaitAsync(TimeSpan.FromSeconds(30));
-        await cts.CancelAsync();
+        await _factory.Entered.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+        await cts.CancelAsync().ConfigureAwait(false);
 
         await FluentActions
             .Awaiting(() => before)
             .Should()
-            .ThrowAsync<OperationCanceledException>();
+            .ThrowAsync<OperationCanceledException>()
+            .ConfigureAwait(false);
 
         var settled = _provider.Settle();
         settled.IsCompleted.Should().BeFalse("the write the caller left is still in flight");
 
         gate.SetResult();
-        await settled;
+        await settled.ConfigureAwait(false);
         _factory.LastToken.Should().Be(CancellationToken.None);
-        (await StoredRow(train)).CurrentlyRunningJunction.Should().Be("ProcessDataJunction");
+        (await StoredRow(train).ConfigureAwait(false))
+            .CurrentlyRunningJunction.Should()
+            .Be("ProcessDataJunction");
     }
 
     [Test]
@@ -174,7 +190,7 @@ public class JunctionProgressProviderTests
     {
         // Eight branches start a junction while a write is in flight. They wait for that write and
         // the one after it, which carries all of their changes, not for eight writes in turn.
-        var train = CreateTestTrain();
+        var train = await CreateTestTrain().ConfigureAwait(false);
         var gate = _factory.Hold();
 
         var first = _provider.BeforeJunctionExecution(
@@ -182,7 +198,7 @@ public class JunctionProgressProviderTests
             train,
             CancellationToken.None
         );
-        await _factory.Entered.WaitAsync(TimeSpan.FromSeconds(30));
+        await _factory.Entered.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
 
         var others = Enumerable
             .Range(1, 7)
@@ -196,21 +212,26 @@ public class JunctionProgressProviderTests
             .ToList();
 
         gate.SetResult();
-        await Task.WhenAll([first, .. others]);
+        await Task.WhenAll([first, .. others]).ConfigureAwait(false);
 
         _factory
             .Writes.Should()
             .Be(2, "the seven changes made while the first write was in flight share one write");
-        (await StoredRow(train)).CurrentlyRunningJunction.Should().Be("Branch7");
+        (await StoredRow(train).ConfigureAwait(false))
+            .CurrentlyRunningJunction.Should()
+            .Be("Branch7");
     }
 
     [Test]
     public async Task BeforeJunctionExecution_ARowNotSavedYet_WritesNothing()
     {
-        var train = CreateTestTrain(metadata: CreateMetadata(), save: false);
+        var train = await CreateTestTrain(metadata: CreateMetadata(), save: false)
+            .ConfigureAwait(false);
         var junction = CreateTestJunction("SomeJunction");
 
-        await _provider.BeforeJunctionExecution(junction, train, CancellationToken.None);
+        await _provider
+            .BeforeJunctionExecution(junction, train, CancellationToken.None)
+            .ConfigureAwait(false);
 
         _factory.Writes.Should().Be(0);
         train.Metadata!.CurrentlyRunningJunction.Should().Be("SomeJunction");
@@ -224,12 +245,15 @@ public class JunctionProgressProviderTests
     public async Task AfterJunctionExecution_ClearsCurrentlyRunningJunction()
     {
         // Arrange
-        var (train, junction) = CreateTestTrainAndJunction("ProcessDataJunction");
+        var (train, junction) = await CreateTestTrainAndJunction("ProcessDataJunction")
+            .ConfigureAwait(false);
         train.Metadata!.CurrentlyRunningJunction = "ProcessDataJunction";
         train.Metadata!.JunctionStartedAt = DateTime.UtcNow;
 
         // Act
-        await _provider.AfterJunctionExecution(junction, train, CancellationToken.None);
+        await _provider
+            .AfterJunctionExecution(junction, train, CancellationToken.None)
+            .ConfigureAwait(false);
 
         // Assert
         train.Metadata!.CurrentlyRunningJunction.Should().BeNull();
@@ -239,12 +263,15 @@ public class JunctionProgressProviderTests
     public async Task AfterJunctionExecution_ClearsJunctionStartedAt()
     {
         // Arrange
-        var (train, junction) = CreateTestTrainAndJunction("ProcessDataJunction");
+        var (train, junction) = await CreateTestTrainAndJunction("ProcessDataJunction")
+            .ConfigureAwait(false);
         train.Metadata!.CurrentlyRunningJunction = "ProcessDataJunction";
         train.Metadata!.JunctionStartedAt = DateTime.UtcNow;
 
         // Act
-        await _provider.AfterJunctionExecution(junction, train, CancellationToken.None);
+        await _provider
+            .AfterJunctionExecution(junction, train, CancellationToken.None)
+            .ConfigureAwait(false);
 
         // Assert
         train.Metadata!.JunctionStartedAt.Should().BeNull();
@@ -253,13 +280,18 @@ public class JunctionProgressProviderTests
     [Test]
     public async Task AfterJunctionExecution_ClearsTheProgressColumnsOnTheRow()
     {
-        var (train, junction) = CreateTestTrainAndJunction("ProcessDataJunction");
-        await _provider.BeforeJunctionExecution(junction, train, CancellationToken.None);
+        var (train, junction) = await CreateTestTrainAndJunction("ProcessDataJunction")
+            .ConfigureAwait(false);
+        await _provider
+            .BeforeJunctionExecution(junction, train, CancellationToken.None)
+            .ConfigureAwait(false);
 
-        await _provider.AfterJunctionExecution(junction, train, CancellationToken.None);
-        await _provider.Settle();
+        await _provider
+            .AfterJunctionExecution(junction, train, CancellationToken.None)
+            .ConfigureAwait(false);
+        await _provider.Settle().ConfigureAwait(false);
 
-        var row = await StoredRow(train);
+        var row = await StoredRow(train).ConfigureAwait(false);
         row.CurrentlyRunningJunction.Should().BeNull();
         row.JunctionStartedAt.Should().BeNull();
         _fakeEffectRunner.SaveChangesCallCount.Should().Be(0);
@@ -271,12 +303,13 @@ public class JunctionProgressProviderTests
     {
         // The junction's work has returned; a cancelled caller must not cancel the write that
         // records it, or the run is recorded Cancelled although the work finished.
-        var (train, junction) = CreateTestTrainAndJunction("ProcessDataJunction");
+        var (train, junction) = await CreateTestTrainAndJunction("ProcessDataJunction")
+            .ConfigureAwait(false);
         using var cts = new CancellationTokenSource();
-        await cts.CancelAsync();
+        await cts.CancelAsync().ConfigureAwait(false);
 
-        await _provider.AfterJunctionExecution(junction, train, cts.Token);
-        await _provider.Settle();
+        await _provider.AfterJunctionExecution(junction, train, cts.Token).ConfigureAwait(false);
+        await _provider.Settle().ConfigureAwait(false);
 
         _factory.LastToken.Should().Be(CancellationToken.None);
     }
@@ -284,20 +317,20 @@ public class JunctionProgressProviderTests
     [Test]
     public async Task AfterJunctionExecution_AFailingWrite_DoesNotReplaceTheJunctionsResult()
     {
-        var train = CreateTestTrain();
+        var train = await CreateTestTrain().ConfigureAwait(false);
         var junction = CreateTestJunction("ProcessDataJunction");
         _factory.Throws = true;
 
         var act = () => _provider.AfterJunctionExecution(junction, train, CancellationToken.None);
 
         await act.Should()
-            .NotThrowAsync(
-                "a failed progress write after finished work is logged, not the outcome"
-            );
+            .NotThrowAsync("a failed progress write after finished work is logged, not the outcome")
+            .ConfigureAwait(false);
         await FluentActions
             .Awaiting(() => _provider.Settle())
             .Should()
-            .NotThrowAsync("the run's terminal write follows whatever the writer did");
+            .NotThrowAsync("the run's terminal write follows whatever the writer did")
+            .ConfigureAwait(false);
         train.Metadata!.CurrentlyRunningJunction.Should().BeNull();
     }
 
@@ -324,18 +357,23 @@ public class JunctionProgressProviderTests
     public async Task FullLifecycle_BeforeAndAfter_SetsAndClearsJunctionProgress()
     {
         // Arrange
-        var (train, junction) = CreateTestTrainAndJunction("FetchDataJunction");
+        var (train, junction) = await CreateTestTrainAndJunction("FetchDataJunction")
+            .ConfigureAwait(false);
 
         // Act — Before
-        await _provider.BeforeJunctionExecution(junction, train, CancellationToken.None);
+        await _provider
+            .BeforeJunctionExecution(junction, train, CancellationToken.None)
+            .ConfigureAwait(false);
 
         // Assert — progress is set
         train.Metadata!.CurrentlyRunningJunction.Should().Be("FetchDataJunction");
         train.Metadata!.JunctionStartedAt.Should().NotBeNull();
 
         // Act — After
-        await _provider.AfterJunctionExecution(junction, train, CancellationToken.None);
-        await _provider.Settle();
+        await _provider
+            .AfterJunctionExecution(junction, train, CancellationToken.None)
+            .ConfigureAwait(false);
+        await _provider.Settle().ConfigureAwait(false);
 
         // Assert — progress is cleared
         train.Metadata!.CurrentlyRunningJunction.Should().BeNull();
@@ -346,24 +384,32 @@ public class JunctionProgressProviderTests
     public async Task FullLifecycle_MultipleJunctions_TracksEachJunctionSeparately()
     {
         // Arrange
-        var (train, _) = CreateTestTrainAndJunction("Unused");
+        var (train, _) = await CreateTestTrainAndJunction("Unused").ConfigureAwait(false);
         var junction1 = CreateTestJunction("Junction1");
         var junction2 = CreateTestJunction("Junction2");
 
         // Step 1 lifecycle
-        await _provider.BeforeJunctionExecution(junction1, train, CancellationToken.None);
+        await _provider
+            .BeforeJunctionExecution(junction1, train, CancellationToken.None)
+            .ConfigureAwait(false);
         train.Metadata!.CurrentlyRunningJunction.Should().Be("Junction1");
 
-        await _provider.AfterJunctionExecution(junction1, train, CancellationToken.None);
-        await _provider.Settle();
+        await _provider
+            .AfterJunctionExecution(junction1, train, CancellationToken.None)
+            .ConfigureAwait(false);
+        await _provider.Settle().ConfigureAwait(false);
         train.Metadata!.CurrentlyRunningJunction.Should().BeNull();
 
         // Step 2 lifecycle
-        await _provider.BeforeJunctionExecution(junction2, train, CancellationToken.None);
+        await _provider
+            .BeforeJunctionExecution(junction2, train, CancellationToken.None)
+            .ConfigureAwait(false);
         train.Metadata!.CurrentlyRunningJunction.Should().Be("Junction2");
 
-        await _provider.AfterJunctionExecution(junction2, train, CancellationToken.None);
-        await _provider.Settle();
+        await _provider
+            .AfterJunctionExecution(junction2, train, CancellationToken.None)
+            .ConfigureAwait(false);
+        await _provider.Settle().ConfigureAwait(false);
         train.Metadata!.CurrentlyRunningJunction.Should().BeNull();
 
         // Four writes of the two columns (before and after each junction, each settled before the
@@ -398,14 +444,16 @@ public class JunctionProgressProviderTests
 
     #region Test Helpers
 
-    private (TestTrain train, TestJunction junction) CreateTestTrainAndJunction(string junctionName)
+    private async Task<(TestTrain train, TestJunction junction)> CreateTestTrainAndJunction(
+        string junctionName
+    )
     {
-        var train = CreateTestTrain();
+        var train = await CreateTestTrain().ConfigureAwait(false);
         var junction = CreateTestJunction(junctionName);
         return (train, junction);
     }
 
-    private TestTrain CreateTestTrain(Metadata? metadata = null, bool save = true)
+    private async Task<TestTrain> CreateTestTrain(Metadata? metadata = null, bool save = true)
     {
         var train = new TestTrain();
 
@@ -417,9 +465,10 @@ public class JunctionProgressProviderTests
         var metadataToSet = metadata ?? CreateMetadata();
         if (save)
         {
-            using var context = (IDataContext)_factory.Create();
+            var context = (IDataContext)_factory.Create();
+            await using var contextDisposal = context.ConfigureAwait(false);
             context.Metadatas.Add(metadataToSet);
-            context.SaveChanges(CancellationToken.None).GetAwaiter().GetResult();
+            await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         }
         SetInternalProperty(train, "Metadata", metadataToSet);
 
@@ -428,7 +477,8 @@ public class JunctionProgressProviderTests
 
     private async Task<Metadata> StoredRow(TestTrain train)
     {
-        using var context = (IDataContext)_factory.Create();
+        var context = (IDataContext)_factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         return await context
             .Metadatas.AsNoTracking()
             .SingleAsync(m => m.Id == train.Metadata!.Id)

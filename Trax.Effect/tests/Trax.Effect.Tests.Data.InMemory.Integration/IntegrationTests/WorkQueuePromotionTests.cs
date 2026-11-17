@@ -172,9 +172,10 @@ public class WorkQueuePromotionTests : TestSetup
         bool confirmed = false
     )
     {
-        using var context = await Factory
+        var context = await Factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         for (var i = 0; i < count; i++)
         {
@@ -198,9 +199,10 @@ public class WorkQueuePromotionTests : TestSetup
 
     private async Task<Dictionary<WorkQueueStatus, int>> CountByStatus(string trainName)
     {
-        using var context = await Factory
+        var context = await Factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var statuses = await context
             .WorkQueues.AsNoTracking()
@@ -231,9 +233,10 @@ public class WorkQueuePromotionTests : TestSetup
         if (confirmed)
             entry.ConfirmedAt = entry.CreatedAt;
 
-        using var context = await Factory
+        var context = await Factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         await context.Track(entry).ConfigureAwait(false);
         await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
@@ -242,9 +245,10 @@ public class WorkQueuePromotionTests : TestSetup
 
     private async Task<WorkQueue> Load(long id)
     {
-        using var context = await Factory
+        var context = await Factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         return await context
             .WorkQueues.AsNoTracking()
             .SingleAsync(w => w.Id == id)

@@ -128,7 +128,7 @@ internal sealed class PostgresSnapshotNoticeSource(
                 ? null
                 : reader.GetString(3),
             reader.GetBoolean(4),
-            reader.GetFieldValue<string[]>(5)
+            await reader.GetFieldValueAsync<string[]>(5).ConfigureAwait(false)
         );
     }
 

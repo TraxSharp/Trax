@@ -80,9 +80,10 @@ public class PostgresWorkQueuePromotionTests : TestSetup
         bool confirmed = false
     )
     {
-        using var context = await DataContextFactory
+        var context = await DataContextFactory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         for (var i = 0; i < count; i++)
         {
@@ -106,9 +107,10 @@ public class PostgresWorkQueuePromotionTests : TestSetup
 
     private async Task<Dictionary<WorkQueueStatus, int>> CountByStatus(string trainName)
     {
-        using var context = await DataContextFactory
+        var context = await DataContextFactory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var statuses = await context
             .WorkQueues.AsNoTracking()

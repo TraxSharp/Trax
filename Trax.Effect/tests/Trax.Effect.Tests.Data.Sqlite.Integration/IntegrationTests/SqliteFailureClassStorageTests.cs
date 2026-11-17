@@ -46,7 +46,8 @@ public class SqliteFailureClassStorageTests : TestSetup
     public async Task A_failure_class_is_written_as_its_integer()
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var metadata = Metadata.Create(
             new CreateMetadata

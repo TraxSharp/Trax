@@ -95,9 +95,10 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
 
         try
         {
-            using var dataContext = await _dbContextFactory
+            var dataContext = await _dbContextFactory
                 .CreateDbContextAsync(ct)
                 .ConfigureAwait(false);
+            await using var dataContextDisposal = dataContext.ConfigureAwait(false);
 
             // WaitToReadAsync returns false only once the queue is completed and empty, so after
             // Dispose completes it the loop still writes everything queued before that, then ends.
@@ -181,10 +182,12 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
 
         _logChannel.Writer.TryComplete();
 
-        if (!WaitForWriter(DrainTimeout))
+        // Dispose is synchronous, so it waits here. The writer's awaits are all
+        // ConfigureAwait(false), so it never needs this thread to finish.
+        if (!WaitForWriterAsync(DrainTimeout).GetAwaiter().GetResult())
         {
             _cts.Cancel();
-            WaitForWriter(TimeSpan.FromSeconds(1));
+            WaitForWriterAsync(TimeSpan.FromSeconds(1)).GetAwaiter().GetResult();
         }
 
         _cts.Dispose();
@@ -198,13 +201,18 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
     /// True when the writer has stopped within <paramref name="timeout"/>. A writer that failed
     /// (its database unreachable, say) has stopped too, and logging never throws into the caller.
     /// </summary>
-    private bool WaitForWriter(TimeSpan timeout)
+    private async Task<bool> WaitForWriterAsync(TimeSpan timeout)
     {
         try
         {
-            return _flushTask.Wait(timeout);
+            await _flushTask.WaitAsync(timeout).ConfigureAwait(false);
+            return true;
         }
-        catch (AggregateException)
+        catch (TimeoutException) when (!_flushTask.IsCompleted)
+        {
+            return false;
+        }
+        catch
         {
             return true;
         }

@@ -40,7 +40,8 @@ public class HostTrackingIntegrationTests : TestSetup
             Labels = new Dictionary<string, string>(),
         };
 
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var metadata = Metadata.Create(
             new CreateMetadata
             {
@@ -82,7 +83,8 @@ public class HostTrackingIntegrationTests : TestSetup
             },
         };
 
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var metadata = Metadata.Create(
             new CreateMetadata
             {
@@ -115,7 +117,8 @@ public class HostTrackingIntegrationTests : TestSetup
             Labels = new Dictionary<string, string>(),
         };
 
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var metadata = Metadata.Create(
             new CreateMetadata
             {
@@ -145,7 +148,8 @@ public class HostTrackingIntegrationTests : TestSetup
             Labels = new Dictionary<string, string>(),
         };
 
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var metadata1 = Metadata.Create(
             new CreateMetadata
@@ -199,7 +203,8 @@ public class HostTrackingIntegrationTests : TestSetup
             Labels = new Dictionary<string, string>(),
         };
 
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var metadata1 = Metadata.Create(
             new CreateMetadata

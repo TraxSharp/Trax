@@ -54,14 +54,16 @@ public class RabbitMqBroadcasterIntegrationTests
     public async Task PublishAsync_DeliversMessage_ToReceiver()
     {
         var opts = Options("publish");
-        await using var broadcaster = new RabbitMqTrainEventBroadcaster(
+        var broadcaster = new RabbitMqTrainEventBroadcaster(
             opts,
             NullLogger<RabbitMqTrainEventBroadcaster>.Instance
         );
-        await using var receiver = new RabbitMqTrainEventReceiver(
+        await using var broadcasterDisposal = broadcaster.ConfigureAwait(false);
+        var receiver = new RabbitMqTrainEventReceiver(
             opts,
             NullLogger<RabbitMqTrainEventReceiver>.Instance
         );
+        await using var receiverDisposal = receiver.ConfigureAwait(false);
 
         var received = new TaskCompletionSource<TrainLifecycleEventMessage>();
         await receiver.StartAsync(
@@ -79,19 +81,20 @@ public class RabbitMqBroadcasterIntegrationTests
         // fail-safe ceiling so a lost message fails the test instead of hanging it.
         var awaited = await Task.WhenAny(received.Task, Task.Delay(TimeSpan.FromSeconds(10)));
         awaited.Should().Be(received.Task);
-        received.Task.Result.TrainName.Should().Be("RoundTrip.Train");
+        (await received.Task.ConfigureAwait(false)).TrainName.Should().Be("RoundTrip.Train");
 
-        await receiver.StopAsync(CancellationToken.None);
+        await receiver.StopAsync(CancellationToken.None).ConfigureAwait(false);
     }
 
     [Test]
     public async Task PublishAsync_TwiceOnSameBroadcaster_ReusesChannel()
     {
         var opts = Options("reuse");
-        await using var broadcaster = new RabbitMqTrainEventBroadcaster(
+        var broadcaster = new RabbitMqTrainEventBroadcaster(
             opts,
             NullLogger<RabbitMqTrainEventBroadcaster>.Instance
         );
+        await using var broadcasterDisposal = broadcaster.ConfigureAwait(false);
 
         // First publish opens the connection + declares the exchange. The second
         // publish should hit the already-open channel and skip the exchange-declare.
@@ -105,14 +108,16 @@ public class RabbitMqBroadcasterIntegrationTests
         // The cross-process change-signal path serialises a DataChanged message and rides the same
         // exchange as lifecycle events. Prove the domain + event type survive the real broker.
         var opts = Options("datachange");
-        await using var broadcaster = new RabbitMqTrainEventBroadcaster(
+        var broadcaster = new RabbitMqTrainEventBroadcaster(
             opts,
             NullLogger<RabbitMqTrainEventBroadcaster>.Instance
         );
-        await using var receiver = new RabbitMqTrainEventReceiver(
+        await using var broadcasterDisposal = broadcaster.ConfigureAwait(false);
+        var receiver = new RabbitMqTrainEventReceiver(
             opts,
             NullLogger<RabbitMqTrainEventReceiver>.Instance
         );
+        await using var receiverDisposal = receiver.ConfigureAwait(false);
 
         var received = new TaskCompletionSource<TrainLifecycleEventMessage>();
 
@@ -157,26 +162,28 @@ public class RabbitMqBroadcasterIntegrationTests
             .Should()
             .Be(received.Task, "the data-change message should be delivered over RabbitMQ");
 
-        var got = received.Task.Result;
+        var got = await received.Task.ConfigureAwait(false);
         got.EventType.Should().Be(TrainLifecycleEventMessage.DataChangedEventType);
         got.ChangeDomain.Should().Be("WorkQueue");
         got.Executor.Should().Be("SchedulerProc");
 
-        await receiver.StopAsync(CancellationToken.None);
+        await receiver.StopAsync(CancellationToken.None).ConfigureAwait(false);
     }
 
     [Test]
     public async Task Receiver_HandlerThrows_NacksAndKeepsConsuming()
     {
         var opts = Options("handler-throws");
-        await using var broadcaster = new RabbitMqTrainEventBroadcaster(
+        var broadcaster = new RabbitMqTrainEventBroadcaster(
             opts,
             NullLogger<RabbitMqTrainEventBroadcaster>.Instance
         );
-        await using var receiver = new RabbitMqTrainEventReceiver(
+        await using var broadcasterDisposal = broadcaster.ConfigureAwait(false);
+        var receiver = new RabbitMqTrainEventReceiver(
             opts,
             NullLogger<RabbitMqTrainEventReceiver>.Instance
         );
+        await using var receiverDisposal = receiver.ConfigureAwait(false);
 
         var calls = 0;
         var second = new TaskCompletionSource();
@@ -261,14 +268,16 @@ public class RabbitMqBroadcasterIntegrationTests
     {
         var opts = Options("prefetch");
         opts.PrefetchCount = 2;
-        await using var broadcaster = new RabbitMqTrainEventBroadcaster(
+        var broadcaster = new RabbitMqTrainEventBroadcaster(
             opts,
             NullLogger<RabbitMqTrainEventBroadcaster>.Instance
         );
-        await using var receiver = new RabbitMqTrainEventReceiver(
+        await using var broadcasterDisposal = broadcaster.ConfigureAwait(false);
+        var receiver = new RabbitMqTrainEventReceiver(
             opts,
             NullLogger<RabbitMqTrainEventReceiver>.Instance
         );
+        await using var receiverDisposal = receiver.ConfigureAwait(false);
 
         var entered = new TaskCompletionSource();
         var release = new TaskCompletionSource();

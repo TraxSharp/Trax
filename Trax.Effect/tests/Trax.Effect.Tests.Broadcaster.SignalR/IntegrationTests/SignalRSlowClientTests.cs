@@ -53,7 +53,8 @@ public class SignalRSlowClientTests
         new TraxBuilder(builder.Services, registry).AddEffects(effects =>
             effects.UseBroadcaster(b => b.UseSignalRHub())
         );
-        await using var app = builder.Build();
+        var app = builder.Build();
+        await using var appDisposal = app.ConfigureAwait(false);
         app.MapTraxTrainEventHub(hub => hub.AllowAnonymous());
         await app.StartAsync();
 

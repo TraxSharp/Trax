@@ -31,9 +31,10 @@ public class PeekDecisions(IDataContextProviderFactory factory) : EffectJunction
     {
         Seen.Clear();
         var id = Metadata!.TrainMetadataId;
-        using var context = await factory
+        var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var state = await context
             .Metadatas.AsNoTracking()

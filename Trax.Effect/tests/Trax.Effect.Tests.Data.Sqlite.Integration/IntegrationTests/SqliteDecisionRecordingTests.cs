@@ -198,7 +198,8 @@ public class SqliteDecisionRecordingTests
     )
         where TTrain : class, IServiceTrain<LiteOrder, string>
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train =
             (ServiceTrain<LiteOrder, string>)
                 (object)scope.ServiceProvider.GetRequiredService<TTrain>();
@@ -221,9 +222,10 @@ public class SqliteDecisionRecordingTests
     private async Task<List<Models.RecordedDecision.RecordedDecision>> Recorded(long metadataId)
     {
         var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory
+        var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         return await context
             .RecordedDecisions.AsNoTracking()
@@ -235,9 +237,10 @@ public class SqliteDecisionRecordingTests
     private async Task<Metadata> RunRow(long metadataId)
     {
         var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory
+        var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         return await context
             .Metadatas.AsNoTracking()
@@ -248,9 +251,10 @@ public class SqliteDecisionRecordingTests
     private async Task Delete(params long[] metadataIds)
     {
         var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory
+        var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         await context
             .Metadatas.Where(m => metadataIds.Contains(m.Id))
@@ -360,9 +364,10 @@ public class SqliteDecisionRecordingTests
         {
             Seen.Clear();
             var id = Metadata!.TrainMetadataId;
-            using var context = await factory
+            var context = await factory
                 .CreateDbContextAsync(CancellationToken.None)
                 .ConfigureAwait(false);
+            await using var contextDisposal = context.ConfigureAwait(false);
 
             var state = await context
                 .Metadatas.AsNoTracking()

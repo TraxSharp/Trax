@@ -57,7 +57,8 @@ public class RunChainHashTests : TestSetup
     private async Task<string?> ChainHashOf(string trainName)
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var row = await context
             .Metadatas.AsNoTracking()
             .SingleAsync(m => m.Name == trainName)

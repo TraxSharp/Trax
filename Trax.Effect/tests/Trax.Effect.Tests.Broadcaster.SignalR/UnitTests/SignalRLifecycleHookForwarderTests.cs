@@ -31,7 +31,8 @@ public class SignalRLifecycleHookForwarderTests
     [Test]
     public async Task TheForwarderImplementsEveryLifecycleHookMember()
     {
-        await using var dispatcher = NewDispatcher(out _);
+        var dispatcher = NewDispatcher(out _);
+        await using var dispatcherDisposal = dispatcher.ConfigureAwait(false);
         var forwarderType = ForwarderFrom(dispatcher).GetType();
         var map = forwarderType.GetInterfaceMap(typeof(ITrainLifecycleHook));
 
@@ -52,7 +53,8 @@ public class SignalRLifecycleHookForwarderTests
     [Test]
     public async Task EveryLifecycleEventReachesTheClientsThroughTheForwarder()
     {
-        await using var dispatcher = NewDispatcher(out var client);
+        var dispatcher = NewDispatcher(out var client);
+        await using var dispatcherDisposal = dispatcher.ConfigureAwait(false);
         var hook = ForwarderFrom(dispatcher);
         var metadata = NewRun();
 
@@ -112,7 +114,8 @@ public class SignalRLifecycleHookForwarderTests
 
         // The dispatcher is often first resolved on a train run's flow, and its loop outlives it.
         Ambient.Value = "the creating run";
-        await using var dispatcher = NewDispatcher(out var client);
+        var dispatcher = NewDispatcher(out var client);
+        await using var dispatcherDisposal = dispatcher.ConfigureAwait(false);
         Ambient.Value = null;
         client
             .TrainEvent(Arg.Any<object>())

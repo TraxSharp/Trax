@@ -63,7 +63,8 @@ public class NulCharacterOutcomeTests
     [Test]
     public async Task A_NUL_in_the_output_is_recorded_Completed()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (NulOutputTrain)scope.ServiceProvider.GetRequiredService<INulOutputTrain>();
 
         var output = await train.Run(Unit.Default);
@@ -83,7 +84,8 @@ public class NulCharacterOutcomeTests
     [Test]
     public async Task A_NUL_in_the_exception_message_is_recorded_Failed_with_an_end_time()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (NulFailureTrain)scope.ServiceProvider.GetRequiredService<INulFailureTrain>();
 
         var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
@@ -104,7 +106,8 @@ public class NulCharacterOutcomeTests
     [Test]
     public async Task A_failure_message_Postgres_cannot_encode_is_recorded_Failed_without_it()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (UnpairedSurrogateFailureTrain)
             scope.ServiceProvider.GetRequiredService<IUnpairedSurrogateFailureTrain>();
 
@@ -126,9 +129,11 @@ public class NulCharacterOutcomeTests
     [Test]
     public async Task A_value_Postgres_refuses_is_reported_as_a_content_refusal()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         context.Logs.Add(
             new Log
             {
@@ -147,11 +152,13 @@ public class NulCharacterOutcomeTests
     [Test]
     public async Task A_NUL_written_through_a_synchronous_save_is_replaced()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var category = $"nul-sync-{Guid.NewGuid():N}";
 
-        using (var context = (IDataContext)factory.Create())
+        var context = (IDataContext)factory.Create();
+        await using (context.ConfigureAwait(false))
         {
             context.Logs.Add(
                 new Log
@@ -161,10 +168,15 @@ public class NulCharacterOutcomeTests
                     Category = category,
                 }
             );
-            ((DbContext)context).SaveChanges();
+            // The synchronous SavingChanges hook is what this test covers, so the save has to
+            // be the synchronous one. It goes through a delegate because TRX0045 refuses a
+            // direct call to a method that has an async twin.
+            Func<int> saveSynchronously = ((DbContext)context).SaveChanges;
+            saveSynchronously();
         }
 
-        using var reader = (IDataContext)factory.Create();
+        var reader = (IDataContext)factory.Create();
+        await using var readerDisposal = reader.ConfigureAwait(false);
         var stored = await reader.Logs.AsNoTracking().SingleAsync(l => l.Category == category);
         stored.Message.Should().Be("bytes:\uFFFDend");
     }
@@ -172,7 +184,8 @@ public class NulCharacterOutcomeTests
     private static async Task<Metadata> PersistedRow(IServiceScope scope, long id)
     {
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         return await context
             .Metadatas.AsNoTracking()

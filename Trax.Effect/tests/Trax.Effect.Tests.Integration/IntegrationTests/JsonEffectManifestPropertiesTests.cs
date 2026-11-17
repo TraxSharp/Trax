@@ -59,12 +59,14 @@ public class JsonEffectManifestPropertiesTests
     [Test]
     public async Task A_scheduled_runs_manifest_properties_are_not_written_to_the_log()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var charge = new ChargeInput { Customer = "ada", ApiKey = Secret };
 
         long metadataId;
-        using (var seed = (IDataContext)factory.Create())
+        var seed = (IDataContext)factory.Create();
+        await using (seed.ConfigureAwait(false))
         {
             var group = new ManifestGroup { Name = "billing" };
             seed.ManifestGroups.Add(group);
@@ -93,7 +95,8 @@ public class JsonEffectManifestPropertiesTests
 
         // What the scheduler's job runner does: load the row with its manifest, then run the
         // train under it.
-        using var load = (IDataContext)factory.Create();
+        var load = (IDataContext)factory.Create();
+        await using var loadDisposal = load.ConfigureAwait(false);
         var metadata = await load
             .Metadatas.Include(m => m.Manifest)
             .SingleAsync(m => m.Id == metadataId);
@@ -116,7 +119,8 @@ public class JsonEffectManifestPropertiesTests
     {
         // The scheduler's own dispatcher is a train whose junction returns the queued entries,
         // and AddJunctionLogger(serializeJunctionData: true) logs each junction's output.
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<ILoadQueueTrain>();
         _logs.Lines.Clear();
 

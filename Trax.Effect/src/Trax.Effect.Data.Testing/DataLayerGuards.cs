@@ -46,7 +46,11 @@ public static class DataLayerGuards
         var offenders = MissingScanRoots(root, options.SourceScanRoots);
         var inspected = 0;
 
-        foreach (var context in ClassesUnder(root, options.SourceScanRoots))
+        // The guards are synchronous; every await below is ConfigureAwait(false), so this waits
+        // on no context of its own.
+        foreach (
+            var context in ClassesUnderAsync(root, options.SourceScanRoots).GetAwaiter().GetResult()
+        )
         {
             if (
                 !context.Name.EndsWith("DbContext", StringComparison.Ordinal)
@@ -89,7 +93,11 @@ public static class DataLayerGuards
         var offenders = MissingScanRoots(root, options.SourceScanRoots);
         var inspected = 0;
 
-        foreach (var context in ClassesUnder(root, options.SourceScanRoots))
+        // The guards are synchronous; every await below is ConfigureAwait(false), so this waits
+        // on no context of its own.
+        foreach (
+            var context in ClassesUnderAsync(root, options.SourceScanRoots).GetAwaiter().GetResult()
+        )
         {
             if (!context.GenericBaseNames.Contains(baseTypeName))
                 continue;
@@ -121,7 +129,8 @@ public static class DataLayerGuards
 
         foreach (var contextType in contextTypes)
         {
-            var schema = SchemaOf(contextType);
+            using var context = BuildOffline(contextType);
+            var schema = context.Model.GetDefaultSchema();
             if (string.IsNullOrEmpty(schema))
             {
                 offenders.Add($"{contextType.Name} declares no default schema");
@@ -479,9 +488,9 @@ public static class DataLayerGuards
             .ToHashSet(StringComparer.Ordinal);
 
         var root = scan.RepoRootOverride ?? RepoRoot.Path;
-        var files = SourceFiles
-            .CSharpUnder(root, [.. scan.SourceScanRoots])
-            .Select(file => (Path: Rel(root, file), Text: File.ReadAllText(file)))
+        var files = ReadSourcesAsync(root, scan.SourceScanRoots)
+            .GetAwaiter()
+            .GetResult()
             .Select(f => (f.Path, f.Text, Stripped: SourceText.StripCommentsAndStrings(f.Text)))
             .ToList();
 
@@ -826,12 +835,6 @@ public static class DataLayerGuards
         }
     }
 
-    private static string? SchemaOf(Type contextType)
-    {
-        using var context = BuildOffline(contextType);
-        return context.Model.GetDefaultSchema();
-    }
-
     /// <summary>
     /// Builds a context instance offline (PostgreSQL provider, no connection) via its
     /// <c>DbContextOptions</c> constructor, for reflection-only model inspection.
@@ -867,15 +870,32 @@ public static class DataLayerGuards
         HashSet<string> GenericBaseNames
     );
 
-    private static List<ClassDeclaration> ClassesUnder(string root, IReadOnlyList<string> scanRoots)
+    private static async Task<List<(string Path, string Text)>> ReadSourcesAsync(
+        string root,
+        IReadOnlyList<string> scanRoots
+    )
+    {
+        var files = new List<(string Path, string Text)>();
+        foreach (var file in SourceFiles.CSharpUnder(root, [.. scanRoots]))
+            files.Add((Rel(root, file), await File.ReadAllTextAsync(file).ConfigureAwait(false)));
+        return files;
+    }
+
+    private static async Task<List<ClassDeclaration>> ClassesUnderAsync(
+        string root,
+        IReadOnlyList<string> scanRoots
+    )
     {
         var classes = new Dictionary<string, ClassDeclaration>(StringComparer.Ordinal);
 
         foreach (var file in SourceFiles.CSharpUnder(root, [.. scanRoots]))
         {
-            var tree = CSharpSyntaxTree.ParseText(File.ReadAllText(file));
+            var tree = CSharpSyntaxTree.ParseText(
+                await File.ReadAllTextAsync(file).ConfigureAwait(false)
+            );
+            var syntaxRoot = await tree.GetRootAsync().ConfigureAwait(false);
             foreach (
-                var declaration in tree.GetRoot().DescendantNodes().OfType<ClassDeclarationSyntax>()
+                var declaration in syntaxRoot.DescendantNodes().OfType<ClassDeclarationSyntax>()
             )
             {
                 var key = FullName(declaration);

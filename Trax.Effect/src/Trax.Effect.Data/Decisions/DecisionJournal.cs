@@ -611,9 +611,10 @@ public sealed class DecisionJournal(
 
         try
         {
-            using var context = await contextFactory
+            var context = await contextFactory
                 .CreateDbContextAsync(cancellationToken)
                 .ConfigureAwait(false);
+            await using var contextDisposal = context.ConfigureAwait(false);
 
             var seen = new HashSet<long> { metadata.Id };
             long? next = source;
@@ -833,9 +834,10 @@ public sealed class DecisionJournal(
 
         try
         {
-            using var context = await contextFactory
+            var context = await contextFactory
                 .CreateDbContextAsync(cancellationToken)
                 .ConfigureAwait(false);
+            await using var contextDisposal = context.ConfigureAwait(false);
             var row = await context
                 .Metadatas.FirstOrDefaultAsync(m => m.Id == metadata.Id, cancellationToken)
                 .ConfigureAwait(false);
@@ -870,9 +872,10 @@ public sealed class DecisionJournal(
     {
         try
         {
-            using var context = await contextFactory
+            var context = await contextFactory
                 .CreateDbContextAsync(cancellationToken)
                 .ConfigureAwait(false);
+            await using var contextDisposal = context.ConfigureAwait(false);
             await write(context).ConfigureAwait(false);
         }
         catch (StoreRefusedContentException e)
@@ -937,9 +940,10 @@ public sealed class DecisionJournal(
 
         try
         {
-            using var context = await contextFactory
+            var context = await contextFactory
                 .CreateDbContextAsync(cancellationToken)
                 .ConfigureAwait(false);
+            await using var contextDisposal = context.ConfigureAwait(false);
 
             runs = (
                 await context
@@ -1027,9 +1031,10 @@ public sealed class DecisionJournal(
 
         try
         {
-            using var context = await contextFactory
+            var context = await contextFactory
                 .CreateDbContextAsync(cancellationToken)
                 .ConfigureAwait(false);
+            await using var contextDisposal = context.ConfigureAwait(false);
 
             var candidates = await context
                 .RecordedDecisions.AsNoTracking()

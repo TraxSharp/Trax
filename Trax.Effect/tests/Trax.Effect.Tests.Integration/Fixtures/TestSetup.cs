@@ -18,7 +18,7 @@ public abstract class TestSetup
 {
     private ServiceProvider ServiceProvider { get; set; } = null!;
 
-    public IServiceScope Scope { get; private set; } = null!;
+    public AsyncServiceScope Scope { get; private set; }
 
     public IDataContextProviderFactory DataContextFactory { get; private set; } = null!;
 
@@ -58,11 +58,12 @@ public abstract class TestSetup
     [SetUp]
     public virtual async Task TestSetUp()
     {
-        Scope = ServiceProvider.CreateScope();
+        Scope = ServiceProvider.CreateAsyncScope();
         DataContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var cleanupContext = (IDataContext)DataContextFactory.Create();
+        var cleanupContext = (IDataContext)DataContextFactory.Create();
+        await using var cleanupContextDisposal = cleanupContext.ConfigureAwait(false);
         await CleanupDatabase(cleanupContext);
     }
 
@@ -88,6 +89,6 @@ public abstract class TestSetup
     [TearDown]
     public async Task TestTearDown()
     {
-        Scope.Dispose();
+        await Scope.DisposeAsync().ConfigureAwait(false);
     }
 }

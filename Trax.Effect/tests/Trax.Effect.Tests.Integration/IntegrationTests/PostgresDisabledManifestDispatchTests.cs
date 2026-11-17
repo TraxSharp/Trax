@@ -29,7 +29,8 @@ public class PostgresDisabledManifestDispatchTests : TestSetup
     public async Task A_scheduled_entry_of_a_disabled_manifest_is_neither_loaded_nor_claimed()
     {
         var dialect = Scope.ServiceProvider.GetRequiredService<ISqlDialect>();
-        using var context = await NewContext();
+        var context = await NewContext();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var entry = await QueueFor(context, manifestEnabled: false, explicitTrigger: false);
 
@@ -46,7 +47,8 @@ public class PostgresDisabledManifestDispatchTests : TestSetup
     public async Task A_scheduled_entry_of_an_enabled_manifest_is_loaded_and_claimed()
     {
         var dialect = Scope.ServiceProvider.GetRequiredService<ISqlDialect>();
-        using var context = await NewContext();
+        var context = await NewContext();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var entry = await QueueFor(context, manifestEnabled: true, explicitTrigger: false);
 
@@ -58,7 +60,8 @@ public class PostgresDisabledManifestDispatchTests : TestSetup
     public async Task An_explicit_trigger_of_a_disabled_manifest_is_loaded_and_claimed()
     {
         var dialect = Scope.ServiceProvider.GetRequiredService<ISqlDialect>();
-        using var context = await NewContext();
+        var context = await NewContext();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var entry = await QueueFor(context, manifestEnabled: false, explicitTrigger: true);
 
@@ -75,7 +78,8 @@ public class PostgresDisabledManifestDispatchTests : TestSetup
     public async Task A_scheduled_entry_marked_explicit_after_it_was_queued_is_released()
     {
         var dialect = Scope.ServiceProvider.GetRequiredService<ISqlDialect>();
-        using var context = await NewContext();
+        var context = await NewContext();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var entry = await QueueFor(context, manifestEnabled: false, explicitTrigger: false);
         entry.IsExplicitTrigger = true;
@@ -88,7 +92,8 @@ public class PostgresDisabledManifestDispatchTests : TestSetup
     public async Task An_explicit_trigger_in_a_disabled_group_is_still_held()
     {
         var dialect = Scope.ServiceProvider.GetRequiredService<ISqlDialect>();
-        using var context = await NewContext();
+        var context = await NewContext();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var entry = await QueueFor(
             context,
@@ -109,19 +114,23 @@ public class PostgresDisabledManifestDispatchTests : TestSetup
     public async Task The_claim_does_not_lock_or_wait_for_the_manifest_row()
     {
         var dialect = Scope.ServiceProvider.GetRequiredService<ISqlDialect>();
-        using var holder = await NewContext();
+        var holder = await NewContext();
+        await using var holderDisposal = holder.ConfigureAwait(false);
         var entry = await QueueFor(holder, manifestEnabled: true, explicitTrigger: false);
 
         var holderDb = ((DbContext)holder).Database;
-        await using var held = await holderDb.BeginTransactionAsync();
+        var held = await holderDb.BeginTransactionAsync();
+        await using var heldDisposal = held.ConfigureAwait(false);
         await holderDb.ExecuteSqlRawAsync(
             "SELECT id FROM trax.manifest WHERE id = {0} FOR UPDATE",
             entry.ManifestId!.Value
         );
 
-        using var claimer = await NewContext();
+        var claimer = await NewContext();
+        await using var claimerDisposal = claimer.ConfigureAwait(false);
         var claimerDb = ((DbContext)claimer).Database;
-        await using var claim = await claimerDb.BeginTransactionAsync();
+        var claim = await claimerDb.BeginTransactionAsync();
+        await using var claimDisposal = claim.ConfigureAwait(false);
         await claimerDb.ExecuteSqlRawAsync("SET LOCAL lock_timeout = '2s'");
 
         (await Claim(claimer, dialect, entry.Id))

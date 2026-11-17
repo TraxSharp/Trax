@@ -64,7 +64,8 @@ public class JsonEffectToggleTests
         var jsonLogCountBefore = GetJsonEffectLogCount(arrayProvider);
 
         // Act
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IToggleTestTrain>();
         await train.Run(Unit.Default);
 
@@ -88,7 +89,8 @@ public class JsonEffectToggleTests
         var jsonLogCountBefore = GetJsonEffectLogCount(arrayProvider);
 
         // Act
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IToggleTestTrain>();
         await train.Run(Unit.Default);
 
@@ -114,7 +116,8 @@ public class JsonEffectToggleTests
         var jsonLogCountBefore = GetJsonEffectLogCount(arrayProvider);
 
         // Act
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IToggleTestTrain>();
         await train.Run(Unit.Default);
 

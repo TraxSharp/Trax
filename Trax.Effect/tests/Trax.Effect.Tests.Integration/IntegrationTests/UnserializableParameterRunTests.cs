@@ -43,7 +43,8 @@ public class UnserializableParameterRunTests
     [Test]
     public async Task An_output_with_a_throwing_getter_completes_with_the_placeholder()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IThrowingGetterOutputTrain>();
 
         await train.Run(Unit.Default);
@@ -56,7 +57,8 @@ public class UnserializableParameterRunTests
     [Test]
     public async Task An_output_with_colliding_property_names_completes_with_the_placeholder()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<ICollidingNamesOutputTrain>();
 
         await train.Run(Unit.Default);
@@ -69,7 +71,8 @@ public class UnserializableParameterRunTests
     [Test]
     public async Task An_input_with_a_throwing_getter_completes_with_the_placeholder()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IThrowingGetterInputTrain>();
 
         await train.Run(new ThrowingGetter());

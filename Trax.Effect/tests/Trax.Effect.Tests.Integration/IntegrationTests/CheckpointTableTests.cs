@@ -24,7 +24,8 @@ public class CheckpointTableTests : TestSetup
     [Test]
     public async Task A_checkpoint_round_trips_with_its_defaults()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var run = await NewRun(context);
         context.Checkpoints.Add(
             Row(run, "Parallel#0/embedding/Checkpoint<Scores>#0", "Parallel#0/embedding")
@@ -47,12 +48,14 @@ public class CheckpointTableTests : TestSetup
     [Test]
     public async Task A_second_row_for_one_run_and_node_is_refused()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var run = await NewRun(context);
         context.Checkpoints.Add(Row(run, "Checkpoint<Scores>#0", branchPath: null));
         await context.SaveChanges(CancellationToken.None);
 
-        using var other = (IDataContext)DataContextFactory.Create();
+        var other = (IDataContext)DataContextFactory.Create();
+        await using var otherDisposal = other.ConfigureAwait(false);
         other.Checkpoints.Add(Row(run, "Checkpoint<Scores>#0", branchPath: null));
         var second = () => other.SaveChanges(CancellationToken.None);
 
@@ -64,7 +67,8 @@ public class CheckpointTableTests : TestSetup
     [Test]
     public async Task A_runs_checkpoints_are_deleted_with_it()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var run = await NewRun(context);
         var kept = await NewRun(context);
         context.Checkpoints.Add(Row(run, "Checkpoint<Scores>#0", branchPath: null));
@@ -86,7 +90,8 @@ public class CheckpointTableTests : TestSetup
     [Test]
     public async Task A_second_queued_resume_of_one_run_is_refused()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var source = await NewRun(context);
         await context.Track(Resuming(source));
         await context.SaveChanges(CancellationToken.None);
@@ -103,7 +108,8 @@ public class CheckpointTableTests : TestSetup
     )]
     public async Task A_dispatched_resume_does_not_count_against_a_queued_one()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var source = await NewRun(context);
         var dispatched = Resuming(source);
         dispatched.Status = WorkQueueStatus.Dispatched;

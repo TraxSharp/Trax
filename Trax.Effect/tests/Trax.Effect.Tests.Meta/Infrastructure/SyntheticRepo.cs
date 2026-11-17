@@ -14,14 +14,14 @@ internal sealed class SyntheticRepo : IDisposable
 
     public SyntheticRepo() => Directory.CreateDirectory(Root);
 
-    public SyntheticRepo Write(string relativePath, string content)
+    public async Task<SyntheticRepo> WriteAsync(string relativePath, string content)
     {
         var full = System.IO.Path.Combine(
             Root,
             relativePath.Replace('/', System.IO.Path.DirectorySeparatorChar)
         );
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(full)!);
-        File.WriteAllText(full, content);
+        await File.WriteAllTextAsync(full, content).ConfigureAwait(false);
         return this;
     }
 

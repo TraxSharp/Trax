@@ -38,7 +38,8 @@ public class WithheldOutputStorageTests
     [Test]
     public async Task A_withheld_output_is_not_stored_and_the_input_still_is()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (WithheldTrain)scope.ServiceProvider.GetRequiredService<IWithheldTrain>();
 
         var output = await train.Run("given");
@@ -51,7 +52,8 @@ public class WithheldOutputStorageTests
     [Test]
     public async Task A_plain_output_is_still_stored()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (PlainTrain)scope.ServiceProvider.GetRequiredService<IPlainTrain>();
 
         await train.Run("given");

@@ -42,7 +42,8 @@ public class JunctionProgressCancellationTests
     [Test]
     public async Task Work_that_finished_after_the_caller_cancelled_is_recorded_completed_with_junction_progress()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (FinishesAnywayTrain)
             scope.ServiceProvider.GetRequiredService<IFinishesAnywayTrain>();
         using var cts = new CancellationTokenSource();
@@ -62,7 +63,8 @@ public class JunctionProgressCancellationTests
         Downstream.WorkDone.Should().BeTrue("the junction's downstream call completed");
 
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var row = await context
             .Metadatas.AsNoTracking()
             .SingleAsync(m => m.Id == train.Metadata!.Id);

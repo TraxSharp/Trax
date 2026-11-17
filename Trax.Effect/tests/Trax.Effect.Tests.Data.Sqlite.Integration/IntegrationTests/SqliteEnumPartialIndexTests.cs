@@ -30,8 +30,8 @@ public class SqliteEnumPartialIndexTests : TestSetup
     public async Task A_second_queued_entry_for_one_manifest_is_refused()
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)
-            await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = (IDataContext)await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var group = new ManifestGroup { Name = $"queued-{Guid.NewGuid():N}" };
         context.ManifestGroups.Add(group);
@@ -58,8 +58,8 @@ public class SqliteEnumPartialIndexTests : TestSetup
     public async Task A_second_queued_replay_of_one_run_is_refused()
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)
-            await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = (IDataContext)await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var source = Random.Shared.NextInt64(1_000_000_000, long.MaxValue);
 
         var dispatched = Replaying(source);
@@ -89,8 +89,8 @@ public class SqliteEnumPartialIndexTests : TestSetup
     public async Task A_dispatched_entry_does_not_count_against_the_queued_one()
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)
-            await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = (IDataContext)await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var group = new ManifestGroup { Name = $"dispatched-{Guid.NewGuid():N}" };
         context.ManifestGroups.Add(group);
@@ -159,11 +159,13 @@ public class SqliteEnumPartialIndexTests : TestSetup
     public async Task An_integer_filter_can_use_the_partial_index(string index, string query)
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (DbContext)await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = (DbContext)await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var connection = (SqliteConnection)context.Database.GetDbConnection();
         await connection.OpenAsync();
 
-        await using var command = connection.CreateCommand();
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = string.Format(query, index);
         var act = () => command.ExecuteReaderAsync();
 

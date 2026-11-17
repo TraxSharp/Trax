@@ -680,7 +680,9 @@ public static class TraxInvariants
             )
                 continue;
             // The sweep counts a row written before created_at was recorded from its last write.
-            var born = reader.IsDBNull(5) ? null : reader.GetString(5);
+            var born = await reader.IsDBNullAsync(5).ConfigureAwait(false)
+                ? null
+                : reader.GetString(5);
             var since = born ?? reader.GetString(6);
             if (
                 DateTimeOffset.Parse(
@@ -743,8 +745,12 @@ public static class TraxInvariants
             var rowId = reader.GetString(0);
             var id = reader.GetString(2);
             var state = reader.GetString(3);
-            var token = reader.IsDBNull(4) ? null : reader.GetString(4);
-            var stranded = reader.IsDBNull(5) ? null : reader.GetString(5);
+            var token = await reader.IsDBNullAsync(4).ConfigureAwait(false)
+                ? null
+                : reader.GetString(4);
+            var stranded = await reader.IsDBNullAsync(5).ConfigureAwait(false)
+                ? null
+                : reader.GetString(5);
             var invokes = invoking.Contains(new InvokingState(machine, state));
 
             if (

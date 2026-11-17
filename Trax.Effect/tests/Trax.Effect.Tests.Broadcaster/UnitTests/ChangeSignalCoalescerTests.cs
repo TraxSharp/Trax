@@ -93,7 +93,8 @@ public class ChangeSignalCoalescerTests
     {
         var sink = new CapturingSink();
         var (signal, coalescer, provider) = Build(FastOptions(), sink);
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         // Buffer the burst before the coalescer starts, so the first drain sees the whole burst.
         signal.Notify(ChangeDomain.WorkQueue);
@@ -118,7 +119,8 @@ public class ChangeSignalCoalescerTests
     {
         var sink = new CapturingSink();
         var (signal, coalescer, provider) = Build(FastOptions(), sink);
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         signal.Notify(ChangeDomain.WorkQueue);
         signal.Notify(ChangeDomain.DeadLetter);
@@ -147,7 +149,8 @@ public class ChangeSignalCoalescerTests
     {
         var sink = new CapturingSink();
         var (signal, coalescer, provider) = Build(FastOptions(), sink);
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         await coalescer.StartAsync(CancellationToken.None);
         try
@@ -173,7 +176,8 @@ public class ChangeSignalCoalescerTests
     {
         var sink = new CapturingSink();
         var (signal, coalescer, provider) = Build(FastOptions(), sink);
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         await coalescer.StartAsync(CancellationToken.None);
         try
@@ -205,7 +209,8 @@ public class ChangeSignalCoalescerTests
         var sinkA = new CapturingSink();
         var sinkB = new CapturingSink();
         var (signal, coalescer, provider) = Build(FastOptions(), sinkA, sinkB);
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         signal.Notify(ChangeDomain.ManifestGroup);
 
@@ -232,7 +237,8 @@ public class ChangeSignalCoalescerTests
         };
         var healthy = new CapturingSink();
         var (signal, coalescer, provider) = Build(FastOptions(), throwing, healthy);
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         await coalescer.StartAsync(CancellationToken.None);
         try
@@ -267,7 +273,8 @@ public class ChangeSignalCoalescerTests
         };
         var sink = new CapturingSink();
         var (signal, coalescer, provider) = Build(options, sink);
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         await coalescer.StartAsync(CancellationToken.None);
         try
@@ -462,7 +469,8 @@ public class ChangeSignalCoalescerTests
                 ? throw new InvalidOperationException("resolve boom")
                 : realSink
         );
-        await using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var options = FastOptions();
         var signal = new TraxChangeSignal(options);
@@ -532,7 +540,8 @@ public class ChangeSignalCoalescerTests
 
         var services = new ServiceCollection().AddLogging();
         services.AddSingleton<IChangeSignalSink>(blockingSink);
-        await using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var options = FastOptions();
         var signal = new TraxChangeSignal(options);

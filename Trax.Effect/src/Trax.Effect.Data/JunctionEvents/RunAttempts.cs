@@ -40,9 +40,8 @@ internal sealed class RunAttempts(IDataContextProviderFactory contexts) : IRunAt
         if (metadata.ManifestId is not { } manifestId)
             return null;
 
-        using var context = await contexts
-            .CreateDbContextAsync(cancellationToken)
-            .ConfigureAwait(false);
+        var context = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var id = metadata.Id;
         var recent = await context

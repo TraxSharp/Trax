@@ -104,7 +104,7 @@ public class SignalRBroadcasterCompositionTests
         try
         {
             var server = host.GetTestServer();
-            await using var connection = new HubConnectionBuilder()
+            var connection = new HubConnectionBuilder()
                 .WithUrl(
                     new Uri(server.BaseAddress, "hubs/trax-events"),
                     options =>
@@ -119,6 +119,7 @@ public class SignalRBroadcasterCompositionTests
                     }
                 )
                 .Build();
+            await using var connectionDisposal = connection.ConfigureAwait(false);
 
             // ADR 0014: the Timeout below is 10s and the handshake default is 15s.
             connection.HandshakeTimeout = TimeSpan.FromSeconds(5);

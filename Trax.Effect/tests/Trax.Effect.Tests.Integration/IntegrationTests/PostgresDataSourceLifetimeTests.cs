@@ -31,7 +31,8 @@ public class PostgresDataSourceLifetimeTests
     {
         var provider = BuildProvider(new ServiceCollection());
         var dataSource = provider.GetRequiredService<NpgsqlDataSource>();
-        await using (var connection = await dataSource.OpenConnectionAsync())
+        var connection = await dataSource.OpenConnectionAsync();
+        await using (connection.ConfigureAwait(false))
             connection.State.Should().Be(System.Data.ConnectionState.Open);
 
         await provider.DisposeAsync();
@@ -57,10 +58,11 @@ public class PostgresDataSourceLifetimeTests
         ).DisposeAsync();
         await first.DisposeAsync();
 
-        await using (second)
+        await using ((second).ConfigureAwait(false))
         {
             var factory = second.GetRequiredService<IDataContextProviderFactory>();
-            using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+            var context = await factory.CreateDbContextAsync(CancellationToken.None);
+            await using var contextDisposal = context.ConfigureAwait(false);
             var reading = async () =>
                 await Microsoft
                     .EntityFrameworkCore.EntityFrameworkQueryableExtensions.CountAsync(

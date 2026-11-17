@@ -68,7 +68,8 @@ public class StateHashKeyTests
     )
         where TTrain : class, IServiceTrain<TIn, string>
     {
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train =
             (ServiceTrain<TIn, string>)(object)scope.ServiceProvider.GetRequiredService<TTrain>();
         var metadata = Metadata.Create(
@@ -86,7 +87,8 @@ public class StateHashKeyTests
 
     private static async Task<string?> StateHash(IServiceProvider provider, long metadataId)
     {
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .RecordedDecisions.AsNoTracking()
@@ -99,7 +101,8 @@ public class StateHashKeyTests
     [Test]
     public async Task Without_a_key_the_state_hash_is_unkeyed()
     {
-        await using var provider = Provider();
+        var provider = Provider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var run = await Run<IRouteVisit, Visit>(provider, new Visit("v1"));
 
@@ -109,8 +112,10 @@ public class StateHashKeyTests
     [Test]
     public async Task A_key_given_in_code_keys_the_state_hash()
     {
-        await using var unkeyed = Provider();
-        await using var keyed = Provider(o => o.HashStatesWith(Key));
+        var unkeyed = Provider();
+        await using var unkeyedDisposal = unkeyed.ConfigureAwait(false);
+        var keyed = Provider(o => o.HashStatesWith(Key));
+        await using var keyedDisposal = keyed.ConfigureAwait(false);
 
         var plain = await StateHash(
             unkeyed,
@@ -129,7 +134,8 @@ public class StateHashKeyTests
             DecisionRecordingOptions.StateHashKeyConfigurationKey,
             Convert.ToBase64String(Key)
         );
-        await using var provider = Provider(configuration: configuration);
+        var provider = Provider(configuration: configuration);
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var run = await Run<IRouteVisit, Visit>(provider, new Visit("v3"));
 
@@ -151,7 +157,8 @@ public class StateHashKeyTests
     public async Task Without_a_key_a_sensitive_state_is_recorded_without_its_hash_and_never_replayed()
     {
         var logger = new CapturingJournalLogger();
-        await using var provider = Provider(logger: logger);
+        var provider = Provider(logger: logger);
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var first = await Run<IRouteClaim, Claim>(provider, new Claim("c1", "078-05-1120"));
         await Run<IRouteClaim, Claim>(provider, new Claim("c2", "219-09-9999"));
@@ -169,7 +176,8 @@ public class StateHashKeyTests
             new Claim("c1", "078-05-1120"),
             replayDecisionsOf: first
         );
-        using (var scope = provider.CreateScope())
+        var scope = provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             (
                 await scope
                     .ServiceProvider.GetRequiredService<IDataContext>()
@@ -186,7 +194,8 @@ public class StateHashKeyTests
     [Test]
     public async Task With_a_key_a_sensitive_state_is_recorded_with_its_keyed_hash()
     {
-        await using var provider = Provider(o => o.HashStatesWith(Key));
+        var provider = Provider(o => o.HashStatesWith(Key));
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var run = await Run<IRouteClaim, Claim>(provider, new Claim("c3", "078-05-1120"));
 
@@ -239,7 +248,8 @@ public class StateHashKeyTests
     [Test]
     public async Task Without_a_key_a_state_holding_a_sensitive_subtype_is_recorded_without_its_hash()
     {
-        await using var provider = Provider();
+        var provider = Provider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var run = await Run<IRouteKennel, Kennel>(
             provider,
@@ -254,7 +264,8 @@ public class StateHashKeyTests
     [Test]
     public async Task Without_a_key_a_sensitive_state_outside_a_framework_namespace_is_recorded_without_its_hash()
     {
-        await using var provider = Provider();
+        var provider = Provider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var run = await Run<Systematic.Tests.IRouteFiling, Systematic.Tests.Filing>(
             provider,

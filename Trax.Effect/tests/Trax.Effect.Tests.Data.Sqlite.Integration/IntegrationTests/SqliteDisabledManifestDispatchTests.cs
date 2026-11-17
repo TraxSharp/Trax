@@ -32,7 +32,8 @@ public class SqliteDisabledManifestDispatchTests : TestSetup
     public async Task A_scheduled_entry_of_a_disabled_manifest_is_neither_loaded_nor_claimed()
     {
         var dialect = Scope.ServiceProvider.GetRequiredService<ISqlDialect>();
-        using var context = await NewContext();
+        var context = await NewContext();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var entry = await QueueFor(context, manifestEnabled: false, explicitTrigger: false);
 
@@ -49,7 +50,8 @@ public class SqliteDisabledManifestDispatchTests : TestSetup
     public async Task A_scheduled_entry_of_an_enabled_manifest_is_loaded_and_claimed()
     {
         var dialect = Scope.ServiceProvider.GetRequiredService<ISqlDialect>();
-        using var context = await NewContext();
+        var context = await NewContext();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var entry = await QueueFor(context, manifestEnabled: true, explicitTrigger: false);
 
@@ -61,7 +63,8 @@ public class SqliteDisabledManifestDispatchTests : TestSetup
     public async Task An_explicit_trigger_of_a_disabled_manifest_is_loaded_and_claimed()
     {
         var dialect = Scope.ServiceProvider.GetRequiredService<ISqlDialect>();
-        using var context = await NewContext();
+        var context = await NewContext();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var entry = await QueueFor(context, manifestEnabled: false, explicitTrigger: true);
 
@@ -78,7 +81,8 @@ public class SqliteDisabledManifestDispatchTests : TestSetup
     public async Task A_scheduled_entry_marked_explicit_after_it_was_queued_is_released()
     {
         var dialect = Scope.ServiceProvider.GetRequiredService<ISqlDialect>();
-        using var context = await NewContext();
+        var context = await NewContext();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var entry = await QueueFor(context, manifestEnabled: false, explicitTrigger: false);
         entry.IsExplicitTrigger = true;
@@ -91,7 +95,8 @@ public class SqliteDisabledManifestDispatchTests : TestSetup
     public async Task An_explicit_trigger_in_a_disabled_group_is_still_held()
     {
         var dialect = Scope.ServiceProvider.GetRequiredService<ISqlDialect>();
-        using var context = await NewContext();
+        var context = await NewContext();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var entry = await QueueFor(
             context,

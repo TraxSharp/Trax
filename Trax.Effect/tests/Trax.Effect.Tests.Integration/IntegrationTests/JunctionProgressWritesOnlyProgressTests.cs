@@ -53,7 +53,8 @@ public class JunctionProgressWritesOnlyProgressTests
         var counter = new SaveCounter();
         var provider = Build(counter, progress: true);
         await using var providerDisposal = provider.ConfigureAwait(false);
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (ThreeJunctionTrain)
             scope.ServiceProvider.GetRequiredService<IThreeJunctionTrain>();
 
@@ -74,7 +75,8 @@ public class JunctionProgressWritesOnlyProgressTests
     {
         var provider = Build(new SaveCounter(), progress: true);
         await using var providerDisposal = provider.ConfigureAwait(false);
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (WatchedTrain)scope.ServiceProvider.GetRequiredService<IWatchedTrain>();
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         WatchedTrain.Seen = null;
@@ -89,7 +91,8 @@ public class JunctionProgressWritesOnlyProgressTests
                 "the column is written before the junction runs"
             );
 
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var row = await context
             .Metadatas.AsNoTracking()
             .SingleAsync(m => m.Id == train.Metadata!.Id);
@@ -131,7 +134,8 @@ public class JunctionProgressWritesOnlyProgressTests
         var host = ProgressHost.Create(store);
         await using var hostDisposal = host.ConfigureAwait(false);
         Waits.Reset(expected: 1);
-        using var scope = host.Services.CreateScope();
+        var scope = host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train =
             (ServiceTrain<Unit, Unit>)
                 (object)scope.ServiceProvider.GetRequiredService<ICancelSiblingsTrain>();
@@ -159,7 +163,8 @@ public class JunctionProgressWritesOnlyProgressTests
     {
         var host = ProgressHost.Create(store);
         await using var hostDisposal = host.ConfigureAwait(false);
-        using var scope = host.Services.CreateScope();
+        var scope = host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (TracksThenFailsTrain)
             scope.ServiceProvider.GetRequiredService<ITracksThenFailsTrain>();
         var group = $"progress-failed-{Guid.NewGuid():N}";
@@ -210,7 +215,8 @@ public class JunctionProgressWritesOnlyProgressTests
         var host = ProgressHost.Create(store);
         await using var hostDisposal = host.ConfigureAwait(false);
         Waits.Reset(expected: waiting);
-        using var scope = host.Services.CreateScope();
+        var scope = host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train =
             (ServiceTrain<Unit, Unit>)(object)scope.ServiceProvider.GetRequiredService<TTrain>();
         using var cancel = new CancellationTokenSource();
@@ -240,7 +246,8 @@ public class JunctionProgressWritesOnlyProgressTests
         var counter = new SaveCounter();
         var provider = Build(counter, progress: false);
         await using var providerDisposal = provider.ConfigureAwait(false);
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (ThreeJunctionTrain)
             scope.ServiceProvider.GetRequiredService<IThreeJunctionTrain>();
 
@@ -628,7 +635,8 @@ public class JunctionProgressWritesOnlyProgressTests
         {
             public override async Task<Unit> Run(Unit input)
             {
-                using var context = (IDataContext)Factory.Create();
+                var context = (IDataContext)Factory.Create();
+                await using var contextDisposal = context.ConfigureAwait(false);
                 Seen = await context
                     .Metadatas.AsNoTracking()
                     .Where(m =>

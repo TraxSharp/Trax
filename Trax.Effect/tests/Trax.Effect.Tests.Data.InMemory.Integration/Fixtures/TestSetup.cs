@@ -9,7 +9,7 @@ public abstract class TestSetup
 {
     private ServiceProvider ServiceProvider { get; set; }
 
-    public IServiceScope Scope { get; private set; }
+    public AsyncServiceScope Scope { get; private set; }
 
     private ServiceCollection ServiceCollection { get; set; }
 
@@ -38,13 +38,13 @@ public abstract class TestSetup
     [SetUp]
     public virtual async Task TestSetUp()
     {
-        Scope = ServiceProvider.CreateScope();
+        Scope = ServiceProvider.CreateAsyncScope();
     }
 
     [TearDown]
     public async Task TestTearDown()
     {
-        Scope.Dispose();
+        await Scope.DisposeAsync().ConfigureAwait(false);
     }
 
     public abstract ServiceProvider ConfigureServices(IServiceCollection services);

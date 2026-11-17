@@ -38,10 +38,11 @@ public class RabbitMqReceiverRestartTests
     [Test]
     public async Task StartAsync_CalledAgain_ClosesTheConnectionTheFirstStartOpened()
     {
-        await using var receiver = new RabbitMqTrainEventReceiver(
+        var receiver = new RabbitMqTrainEventReceiver(
             Options(),
             NullLogger<RabbitMqTrainEventReceiver>.Instance
         );
+        await using var receiverDisposal = receiver.ConfigureAwait(false);
         await receiver.StartAsync((_, _) => Task.CompletedTask, CancellationToken.None);
         var first = ConnectionOf(receiver)!;
 
@@ -60,21 +61,26 @@ public class RabbitMqReceiverRestartTests
         // An exchange of another type under the same name makes the receiver's declare fail
         // after its connection is open.
         var factory = new ConnectionFactory { Uri = new Uri(AmqpUri) };
-        await using (var setup = await factory.CreateConnectionAsync())
-        await using (var channel = await setup.CreateChannelAsync())
+        var setup = await factory.CreateConnectionAsync();
+        await using (setup.ConfigureAwait(false))
         {
-            await channel.ExchangeDeclareAsync(
-                options.ExchangeName,
-                ExchangeType.Direct,
-                durable: false,
-                autoDelete: true
-            );
+            var channel = await setup.CreateChannelAsync();
+            await using (channel.ConfigureAwait(false))
+            {
+                await channel.ExchangeDeclareAsync(
+                    options.ExchangeName,
+                    ExchangeType.Direct,
+                    durable: false,
+                    autoDelete: true
+                );
+            }
         }
 
-        await using var receiver = new RabbitMqTrainEventReceiver(
+        var receiver = new RabbitMqTrainEventReceiver(
             options,
             NullLogger<RabbitMqTrainEventReceiver>.Instance
         );
+        await using var receiverDisposal = receiver.ConfigureAwait(false);
 
         var start = async () =>
             await receiver

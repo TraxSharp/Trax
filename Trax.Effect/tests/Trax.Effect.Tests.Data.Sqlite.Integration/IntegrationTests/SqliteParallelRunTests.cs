@@ -117,7 +117,8 @@ public class SqliteParallelRunTests
 
     private async Task<long> Run(long? replayDecisionsOf = null)
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train =
             (ServiceTrain<LiteParOrder, string>)
                 (object)scope.ServiceProvider.GetRequiredService<ILiteParAskEverywhereTrain>();
@@ -140,9 +141,10 @@ public class SqliteParallelRunTests
     private async Task<List<Models.RecordedDecision.RecordedDecision>> Recorded(long metadataId)
     {
         var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory
+        var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         return await context
             .RecordedDecisions.AsNoTracking()
             .Where(d => d.MetadataId == metadataId)
@@ -153,9 +155,10 @@ public class SqliteParallelRunTests
     private async Task<List<JunctionRun>> Rows(long metadataId)
     {
         var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory
+        var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         return await context
             .JunctionRuns.AsNoTracking()
             .ForRun(metadataId)

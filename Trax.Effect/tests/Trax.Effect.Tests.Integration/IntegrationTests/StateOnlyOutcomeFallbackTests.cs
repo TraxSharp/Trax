@@ -39,8 +39,10 @@ public class StateOnlyOutcomeFallbackTests
     public async Task An_output_the_store_refuses_still_records_Completed()
     {
         var store = new ContentRefusingStore();
-        await using var provider = Build(effects => effects.AddEffect(store.Factory));
-        using var scope = provider.CreateScope();
+        var provider = Build(effects => effects.AddEffect(store.Factory));
+        await using var providerDisposal = provider.ConfigureAwait(false);
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (UnwritableOutputTrain)
             scope.ServiceProvider.GetRequiredService<IUnwritableOutputTrain>();
 
@@ -62,8 +64,10 @@ public class StateOnlyOutcomeFallbackTests
     public async Task A_failure_whose_message_the_store_refuses_still_records_Failed()
     {
         var store = new ContentRefusingStore();
-        await using var provider = Build(effects => effects.AddEffect(store.Factory));
-        using var scope = provider.CreateScope();
+        var provider = Build(effects => effects.AddEffect(store.Factory));
+        await using var providerDisposal = provider.ConfigureAwait(false);
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (UnwritableFailureTrain)
             scope.ServiceProvider.GetRequiredService<IUnwritableFailureTrain>();
 
@@ -84,8 +88,10 @@ public class StateOnlyOutcomeFallbackTests
     public async Task An_input_the_store_refuses_still_records_the_run()
     {
         var store = new ContentRefusingStore();
-        await using var provider = Build(effects => effects.AddEffect(store.Factory));
-        using var scope = provider.CreateScope();
+        var provider = Build(effects => effects.AddEffect(store.Factory));
+        await using var providerDisposal = provider.ConfigureAwait(false);
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (EchoTrain)scope.ServiceProvider.GetRequiredService<IEchoTrain>();
 
         var output = await train.Run(Unwritable);
@@ -100,10 +106,10 @@ public class StateOnlyOutcomeFallbackTests
     [Test]
     public async Task A_throwing_effect_after_the_store_does_not_erase_the_saved_output()
     {
-        await using var provider = Build(effects =>
-            effects.AddEffect(new ThrowsOnOutcomeEffectFactory())
-        );
-        using var scope = provider.CreateScope();
+        var provider = Build(effects => effects.AddEffect(new ThrowsOnOutcomeEffectFactory()));
+        await using var providerDisposal = provider.ConfigureAwait(false);
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (UnwritableOutputTrain)
             scope.ServiceProvider.GetRequiredService<IUnwritableOutputTrain>();
 
@@ -125,10 +131,10 @@ public class StateOnlyOutcomeFallbackTests
     [Test]
     public async Task A_throwing_effect_after_the_store_does_not_erase_the_saved_failure()
     {
-        await using var provider = Build(effects =>
-            effects.AddEffect(new ThrowsOnOutcomeEffectFactory())
-        );
-        using var scope = provider.CreateScope();
+        var provider = Build(effects => effects.AddEffect(new ThrowsOnOutcomeEffectFactory()));
+        await using var providerDisposal = provider.ConfigureAwait(false);
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (UnwritableFailureTrain)
             scope.ServiceProvider.GetRequiredService<IUnwritableFailureTrain>();
 
@@ -146,11 +152,13 @@ public class StateOnlyOutcomeFallbackTests
     {
         var store = new ContentRefusingStore();
         var hook = new RecordingHook();
-        await using var provider = Build(
+        var provider = Build(
             effects => effects.AddEffect(store.Factory),
             services => services.AddSingleton<ITrainLifecycleHookFactory>(hook)
         );
-        using var scope = provider.CreateScope();
+        await using var providerDisposal = provider.ConfigureAwait(false);
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (UnwritableOutputTrain)
             scope.ServiceProvider.GetRequiredService<IUnwritableOutputTrain>();
 
@@ -166,11 +174,13 @@ public class StateOnlyOutcomeFallbackTests
     {
         var store = new ContentRefusingStore();
         var hook = new RecordingHook();
-        await using var provider = Build(
+        var provider = Build(
             effects => effects.AddEffect(store.Factory),
             services => services.AddSingleton<ITrainLifecycleHookFactory>(hook)
         );
-        using var scope = provider.CreateScope();
+        await using var providerDisposal = provider.ConfigureAwait(false);
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (UnwritableFailureTrain)
             scope.ServiceProvider.GetRequiredService<IUnwritableFailureTrain>();
 
@@ -202,7 +212,8 @@ public class StateOnlyOutcomeFallbackTests
     private static async Task<Metadata> PersistedRow(IServiceScope scope, long id)
     {
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         return await context
             .Metadatas.AsNoTracking()

@@ -36,7 +36,8 @@ public class SignalRConsecutiveRunTests
 
     private static async Task RunOnce(IServiceProvider services, string externalId)
     {
-        using var scope = services.CreateScope();
+        var scope = services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var runner = scope.ServiceProvider.GetRequiredService<ILifecycleHookRunner>();
         try
         {
@@ -54,8 +55,10 @@ public class SignalRConsecutiveRunTests
     [Test]
     public async Task TwoConsecutiveRuns_BothRunsEventsReachTheClient()
     {
-        await using var server = await SignalRTestServer.StartAsync(throughAddTrax: true);
-        await using var connection = server.CreateClient();
+        var server = await SignalRTestServer.StartAsync(throughAddTrax: true);
+        await using var serverDisposal = server.ConfigureAwait(false);
+        var connection = server.CreateClient();
+        await using var connectionDisposal = connection.ConfigureAwait(false);
 
         var received = new ConcurrentQueue<TraxClientEvent>();
         var secondRunArrived = new TaskCompletionSource(

@@ -37,7 +37,8 @@ public class SqliteEnsureSchemaCreatedTests
         services.AddDomainDataContext<TwoTableContext, TwoTableContext>(o =>
             o.UseSqlite($"Data Source={_dbPath}")
         );
-        await using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         await provider.EnsureSchemaCreatedAsync<OneTableContext>();
         Exec("INSERT INTO gadgets (name) VALUES ('kept');");

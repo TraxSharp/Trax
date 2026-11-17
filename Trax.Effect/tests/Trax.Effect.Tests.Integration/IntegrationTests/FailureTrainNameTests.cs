@@ -54,7 +54,8 @@ public class FailureTrainNameTests
     private async Task<TrainExceptionData> FailureData<TTrain>()
         where TTrain : IServiceTrain<Unit, Unit>
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<TTrain>();
 
         var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);

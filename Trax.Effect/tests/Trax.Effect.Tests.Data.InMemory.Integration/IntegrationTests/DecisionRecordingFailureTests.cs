@@ -33,17 +33,19 @@ public class DecisionRecordingFailureTests
     [Test]
     public async Task A_decision_that_cannot_be_written_fails_its_step_as_transient()
     {
-        await using var provider = DecisionTrains
+        var provider = DecisionTrains
             .Register(new ServiceCollection(), Decider)
             .AddSingleton(_ => new DecisionJournal(new DownFactory()))
             .AddTrax(trax =>
                 trax.AddEffects(effects => effects.UseInMemory().AddDecisionRecording())
             )
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         var decider = Decider.Use(new ScriptedDecider().Choose(Fulfilment.Standard));
         Ship.Ran = 0;
 
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (RouteOrder)scope.ServiceProvider.GetRequiredService<IRouteOrder>();
 
         var run = () => train.Run(new Order("down", 20m));
@@ -59,13 +61,15 @@ public class DecisionRecordingFailureTests
     [Test]
     public async Task A_replay_on_a_host_that_records_no_decisions_fails_the_run_as_permanent()
     {
-        await using var provider = DecisionTrains
+        var provider = DecisionTrains
             .Register(new ServiceCollection(), Decider)
             .AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory()))
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         var decider = Decider.Use(new ScriptedDecider().Choose(Fulfilment.Standard));
 
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (RouteOrder)scope.ServiceProvider.GetRequiredService<IRouteOrder>();
         var metadata = Metadata.Create(
             new CreateMetadata

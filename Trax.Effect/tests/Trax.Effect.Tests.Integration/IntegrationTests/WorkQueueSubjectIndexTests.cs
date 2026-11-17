@@ -45,7 +45,8 @@ public class WorkQueueSubjectIndexTests : TestSetup
     [Test]
     public async Task The_queued_behind_lookup_reads_the_queued_subject_index()
     {
-        using var context = (DbContext)DataContextFactory.Create();
+        var context = (DbContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var connection = (NpgsqlConnection)context.Database.GetDbConnection();
         await connection.OpenAsync();
         var transaction = await connection.BeginTransactionAsync();

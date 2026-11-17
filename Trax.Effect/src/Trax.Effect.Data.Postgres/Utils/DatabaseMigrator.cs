@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using DbUp;
 using DbUp.Engine;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 
 namespace Trax.Effect.Data.Postgres.Utils;
@@ -150,7 +151,10 @@ public static partial class DatabaseMigrator
                     if (result.Successful)
                         break;
 
-                    if (!IsRetryable(result.Error) || attempt >= policy.Attempts)
+                    if (
+                        !await IsRetryableAsync(result.Error).ConfigureAwait(false)
+                        || attempt >= policy.Attempts
+                    )
                         ExceptionDispatchInfo.Capture(result.Error).Throw();
 
                     Console.WriteLine(
@@ -211,8 +215,9 @@ public static partial class DatabaseMigrator
     /// gave up waiting for a lock, or a unique index a script builds met a duplicate, which the
     /// script's own clean-up resolves when it runs again.
     /// </summary>
-    internal static bool IsRetryable(Exception? error)
+    internal static async Task<bool> IsRetryableAsync(Exception? error)
     {
+        var scriptIndexNames = await ScriptIndexNamesAsync().ConfigureAwait(false);
         for (var current = error; current is not null; current = current.InnerException)
             switch (current)
             {
@@ -222,7 +227,7 @@ public static partial class DatabaseMigrator
                 {
                     SqlState: PostgresErrorCodes.UniqueViolation,
                     ConstraintName: { } index,
-                } when ScriptIndexNames.Contains(index):
+                } when scriptIndexNames.Contains(index):
                     return true;
             }
         return false;
@@ -250,7 +255,10 @@ public static partial class DatabaseMigrator
                 JOIN pg_namespace n ON n.oid = c.relnamespace
                 WHERE n.nspname = 'trax' AND NOT i.indisvalid AND c.relname = ANY(@names);
                 """;
-            command.Parameters.AddWithValue("names", ScriptIndexNames.ToArray());
+            command.Parameters.AddWithValue(
+                "names",
+                (await ScriptIndexNamesAsync().ConfigureAwait(false)).ToArray()
+            );
             var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
             await using var readerDisposal = reader.ConfigureAwait(false);
             while (await reader.ReadAsync().ConfigureAwait(false))
@@ -269,9 +277,13 @@ public static partial class DatabaseMigrator
     /// The name of every index a shipped migration script creates, read from the scripts
     /// themselves, lower-cased as Postgres folds an unquoted name.
     /// </summary>
-    internal static IReadOnlySet<string> ScriptIndexNames { get; } = ReadScriptIndexNames();
+    internal static Task<IReadOnlySet<string>> ScriptIndexNamesAsync() => ScriptIndexNames.Value;
 
-    private static System.Collections.Generic.HashSet<string> ReadScriptIndexNames()
+    private static readonly Lazy<Task<IReadOnlySet<string>>> ScriptIndexNames = new(
+        ReadScriptIndexNamesAsync
+    );
+
+    private static async Task<IReadOnlySet<string>> ReadScriptIndexNamesAsync()
     {
         var assembly = typeof(AssemblyMarker).Assembly;
         var names = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
@@ -279,9 +291,11 @@ public static partial class DatabaseMigrator
         {
             if (!resource.EndsWith(".sql", StringComparison.Ordinal))
                 continue;
-            using var stream = assembly.GetManifestResourceStream(resource)!;
+            var stream = assembly.GetManifestResourceStream(resource).NotNull();
+            await using var streamDisposal = stream.ConfigureAwait(false);
             using var reader = new StreamReader(stream);
-            foreach (Match match in CreateIndexName().Matches(reader.ReadToEnd()))
+            var script = await reader.ReadToEndAsync().ConfigureAwait(false);
+            foreach (Match match in CreateIndexName().Matches(script))
                 names.Add(match.Groups["name"].Value.Trim('"').ToLowerInvariant());
         }
         return names;

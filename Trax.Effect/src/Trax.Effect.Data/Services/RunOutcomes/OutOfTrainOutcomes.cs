@@ -175,7 +175,8 @@ internal static class OutOfTrainOutcomes
         CancellationToken ct
     )
     {
-        using var scope = services.CreateScope();
+        var scope = services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
 
         // Transient, and disposed with the scope. No hooks or no store: nothing to publish.
         var hooks = scope.ServiceProvider.GetService<ILifecycleHookRunner>();
@@ -184,7 +185,8 @@ internal static class OutOfTrainOutcomes
             return;
 
         Metadata? run;
-        using (var context = await factory.CreateDbContextAsync(ct).ConfigureAwait(false))
+        var context = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using (context.ConfigureAwait(false))
             run = await context
                 .Metadatas.AsNoTracking()
                 .FirstOrDefaultAsync(m => m.Id == runId, ct)

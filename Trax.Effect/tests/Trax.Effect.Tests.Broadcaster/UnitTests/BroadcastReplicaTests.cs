@@ -22,8 +22,10 @@ public class BroadcastReplicaTests
     public async Task TwoReplicasOfOneApp_EachReceivesTheOthersEvent_AndDropsItsOwn()
     {
         var bus = new InMemoryBus();
-        await using var a = await Replica.StartAsync(bus);
-        await using var b = await Replica.StartAsync(bus);
+        var a = await Replica.StartAsync(bus);
+        await using var aDisposal = a.ConfigureAwait(false);
+        var b = await Replica.StartAsync(bus);
+        await using var bDisposal = b.ConfigureAwait(false);
 
         await a.Hook.OnCompleted(CompletedRun("from-a"), CancellationToken.None);
         await b.Hook.OnCompleted(CompletedRun("from-b"), CancellationToken.None);
@@ -36,8 +38,10 @@ public class BroadcastReplicaTests
     public async Task TwoReplicasOfOneApp_KeepTheirExecutorForDisplay()
     {
         var bus = new InMemoryBus();
-        await using var a = await Replica.StartAsync(bus);
-        await using var b = await Replica.StartAsync(bus);
+        var a = await Replica.StartAsync(bus);
+        await using var aDisposal = a.ConfigureAwait(false);
+        var b = await Replica.StartAsync(bus);
+        await using var bDisposal = b.ConfigureAwait(false);
 
         await a.Hook.OnCompleted(CompletedRun("from-a"), CancellationToken.None);
 
@@ -50,8 +54,10 @@ public class BroadcastReplicaTests
     public async Task ChangeSignalsFromAnotherReplica_AreDelivered()
     {
         var bus = new InMemoryBus();
-        await using var a = await Replica.StartAsync(bus);
-        await using var b = await Replica.StartAsync(bus);
+        var a = await Replica.StartAsync(bus);
+        await using var aDisposal = a.ConfigureAwait(false);
+        var b = await Replica.StartAsync(bus);
+        await using var bDisposal = b.ConfigureAwait(false);
 
         await a.Sink.FlushAsync(
             [Trax.Effect.Services.ChangeSignal.ChangeDomain.WorkQueue],
@@ -69,7 +75,8 @@ public class BroadcastReplicaTests
     public async Task AnEventWithNoInstanceId_IsFromAnotherHost()
     {
         var bus = new InMemoryBus();
-        await using var a = await Replica.StartAsync(bus);
+        var a = await Replica.StartAsync(bus);
+        await using var aDisposal = a.ConfigureAwait(false);
 
         // A publisher on an older version stamps no instance id. It cannot be this host.
         await bus.PublishAsync(

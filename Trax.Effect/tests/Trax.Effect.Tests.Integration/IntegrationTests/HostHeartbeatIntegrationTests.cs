@@ -41,7 +41,8 @@ public class HostHeartbeatIntegrationTests : TestSetup
     [SetUp]
     public async Task ClearHostRows()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         await context.HostHeartbeats.ExecuteDeleteAsync();
     }
 
@@ -53,7 +54,8 @@ public class HostHeartbeatIntegrationTests : TestSetup
 
     private async Task<List<HostRow>> Rows()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         return await context
             .HostHeartbeats.AsNoTracking()
             .OrderBy(h => h.InstanceId)
@@ -104,7 +106,8 @@ public class HostHeartbeatIntegrationTests : TestSetup
     [Test]
     public async Task Beat_DeletesRowsWhoseLastBeatIsADayOld_AndKeepsTheRest()
     {
-        await using (var context = (IDataContext)DataContextFactory.Create())
+        var context = (IDataContext)DataContextFactory.Create();
+        await using (context.ConfigureAwait(false))
         {
             context.HostHeartbeats.Add(
                 Row("gone", Start - HostRow.Retention - TimeSpan.FromSeconds(1))

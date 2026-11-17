@@ -31,7 +31,8 @@ public class TrainEventReceiverServiceTests
     [TearDown]
     public async Task TearDown()
     {
-        _serviceProvider?.Dispose();
+        if (_serviceProvider is not null)
+            await _serviceProvider.DisposeAsync().ConfigureAwait(false);
         if (_receiver is IAsyncDisposable disposable)
             await disposable.DisposeAsync();
     }
@@ -183,7 +184,8 @@ public class TrainEventReceiverServiceTests
         services.AddTransient<ITrainEventHandler>(_ => handler1);
         services.AddTransient<ITrainEventHandler>(_ => handler2);
         services.AddLogging();
-        using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
 
         var started = Started(_receiver);
 

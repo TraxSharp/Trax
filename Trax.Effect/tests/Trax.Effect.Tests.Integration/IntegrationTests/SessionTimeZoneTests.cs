@@ -35,7 +35,8 @@ public class SessionTimeZoneTests : TestSetup
     [Test]
     public async Task No_trax_column_is_a_timestamp_without_time_zone()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var columns = await ((DbContext)context)
             .Database.SqlQueryRaw<string>(
                 """
@@ -64,7 +65,8 @@ public class SessionTimeZoneTests : TestSetup
             manifestId,
             entryId;
 
-        using (var context = (IDataContext)DataContextFactory.Create())
+        var context = (IDataContext)DataContextFactory.Create();
+        await using (context.ConfigureAwait(false))
         {
             var db = (DbContext)context;
             await db.Database.OpenConnectionAsync();
@@ -98,7 +100,8 @@ public class SessionTimeZoneTests : TestSetup
             entryId = entry.Id;
         }
 
-        using var readBack = (IDataContext)DataContextFactory.Create();
+        var readBack = (IDataContext)DataContextFactory.Create();
+        await using var readBackDisposal = readBack.ConfigureAwait(false);
 
         var storedGroup = await readBack
             .ManifestGroups.AsNoTracking()
@@ -121,7 +124,8 @@ public class SessionTimeZoneTests : TestSetup
     [Test]
     public async Task A_defaulted_created_at_is_now_whatever_the_session_zone()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var db = (DbContext)context;
         await db.Database.OpenConnectionAsync();
         await db.Database.ExecuteSqlRawAsync("SET TIME ZONE 'America/New_York'");

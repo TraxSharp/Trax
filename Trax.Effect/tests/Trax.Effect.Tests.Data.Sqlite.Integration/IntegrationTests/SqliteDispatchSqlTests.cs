@@ -24,7 +24,8 @@ public class SqliteDispatchSqlTests : TestSetup
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var dialect = Scope.ServiceProvider.GetRequiredService<ISqlDialect>();
 
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var entry = WorkQueue.Create(
             new CreateWorkQueue { TrainName = "Sqlite.Claim", InputTypeName = "Sqlite.Input" }
         );
@@ -36,7 +37,7 @@ public class SqliteDispatchSqlTests : TestSetup
                 "SELECT CAST(status AS TEXT) AS \"Value\" FROM work_queue"
             )
             .ToListAsync();
-        TestContext.Out.WriteLine($"stored status: {string.Join(',', raw)}");
+        await TestContext.Out.WriteLineAsync($"stored status: {string.Join(',', raw)}");
 
         var claimed = await context
             .WorkQueues.FromSqlRaw(dialect.ClaimWorkQueueEntry(), entry.Id)
@@ -55,7 +56,8 @@ public class SqliteDispatchSqlTests : TestSetup
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var dialect = Scope.ServiceProvider.GetRequiredService<ISqlDialect>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         // One entry for the subject is dispatched with its run still pending.
         var metadata = Trax.Effect.Models.Metadata.Metadata.Create(
@@ -133,7 +135,8 @@ public class SqliteDispatchSqlTests : TestSetup
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var dialect = Scope.ServiceProvider.GetRequiredService<ISqlDialect>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var metadata = Trax.Effect.Models.Metadata.Metadata.Create(
             new Trax.Effect.Models.Metadata.DTOs.CreateMetadata
@@ -192,7 +195,8 @@ public class SqliteDispatchSqlTests : TestSetup
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var dialect = Scope.ServiceProvider.GetRequiredService<ISqlDialect>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var finished = Trax.Effect.Models.Metadata.Metadata.Create(
             new Trax.Effect.Models.Metadata.DTOs.CreateMetadata
@@ -244,7 +248,8 @@ public class SqliteDispatchSqlTests : TestSetup
     public async Task A_row_written_without_a_failure_class_reads_and_filters_as_unclassified()
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var externalId = Guid.NewGuid().ToString("N");
 
         // What a row written before the column existed looks like: the migration default.

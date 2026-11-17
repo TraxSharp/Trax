@@ -876,7 +876,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         {
             try
             {
-                check.ThrowIfReplaced();
+                await check.ThrowIfReplacedAsync().ConfigureAwait(false);
             }
             catch (InvalidOperationException e)
             {

@@ -15,9 +15,10 @@ public class WorkQueuePromotion(IDataContextProviderFactory contextFactory) : IW
     /// <inheritdoc />
     public async Task<bool> PromoteAsync(long workQueueId, CancellationToken cancellationToken)
     {
-        using var context = await contextFactory
+        var context = await contextFactory
             .CreateDbContextAsync(cancellationToken)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var promoted = await UpdateAsync(
                 context,
@@ -48,9 +49,10 @@ public class WorkQueuePromotion(IDataContextProviderFactory contextFactory) : IW
     /// <inheritdoc />
     public async Task<int> CancelStaleAsync(TimeSpan olderThan, CancellationToken cancellationToken)
     {
-        using var context = await contextFactory
+        var context = await contextFactory
             .CreateDbContextAsync(cancellationToken)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         // Deleted before this pass cancels anything, so an entry is only ever deleted by a pass
         // after the one that cancelled it, however late the sweep runs.
@@ -71,9 +73,10 @@ public class WorkQueuePromotion(IDataContextProviderFactory contextFactory) : IW
         CancellationToken cancellationToken
     )
     {
-        using var context = await contextFactory
+        var context = await contextFactory
             .CreateDbContextAsync(cancellationToken)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         return await UpdateAsync(context, Stale(olderThan), confirm: true, cancellationToken)
             .ConfigureAwait(false);

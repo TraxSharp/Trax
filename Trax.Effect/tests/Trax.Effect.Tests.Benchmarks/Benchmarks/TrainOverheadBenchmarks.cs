@@ -61,7 +61,8 @@ public class TrainOverheadBenchmarks
     [Benchmark(Description = "EffectTrain_NoEffects_Add1")]
     public async Task<int> EffectTrain_NoEffects_AddOne()
     {
-        using var scope = _noEffectsProvider.CreateScope();
+        var scope = _noEffectsProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IEffectAddOneTrain>();
         return await train.Run(0).ConfigureAwait(false);
     }
@@ -69,7 +70,8 @@ public class TrainOverheadBenchmarks
     [Benchmark(Description = "EffectTrain_InMemory_Add1")]
     public async Task<int> EffectTrain_InMemory_AddOne()
     {
-        using var scope = _inMemoryProvider.CreateScope();
+        var scope = _inMemoryProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IEffectAddOneTrain>();
         return await train.Run(0).ConfigureAwait(false);
     }
@@ -85,7 +87,8 @@ public class TrainOverheadBenchmarks
     [Benchmark(Description = "EffectTrain_NoEffects_Add3")]
     public async Task<int> EffectTrain_NoEffects_AddThree()
     {
-        using var scope = _noEffectsProvider.CreateScope();
+        var scope = _noEffectsProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IEffectAddThreeTrain>();
         return await train.Run(0).ConfigureAwait(false);
     }
@@ -93,7 +96,8 @@ public class TrainOverheadBenchmarks
     [Benchmark(Description = "EffectTrain_InMemory_Add3")]
     public async Task<int> EffectTrain_InMemory_AddThree()
     {
-        using var scope = _inMemoryProvider.CreateScope();
+        var scope = _inMemoryProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IEffectAddThreeTrain>();
         return await train.Run(0).ConfigureAwait(false);
     }
@@ -109,7 +113,8 @@ public class TrainOverheadBenchmarks
     [Benchmark(Description = "EffectTrain_NoEffects_Transform")]
     public async Task<PersonEntity> EffectTrain_NoEffects_Transform()
     {
-        using var scope = _noEffectsProvider.CreateScope();
+        var scope = _noEffectsProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IEffectTransformTrain>();
         return await train.Run(_samplePerson).ConfigureAwait(false);
     }
@@ -117,7 +122,8 @@ public class TrainOverheadBenchmarks
     [Benchmark(Description = "EffectTrain_InMemory_Transform")]
     public async Task<PersonEntity> EffectTrain_InMemory_Transform()
     {
-        using var scope = _inMemoryProvider.CreateScope();
+        var scope = _inMemoryProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IEffectTransformTrain>();
         return await train.Run(_samplePerson).ConfigureAwait(false);
     }
@@ -133,7 +139,8 @@ public class TrainOverheadBenchmarks
     [Benchmark(Description = "EffectTrain_NoEffects_SimulatedIO")]
     public async Task<int> EffectTrain_NoEffects_SimulatedIo()
     {
-        using var scope = _noEffectsProvider.CreateScope();
+        var scope = _noEffectsProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IEffectSimulatedIoTrain>();
         return await train.Run(0).ConfigureAwait(false);
     }
@@ -141,7 +148,8 @@ public class TrainOverheadBenchmarks
     [Benchmark(Description = "EffectTrain_InMemory_SimulatedIO")]
     public async Task<int> EffectTrain_InMemory_SimulatedIo()
     {
-        using var scope = _inMemoryProvider.CreateScope();
+        var scope = _inMemoryProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IEffectSimulatedIoTrain>();
         return await train.Run(0).ConfigureAwait(false);
     }

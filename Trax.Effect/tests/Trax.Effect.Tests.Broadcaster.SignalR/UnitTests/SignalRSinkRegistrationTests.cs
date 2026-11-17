@@ -137,7 +137,8 @@ public class SignalRSinkRegistrationTests
         // SignalR-only topology: no UseRabbitMq. The no-op broadcaster + receiver
         // make UseBroadcaster()'s hosted service + BroadcastLifecycleHook resolvable
         // so the host can start without a real transport.
-        await using var sp = BuildProvider();
+        var sp = BuildProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
 
         sp.GetRequiredService<ITrainEventBroadcaster>().Should().NotBeNull();
         sp.GetRequiredService<ITrainEventReceiver>().Should().NotBeNull();
@@ -149,7 +150,8 @@ public class SignalRSinkRegistrationTests
         // BroadcastLifecycleHook calls ITrainEventBroadcaster.PublishAsync on every
         // local lifecycle event. In a SignalR-only topology the resolved broadcaster
         // is the no-op; that path must complete successfully (no throw, no hang).
-        await using var sp = BuildProvider();
+        var sp = BuildProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
         var broadcaster = sp.GetRequiredService<ITrainEventBroadcaster>();
 
         var message = new TrainLifecycleEventMessage(
@@ -176,7 +178,8 @@ public class SignalRSinkRegistrationTests
         // TrainEventReceiverService calls StartAsync on the receiver. In a SignalR-only
         // topology, the resolved receiver is the no-op; Start/Stop/Dispose must all
         // complete without throwing.
-        await using var sp = BuildProvider();
+        var sp = BuildProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
         var receiver = sp.GetRequiredService<ITrainEventReceiver>();
         var handlerCalled = false;
         Func<TrainLifecycleEventMessage, CancellationToken, Task> handler = (_, _) =>
@@ -210,7 +213,8 @@ public class SignalRSinkRegistrationTests
             )
         );
 
-        await using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
 
         sp.GetRequiredService<ITrainEventBroadcaster>().Should().NotBeNull();
         sp.GetRequiredService<ITrainEventReceiver>().Should().NotBeNull();
@@ -232,7 +236,8 @@ public class SignalRSinkRegistrationTests
 
         builder.AddEffects(effects => effects.UseBroadcaster(b => b.UseSignalRHub()));
 
-        await using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
 
         sp.GetServices<IHostedService>()
             .Should()

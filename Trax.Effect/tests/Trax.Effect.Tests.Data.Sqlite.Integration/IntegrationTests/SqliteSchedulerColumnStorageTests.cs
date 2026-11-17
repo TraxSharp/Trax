@@ -29,7 +29,8 @@ public class SqliteSchedulerColumnStorageTests : TestSetup
     public async Task A_manifests_failure_window_and_owner_are_stored()
     {
         long id;
-        using (var context = (IDataContext)DataContextFactory.Create())
+        var context = (IDataContext)DataContextFactory.Create();
+        await using (context.ConfigureAwait(false))
         {
             var manifest = await SaveManifest(
                 context,
@@ -43,7 +44,8 @@ public class SqliteSchedulerColumnStorageTests : TestSetup
             id = manifest.Id;
         }
 
-        using var readBack = (IDataContext)DataContextFactory.Create();
+        var readBack = (IDataContext)DataContextFactory.Create();
+        await using var readBackDisposal = readBack.ConfigureAwait(false);
         var stored = await readBack.Manifests.AsNoTracking().SingleAsync(m => m.Id == id);
 
         stored.FailureWindowSeconds.Should().Be(3600);
@@ -55,7 +57,8 @@ public class SqliteSchedulerColumnStorageTests : TestSetup
     {
         long off,
             on;
-        using (var context = (IDataContext)DataContextFactory.Create())
+        var context = (IDataContext)DataContextFactory.Create();
+        await using (context.ConfigureAwait(false))
         {
             off = (
                 await SaveManifest(
@@ -75,7 +78,8 @@ public class SqliteSchedulerColumnStorageTests : TestSetup
             ).Id;
         }
 
-        using var readBack = (IDataContext)DataContextFactory.Create();
+        var readBack = (IDataContext)DataContextFactory.Create();
+        await using var readBackDisposal = readBack.ConfigureAwait(false);
         (await readBack.Manifests.AsNoTracking().SingleAsync(m => m.Id == off))
             .ReplayDecisionsOnRetry.Should()
             .BeFalse();
@@ -87,7 +91,8 @@ public class SqliteSchedulerColumnStorageTests : TestSetup
     [Test]
     public async Task A_manifest_row_written_without_the_column_replays_decisions_on_retry()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var column = await ((DbContext)context)
             .Database.SqlQueryRaw<string>(
                 "SELECT dflt_value AS Value FROM pragma_table_info('manifest') "
@@ -101,7 +106,8 @@ public class SqliteSchedulerColumnStorageTests : TestSetup
     [Test]
     public async Task The_database_refuses_a_failure_window_of_zero()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var manifest = await SaveManifest(
             context,
             new CreateManifest { Name = typeof(SqliteSchedulerColumnStorageTests) }
@@ -124,7 +130,8 @@ public class SqliteSchedulerColumnStorageTests : TestSetup
     [Test]
     public async Task Scheduler_overrides_are_stored_as_json()
     {
-        using (var context = (IDataContext)DataContextFactory.Create())
+        var context = (IDataContext)DataContextFactory.Create();
+        await using (context.ConfigureAwait(false))
         {
             await context.SchedulerConfigs.ExecuteDeleteAsync();
             var row = new SchedulerConfig { UpdatedAt = DateTime.UtcNow };
@@ -134,7 +141,8 @@ public class SqliteSchedulerColumnStorageTests : TestSetup
             await context.SaveChanges(CancellationToken.None);
         }
 
-        using var readBack = (IDataContext)DataContextFactory.Create();
+        var readBack = (IDataContext)DataContextFactory.Create();
+        await using var readBackDisposal = readBack.ConfigureAwait(false);
         var stored = await readBack.SchedulerConfigs.AsNoTracking().SingleAsync();
 
         stored.OverriddenSettings.Should().BeEquivalentTo("MaxActiveJobs", "FailureCountWindow");

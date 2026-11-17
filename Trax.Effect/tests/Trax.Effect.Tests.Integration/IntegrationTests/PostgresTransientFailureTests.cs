@@ -68,7 +68,8 @@ public class PostgresTransientFailureTests : TestSetup
             Password = "trax123",
             Timeout = 2,
         };
-        await using var connection = new NpgsqlConnection(unreachable.ConnectionString);
+        var connection = new NpgsqlConnection(unreachable.ConnectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
 
         var failure = await Capture(() => connection.OpenAsync());
 
@@ -78,7 +79,8 @@ public class PostgresTransientFailureTests : TestSetup
     [Test]
     public async Task A_query_against_a_missing_table_is_not_transient()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var failure = await Capture(() =>
             ((DbContext)context).Database.ExecuteSqlRawAsync("SELECT 1 FROM trax.no_such_table")

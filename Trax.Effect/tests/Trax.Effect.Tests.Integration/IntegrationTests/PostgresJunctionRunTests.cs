@@ -106,7 +106,8 @@ public class PostgresJunctionRunTests
     {
         var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
         long manifestId;
-        using (var context = await factory.CreateDbContextAsync(CancellationToken.None))
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using (context.ConfigureAwait(false))
         {
             var group = new ManifestGroup
             {
@@ -195,7 +196,8 @@ public class PostgresJunctionRunTests
     public async Task Each_row_stores_the_id_the_trains_graph_draws_for_its_step()
     {
         ChainGraph graph;
-        using (var scope = _provider.CreateScope())
+        var scope = _provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var fresh = (PgStepsTrain)scope.ServiceProvider.GetRequiredService<IPgStepsTrain>();
             graph = ChainGraph.From(
@@ -230,7 +232,8 @@ public class PostgresJunctionRunTests
 
     private async Task<long> Run(long? manifestId = null)
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (PgStepsTrain)scope.ServiceProvider.GetRequiredService<IPgStepsTrain>();
         var input = new PgItem(3);
         var metadata = Metadata.Create(
@@ -252,9 +255,10 @@ public class PostgresJunctionRunTests
     private async Task<List<JunctionRun>> Rows(long metadataId)
     {
         var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory
+        var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         return await context
             .JunctionRuns.AsNoTracking()
             .ForRun(metadataId)
@@ -265,9 +269,10 @@ public class PostgresJunctionRunTests
     private async Task Delete(long metadataId)
     {
         var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory
+        var context = await factory
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         await context
             .Metadatas.Where(m => m.Id == metadataId)
             .ExecuteDeleteAsync()

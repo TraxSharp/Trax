@@ -50,7 +50,8 @@ public class ExcludedOutputHookCopyTests
     [Test]
     public async Task An_excluded_output_is_not_serialized_in_full_for_the_hooks()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IBigFetchTrain>();
 
         await train.Run(Unit.Default);

@@ -22,8 +22,9 @@ public class PostgresLeaderLockTests : TestSetup
     {
         var name = $"leader-{Guid.NewGuid():N}";
 
-        using var context = (DbContext)
+        var context = (DbContext)
             await DataContextFactory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var transaction = await context.Database.BeginTransactionAsync();
         await using var transactionDisposal = transaction.ConfigureAwait(false);
 
@@ -43,16 +44,18 @@ public class PostgresLeaderLockTests : TestSetup
         var first = $"leader-{Guid.NewGuid():N}";
         var second = $"leader-{Guid.NewGuid():N}";
 
-        using var holder = (DbContext)
+        var holder = (DbContext)
             await DataContextFactory.CreateDbContextAsync(CancellationToken.None);
+        await using var holderDisposal = holder.ConfigureAwait(false);
         var holderTransaction = await holder.Database.BeginTransactionAsync();
         await using var holderTransactionDisposal = holderTransaction.ConfigureAwait(false);
         (await holder.Database.SqlQuery<bool>(Dialect.TryAcquireLeaderLock(first)).SingleAsync())
             .Should()
             .BeTrue();
 
-        using var other = (DbContext)
+        var other = (DbContext)
             await DataContextFactory.CreateDbContextAsync(CancellationToken.None);
+        await using var otherDisposal = other.ConfigureAwait(false);
         var otherTransaction = await other.Database.BeginTransactionAsync();
         await using var otherTransactionDisposal = otherTransaction.ConfigureAwait(false);
         (await other.Database.SqlQuery<bool>(Dialect.TryAcquireLeaderLock(second)).SingleAsync())

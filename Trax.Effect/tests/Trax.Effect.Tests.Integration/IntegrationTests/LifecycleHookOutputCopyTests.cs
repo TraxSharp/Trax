@@ -150,7 +150,8 @@ public class LifecycleHookOutputCopyTests
         await using var providerDisposal = provider.ConfigureAwait(false);
         arrange?.Invoke(provider);
 
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<TTrain>();
         await train.Run(rows).ConfigureAwait(false);
 

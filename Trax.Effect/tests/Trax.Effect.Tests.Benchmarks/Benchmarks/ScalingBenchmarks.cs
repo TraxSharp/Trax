@@ -51,7 +51,8 @@ public class ScalingBenchmarks
     [Benchmark(Description = "EffectTrain_NoEffects")]
     public async Task<int> EffectTrain_NoEffects()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return JunctionCount switch
         {
             1 => await scope

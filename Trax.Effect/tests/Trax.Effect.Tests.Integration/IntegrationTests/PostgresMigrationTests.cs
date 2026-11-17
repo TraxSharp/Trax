@@ -3,6 +3,7 @@ using DbUp;
 using DbUp.Postgresql;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Utils;
 using Trax.Effect.Tests.Integration.Fixtures;
 
@@ -242,7 +243,7 @@ public class PostgresMigrationTests
                 )
                 .ConfigureAwait(false);
             journaled.Should().OnlyHaveUniqueItems("each script is applied once");
-            journaled.Should().HaveCount(EmbeddedScripts().Count);
+            journaled.Should().HaveCount((await EmbeddedScripts().ConfigureAwait(false)).Count);
         });
     }
 
@@ -287,7 +288,11 @@ public class PostgresMigrationTests
             await using var connectionDisposal = connection.ConfigureAwait(false);
             await connection.OpenAsync().ConfigureAwait(false);
 
-            foreach (var (name, script) in EmbeddedScripts().Where(s => Number(s.Name) >= 46))
+            foreach (
+                var (name, script) in (await EmbeddedScripts().ConfigureAwait(false)).Where(s =>
+                    Number(s.Name) >= 46
+                )
+            )
             {
                 var statements = new PostgresqlConnectionManager(connectionString)
                     .SplitScriptIntoCommands(script)
@@ -993,7 +998,10 @@ public class PostgresMigrationTests
                         .ConfigureAwait(false)
                 )
                     .Should()
-                    .HaveCount(EmbeddedScripts().Count, "every script ran once the lock was free");
+                    .HaveCount(
+                        (await EmbeddedScripts().ConfigureAwait(false)).Count,
+                        "every script ran once the lock was free"
+                    );
             }
         );
     }
@@ -1036,16 +1044,16 @@ public class PostgresMigrationTests
     }
 
     [Test]
-    public void The_scripts_index_names_include_every_concurrently_built_index()
+    public async Task The_scripts_index_names_include_every_concurrently_built_index()
     {
-        DatabaseMigrator
-            .ScriptIndexNames.Should()
+        (await DatabaseMigrator.ScriptIndexNamesAsync().ConfigureAwait(false))
+            .Should()
             .Contain(["ix_work_queue_subject_queued", "ix_metadata_external_id"])
             .And.NotContain(name => name.EndsWith("_ccnew"));
     }
 
     [Test]
-    public void A_duplicate_met_while_building_a_scripts_unique_index_runs_the_scripts_again()
+    public async Task A_duplicate_met_while_building_a_scripts_unique_index_runs_the_scripts_again()
     {
         static PostgresException Error(string sqlState, string? constraint) =>
             new(
@@ -1056,35 +1064,56 @@ public class PostgresMigrationTests
                 constraintName: constraint
             );
 
-        DatabaseMigrator
-            .IsRetryable(
-                Error(PostgresErrorCodes.UniqueViolation, "ix_work_queue_unique_queued_replay")
-            )
-            .Should()
-            .BeTrue("migration 062 clears a duplicate queued replay before it builds the index");
-        DatabaseMigrator
-            .IsRetryable(
-                new InvalidOperationException(
-                    "wrapped",
+        (
+            await DatabaseMigrator
+                .IsRetryableAsync(
                     Error(PostgresErrorCodes.UniqueViolation, "ix_work_queue_unique_queued_replay")
                 )
-            )
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .BeTrue("migration 062 clears a duplicate queued replay before it builds the index");
+        (
+            await DatabaseMigrator
+                .IsRetryableAsync(
+                    new InvalidOperationException(
+                        "wrapped",
+                        Error(
+                            PostgresErrorCodes.UniqueViolation,
+                            "ix_work_queue_unique_queued_replay"
+                        )
+                    )
+                )
+                .ConfigureAwait(false)
+        )
             .Should()
             .BeTrue();
-        DatabaseMigrator
-            .IsRetryable(Error(PostgresErrorCodes.LockNotAvailable, constraint: null))
+        (
+            await DatabaseMigrator
+                .IsRetryableAsync(Error(PostgresErrorCodes.LockNotAvailable, constraint: null))
+                .ConfigureAwait(false)
+        )
             .Should()
             .BeTrue();
-        DatabaseMigrator
-            .IsRetryable(Error(PostgresErrorCodes.UniqueViolation, "some_consumer_index"))
+        (
+            await DatabaseMigrator
+                .IsRetryableAsync(Error(PostgresErrorCodes.UniqueViolation, "some_consumer_index"))
+                .ConfigureAwait(false)
+        )
             .Should()
             .BeFalse("only an index a script builds again is retried");
-        DatabaseMigrator
-            .IsRetryable(Error(PostgresErrorCodes.UniqueViolation, constraint: null))
+        (
+            await DatabaseMigrator
+                .IsRetryableAsync(Error(PostgresErrorCodes.UniqueViolation, constraint: null))
+                .ConfigureAwait(false)
+        )
             .Should()
             .BeFalse();
-        DatabaseMigrator
-            .IsRetryable(Error(PostgresErrorCodes.SyntaxError, constraint: null))
+        (
+            await DatabaseMigrator
+                .IsRetryableAsync(Error(PostgresErrorCodes.SyntaxError, constraint: null))
+                .ConfigureAwait(false)
+        )
             .Should()
             .BeFalse();
     }
@@ -1160,23 +1189,33 @@ public class PostgresMigrationTests
     }
 
     /// <summary>The embedded Postgres scripts, by file name, in the order DbUp runs them.</summary>
-    private static List<(string Name, string Script)> EmbeddedScripts()
+    private static async Task<List<(string Name, string Script)>> EmbeddedScripts()
     {
         var assembly = typeof(Trax.Effect.Data.Postgres.Utils.DatabaseMigrator).Assembly;
-        return assembly
-            .GetManifestResourceNames()
-            .Where(name => name.EndsWith(".sql"))
-            .Order(StringComparer.Ordinal)
-            .Select(name =>
-            {
-                using var stream = assembly.GetManifestResourceStream(name)!;
-                using var reader = new StreamReader(stream);
-                return (
-                    name[(name.IndexOf(".Migrations.") + ".Migrations.".Length)..],
-                    reader.ReadToEnd()
-                );
-            })
-            .ToList();
+        var scripts = new List<(string Name, string Script)>();
+        foreach (
+            var name in assembly
+                .GetManifestResourceNames()
+                .Where(name => name.EndsWith(".sql", StringComparison.Ordinal))
+                .Order(StringComparer.Ordinal)
+        )
+        {
+            var stream = assembly.GetManifestResourceStream(name).NotNull();
+            await using var streamDisposal = stream.ConfigureAwait(false);
+            using var reader = new StreamReader(stream);
+            scripts.Add(
+                (
+                    name[
+                        (
+                            name.IndexOf(".Migrations.", StringComparison.Ordinal)
+                            + ".Migrations.".Length
+                        )..
+                    ],
+                    await reader.ReadToEndAsync().ConfigureAwait(false)
+                )
+            );
+        }
+        return scripts;
     }
 
     private static int Number(string fileName) => int.Parse(fileName[..fileName.IndexOf('_')]);

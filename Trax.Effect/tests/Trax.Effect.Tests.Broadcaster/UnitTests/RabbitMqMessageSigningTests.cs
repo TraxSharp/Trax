@@ -293,9 +293,10 @@ public class RabbitMqMessageSigningTests
     public async Task A_receiver_without_a_key_refuses_to_start_before_connecting()
     {
         // The URI points nowhere: the refusal must come before any connection attempt.
-        await using var receiver = new RabbitMqTrainEventReceiver(
+        var receiver = new RabbitMqTrainEventReceiver(
             new RabbitMqBroadcasterOptions { ConnectionString = "amqp://trax:trax123@127.0.0.1:1/" }
         );
+        await using var receiverDisposal = receiver.ConfigureAwait(false);
 
         var act = () => receiver.StartAsync((_, _) => Task.CompletedTask, CancellationToken.None);
 
@@ -341,12 +342,14 @@ public class RabbitMqMessageSigningTests
             return;
         }
 
-        await using var _ = connection;
+        var _ = connection;
+        await using var _Disposal = _.ConfigureAwait(false);
         var options = Signed($"trax.test.signing.{Guid.NewGuid():N}");
-        await using var receiver = new RabbitMqTrainEventReceiver(
+        var receiver = new RabbitMqTrainEventReceiver(
             options,
             NullLogger<RabbitMqTrainEventReceiver>.Instance
         );
+        await using var receiverDisposal = receiver.ConfigureAwait(false);
         var received = new ConcurrentQueue<string>();
         var gotSigned = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously
@@ -363,10 +366,12 @@ public class RabbitMqMessageSigningTests
         );
 
         // On one channel, in order: the two the receiver must drop, then the one it must pass on.
-        await using var channel = await connection.CreateChannelAsync();
+        var channel = await connection.CreateChannelAsync();
+        await using var channelDisposal = channel.ConfigureAwait(false);
         await RawPublish(channel, options.ExchangeName, "unsigned", key: null);
         await RawPublish(channel, options.ExchangeName, "other-key", OtherKey);
-        await using (var broadcaster = new RabbitMqTrainEventBroadcaster(options))
+        var broadcaster = new RabbitMqTrainEventBroadcaster(options);
+        await using (broadcaster.ConfigureAwait(false))
         {
             await broadcaster.PublishAsync(Message("signed"), CancellationToken.None);
             await gotSigned.Task.WaitAsync(Timeout);

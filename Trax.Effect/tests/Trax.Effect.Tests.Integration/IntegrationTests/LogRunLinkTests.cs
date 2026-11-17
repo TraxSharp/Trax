@@ -62,7 +62,8 @@ public class LogRunLinkTests
     {
         var tag = Guid.NewGuid().ToString("N");
 
-        using (var scope = _provider.CreateScope())
+        var scope = _provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             await scope.ServiceProvider.GetRequiredService<IOuterTrain>().Run(tag);
         }
@@ -94,7 +95,8 @@ public class LogRunLinkTests
     {
         var tag = Guid.NewGuid().ToString("N");
 
-        using (var scope = _provider.CreateScope())
+        var scope = _provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             await scope.ServiceProvider.GetRequiredService<IProviderBuildingTrain>().Run(tag);
         }
@@ -130,7 +132,8 @@ public class LogRunLinkTests
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
         while (true)
         {
-            using var context = (IDataContext)factory.Create();
+            var context = (IDataContext)factory.Create();
+            await using var contextDisposal = context.ConfigureAwait(false);
             var rows = await context
                 .Logs.AsNoTracking()
                 .Where(l => l.Category == Category && l.Message.StartsWith(tag))

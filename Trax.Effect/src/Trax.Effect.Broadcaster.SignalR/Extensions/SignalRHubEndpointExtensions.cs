@@ -107,7 +107,11 @@ public static class SignalRHubEndpointExtensions
         // authorization fails where the hub is mapped rather than at the first connection.
         AuthorizationPolicy? fallback = null;
         if (!posture.AllowAnonymous)
-            fallback = ResolvePolicies(endpoints.ServiceProvider, posture, path);
+            // Mapping an endpoint is synchronous, so this waits. Every await in
+            // ResolvePoliciesAsync is ConfigureAwait(false), so it waits on no context of its own.
+            fallback = ResolvePoliciesAsync(endpoints.ServiceProvider, posture, path)
+                .GetAwaiter()
+                .GetResult();
 
         var hub = endpoints.MapHub<TraxTrainEventHub>(
             path,
@@ -183,7 +187,7 @@ public static class SignalRHubEndpointExtensions
     /// <see cref="IAuthorizationPolicyProvider"/> and refuses an unknown one. Returns the host's
     /// fallback policy, or <c>null</c> when it has none.
     /// </summary>
-    private static AuthorizationPolicy? ResolvePolicies(
+    private static async Task<AuthorizationPolicy?> ResolvePoliciesAsync(
         IServiceProvider services,
         TrainEventHubPosture posture,
         string path
@@ -198,7 +202,7 @@ public static class SignalRHubEndpointExtensions
 
         foreach (var name in posture.Policies)
         {
-            if (provider.GetPolicyAsync(name).GetAwaiter().GetResult() is null)
+            if (await provider.GetPolicyAsync(name).ConfigureAwait(false) is null)
             {
                 throw new InvalidOperationException(
                     $"MapTraxTrainEventHub() at {path} requires the authorization policy '{name}', "
@@ -208,7 +212,7 @@ public static class SignalRHubEndpointExtensions
             }
         }
 
-        return provider.GetFallbackPolicyAsync().GetAwaiter().GetResult();
+        return await provider.GetFallbackPolicyAsync().ConfigureAwait(false);
     }
 
     private const string DefaultPath = "/hubs/trax-events";

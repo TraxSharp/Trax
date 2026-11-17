@@ -82,7 +82,8 @@ public class ChangeSignalWindowTests
 
         var services = new ServiceCollection().AddLogging();
         services.AddSingleton<IChangeSignalSink>(sink);
-        await using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var signal = new TraxChangeSignal(options);
         var coalescer = new ChangeSignalCoalescer(
@@ -140,7 +141,8 @@ public class ChangeSignalWindowTests
 
         var services = new ServiceCollection().AddLogging();
         services.AddSingleton<IChangeSignalSink>(sink);
-        await using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var signal = new TraxChangeSignal(options);
         var coalescer = new ChangeSignalCoalescer(
@@ -190,7 +192,8 @@ public class ChangeSignalWindowTests
 
         var services = new ServiceCollection().AddLogging();
         services.AddSingleton<IChangeSignalSink>(sink);
-        await using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var signal = new TraxChangeSignal(options);
         var coalescer = new ChangeSignalCoalescer(

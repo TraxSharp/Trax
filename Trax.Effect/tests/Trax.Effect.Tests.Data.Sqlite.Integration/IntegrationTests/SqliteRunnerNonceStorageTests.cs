@@ -33,7 +33,8 @@ public class SqliteRunnerNonceStorageTests : TestSetup
     [TearDown]
     public async Task DeleteNonces()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         await context.RunnerNonces.Where(n => _nonces.Contains(n.Nonce)).ExecuteDeleteAsync();
         _nonces.Clear();
     }
@@ -47,7 +48,8 @@ public class SqliteRunnerNonceStorageTests : TestSetup
 
     private async Task Insert(string nonce, DateTimeOffset expiresAt)
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         context.RunnerNonces.Add(new RunnerNonce { Nonce = nonce, ExpiresAt = expiresAt });
         await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
     }
@@ -60,7 +62,8 @@ public class SqliteRunnerNonceStorageTests : TestSetup
 
         await Insert(nonce, expiresAt);
 
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var stored = await context.RunnerNonces.AsNoTracking().SingleAsync(n => n.Nonce == nonce);
         stored
             .ExpiresAt.Should()
@@ -79,7 +82,8 @@ public class SqliteRunnerNonceStorageTests : TestSetup
         await Insert(expired, now.AddMinutes(-1));
         await Insert(live, now.AddMinutes(5));
 
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var mine = context.RunnerNonces.Where(n => _nonces.Contains(n.Nonce));
 
         (await mine.Where(n => n.ExpiresAt < now).Select(n => n.Nonce).ToListAsync())
@@ -152,7 +156,8 @@ public class SqliteRunnerNonceStorageTests : TestSetup
     [Test]
     public async Task Another_constraint_failure_is_not_a_unique_violation()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         // scheduler_config is a singleton: CHECK (id = 1). Id 2 fails that check, not a key, and
         // Sqlite reports it with the same primary code, SQLITE_CONSTRAINT, as a key conflict.
         context.SchedulerConfigs.Add(new SchedulerConfig { Id = 2 });

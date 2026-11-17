@@ -109,16 +109,18 @@ public class SqliteMigrationTests
     }
 
     [Test]
-    public void Migrate_RunTwice_IsIdempotent()
+    public async Task Migrate_RunTwice_IsIdempotent()
     {
         var dbPath = CreateTempDbPath();
         try
         {
-            DatabaseMigrator.Migrate($"Data Source={dbPath}").Wait();
+            await DatabaseMigrator.Migrate($"Data Source={dbPath}").ConfigureAwait(false);
 
-            var act = () => DatabaseMigrator.Migrate($"Data Source={dbPath}").Wait();
+            var act = () => DatabaseMigrator.Migrate($"Data Source={dbPath}");
 
-            act.Should().NotThrow("running migrations twice should be idempotent");
+            await act.Should()
+                .NotThrowAsync("running migrations twice should be idempotent")
+                .ConfigureAwait(false);
         }
         finally
         {
