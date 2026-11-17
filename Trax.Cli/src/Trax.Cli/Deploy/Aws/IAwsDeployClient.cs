@@ -82,6 +82,12 @@ internal interface IAwsDeployClient
     /// <summary>Turns off the user pool's deletion protection and deletes it; nothing when it does not exist.</summary>
     Task DeleteUserPoolAsync(string userPoolId, CancellationToken ct);
 
+    /// <summary>The network interfaces in <paramref name="vpcId"/>, whoever created them.</summary>
+    Task<IReadOnlyList<AwsNetworkInterface>> NetworkInterfacesAsync(
+        string vpcId,
+        CancellationToken ct
+    );
+
     Task<IReadOnlyList<AwsServiceState>> DescribeServicesAsync(
         string cluster,
         IReadOnlyList<string> services,
@@ -127,8 +133,19 @@ internal sealed record AwsTaskRequest(
     string TaskDefinition,
     string Container,
     IReadOnlyList<string> Subnets,
-    string SecurityGroup,
+    IReadOnlyList<string> SecurityGroups,
     bool AssignPublicIp
+);
+
+/// <summary>
+/// A network interface in a VPC: <paramref name="Type"/> is EC2's interface type (<c>interface</c>,
+/// <c>nat_gateway</c>, ...), and <paramref name="SecurityGroups"/> the ids of the groups it wears.
+/// </summary>
+internal sealed record AwsNetworkInterface(
+    string Id,
+    string Type,
+    string Description,
+    IReadOnlyList<string> SecurityGroups
 );
 
 internal sealed record AwsTaskResult(int? ExitCode, string? StoppedReason, string LogStream);

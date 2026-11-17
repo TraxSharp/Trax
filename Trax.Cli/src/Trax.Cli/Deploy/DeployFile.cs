@@ -131,8 +131,17 @@ internal sealed partial class DeployFile
         return env;
     }
 
-    /// <summary>The CloudFormation stack an environment deploys to: <c>&lt;app&gt;-&lt;environment&gt;</c>.</summary>
+    /// <summary>
+    /// The environment's name on AWS, <c>&lt;app&gt;-&lt;environment&gt;</c>: its runtime stack, and the prefix of its
+    /// secrets, images, log groups and records.
+    /// </summary>
     public string StackName(string environment) => $"{App}-{environment}";
+
+    /// <summary>
+    /// The stack holding the environment's network, database, secrets and sign-in, beneath its runtime:
+    /// <c>&lt;app&gt;-&lt;environment&gt;-base</c>.
+    /// </summary>
+    public string FoundationStackName(string environment) => $"{StackName(environment)}-base";
 
     /// <summary>How many copies of <paramref name="service"/> run in <paramref name="environment"/>.</summary>
     public int Count(DeployEnvironment environment, string service) =>

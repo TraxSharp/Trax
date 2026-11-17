@@ -736,9 +736,14 @@ and so is a `compose.yaml` trax did not write.
 
 ### `--target aws`
 
-`trax deploy --env <name>` deploys one environment of `trax.deploy.json` to AWS, as the CloudFormation stack
-`<app>-<name>`. An environment's name is lower-case letters and digits only, so no two apps share a stack name;
-trax also refuses a stack whose `trax:app` tag names another app, or that has none. Credentials come from the
+`trax deploy --env <name>` deploys one environment of `trax.deploy.json` to AWS, as two CloudFormation stacks: the
+foundation `<app>-<name>-base` (the network, security groups, the database and its secret, the Cognito pool) and the
+runtime `<app>-<name>` on top of it (the load balancer, CloudFront in `try`, the ECS cluster, roles, tasks and
+services). The runtime reads what the foundation creates through parameters trax fills from the foundation's
+outputs, not CloudFormation exports, so the foundation can change its database or network under a running app. An
+environment's name is lower-case letters and digits only, so no two apps share a stack name; trax also refuses a
+stack whose `trax:app` tag names another app, or that has none, and one deployed before the split into two stacks
+(destroy it and deploy again). Credentials come from the
 standard AWS chain (a profile, SSO, the environment, a role); trax stores none. Nothing beyond the .NET SDK is
 needed: the stack is CloudFormation that trax generates, and the images are built and pushed with
 `dotnet publish -t:PublishContainer`.
@@ -773,40 +778,43 @@ A deploy:
 1. refuses before anything is created when a listed secret has no value, or a host reports something the stack
    cannot give it (runs kept anywhere but Postgres, RabbitMQ, more than one API service, an API with no health
    check, more than one copy of the API or the scheduler);
-2. pushes each service's image to the ECR repository `trax/<stack>/<service>`, tagged with the time and the commit;
-3. creates or updates the stack with the migrate task on the new image, while the services stay where they are
-   (a new stack's, and a service the stack does not run yet, at zero);
+2. pushes each service's image to the ECR repository `trax/<app>-<name>/<service>`, tagged with the time and the commit;
+3. creates or updates the foundation, then the runtime with the migrate task on the new image, while the services
+   stay where they are (a new stack's, and a service the stack does not run yet, at zero);
 4. runs the migrate task (`--trax-migrate`) and stops if it does not exit 0;
 5. rolls every service onto the new image at its count with the ECS circuit breaker on, which rolls a version back
    if it never gets healthy, and prints the address.
 
 Every security group replaces the default allow-all egress: the services reach HTTPS and the database, the
 database reaches nothing, and only the load balancer takes traffic from outside, on 443 and 80 in production and
-from CloudFront alone in `try`. The services connect to the database with `SSL Mode=VerifyFull`, checking its
+from CloudFront alone in `try`. The database admits only the foundation's database client group, which every task
+wears beside its own. The services connect to the database with `SSL Mode=VerifyFull`, checking its
 certificate against the Amazon RDS CA bundle that `Trax.Effect.Data.Postgres` puts in every image at
 `/app/trax/rds-global-bundle.pem`. Secrets reach a task by reference: the database password from the secret the stack
-generates (never rotated, so a running task does not lose it), each app secret from `<stack>/app/<NAME>`.
+generates (never rotated, so a running task does not lose it), each app secret from `<app>-<name>/app/<NAME>`.
 
 In `try`, CloudFront talks to the load balancer over plain HTTP, since the load balancer has no certificate
 without a domain. That hop is inside AWS's network but not encrypted, and the app sees `http` as the scheme. Use it
 to evaluate, not for data you would not send unencrypted.
 
 ```bash
-trax deploy plan --env production        # write .trax/deploy/aws/<stack>.template.json, count what it creates and its idle cost
+trax deploy plan --env production        # write both stacks' templates to .trax/deploy/aws/, count what each creates and the idle cost
 trax deploy secret set Stripe__ApiKey --env production   # from standard input, or asked for without echo
 trax deploy secret list --env production
 trax deploy --env production
 trax deploy status --env production
 trax deploy logs hub --env production --follow          # or migrate
-trax deploy destroy --env production     # asks for the stack's name; --delete-data also deletes the user pool, images and secrets
+trax deploy destroy --env production     # asks you to type <app>-<name>; --delete-data also deletes the user pool, images and secrets
 ```
 
-`destroy` turns a production database's deletion protection off, then deletes the stack; the database leaves a
-final snapshot, which RDS keeps until you delete it. A secret `--delete-data` deleted can be recovered for seven days, and
+`destroy` deletes the runtime, then turns a production database's deletion protection off and deletes the
+foundation; the database leaves a final snapshot, which RDS keeps until you delete it. It refuses, deleting
+nothing, when the foundation's network holds a network interface trax did not create (an EKS cluster's, say), and
+lists them. A secret `--delete-data` deleted can be recovered for seven days, and
 `secret set` restores it with the new value, so the environment can be deployed again the same day.
 
 A production Cognito user pool outlives `destroy`, with its users, their MFA and their groups. `destroy` records
-its id in the SSM parameter `/<stack>/user-pool` and prints it with the number of users in it, and the next deploy
+its id in the SSM parameter `/<app>-<name>/user-pool` and prints it with the number of users in it, and the next deploy
 of that environment signs in against that pool instead of creating one, so the `sub` claims stored with the data
 still match. With `--delete-data`, `destroy` deletes the pool, every user in it, and the record. A `try`
 environment's pool is deleted with its stack.
