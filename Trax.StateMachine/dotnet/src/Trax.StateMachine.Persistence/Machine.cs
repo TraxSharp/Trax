@@ -494,7 +494,9 @@ public abstract class Machine<TState, TTrigger> : IMachine, IMachineInternals
             binding.Trigger,
             binding.To,
             (userKey, id) => EffectClaimKey.ForUser(binding.KeyPrefix, userKey, id),
-            receiptKey: "receipt"
+            receiptKey: "receipt",
+            // The container's clock, and the system's for a container that registered none.
+            timeProvider: services.GetService<TimeProvider>() ?? TimeProvider.System
         );
     }
 }

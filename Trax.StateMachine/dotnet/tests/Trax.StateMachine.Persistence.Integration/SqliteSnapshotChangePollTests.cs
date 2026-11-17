@@ -88,7 +88,7 @@ public class SqliteSnapshotChangePollTests
         try
         {
             // The first change is a reload, once the poll has taken its baseline: every write after it is reported.
-            await listening.Task.WaitAsync(HearWithin, CancellationToken.None);
+            await listening.Task.WaitAsync(HearWithin, TimeProvider.System, CancellationToken.None);
 
             var id = Guid.NewGuid();
             await host.SeedDraft(User, id, TestTurnstile.InitialJson);
@@ -172,7 +172,7 @@ public class SqliteSnapshotChangePollTests
 
         try
         {
-            await listening.Task.WaitAsync(HearWithin, CancellationToken.None);
+            await listening.Task.WaitAsync(HearWithin, TimeProvider.System, CancellationToken.None);
             foreach (var id in new[] { otherId, watchedId })
                 using (var scope = host.Scope())
                     (
@@ -242,7 +242,7 @@ public class SqliteSnapshotChangePollTests
                 CancellationToken.None
             );
             await listening
-                .Task.WaitAsync(HearWithin, CancellationToken.None)
+                .Task.WaitAsync(HearWithin, TimeProvider.System, CancellationToken.None)
                 .ConfigureAwait(false);
             return (stop, reading);
         }
@@ -254,8 +254,8 @@ public class SqliteSnapshotChangePollTests
 
             await first.CancelAsync();
             await firstReading;
-            var deadline = DateTime.UtcNow + HearWithin;
-            while (listener.IsPolling && DateTime.UtcNow < deadline)
+            var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + HearWithin;
+            while (listener.IsPolling && TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
                 // allowed-delay: polls until the listener's loop has ended.
                 await Task.Delay(50, CancellationToken.None);
             listener
@@ -294,8 +294,8 @@ public class SqliteSnapshotChangePollTests
             listener.IsPolling.Should().BeTrue("a watch is open");
 
             await watch.DisposeAsync();
-            var deadline = DateTime.UtcNow + HearWithin;
-            while (listener.IsPolling && DateTime.UtcNow < deadline)
+            var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + HearWithin;
+            while (listener.IsPolling && TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
                 // allowed-delay: polls until the listener's loop has ended.
                 await Task.Delay(50);
             listener

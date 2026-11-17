@@ -74,7 +74,9 @@ public class ClientSyncTests
         var first = await Next(server);
         first.Trigger.Should().Be("Begin");
         first.Answer.SetResult(ServerAnswer.Of(At(2, "Details")));
-        (await begin.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+        (await begin.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .BeOfType<SendOutcome.Confirmed>();
 
         var update = await Next(server);
         update.Trigger.Should().Be("Update");
@@ -83,7 +85,7 @@ public class ClientSyncTests
         next.Trigger.Should().Be("Next");
         next.Answer.SetResult(ServerAnswer.Of(At(4, "Review", Filled())));
 
-        var outcome = await sync.WaitAsync(Wait);
+        var outcome = await sync.WaitAsync(Wait, TimeProvider.System);
         outcome.Should().BeOfType<SyncOutcome.Synced>().Which.Snapshot.Revision.Should().Be(4);
         controller.View.Unsaved.Should().BeFalse();
     }
@@ -104,7 +106,7 @@ public class ClientSyncTests
             sent.Answer.SetResult(ServerAnswer.Of(At(revision, "Start")));
         }
 
-        (await sync.WaitAsync(Wait)).Should().BeOfType<SyncOutcome.Exceeded>();
+        (await sync.WaitAsync(Wait, TimeProvider.System)).Should().BeOfType<SyncOutcome.Exceeded>();
         server.Events.Reader.TryRead(out _).Should().BeFalse();
         controller.View.Unsaved.Should().BeTrue();
     }
@@ -125,7 +127,7 @@ public class ClientSyncTests
         next.Trigger.Should().Be("Next");
         next.Answer.SetResult(ServerAnswer.Of(At(3, "Review", Filled())));
 
-        (await sync.WaitAsync(Wait)).Should().BeOfType<SyncOutcome.Synced>();
+        (await sync.WaitAsync(Wait, TimeProvider.System)).Should().BeOfType<SyncOutcome.Synced>();
     }
 
     [Test]
@@ -137,7 +139,7 @@ public class ClientSyncTests
 
         var outcome = await controller
             .SyncToAsync("Sent", fields: null, ["Next", "Send"])
-            .WaitAsync(Wait);
+            .WaitAsync(Wait, TimeProvider.System);
 
         outcome.Should().Be(new SyncOutcome.Invalid("Send", Target: null));
         server.Events.Reader.TryRead(out _).Should().BeFalse();
@@ -155,7 +157,7 @@ public class ClientSyncTests
         (await Next(server)).Trigger.Should().Be("Begin");
         controller.Dispose();
 
-        (await sync.WaitAsync(Wait))
+        (await sync.WaitAsync(Wait, TimeProvider.System))
             .Should()
             .BeOfType<SyncOutcome.Failed>()
             .Which.Problem.Code.Should()
@@ -163,7 +165,11 @@ public class ClientSyncTests
     }
 
     private static async Task<HandServer.Sent> Next(HandServer server) =>
-        await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait).ConfigureAwait(false);
+        await server
+            .Events.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System)
+            .ConfigureAwait(false);
 
     private static ServerMachineController Open(HandServer server, IMachinePredictor? predictor) =>
         new(

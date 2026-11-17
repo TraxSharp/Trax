@@ -26,6 +26,6 @@ public sealed record TraxClientOptions
     /// <summary>The clock the resubscribe delays run on; the system's when null.</summary>
     public TimeProvider? Time { get; init; }
 
-    // Where each resubscribe wait is drawn from, a number from 0 to 1; Random.Shared when null. A test pins it.
+    // Where each resubscribe wait is drawn from, a number from 0 to 1; the system's random numbers when null. A test pins it.
     internal Func<double>? Random { get; init; }
 }

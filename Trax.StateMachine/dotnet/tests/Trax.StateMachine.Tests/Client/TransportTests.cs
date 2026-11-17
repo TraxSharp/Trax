@@ -308,7 +308,7 @@ public class TransportTests
         read.IsCompleted.Should().BeFalse();
         time.Advance(TimeSpan.FromMilliseconds(1));
 
-        var answered = () => read.WaitAsync(TimeSpan.FromSeconds(10));
+        var answered = () => read.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
         (await answered.Should().ThrowAsync<HttpRequestException>()).WithMessage(
             "*within 30 seconds*"
         );
@@ -586,10 +586,10 @@ public class TransportTests
             new JsonObject { ["id"] = "changed-1", ["variables"] = new JsonObject() },
             sink
         );
-        var error = await sink.Failed.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var error = await sink.Failed.Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
 
         error.Message.Should().Contain("larger than 1024");
-        await host.WaitAsync(TimeSpan.FromSeconds(10));
+        await host.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
     }
 
     // The server half of the opening handshake (RFC 6455), so a test needs no web host.

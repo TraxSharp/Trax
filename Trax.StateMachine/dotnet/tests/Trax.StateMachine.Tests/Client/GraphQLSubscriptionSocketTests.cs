@@ -104,7 +104,7 @@ public class GraphQLSubscriptionSocketTests
 
         (await throwing.Take(2)).Should().Equal("next", "error");
         (await throwing.Failed.Task).Message.Should().Be("handler bug");
-        (await completed.Task.WaitAsync(Wait)).Should().Be("1");
+        (await completed.Task.WaitAsync(Wait, TimeProvider.System)).Should().Be("1");
         (await healthy.Take(3)).Should().Equal("started", "next", "next");
     }
 
@@ -157,8 +157,10 @@ public class GraphQLSubscriptionSocketTests
 
         using var subscription = socket.Subscribe(Payload, sink);
 
-        (await sink.Failed.Task.WaitAsync(Wait)).Should().BeAssignableTo<WebSocketException>();
-        await redirected.WaitAsync(Wait);
+        (await sink.Failed.Task.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .BeAssignableTo<WebSocketException>();
+        await redirected.WaitAsync(Wait, TimeProvider.System);
         // negative-wait: a followed redirect would connect to elsewhere within this window.
         await Task.Delay(200);
         elsewhere.Pending().Should().BeFalse();
@@ -212,7 +214,9 @@ public class GraphQLSubscriptionSocketTests
 
         using var subscription = socket.Subscribe(Payload, sink);
 
-        (await sink.Failed.Task.WaitAsync(Wait)).Should().NotBeOfType<SocketClosedException>();
+        (await sink.Failed.Task.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .NotBeOfType<SocketClosedException>();
     }
 
     [Test]
@@ -240,7 +244,7 @@ public class GraphQLSubscriptionSocketTests
 
         using var subscription = socket.Subscribe(Payload, sink);
 
-        (await sink.Failed.Task.WaitAsync(Wait)).Should().NotBeNull();
+        (await sink.Failed.Task.WaitAsync(Wait, TimeProvider.System)).Should().NotBeNull();
     }
 
     [Test]
@@ -269,7 +273,7 @@ public class GraphQLSubscriptionSocketTests
 
         subscription.Dispose();
 
-        await dropped.Task.WaitAsync(Wait);
+        await dropped.Task.WaitAsync(Wait, TimeProvider.System);
     }
 
     [Test]
@@ -313,8 +317,12 @@ public class GraphQLSubscriptionSocketTests
 
         using var subscription = socket.Subscribe(Payload, sink);
 
-        (await sink.Failed.Task.WaitAsync(Wait)).Should().BeAssignableTo<WebSocketException>();
-        (await closed.Task.WaitAsync(Wait)).Should().Be((WebSocketCloseStatus)4400);
+        (await sink.Failed.Task.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .BeAssignableTo<WebSocketException>();
+        (await closed.Task.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .Be((WebSocketCloseStatus)4400);
     }
 
     [Test]
@@ -337,7 +345,7 @@ public class GraphQLSubscriptionSocketTests
 
         using var subscription = socket.Subscribe(Payload, sink);
 
-        var error = await sink.Failed.Task.WaitAsync(Wait);
+        var error = await sink.Failed.Task.WaitAsync(Wait, TimeProvider.System);
         error.Should().BeOfType<SubscriptionErrorException>().Which.Errors.Should().BeEmpty();
         error.Message.Should().Contain("ended the subscription with an error");
     }
@@ -367,7 +375,7 @@ public class GraphQLSubscriptionSocketTests
 
         using var subscription = socket.Subscribe(Payload, sink);
 
-        var closed = (await sink.Failed.Task.WaitAsync(Wait))
+        var closed = (await sink.Failed.Task.WaitAsync(Wait, TimeProvider.System))
             .Should()
             .BeOfType<SocketClosedException>()
             .Subject;
@@ -388,7 +396,7 @@ public class GraphQLSubscriptionSocketTests
 
         using var subscription = socket.Subscribe(Payload, sink);
 
-        (await sink.Failed.Task.WaitAsync(Wait))
+        (await sink.Failed.Task.WaitAsync(Wait, TimeProvider.System))
             .Should()
             .NotBeOfType<SocketClosedException>("a 502 is a host that may be back soon");
     }
@@ -450,7 +458,7 @@ public class GraphQLSubscriptionSocketTests
         (await kept.Take(1)).Should().Equal("started");
         held.Dispose();
 
-        var messages = await received.Task.WaitAsync(Wait);
+        var messages = await received.Task.WaitAsync(Wait, TimeProvider.System);
         messages
             .Where(m =>
                 string.Equals(
@@ -486,8 +494,12 @@ public class GraphQLSubscriptionSocketTests
 
         await socket.DisposeAsync();
 
-        (await closed.Task.WaitAsync(Wait)).Should().Be(WebSocketCloseStatus.NormalClosure);
-        (await sink.Failed.Task.WaitAsync(Wait)).Should().BeOfType<SocketUnavailableException>();
+        (await closed.Task.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .Be(WebSocketCloseStatus.NormalClosure);
+        (await sink.Failed.Task.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .BeOfType<SocketUnavailableException>();
     }
 
     [Test]
@@ -539,6 +551,8 @@ public class GraphQLSubscriptionSocketTests
 
         using var subscription = socket.Subscribe(Payload, sink);
 
-        (await sink.Failed.Task.WaitAsync(Wait)).Should().BeOfType<SocketUnavailableException>();
+        (await sink.Failed.Task.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .BeOfType<SocketUnavailableException>();
     }
 }

@@ -52,6 +52,7 @@ internal sealed class SnapshotWatchHub(
     ISnapshotChangeListener listener,
     IDataContextProviderFactory contexts,
     IEnumerable<IMachine> machines,
+    TimeProvider timeProvider,
     ILogger<SnapshotWatchHub>? logger = null
 ) : IHostedService, IAsyncDisposable, IDisposable
 {
@@ -346,7 +347,7 @@ internal sealed class SnapshotWatchHub(
                     );
                     lock (_gate)
                         _pending.UnionWith(burst);
-                    await Task.Delay(RetryDelay, stoppingToken).ConfigureAwait(false);
+                    await Task.Delay(RetryDelay, timeProvider, stoppingToken).ConfigureAwait(false);
                     _wake.Writer.TryWrite(item: true);
                 }
             }
@@ -361,13 +362,13 @@ internal sealed class SnapshotWatchHub(
     // (a writer's quick succession of events, or a flood of forged ones) costs one read of it.
     private async Task Settle(CancellationToken stoppingToken)
     {
-        var started = Stopwatch.GetTimestamp();
-        while (Stopwatch.GetElapsedTime(started) < CoalesceLimit)
+        var started = timeProvider.GetTimestamp();
+        while (timeProvider.GetElapsedTime(started) < CoalesceLimit)
         {
             long before;
             lock (_gate)
                 before = _hints;
-            await Task.Delay(CoalesceWindow, stoppingToken).ConfigureAwait(false);
+            await Task.Delay(CoalesceWindow, timeProvider, stoppingToken).ConfigureAwait(false);
             lock (_gate)
                 if (_hints == before)
                     return;

@@ -83,7 +83,10 @@ public class MachineStreamTests
         var time = new TimerLog();
         var (socket, messages, stream) = Follow(time: time);
         using var following = stream;
-        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var first = await socket
+            .Subscriptions.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
         var refusal = new SocketClosedException(
             string.Create(
                 CultureInfo.InvariantCulture,
@@ -95,7 +98,10 @@ public class MachineStreamTests
 
         first.Sink.Error(refusal);
 
-        var message = await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var message = await messages
+            .Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
         message.Should().Be(new StreamMessage.Refused(code, refusal.Message));
         // Subscribing again would wait on a timer first: none was started.
         time.Delays.Should().BeEmpty();
@@ -108,14 +114,20 @@ public class MachineStreamTests
         var time = new TimerLog();
         var (socket, messages, stream) = Follow(time: time);
         using var following = stream;
-        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var first = await socket
+            .Subscriptions.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
         var disposed = new SocketUnavailableException(
             "The socket was disposed: it follows no more subscriptions."
         );
 
         first.Sink.Error(disposed);
 
-        var message = await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var message = await messages
+            .Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
         message
             .Should()
             .Be(new StreamMessage.Refused(ClientProblemCodes.TransportError, disposed.Message));
@@ -129,13 +141,19 @@ public class MachineStreamTests
     [TestCase(4500)]
     public async Task A_socket_closed_any_other_way_is_subscribed_again(int closeStatus)
     {
-        var (socket, messages, stream) = Follow();
+        var (socket, messages, stream) = Follow(time: TimeProvider.System);
         using var following = stream;
-        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var first = await socket
+            .Subscriptions.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
 
         first.Sink.Error(new SocketClosedException("The socket was closed.", closeStatus));
 
-        var second = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var second = await socket
+            .Subscriptions.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
         second.Should().NotBeSameAs(first);
         first.Disposed.Should().BeTrue();
         messages.Reader.TryRead(out _).Should().BeFalse();
@@ -170,15 +188,18 @@ public class MachineStreamTests
         var time = new TimerLog();
         var (socket, messages, stream) = Follow(time: time);
         using var following = stream;
-        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var first = await socket
+            .Subscriptions.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
 
         first.Push((JsonObject)JsonNode.Parse($$"""{"data":{{data}}}""").NotNull());
         first.Push(Changed(2));
 
-        (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait))
+        (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System))
             .Should()
             .BeOfType<StreamMessage.Reload>();
-        (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait))
+        (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System))
             .Should()
             .BeOfType<StreamMessage.Changed>()
             .Which.Snapshot.Revision.Should()
@@ -192,9 +213,12 @@ public class MachineStreamTests
     [Test]
     public async Task A_revision_a_javascript_host_writes_as_a_whole_number_with_a_fraction_of_zero_is_read()
     {
-        var (socket, messages, stream) = Follow();
+        var (socket, messages, stream) = Follow(time: TimeProvider.System);
         using var following = stream;
-        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var first = await socket
+            .Subscriptions.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
 
         first.Push(
             (JsonObject)
@@ -205,7 +229,9 @@ public class MachineStreamTests
                     .NotNull()
         );
 
-        var changed = (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait))
+        var changed = (
+            await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System)
+        )
             .Should()
             .BeOfType<StreamMessage.Changed>()
             .Which;
@@ -220,9 +246,12 @@ public class MachineStreamTests
     [TestCase("7.0")]
     public async Task A_row_id_written_as_a_whole_number_is_read_as_its_decimal_text(string rowId)
     {
-        var (socket, messages, stream) = Follow();
+        var (socket, messages, stream) = Follow(time: TimeProvider.System);
         using var following = stream;
-        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var first = await socket
+            .Subscriptions.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
 
         first.Push(
             (JsonObject)
@@ -237,7 +266,7 @@ public class MachineStreamTests
                     .NotNull()
         );
 
-        (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait))
+        (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System))
             .Should()
             .BeOfType<StreamMessage.Changed>()
             .Which.Snapshot.RowId.Should()
@@ -263,11 +292,17 @@ public class MachineStreamTests
         var time = new TimerLog();
         var (socket, messages, stream) = Follow(time: time);
         using var following = stream;
-        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var first = await socket
+            .Subscriptions.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
 
         first.Push(Errors(error));
 
-        var message = await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var message = await messages
+            .Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
         message.Should().BeOfType<StreamMessage.Refused>().Which.Code.Should().Be(code);
         // Subscribing again would wait on a timer first: none was started.
         time.Delays.Should().BeEmpty();
@@ -285,13 +320,19 @@ public class MachineStreamTests
         var time = new TimerLog();
         var (socket, messages, stream) = Follow(time: time);
         using var following = stream;
-        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var first = await socket
+            .Subscriptions.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
 
         first.Sink.Error(
             new SubscriptionErrorException((JsonArray)Errors(error)["errors"].NotNull().DeepClone())
         );
 
-        var message = await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var message = await messages
+            .Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
         message.Should().BeOfType<StreamMessage.Refused>().Which.Code.Should().Be(code);
         // Subscribing again would wait on a timer first: none was started.
         time.Delays.Should().BeEmpty();
@@ -301,9 +342,12 @@ public class MachineStreamTests
     [Test]
     public async Task An_error_whose_errors_cannot_be_read_is_subscribed_again()
     {
-        var (socket, messages, stream) = Follow();
+        var (socket, messages, stream) = Follow(time: TimeProvider.System);
         using var following = stream;
-        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var first = await socket
+            .Subscriptions.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
 
         first.Sink.Error(
             new SubscriptionErrorException(
@@ -314,7 +358,10 @@ public class MachineStreamTests
             )
         );
 
-        var second = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var second = await socket
+            .Subscriptions.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
         second.Should().NotBeSameAs(first);
         first.Disposed.Should().BeTrue();
         messages.Reader.TryRead(out _).Should().BeFalse();
@@ -323,14 +370,17 @@ public class MachineStreamTests
     [Test]
     public async Task A_resubscribe_whose_subscribe_throws_ends_the_stream_with_a_transport_error()
     {
-        var (socket, messages, stream) = Follow();
+        var (socket, messages, stream) = Follow(time: TimeProvider.System);
         using var following = stream;
-        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var first = await socket
+            .Subscriptions.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
         socket.Throws = new ObjectDisposedException("socket");
 
         first.Sink.Complete();
 
-        (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait))
+        (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System))
             .Should()
             .BeOfType<StreamMessage.Refused>()
             .Which.Code.Should()
@@ -343,11 +393,17 @@ public class MachineStreamTests
         var time = new TimerLog();
         var (socket, messages, stream) = Follow(terminal: ["CONNECTION_CHANGED"], time: time);
         using var following = stream;
-        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var first = await socket
+            .Subscriptions.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
 
         first.Push(Errors("CONNECTION_CHANGED"));
 
-        var message = await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var message = await messages
+            .Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
         message.Should().Be(new StreamMessage.Refused("CONNECTION_CHANGED", "Not allowed."));
         // Subscribing again would wait on a timer first: none was started.
         time.Delays.Should().BeEmpty();
@@ -363,14 +419,17 @@ public class MachineStreamTests
             throwOn: m => m is StreamMessage.Changed
         );
         using var following = stream;
-        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var first = await socket
+            .Subscriptions.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
 
         first.Push(Changed(1));
 
-        (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait))
+        (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System))
             .Should()
             .BeOfType<StreamMessage.Changed>();
-        (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait))
+        (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System))
             .Should()
             .BeOfType<StreamMessage.Refused>()
             .Which.Message.Should()
@@ -383,13 +442,22 @@ public class MachineStreamTests
     [Test]
     public async Task A_stream_error_with_any_other_code_is_subscribed_again()
     {
-        var (socket, messages, stream) = Follow(terminal: ["CONNECTION_CHANGED"]);
+        var (socket, messages, stream) = Follow(
+            terminal: ["CONNECTION_CHANGED"],
+            time: TimeProvider.System
+        );
         using var following = stream;
-        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var first = await socket
+            .Subscriptions.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
 
         first.Push(Errors("INTERNAL_SERVER_ERROR"));
 
-        var second = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var second = await socket
+            .Subscriptions.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
         second.Should().NotBeSameAs(first);
         messages.Reader.TryRead(out _).Should().BeFalse();
     }
@@ -418,16 +486,22 @@ public class MachineStreamTests
             time: time
         );
         using var following = stream;
-        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var first = await socket
+            .Subscriptions.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
         first.Push(Changed(1));
         first.Sink.Complete();
         time.Advance(TimeSpan.FromMilliseconds(10));
-        var second = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var second = await socket
+            .Subscriptions.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
 
         second.Push(Changed(1));
         second.Sink.Complete();
 
-        (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait))
+        (await messages.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System))
             .Should()
             .BeOfType<StreamMessage.Changed>();
         // The second wait is drawn from the hour's step, at least half of it.
@@ -440,18 +514,30 @@ public class MachineStreamTests
     public async Task A_stream_that_delivered_a_second_push_starts_the_delays_over()
     {
         var (socket, _, stream) = Follow(
-            delays: [TimeSpan.FromMilliseconds(10), TimeSpan.FromHours(1)]
+            delays: [TimeSpan.FromMilliseconds(10), TimeSpan.FromHours(1)],
+            time: TimeProvider.System
         );
         using var following = stream;
-        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var first = await socket
+            .Subscriptions.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
         first.Sink.Complete();
-        var second = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var second = await socket
+            .Subscriptions.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
 
         second.Push(Changed(1));
         second.Push(Changed(2));
         second.Sink.Complete();
 
-        (await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait))
+        (
+            await socket
+                .Subscriptions.Reader.ReadAsync()
+                .AsTask()
+                .WaitAsync(Wait, TimeProvider.System)
+        )
             .Should()
             .NotBeSameAs(second);
     }
@@ -473,7 +559,10 @@ public class MachineStreamTests
             random: () => drawn
         );
         using var following = stream;
-        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var first = await socket
+            .Subscriptions.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
 
         first.Sink.Complete();
         time.Delays.Should().Equal(TimeSpan.FromMilliseconds(milliseconds));
@@ -481,7 +570,12 @@ public class MachineStreamTests
         socket.Subscriptions.Reader.TryRead(out _).Should().BeFalse();
         time.Advance(TimeSpan.FromMilliseconds(1));
 
-        (await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait))
+        (
+            await socket
+                .Subscriptions.Reader.ReadAsync()
+                .AsTask()
+                .WaitAsync(Wait, TimeProvider.System)
+        )
             .Should()
             .NotBeSameAs(first);
     }
@@ -491,7 +585,10 @@ public class MachineStreamTests
     {
         var time = new FakeTimeProvider();
         var (socket, _, stream) = Follow(delays: [TimeSpan.FromSeconds(1)], time: time);
-        var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var first = await socket
+            .Subscriptions.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
 
         first.Sink.Complete();
         var ended = PendingTimer(stream).NotNull();
@@ -499,7 +596,7 @@ public class MachineStreamTests
         var second = await socket
             .Subscriptions.Reader.ReadAsync(CancellationToken.None)
             .AsTask()
-            .WaitAsync(Wait, CancellationToken.None);
+            .WaitAsync(Wait, TimeProvider.System, CancellationToken.None);
         second.Sink.Complete();
         var pending = PendingTimer(stream).NotNull();
         stream.Dispose();

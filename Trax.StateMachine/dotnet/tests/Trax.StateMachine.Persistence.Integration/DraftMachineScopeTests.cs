@@ -63,7 +63,7 @@ public class DraftMachineScopeTests
         // Only the turnstile's draft is idle past the TTL.
         await host.Execute(
             $"UPDATE {host.DraftTable} SET updated_at = @p0 WHERE id = @p1 AND machine = 'turnstile'",
-            DateTimeOffset.UtcNow.AddHours(-1),
+            TimeProvider.System.GetUtcNow().AddHours(-1),
             id
         );
 

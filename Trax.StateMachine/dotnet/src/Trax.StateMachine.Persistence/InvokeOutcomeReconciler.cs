@@ -44,6 +44,7 @@ internal sealed class InvokeOutcomeReconciler(
     IServiceScopeFactory scopes,
     StateMachineOptions options,
     ILogger<InvokeOutcomeReconciler> logger,
+    TimeProvider timeProvider,
     IInvokedRunListener? listener = null
 ) : BackgroundService
 {
@@ -177,7 +178,10 @@ internal sealed class InvokeOutcomeReconciler(
     internal event EventHandler? Subscribed;
 
     /// <summary>The clock the back-off of an unreadable row is read on. Settable for tests.</summary>
-    internal TimeProvider Time { get; set; } = TimeProvider.System;
+    internal TimeProvider Time { get; set; } = timeProvider;
+
+    // The container's clock, which the sweep's pace and the resubscribe delays are waited on.
+    private readonly TimeProvider _clock = timeProvider;
 
     /// <summary>Completes once the reconciler first hears the provider's notices. For tests.</summary>
     internal Task Listening => _listening.Task;
@@ -310,7 +314,8 @@ internal sealed class InvokeOutcomeReconciler(
             var services = readScope.ServiceProvider;
             abandoned = await new EfSnapshotStore(
                 services.GetRequiredService<IDataContext>(),
-                services.GetService<ISqlDialect>()
+                services.GetService<ISqlDialect>(),
+                _clock
             )
                 .ReadAbandonedEffects(withEffects, AbandonedEffectBatch, cancellationToken)
                 .ConfigureAwait(false);
@@ -1078,14 +1083,14 @@ internal sealed class InvokeOutcomeReconciler(
         CancellationToken stoppingToken
     )
     {
-        var since = Stopwatch.GetTimestamp();
+        var since = _clock.GetTimestamp();
         while (true)
         {
             var pace = _hearing ? ListeningInterval : options.InvokeOutcomeSweepInterval;
             // The next due timer wakes the sweep before the interval does.
             if (nextTimer is { } timer && timer < pace)
                 pace = timer < MinTimerWake ? MinTimerWake : timer;
-            var due = pace - Stopwatch.GetElapsedTime(since);
+            var due = pace - _clock.GetElapsedTime(since);
             if (due <= TimeSpan.Zero)
                 return;
 
@@ -1181,7 +1186,7 @@ internal sealed class InvokeOutcomeReconciler(
                 );
                 try
                 {
-                    await Task.Delay(delay, stoppingToken).ConfigureAwait(false);
+                    await Task.Delay(delay, _clock, stoppingToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {

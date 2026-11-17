@@ -75,7 +75,7 @@ public class GeneratedViewTests
         var sent = await server
             .Events.Reader.ReadAsync()
             .AsTask()
-            .WaitAsync(Wait)
+            .WaitAsync(Wait, TimeProvider.System)
             .ConfigureAwait(false);
 
         sent.Input.NotNull().ToJsonString().Should().Be("{\"coin\":\"quarter\"}");
@@ -94,7 +94,7 @@ public class GeneratedViewTests
                 }
             )
         );
-        (await send.WaitAsync(Wait).ConfigureAwait(false))
+        (await send.WaitAsync(Wait, TimeProvider.System).ConfigureAwait(false))
             .Should()
             .BeOfType<SendOutcome.Confirmed>();
 

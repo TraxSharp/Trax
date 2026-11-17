@@ -152,7 +152,7 @@ public class SnapshotStoreDefaultMembersTests
                 json,
                 Guid.NewGuid(),
                 requestId,
-                DateTimeOffset.UtcNow
+                TimeProvider.System.GetUtcNow()
             );
             return this;
         }

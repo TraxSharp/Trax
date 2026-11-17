@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -57,6 +58,10 @@ public sealed partial class GraphQLMachineServer : IMachineServer
     private readonly IReadOnlySet<string> _terminal;
     private readonly TimeProvider _time;
     private readonly Func<double> _random;
+
+    // A number from 0 to 1 for a resubscribe wait's jitter, when the options give no source of their own.
+    private static double NextJitter() =>
+        RandomNumberGenerator.GetInt32(int.MaxValue) / (double)int.MaxValue;
 
     private sealed record Document(string Id, IReadOnlySet<string> Variables);
 
@@ -137,7 +142,7 @@ public sealed partial class GraphQLMachineServer : IMachineServer
             : DefaultResubscribeDelays;
         _terminal = (options.TerminalStreamErrors ?? []).ToHashSet(StringComparer.Ordinal);
         _time = options.Time ?? TimeProvider.System;
-        _random = options.Random ?? System.Random.Shared.NextDouble;
+        _random = options.Random ?? NextJitter;
     }
 
     /// <inheritdoc/>

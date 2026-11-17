@@ -343,7 +343,9 @@ public class PolicyRunnerTests(StoreProvider provider)
 
         var pass = Runner(_host.NotNull()).PassOnce(CancellationToken.None);
         // negative-wait: a pass that waits on the held row never ends while it is held.
-        var finished = await Task.WhenAny(pass, Task.Delay(TimeSpan.FromSeconds(10))) == pass;
+        var finished =
+            await Task.WhenAny(pass, Task.Delay(TimeSpan.FromSeconds(10), TimeProvider.System))
+            == pass;
         await transaction.RollbackAsync();
         await pass;
 
@@ -503,10 +505,11 @@ public class PolicyRunnerTests(StoreProvider provider)
         await Runner(_host.NotNull()).PassOnce(CancellationToken.None);
 
         (await StateOf(receipt)).Should().Be("Void");
-        var waited = System.Diagnostics.Stopwatch.StartNew();
+        var started = TimeProvider.System.GetTimestamp();
         await signal.WaitAsync(TimeSpan.FromSeconds(10), CancellationToken.None);
-        waited
-            .Elapsed.Should()
+        TimeProvider
+            .System.GetElapsedTime(started)
+            .Should()
             .BeLessThan(
                 TimeSpan.FromSeconds(5),
                 "a poll is woken by the policy's write, not left to its next interval"
@@ -624,7 +627,7 @@ public class PolicyRunnerTests(StoreProvider provider)
             SourceRowId = -1,
             SourceInstanceId = Guid.NewGuid(),
             SourceRevision = 1,
-            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow(),
         };
         context.MachinePolicyFires.Add(fire);
         await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);

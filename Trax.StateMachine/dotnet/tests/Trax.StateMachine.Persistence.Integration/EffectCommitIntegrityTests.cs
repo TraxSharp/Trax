@@ -456,7 +456,7 @@ public class EffectCommitIntegrityTests
                 Json(snapshot),
                 Guid.NewGuid(),
                 LastRequestId: null,
-                DateTimeOffset.UtcNow
+                TimeProvider.System.GetUtcNow()
             );
             return Task.FromResult(true);
         }
@@ -476,7 +476,7 @@ public class EffectCommitIntegrityTests
                 Json(snapshot),
                 Guid.NewGuid(),
                 requestId,
-                DateTimeOffset.UtcNow
+                TimeProvider.System.GetUtcNow()
             );
             return Task.FromResult(true);
         }

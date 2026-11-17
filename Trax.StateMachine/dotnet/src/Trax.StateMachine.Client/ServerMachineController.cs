@@ -61,6 +61,8 @@ public sealed class ServerMachineController : IDisposable
 
     // Every await in this class is ConfigureAwait(true): work posted to the loop must resume on it, and
     // ConfigureAwait(false) would resume on the thread pool, beside whatever the loop runs next.
+    private readonly TimeProvider _time;
+
     private readonly TaskScheduler _loop =
         new ConcurrentExclusiveSchedulerPair().ExclusiveScheduler;
     private readonly MachineShape _shape;
@@ -165,6 +167,7 @@ public sealed class ServerMachineController : IDisposable
         _startRequestId = options.StartRequestId;
         _newRequestId = options.NewRequestId ?? (() => Guid.NewGuid().ToString());
         _retryDelays = options.RetryDelays ?? DefaultRetryDelays;
+        _time = options.Time ?? TimeProvider.System;
         _alive = _lifetime.Token;
         _view = BuildView();
     }
@@ -1443,7 +1446,7 @@ public sealed class ServerMachineController : IDisposable
     {
         try
         {
-            await Task.Delay(delay, token).ConfigureAwait(true);
+            await Task.Delay(delay, _time, token).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {

@@ -40,7 +40,8 @@ internal sealed class MachinePolicyRunner(
     MachinePolicies policies,
     IEnumerable<IMachine> machines,
     PolicyRunnerOptions options,
-    ILogger<MachinePolicyRunner> logger
+    ILogger<MachinePolicyRunner> logger,
+    TimeProvider timeProvider
 ) : BackgroundService
 {
     private readonly Lazy<IReadOnlyDictionary<string, IMachineInternals>> _byName = new(() =>
@@ -73,7 +74,8 @@ internal sealed class MachinePolicyRunner(
             }
             try
             {
-                await Task.Delay(options.Interval, stoppingToken).ConfigureAwait(false);
+                await Task.Delay(options.Interval, timeProvider, stoppingToken)
+                    .ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -237,14 +239,14 @@ internal sealed class MachinePolicyRunner(
     }
 
     // One row of the policy per target, from the same source.
-    private static async Task Owe(
+    private async Task Owe(
         IDataContext context,
         MachinePolicyFire row,
         IEnumerable<long> targets,
         CancellationToken cancellationToken
     )
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = timeProvider.GetUtcNow();
         context.MachinePolicyFires.AddRange(
             targets.Select(target => new MachinePolicyFire
             {

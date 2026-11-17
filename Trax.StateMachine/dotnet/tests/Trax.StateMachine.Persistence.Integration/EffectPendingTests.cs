@@ -176,9 +176,10 @@ public class EffectPendingTests(StoreProvider provider)
             .Execute(
                 $"UPDATE {_host.NotNull().DraftTable} SET created_at = @p0 WHERE row_id = @p1",
                 provider == StoreProvider.Postgres
-                    ? DateTimeOffset.UtcNow.AddDays(-30)
-                    : DateTimeOffset
-                        .UtcNow.AddDays(-30)
+                    ? TimeProvider.System.GetUtcNow().AddDays(-30)
+                    : TimeProvider
+                        .System.GetUtcNow()
+                        .AddDays(-30)
                         .ToString(
                             "yyyy-MM-dd HH:mm:ss.FFFFFFFzzz",
                             System.Globalization.CultureInfo.InvariantCulture

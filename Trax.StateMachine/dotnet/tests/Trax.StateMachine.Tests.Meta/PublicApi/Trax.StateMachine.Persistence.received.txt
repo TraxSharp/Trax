@@ -105,6 +105,7 @@ namespace Trax.StateMachine.Persistence
     public sealed class EfEffectClaimStore : Trax.StateMachine.Persistence.IEffectClaimStore
     {
         public EfEffectClaimStore(Trax.Effect.Data.Services.DataContext.IDataContext db, Trax.Effect.Data.Services.SqlDialect.ISqlDialect? dialect = null) { }
+        public EfEffectClaimStore(Trax.Effect.Data.Services.DataContext.IDataContext db, Trax.Effect.Data.Services.SqlDialect.ISqlDialect? dialect, System.TimeProvider timeProvider) { }
         public System.Threading.Tasks.Task<bool> Complete(string effectKey, System.Guid ownerToken, string receipt, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<Trax.StateMachine.Persistence.CompletedEffect?> GetCompleted(string effectKey, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<string?> GetReceipt(string effectKey, System.Threading.CancellationToken cancellationToken = default) { }
@@ -118,6 +119,7 @@ namespace Trax.StateMachine.Persistence
     public sealed class EfSnapshotStore : Trax.StateMachine.Persistence.ISnapshotStore
     {
         public EfSnapshotStore(Trax.Effect.Data.Services.DataContext.IDataContext db, Trax.Effect.Data.Services.SqlDialect.ISqlDialect? dialect = null) { }
+        public EfSnapshotStore(Trax.Effect.Data.Services.DataContext.IDataContext db, Trax.Effect.Data.Services.SqlDialect.ISqlDialect? dialect, System.TimeProvider timeProvider) { }
         public System.Threading.Tasks.Task Delete(string userKey, System.Guid id, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task Delete(string userKey, string machine, System.Guid id, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<Trax.StateMachine.Persistence.StoredSnapshot?> Get(string userKey, System.Guid id, System.Threading.CancellationToken cancellationToken = default) { }

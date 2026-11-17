@@ -53,7 +53,7 @@ public class ThroughputStressTests : StressFixture
         var ids = Enumerable.Range(0, n).Select(_ => Guid.NewGuid()).ToArray();
         var ops = 0;
 
-        var sw = Stopwatch.StartNew();
+        var started = TimeProvider.System.GetTimestamp();
         await Fan(
             n,
             StressProfile.MaxConcurrency,
@@ -73,18 +73,18 @@ public class ThroughputStressTests : StressFixture
                 return 0;
             }
         );
-        sw.Stop();
+        var elapsed = (long)TimeProvider.System.GetElapsedTime(started).TotalMilliseconds;
 
         var states = await Fan(n, StressProfile.MaxConcurrency, i => LoadState(ids[i]));
         states.Should().OnlyContain(s => s == "Review", "every instance ends in Review");
         await TestContext.Progress.WriteLineAsync(
             string.Create(
                 CultureInfo.InvariantCulture,
-                $"[throughput] {ops} ops ({n} instances x 3) in {sw.ElapsedMilliseconds} ms "
+                $"[throughput] {ops} ops ({n} instances x 3) in {elapsed} ms "
             )
                 + string.Create(
                     CultureInfo.InvariantCulture,
-                    $"({ops * 1000.0 / Math.Max(1, sw.ElapsedMilliseconds):N0} ops/s)"
+                    $"({ops * 1000.0 / Math.Max(1, elapsed):N0} ops/s)"
                 )
         );
     }

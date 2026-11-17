@@ -25,7 +25,7 @@ public class SnapshotDraftExpiryTests(StoreProvider provider)
 
     private static string NewUser() => $"u-{Guid.NewGuid():N}";
 
-    private static DateTimeOffset LongAgo => DateTimeOffset.UtcNow.AddHours(-1);
+    private static DateTimeOffset LongAgo => TimeProvider.System.GetUtcNow().AddHours(-1);
 
     private InstanceHost Host(TimeSpan? ttl, Action<IServiceCollection>? services = null) =>
         InstanceHost.Create(provider, draftTtl: ttl, services: services);
@@ -82,7 +82,7 @@ public class SnapshotDraftExpiryTests(StoreProvider provider)
     private static async Task Born(InstanceHost host, Guid id, TimeSpan ago)
     {
         using var scope = host.Scope();
-        DateTimeOffset? at = DateTimeOffset.UtcNow - ago;
+        DateTimeOffset? at = TimeProvider.System.GetUtcNow() - ago;
         await scope
             .ServiceProvider.GetRequiredService<Effect.Data.Services.DataContext.IDataContext>()
             .SnapshotDrafts.Where(d => d.Id == id)
@@ -144,7 +144,11 @@ public class SnapshotDraftExpiryTests(StoreProvider provider)
         using var host = Host(ttl: null);
         var user = NewUser();
         var id = await Saved(host, user, TestTurnstile.UnlockedJson);
-        await host.Backdate(id, SnapshotOwnerKind.User, DateTimeOffset.UtcNow.AddYears(-1));
+        await host.Backdate(
+            id,
+            SnapshotOwnerKind.User,
+            TimeProvider.System.GetUtcNow().AddYears(-1)
+        );
 
         await Sweeper(host).SweepOnce();
 

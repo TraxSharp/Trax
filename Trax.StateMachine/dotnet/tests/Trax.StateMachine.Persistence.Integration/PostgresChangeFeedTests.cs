@@ -58,8 +58,8 @@ public class PostgresChangeFeedTests
     // Whether a poll reads the row within the wait.
     private static async Task<bool> Polled(SnapshotChangeListener listener, long rowId)
     {
-        var until = DateTime.UtcNow + Within;
-        while (DateTime.UtcNow < until)
+        var until = TimeProvider.System.GetUtcNow().UtcDateTime + Within;
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < until)
         {
             if (listener.LastPolled.Contains(rowId))
                 return true;

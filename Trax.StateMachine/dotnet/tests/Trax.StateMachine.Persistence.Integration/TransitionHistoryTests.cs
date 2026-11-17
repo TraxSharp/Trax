@@ -693,7 +693,7 @@ public class TransitionHistoryTests(StoreProvider provider)
                         })
                     )
             )
-            .WaitAsync(TimeSpan.FromSeconds(60));
+            .WaitAsync(TimeSpan.FromSeconds(60), TimeProvider.System);
 
         writes.Count(w => w).Should().Be(1, "one token admits one write");
         (await History(id))
@@ -739,7 +739,11 @@ public class TransitionHistoryTests(StoreProvider provider)
         await host.SeedDraft(User, id, TestTurnstile.UnlockedJson);
         var rowId = await host.RowId(id);
         (await RowHistory(host, rowId)).Should().ContainSingle();
-        await host.Backdate(id, SnapshotOwnerKind.User, DateTimeOffset.UtcNow.AddDays(-2));
+        await host.Backdate(
+            id,
+            SnapshotOwnerKind.User,
+            TimeProvider.System.GetUtcNow().AddDays(-2)
+        );
 
         await host.Services.GetRequiredService<DraftSweeper>().SweepOnce();
 

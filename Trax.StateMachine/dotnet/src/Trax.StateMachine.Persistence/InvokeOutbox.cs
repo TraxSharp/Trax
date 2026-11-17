@@ -414,7 +414,9 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
             var held = await store
                 .CountDrafts(
                     userKey,
-                    limit.Ttl is { } ttl ? DateTimeOffset.UtcNow - ttl : null,
+                    limit.Ttl is { } ttl
+                        ? services.GetRequiredService<TimeProvider>().GetUtcNow() - ttl
+                        : null,
                     limit.Kept,
                     cancellationToken
                 )

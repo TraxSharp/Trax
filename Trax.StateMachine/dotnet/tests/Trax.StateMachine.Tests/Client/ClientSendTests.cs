@@ -47,7 +47,7 @@ public class ClientSendTests
         using var controller = Open(server, MachinePredictor.FromIr(Turnstile));
         await server.Answer(controller, ServerAnswer.Of(At(1, "Locked")));
 
-        var outcome = await controller.SendAsync(trigger).WaitAsync(Wait);
+        var outcome = await controller.SendAsync(trigger).WaitAsync(Wait, TimeProvider.System);
 
         outcome
             .Should()
@@ -57,7 +57,7 @@ public class ClientSendTests
         controller.View.Status.Should().Be(MachineStatus.Ready);
         // The next event goes out, so nothing the refused one could have sent is still waiting.
         var push = controller.SendAsync("Coin", new JsonObject { ["coin"] = "quarter" });
-        (await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait))
+        (await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System))
             .Trigger.Should()
             .Be("Coin");
         server.Events.Reader.TryRead(out _).Should().BeFalse();
@@ -87,8 +87,12 @@ public class ClientSendTests
         );
         await server.Answer(controller, ServerAnswer.Of(At(1, "Locked")));
 
-        var outcome = await controller.SendAsync("Locked.done").WaitAsync(Wait);
-        var timer = await controller.SendAsync("Unlocked.after").WaitAsync(Wait);
+        var outcome = await controller
+            .SendAsync("Locked.done")
+            .WaitAsync(Wait, TimeProvider.System);
+        var timer = await controller
+            .SendAsync("Unlocked.after")
+            .WaitAsync(Wait, TimeProvider.System);
 
         outcome
             .Should()
@@ -144,7 +148,7 @@ public class ClientSendTests
 
         var answer = await server
             .EventAsync("i-1", trigger, input: null, "r1", clientResult: null)
-            .WaitAsync(Wait);
+            .WaitAsync(Wait, TimeProvider.System);
 
         answer.Problem.NotNull().Code.Should().Be("NO_TRANSITION");
         host.Requests.Should().Be(0);
@@ -197,14 +201,17 @@ public class ClientSendTests
         );
 
         var start = controller.StartAsync();
-        (await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetException(
-            new HttpRequestException("dropped")
-        );
-        var again = await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        (
+            await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System)
+        ).SetException(new HttpRequestException("dropped"));
+        var again = await server
+            .Reads.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
 
         start.IsCompleted.Should().BeFalse("the read is still being retried");
         again.SetResult(ServerAnswer.Of(At(1, "Locked")));
-        await start.WaitAsync(Wait);
+        await start.WaitAsync(Wait, TimeProvider.System);
         controller.View.Status.Should().Be(MachineStatus.Ready);
     }
 
@@ -219,14 +226,17 @@ public class ClientSendTests
         );
 
         var start = controller.StartAsync();
-        (await server.Starts.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetResult(
-            ServerAnswer.Refused("SERVER_OUTDATED", "Another version answered.")
-        );
-        var again = await server.Starts.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        (
+            await server.Starts.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System)
+        ).SetResult(ServerAnswer.Refused("SERVER_OUTDATED", "Another version answered."));
+        var again = await server
+            .Starts.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
 
         start.IsCompleted.Should().BeFalse("the start is still being retried");
         again.SetResult(ServerAnswer.Of(At(1, "Locked"), "i-1"));
-        await start.WaitAsync(Wait);
+        await start.WaitAsync(Wait, TimeProvider.System);
         controller.View.Status.Should().Be(MachineStatus.Ready);
     }
 
@@ -241,18 +251,18 @@ public class ClientSendTests
             predictor: MachinePredictor.FromIr(Turnstile)
         );
         var start = controller.StartAsync();
-        (await server.Starts.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetException(
-            new HttpRequestException("dropped")
-        );
-        await start.WaitAsync(Wait);
+        (
+            await server.Starts.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System)
+        ).SetException(new HttpRequestException("dropped"));
+        await start.WaitAsync(Wait, TimeProvider.System);
 
         var retry = controller.RetryAsync();
         // A state this client's machine does not have: the answer stops the controller as CLIENT_OUTDATED.
-        (await server.Starts.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetResult(
-            ServerAnswer.Of(At(1, "Nowhere"), "i-1")
-        );
+        (
+            await server.Starts.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System)
+        ).SetResult(ServerAnswer.Of(At(1, "Nowhere"), "i-1"));
 
-        (await retry.WaitAsync(Wait))
+        (await retry.WaitAsync(Wait, TimeProvider.System))
             .Should()
             .BeOfType<SendOutcome.Stopped>()
             .Which.Error.Code.Should()
@@ -270,10 +280,14 @@ public class ClientSendTests
 
         server.Push(new StreamMessage.Refused("FORBIDDEN", "Not yours."));
         // Settled on the controller's scheduler after the push, so the stop has run.
-        await controller.SendAsync("Coin").WaitAsync(Wait, CancellationToken.None);
+        await controller
+            .SendAsync("Coin")
+            .WaitAsync(Wait, TimeProvider.System, CancellationToken.None);
         var afterStop = Timers(controller);
         controller.Dispose();
-        await controller.SendAsync("Coin").WaitAsync(Wait, CancellationToken.None);
+        await controller
+            .SendAsync("Coin")
+            .WaitAsync(Wait, TimeProvider.System, CancellationToken.None);
 
         IsDisposed(running).Should().BeTrue("the stop replaced them");
         IsDisposed(afterStop).Should().BeTrue("the controller was disposed");
@@ -310,18 +324,23 @@ public class ClientSendTests
         var sync = controller.SyncToAsync("Unlocked", fields: null, []);
 
         var start = controller.StartAsync();
-        (await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetResult(
-            ServerAnswer.Of(At(1, "Locked"))
-        );
-        await start.WaitAsync(Wait);
-        var sent = await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        (
+            await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System)
+        ).SetResult(ServerAnswer.Of(At(1, "Locked")));
+        await start.WaitAsync(Wait, TimeProvider.System);
+        var sent = await server
+            .Events.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
         sent.Trigger.Should().Be("Coin");
         sent.Answer.SetResult(
             ServerAnswer.Of(At(2, "Unlocked", new JsonObject { ["paidWith"] = "quarter" }))
         );
 
-        (await coin.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
-        (await sync.WaitAsync(Wait)).Should().BeOfType<SyncOutcome.Synced>();
+        (await coin.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .BeOfType<SendOutcome.Confirmed>();
+        (await sync.WaitAsync(Wait, TimeProvider.System)).Should().BeOfType<SyncOutcome.Synced>();
     }
 
     [Test]
@@ -332,15 +351,15 @@ public class ClientSendTests
         var start = controller.StartAsync();
         // Sent while the start is in flight, it waits for it, and settles once the start is refused.
         var early = controller.SendAsync("Coin", new JsonObject { ["coin"] = "quarter" });
-        (await server.Starts.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetResult(
-            ServerAnswer.Refused("FORBIDDEN", "Not yours.")
-        );
-        await start.WaitAsync(Wait);
+        (
+            await server.Starts.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System)
+        ).SetResult(ServerAnswer.Refused("FORBIDDEN", "Not yours."));
+        await start.WaitAsync(Wait, TimeProvider.System);
 
-        var late = await controller.SendAsync("Push").WaitAsync(Wait);
+        var late = await controller.SendAsync("Push").WaitAsync(Wait, TimeProvider.System);
 
         late.Should().BeOfType<SendOutcome.Failed>().Which.Problem.Code.Should().Be("NOT_READY");
-        (await early.WaitAsync(Wait))
+        (await early.WaitAsync(Wait, TimeProvider.System))
             .Should()
             .BeOfType<SendOutcome.Failed>()
             .Which.Problem.Code.Should()
@@ -355,14 +374,17 @@ public class ClientSendTests
         var server = new StepServer();
         using var controller = Open(server, id: "i-1", retryDelays: []);
         var start = controller.StartAsync();
-        var read = await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var read = await server
+            .Reads.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
         if (string.Equals(answer, "TRANSPORT", StringComparison.Ordinal))
             read.SetException(new HttpRequestException("dropped"));
         else
             read.SetResult(ServerAnswer.Refused(answer, "No."));
-        await start.WaitAsync(Wait);
+        await start.WaitAsync(Wait, TimeProvider.System);
 
-        var send = await controller.SendAsync("Push").WaitAsync(Wait);
+        var send = await controller.SendAsync("Push").WaitAsync(Wait, TimeProvider.System);
 
         send.Should().BeOfType<SendOutcome.Failed>().Which.Problem.Code.Should().Be("NOT_READY");
         server.Events.Reader.TryRead(out _).Should().BeFalse();
@@ -379,28 +401,35 @@ public class ClientSendTests
             predictor: MachinePredictor.FromIr(Turnstile)
         );
         var start = controller.StartAsync();
-        (await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetResult(
-            ServerAnswer.Of(At(1, "Unlocked", new JsonObject { ["paidWith"] = "dollar" }))
-        );
-        await start.WaitAsync(Wait);
+        (
+            await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System)
+        ).SetResult(ServerAnswer.Of(At(1, "Unlocked", new JsonObject { ["paidWith"] = "dollar" })));
+        await start.WaitAsync(Wait, TimeProvider.System);
 
         var push = controller.SendAsync("Push");
-        (await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait)).Answer.SetResult(
+        (
+            await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System)
+        ).Answer.SetResult(
             ServerAnswer.Of(
                 At(2, "Locked", (JsonObject)JsonNode.Parse("""{"n":1e400}""").NotNull())
             )
         );
 
-        (await push.WaitAsync(Wait))
+        (await push.WaitAsync(Wait, TimeProvider.System))
             .Should()
             .BeOfType<SendOutcome.Failed>()
             .Which.Problem.Code.Should()
             .Be("TRANSPORT_ERROR");
         var next = controller.SendAsync("Push");
-        var sent = await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var sent = await server
+            .Events.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
         sent.Trigger.Should().Be("Push");
         sent.Answer.SetResult(ServerAnswer.Of(At(2, "Locked")));
-        (await next.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+        (await next.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .BeOfType<SendOutcome.Confirmed>();
     }
 
     // The kit holds a minter that throws for an event (request-id-minter-throws); no transcript starts an instance with
@@ -423,22 +452,24 @@ public class ClientSendTests
             }
         );
 
-        await controller.StartAsync().WaitAsync(Wait);
+        await controller.StartAsync().WaitAsync(Wait, TimeProvider.System);
         controller.View.Status.Should().Be(MachineStatus.Loading);
         controller.View.Problem.NotNull().Code.Should().Be("INVALID_REQUEST_ID");
         server.Starts.Reader.TryRead(out _).Should().BeFalse();
-        (await controller.SendAsync("Push").WaitAsync(Wait))
+        (await controller.SendAsync("Push").WaitAsync(Wait, TimeProvider.System))
             .Should()
             .BeOfType<SendOutcome.Failed>()
             .Which.Problem.Code.Should()
             .Be(ClientProblemCodes.NotReady);
 
         var retry = controller.RetryAsync();
-        (await server.Starts.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetResult(
-            ServerAnswer.Of(At(1, "Locked"), "i-1")
-        );
+        (
+            await server.Starts.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System)
+        ).SetResult(ServerAnswer.Of(At(1, "Locked"), "i-1"));
 
-        (await retry.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+        (await retry.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .BeOfType<SendOutcome.Confirmed>();
         controller.View.Id.Should().Be("i-1");
     }
 
@@ -455,15 +486,20 @@ public class ClientSendTests
             )
         );
 
-        var read = await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var read = await server
+            .Reads.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
         controller.View.Status.Should().Be(MachineStatus.Ready);
         controller.View.Revision.Should().Be(1);
         read.SetResult(ServerAnswer.Of(At(2, "Locked")));
         var send = controller.SendAsync("Push");
-        (await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait)).Answer.SetResult(
-            ServerAnswer.Of(At(3, "Locked"))
-        );
-        (await send.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+        (
+            await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System)
+        ).Answer.SetResult(ServerAnswer.Of(At(3, "Locked")));
+        (await send.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .BeOfType<SendOutcome.Confirmed>();
         controller.View.Error.Should().BeNull();
     }
 
@@ -479,13 +515,15 @@ public class ClientSendTests
         );
 
         var start = controller.StartAsync();
-        (await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetResult(
+        (
+            await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System)
+        ).SetResult(
             ServerAnswer.Of(
                 At(1, "Locked", (JsonObject)JsonNode.Parse("""{"n":-1e400}""").NotNull())
             )
         );
 
-        await start.WaitAsync(Wait);
+        await start.WaitAsync(Wait, TimeProvider.System);
         controller.View.Status.Should().Be(MachineStatus.Loading);
         controller.View.Problem.NotNull().Code.Should().Be("TRANSPORT_ERROR");
     }
@@ -500,14 +538,14 @@ public class ClientSendTests
             retryDelays: [TimeSpan.FromMilliseconds(10)]
         );
         var start = controller.StartAsync();
-        (await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetException(
-            new HttpRequestException("down")
-        );
-        (await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetResult(
-            ServerAnswer.Of(At(1, "Locked"))
-        );
+        (
+            await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System)
+        ).SetException(new HttpRequestException("down"));
+        (
+            await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System)
+        ).SetResult(ServerAnswer.Of(At(1, "Locked")));
 
-        await start.WaitAsync(Wait);
+        await start.WaitAsync(Wait, TimeProvider.System);
         controller.View.Status.Should().Be(MachineStatus.Ready);
         controller.View.Problem.Should().BeNull();
     }
@@ -526,26 +564,32 @@ public class ClientSendTests
             retryDelays: [TimeSpan.FromMilliseconds(50)]
         );
         var start = controller.StartAsync();
-        (await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetException(
-            new HttpRequestException("down")
-        );
-        (await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetException(
-            new HttpRequestException("down")
-        );
-        await start.WaitAsync(Wait);
+        (
+            await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System)
+        ).SetException(new HttpRequestException("down"));
+        (
+            await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System)
+        ).SetException(new HttpRequestException("down"));
+        await start.WaitAsync(Wait, TimeProvider.System);
         controller.View.Status.Should().Be(MachineStatus.Loading);
 
         var retry = controller.RetryAsync();
-        var read = await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var read = await server
+            .Reads.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
         server.Push(new StreamMessage.Changed(At(1, "Locked")));
         read.SetException(new HttpRequestException("down"));
-        var last = await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var last = await server
+            .Reads.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
         if (outdated)
             last.SetResult(ServerAnswer.Refused("SERVER_OUTDATED", "Another version answered."));
         else
             last.SetException(new HttpRequestException("down"));
 
-        (await retry.WaitAsync(Wait))
+        (await retry.WaitAsync(Wait, TimeProvider.System))
             .Should()
             .BeOfType<SendOutcome.Confirmed>()
             .Which.Snapshot.Revision.Should()
@@ -564,17 +608,22 @@ public class ClientSendTests
             predictor: new UnwritablePredictions(MachinePredictor.FromIr(Turnstile))
         );
         var start = controller.StartAsync();
-        (await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetResult(
-            ServerAnswer.Of(At(1, "Locked"))
-        );
-        await start.WaitAsync(Wait);
+        (
+            await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System)
+        ).SetResult(ServerAnswer.Of(At(1, "Locked")));
+        await start.WaitAsync(Wait, TimeProvider.System);
 
         var coin = controller.SendAsync("Coin", new JsonObject { ["coin"] = "quarter" });
-        var sent = await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var sent = await server
+            .Events.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
 
         sent.ClientResult.Should().BeNull();
         sent.Answer.SetResult(ServerAnswer.Of(At(2, "Locked")));
-        (await coin.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+        (await coin.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .BeOfType<SendOutcome.Confirmed>();
     }
 
     // A predictor whose every prediction out of Locked fails to serialize, as one holding a number past a double's range
@@ -689,11 +738,11 @@ public class ClientSendTests
             }
         );
         var start = controller.StartAsync();
-        var token = await server.Read.Task.WaitAsync(Wait);
+        var token = await server.Read.Task.WaitAsync(Wait, TimeProvider.System);
 
         controller.Dispose();
 
-        await start.WaitAsync(Wait, CancellationToken.None);
+        await start.WaitAsync(Wait, TimeProvider.System, CancellationToken.None);
         token.IsCancellationRequested.Should().BeTrue();
     }
 
@@ -749,8 +798,8 @@ public class ClientSendTests
             }
         );
 
-        await controller.StartAsync().WaitAsync(Wait);
-        var outcome = await controller.SendAsync("Push").WaitAsync(Wait);
+        await controller.StartAsync().WaitAsync(Wait, TimeProvider.System);
+        var outcome = await controller.SendAsync("Push").WaitAsync(Wait, TimeProvider.System);
 
         outcome
             .Should()

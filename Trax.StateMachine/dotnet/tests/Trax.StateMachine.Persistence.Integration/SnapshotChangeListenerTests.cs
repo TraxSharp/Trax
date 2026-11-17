@@ -339,7 +339,7 @@ public class SnapshotChangeListenerTests
         await Listen();
         meters.RecordObservableInstruments();
 
-        var usage = await reported.Task.WaitAsync(HearWithin);
+        var usage = await reported.Task.WaitAsync(HearWithin, TimeProvider.System);
         usage
             .Should()
             .BeInRange(
@@ -384,7 +384,7 @@ public class SnapshotChangeListenerTests
                 },
                 CancellationToken.None
             );
-            await flooding.Task.WaitAsync(HearWithin, CancellationToken.None);
+            await flooding.Task.WaitAsync(HearWithin, TimeProvider.System, CancellationToken.None);
 
             // Two readings of the queue on the listener's session, both after the flood began.
             var since = await DatabaseNow();
@@ -428,8 +428,8 @@ public class SnapshotChangeListenerTests
             + "AND query_start > @since";
         command.Parameters.AddWithValue("@name", ApplicationName);
         command.Parameters.AddWithValue("@since", since);
-        var deadline = DateTime.UtcNow + HearWithin;
-        while (DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + HearWithin;
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             if (await command.ExecuteScalarAsync().ConfigureAwait(false) is DateTime started)
                 return started;
@@ -489,7 +489,7 @@ public class SnapshotChangeListenerTests
             var entered = _counting.NotNull().Hold();
             var before = _counting.Count;
             await Touch(row);
-            await entered.WaitAsync(HearWithin);
+            await entered.WaitAsync(HearWithin, TimeProvider.System);
             await Touch(row);
             for (var i = 0; i < Notices; i++)
                 await SnapshotNotices.Notify(
@@ -572,7 +572,7 @@ public class SnapshotChangeListenerTests
             .BeTrue($"the listener's first poll reads the watched row. See {Adr}");
 
         // A turn the host takes on the draft, in this process; the answer is the committed write.
-        var sinceWrite = Stopwatch.StartNew();
+        var written = TimeProvider.System.GetTimestamp();
         using (var scope = host.Scope())
         {
             (
@@ -586,14 +586,14 @@ public class SnapshotChangeListenerTests
         }
 
         var next = await Next(watch);
-        sinceWrite.Stop();
+        var sinceWrite = TimeProvider.System.GetElapsedTime(written);
         next.Revision.Should().Be(2);
         sinceWrite
-            .Elapsed.Should()
+            .Should()
             .BeLessThan(
                 TimeSpan.FromSeconds(2),
                 $"a write committed in this process reaches its watcher before the next poll, {pollInterval} after the "
-                    + $"baseline, but it arrived {sinceWrite.Elapsed} after the write. See {Adr}"
+                    + $"baseline, but it arrived {sinceWrite} after the write. See {Adr}"
             );
     }
 
@@ -623,8 +623,8 @@ public class SnapshotChangeListenerTests
     // Whether the listener's last poll has read <paramref name="rowId"/> before <see cref="HearWithin"/> passes.
     private static async Task<bool> Polled(SnapshotChangeListener listener, long rowId)
     {
-        var deadline = DateTime.UtcNow + HearWithin;
-        while (DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + HearWithin;
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             if (listener.LastPolled.Contains(rowId))
                 return true;

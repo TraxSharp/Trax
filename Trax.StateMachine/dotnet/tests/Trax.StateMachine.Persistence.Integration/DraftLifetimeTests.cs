@@ -63,7 +63,7 @@ public class DraftLifetimeTests(StoreProvider provider)
     private static async Task Born(InstanceHost host, Guid id, TimeSpan? ago)
     {
         using var scope = host.Scope();
-        DateTimeOffset? at = ago is { } a ? DateTimeOffset.UtcNow - a : null;
+        DateTimeOffset? at = ago is { } a ? TimeProvider.System.GetUtcNow() - a : null;
         await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .SnapshotDrafts.Where(d => d.Id == id)
@@ -142,7 +142,7 @@ public class DraftLifetimeTests(StoreProvider provider)
             nameof(LedgerState.Open),
             new JsonObject { ["entries"] = new JsonArray() }
         );
-        var idleSince = DateTimeOffset.UtcNow.AddHours(-1);
+        var idleSince = TimeProvider.System.GetUtcNow().AddHours(-1);
         await host.Backdate(kept, SnapshotOwnerKind.User, idleSince);
         await host.Backdate(editable, SnapshotOwnerKind.User, idleSince);
 
@@ -218,7 +218,11 @@ public class DraftLifetimeTests(StoreProvider provider)
         );
         await Born(host, old, ago: null);
         await Born(host, recent, ago: null);
-        await host.Backdate(old, SnapshotOwnerKind.User, DateTimeOffset.UtcNow - PastLifetime);
+        await host.Backdate(
+            old,
+            SnapshotOwnerKind.User,
+            TimeProvider.System.GetUtcNow() - PastLifetime
+        );
 
         await Sweeper(host).SweepOnce();
 

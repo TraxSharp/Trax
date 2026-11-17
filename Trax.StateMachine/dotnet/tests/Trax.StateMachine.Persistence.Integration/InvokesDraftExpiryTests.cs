@@ -28,7 +28,7 @@ public class InvokesDraftExpiryTests(StoreProvider provider)
     private static string UnlockedJson =>
         """{"machine":"turnstile","version":1,"state":"Unlocked","context":{"paidWith":"quarter"}}""";
 
-    private static DateTimeOffset LongAgo => DateTimeOffset.UtcNow.AddHours(-1);
+    private static DateTimeOffset LongAgo => TimeProvider.System.GetUtcNow().AddHours(-1);
 
     private static DraftSweeper Sweeper(InstanceHost host) =>
         host.Services.GetRequiredService<DraftSweeper>();

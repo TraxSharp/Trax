@@ -432,10 +432,14 @@ the recorded `ContentFingerprint`, or `InProgress`. A null `lease` is `SnapshotL
 
 ```csharp fragment
 public EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null)
+public EfSnapshotStore(IDataContext db, ISqlDialect? dialect, TimeProvider timeProvider)
 public EfEffectClaimStore(IDataContext db, ISqlDialect? dialect = null)
+public EfEffectClaimStore(IDataContext db, ISqlDialect? dialect, TimeProvider timeProvider)
 ```
 
-The default stores take the `IDataContext` their tables are reached through and the provider's `ISqlDialect`:
+The default stores take the `IDataContext` their tables are reached through and the provider's `ISqlDialect`, and
+the clock they stamp rows and check leases on: `AddStateMachines` passes the `TimeProvider` the container registers,
+and the constructors without one use the system clock.
 
 The dialect is how a lost race (a concurrent create of one draft, a claim on a key someone else holds) is told
 apart from a real failure, on Postgres and SQLite alike. Without one, such a race throws instead of returning

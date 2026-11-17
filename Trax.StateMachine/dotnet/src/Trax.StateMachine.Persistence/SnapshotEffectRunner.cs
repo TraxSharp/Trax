@@ -38,6 +38,7 @@ internal sealed class SnapshotEffectRunner<TState, TTrigger>
     private readonly string _trigger;
     private readonly string _receiptKey;
     private readonly TimeSpan? _lease;
+    private readonly TimeProvider _time;
 
     /// <param name="drafts">The draft service that loads the draft and commits the effect's result to it.</param>
     /// <param name="effect">The side effect to run once per intent; its receipt is recorded on the draft.</param>
@@ -48,6 +49,7 @@ internal sealed class SnapshotEffectRunner<TState, TTrigger>
     /// <param name="effectKey">Produces the intent key (server-stable; names the intent, not the content).</param>
     /// <param name="receiptKey">The context key the receipt is written under by the reducer.</param>
     /// <param name="lease">How long one attempt holds the effect's lease; null uses the <see cref="IdempotentEffect"/> default.</param>
+    /// <param name="timeProvider">The clock a send waits for a copy of itself on; the system's when null.</param>
     public SnapshotEffectRunner(
         SnapshotDraftService<TState, TTrigger> drafts,
         ISnapshotEffect effect,
@@ -57,9 +59,11 @@ internal sealed class SnapshotEffectRunner<TState, TTrigger>
         TState toState,
         Func<string, Guid, string> effectKey,
         string receiptKey = "receipt",
-        TimeSpan? lease = null
+        TimeSpan? lease = null,
+        TimeProvider? timeProvider = null
     )
     {
+        _time = timeProvider ?? TimeProvider.System;
         _drafts = drafts;
         _effect = effect;
         _idempotent = idempotent;
@@ -109,7 +113,7 @@ internal sealed class SnapshotEffectRunner<TState, TTrigger>
                 RefusalCode.InvalidRequestId,
                 $"A request id is 1 to {RequestIdRing.MaxRequestIdLength} characters and not blank."
             );
-        var waitUntil = DateTimeOffset.UtcNow + InProgressWait;
+        var waitUntil = _time.GetUtcNow() + InProgressWait;
         var delay = TimeSpan.FromMilliseconds(10);
         while (true)
         {
@@ -125,13 +129,13 @@ internal sealed class SnapshotEffectRunner<TState, TTrigger>
                 // The draft moved between the load and the claim (a timer fired): the effect did not run, and the
                 // send is answered from the draft as it is now.
                 case AdvanceOutcome.Rejected moved
-                    when ReferenceEquals(moved, Moved) && DateTimeOffset.UtcNow < waitUntil:
+                    when ReferenceEquals(moved, Moved) && _time.GetUtcNow() < waitUntil:
                     continue;
                 case AdvanceOutcome.Rejected moved when ReferenceEquals(moved, Moved):
                     return new AdvanceOutcome.Conflict();
                 case AdvanceOutcome.Rejected { Reason: EffectInProgress }
-                    when DateTimeOffset.UtcNow < waitUntil:
-                    await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+                    when _time.GetUtcNow() < waitUntil:
+                    await Task.Delay(delay, _time, cancellationToken).ConfigureAwait(false);
                     delay = TimeSpan.FromMilliseconds(Math.Min(delay.TotalMilliseconds * 2, 200));
                     continue;
                 default:

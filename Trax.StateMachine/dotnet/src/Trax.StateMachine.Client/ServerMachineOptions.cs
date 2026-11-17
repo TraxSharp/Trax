@@ -43,4 +43,7 @@ public sealed record ServerMachineOptions
     /// the transport failed. After the last, the event fails and <see cref="ServerMachineController.RetryAsync"/> resends it.
     /// </summary>
     public IReadOnlyList<TimeSpan>? RetryDelays { get; init; }
+
+    // The clock retry delays are waited on; the system's when null. A test pins it.
+    internal TimeProvider? Time { get; init; }
 }

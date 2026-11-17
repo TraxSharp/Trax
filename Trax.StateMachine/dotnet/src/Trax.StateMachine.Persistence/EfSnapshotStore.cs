@@ -43,6 +43,16 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         IRowReportingSnapshotStore,
         IConditionalDraftDelete
 {
+    // The clock rows are stamped on: the container's, through the constructor that takes one.
+    private readonly TimeProvider _time = TimeProvider.System;
+
+    /// <summary>A store over <paramref name="db"/> whose rows are stamped on <paramref name="timeProvider"/>.</summary>
+    /// <param name="db">The data context the drafts are kept in.</param>
+    /// <param name="dialect">How the provider reports a unique violation, or null to treat none as one.</param>
+    /// <param name="timeProvider">The clock updated_at is read from, and the InMemory provider's database clock.</param>
+    public EfSnapshotStore(IDataContext db, ISqlDialect? dialect, TimeProvider timeProvider)
+        : this(db, dialect) => _time = timeProvider;
+
     /// <summary>
     /// The IR hash of a machine's current definition by its name, written to <c>ir_hash</c> with every snapshot.
     /// Null, or a machine it answers null for, writes none.
@@ -524,7 +534,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         // and stated nothing, which leaves the row judged by its state.
         record.ServerRecord = snapshot.ServerRecord;
         record.ConcurrencyToken = Guid.NewGuid();
-        record.UpdatedAt = DateTimeOffset.UtcNow;
+        record.UpdatedAt = _time.GetUtcNow();
     }
 
     private async Task<bool> Save(
@@ -865,6 +875,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     ) =>
         new RowWrite
         {
+            Now = _time.GetUtcNow(),
             Snapshot = snapshot,
             Note = note,
             IrHash = IrHashOf(snapshot.Machine),
@@ -894,6 +905,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
                 ),
             new RowWrite
             {
+                Now = _time.GetUtcNow(),
                 InvokeToken = invokeToken,
                 Stranded = invokeToken.Value is not null ? StrandedWrite.Clear : StrandedWrite.Keep,
             },
@@ -959,6 +971,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             target,
             new RowWrite
             {
+                Now = _time.GetUtcNow(),
                 Snapshot = snapshot,
                 IrHash = IrHashOf(snapshot.Machine),
                 Due = DueFor(snapshot),
@@ -988,6 +1001,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             ),
             new RowWrite
             {
+                Now = _time.GetUtcNow(),
                 Snapshot = snapshot,
                 IrHash = IrHashOf(snapshot.Machine),
                 Due = DueFor(snapshot),
@@ -1024,7 +1038,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     {
         public Guid NewToken { get; } = Guid.NewGuid();
 
-        public DateTimeOffset Now { get; } = DateTimeOffset.UtcNow;
+        public required DateTimeOffset Now { get; init; }
 
         // The snapshot to write, or null to leave version, state, context and the IR hash alone.
         public Snapshot? Snapshot { get; init; }
@@ -1171,7 +1185,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     {
         var database = ((DbContext)db).Database;
         if (!database.IsRelational())
-            return DateTimeOffset.UtcNow;
+            return _time.GetUtcNow();
         var sql =
             database.ProviderName?.Contains("Npgsql", StringComparison.Ordinal) == true
                 ? "SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US') AS \"Value\""
@@ -1590,7 +1604,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
                 .Where(x =>
                     x.Id == id && x.Machine == machine && x.ConcurrencyToken == expectedToken
                 ),
-            new RowWrite { Stranded = StrandedWrite.Keep },
+            new RowWrite { Now = _time.GetUtcNow(), Stranded = StrandedWrite.Keep },
             cancellationToken
         );
 
@@ -1839,6 +1853,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             ),
             new RowWrite
             {
+                Now = _time.GetUtcNow(),
                 Snapshot = next,
                 Note = note ?? TransitionNote.Timer(trigger),
                 IrHash = IrHashOf(next.Machine),
@@ -1861,6 +1876,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             ),
             new RowWrite
             {
+                Now = _time.GetUtcNow(),
                 Due = new DueWrite(DueMode.Clear, TimeSpan.Zero),
                 Stranded = StrandedWrite.Keep,
             },
@@ -1896,6 +1912,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
                     ),
                 new RowWrite
                 {
+                    Now = _time.GetUtcNow(),
                     Stranded = StrandedWrite.Keep,
                     Effect = new EffectWrite(
                         token,
@@ -1937,6 +1954,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
                     ),
                 new RowWrite
                 {
+                    Now = _time.GetUtcNow(),
                     Stranded = StrandedWrite.Keep,
                     EffectOwner = from,
                     Effect = new EffectWrite(token, now + lease, KeepsEvent: true),
@@ -1961,6 +1979,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             Owned(owner).Where(x => x.Id == id && x.Machine == machine),
             new RowWrite
             {
+                Now = _time.GetUtcNow(),
                 Stranded = StrandedWrite.Keep,
                 EffectOwner = token,
                 Effect = EffectWrite.Cleared,

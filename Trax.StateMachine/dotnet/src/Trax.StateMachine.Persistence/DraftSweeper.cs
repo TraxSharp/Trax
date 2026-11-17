@@ -24,6 +24,7 @@ internal sealed class DraftSweeper(
     IEnumerable<IMachine> machines,
     IServiceScopeFactory scopes,
     StateMachineOptions options,
+    TimeProvider timeProvider,
     ILogger<DraftSweeper>? logger = null
 ) : BackgroundService
 {
@@ -92,7 +93,7 @@ internal sealed class DraftSweeper(
         )
             return 0;
 
-        var now = DateTimeOffset.UtcNow;
+        var now = timeProvider.GetUtcNow();
         var expiredBefore = new DraftExpiry(
             now - options.DraftTtl,
             now - options.MaxDraftLifetime,
@@ -102,7 +103,7 @@ internal sealed class DraftSweeper(
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var services = scope.ServiceProvider;
         var context = services.GetRequiredService<IDataContext>();
-        var store = new EfSnapshotStore(context, services.GetService<ISqlDialect>())
+        var store = new EfSnapshotStore(context, services.GetService<ISqlDialect>(), timeProvider)
         {
             Writes = services.GetService<SnapshotWriteSignal>(),
         };

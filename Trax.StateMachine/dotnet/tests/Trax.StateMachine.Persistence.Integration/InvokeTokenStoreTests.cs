@@ -136,7 +136,7 @@ public class InvokeTokenStoreTests(StoreProvider provider)
                 Version = 1,
                 State = "Locked",
                 ConcurrencyToken = Guid.NewGuid(),
-                UpdatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = TimeProvider.System.GetUtcNow(),
                 InvokeToken = token,
             }
         );
@@ -167,7 +167,7 @@ public class InvokeTokenStoreTests(StoreProvider provider)
                     Version = 1,
                     State = "Locked",
                     ConcurrencyToken = Guid.NewGuid(),
-                    UpdatedAt = DateTimeOffset.UtcNow,
+                    UpdatedAt = TimeProvider.System.GetUtcNow(),
                 }
             );
             var save = () => ((DbContext)db).SaveChangesAsync();

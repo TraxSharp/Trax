@@ -89,7 +89,7 @@ public class RevisionConcurrencyTests
                         })
                     )
             )
-            .WaitAsync(TimeSpan.FromSeconds(120));
+            .WaitAsync(TimeSpan.FromSeconds(120), TimeProvider.System);
 
         (await _host.NotNull().Revision(id))
             .Should()

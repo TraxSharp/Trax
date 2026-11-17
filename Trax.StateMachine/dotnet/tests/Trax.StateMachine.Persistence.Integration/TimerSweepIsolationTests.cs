@@ -342,7 +342,7 @@ public class TimerSweepIsolationTests(StoreProvider provider)
         // The sweep holds the row and is about to write the timer's move; the send loads the draft and tries to mark
         // it, which the held row and the fire's new revision both refuse.
         var sweep = Task.Run(() => Reconciler.FireDueTimersOnce(CancellationToken.None));
-        await paused.Task.WaitAsync(Bound);
+        await paused.Task.WaitAsync(Bound, TimeProvider.System);
         var send = Task.Run(async () =>
         {
             using var scope = _host.NotNull().Scope();
@@ -354,8 +354,8 @@ public class TimerSweepIsolationTests(StoreProvider provider)
         });
         release.TrySetResult();
 
-        var fired = await sweep.WaitAsync(Bound);
-        var sent = await send.WaitAsync(Bound);
+        var fired = await sweep.WaitAsync(Bound, TimeProvider.System);
+        var sent = await send.WaitAsync(Bound, TimeProvider.System);
 
         fired
             .Should()
@@ -393,12 +393,12 @@ public class TimerSweepIsolationTests(StoreProvider provider)
                 .Send(new Actor.Client(User), id, "charge-1")
                 .ConfigureAwait(false);
         });
-        await _charge.NotNull().Entered.WaitAsync(Bound);
+        await _charge.NotNull().Entered.WaitAsync(Bound, TimeProvider.System);
 
         var fired = await Reconciler.FireDueTimersOnce(CancellationToken.None);
         var whilePending = (await RawSql.Timer(_host.NotNull(), id)).NotNull().State;
         _charge.NotNull().Release();
-        var sent = await send.WaitAsync(Bound);
+        var sent = await send.WaitAsync(Bound, TimeProvider.System);
 
         fired
             .Should()
@@ -537,7 +537,7 @@ public class TimerSweepIsolationTests(StoreProvider provider)
     /// <summary>A clock that moves only when the test moves it.</summary>
     private sealed class SteppingTime : TimeProvider
     {
-        private DateTimeOffset _now = DateTimeOffset.UtcNow;
+        private DateTimeOffset _now = TimeProvider.System.GetUtcNow();
 
         public override DateTimeOffset GetUtcNow() => _now;
 

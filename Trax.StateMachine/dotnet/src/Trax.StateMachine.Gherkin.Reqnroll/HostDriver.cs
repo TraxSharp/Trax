@@ -27,6 +27,13 @@ internal sealed class HostDriver(
     string scenarioId
 ) : IScenarioDriver
 {
+    // Time passing on a host, and the slack that bounds its lag, are real time, as the host runs in it, so they are
+    // waited out on the real clock.
+    private static TimeProvider RealTime => TimeProvider.System;
+
+    // What is due is due on the host's clock: the one its container registered.
+    private TimeProvider HostClock => options.Host.GetRequiredService<TimeProvider>();
+
     private readonly HostFile _host = options.Host.GetRequiredService<HostFile>();
     private readonly Dictionary<InstanceKey, Guid> _ids = [];
 
@@ -185,7 +192,7 @@ internal sealed class HostDriver(
         // it, from its history, so a state it passed through on the way, or the move out of an earlier visit to the same
         // state, is not mistaken for where this outcome took it.
         var id = await IdOf(key).ConfigureAwait(false);
-        var deadline = DateTimeOffset.UtcNow + options.Slack;
+        var deadline = RealTime.GetUtcNow() + options.Slack;
         var entered = Entered(await History(key, id).ConfigureAwait(false), state);
         while (true)
         {
@@ -197,7 +204,7 @@ internal sealed class HostDriver(
                 await Settle().ConfigureAwait(false);
                 return new Answer.Moved(left.To);
             }
-            if (DateTimeOffset.UtcNow > deadline)
+            if (RealTime.GetUtcNow() > deadline)
                 return new Answer.Refused(
                     RefusalCode.InternalError,
                     string.Create(
@@ -292,7 +299,7 @@ internal sealed class HostDriver(
             throw new InvalidOperationException(
                 $"{time} cannot pass against a host: time passing is waited for in real time, and a step may wait at most {MaxPass}. Run this scenario in memory."
             );
-        await Task.Delay(time).ConfigureAwait(false);
+        await Task.Delay(time, RealTime).ConfigureAwait(false);
         await Settle().ConfigureAwait(false);
     }
 
@@ -336,13 +343,13 @@ internal sealed class HostDriver(
     // Waits for the host to fire what is due and the policies it owes, within the slack.
     private async Task Settle()
     {
-        var deadline = DateTimeOffset.UtcNow + options.Slack;
-        while (DateTimeOffset.UtcNow < deadline)
+        var deadline = RealTime.GetUtcNow() + options.Slack;
+        while (RealTime.GetUtcNow() < deadline)
         {
             var scope = options.Host.CreateAsyncScope();
             await using var scopeDisposal = scope.ConfigureAwait(false);
             var data = scope.ServiceProvider.GetRequiredService<IDataContext>();
-            var now = DateTimeOffset.UtcNow;
+            var now = HostClock.GetUtcNow();
             var ids = _ids.Values.ToList();
             var due = await data
                 .SnapshotDrafts.AnyAsync(d =>

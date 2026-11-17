@@ -36,6 +36,7 @@ namespace Trax.StateMachine.Persistence;
 /// </remarks>
 internal sealed class SnapshotChangeListener(
     IDataContextProviderFactory contexts,
+    TimeProvider timeProvider,
     ILogger<SnapshotChangeListener>? logger = null,
     ISnapshotNoticeSource? notices = null,
     SnapshotWriteSignal? writes = null
@@ -201,7 +202,7 @@ internal sealed class SnapshotChangeListener(
                     this,
                     await subscription.QueueUsageAsync(stoppingToken).ConfigureAwait(false)
                 );
-                var sampled = Stopwatch.GetTimestamp();
+                var sampled = timeProvider.GetTimestamp();
                 Live(CancellationToken.None);
                 delay = ReconnectDelay;
                 while (true)
@@ -210,14 +211,14 @@ internal sealed class SnapshotChangeListener(
                     // stream of notices (when the queue is most likely to fill) never stops the reading.
                     // The wait is whole milliseconds, and a session's wait of zero is no time-out at all, so less
                     // than one left is due now.
-                    var due = QueueUsageInterval - Stopwatch.GetElapsedTime(sampled);
+                    var due = QueueUsageInterval - timeProvider.GetElapsedTime(sampled);
                     if (due < TimeSpan.FromMilliseconds(1))
                     {
                         StateMachineMeter.ReportQueueUsage(
                             this,
                             await subscription.QueueUsageAsync(stoppingToken).ConfigureAwait(false)
                         );
-                        sampled = Stopwatch.GetTimestamp();
+                        sampled = timeProvider.GetTimestamp();
                         due = QueueUsageInterval;
                     }
                     var payload = await subscription
@@ -470,11 +471,11 @@ internal sealed class SnapshotChangeListener(
         }
     }
 
-    private static async Task<bool> Wait(TimeSpan delay, CancellationToken stoppingToken)
+    private async Task<bool> Wait(TimeSpan delay, CancellationToken stoppingToken)
     {
         try
         {
-            await Task.Delay(delay, stoppingToken).ConfigureAwait(false);
+            await Task.Delay(delay, timeProvider, stoppingToken).ConfigureAwait(false);
             return true;
         }
         catch (OperationCanceledException)

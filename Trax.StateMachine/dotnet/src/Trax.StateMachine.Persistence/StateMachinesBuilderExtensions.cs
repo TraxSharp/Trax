@@ -240,7 +240,8 @@ public static class StateMachinesBuilderExtensions
         services.AddHostedService<MachineSchemaStartupValidator>();
         services.AddScoped<ISnapshotStore>(sp => new EfSnapshotStore(
             sp.GetRequiredService<IDataContext>(),
-            sp.GetService<ISqlDialect>()
+            sp.GetService<ISqlDialect>(),
+            sp.GetRequiredService<TimeProvider>()
         )
         {
             IrHashes = sp.GetRequiredService<MachineIrHashes>().Of,
@@ -252,7 +253,8 @@ public static class StateMachinesBuilderExtensions
         });
         services.AddScoped<IEffectClaimStore>(sp => new EfEffectClaimStore(
             sp.GetRequiredService<IDataContext>(),
-            sp.GetService<ISqlDialect>()
+            sp.GetService<ISqlDialect>(),
+            sp.GetRequiredService<TimeProvider>()
         ));
         services.AddScoped<IdempotentEffect>();
         services.AddScoped<ISnapshotMachineRegistry, SnapshotMachineRegistry>();
@@ -264,7 +266,8 @@ public static class StateMachinesBuilderExtensions
         // invoke a train it cannot run, cancel or authorize as declared.
         services.AddScoped<IMachineInstanceStore>(sp => new EfSnapshotStore(
             sp.GetRequiredService<IDataContext>(),
-            sp.GetService<ISqlDialect>()
+            sp.GetService<ISqlDialect>(),
+            sp.GetRequiredService<TimeProvider>()
         )
         {
             IrHashes = sp.GetRequiredService<MachineIrHashes>().Of,
@@ -310,6 +313,7 @@ public static class StateMachinesBuilderExtensions
         // database sends.
         services.AddSingleton(sp => new SnapshotChangeListener(
             sp.GetRequiredService<IDataContextProviderFactory>(),
+            sp.GetRequiredService<TimeProvider>(),
             sp.GetService<ILogger<SnapshotChangeListener>>(),
             options.ChangeFeed == StateMachineChangeFeed.Poll
                 ? null

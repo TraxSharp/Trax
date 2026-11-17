@@ -19,6 +19,16 @@ namespace Trax.StateMachine.Persistence;
 public sealed class EfEffectClaimStore(IDataContext db, ISqlDialect? dialect = null)
     : IEffectClaimStore
 {
+    // The clock leases are taken and checked on: the container's, through the constructor that takes one.
+    private readonly TimeProvider _time = TimeProvider.System;
+
+    /// <summary>A store over <paramref name="db"/> whose leases are read on <paramref name="timeProvider"/>.</summary>
+    /// <param name="db">The data context the claims are kept in.</param>
+    /// <param name="dialect">How the provider reports a unique violation, or null to treat none as one.</param>
+    /// <param name="timeProvider">The clock leases are taken and checked on.</param>
+    public EfEffectClaimStore(IDataContext db, ISqlDialect? dialect, TimeProvider timeProvider)
+        : this(db, dialect) => _time = timeProvider;
+
     /// <summary>
     /// Inserts a new <c>effect_claim</c> row with a fresh owner token and <c>lease_expires_at = now + lease</c>.
     /// If the key already exists, it takes the row over only when the receipt is null and the lease has passed,
@@ -50,7 +60,7 @@ public sealed class EfEffectClaimStore(IDataContext db, ISqlDialect? dialect = n
     )
     {
         var owner = Guid.NewGuid();
-        var now = DateTimeOffset.UtcNow;
+        var now = _time.GetUtcNow();
         var expires = now + lease;
 
         var claim = new EffectClaim
@@ -170,7 +180,7 @@ public sealed class EfEffectClaimStore(IDataContext db, ISqlDialect? dialect = n
 
         if (claim.Receipt is null)
         {
-            var now = DateTimeOffset.UtcNow;
+            var now = _time.GetUtcNow();
             await db
                 .EffectClaims.Where(x =>
                     x.EffectKey == effectKey && x.Receipt == null && x.LeaseExpiresAt < now
@@ -193,7 +203,7 @@ public sealed class EfEffectClaimStore(IDataContext db, ISqlDialect? dialect = n
     /// <param name="effectKey">The intent key.</param>
     internal Task<bool> LeasePassed(string effectKey)
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = _time.GetUtcNow();
         return db
             .EffectClaims.AsNoTracking()
             .AnyAsync(x => x.EffectKey == effectKey && x.LeaseExpiresAt < now);

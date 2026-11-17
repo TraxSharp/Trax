@@ -110,7 +110,7 @@ public class TraxHttpTransportTests
     {
         var answer = await Transport(new Never(), TimeSpan.FromMilliseconds(200))
             .ExecuteAsync(Request)
-            .WaitAsync(TimeSpan.FromSeconds(10));
+            .WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
 
         answer.Failure.NotNull().Message.Should().Contain("did not answer");
     }
@@ -122,7 +122,7 @@ public class TraxHttpTransportTests
 
         var answer = await Transport(new Answers(body), TimeSpan.FromMilliseconds(500))
             .ExecuteAsync(Request)
-            .WaitAsync(TimeSpan.FromSeconds(10));
+            .WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
 
         answer.Failure.NotNull().Message.Should().Contain("did not answer");
         body.Disposed.Should().BeTrue();
@@ -148,9 +148,10 @@ public class TraxHttpTransportTests
                 http,
                 new Uri("https://api.example.com/trax/graphql"),
                 new JsonObject(),
-                requestTimeout: TimeSpan.FromMilliseconds(requestMilliseconds)
+                requestTimeout: TimeSpan.FromMilliseconds(requestMilliseconds),
+                time: TimeProvider.System
             )
-            .WaitAsync(TimeSpan.FromSeconds(10));
+            .WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
 
         answer.Failure.NotNull().Message.Should().Be("The host did not answer within 0.2 seconds.");
     }
@@ -170,14 +171,15 @@ public class TraxHttpTransportTests
             http,
             new Uri("https://api.example.com/trax/graphql"),
             new JsonObject(),
-            requestTimeout: Timeout.InfiniteTimeSpan
+            requestTimeout: Timeout.InfiniteTimeSpan,
+            time: TimeProvider.System
         );
         // negative-wait: with no timeout there is no signal that one did not fire; the request waits, then is answered.
         await Task.Delay(300);
         answer.IsCompleted.Should().BeFalse();
         answering.SetResult();
 
-        var answered = await answer.WaitAsync(TimeSpan.FromSeconds(10));
+        var answered = await answer.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
         answered.Failure.Should().BeNull();
         answered.Data.NotNull()["x"].NotNull().GetValue<int>().Should().Be(1);
     }

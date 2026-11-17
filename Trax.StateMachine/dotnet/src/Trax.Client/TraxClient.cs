@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization.Metadata;
@@ -26,6 +27,10 @@ public sealed class TraxClient
     private readonly TimeProvider _time;
     private readonly Func<double> _random;
 
+    // A number from 0 to 1 for a resubscribe wait's jitter, when the options give no source of their own.
+    private static double NextJitter() =>
+        RandomNumberGenerator.GetInt32(int.MaxValue) / (double)int.MaxValue;
+
     /// <summary>Builds the client over <paramref name="transport"/>.</summary>
     /// <exception cref="ArgumentException">
     /// The app turned reflection-based serialization off, and <see cref="TraxClientOptions.Json"/> names no resolver.
@@ -48,7 +53,7 @@ public sealed class TraxClient
             ? delays
             : DefaultResubscribeDelays;
         _time = options?.Time ?? TimeProvider.System;
-        _random = options?.Random ?? System.Random.Shared.NextDouble;
+        _random = options?.Random ?? NextJitter;
     }
 
     /// <summary>The transport the client sends through.</summary>

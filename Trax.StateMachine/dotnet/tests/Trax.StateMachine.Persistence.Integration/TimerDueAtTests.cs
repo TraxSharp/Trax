@@ -535,9 +535,12 @@ public class TimerDueAtTests(StoreProvider provider)
             using var transaction = await context.BeginTransaction(CancellationToken.None);
             // On Postgres now() is the transaction's start for as long as it lasts; the statement clock moves on.
             began = await Clock(database, transactionStart: true);
-            var deadline = DateTimeOffset.UtcNow + Bound;
+            var deadline = TimeProvider.System.GetUtcNow() + Bound;
             while ((later = await Clock(database, transactionStart: false)) <= began)
-                DateTimeOffset.UtcNow.Should().BeBefore(deadline, "the statement clock moves on");
+                TimeProvider
+                    .System.GetUtcNow()
+                    .Should()
+                    .BeBefore(deadline, "the statement clock moves on");
 
             (await store.Upsert(User, id, Reminder("Review"))).Should().BeTrue();
             await transaction.Commit();
@@ -592,7 +595,7 @@ public class TimerDueAtTests(StoreProvider provider)
         });
         try
         {
-            await gate.Reached.WaitAsync(Bound);
+            await gate.Reached.WaitAsync(Bound, TimeProvider.System);
 
             var between = await Row(paused, id);
             if (string.Equals(between.State, "Review", StringComparison.Ordinal))
@@ -607,7 +610,9 @@ public class TimerDueAtTests(StoreProvider provider)
             gate.Release();
         }
 
-        (await advance.WaitAsync(Bound)).Should().BeOfType<AdvanceOutcome.Advanced>();
+        (await advance.WaitAsync(Bound, TimeProvider.System))
+            .Should()
+            .BeOfType<AdvanceOutcome.Advanced>();
         await ShouldBeDue(paused, id, "Review", ReminderMachine.ReviewFor);
     }
 

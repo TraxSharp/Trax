@@ -55,7 +55,11 @@ public class SqliteStoreTests
         await _db.NotNull().NewClaims().TryClaim(stale, TimeSpan.FromSeconds(-10));
         await _db.NotNull().NewClaims().TryClaim(live, TimeSpan.FromMinutes(5));
 
-        (await new EffectClaimSweeper(_db.NotNull().NewClaims()).Sweep(DateTimeOffset.UtcNow))
+        (
+            await new EffectClaimSweeper(_db.NotNull().NewClaims()).Sweep(
+                TimeProvider.System.GetUtcNow()
+            )
+        )
             .Should()
             .Be(1);
     }

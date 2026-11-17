@@ -65,7 +65,7 @@ public sealed record GraphQLMachineServerOptions
     public IReadOnlyList<TimeSpan>? ResubscribeDelays { get; init; }
 
     // The clock the resubscribe delays and the request timeout run on, and where each wait is drawn from (a number from
-    // 0 to 1); the system's clock and Random.Shared when null. A test pins them.
+    // 0 to 1); the system's clock and the system's random numbers when null. A test pins them.
     internal TimeProvider? Time { get; init; }
     internal Func<double>? Random { get; init; }
 

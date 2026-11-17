@@ -122,7 +122,7 @@ public class EfSnapshotStoreTests
         (await TestDb.NewStore().Get("u", id))
             .NotNull()
             .UpdatedAt.Should()
-            .BeCloseTo(DateTimeOffset.UtcNow, TimeSpan.FromMinutes(1));
+            .BeCloseTo(TimeProvider.System.GetUtcNow(), TimeSpan.FromMinutes(1));
     }
 
     [Test]

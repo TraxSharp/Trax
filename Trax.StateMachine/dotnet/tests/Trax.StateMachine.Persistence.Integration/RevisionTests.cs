@@ -797,7 +797,7 @@ public class RevisionTests(StoreProvider provider)
                         })
                     )
             )
-            .WaitAsync(TimeSpan.FromSeconds(60));
+            .WaitAsync(TimeSpan.FromSeconds(60), TimeProvider.System);
 
         writes.Count(w => w).Should().Be(1, "one token admits one write");
         (await _host.NotNull().Revision(id))
@@ -1218,7 +1218,7 @@ public class RevisionTests(StoreProvider provider)
                 TestTurnstile.Machine.Serialize(snapshot),
                 Guid.NewGuid(),
                 LastRequestId: null,
-                DateTimeOffset.UtcNow
+                TimeProvider.System.GetUtcNow()
             );
             return Task.FromResult(true);
         }
@@ -1238,7 +1238,7 @@ public class RevisionTests(StoreProvider provider)
                 TestTurnstile.Machine.Serialize(snapshot),
                 Guid.NewGuid(),
                 requestId,
-                DateTimeOffset.UtcNow
+                TimeProvider.System.GetUtcNow()
             );
             return Task.FromResult(true);
         }

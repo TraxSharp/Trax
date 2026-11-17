@@ -79,13 +79,13 @@ public class ExactlyOnceStressTests : StressFixture
             }
         );
 
-        var sw = Stopwatch.StartNew();
+        var started = TimeProvider.System.GetTimestamp();
         await Fan(
             instances * per,
             StressProfile.MaxConcurrency,
             k => Send(ids[k / per], string.Create(CultureInfo.InvariantCulture, $"req-{k}"), effect)
         );
-        sw.Stop();
+        var elapsed = (long)TimeProvider.System.GetElapsedTime(started).TotalMilliseconds;
 
         // The whole point: N drafts charged once each means exactly N deliveries, however many sends raced.
         effect
@@ -99,11 +99,11 @@ public class ExactlyOnceStressTests : StressFixture
         await TestContext.Progress.WriteLineAsync(
             string.Create(
                 CultureInfo.InvariantCulture,
-                $"[exactly-once] {instances} drafts x {per} sends = {sends} sends in {sw.ElapsedMilliseconds} ms "
+                $"[exactly-once] {instances} drafts x {per} sends = {sends} sends in {elapsed} ms "
             )
                 + string.Create(
                     CultureInfo.InvariantCulture,
-                    $"({sends * 1000.0 / Math.Max(1, sw.ElapsedMilliseconds):N0} sends/s), deliveries={effect.Calls}"
+                    $"({sends * 1000.0 / Math.Max(1, elapsed):N0} sends/s), deliveries={effect.Calls}"
                 )
         );
     }

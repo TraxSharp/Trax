@@ -73,7 +73,9 @@ public class RevisionStoreModelTests : StressFixture
             .Array[1, 4]
             .SampleAsync(
                 async incarnations =>
-                    await Run(incarnations).WaitAsync(Bound).ConfigureAwait(false),
+                    await Run(incarnations)
+                        .WaitAsync(Bound, TimeProvider.System)
+                        .ConfigureAwait(false),
                 iter: Iterations,
                 threads: 1,
                 print: incarnations =>
