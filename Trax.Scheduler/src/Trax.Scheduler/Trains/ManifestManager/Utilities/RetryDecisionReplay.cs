@@ -185,7 +185,7 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
                     && runIds.Contains(r.ReplayDecisionsOf.Value)
                     && !r.ReplayAbandoned
                 )
-                .Select(r => r.ReplayDecisionsOf.GetValueOrDefault())
+                .Select(r => r.ReplayDecisionsOf ?? 0)
                 .Distinct()
                 .ToListAsync(ct)
                 .ConfigureAwait(false)
@@ -198,7 +198,7 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
                     && runIds.Contains(q.ReplayDecisionsOf.Value)
                     && q.Status == WorkQueueStatus.Queued
                 )
-                .Select(q => q.ReplayDecisionsOf.GetValueOrDefault())
+                .Select(q => q.ReplayDecisionsOf ?? 0)
                 .Distinct()
                 .ToListAsync(ct)
                 .ConfigureAwait(false)

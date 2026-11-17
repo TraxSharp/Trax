@@ -5,7 +5,7 @@ namespace Trax.Scheduler.Sqs.Configuration
         public SqsWorkerOptions() { }
         public System.Action<Amazon.SQS.AmazonSQSConfig>? ConfigureSqsClient { get; set; }
         public string? MessageGroupId { get; set; }
-        public string QueueUrl { get; set; }
+        public string? QueueUrl { get; set; }
         public byte[]? SigningKey { get; set; }
     }
 }

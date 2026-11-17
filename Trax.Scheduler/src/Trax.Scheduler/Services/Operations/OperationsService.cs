@@ -1706,20 +1706,57 @@ public partial class OperationsService : IOperationsService
         if (!string.IsNullOrEmpty(query.MessageContains))
         {
             var pattern = LikePattern.Contains(query.MessageContains);
-            logs = logs.Where(l =>
-                EF.Functions.Like(l.Message.ToLowerInvariant(), pattern, LikePattern.Escape)
-            );
+            logs = WhereLoweredLike(logs, l => l.Message, pattern);
         }
 
         if (!string.IsNullOrEmpty(query.CategoryContains))
         {
             var pattern = LikePattern.Contains(query.CategoryContains);
-            logs = logs.Where(l =>
-                EF.Functions.Like(l.Category.ToLowerInvariant(), pattern, LikePattern.Escape)
-            );
+            logs = WhereLoweredLike(logs, l => l.Category, pattern);
         }
 
         return logs;
+    }
+
+    // string.ToLower(), which every provider translates to SQL's LOWER(). It is put into the
+    // query as a node rather than written: written, it reads as a lowering in this process's
+    // culture, which it never is, since only the database evaluates it.
+    private static readonly System.Reflection.MethodInfo SqlLower = typeof(string)
+        .GetMethod("ToLower", Type.EmptyTypes)
+        .NotNull();
+
+    /// <summary>
+    /// The logs whose <paramref name="column"/>, lowered by the database, is LIKE
+    /// <paramref name="pattern"/>. The pattern stays a query parameter.
+    /// </summary>
+    private static IQueryable<Trax.Effect.Models.Log.Log> WhereLoweredLike(
+        IQueryable<Trax.Effect.Models.Log.Log> logs,
+        System.Linq.Expressions.Expression<Func<Trax.Effect.Models.Log.Log, string>> column,
+        string pattern
+    )
+    {
+        System.Linq.Expressions.Expression<Func<string, bool>> like = lowered =>
+            EF.Functions.Like(lowered, pattern, LikePattern.Escape);
+        var body = new ReplaceParameter(
+            like.Parameters[0],
+            System.Linq.Expressions.Expression.Call(column.Body, SqlLower)
+        ).Visit(like.Body);
+        return logs.Where(
+            System.Linq.Expressions.Expression.Lambda<Func<Trax.Effect.Models.Log.Log, bool>>(
+                body,
+                column.Parameters
+            )
+        );
+    }
+
+    private sealed class ReplaceParameter(
+        System.Linq.Expressions.ParameterExpression parameter,
+        System.Linq.Expressions.Expression replacement
+    ) : System.Linq.Expressions.ExpressionVisitor
+    {
+        protected override System.Linq.Expressions.Expression VisitParameter(
+            System.Linq.Expressions.ParameterExpression node
+        ) => node == parameter ? replacement : base.VisitParameter(node);
     }
 
     /// <inheritdoc />
@@ -3163,7 +3200,7 @@ public partial class OperationsService : IOperationsService
             {
                 Name = g.Key,
                 AvgMs = g.Average(m =>
-                    (m.EndTime.GetValueOrDefault() - m.StartTime).TotalMilliseconds
+                    ((m.EndTime ?? m.StartTime) - m.StartTime).TotalMilliseconds
                 ),
             })
             .OrderByDescending(x => x.AvgMs)
@@ -3184,7 +3221,7 @@ public partial class OperationsService : IOperationsService
             .Select(g => new
             {
                 Name = g.Key,
-                AvgTicks = g.Average(m => m.EndTime.GetValueOrDefault().Ticks - m.StartTime.Ticks),
+                AvgTicks = g.Average(m => (m.EndTime ?? m.StartTime).Ticks - m.StartTime.Ticks),
             })
             .OrderByDescending(x => x.AvgTicks)
             .Take(10)

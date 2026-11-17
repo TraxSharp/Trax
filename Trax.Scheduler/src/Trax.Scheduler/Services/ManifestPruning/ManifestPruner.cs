@@ -56,7 +56,7 @@ internal static class ManifestPruner
                     && batch.Contains(m.ManifestId.Value)
                     && (m.TrainState == TrainState.Pending || m.TrainState == TrainState.InProgress)
                 )
-                .Select(m => m.ManifestId.GetValueOrDefault())
+                .Select(m => m.ManifestId ?? 0)
                 .Distinct()
                 .ToListAsync(ct)
                 .ConfigureAwait(false);

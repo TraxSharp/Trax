@@ -68,6 +68,7 @@ public class LocalWorkerHeartbeatTests : TestSetup
             while (
                 TimeProvider.System.GetUtcNow().UtcDateTime - claimedAt < VisibilityTimeout * 2.5
             )
+                // negative-wait: only elapsed time shows the job is still held.
                 await Task.Delay(
                     TimeSpan.FromMilliseconds(100),
                     TimeProvider.System,
@@ -143,6 +144,7 @@ public class LocalWorkerHeartbeatTests : TestSetup
             while (
                 TimeProvider.System.GetUtcNow().UtcDateTime - claimedAt < VisibilityTimeout * 2.5
             )
+                // negative-wait: only elapsed time shows the job is still held.
                 await Task.Delay(
                     TimeSpan.FromMilliseconds(100),
                     TimeProvider.System,

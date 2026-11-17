@@ -547,7 +547,7 @@ public partial class SchedulerConfigurationBuilder
                         clientName,
                         client =>
                         {
-                            client.BaseAddress = new Uri(options.BaseUrl);
+                            client.BaseAddress = new Uri(options.BaseUrl.NotNull());
                             client.Timeout = options.Timeout;
                             options.ConfigureHttpClient?.Invoke(client);
                         }
@@ -613,7 +613,7 @@ public partial class SchedulerConfigurationBuilder
 
             services.AddHttpClient<IRunExecutor, HttpRunExecutor>(client =>
             {
-                client.BaseAddress = new Uri(options.BaseUrl);
+                client.BaseAddress = new Uri(options.BaseUrl.NotNull());
                 client.Timeout = options.Timeout;
                 options.ConfigureHttpClient?.Invoke(client);
             });

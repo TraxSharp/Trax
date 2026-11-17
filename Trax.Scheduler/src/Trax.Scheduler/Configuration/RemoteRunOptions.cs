@@ -23,11 +23,7 @@ public class RemoteRunOptions
     /// unless its host is loopback or <see cref="AllowInsecureTransport"/> is set.
     /// </summary>
     /// <example>https://my-runner.example.com/trax/run</example>
-    public string BaseUrl
-    {
-        get => field.NotNull(nameof(BaseUrl));
-        set;
-    }
+    public string? BaseUrl { get; set; }
 
     /// <summary>
     /// Accepts an <c>http://</c> <see cref="BaseUrl"/> to a host that is not loopback. Off by

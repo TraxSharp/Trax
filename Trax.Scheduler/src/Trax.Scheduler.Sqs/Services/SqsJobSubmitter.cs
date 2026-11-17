@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using Amazon.SQS;
 using Amazon.SQS.Model;
+using Trax.Core.Extensions;
 using Trax.Effect.Utils;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.RequestSigning;
@@ -86,7 +87,9 @@ internal sealed class SqsJobSubmitter(
                 },
             };
 
-        var isFifo = options.QueueUrl.EndsWith(".fifo", StringComparison.OrdinalIgnoreCase);
+        var isFifo = options
+            .QueueUrl.NotNull()
+            .EndsWith(".fifo", StringComparison.OrdinalIgnoreCase);
 
         if (isFifo)
         {

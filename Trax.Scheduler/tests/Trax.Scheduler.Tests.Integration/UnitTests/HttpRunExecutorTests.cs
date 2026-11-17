@@ -34,7 +34,7 @@ public class HttpRunExecutorTests
             Timeout = TimeSpan.FromSeconds(5),
             Retry = new HttpRetryOptions { MaxRetries = 0 },
         };
-        var client = new HttpClient(handler) { BaseAddress = new Uri(opts.BaseUrl) };
+        var client = new HttpClient(handler) { BaseAddress = new Uri(opts.BaseUrl.NotNull()) };
         return new HttpRunExecutor(
             client,
             opts,

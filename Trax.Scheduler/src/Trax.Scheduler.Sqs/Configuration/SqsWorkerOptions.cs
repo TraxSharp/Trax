@@ -13,11 +13,7 @@ public class SqsWorkerOptions
     /// The SQS queue URL to send messages to.
     /// </summary>
     /// <example>https://sqs.us-east-1.amazonaws.com/123456789012/trax-jobs</example>
-    public string QueueUrl
-    {
-        get => field.NotNull(nameof(QueueUrl));
-        set;
-    }
+    public string? QueueUrl { get; set; }
 
     /// <summary>
     /// Optional callback to configure the <see cref="AmazonSQSConfig"/> used to create the SQS client.

@@ -1,4 +1,3 @@
-using Trax.Core.Extensions;
 using Trax.Effect.Models.SchedulerConfig;
 using Trax.Scheduler.Configuration;
 
@@ -8,11 +7,11 @@ namespace Trax.Scheduler.Services.Operations;
 internal sealed class SchedulerSetting<T>(
     string name,
     Func<SchedulerConfig, (bool IsSet, T Value)>? readColumn,
-    Action<SchedulerConfig, T>? writeColumn,
+    Action<SchedulerConfig, T?>? writeColumn,
     Func<SchedulerSettingsTarget, T> readLive,
-    Action<SchedulerSettingsTarget, T> writeLive,
+    Action<SchedulerSettingsTarget, T?> writeLive,
     Func<UpdateSchedulerConfigInput, (bool IsSet, T Value)> readPatch,
-    Func<T, string, string?>? check = null,
+    Func<T?, string, string?>? check = null,
     Func<SchedulerSettingsTarget, bool>? appliesTo = null
 ) : ISchedulerSetting
 {
@@ -32,8 +31,8 @@ internal sealed class SchedulerSetting<T>(
 
     public void WriteRow(SchedulerConfig row, object? value)
     {
-        row.SetOverride(name, (T)value.NotNull());
-        writeColumn?.Invoke(row, (T)value.NotNull());
+        row.SetOverride(name, Typed(value));
+        writeColumn?.Invoke(row, Typed(value));
     }
 
     public bool TryReadLegacyRow(SchedulerConfig row, out object? value)
@@ -52,9 +51,9 @@ internal sealed class SchedulerSetting<T>(
     public object? ReadLive(SchedulerSettingsTarget target) => readLive(target);
 
     public void WriteLive(SchedulerSettingsTarget target, object? value) =>
-        writeLive(target, (T)value.NotNull());
+        writeLive(target, Typed(value));
 
-    public string? Check(object? value) => check?.Invoke((T)value.NotNull(), name);
+    public string? Check(object? value) => check?.Invoke(Typed(value), name);
 
     public bool TryReadPatch(UpdateSchedulerConfigInput input, out object? value)
     {
@@ -62,4 +61,7 @@ internal sealed class SchedulerSetting<T>(
         value = v;
         return isSet;
     }
+
+    // The value as the setting's type. Null only reaches a nullable setting, where it clears it.
+    private static T? Typed(object? value) => (T?)value;
 }

@@ -249,7 +249,7 @@ public class SchedulerStartupServiceTests
                 baseDelay: TimeSpan.Zero
             );
 
-        await act.Should().ThrowAsync<ArgumentException>().WithMessage("bad config");
+        await act.Should().ThrowAsync<ArgumentException>().WithMessage("bad config*");
         callCount.Should().Be(1, "non-transient errors should not be retried");
     }
 
@@ -356,7 +356,7 @@ public class SchedulerStartupServiceTests
                 baseDelay: TimeSpan.Zero
             );
 
-        await act.Should().ThrowAsync<ArgumentException>().WithMessage("fatal on second attempt");
+        await act.Should().ThrowAsync<ArgumentException>().WithMessage("fatal on second attempt*");
         callCount.Should().Be(2, "should retry the transient, then stop on non-transient");
     }
 

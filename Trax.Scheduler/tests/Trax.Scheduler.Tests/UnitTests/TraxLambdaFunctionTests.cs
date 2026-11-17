@@ -675,6 +675,7 @@ public class TraxLambdaFunctionTests
         (
             await Task.WhenAny(
                 running,
+                // negative-wait: the bound on shutdown.
                 Task.Delay(TimeSpan.FromSeconds(10), TimeProvider.System, CancellationToken.None)
             )
         )
