@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -96,7 +97,7 @@ public class DiscardEffectTests(StoreProvider provider)
             var n = Interlocked.Increment(ref _calls);
             _entered.TrySetResult();
             await _released.Task.ConfigureAwait(false);
-            return $"receipt-{n}";
+            return string.Create(CultureInfo.InvariantCulture, $"receipt-{n}");
         }
     }
 }

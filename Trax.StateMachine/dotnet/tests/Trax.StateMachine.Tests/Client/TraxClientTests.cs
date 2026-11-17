@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -466,7 +467,12 @@ public class TraxClientTests
             time.Advance(TimeSpan.FromSeconds(delay) - TimeSpan.FromMilliseconds(1));
             (await socket.Subscriptions.TryTake(TimeSpan.FromMilliseconds(200)))
                 .Should()
-                .BeNull($"the {delay} second delay has not passed");
+                .BeNull(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"the {delay} second delay has not passed"
+                    )
+                );
             time.Advance(TimeSpan.FromMilliseconds(1));
             current = await socket.Subscriptions.Take(Wait);
         }
@@ -526,7 +532,12 @@ public class TraxClientTests
         time.Advance(TimeSpan.FromMilliseconds(milliseconds - 1));
         (await socket.Subscriptions.TryTake(TimeSpan.FromMilliseconds(200)))
             .Should()
-            .BeNull($"the {milliseconds} ms wait has not passed");
+            .BeNull(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"the {milliseconds} ms wait has not passed"
+                )
+            );
         time.Advance(TimeSpan.FromMilliseconds(1));
 
         (await socket.Subscriptions.Take(Wait)).Should().NotBeNull();
@@ -1023,11 +1034,18 @@ public class TraxClientTests
         yield return new TestCaseData(
             new JsonSerializerOptions(JsonSerializerDefaults.Web)
             {
+                RespectNullableAnnotations = false,
+                RespectRequiredConstructorParameters = false,
                 Converters = { new JsonStringEnumConverter() },
             }
         ).SetName("Optional_with_options_of_the_callers_own");
         yield return new TestCaseData(
-            new JsonSerializerOptions { TypeInfoResolver = OptionalTestJson.Default }
+            new JsonSerializerOptions
+            {
+                RespectNullableAnnotations = false,
+                RespectRequiredConstructorParameters = false,
+                TypeInfoResolver = OptionalTestJson.Default,
+            }
         ).SetName("Optional_with_a_source_generated_context");
     }
 

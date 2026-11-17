@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 
 namespace Trax.StateMachine.Gherkin.Lexical;
@@ -60,7 +61,13 @@ internal sealed class LexiconElaborator
     {
         if (seen.TryGetValue(name, out var earlier))
         {
-            Problem(line, $"{what} '{name}' is already defined at line {lineOf(earlier)}.");
+            Problem(
+                line,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{what} '{name}' is already defined at line {lineOf(earlier)}."
+                )
+            );
             return false;
         }
         seen[name] = value;
@@ -75,7 +82,10 @@ internal sealed class LexiconElaborator
         else if (_doc.Version != 1)
             Problem(
                 _doc.VersionLine,
-                $"'Version: {_doc.Version}' is not one this reader reads; it reads version 1."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"'Version: {_doc.Version}' is not one this reader reads; it reads version 1."
+                )
             );
         root["version"] = 1;
         Map("/version", _doc.VersionLine);
@@ -336,7 +346,10 @@ internal sealed class LexiconElaborator
                 else
                     Problem(
                         runs.Line,
-                        $"{runs.State} already runs a train, at line {earlier.Line}; a state runs one."
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{runs.State} already runs a train, at line {earlier.Line}; a state runs one."
+                        )
                     );
             }
             json["invokes"] = invokes;
@@ -475,7 +488,10 @@ internal sealed class LexiconElaborator
                     : partial[field.Name].Line;
                 Problem(
                     field.Line,
-                    $"the context field '{field.Name}' is already given at line {line}."
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"the context field '{field.Name}' is already given at line {line}."
+                    )
                 );
                 continue;
             }
@@ -536,7 +552,10 @@ internal sealed class LexiconElaborator
                 if (writer.Shape is { } shape && !SameType(d.Json, shape))
                     Problem(
                         writer.Line,
-                        $"'{writer.Field}' is declared {Describe(d.Json)} at line {d.Field.Line}, and this writes {Describe(shape)}."
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"'{writer.Field}' is declared {Describe(d.Json)} at line {d.Field.Line}, and this writes {Describe(shape)}."
+                        )
                     );
                 continue;
             }
@@ -545,7 +564,10 @@ internal sealed class LexiconElaborator
             else if (writer.Shape is { } shape && !SameType(known.Shape, shape))
                 Problem(
                     writer.Line,
-                    $"'{writer.Field}' is {Describe(known.Shape)} where line {known.Line} writes it, and this writes {Describe(shape)}."
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"'{writer.Field}' is {Describe(known.Shape)} where line {known.Line} writes it, and this writes {Describe(shape)}."
+                    )
                 );
         }
 
@@ -1060,7 +1082,10 @@ internal sealed class LexiconElaborator
             {
                 Problem(
                     outcome.Line,
-                    $"the outcome '{outcome.Phrase}' is already defined at line {other.Line}."
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"the outcome '{outcome.Phrase}' is already defined at line {other.Line}."
+                    )
                 );
                 continue;
             }

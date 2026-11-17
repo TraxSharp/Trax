@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
@@ -260,7 +261,14 @@ internal static class IrMachines
             ),
             host.Migrations.ToDictionary(
                 kv => kv.Key,
-                kv => Create<IMachineMigration>(kv.Value, $"the migration from version {kv.Key}")
+                kv =>
+                    Create<IMachineMigration>(
+                        kv.Value,
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"the migration from version {kv.Key}"
+                        )
+                    )
             )
         );
     }

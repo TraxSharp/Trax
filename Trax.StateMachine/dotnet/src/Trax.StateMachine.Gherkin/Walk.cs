@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -296,7 +297,10 @@ internal sealed class Walk
                 {
                     Fail(
                         step.Line,
-                        $"'{step.Text}' adds up to more time than a clock holds ({TimeSpan.MaxValue.Days} days)."
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"'{step.Text}' adds up to more time than a clock holds ({TimeSpan.MaxValue.Days} days)."
+                        )
                     );
                     return;
                 }

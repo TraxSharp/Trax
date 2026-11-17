@@ -1,3 +1,4 @@
+using System.Globalization;
 using Gherkin;
 using Gherkin.CucumberMessages;
 using Gherkin.CucumberMessages.Pickles;
@@ -18,7 +19,7 @@ internal sealed record FeatureScenario(
     IReadOnlyList<string> Tags
 )
 {
-    internal string Id => $"{File}:{Line}";
+    internal string Id => string.Create(CultureInfo.InvariantCulture, $"{File}:{Line}");
 
     /// <summary>
     /// The tag of a scenario that needs a handler only the host has (a custom rule's or reduction's C#, an effect's real

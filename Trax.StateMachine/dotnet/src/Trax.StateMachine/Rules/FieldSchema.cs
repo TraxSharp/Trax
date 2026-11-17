@@ -68,7 +68,7 @@ public sealed record FieldSchema(
     /// <c>date-time</c> (a DateTime), <c>date-time-offset</c> (a DateTimeOffset), <c>date</c> (a DateOnly),
     /// <c>time</c> (a TimeOnly),
     /// <c>duration</c> (a TimeSpan, as the ISO-8601 duration a timer reads), <c>uri</c> (an absolute Uri) or
-    /// <c>char</c> (one UTF-16 code unit). See <see cref="ValueFormats"/>. Null for any other field.
+    /// <see langword="char"/> (one UTF-16 code unit). See <see cref="ValueFormats"/>. Null for any other field.
     /// </summary>
     public string? Format { get; init; }
 }

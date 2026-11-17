@@ -10,68 +10,81 @@ internal static partial class Names
 {
     [GeneratedRegex(
         @"\A[a-z][a-z0-9]*(-[a-z0-9]+)*\z",
-        RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture
+        RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
     )]
-    internal static partial Regex MachineId();
+    internal static partial Regex MachineId { get; }
 
-    [GeneratedRegex(@"\A[A-Z][A-Za-z0-9]*\z", RegexOptions.CultureInvariant)]
-    internal static partial Regex Member();
+    [GeneratedRegex(
+        @"\A[A-Z][A-Za-z0-9]*\z",
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000
+    )]
+    internal static partial Regex Member { get; }
 
-    [GeneratedRegex(@"\A[a-z][a-zA-Z0-9]*\z", RegexOptions.CultureInvariant)]
-    internal static partial Regex Word();
+    [GeneratedRegex(
+        @"\A[a-z][a-zA-Z0-9]*\z",
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000
+    )]
+    internal static partial Regex Word { get; }
 
     [GeneratedRegex(
         @"\A[a-z][a-z0-9]*(-[a-z0-9]+)*/[a-z0-9]+(-[a-z0-9]+)*\z",
-        RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture
+        RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
     )]
-    internal static partial Regex SystemKey();
+    internal static partial Regex SystemKey { get; }
 
     [GeneratedRegex(
         @"\A[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*\z",
-        RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture
+        RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
     )]
-    internal static partial Regex TrainName();
+    internal static partial Regex TrainName { get; }
 
     [GeneratedRegex(
         @"\A(?<machine>[a-z][a-z0-9]*(?:-[a-z0-9]+)*)\.(?<member>[A-Za-z_][A-Za-z0-9_]*)\z",
-        RegexOptions.CultureInvariant
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000
     )]
-    internal static partial Regex ViewSource();
+    internal static partial Regex ViewSource { get; }
 
     [GeneratedRegex(
         @"(\A|\.)(__proto__|constructor|prototype)(\.|\z)",
-        RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture
+        RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
     )]
-    private static partial Regex PrototypeName();
+    private static partial Regex PrototypeName { get; }
 
     internal static string MachineIdAt(At at, JsonNode? node) =>
-        at.Text(node, maxLength: 64) is var id && MachineId().IsMatch(id)
+        at.Text(node, maxLength: 64) is var id && MachineId.IsMatch(id)
             ? id
             : throw at.Fail("is not a machine id: lowercase words joined by single hyphens.");
 
     internal static string MemberAt(At at, JsonNode? node) =>
-        at.Text(node, maxLength: 64) is var name && Member().IsMatch(name)
+        at.Text(node, maxLength: 64) is var name && Member.IsMatch(name)
             ? name
             : throw at.Fail("is not a state or trigger name: a capital, then letters and digits.");
 
     internal static string WordAt(At at, JsonNode? node) =>
-        at.Text(node, maxLength: 64) is var word && Word().IsMatch(word)
+        at.Text(node, maxLength: 64) is var word && Word.IsMatch(word)
             ? word
             : throw at.Fail("is not a name: a lowercase letter, then letters and digits.");
 
     internal static string SystemKeyAt(At at, JsonNode? node) =>
-        at.Text(node, maxLength: 129) is var key && SystemKey().IsMatch(key)
+        at.Text(node, maxLength: 129) is var key && SystemKey.IsMatch(key)
             ? key
             : throw at.Fail("is not a system key: the machine id, a slash and a name.");
 
     internal static string TrainAt(At at, JsonNode? node) =>
-        at.Text(node, maxLength: 512) is var train && TrainName().IsMatch(train)
+        at.Text(node, maxLength: 512) is var train && TrainName.IsMatch(train)
             ? train
             : throw at.Fail("is not a train's full name.");
 
     /// <summary>The IR's field name: any non-empty text but a path through a prototype name.</summary>
     internal static string FieldNameAt(At at, JsonNode? node) =>
-        at.Text(node, minLength: 1) is var name && !PrototypeName().IsMatch(name)
+        at.Text(node, minLength: 1) is var name && !PrototypeName.IsMatch(name)
             ? name
             : throw at.Fail("is not a field name any engine holds.");
 

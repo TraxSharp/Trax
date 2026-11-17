@@ -72,10 +72,10 @@ public sealed class FieldMatcher(RuleSource source, string field)
     public Rule LengthAtLeast(int value) =>
         new Rule.Length(source, field, CompareOp.GreaterOrEqual, value);
 
-    /// <summary>A boolean field equal to <c>true</c>.</summary>
+    /// <summary>A boolean field equal to <see langword="true"/>.</summary>
     public Rule IsTrue() => new Rule.BoolEquals(source, field, Value: true);
 
-    /// <summary>A boolean field equal to <c>false</c>.</summary>
+    /// <summary>A boolean field equal to <see langword="false"/>.</summary>
     public Rule IsFalse() => new Rule.BoolEquals(source, field, Value: false);
 
     /// <summary>An array field whose every element is of the given JSON type.</summary>

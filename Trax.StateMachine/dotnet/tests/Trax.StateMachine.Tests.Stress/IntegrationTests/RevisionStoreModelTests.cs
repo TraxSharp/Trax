@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
@@ -79,7 +80,10 @@ public class RevisionStoreModelTests : StressFixture
                         Environment.NewLine,
                         incarnations.Select(
                             (x, i) =>
-                                $"  {i}: {x.Starters} starts, then {string.Join(", ", x.Burst)}"
+                                string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"  {i}: {x.Starters} starts, then {string.Join(", ", x.Burst)}"
+                                )
                         )
                     )
             );
@@ -143,7 +147,12 @@ public class RevisionStoreModelTests : StressFixture
             if (last is not null)
                 Expected(last.Op, row)
                     .Should()
-                    .BeTrue($"the write that took revision {revision} left the final row");
+                    .BeTrue(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"the write that took revision {revision} left the final row"
+                        )
+                    );
             else if (committed.IsEmpty)
                 (
                     string.Equals(

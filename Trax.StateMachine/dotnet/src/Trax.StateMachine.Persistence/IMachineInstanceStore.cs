@@ -11,7 +11,7 @@ namespace Trax.StateMachine.Persistence;
 /// </summary>
 /// <remarks>
 /// Every write is total in the same way as <see cref="ISnapshotStore"/>: an expected race (a stale concurrency
-/// token, a token that no longer matches, a unique key another writer took first) returns <c>false</c>, and any
+/// token, a token that no longer matches, a unique key another writer took first) returns <see langword="false"/>, and any
 /// other database failure propagates.
 /// </remarks>
 internal interface IMachineInstanceStore

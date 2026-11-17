@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using AwesomeAssertions.Execution;
@@ -66,7 +67,9 @@ public class MachineInterleavingModelTests(StoreProvider provider)
             },
             services: s => s.AddSingleton<IOrderCharge>(charge)
         );
-        var owner = DeskRoles.Client($"model-{seed}-{Guid.NewGuid():N}");
+        var owner = DeskRoles.Client(
+            string.Create(CultureInfo.InvariantCulture, $"model-{seed}-{Guid.NewGuid():N}")
+        );
         var ids = new List<Guid>();
         Task<AdvanceOutcome>? held = null;
         var log = new List<string>();
@@ -99,7 +102,10 @@ public class MachineInterleavingModelTests(StoreProvider provider)
                             Machine,
                             target,
                             nameof(PendingPayTrigger.Edit),
-                            new JsonObject { ["note"] = $"n{n}" }
+                            new JsonObject
+                            {
+                                ["note"] = string.Create(CultureInfo.InvariantCulture, $"n{n}"),
+                            }
                         )
                         .ConfigureAwait(false);
                     break;
@@ -166,7 +172,12 @@ public class MachineInterleavingModelTests(StoreProvider provider)
         foreach (var id in marked)
             (await RawSql.PendingEffect(host, id).ConfigureAwait(false))
                 .Token.Should()
-                .BeNull($"seed {seed}: every mark is finished once its lease has passed ({Adr})");
+                .BeNull(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"seed {seed}: every mark is finished once its lease has passed ({Adr})"
+                    )
+                );
     }
 
     private static async Task Swallow(Task task)
@@ -187,7 +198,7 @@ public class MachineInterleavingModelTests(StoreProvider provider)
             $"UPDATE {RawSql.Table(host)} SET effect_lease_until = created_at WHERE effect_token IS NOT NULL"
         );
 
-    private async Task Check(
+    private static async Task Check(
         InstanceHost host,
         Actor.Client owner,
         ControlledCharge charge,
@@ -196,7 +207,10 @@ public class MachineInterleavingModelTests(StoreProvider provider)
     )
     {
         var rows = await host.UserRows(owner.UserKey, Machine).ConfigureAwait(false);
-        var because = $"seed {seed}, after: {string.Join(", ", log)} ({Adr})";
+        var because = string.Create(
+            CultureInfo.InvariantCulture,
+            $"seed {seed}, after: {string.Join(", ", log)} ({Adr})"
+        );
         using var scope = new AssertionScope();
 
         var drafts = 0;

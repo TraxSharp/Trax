@@ -139,7 +139,7 @@ internal sealed class InvokeOutcomeReconciler(
     internal static readonly TimeSpan WaitingRecheck = TimeSpan.FromSeconds(30);
 
     /// <summary>Raised after each timer this reconciler handles, with what it did. For tests.</summary>
-    internal event Action<TimerFireResult>? TimerFired;
+    internal event EventHandler<TimerFiredEventArgs>? TimerFired;
 
     /// <summary>Awaited after a due row is read and before its transaction begins. For tests.</summary>
     internal Func<DueRow, Task>? AfterRead { get; set; }
@@ -168,13 +168,13 @@ internal sealed class InvokeOutcomeReconciler(
     private volatile bool _hearing;
 
     /// <summary>Raised after each delivery this reconciler makes, with what it did. For tests.</summary>
-    internal event Action<string, InvokeDelivery>? Delivered;
+    internal event EventHandler<InvokeDeliveredEventArgs>? Delivered;
 
     /// <summary>Raised as the hosted service starts each full sweep. For tests.</summary>
-    internal event Action? Sweeping;
+    internal event EventHandler? Sweeping;
 
     /// <summary>Raised each time the hosted service subscribes to the provider's notices. For tests.</summary>
-    internal event Action? Subscribed;
+    internal event EventHandler? Subscribed;
 
     /// <summary>The clock the back-off of an unreadable row is read on. Settable for tests.</summary>
     internal TimeProvider Time { get; set; } = TimeProvider.System;
@@ -271,7 +271,7 @@ internal sealed class InvokeOutcomeReconciler(
                 seen.Add(row.RowId);
                 var result = await FireIsolated(row, cancellationToken).ConfigureAwait(false);
                 results.Add(result);
-                TimerFired?.Invoke(result);
+                TimerFired?.Invoke(this, new TimerFiredEventArgs(result));
                 if (result.Moved && ++moved >= PageSize)
                     break;
             }
@@ -734,7 +734,7 @@ internal sealed class InvokeOutcomeReconciler(
         var now = Time.GetUtcNow();
         _timerErrors.AddOrUpdate(
             row.RowId,
-            (_, arg) => new TimerError(arg.Revision, 0, now + TimerErrorBackoff, 1),
+            (_, arg) => new TimerError(arg.Row.Revision, 0, arg.Now + TimerErrorBackoff, 1),
             (_, last, arg) =>
             {
                 var failures = last.DatabaseFailures + 1;
@@ -742,10 +742,10 @@ internal sealed class InvokeOutcomeReconciler(
                 return last with
                 {
                     DatabaseFailures = failures,
-                    Until = now + (wait > NotHereBackoffCap ? NotHereBackoffCap : wait),
+                    Until = arg.Now + (wait > NotHereBackoffCap ? NotHereBackoffCap : wait),
                 };
             },
-            row
+            (Row: row, Now: now)
         );
     }
 
@@ -755,18 +755,18 @@ internal sealed class InvokeOutcomeReconciler(
         var now = Time.GetUtcNow();
         var next = _timerErrors.AddOrUpdate(
             row.RowId,
-            (_, arg) => new TimerError(arg.Revision, 1, now + TimerErrorBackoff),
+            (_, arg) => new TimerError(arg.Row.Revision, 1, arg.Now + TimerErrorBackoff),
             (_, last, arg) =>
             {
-                var attempts = last.Revision == arg.Revision ? last.Attempts + 1 : 1;
+                var attempts = last.Revision == arg.Row.Revision ? last.Attempts + 1 : 1;
                 var wait = TimerErrorBackoff * Math.Pow(2, Math.Min(attempts - 1, 16));
                 return new TimerError(
-                    arg.Revision,
+                    arg.Row.Revision,
                     attempts,
-                    now + (wait > NotHereBackoffCap ? NotHereBackoffCap : wait)
+                    arg.Now + (wait > NotHereBackoffCap ? NotHereBackoffCap : wait)
                 );
             },
-            row
+            (Row: row, Now: now)
         );
         return next.Attempts;
     }
@@ -932,7 +932,7 @@ internal sealed class InvokeOutcomeReconciler(
                     .Deliver(invokeToken, cancellationToken)
                     .ConfigureAwait(false);
             Record(invokeToken, result);
-            Delivered?.Invoke(invokeToken, result);
+            Delivered?.Invoke(this, new InvokeDeliveredEventArgs(invokeToken, result));
             return result;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -1016,7 +1016,7 @@ internal sealed class InvokeOutcomeReconciler(
             while (!stoppingToken.IsCancellationRequested)
             {
                 Interlocked.Exchange(ref _sweepAsked, 0);
-                Sweeping?.Invoke();
+                Sweeping?.Invoke(this, EventArgs.Empty);
                 try
                 {
                     await SweepOnce(stoppingToken).ConfigureAwait(false);
@@ -1162,7 +1162,7 @@ internal sealed class InvokeOutcomeReconciler(
                     AskForSweep(wake);
                 first = false;
                 _listening.TrySetResult();
-                Subscribed?.Invoke();
+                Subscribed?.Invoke(this, EventArgs.Empty);
                 while (true)
                     Notice(wake, await subscription.NextAsync(stoppingToken).ConfigureAwait(false));
             }

@@ -22,7 +22,7 @@ namespace Trax.StateMachine;
 /// validates against its own serialized form, with one exception: an integer within one double step of a 64-bit
 /// (or wider) type's end, which an engine reading JSON numbers as doubles cannot tell from one past the end, is
 /// refused with it. An integral field carries its CLR range, and a dictionary's values and a list's elements
-/// carry their own schema. A property whose type has no fixed JSON type (<c>object</c>,
+/// carry their own schema. A property whose type has no fixed JSON type (<see langword="object"/>,
 /// a raw <c>JsonNode</c>, a <c>[Flags]</c> enum) throws <see cref="InvalidOperationException"/> here, when the machine is
 /// configured, rather than being given a type its values would not match.</para>
 ///
@@ -132,7 +132,7 @@ internal static class SchemaReflection
 
     /// <summary>
     /// Whether System.Text.Json sets <paramref name="property"/> when it reads a <paramref name="type"/>: through a
-    /// public setter (an <c>init</c> one too), a setter marked <c>[JsonInclude]</c>, or a parameter of the
+    /// public setter (an <see langword="init"/> one too), a setter marked <c>[JsonInclude]</c>, or a parameter of the
     /// constructor it reads the type with. A computed property (<c>int Total =&gt; Qty * Price</c>) is none of
     /// these: it is skipped on read, so an input carrying it carries a value the record never holds.
     /// </summary>

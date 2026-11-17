@@ -970,10 +970,10 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
         var delivered = new TaskCompletionSource<InvokeDelivery>(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
-        swept.Reconciler.Delivered += (run, result) =>
+        swept.Reconciler.Delivered += (_, e) =>
         {
-            if (run == token)
-                delivered.TrySetResult(result);
+            if (e.InvokeToken == token)
+                delivered.TrySetResult(e.Delivery);
         };
 
         await swept.Reconciler.StartAsync(CancellationToken.None);

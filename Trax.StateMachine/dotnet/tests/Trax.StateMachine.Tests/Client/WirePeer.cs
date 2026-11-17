@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
@@ -24,7 +25,10 @@ internal sealed class WirePeer(NetworkStream stream, CancellationToken stopping)
         await stream
             .WriteAsync(
                 Encoding.ASCII.GetBytes(
-                    $"HTTP/1.1 {status} {reason}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"HTTP/1.1 {status} {reason}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    )
                 ),
                 Stopping
             )

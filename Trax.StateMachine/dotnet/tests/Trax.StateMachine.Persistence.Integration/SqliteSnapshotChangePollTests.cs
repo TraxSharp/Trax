@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Threading.Channels;
 using AwesomeAssertions;
@@ -44,23 +45,26 @@ public class SqliteSnapshotChangePollTests
         var listening = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
-        var reading = Task.Run(async () =>
-        {
-            try
+        var reading = Task.Run(
+            async () =>
             {
-                await foreach (
-                    var change in listener!.ChangesAsync(stop.Token).ConfigureAwait(false)
-                )
-                    if (change is SnapshotChange.Row(var rowId))
-                        heard.Writer.TryWrite(rowId);
-                    else
-                        listening.TrySetResult();
-            }
-            catch (OperationCanceledException) when (stop.IsCancellationRequested)
-            {
-                // Stopped by the test.
-            }
-        });
+                try
+                {
+                    await foreach (
+                        var change in listener!.ChangesAsync(stop.Token).ConfigureAwait(false)
+                    )
+                        if (change is SnapshotChange.Row(var rowId))
+                            heard.Writer.TryWrite(rowId);
+                        else
+                            listening.TrySetResult();
+                }
+                catch (OperationCanceledException) when (stop.IsCancellationRequested)
+                {
+                    // Stopped by the test.
+                }
+            },
+            CancellationToken.None
+        );
 
         async Task<bool> Hears(long rowId)
         {
@@ -80,7 +84,7 @@ public class SqliteSnapshotChangePollTests
         try
         {
             // The first change is a reload, once the poll has taken its baseline: every write after it is reported.
-            await listening.Task.WaitAsync(HearWithin);
+            await listening.Task.WaitAsync(HearWithin, CancellationToken.None);
 
             var id = Guid.NewGuid();
             await host.SeedDraft(User, id, TestTurnstile.InitialJson);
@@ -90,14 +94,22 @@ public class SqliteSnapshotChangePollTests
             using (var scope = host.Scope())
                 (
                     await host.Service(scope, "turnstile")
-                        .Advance(User, id, "Coin", new JsonObject { ["coin"] = "quarter" })
+                        .Advance(
+                            User,
+                            id,
+                            "Coin",
+                            new JsonObject { ["coin"] = "quarter" },
+                            cancellationToken: CancellationToken.None
+                        )
                 )
                     .Should()
                     .BeOfType<AdvanceOutcome.Advanced>();
             (await Hears(first)).Should().BeTrue("the advance is a new revision");
 
             using (var scope = host.Scope())
-                await scope.ServiceProvider.GetRequiredService<ISnapshotStore>().Delete(User, id);
+                await scope
+                    .ServiceProvider.GetRequiredService<ISnapshotStore>()
+                    .Delete(User, id, CancellationToken.None);
             (await Hears(first)).Should().BeTrue("a delete is reported");
 
             await host.SeedDraft(User, id, TestTurnstile.InitialJson);
@@ -134,31 +146,40 @@ public class SqliteSnapshotChangePollTests
         var listening = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
-        var reading = Task.Run(async () =>
-        {
-            try
+        var reading = Task.Run(
+            async () =>
             {
-                await foreach (
-                    var change in listener
-                        .ChangesAsync(stop.Token, () => new([watched]))
-                        .ConfigureAwait(false)
-                )
-                    if (change is SnapshotChange.Row(var rowId))
-                        heard.Writer.TryWrite(rowId);
-                    else
-                        listening.TrySetResult();
-            }
-            catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
-        });
+                try
+                {
+                    await foreach (
+                        var change in listener
+                            .ChangesAsync(stop.Token, () => new([watched]))
+                            .ConfigureAwait(false)
+                    )
+                        if (change is SnapshotChange.Row(var rowId))
+                            heard.Writer.TryWrite(rowId);
+                        else
+                            listening.TrySetResult();
+                }
+                catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
+            },
+            CancellationToken.None
+        );
 
         try
         {
-            await listening.Task.WaitAsync(HearWithin);
+            await listening.Task.WaitAsync(HearWithin, CancellationToken.None);
             foreach (var id in new[] { otherId, watchedId })
                 using (var scope = host.Scope())
                     (
                         await host.Service(scope, "turnstile")
-                            .Advance(User, id, "Coin", new JsonObject { ["coin"] = "quarter" })
+                            .Advance(
+                                User,
+                                id,
+                                "Coin",
+                                new JsonObject { ["coin"] = "quarter" },
+                                cancellationToken: CancellationToken.None
+                            )
                     )
                         .Should()
                         .BeOfType<AdvanceOutcome.Advanced>();
@@ -168,11 +189,16 @@ public class SqliteSnapshotChangePollTests
                 .Should()
                 .Be(watched, $"only the rows a reader watches are polled and reported. See {Adr}");
             // negative-wait: several polls pass, and the unwatched row must not be reported.
-            await Task.Delay(500);
+            await Task.Delay(500, CancellationToken.None);
             heard
                 .Reader.TryRead(out var more)
                 .Should()
-                .BeFalse($"row {other} is not watched, yet {more} was reported");
+                .BeFalse(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"row {other} is not watched, yet {more} was reported"
+                    )
+                );
         }
         finally
         {
@@ -196,19 +222,24 @@ public class SqliteSnapshotChangePollTests
             var listening = new TaskCompletionSource(
                 TaskCreationOptions.RunContinuationsAsynchronously
             );
-            var reading = Task.Run(async () =>
-            {
-                try
+            var reading = Task.Run(
+                async () =>
                 {
-                    await foreach (
-                        var change in listener.ChangesAsync(stop.Token).ConfigureAwait(false)
-                    )
-                        if (change is SnapshotChange.Reload)
-                            listening.TrySetResult();
-                }
-                catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
-            });
-            await listening.Task.WaitAsync(HearWithin).ConfigureAwait(false);
+                    try
+                    {
+                        await foreach (
+                            var change in listener.ChangesAsync(stop.Token).ConfigureAwait(false)
+                        )
+                            if (change is SnapshotChange.Reload)
+                                listening.TrySetResult();
+                    }
+                    catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
+                },
+                CancellationToken.None
+            );
+            await listening
+                .Task.WaitAsync(HearWithin, CancellationToken.None)
+                .ConfigureAwait(false);
             return (stop, reading);
         }
 
@@ -222,7 +253,7 @@ public class SqliteSnapshotChangePollTests
             var deadline = DateTime.UtcNow + HearWithin;
             while (listener.IsPolling && DateTime.UtcNow < deadline)
                 // allowed-delay: polls until the listener's loop has ended.
-                await Task.Delay(50);
+                await Task.Delay(50, CancellationToken.None);
             listener
                 .IsPolling.Should()
                 .BeFalse($"with no reader left, nothing polls the table. See {Adr}");

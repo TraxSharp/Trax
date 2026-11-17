@@ -1,3 +1,4 @@
+using System.Globalization;
 using Npgsql;
 using Trax.Effect.Data.Postgres.Utils;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
@@ -20,15 +21,23 @@ public class PostgresSetup
     // Connect to the always-present `postgres` maintenance database to create/drop the throwaway one. The
     // local docker-compose and the CI Postgres service disagree on which app databases exist, but every
     // Postgres has `postgres`.
-    private static readonly string Maintenance =
-        $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database=postgres;Include Error Detail=true";
+    private static readonly string Maintenance = string.Create(
+        CultureInfo.InvariantCulture,
+        $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database=postgres;Include Error Detail=true"
+    );
 
     // One per test run: two runs on one Postgres (two worktrees, or two sessions sharing a Docker daemon) would
     // otherwise drop each other's database out from under their tests.
-    private static readonly string Database = $"trax_statemachine_it_{Environment.ProcessId}";
+    private static readonly string Database = string.Create(
+        CultureInfo.InvariantCulture,
+        $"trax_statemachine_it_{Environment.ProcessId}"
+    );
 
     public static string ConnectionString { get; } =
-        $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database={Database};Include Error Detail=true;Maximum Pool Size=40";
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database={Database};Include Error Detail=true;Maximum Pool Size=40"
+        );
 
     [OneTimeSetUp]
     public async Task Up()

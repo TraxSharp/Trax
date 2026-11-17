@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
@@ -129,8 +130,10 @@ public class GraphQLSubscriptionSocketTests
             await stream
                 .WriteAsync(
                     Encoding.ASCII.GetBytes(
-                        $"HTTP/1.1 302 Found\r\nLocation: ws://127.0.0.1:{port}/graphql\r\n"
-                            + "Content-Length: 0\r\nConnection: close\r\n\r\n"
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"HTTP/1.1 302 Found\r\nLocation: ws://127.0.0.1:{port}/graphql\r\n"
+                        ) + "Content-Length: 0\r\nConnection: close\r\n\r\n"
                     )
                 )
                 .ConfigureAwait(false);
@@ -139,7 +142,10 @@ public class GraphQLSubscriptionSocketTests
             new GraphQLSubscriptionSocketOptions
             {
                 Endpoint = new Uri(
-                    $"ws://127.0.0.1:{((IPEndPoint)host.LocalEndpoint).Port}/graphql"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"ws://127.0.0.1:{((IPEndPoint)host.LocalEndpoint).Port}/graphql"
+                    )
                 ),
             }
         );

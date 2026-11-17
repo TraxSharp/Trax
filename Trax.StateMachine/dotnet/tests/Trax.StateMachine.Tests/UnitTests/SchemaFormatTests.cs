@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
@@ -237,8 +238,9 @@ public class SchemaFormatTests
             {
                 0 => $"{scheme}:{tail}",
                 1 => $"{scheme}://{host}{tail}",
-                2 => $"{scheme}://{host}:{port}{tail}",
-                _ => $"{scheme}://{tail}@{host}{(port < 0 ? "" : ":" + port)}/{tail}",
+                2 => string.Create(CultureInfo.InvariantCulture, $"{scheme}://{host}:{port}{tail}"),
+                _ =>
+                    $"{scheme}://{tail}@{host}{(port < 0 ? "" : ":" + port.ToString(CultureInfo.InvariantCulture))}/{tail}",
             }
     );
 
@@ -246,7 +248,11 @@ public class SchemaFormatTests
     public void Every_uri_the_format_accepts_is_one_System_Text_Json_reads()
     {
         // The twin checks the same grammar without System.Uri to ask, so the grammar alone must be the stricter.
-        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            RespectNullableAnnotations = false,
+            RespectRequiredConstructorParameters = false,
+        };
         AUriLikeString.Sample(
             uri =>
             {

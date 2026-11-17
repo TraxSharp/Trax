@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 
 namespace Trax.StateMachine.Features;
@@ -340,7 +341,12 @@ internal sealed record HostFile(
             var p = at["policies"][i];
             // Two policies that wait for the same entry and fire the same trigger are one fire, named once.
             if (!seen.TryAdd(policy.Id, i))
-                throw p.Fail($"'{policy.Id}' is the policy at /policies/{seen[policy.Id]} again.");
+                throw p.Fail(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"'{policy.Id}' is the policy at /policies/{seen[policy.Id]} again."
+                    )
+                );
             if (!Machines.TryGetValue(policy.When, out var source))
                 throw p["when"]["machine"].Fail($"'{policy.When}' is not a machine here.");
             if (!Machines.TryGetValue(policy.Target, out var target))

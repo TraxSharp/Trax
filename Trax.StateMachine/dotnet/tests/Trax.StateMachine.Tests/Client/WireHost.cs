@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
@@ -28,7 +29,12 @@ internal sealed class WireHost : IAsyncDisposable
     }
 
     public Uri Endpoint =>
-        new($"ws://127.0.0.1:{((IPEndPoint)_listener.LocalEndpoint).Port}/graphql");
+        new(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"ws://127.0.0.1:{((IPEndPoint)_listener.LocalEndpoint).Port}/graphql"
+            )
+        );
 
     /// <summary>How many connections were accepted.</summary>
     public int Connections => Volatile.Read(ref _connections);
@@ -83,7 +89,9 @@ internal sealed class WireHost : IAsyncDisposable
         Task[] peers;
         lock (_peers)
             peers = [.. _peers];
-        await Task.WhenAll(peers).WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+        await Task.WhenAll(peers)
+            .WaitAsync(TimeSpan.FromSeconds(10), CancellationToken.None)
+            .ConfigureAwait(false);
         _stop.Dispose();
     }
 }

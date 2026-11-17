@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.StateMachine.Persistence.Integration.Fakes;
 
 /// <summary>An effect that blocks until released — lets a test hold a claim mid-flight deterministically
@@ -24,6 +26,6 @@ public sealed class GatedEffect : ISnapshotEffect
         var n = Interlocked.Increment(ref _calls);
         _entered.TrySetResult();
         await _gate.Task.ConfigureAwait(false);
-        return $"receipt-{n}";
+        return string.Create(CultureInfo.InvariantCulture, $"receipt-{n}");
     }
 }

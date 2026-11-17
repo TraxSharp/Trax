@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.StateMachine.Gherkin.Lexical;
 
 /// <summary>
@@ -66,7 +68,7 @@ internal sealed class LexiconParser
             opened = Read(line, cursor, _open[at].Block, parent);
             cursor.End();
         }
-        catch (FormError error)
+        catch (FormErrorException error)
         {
             _problems.Add(new LexProblem(line.Number, error.Message));
         }
@@ -220,7 +222,7 @@ internal sealed class LexiconParser
     }
 
     // The parent was a problem: read the line for its own form against a throwaway parent, then drop it.
-    private object? Discard(LexLine line, Cursor c, Block under) =>
+    private static object? Discard(LexLine line, Cursor c, Block under) =>
         under switch
         {
             Block.Machine => ReadMachine(line, c, new LxMachine("x", noun: null, 0)),
@@ -235,7 +237,7 @@ internal sealed class LexiconParser
             _ => null,
         };
 
-    private object? ReadMachine(LexLine line, Cursor c, LxMachine m)
+    private static object? ReadMachine(LexLine line, Cursor c, LxMachine m)
     {
         var n = line.Number;
         switch (line.Keyword.Text)
@@ -368,7 +370,7 @@ internal sealed class LexiconParser
         throw new InvalidOperationException($"{line.Keyword.Text} has no reader under Machine:.");
     }
 
-    private object? ReadState(LexLine line, Cursor c, LxState state)
+    private static object? ReadState(LexLine line, Cursor c, LxState state)
     {
         switch (line.Keyword.Text)
         {
@@ -384,15 +386,17 @@ internal sealed class LexiconParser
         throw new InvalidOperationException($"{line.Keyword.Text} has no reader under State:.");
     }
 
-    private object? ReadTrigger(LexLine line, Cursor c, LxTrigger trigger)
+    private static object? ReadTrigger(LexLine line, Cursor c, LxTrigger trigger)
     {
         var n = line.Number;
         void Reduce(LxReduce reduce)
         {
             if (trigger.Reduce is { } earlier)
-                throw new FormError(
-                    $"a trigger reduces once, and line {earlier.Line} already does: one of Sets:, Keeps, Clears, "
-                        + "Resets or Reduces with:."
+                throw new FormErrorException(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"a trigger reduces once, and line {earlier.Line} already does: one of Sets:, Keeps, Clears, "
+                    ) + "Resets or Reduces with:."
                 );
             trigger.Reduce = reduce;
         }
@@ -444,7 +448,7 @@ internal sealed class LexiconParser
         throw new InvalidOperationException($"{line.Keyword.Text} has no reader under Trigger:.");
     }
 
-    private object? ReadGuard(LexLine line, Cursor c, LxGuard guard)
+    private static object? ReadGuard(LexLine line, Cursor c, LxGuard guard)
     {
         var n = line.Number;
         switch (line.Keyword.Text)
@@ -465,7 +469,7 @@ internal sealed class LexiconParser
         throw new InvalidOperationException($"{line.Keyword.Text} has no reader under Guard:.");
     }
 
-    private object? ReadRuns(LexLine line, Cursor c, LxRuns runs)
+    private static object? ReadRuns(LexLine line, Cursor c, LxRuns runs)
     {
         var n = line.Number;
         switch (line.Keyword.Text)
@@ -480,7 +484,7 @@ internal sealed class LexiconParser
             }
             case "Takes:":
                 if (runs.Takes)
-                    throw new FormError(
+                    throw new FormErrorException(
                         "the train's inputs are already listed on an earlier 'Takes:' line."
                     );
                 runs.Takes = true;
@@ -622,6 +626,11 @@ internal sealed class LexiconParser
 
     private static bool Letter(char c) => c is (>= 'A' and <= 'Z') or (>= 'a' and <= 'z');
 
-    private static FormError Again(string keyword, int line) =>
-        new($"'{keyword}' is already given at line {line}, and is given once.");
+    private static FormErrorException Again(string keyword, int line) =>
+        new(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"'{keyword}' is already given at line {line}, and is given once."
+            )
+        );
 }

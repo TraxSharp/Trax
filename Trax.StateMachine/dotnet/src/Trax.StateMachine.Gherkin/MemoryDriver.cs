@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using Trax.StateMachine.Features;
 
@@ -119,7 +120,10 @@ internal sealed class MemoryDriver(
     {
         if (_clock > TimeSpan.MaxValue - time)
             throw new InvalidOperationException(
-                $"Waiting {time} more adds up to more time than a clock holds ({TimeSpan.MaxValue.Days} days)."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Waiting {time} more adds up to more time than a clock holds ({TimeSpan.MaxValue.Days} days)."
+                )
             );
         _clock += time;
         for (var fired = 0; fired < 1000; fired++)

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using AwesomeAssertions;
 using Trax.StateMachine.Persistence;
 using Trax.StateMachine.Tests.Stress.Fakes;
@@ -82,7 +83,7 @@ public class ExactlyOnceStressTests : StressFixture
         await Fan(
             instances * per,
             StressProfile.MaxConcurrency,
-            k => Send(ids[k / per], $"req-{k}", effect)
+            k => Send(ids[k / per], string.Create(CultureInfo.InvariantCulture, $"req-{k}"), effect)
         );
         sw.Stop();
 
@@ -96,8 +97,14 @@ public class ExactlyOnceStressTests : StressFixture
 
         var sends = instances * per;
         await TestContext.Progress.WriteLineAsync(
-            $"[exactly-once] {instances} drafts x {per} sends = {sends} sends in {sw.ElapsedMilliseconds} ms "
-                + $"({sends * 1000.0 / Math.Max(1, sw.ElapsedMilliseconds):N0} sends/s), deliveries={effect.Calls}"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"[exactly-once] {instances} drafts x {per} sends = {sends} sends in {sw.ElapsedMilliseconds} ms "
+            )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"({sends * 1000.0 / Math.Max(1, sw.ElapsedMilliseconds):N0} sends/s), deliveries={effect.Calls}"
+                )
         );
     }
 
@@ -112,7 +119,7 @@ public class ExactlyOnceStressTests : StressFixture
         var outcomes = await Fan(
             hot,
             StressProfile.MaxConcurrency,
-            k => Send(id, $"req-{k}", effect)
+            k => Send(id, string.Create(CultureInfo.InvariantCulture, $"req-{k}"), effect)
         );
 
         effect

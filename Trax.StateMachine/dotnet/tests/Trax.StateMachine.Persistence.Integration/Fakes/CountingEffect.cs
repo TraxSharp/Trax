@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.StateMachine.Persistence.Integration.Fakes;
 
 /// <summary>An effect that counts deliveries and returns a distinct receipt each time — so a test can prove
@@ -13,6 +15,6 @@ public sealed class CountingEffect(bool fail = false) : IOrderCharge
         var n = Interlocked.Increment(ref _calls);
         if (fail)
             throw new InvalidOperationException("delivery failed");
-        return Task.FromResult($"receipt-{n}");
+        return Task.FromResult(string.Create(CultureInfo.InvariantCulture, $"receipt-{n}"));
     }
 }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
@@ -52,7 +53,9 @@ public class RequestIdRingSizeTests(StoreProvider provider)
         );
 
         for (var i = 1; i <= RequestIdRing.Capacity; i++)
-            (await Edit(id, $"edit-{i}")).Should().BeOfType<AdvanceOutcome.Advanced>();
+            (await Edit(id, string.Create(CultureInfo.InvariantCulture, $"edit-{i}")))
+                .Should()
+                .BeOfType<AdvanceOutcome.Advanced>();
 
         var column = (string?)
             await _host.Scalar(
@@ -110,7 +113,9 @@ public class RequestIdRingSizeTests(StoreProvider provider)
         await _host.SeedDraft(User, id, snapshot);
 
         for (var i = 1; i <= RequestIdRing.Capacity; i++)
-            (await Edit(id, $"edit-{i}")).Should().BeOfType<AdvanceOutcome.Advanced>();
+            (await Edit(id, string.Create(CultureInfo.InvariantCulture, $"edit-{i}")))
+                .Should()
+                .BeOfType<AdvanceOutcome.Advanced>();
 
         var ring = RequestIdRing.Parse(await StoredText(id))!;
         var result = ring[^1].ResultSnapshot;
@@ -125,7 +130,10 @@ public class RequestIdRingSizeTests(StoreProvider provider)
             .Should()
             .BeGreaterThan(
                 RequestIdRing.MaxBytes,
-                $"each entry takes about {sizes[^1]} bytes as stored, and the ring keeps as many as fit; see {Adr}"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"each entry takes about {sizes[^1]} bytes as stored, and the ring keeps as many as fit; see {Adr}"
+                )
             );
         var expected = ring.Count;
         expected.Should().Be(fits, "a result is counted as the column's text stores it");
@@ -134,7 +142,7 @@ public class RequestIdRingSizeTests(StoreProvider provider)
             .Equal(
                 Enumerable
                     .Range(RequestIdRing.Capacity - expected + 1, expected)
-                    .Select(i => $"edit-{i}")
+                    .Select(i => string.Create(CultureInfo.InvariantCulture, $"edit-{i}"))
             );
 
         // What the column holds is no larger than what was counted.

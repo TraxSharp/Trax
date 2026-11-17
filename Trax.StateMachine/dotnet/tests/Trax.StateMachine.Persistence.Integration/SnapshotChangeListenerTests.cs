@@ -363,22 +363,27 @@ public class SnapshotChangeListenerTests
             var flooding = new TaskCompletionSource(
                 TaskCreationOptions.RunContinuationsAsynchronously
             );
-            flood = Task.Run(async () =>
-            {
-                var connection = new NpgsqlConnection(PostgresSetup.ConnectionString);
-                await using var connectionDisposal = connection.ConfigureAwait(false);
-                await connection.OpenAsync().ConfigureAwait(false);
-                var notify = connection.CreateCommand();
-                await using var notifyDisposal = notify.ConfigureAwait(false);
-                notify.CommandText =
-                    $"SELECT pg_notify('{SnapshotNotices.Channel}', '999999999999')";
-                while (!stop.IsCancellationRequested)
+            flood = Task.Run(
+                async () =>
                 {
-                    await notify.ExecuteNonQueryAsync().ConfigureAwait(false);
-                    flooding.TrySetResult();
-                }
-            });
-            await flooding.Task.WaitAsync(HearWithin);
+                    var connection = new NpgsqlConnection(PostgresSetup.ConnectionString);
+                    await using var connectionDisposal = connection.ConfigureAwait(false);
+                    await connection.OpenAsync(CancellationToken.None).ConfigureAwait(false);
+                    var notify = connection.CreateCommand();
+                    await using var notifyDisposal = notify.ConfigureAwait(false);
+                    notify.CommandText =
+                        $"SELECT pg_notify('{SnapshotNotices.Channel}', '999999999999')";
+                    while (!stop.IsCancellationRequested)
+                    {
+                        await notify
+                            .ExecuteNonQueryAsync(CancellationToken.None)
+                            .ConfigureAwait(false);
+                        flooding.TrySetResult();
+                    }
+                },
+                CancellationToken.None
+            );
+            await flooding.Task.WaitAsync(HearWithin, CancellationToken.None);
 
             // Two readings of the queue on the listener's session, both after the flood began.
             var since = await DatabaseNow();

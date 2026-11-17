@@ -7,6 +7,9 @@ namespace Trax.StateMachine.Gherkin;
 /// machine's start, each state, guard, trigger and outcome phrase, and each view field. Sorted by part, so the report
 /// reads the same on every run.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal static class Usage
 {
     private static readonly Comparer<(string File, long Line)> ByFileAndLine = Comparer<(

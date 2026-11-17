@@ -11,7 +11,7 @@ namespace Trax.StateMachine.Tests.Fakes;
 /// </summary>
 public static class StrictInputMachine
 {
-    public sealed record StrictInput
+    internal sealed record StrictInput
     {
         public StrictColor Color { get; init; }
         public Guid Id { get; init; }

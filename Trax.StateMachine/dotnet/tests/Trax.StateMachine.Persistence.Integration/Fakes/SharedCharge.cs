@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using Trax.Effect.Data.Services.DataContext;
 
@@ -11,5 +12,10 @@ public sealed class SharedCharge : IOrderCharge
     public int Calls => Volatile.Read(ref _calls);
 
     public Task<string> Run(Snapshot snapshot, CancellationToken cancellationToken = default) =>
-        Task.FromResult($"receipt-{Interlocked.Increment(ref _calls)}");
+        Task.FromResult(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"receipt-{Interlocked.Increment(ref _calls)}"
+            )
+        );
 }

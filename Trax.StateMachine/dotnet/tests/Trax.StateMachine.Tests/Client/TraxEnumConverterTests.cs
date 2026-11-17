@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AwesomeAssertions;
@@ -71,7 +72,10 @@ public class TraxEnumConverterTests
         var act = () =>
         {
             for (var i = 0; i <= TraxEnumConverter<Flood>.MaxUnknownNames; i++)
-                JsonSerializer.Deserialize<Flood>($"\"NEW_{i}\"", TraxJson.Options);
+                JsonSerializer.Deserialize<Flood>(
+                    string.Create(CultureInfo.InvariantCulture, $"\"NEW_{i}\""),
+                    TraxJson.Options
+                );
         };
 
         act.Should().Throw<JsonException>().WithMessage("*more than 256*");

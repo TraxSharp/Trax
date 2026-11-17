@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using CsCheck;
@@ -340,7 +341,12 @@ public class TwinSequenceParityTests
                     )
                     && !string.Equals(outcome, "rejected", StringComparison.Ordinal)
                 )
-                    diffs.Add($"[{subject.Name} #{i} step {n}] C# advance applied {step.Trigger}");
+                    diffs.Add(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"[{subject.Name} #{i} step {n}] C# advance applied {step.Trigger}"
+                        )
+                    );
 
                 var answer = (JsonObject)answers[n]!;
                 var twinOutcome = answer["outcome"]!.GetValue<string>();
@@ -353,7 +359,10 @@ public class TwinSequenceParityTests
                 )
                 {
                     diffs.Add(
-                        $"[{subject.Name} #{i} step {n}: {step.Op} {step.Trigger} "
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"[{subject.Name} #{i} step {n}: {step.Op} {step.Trigger} "
+                        )
                             + $"{step.Input?.ToJsonString()}] C# {outcome} {reason ?? wire}, "
                             + $"twin {twinOutcome} {twinReason ?? twinWire}"
                     );

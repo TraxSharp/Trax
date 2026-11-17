@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
@@ -571,7 +572,9 @@ public class TransportTests
         var client = new GraphQLSubscriptionSocket(
             new GraphQLSubscriptionSocketOptions
             {
-                Endpoint = new Uri($"ws://127.0.0.1:{port}/graphql"),
+                Endpoint = new Uri(
+                    string.Create(CultureInfo.InvariantCulture, $"ws://127.0.0.1:{port}/graphql")
+                ),
                 MaxMessageSize = 1024,
             }
         );

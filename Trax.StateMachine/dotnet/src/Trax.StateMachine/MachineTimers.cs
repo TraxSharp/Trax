@@ -21,6 +21,8 @@ public static class MachineTimers
     /// <see cref="MaxDuration"/>: the builder's words, which derivation from features repeats.
     /// </summary>
     internal static string TooLong(string state, TimeSpan wait) =>
-        $"the timer of {state} waits {wait}, longer than the {MaxDuration.TotalDays} days a timer may wait "
-        + "(MachineTimers.MaxDuration).";
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"the timer of {state} waits {wait}, longer than the {MaxDuration.TotalDays} days a timer may wait "
+        ) + "(MachineTimers.MaxDuration).";
 }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 
@@ -64,7 +65,12 @@ public class ClientManifestTests
 
         text.Should().Be(ClientManifest.Write(Sample()));
         text.Should().EndWith("}\n").And.NotContain("\r");
-        text.Should().StartWith("{\"format\":" + ClientManifest.CurrentFormat + ",");
+        text.Should()
+            .StartWith(
+                "{\"format\":"
+                    + ClientManifest.CurrentFormat.ToString(CultureInfo.InvariantCulture)
+                    + ","
+            );
     }
 
     [Test]
@@ -84,12 +90,12 @@ public class ClientManifestTests
         };
         var outcomes = new JsonObject();
         for (var i = 0; i < 8; i++)
-            outcomes[$"Step{i}.done"] = new JsonObject
+            outcomes[string.Create(CultureInfo.InvariantCulture, $"Step{i}.done")] = new JsonObject
             {
                 ["edges"] = new JsonArray(),
                 ["outcome"] = "done",
                 ["output"] = output.DeepClone(),
-                ["state"] = $"Step{i}",
+                ["state"] = string.Create(CultureInfo.InvariantCulture, $"Step{i}"),
             };
         var ir = new JsonObject
         {

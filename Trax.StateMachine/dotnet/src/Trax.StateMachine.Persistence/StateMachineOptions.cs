@@ -40,7 +40,11 @@ public sealed class StateMachineOptions
         set
         {
             if (value is { } ttl)
-                ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(ttl, TimeSpan.Zero);
+                ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(
+                    ttl,
+                    TimeSpan.Zero,
+                    nameof(value)
+                );
             field = value;
             DraftTtlSet = true;
         }
@@ -65,7 +69,7 @@ public sealed class StateMachineOptions
         set
         {
             if (value is { } cap)
-                ArgumentOutOfRangeException.ThrowIfLessThan(cap, 1);
+                ArgumentOutOfRangeException.ThrowIfLessThan(cap, 1, nameof(value));
             field = value;
             MaxDraftsPerUserSet = true;
         }
@@ -156,7 +160,11 @@ public sealed class StateMachineOptions
         set
         {
             if (value is { } lifetime)
-                ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(lifetime, TimeSpan.Zero);
+                ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(
+                    lifetime,
+                    TimeSpan.Zero,
+                    nameof(value)
+                );
             field = value;
         }
     } = DefaultMaxDraftLifetime;

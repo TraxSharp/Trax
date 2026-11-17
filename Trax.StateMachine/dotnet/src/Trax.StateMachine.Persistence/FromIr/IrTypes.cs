@@ -76,7 +76,7 @@ internal sealed partial class IrTypes
         var builder = _module.DefineEnum(Name(suffix), TypeAttributes.Public, typeof(int));
         for (var i = 0; i < members.Count; i++)
         {
-            if (!Member().IsMatch(members[i]))
+            if (!Member.IsMatch(members[i]))
                 throw new InvalidOperationException(
                     $"The {what} '{members[i]}' is not a name a machine can have: a capital letter, then letters and "
                         + "digits."
@@ -201,7 +201,7 @@ internal sealed partial class IrTypes
     /// <summary>A field's property name: its JSON name with the first letter upper-cased, which must be a C# identifier.</summary>
     internal static string PropertyName(string field, string owner)
     {
-        if (!Identifier().IsMatch(field))
+        if (!Identifier.IsMatch(field))
             throw new InvalidOperationException(
                 $"{owner} has the field '{field}', which is not a name a property can have: a letter or '_', then "
                     + "letters, digits and '_'."
@@ -216,9 +216,17 @@ internal sealed partial class IrTypes
                 .Select(word => word.Length == 0 ? "" : char.ToUpperInvariant(word[0]) + word[1..])
         );
 
-    [GeneratedRegex(@"\A[A-Z][A-Za-z0-9]*\z", RegexOptions.CultureInvariant)]
-    private static partial Regex Member();
+    [GeneratedRegex(
+        @"\A[A-Z][A-Za-z0-9]*\z",
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Member { get; }
 
-    [GeneratedRegex(@"\A[A-Za-z_][A-Za-z0-9_]*\z", RegexOptions.CultureInvariant)]
-    private static partial Regex Identifier();
+    [GeneratedRegex(
+        @"\A[A-Za-z_][A-Za-z0-9_]*\z",
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Identifier { get; }
 }

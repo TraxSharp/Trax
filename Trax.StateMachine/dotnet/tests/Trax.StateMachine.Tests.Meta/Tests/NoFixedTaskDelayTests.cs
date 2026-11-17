@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.StateMachine.Tests.Meta.Tests;
 
 /// <summary>
@@ -9,11 +11,6 @@ namespace Trax.StateMachine.Tests.Meta.Tests;
 [TestFixture]
 public partial class NoFixedTaskDelayTests
 {
-    private static readonly Regex Justification = new(
-        @"(?i)(determinism:|allowed-delay:|measuring-interval:|negative-wait:)",
-        RegexOptions.Compiled
-    );
-
     /// <summary>
     /// Pre-existing offenders that pre-date the determinism convention. Each entry is a
     /// repo-relative path. New code MUST NOT add fixed-duration Task.Delay / Thread.Sleep
@@ -59,7 +56,12 @@ public partial class NoFixedTaskDelayTests
 
                 count++;
                 if (!BaselineOffenders.ContainsKey(rel))
-                    newOffenders.Add($"{rel}:{i + 1}  -> {lines[i].Trim()}");
+                    newOffenders.Add(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{rel}:{i + 1}  -> {lines[i].Trim()}"
+                        )
+                    );
             }
 
             if (count > 0)
@@ -85,7 +87,10 @@ public partial class NoFixedTaskDelayTests
             var actual = fileOffenderCounts.TryGetValue(path, out var c) ? c : 0;
             if (actual != baselineCount)
                 regressions.Add(
-                    $"{path}: baseline={baselineCount}, actual={actual} ({actual - baselineCount:+#;-#})"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{path}: baseline={baselineCount}, actual={actual} ({actual - baselineCount:+#;-#})"
+                    )
                 );
         }
 
@@ -111,6 +116,17 @@ public partial class NoFixedTaskDelayTests
         return false;
     }
 
-    [GeneratedRegex(@"\b(Task\.Delay|Thread\.Sleep)\s*\(", RegexOptions.Compiled)]
+    [GeneratedRegex(
+        @"(?i)(?:determinism:|allowed-delay:|measuring-interval:|negative-wait:)",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Justification { get; }
+
+    [GeneratedRegex(
+        @"\b(?:Task\.Delay|Thread\.Sleep)\s*\(",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
     private static partial Regex DelayCall { get; }
 }

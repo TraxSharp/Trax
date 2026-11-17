@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -325,18 +326,26 @@ public class RedirectTests
         {
             _response = Encoding.UTF8.GetBytes(response);
             _listener.Start();
-            _serving = Task.Run(ServeAsync);
+            _serving = Task.Run(ServeAsync, CancellationToken.None);
         }
 
         public Uri Endpoint =>
-            new($"http://127.0.0.1:{((IPEndPoint)_listener.LocalEndpoint).Port}/graphql");
+            new(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"http://127.0.0.1:{((IPEndPoint)_listener.LocalEndpoint).Port}/graphql"
+                )
+            );
 
         public int Received => Volatile.Read(ref _received);
 
         public static LoopbackHttpHost Answering(string json) =>
             new(
                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n"
-                    + $"Content-Length: {Encoding.UTF8.GetByteCount(json)}\r\nConnection: close\r\n\r\n{json}"
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Content-Length: {Encoding.UTF8.GetByteCount(json)}\r\nConnection: close\r\n\r\n{json}"
+                    )
             );
 
         public static LoopbackHttpHost RedirectingTo(Uri target) =>

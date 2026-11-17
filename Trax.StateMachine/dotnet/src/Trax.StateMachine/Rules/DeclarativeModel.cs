@@ -18,7 +18,7 @@ public sealed record DeclarativeModel<TState, TTrigger>(
 {
     /// <summary>
     /// The differential fuzzing inputs authored on the machine, if any (see <see cref="DifferentialModel{TState,TTrigger}"/>).
-    /// Null when the machine declares no <c>.Differential(...)</c>. An <c>init</c> property, not a positional
+    /// Null when the machine declares no <c>.Differential(...)</c>. An <see langword="init"/> property, not a positional
     /// parameter, so existing construction stays source-compatible.
     /// </summary>
     public DifferentialModel<TState, TTrigger>? Differential { get; init; }

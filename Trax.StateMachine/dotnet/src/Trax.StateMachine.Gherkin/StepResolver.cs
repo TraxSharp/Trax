@@ -146,7 +146,7 @@ internal sealed partial class StepResolver
     {
         problem = null;
         unresolved = false;
-        if (FirstPerson().IsMatch(text))
+        if (FirstPerson.IsMatch(text))
         {
             problem =
                 $"'{text}' speaks as 'I'. Name the person: 'Given Ada is {_glossary.Actors.Values.First().Noun}', then 'Ada ...'.";
@@ -264,7 +264,15 @@ internal sealed partial class StepResolver
     private static string Reference(GlossaryMachine machine) =>
         machine.KeyedBy is { } parts
             ? Words(machine.Reference)
-                + string.Concat(parts.Select((_, i) => $@"\s+""(?<key{i}>[^""]*)"""))
+                + string.Concat(
+                    parts.Select(
+                        (_, i) =>
+                            string.Create(
+                                CultureInfo.InvariantCulture,
+                                $@"\s+""(?<key{i}>[^""]*)"""
+                            )
+                    )
+                )
         : machine.SystemKey is null
             ? $@"(?:(?<owner>{NamePattern})'s|(?<pronoun>her|his|their))\s+{Words(machine.Reference)}"
         : Words(machine.Reference);
@@ -275,7 +283,12 @@ internal sealed partial class StepResolver
         if (!match.Groups["key0"].Success)
             return null;
         var parts = new JsonArray();
-        for (var i = 0; match.Groups[$"key{i}"] is { Success: true } part; i++)
+        for (
+            var i = 0;
+            match.Groups[string.Create(CultureInfo.InvariantCulture, $"key{i}")]
+                is { Success: true } part;
+            i++
+        )
             parts.Add(part.Value);
         return parts.ToJsonString();
     }
@@ -398,10 +411,14 @@ internal sealed partial class StepResolver
                 _ => TimeSpan.FromDays(n),
             };
         }
-        catch (ArgumentOutOfRangeException)
+        catch (ArgumentOutOfRangeException ex)
         {
             throw new FormatException(
-                $"'{n} {unit}' is longer than a clock holds ({TimeSpan.MaxValue.Days} days)."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"'{n} {unit}' is longer than a clock holds ({TimeSpan.MaxValue.Days} days)."
+                ),
+                ex
             );
         }
     }
@@ -423,6 +440,10 @@ internal sealed partial class StepResolver
         );
     }
 
-    [GeneratedRegex(@"\A(?:I|I'm|I've|my|me)\b|\s(?:my|me|I)\s", RegexOptions.CultureInvariant)]
-    private static partial Regex FirstPerson();
+    [GeneratedRegex(
+        @"\A(?:I|I'm|I've|my|me)\b|\s(?:my|me|I)\s",
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex FirstPerson { get; }
 }

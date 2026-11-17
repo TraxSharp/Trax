@@ -113,8 +113,7 @@ public partial class TestFolderLayoutTests
         // Accept either explicit 'TestResults' or the [Tt]est[Rr]esult glob form
         // (both are recognised by gitignore and produced by `dotnet new gitignore`).
         var hasTestResults =
-            Regex.IsMatch(content, @"\bTestResults\b", RegexOptions.IgnoreCase)
-            || BracketedTestResults.IsMatch(content);
+            PlainTestResults.IsMatch(content) || BracketedTestResults.IsMatch(content);
 
         hasTestResults
             .Should()
@@ -125,9 +124,12 @@ public partial class TestFolderLayoutTests
             );
     }
 
-    [GeneratedRegex(@"\[Tt\]est\[Rr\]esult")]
+    [GeneratedRegex(@"\[Tt\]est\[Rr\]esult", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     private static partial Regex BracketedTestResults { get; }
 
-    [GeneratedRegex(@"^[A-Z][A-Za-z0-9]*$", RegexOptions.Compiled)]
+    [GeneratedRegex(@"\bTestResults\b", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex PlainTestResults { get; }
+
+    [GeneratedRegex(@"^[A-Z][A-Za-z0-9]*$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     private static partial Regex PascalCaseFolder { get; }
 }

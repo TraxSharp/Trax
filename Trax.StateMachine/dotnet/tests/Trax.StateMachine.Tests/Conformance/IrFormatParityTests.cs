@@ -23,14 +23,14 @@ public partial class IrFormatParityTests
             Path.Combine(FixturePaths.TypeScriptEngineRoot, "src", "rules", "irFormat.ts")
         );
 
-        Declared(TsIrFormatVersion(), irFormatTs, "irFormat.ts", "irFormatVersion")
+        Declared(TsIrFormatVersion, irFormatTs, "irFormat.ts", "irFormatVersion")
             .Should()
             .Be(
                 IrExporter.FormatVersion,
                 "the TypeScript engine's irFormatVersion and IrExporter.FormatVersion name one IR format; bump "
                     + "both together"
             );
-        Declared(TsOldestIrFormatRead(), irFormatTs, "irFormat.ts", "oldestIrFormatRead")
+        Declared(TsOldestIrFormatRead, irFormatTs, "irFormat.ts", "oldestIrFormatRead")
             .Should()
             .Be(
                 IrExporter.OldestFormatRead,
@@ -43,10 +43,10 @@ public partial class IrFormatParityTests
     {
         var irRs = File.ReadAllText(Path.Combine(FixturePaths.FolderRoot, "rust", "src", "ir.rs"));
 
-        Declared(RsIrFormatVersion(), irRs, "ir.rs", "IR_FORMAT_VERSION")
+        Declared(RsIrFormatVersion, irRs, "ir.rs", "IR_FORMAT_VERSION")
             .Should()
             .Be(IrExporter.FormatVersion, "the Rust engine reads the format IrExporter writes");
-        Declared(RsOldestIrFormatRead(), irRs, "ir.rs", "OLDEST_IR_FORMAT_READ")
+        Declared(RsOldestIrFormatRead, irRs, "ir.rs", "OLDEST_IR_FORMAT_READ")
             .Should()
             .Be(
                 IrExporter.OldestFormatRead,
@@ -100,24 +100,31 @@ public partial class IrFormatParityTests
         );
     }
 
-    [GeneratedRegex(@"^export const irFormatVersion = (?<version>\d+);$", RegexOptions.Multiline)]
-    private static partial Regex TsIrFormatVersion();
+    [GeneratedRegex(
+        @"^export const irFormatVersion = (?<version>\d+);$",
+        RegexOptions.Multiline,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex TsIrFormatVersion { get; }
 
     [GeneratedRegex(
         @"^export const oldestIrFormatRead = (?<version>\d+);$",
-        RegexOptions.Multiline
+        RegexOptions.Multiline,
+        matchTimeoutMilliseconds: 1000
     )]
-    private static partial Regex TsOldestIrFormatRead();
+    private static partial Regex TsOldestIrFormatRead { get; }
 
     [GeneratedRegex(
         @"^pub const IR_FORMAT_VERSION: i64 = (?<version>\d+);$",
-        RegexOptions.Multiline
+        RegexOptions.Multiline,
+        matchTimeoutMilliseconds: 1000
     )]
-    private static partial Regex RsIrFormatVersion();
+    private static partial Regex RsIrFormatVersion { get; }
 
     [GeneratedRegex(
         @"^pub const OLDEST_IR_FORMAT_READ: i64 = (?<version>\d+);$",
-        RegexOptions.Multiline
+        RegexOptions.Multiline,
+        matchTimeoutMilliseconds: 1000
     )]
-    private static partial Regex RsOldestIrFormatRead();
+    private static partial Regex RsOldestIrFormatRead { get; }
 }

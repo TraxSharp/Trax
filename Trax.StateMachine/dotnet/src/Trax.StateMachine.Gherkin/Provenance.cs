@@ -108,5 +108,19 @@ internal static class Provenance
             var byLine = Line.CompareTo(other.Line);
             return byLine != 0 ? byLine : string.CompareOrdinal(Name, other.Name);
         }
+
+        public static bool operator <(Scenario? left, Scenario? right) => Compare(left, right) < 0;
+
+        public static bool operator <=(Scenario? left, Scenario? right) =>
+            Compare(left, right) <= 0;
+
+        public static bool operator >(Scenario? left, Scenario? right) => Compare(left, right) > 0;
+
+        public static bool operator >=(Scenario? left, Scenario? right) =>
+            Compare(left, right) >= 0;
+
+        // Null orders first, as Comparer<Scenario>.Default orders it.
+        private static int Compare(Scenario? left, Scenario? right) =>
+            left is null ? (right is null ? 0 : -1) : left.CompareTo(right);
     }
 }

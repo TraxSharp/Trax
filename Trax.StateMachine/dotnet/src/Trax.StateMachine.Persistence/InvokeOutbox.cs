@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -421,7 +422,10 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
             if (held >= limit.Max)
                 return new CreateWrite.Refused(
                     RefusalCode.TooManyDrafts,
-                    $"You already have {held} drafts, the most allowed. Finish or discard one, then try again."
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"You already have {held} drafts, the most allowed. Finish or discard one, then try again."
+                    )
                 );
         }
 
@@ -609,8 +613,10 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
         return live >= limit
             ? new InvokeWrite.Refused(
                 LimitReached,
-                $"You already have {live} steps running, the most allowed at once. "
-                    + "Wait for one to finish, then try again."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"You already have {live} steps running, the most allowed at once. "
+                ) + "Wait for one to finish, then try again."
             )
             : null;
     }

@@ -19,12 +19,18 @@ internal abstract record InvokeOutcome
     }
 
     /// <summary>The run failed.</summary>
+    [System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+        System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+    )]
     public sealed record Failed : InvokeOutcome
     {
         public override InvokeOutcomeKind Kind => InvokeOutcomeKind.Failed;
     }
 
     /// <summary>The run was cancelled.</summary>
+    [System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+        System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+    )]
     public sealed record Cancelled : InvokeOutcome
     {
         public override InvokeOutcomeKind Kind => InvokeOutcomeKind.Cancelled;

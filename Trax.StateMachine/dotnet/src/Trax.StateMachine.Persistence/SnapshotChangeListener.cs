@@ -148,7 +148,7 @@ internal sealed class SnapshotChangeListener(
             {
                 _run = CancellationTokenSource.CreateLinkedTokenSource(_stopping.Token);
                 var token = _run.Token;
-                _loop = Task.Run(() => Run(token));
+                _loop = Task.Run(() => Run(token), CancellationToken.None);
             }
             return true;
         }
@@ -202,7 +202,7 @@ internal sealed class SnapshotChangeListener(
                     await subscription.QueueUsageAsync(stoppingToken).ConfigureAwait(false)
                 );
                 var sampled = Stopwatch.GetTimestamp();
-                Live();
+                Live(CancellationToken.None);
                 delay = ReconnectDelay;
                 while (true)
                 {
@@ -226,7 +226,7 @@ internal sealed class SnapshotChangeListener(
                     if (payload is null)
                         continue;
                     if (TryParseRowId(payload, out var rowId))
-                        Broadcast(new SnapshotChange.Row(rowId));
+                        Broadcast(new SnapshotChange.Row(rowId), CancellationToken.None);
                     else
                         StateMachineMeter.SnapshotNoticeMalformed.Add(1);
                 }
@@ -237,7 +237,7 @@ internal sealed class SnapshotChangeListener(
             }
             catch (Exception ex)
             {
-                Lost();
+                Lost(CancellationToken.None);
                 _logger.LogWarning(
                     ex,
                     "Lost the snapshot change notices; listening again in {Delay}. Watchers re-read their rows when it does.",
@@ -248,7 +248,7 @@ internal sealed class SnapshotChangeListener(
                 delay = delay * 2 > ReconnectDelayCap ? ReconnectDelayCap : delay * 2;
             }
         }
-        Lost();
+        Lost(CancellationToken.None);
     }
 
     // SQLite and InMemory, and Postgres on Poll: compares the (row_id, revision) pairs of the rows the readers watch

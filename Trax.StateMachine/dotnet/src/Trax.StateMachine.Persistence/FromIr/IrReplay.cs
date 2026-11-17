@@ -21,7 +21,11 @@ internal sealed class IrReplay(
     string? corpus
 )
 {
-    private static readonly JsonSerializerOptions TrainInputJson = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions TrainInputJson = new(JsonSerializerDefaults.Web)
+    {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
+    };
 
     internal string? Corpus => corpus;
 

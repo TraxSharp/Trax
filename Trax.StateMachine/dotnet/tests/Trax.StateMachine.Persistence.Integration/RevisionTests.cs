@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
@@ -917,11 +918,18 @@ public class RevisionTests(StoreProvider provider)
 
     private static async Task PostgresRowsBeforeTheRevisionMigration()
     {
-        var database = $"trax_revision_migration_{Environment.ProcessId}";
-        var maintenance =
-            $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database=postgres";
-        var connectionString =
-            $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database={database};Include Error Detail=true";
+        var database = string.Create(
+            CultureInfo.InvariantCulture,
+            $"trax_revision_migration_{Environment.ProcessId}"
+        );
+        var maintenance = string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database=postgres"
+        );
+        var connectionString = string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database={database};Include Error Detail=true"
+        );
 
         var creator = new NpgsqlConnection(maintenance);
         await using (creator.ConfigureAwait(false))
@@ -1248,7 +1256,12 @@ public class RevisionTests(StoreProvider provider)
                 iter: Iterations,
                 threads: 1,
                 print: ops =>
-                    string.Join(Environment.NewLine, ops.Select((op, i) => $"  {i}: {op}"))
+                    string.Join(
+                        Environment.NewLine,
+                        ops.Select(
+                            (op, i) => string.Create(CultureInfo.InvariantCulture, $"  {i}: {op}")
+                        )
+                    )
             );
 
     /// <summary>
@@ -1306,9 +1319,19 @@ public class RevisionTests(StoreProvider provider)
                     break;
                 case Kind.AdvanceValid:
                     if (_orderState is { } current)
-                        await Fire(TriggerFrom(current), $"a{_step}").ConfigureAwait(false);
+                        await Fire(
+                                TriggerFrom(current),
+                                string.Create(CultureInfo.InvariantCulture, $"a{_step}")
+                            )
+                            .ConfigureAwait(false);
                     else
-                        (await Advance("Next", $"a{_step}").ConfigureAwait(false))
+                        (
+                            await Advance(
+                                    "Next",
+                                    string.Create(CultureInfo.InvariantCulture, $"a{_step}")
+                                )
+                                .ConfigureAwait(false)
+                        )
                             .Should()
                             .BeOfType<AdvanceOutcome.NotFound>();
                     break;
@@ -1317,7 +1340,7 @@ public class RevisionTests(StoreProvider provider)
                     (
                         await Advance(
                                 "Place",
-                                $"a{_step}",
+                                string.Create(CultureInfo.InvariantCulture, $"a{_step}"),
                                 new JsonObject { ["receipt"] = "forged" }
                             )
                             .ConfigureAwait(false)
@@ -1487,7 +1510,7 @@ public class RevisionTests(StoreProvider provider)
                 outcome = await scope
                     .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
                     .EffectRunner("order")!
-                    .Run(_user, _order, $"s{_step}")
+                    .Run(_user, _order, string.Create(CultureInfo.InvariantCulture, $"s{_step}"))
                     .ConfigureAwait(false);
 
             switch (_orderState)
@@ -1504,7 +1527,7 @@ public class RevisionTests(StoreProvider provider)
                         .Which.Snapshot.State.Should()
                         .Be("Placed");
                     _orderState = "Placed";
-                    _last = ($"s{_step}", "Place");
+                    _last = (string.Create(CultureInfo.InvariantCulture, $"s{_step}"), "Place");
                     // The mark, then the record.
                     _orderRevision += 2;
                     return;
@@ -1578,15 +1601,25 @@ public class RevisionTests(StoreProvider provider)
             if (_orderState is { } state)
             {
                 var row = (await Host.Rows(_order).ConfigureAwait(false)).Single();
-                row.State.Should().Be(state, $"after step {_step} ({op})");
+                row.State.Should()
+                    .Be(
+                        state,
+                        string.Create(CultureInfo.InvariantCulture, $"after step {_step} ({op})")
+                    );
                 (JsonNode.Parse(row.Context)!["items"] as JsonArray)!
                     .Count.Should()
-                    .Be(_items, $"after step {_step} ({op})");
+                    .Be(
+                        _items,
+                        string.Create(CultureInfo.InvariantCulture, $"after step {_step} ({op})")
+                    );
                 (await Host.Revision(_order).ConfigureAwait(false))
                     .Should()
                     .Be(
                         _orderRevision,
-                        $"the order was written {_orderRevision} times by step {_step} ({op}). See {Adr}"
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"the order was written {_orderRevision} times by step {_step} ({op}). See {Adr}"
+                        )
                     );
             }
 
@@ -1595,12 +1628,18 @@ public class RevisionTests(StoreProvider provider)
                 (await Host.Rows(_build).ConfigureAwait(false))
                     .Single()
                     .State.Should()
-                    .Be(build, $"after step {_step} ({op})");
+                    .Be(
+                        build,
+                        string.Create(CultureInfo.InvariantCulture, $"after step {_step} ({op})")
+                    );
                 (await Host.Revision(_build).ConfigureAwait(false))
                     .Should()
                     .Be(
                         _buildRevision,
-                        $"the build was written {_buildRevision} times by step {_step} ({op}). See {Adr}"
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"the build was written {_buildRevision} times by step {_step} ({op}). See {Adr}"
+                        )
                     );
             }
         }

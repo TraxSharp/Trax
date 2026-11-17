@@ -124,7 +124,8 @@ internal static class CanonicalJson
                 return;
             default:
                 throw new ArgumentException(
-                    $"Unexpected scalar kind {node.GetValueKind()} in canonical JSON."
+                    $"Unexpected scalar kind {node.GetValueKind()} in canonical JSON.",
+                    nameof(node)
                 );
         }
     }
@@ -137,7 +138,10 @@ internal static class CanonicalJson
     internal static string FormatNumber(double value)
     {
         if (double.IsNaN(value) || double.IsInfinity(value))
-            throw new ArgumentException("NaN and Infinity are not valid canonical JSON numbers.");
+            throw new ArgumentException(
+                "NaN and Infinity are not valid canonical JSON numbers.",
+                nameof(value)
+            );
         if (value == 0)
             return "0"; // Covers -0.0: JSON.stringify(-0) === "0".
 

@@ -316,7 +316,7 @@ public class TriggerInputValidationTests
         public int Count { get; init; }
     }
 
-    public sealed record NestedInput
+    internal sealed record NestedInput
     {
         public Inner Inner { get; init; } = new();
         public List<Inner> Items { get; init; } = [];

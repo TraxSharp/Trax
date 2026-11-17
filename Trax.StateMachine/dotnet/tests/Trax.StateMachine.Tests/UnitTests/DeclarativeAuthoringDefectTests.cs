@@ -27,7 +27,7 @@ public class DeclarativeAuthoringDefectTests
 
     public sealed record UnsignedContext(uint Quantity);
 
-    public sealed record MapContext(Dictionary<string, int> Counts);
+    internal sealed record MapContext(Dictionary<string, int> Counts);
 
     public sealed record CountInput(int N);
 
@@ -35,6 +35,8 @@ public class DeclarativeAuthoringDefectTests
     // the schema's duration format describes.
     private static readonly JsonSerializerOptions CamelCase = new()
     {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         Converters = { new JsonStringEnumConverter(), new IsoDurationJsonConverter() },
     };
@@ -65,7 +67,7 @@ public class DeclarativeAuthoringDefectTests
         }
     }
 
-    public sealed record WideContext(
+    internal sealed record WideContext(
         Guid? MaybeId,
         DateOnly Day,
         TimeSpan Wait,

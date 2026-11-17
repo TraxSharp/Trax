@@ -2,7 +2,7 @@ namespace Trax.StateMachine.Gherkin.Lexical;
 
 /// <summary>
 /// Reads the tokens after one line's keyword. Every read that does not find what the form says throws a
-/// <see cref="FormError"/> naming the keyword's form, so a line is either read whole or is a problem.
+/// <see cref="FormErrorException"/> naming the keyword's form, so a line is either read whole or is a problem.
 /// </summary>
 internal sealed class Cursor(LexLine line)
 {
@@ -19,7 +19,7 @@ internal sealed class Cursor(LexLine line)
 
     internal Token PeekAt(int ahead) => _at + ahead < _tokens.Count ? _tokens[_at + ahead] : None;
 
-    internal FormError Form(string? detail = null) =>
+    internal FormErrorException Form(string? detail = null) =>
         new(
             $"'{line.Keyword.Text}' reads '{line.Keyword.Form}'"
                 + (detail is null ? "." : $": {detail}.")
@@ -98,7 +98,7 @@ internal sealed class Cursor(LexLine line)
     }
 
     /// <summary>
-    /// A value: a quoted text, a number, <c>true</c>, <c>false</c>, <c>nothing</c> (null), a list in brackets, or a
+    /// A value: a quoted text, a number, <see langword="true"/>, <see langword="false"/>, <c>nothing</c> (null), a list in brackets, or a
     /// bare name (a constant, or a field of what the line reads from).
     /// </summary>
     /// <summary>The deepest a list in a value nests.</summary>
@@ -115,7 +115,7 @@ internal sealed class Cursor(LexLine line)
                 return new LxText(token.Value, Line);
             case TokenKind.Open:
                 if (depth >= MaxDepth)
-                    throw new FormError($"a list nests deeper than {MaxDepth}.");
+                    throw new FormErrorException($"a list nests deeper than {MaxDepth}.");
                 var items = new List<LxValue>();
                 if (Peek.Kind == TokenKind.Close && !AtEnd)
                 {
@@ -349,7 +349,7 @@ internal sealed class Cursor(LexLine line)
                 connective is not null
                 && !string.Equals(connective, word, StringComparison.Ordinal)
             )
-                throw new FormError(
+                throw new FormErrorException(
                     "a rule joins its parts with 'and' or with 'or', never both on one line. A rule that needs both "
                         + "is a custom rule, written in C# and named here."
                 );

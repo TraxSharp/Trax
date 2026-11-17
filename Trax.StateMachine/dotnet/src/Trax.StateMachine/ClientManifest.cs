@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Encodings.Web;
@@ -185,7 +186,10 @@ public sealed record ClientManifest
         var format = root["format"] is JsonValue value && value.TryGetValue<int>(out var f) ? f : 0;
         if (format != CurrentFormat)
             throw new InvalidOperationException(
-                $"The client manifest is in format {format}, and this version reads format {CurrentFormat}. "
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The client manifest is in format {format}, and this version reads format {CurrentFormat}. "
+                )
                     + (
                         format > CurrentFormat
                             ? "Update the trax tool to the version of the host that exported it."

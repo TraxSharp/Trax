@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Data.Sqlite;
@@ -30,8 +31,10 @@ namespace Trax.StateMachine.Persistence.Integration;
 [Property("adr", "docs/adr/0002-framework-tables-are-migrated-domain-tables-are-bootstrapped.md")]
 public class MigrationSchemaTests
 {
-    private static readonly string Maintenance =
-        $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database=postgres;Include Error Detail=true";
+    private static readonly string Maintenance = string.Create(
+        CultureInfo.InvariantCulture,
+        $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database=postgres;Include Error Detail=true"
+    );
 
     private static Snapshot Sample() =>
         new()
@@ -50,8 +53,10 @@ public class MigrationSchemaTests
     public async Task Postgres_migration_040_creates_the_tables_the_stores_query()
     {
         const string db = "trax_statemachine_migration_it";
-        var conn =
-            $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database={db};Include Error Detail=true";
+        var conn = string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database={db};Include Error Detail=true"
+        );
 
         await CreatePostgresDatabase(db);
         try

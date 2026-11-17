@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using AwesomeAssertions;
 using Trax.StateMachine.Persistence;
 using Trax.StateMachine.Tests.Stress.Fakes;
@@ -77,8 +78,14 @@ public class ThroughputStressTests : StressFixture
         var states = await Fan(n, StressProfile.MaxConcurrency, i => LoadState(ids[i]));
         states.Should().OnlyContain(s => s == "Review", "every instance ends in Review");
         await TestContext.Progress.WriteLineAsync(
-            $"[throughput] {ops} ops ({n} instances x 3) in {sw.ElapsedMilliseconds} ms "
-                + $"({ops * 1000.0 / Math.Max(1, sw.ElapsedMilliseconds):N0} ops/s)"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"[throughput] {ops} ops ({n} instances x 3) in {sw.ElapsedMilliseconds} ms "
+            )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"({ops * 1000.0 / Math.Max(1, sw.ElapsedMilliseconds):N0} ops/s)"
+                )
         );
     }
 }

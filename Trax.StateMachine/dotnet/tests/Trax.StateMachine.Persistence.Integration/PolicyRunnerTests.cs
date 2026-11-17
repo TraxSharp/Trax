@@ -70,7 +70,7 @@ public class PolicyRunnerTests(StoreProvider provider)
             }
         );
 
-    private MachinePolicyRunner Runner(InstanceHost host) =>
+    private static MachinePolicyRunner Runner(InstanceHost host) =>
         host.Services.GetRequiredService<MachinePolicyRunner>();
 
     private static string NewUser() => $"policy-{Guid.NewGuid():N}";

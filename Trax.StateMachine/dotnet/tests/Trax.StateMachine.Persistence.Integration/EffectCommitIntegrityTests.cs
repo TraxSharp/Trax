@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -355,7 +356,7 @@ public class EffectCommitIntegrityTests
             await _gate.Task.ConfigureAwait(false);
             if (CancelAfterCharging)
                 throw new OperationCanceledException("the caller went away after the charge");
-            return $"receipt-{n}";
+            return string.Create(CultureInfo.InvariantCulture, $"receipt-{n}");
         }
     }
 
@@ -412,97 +413,6 @@ public class EffectCommitIntegrityTests
             Snapshot snapshot,
             CancellationToken cancellationToken = default
         ) => inner.Insert(userKey, id, snapshot, cancellationToken);
-    }
-
-    /// <summary>A store that cancels the request as it deletes a draft, then deletes it on the token it was given.</summary>
-    private sealed class CancellingStore(EfSnapshotStore inner, CancellationTokenSource request)
-        : ISnapshotStore
-    {
-        public Task<StoredSnapshot?> Get(
-            string userKey,
-            Guid id,
-            CancellationToken cancellationToken = default
-        ) => inner.Get(userKey, id, cancellationToken);
-
-        public Task<StoredSnapshot?> Get(
-            string userKey,
-            string machine,
-            Guid id,
-            CancellationToken cancellationToken = default
-        ) => inner.Get(userKey, machine, id, cancellationToken);
-
-        public Task Delete(
-            string userKey,
-            Guid id,
-            CancellationToken cancellationToken = default
-        ) => inner.Delete(userKey, id, cancellationToken);
-
-        public async Task Delete(
-            string userKey,
-            string machine,
-            Guid id,
-            CancellationToken cancellationToken = default
-        )
-        {
-            await inner.Delete(userKey, machine, id, cancellationToken).ConfigureAwait(false);
-            await request.CancelAsync().ConfigureAwait(false);
-        }
-
-        public Task<bool> Upsert(
-            string userKey,
-            Guid id,
-            Snapshot snapshot,
-            CancellationToken cancellationToken = default
-        ) => inner.Upsert(userKey, id, snapshot, cancellationToken);
-
-        public Task<bool> Update(
-            string userKey,
-            Guid id,
-            Snapshot snapshot,
-            Guid expectedToken,
-            string? requestId = null,
-            CancellationToken cancellationToken = default
-        ) => inner.Update(userKey, id, snapshot, expectedToken, requestId, cancellationToken);
-    }
-
-    /// <summary>A claim ledger that cancels the request as a release starts, then releases on the token it was given.</summary>
-    private sealed class CancellingClaims(EfEffectClaimStore inner, CancellationTokenSource request)
-        : IEffectClaimStore
-    {
-        public Task<ClaimResult> TryClaim(
-            string effectKey,
-            TimeSpan lease,
-            CancellationToken cancellationToken = default
-        ) => inner.TryClaim(effectKey, lease, cancellationToken);
-
-        public Task<bool> Complete(
-            string effectKey,
-            Guid ownerToken,
-            string receipt,
-            CancellationToken cancellationToken = default
-        ) => inner.Complete(effectKey, ownerToken, receipt, cancellationToken);
-
-        public Task<string?> GetReceipt(
-            string effectKey,
-            CancellationToken cancellationToken = default
-        ) => inner.GetReceipt(effectKey, cancellationToken);
-
-        public async Task Release(string effectKey, CancellationToken cancellationToken = default)
-        {
-            await request.CancelAsync().ConfigureAwait(false);
-            await inner.Release(effectKey, cancellationToken).ConfigureAwait(false);
-        }
-
-        public Task<bool> ReleaseOwned(
-            string effectKey,
-            Guid ownerToken,
-            CancellationToken cancellationToken = default
-        ) => inner.ReleaseOwned(effectKey, ownerToken, cancellationToken);
-
-        public Task<int> ReclaimStale(
-            DateTimeOffset cutoff,
-            CancellationToken cancellationToken = default
-        ) => inner.ReclaimStale(cutoff, cancellationToken);
     }
 
     /// <summary>An in-memory store written before drafts were keyed by machine: one draft per user and id.</summary>

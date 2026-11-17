@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -80,7 +81,7 @@ public sealed class ControlledCharge : IOrderCharge
             case ChargeRun.TimeOut:
                 throw new TaskCanceledException("The charge timed out.");
         }
-        var receipt = $"receipt-{n}";
+        var receipt = string.Create(CultureInfo.InvariantCulture, $"receipt-{n}");
         Receipts.Enqueue((effectKey, receipt));
         return receipt;
     }

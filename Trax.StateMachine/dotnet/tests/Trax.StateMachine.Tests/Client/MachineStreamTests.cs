@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using System.Text.Json.Nodes;
 using System.Threading.Channels;
@@ -83,7 +84,10 @@ public class MachineStreamTests
         using var following = stream;
         var first = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
         var refusal = new SocketClosedException(
-            $"The host refused the socket: {closeStatus ?? httpStatus}",
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"The host refused the socket: {closeStatus ?? httpStatus}"
+            ),
             closeStatus,
             httpStatus
         );
@@ -483,7 +487,10 @@ public class MachineStreamTests
         first.Sink.Complete();
         var ended = PendingTimer(stream)!;
         time.Advance(TimeSpan.FromSeconds(1));
-        var second = await socket.Subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var second = await socket
+            .Subscriptions.Reader.ReadAsync(CancellationToken.None)
+            .AsTask()
+            .WaitAsync(Wait, CancellationToken.None);
         second.Sink.Complete();
         var pending = PendingTimer(stream)!;
         stream.Dispose();

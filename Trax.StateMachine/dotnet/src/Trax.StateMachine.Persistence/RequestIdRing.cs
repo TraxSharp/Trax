@@ -125,6 +125,8 @@ public static class RequestIdRing
         System.Text.Json.JsonSerializerDefaults.Web
     )
     {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -408,7 +409,10 @@ public sealed class SnapshotMachine<TState, TTrigger>
         if (effectiveVersion > _def.Version)
             return new RehydrationResult.Error(
                 RefusalCode.VersionMismatch,
-                $"Snapshot version {effectiveVersion} is newer than definition version {_def.Version}."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Snapshot version {effectiveVersion} is newer than definition version {_def.Version}."
+                )
             );
 
         while (effectiveVersion < _def.Version)
@@ -416,7 +420,10 @@ public sealed class SnapshotMachine<TState, TTrigger>
             if (!_def.Migrations.TryGetValue(effectiveVersion, out var migrate))
                 return new RehydrationResult.Error(
                     RefusalCode.VersionMismatch,
-                    $"No migration from version {effectiveVersion} to {_def.Version}."
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"No migration from version {effectiveVersion} to {_def.Version}."
+                    )
                 );
 
             var migrated = migrate(effectiveState, effectiveContext);

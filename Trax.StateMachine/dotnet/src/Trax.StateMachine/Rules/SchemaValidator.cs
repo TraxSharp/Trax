@@ -122,8 +122,18 @@ internal static partial class SchemaValidator
             for (var i = 0; i < array.Count; i++)
             {
                 if (array[i] is not JsonObject element)
-                    return $"'{name}[{i}]' must be an object.";
-                if (ValidateObject(shape, element, $"{name}[{i}].") is { } problem)
+                    return string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"'{name}[{i}]' must be an object."
+                    );
+                if (
+                    ValidateObject(
+                        shape,
+                        element,
+                        string.Create(CultureInfo.InvariantCulture, $"{name}[{i}].")
+                    ) is
+                    { } problem
+                )
                     return problem;
             }
         return null;
@@ -141,7 +151,14 @@ internal static partial class SchemaValidator
         else if (node is JsonArray array)
         {
             for (var i = 0; i < array.Count; i++)
-                if (ValidateValue(values, array[i], $"{name}[{i}]") is { } problem)
+                if (
+                    ValidateValue(
+                        values,
+                        array[i],
+                        string.Create(CultureInfo.InvariantCulture, $"{name}[{i}]")
+                    ) is
+                    { } problem
+                )
                     return problem;
         }
         return null;
@@ -187,7 +204,7 @@ internal static partial class SchemaValidator
     // within the key type's range compared exactly: a key is text, never a double.
     private static bool IsIntegerKey(string key, FieldSchema keys)
     {
-        if (key.Length > 40 || !IntegerKeyPattern().IsMatch(key))
+        if (key.Length > 40 || !IntegerKeyPattern.IsMatch(key))
             return false;
         var value = BigInteger.Parse(
             key,
@@ -198,8 +215,12 @@ internal static partial class SchemaValidator
             && (keys.Maximum is not { } max || value <= new BigInteger(max));
     }
 
-    [GeneratedRegex("^(?:0|-?[1-9][0-9]*)\\z", RegexOptions.CultureInvariant)]
-    private static partial Regex IntegerKeyPattern();
+    [GeneratedRegex(
+        "^(?:0|-?[1-9][0-9]*)\\z",
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex IntegerKeyPattern { get; }
 
     // Why a string is not a value of the field's CLR type: not one of its enum's names, or not of its format.
     // Null when it is, or the field has neither.

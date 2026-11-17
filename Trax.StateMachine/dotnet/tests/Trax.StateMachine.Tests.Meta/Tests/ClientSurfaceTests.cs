@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -61,7 +62,9 @@ public partial class ClientSurfaceTests
                     _ => true,
                 }
             )
-            .Select(n => $"PROTOCOL.md:{n.Line}: `{n.Name}`")
+            .Select(n =>
+                string.Create(CultureInfo.InvariantCulture, $"PROTOCOL.md:{n.Line}: `{n.Name}`")
+            )
             .ToList();
 
         missing
@@ -85,7 +88,10 @@ public partial class ClientSurfaceTests
             var members =
                 Members(type.Name)
                 ?? throw new AssertionException(
-                    $"PROTOCOL.md:{type.Line}: `{type.Name}` is not a public type of the client's assemblies."
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"PROTOCOL.md:{type.Line}: `{type.Name}` is not a public type of the client's assemblies."
+                    )
                 );
             missing.AddRange(
                 members
@@ -302,27 +308,45 @@ public partial class ClientSurfaceTests
                     != columns.Length
             )
                 throw new AssertionException(
-                    $"PROTOCOL.md:{i + 1}: a table this test does not know: {header}"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"PROTOCOL.md:{i + 1}: a table this test does not know: {header}"
+                    )
                 );
             if ((isTypes ? types : members) is not null)
-                throw new AssertionException($"PROTOCOL.md:{i + 1}: a second {first} table");
+                throw new AssertionException(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"PROTOCOL.md:{i + 1}: a second {first} table"
+                    )
+                );
             if (languages is not null && !languages.SequenceEqual(columns, StringComparer.Ordinal))
                 throw new AssertionException(
-                    $"PROTOCOL.md:{i + 1}: the tables name different languages: "
-                        + $"{string.Join(", ", languages)} and {string.Join(", ", columns)}"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"PROTOCOL.md:{i + 1}: the tables name different languages: "
+                    ) + $"{string.Join(", ", languages)} and {string.Join(", ", columns)}"
                 );
             languages = columns;
             var column = Array.IndexOf(columns, language) + 1;
             if (column == 0)
                 throw new AssertionException(
-                    $"PROTOCOL.md:{i + 1}: the {first} table has no {language} column: {header}"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"PROTOCOL.md:{i + 1}: the {first} table has no {language} column: {header}"
+                    )
                 );
             var separator = "|" + string.Concat(Enumerable.Repeat(" --- |", headerCells.Length));
             if (
                 i + 1 >= lines.Length
                 || !string.Equals(lines[i + 1], separator, StringComparison.Ordinal)
             )
-                throw new AssertionException($"PROTOCOL.md:{i + 2}: no separator row");
+                throw new AssertionException(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"PROTOCOL.md:{i + 2}: no separator row"
+                    )
+                );
             i += 2;
 
             var names = new List<Named>();
@@ -334,7 +358,10 @@ public partial class ClientSurfaceTests
                     continue;
                 if (!seen.Add(name))
                     throw new AssertionException(
-                        $"PROTOCOL.md:{i + 1}: `{name}` is named twice in this table"
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"PROTOCOL.md:{i + 1}: `{name}` is named twice in this table"
+                        )
                     );
                 names.Add(new Named(i + 1, name));
             }
@@ -358,16 +385,25 @@ public partial class ClientSurfaceTests
             || !line.EndsWith(" |", StringComparison.Ordinal)
         )
             throw new AssertionException(
-                $"PROTOCOL.md:{number}: a row starts with `| ` and ends with ` |`"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"PROTOCOL.md:{number}: a row starts with `| ` and ends with ` |`"
+                )
             );
         var cells = line[2..^2].Split(" | ").Select(c => c.Trim()).ToArray();
         if (count is not null && cells.Length != count)
             throw new AssertionException(
-                $"PROTOCOL.md:{number}: a row has {count} cells, one for what it is and one per language"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"PROTOCOL.md:{number}: a row has {count} cells, one for what it is and one per language"
+                )
             );
         if (cells[0].Length == 0)
             throw new AssertionException(
-                $"PROTOCOL.md:{number}: the first cell says what the row is"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"PROTOCOL.md:{number}: the first cell says what the row is"
+                )
             );
         return cells;
     }
@@ -378,21 +414,37 @@ public partial class ClientSurfaceTests
         {
             var reason = cell[2..].Trim();
             if (reason.Length == 0)
-                throw new AssertionException($"PROTOCOL.md:{number}: a `—` gives its reason");
+                throw new AssertionException(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"PROTOCOL.md:{number}: a `—` gives its reason"
+                    )
+                );
             // A name behind a dash would go unchecked: it is the cell's name, not its reason.
             if (Name.IsMatch(reason))
                 throw new AssertionException(
-                    $"PROTOCOL.md:{number}: `{cell}` gives a name as its reason; write the name without the `—`"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"PROTOCOL.md:{number}: `{cell}` gives a name as its reason; write the name without the `—`"
+                    )
                 );
             return null;
         }
         if (string.Equals(cell, "—", StringComparison.Ordinal))
-            throw new AssertionException($"PROTOCOL.md:{number}: a `—` gives its reason");
+            throw new AssertionException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"PROTOCOL.md:{number}: a `—` gives its reason"
+                )
+            );
         var match = Name.Match(cell);
         return match.Success
-            ? match.Groups[1].Value
+            ? match.Groups["name"].Value
             : throw new AssertionException(
-                $"PROTOCOL.md:{number}: `{cell}` is neither one name in backticks (`Type.Member` or `Name`) nor `—` and a reason"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"PROTOCOL.md:{number}: `{cell}` is neither one name in backticks (`Type.Member` or `Name`) nor `—` and a reason"
+                )
             );
     }
 
@@ -436,8 +488,9 @@ public partial class ClientSurfaceTests
     }
 
     [GeneratedRegex(
-        @"^`([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)`$",
-        RegexOptions.CultureInvariant
+        @"^`(?<name>[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)`$",
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000
     )]
     private static partial Regex Name { get; }
 }

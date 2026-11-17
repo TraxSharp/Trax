@@ -15,6 +15,9 @@ namespace Trax.StateMachine.Persistence;
 /// <param name="Committed">The states an instance cannot leave once the server has put it there.</param>
 /// <param name="Transitions">Every edge.</param>
 /// <param name="Timers">Every timed state's timer, in IR order.</param>
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal sealed record MachineGraph(
     string Id,
     string Version,

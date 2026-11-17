@@ -11,7 +11,7 @@ namespace Trax.StateMachine.Tests.Fakes;
 /// </summary>
 public static class RangeMachine
 {
-    public sealed record RangeInput
+    internal sealed record RangeInput
     {
         public int From { get; init; }
         public int To { get; init; }
@@ -21,7 +21,7 @@ public static class RangeMachine
         public List<string> Tags { get; init; } = [];
     }
 
-    public sealed record TagsContext
+    internal sealed record TagsContext
     {
         [MinLength(1)]
         public List<string> Tags { get; init; } = [];

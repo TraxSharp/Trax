@@ -60,7 +60,7 @@ public class RequestIdControlCharacterTests(StoreProvider provider)
     private static string Because(string name) =>
         $"a request id with a control character ({name}) names no request the row can record. See {Adr}";
 
-    private ISnapshotMachineRegistry Registry(IServiceScope scope) =>
+    private static ISnapshotMachineRegistry Registry(IServiceScope scope) =>
         scope.ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>();
 
     [TestCaseSource(nameof(Ids))]

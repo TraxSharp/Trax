@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
@@ -305,7 +306,10 @@ public class EventAuthorizationTests(StoreProvider provider)
                 {
                     string[] pool = [DeskRoles.Operator, DeskRoles.Admin, "operator", "Viewer"];
                     var roles = pool.Where((_, bit) => (mask & (1 << bit)) != 0).ToArray();
-                    var caller = new Caller($"roles {mask}", roles);
+                    var caller = new Caller(
+                        string.Create(CultureInfo.InvariantCulture, $"roles {mask}"),
+                        roles
+                    );
                     var rule = EventRules[ruleIndex];
                     var allowed = Satisfies(caller, rule);
 
@@ -331,7 +335,11 @@ public class EventAuthorizationTests(StoreProvider provider)
                 },
                 iter: 32,
                 threads: 1,
-                print: t => $"roles mask {t.Item1}, rule {EventRules[t.Item2]}"
+                print: t =>
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"roles mask {t.Item1}, rule {EventRules[t.Item2]}"
+                    )
             );
 
     [Test]

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Npgsql;
 using Trax.Effect.Data.Postgres.Utils;
 
@@ -10,14 +11,18 @@ namespace Trax.StateMachine.Persistence.Integration.Fixtures;
 /// </summary>
 internal sealed class ScratchDatabase : IAsyncDisposable
 {
-    private static readonly string Maintenance =
-        $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database=postgres";
+    private static readonly string Maintenance = string.Create(
+        CultureInfo.InvariantCulture,
+        $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database=postgres"
+    );
 
     private ScratchDatabase(string name)
     {
         Name = name;
-        ConnectionString =
-            $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database={name};Include Error Detail=true;Maximum Pool Size=10";
+        ConnectionString = string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database={name};Include Error Detail=true;Maximum Pool Size=10"
+        );
     }
 
     /// <summary>The database's name.</summary>
@@ -30,7 +35,10 @@ internal sealed class ScratchDatabase : IAsyncDisposable
     public static async Task<ScratchDatabase> Create()
     {
         var scratch = new ScratchDatabase(
-            $"trax_sm_scratch_{Environment.ProcessId}_{Guid.NewGuid():N}"[..48]
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"trax_sm_scratch_{Environment.ProcessId}_{Guid.NewGuid():N}"
+            )[..48]
         );
         await Admin($"CREATE DATABASE {scratch.Name}").ConfigureAwait(false);
         await DatabaseMigrator.Migrate(scratch.ConnectionString).ConfigureAwait(false);

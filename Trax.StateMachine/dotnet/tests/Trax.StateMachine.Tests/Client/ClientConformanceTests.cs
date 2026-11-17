@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -92,7 +93,10 @@ public partial class ClientConformanceTests
         report
             .Should()
             .MatchRegex(
-                $@"([1-9]\d*) of \1 transcripts passed, {skipped} skipped, {expected} expected failures?\."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $@"([1-9]\d*) of \1 transcripts passed, {skipped} skipped, {expected} expected failures?\."
+                )
             );
     }
 
@@ -132,7 +136,7 @@ public partial class ClientConformanceTests
         var block = LacksBlock.Match(protocol);
         block.Success.Should().BeTrue("PROTOCOL.md has a `json lacks` block");
         var lacked = JsonNode
-            .Parse(block.Groups[1].Value)!
+            .Parse(block.Groups["lacks"].Value)!
             .AsArray()
             .Where(e =>
                 string.Equals((string?)e!["client"], ClientTestee.Client, StringComparison.Ordinal)
@@ -157,8 +161,9 @@ public partial class ClientConformanceTests
     }
 
     [GeneratedRegex(
-        @"^```json lacks\n(.*?)^```$",
-        RegexOptions.Multiline | RegexOptions.Singleline
+        @"^```json lacks\n(?<lacks>.*?)^```$",
+        RegexOptions.Multiline | RegexOptions.Singleline,
+        matchTimeoutMilliseconds: 1000
     )]
     private static partial Regex LacksBlock { get; }
 }

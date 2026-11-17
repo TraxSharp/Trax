@@ -12,7 +12,7 @@ namespace Trax.Client;
 /// the whole answer, and that value is written back as the name it was read from. <see cref="TraxEnum.IsUnknown"/> tells
 /// one apart.
 /// </summary>
-/// <remarks>Generated enums are <c>int</c> enums; one of another size is refused when the converter is first used.</remarks>
+/// <remarks>Generated enums are <see langword="int"/> enums; one of another size is refused when the converter is first used.</remarks>
 public sealed class TraxEnumConverter<
     [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields)] TEnum
 > : JsonConverter<TEnum>

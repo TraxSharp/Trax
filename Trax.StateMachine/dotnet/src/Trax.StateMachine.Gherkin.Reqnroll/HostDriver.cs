@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -198,7 +199,10 @@ internal sealed class HostDriver(
             if (DateTimeOffset.UtcNow > deadline)
                 return new Answer.Refused(
                     RefusalCode.InternalError,
-                    $"The train {state} invokes did not end within {options.Slack.TotalSeconds:0.#} seconds."
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"The train {state} invokes did not end within {options.Slack.TotalSeconds:0.#} seconds."
+                    )
                 );
             await Task.Delay(100).ConfigureAwait(false);
         }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -80,7 +81,8 @@ internal readonly record struct At(string Document, string Pointer)
             $"{Pointer}/{key.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal)}"
         );
 
-    internal At this[int index] => new(Document, $"{Pointer}/{index}");
+    internal At this[int index] =>
+        new(Document, string.Create(CultureInfo.InvariantCulture, $"{Pointer}/{index}"));
 
     internal FormatException Fail(string problem) => new PointedFormatException(this, problem);
 
@@ -91,7 +93,9 @@ internal readonly record struct At(string Document, string Pointer)
     {
         var array = node as JsonArray ?? throw Fail("must be a list.");
         if (array.Count < minItems)
-            throw Fail($"must hold at least {minItems}.");
+            throw Fail(
+                string.Create(CultureInfo.InvariantCulture, $"must hold at least {minItems}.")
+            );
         return array;
     }
 
@@ -118,7 +122,12 @@ internal readonly record struct At(string Document, string Pointer)
         // A length is counted in code points, as the schemas' validator counts it.
         var length = CodePoints(text);
         if (length < minLength || length > maxLength)
-            throw Fail($"must be {minLength} to {maxLength} characters long.");
+            throw Fail(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"must be {minLength} to {maxLength} characters long."
+                )
+            );
         return text;
     }
 
@@ -153,7 +162,7 @@ internal readonly record struct At(string Document, string Pointer)
             ? value.GetValue<bool>()
             : throw Fail("must be true or false.");
 
-    /// <summary>A key whose only allowed value is <c>true</c>.</summary>
+    /// <summary>A key whose only allowed value is <see langword="true"/>.</summary>
     internal void True(JsonNode? node)
     {
         if (node?.GetValueKind() != JsonValueKind.True)

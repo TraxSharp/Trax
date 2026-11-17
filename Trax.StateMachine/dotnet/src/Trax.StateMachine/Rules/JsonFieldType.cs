@@ -9,7 +9,7 @@ public enum JsonFieldType
     /// <summary>A JSON number (integer or fractional).</summary>
     Number,
 
-    /// <summary>JSON <c>true</c> or <c>false</c>.</summary>
+    /// <summary>JSON <see langword="true"/> or <see langword="false"/>.</summary>
     Boolean,
 
     /// <summary>A JSON array.</summary>

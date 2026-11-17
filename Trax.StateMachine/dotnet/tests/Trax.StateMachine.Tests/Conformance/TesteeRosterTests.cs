@@ -85,7 +85,9 @@ public partial class TesteeRosterTests
         );
         var headers = SurfaceHeader
             .Matches(protocol)
-            .Select(m => m.Groups[1].Value.Split('|', StringSplitOptions.TrimEntries).ToList())
+            .Select(m =>
+                m.Groups["columns"].Value.Split('|', StringSplitOptions.TrimEntries).ToList()
+            )
             .ToList();
         headers.Should().HaveCount(2, "the client surface has a table of types and one of members");
         headers[1].Should().Equal(headers[0]);
@@ -164,9 +166,9 @@ public partial class TesteeRosterTests
     {
         var ci = CiYml();
         var jobs = Jobs(ci);
-        var needs = Regex.Match(jobs["result"], @"^    needs: \[(.*)\]$", RegexOptions.Multiline);
+        var needs = Needs.Match(jobs["result"]);
         needs.Success.Should().BeTrue("the CI result job lists what it needs on one line");
-        var gate = needs.Groups[1].Value.Split(',', StringSplitOptions.TrimEntries);
+        var gate = needs.Groups["needs"].Value.Split(',', StringSplitOptions.TrimEntries);
 
         foreach (var name in Rows().Select(r => Text(r!, "suite")).Distinct(StringComparer.Ordinal))
         {
@@ -231,16 +233,31 @@ public partial class TesteeRosterTests
             .Select(
                 (m, i) =>
                     (
-                        m.Groups[1].Value,
+                        m.Groups["job"].Value,
                         body[m.Index..(i + 1 < starts.Count ? starts[i + 1].Index : body.Length)]
                     )
             )
             .ToDictionary(StringComparer.Ordinal);
     }
 
-    [GeneratedRegex(@"^  ([A-Za-z0-9_-]+):\s*$", RegexOptions.Multiline)]
+    [GeneratedRegex(
+        @"^  (?<job>[A-Za-z0-9_-]+):\s*$",
+        RegexOptions.Multiline,
+        matchTimeoutMilliseconds: 1000
+    )]
     private static partial Regex JobStart { get; }
 
-    [GeneratedRegex(@"^\| (?:Type|Member) \|(.*)\|$", RegexOptions.Multiline)]
+    [GeneratedRegex(
+        @"^\| (?:Type|Member) \|(?<columns>.*)\|$",
+        RegexOptions.Multiline,
+        matchTimeoutMilliseconds: 1000
+    )]
     private static partial Regex SurfaceHeader { get; }
+
+    [GeneratedRegex(
+        @"^    needs: \[(?<needs>.*)\]$",
+        RegexOptions.Multiline,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Needs { get; }
 }

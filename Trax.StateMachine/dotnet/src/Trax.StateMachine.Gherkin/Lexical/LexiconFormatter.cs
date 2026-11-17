@@ -8,6 +8,9 @@ namespace Trax.StateMachine.Gherkin.Lexical;
 /// notes kept where they were. The reader ignores all of it, so formatting never changes what a lexicon elaborates to;
 /// it exists for the person reading the file. Formatting twice changes nothing the second time.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal static class LexiconFormatter
 {
     // The keywords whose first word after them is lined up: the second column starts at one place in a run.

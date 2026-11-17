@@ -50,6 +50,8 @@ public sealed class ClientTestee : IAsyncDisposable
     // System.Text.Json's default writing depth of 64.
     private static readonly System.Text.Json.JsonSerializerOptions Writing = new()
     {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
         MaxDepth = 256,
     };
 
@@ -296,7 +298,10 @@ public sealed class ClientTestee : IAsyncDisposable
             {
                 if (Interlocked.Increment(ref calls) == throwingAt)
                     throw new InvalidOperationException("the request id minter threw");
-                return $"r{Interlocked.Increment(ref minted)}";
+                return string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"r{Interlocked.Increment(ref minted)}"
+                );
             };
             var controller = new ServerMachineController(
                 new ServerMachineOptions

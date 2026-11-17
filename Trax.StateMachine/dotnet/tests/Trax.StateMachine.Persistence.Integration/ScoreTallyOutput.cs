@@ -10,4 +10,4 @@ using Trax.StateMachine.Gherkin;
 namespace Trax.StateMachine.Persistence.Integration;
 
 /// <summary>Its output: an integer per name, so the glossary's values need an int's range.</summary>
-public sealed record ScoreTallyOutput(Dictionary<string, int> Totals);
+public sealed record ScoreTallyOutput(IReadOnlyDictionary<string, int> Totals);

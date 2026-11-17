@@ -90,15 +90,15 @@ public partial class LexiconTests
         var first = directory
             ? Directory.GetFiles(path, "*.lexicon").Order(StringComparer.Ordinal).First()
             : path;
-        var expect = Expect().Match(File.ReadLines(first).First());
+        var expect = Expect.Match(File.ReadLines(first).First());
         expect
             .Success.Should()
             .BeTrue($"{name} starts with '# expect <line>: <words of the problem>'");
         var line = long.Parse(
-            expect.Groups[1].Value,
+            expect.Groups["line"].Value,
             System.Globalization.CultureInfo.InvariantCulture
         );
-        var words = expect.Groups[2].Value.Trim();
+        var words = expect.Groups["words"].Value.Trim();
 
         var reading = directory
             ? Lexicon.ReadDirectory(path)!
@@ -157,15 +157,19 @@ public partial class LexiconTests
         var text = File.ReadAllText(path);
         var flat = string.Join(
             '\n',
-            text.Split('\n').Select(l => l.TrimStart()).Select(l => Columns().Replace(l, "\t"))
+            text.Split('\n').Select(l => l.TrimStart()).Select(l => Columns.Replace(l, "\t"))
         );
 
         Lexicon.Read(path, flat).Json.Should().Be(Lexicon.Read(path, text).Json).And.NotBeNull();
     }
 
     // A run of spaces outside quotes; the fixtures hold no quote with two spaces in it.
-    [GeneratedRegex(@"  +(?=(?:[^""]*""[^""]*"")*[^""]*\z)")]
-    private static partial Regex Columns();
+    [GeneratedRegex(
+        @"  +(?=(?:[^""]*""[^""]*"")*[^""]*\z)",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Columns { get; }
 
     [Test]
     public void A_lone_surrogate_in_quotes_is_a_problem_at_its_line()
@@ -231,6 +235,10 @@ public partial class LexiconTests
             );
     }
 
-    [GeneratedRegex(@"\A#\s*expect\s+(\d+):(.*)\z")]
-    private static partial Regex Expect();
+    [GeneratedRegex(
+        @"\A#\s*expect\s+(?<line>\d+):(?<words>.*)\z",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Expect { get; }
 }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.WebSockets;
 using System.Runtime.Versioning;
@@ -130,7 +131,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
             Socket.Dispose();
             Invoker?.Dispose();
             // A send in flight is cancelled by the stop, and gives the lock back; one that comes after finds it disposed.
-            await Sending.WaitAsync().ConfigureAwait(false);
+            await Sending.WaitAsync(CancellationToken.None).ConfigureAwait(false);
             Sending.Dispose();
             lock (_stopGate)
             {
@@ -242,25 +243,28 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         }
         if (connection.Closed)
             return;
-        _ = Task.Run(async () =>
-        {
-            try
+        _ = Task.Run(
+            async () =>
             {
-                await connection.Ready.ConfigureAwait(false);
-                await SendAsync(
-                        connection,
-                        new JsonObject { ["id"] = id, ["type"] = "complete" },
-                        when: () => subscription.Sent
-                    )
-                    .ConfigureAwait(false);
-            }
-            catch (Exception)
-            {
-                // The socket is gone already; there is nothing left to end.
-            }
-            if (last)
-                CloseIfIdle(connection);
-        });
+                try
+                {
+                    await connection.Ready.ConfigureAwait(false);
+                    await SendAsync(
+                            connection,
+                            new JsonObject { ["id"] = id, ["type"] = "complete" },
+                            when: () => subscription.Sent
+                        )
+                        .ConfigureAwait(false);
+                }
+                catch (Exception)
+                {
+                    // The socket is gone already; there is nothing left to end.
+                }
+                if (last)
+                    CloseIfIdle(connection);
+            },
+            CancellationToken.None
+        );
     }
 
     // Closes a connection nobody subscribes over any more.
@@ -469,7 +473,10 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         {
             var status = (int)socket.HttpStatusCode;
             throw new SocketClosedException(
-                $"The host refused the socket's upgrade: {status} {socket.HttpStatusCode}.",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The host refused the socket's upgrade: {status} {socket.HttpStatusCode}."
+                ),
                 closeStatus: null,
                 status
             );
@@ -479,7 +486,11 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
     private static SocketClosedException Closed(ClientWebSocket socket, string when) =>
         socket.CloseStatus is { } status
             ? new SocketClosedException(
-                $"The socket was closed {when}: {(int)status} {socket.CloseStatusDescription}".TrimEnd(),
+                string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"The socket was closed {when}: {(int)status} {socket.CloseStatusDescription}"
+                    )
+                    .TrimEnd(),
                 (int)status
             )
             : new SocketClosedException($"The socket was closed {when}.", closeStatus: null);
@@ -639,7 +650,10 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
             {
                 connection.Overflowed = true;
                 throw new WebSocketException(
-                    $"The server sent a message larger than {_options.MaxMessageSize} bytes."
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"The server sent a message larger than {_options.MaxMessageSize} bytes."
+                    )
                 );
             }
             // A MemoryStream writes at once; the token is not passed, so a cancel after the frame arrived ends the

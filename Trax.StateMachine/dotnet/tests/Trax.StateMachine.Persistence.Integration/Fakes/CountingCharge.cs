@@ -16,5 +16,10 @@ public sealed class CountingCharge : IFeatureCharge
     public int Calls => Volatile.Read(ref _calls);
 
     public Task<string> Run(Snapshot snapshot, CancellationToken cancellationToken = default) =>
-        Task.FromResult($"charge-{Interlocked.Increment(ref _calls)}");
+        Task.FromResult(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"charge-{Interlocked.Increment(ref _calls)}"
+            )
+        );
 }

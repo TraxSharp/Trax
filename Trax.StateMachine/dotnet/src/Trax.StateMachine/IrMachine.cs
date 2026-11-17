@@ -112,7 +112,10 @@ public sealed class IrMachine
                     );
                 if (number > IrExporter.FormatVersion || number < IrExporter.OldestFormatRead)
                     throw new ArgumentException(
-                        $"The IR is in format {number}, and this engine reads formats {IrExporter.OldestFormatRead} to {IrExporter.FormatVersion}.",
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"The IR is in format {number}, and this engine reads formats {IrExporter.OldestFormatRead} to {IrExporter.FormatVersion}."
+                        ),
                         nameof(ir)
                     );
             }
@@ -515,12 +518,18 @@ public sealed class IrMachine
         if (version.Value > Version)
             return new RehydrationResult.Error(
                 RefusalCode.VersionMismatch,
-                $"Snapshot version {version.Value} is newer than definition version {Version}."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Snapshot version {version.Value} is newer than definition version {Version}."
+                )
             );
         if (version.Value < Version)
             return new RehydrationResult.Error(
                 RefusalCode.VersionMismatch,
-                $"No migration from version {version.Value} to {Version}."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"No migration from version {version.Value} to {Version}."
+                )
             );
         if (!_states.Contains(state))
             return new RehydrationResult.Error(
@@ -677,7 +686,7 @@ public sealed class IrMachine
 
     // ── Reading the IR ─────────────────────────────────────────────────────────────────────────
 
-    private Edge ReadEdge(JsonObject t, string from, string trigger) =>
+    private static Edge ReadEdge(JsonObject t, string from, string trigger) =>
         new(
             from,
             trigger,

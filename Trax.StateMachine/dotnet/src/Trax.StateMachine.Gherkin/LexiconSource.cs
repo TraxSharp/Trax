@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -73,8 +74,14 @@ internal sealed partial class LexiconSource(string path, IReadOnlyDictionary<str
     /// </summary>
     internal string Message(string? pointer, string problem)
     {
-        var said = Pointer()
-            .Replace(problem, m => $"line {LineOf(m.Groups[1].Value)}{m.Groups[2].Value}");
+        var said = Pointer.Replace(
+            problem,
+            m =>
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"line {LineOf(m.Groups["pointer"].Value)}{m.Groups["end"].Value}"
+                )
+        );
         var keyword = (pointer ?? "")
             .Split('/')
             .Reverse()
@@ -84,6 +91,10 @@ internal sealed partial class LexiconSource(string path, IReadOnlyDictionary<str
     }
 
     // A pointer the reader names inside its message: "is also at /machines/order/states/Draft: a step …".
-    [GeneratedRegex(@"(/(?:actors|machines|views)/.*?)(:\s|\.$|$)", RegexOptions.CultureInvariant)]
-    private static partial Regex Pointer();
+    [GeneratedRegex(
+        @"(?<pointer>/(?:actors|machines|views)/.*?)(?<end>:\s|\.$|$)",
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Pointer { get; }
 }

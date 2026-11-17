@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Trax.StateMachine.Tests.Helpers;
@@ -31,7 +32,10 @@ public class FuzzTests
         );
         var (exitCode, report) = await TwinEngine
             .RunFuzzerAsync(
-                $"--seed {seed} --cases {cases}{(irs ? " --irs" : "")} {TypeScriptTestee}",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"--seed {seed} --cases {cases}{(irs ? " --irs" : "")} {TypeScriptTestee}"
+                ),
                 line => Answer(testee, line),
                 TimeSpan.FromMinutes(2) + TimeSpan.FromMilliseconds(cases * 5.0)
             )

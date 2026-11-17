@@ -118,9 +118,9 @@ public sealed partial class GraphQLMachineServer : IMachineServer
             d => d.Operation,
             d => new Document(
                 d.Id,
-                DeclaredVariable()
+                DeclaredVariable
                     .Matches(d.Document)
-                    .Select(m => m.Groups[1].Value)
+                    .Select(m => m.Groups["name"].Value)
                     .ToHashSet(StringComparer.Ordinal)
             ),
             StringComparer.Ordinal
@@ -824,7 +824,7 @@ public sealed partial class GraphQLMachineServer : IMachineServer
             return null;
         if (
             Text(node) is { } text
-            && Instant().IsMatch(text)
+            && Instant.IsMatch(text)
             && DateTimeOffset.TryParse(
                 text,
                 CultureInfo.InvariantCulture,
@@ -883,12 +883,13 @@ public sealed partial class GraphQLMachineServer : IMachineServer
         return trigger[..(upper - 1)].ToLowerInvariant() + trigger[(upper - 1)..];
     }
 
-    [GeneratedRegex(@"\$(\w+)\s*:")]
-    private static partial Regex DeclaredVariable();
+    [GeneratedRegex(@"\$(?<name>\w+)\s*:", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex DeclaredVariable { get; }
 
     [GeneratedRegex(
-        @"^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(\.\d+)?([Zz]|[+-]\d{2}:\d{2})$",
-        RegexOptions.CultureInvariant
+        @"^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[Zz]|[+-]\d{2}:\d{2})$",
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000
     )]
-    private static partial Regex Instant();
+    private static partial Regex Instant { get; }
 }

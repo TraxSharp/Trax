@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
@@ -83,7 +84,12 @@ public class OrderSendTests
         var outcomes = await Task.WhenAll(
             Enumerable
                 .Range(0, 12)
-                .Select(i => Task.Run(() => NewRunner(effect).Run("u", id, $"req-{i}")))
+                .Select(i =>
+                    Task.Run(() =>
+                        NewRunner(effect)
+                            .Run("u", id, string.Create(CultureInfo.InvariantCulture, $"req-{i}"))
+                    )
+                )
         );
 
         effect.Calls.Should().Be(1);
@@ -311,7 +317,7 @@ public class OrderSendTests
         }
 
         // With a lease already expired, a claim left without its receipt would be taken over and run again.
-        var retry = await NewRunner(effect).Run("u", id, "req-2");
+        var retry = await NewRunner(effect).Run("u", id, "req-2", CancellationToken.None);
 
         retry.Should().BeOfType<AdvanceOutcome.Advanced>();
         effect.Calls.Should().Be(1);
@@ -332,7 +338,7 @@ public class OrderSendTests
         {
             var n = Interlocked.Increment(ref _calls);
             await request.CancelAsync().ConfigureAwait(false);
-            return $"receipt-{n}";
+            return string.Create(CultureInfo.InvariantCulture, $"receipt-{n}");
         }
     }
 }

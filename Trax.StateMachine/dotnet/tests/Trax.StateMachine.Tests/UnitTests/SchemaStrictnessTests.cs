@@ -34,7 +34,7 @@ public class SchemaStrictnessTests
         public int Count { get; init; }
     }
 
-    public sealed record Maps
+    internal sealed record Maps
     {
         public Dictionary<string, int> Counts { get; init; } = [];
         public IReadOnlyDictionary<string, string?> Notes { get; init; } =
@@ -301,6 +301,8 @@ public class SchemaStrictnessTests
             new Acronyms(),
             new System.Text.Json.JsonSerializerOptions
             {
+                RespectNullableAnnotations = false,
+                RespectRequiredConstructorParameters = false,
                 PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
             }
         )!;

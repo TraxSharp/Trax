@@ -14,6 +14,9 @@ namespace Trax.StateMachine.Persistence.FromIr;
 /// the caller of this, before it reads; each user machine's own read rule is checked here, as its <c>get</c> checks it,
 /// and a machine that refuses the caller reads as no instances. A system machine declares no read rule of its own.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal static class MachineViewReader
 {
     /// <summary>

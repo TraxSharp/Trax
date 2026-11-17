@@ -49,7 +49,7 @@ internal sealed class SnapshotNotices : IAsyncDisposable
         await using (listen.ConfigureAwait(false))
         {
             listen.CommandText = $"LISTEN {Channel}; LISTEN {MarkerChannel}";
-            await listen.ExecuteNonQueryAsync().ConfigureAwait(false);
+            await listen.ExecuteNonQueryAsync(CancellationToken.None).ConfigureAwait(false);
         }
         notices._pump = notices.Pump();
         return notices;
@@ -85,10 +85,11 @@ internal sealed class SnapshotNotices : IAsyncDisposable
                 payloads.Add(payload);
             }
         }
-        catch (OperationCanceledException) when (timeout.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (timeout.IsCancellationRequested)
         {
             throw new TimeoutException(
-                $"The test's own marker notice was not heard within {MarkerWait}."
+                $"The test's own marker notice was not heard within {MarkerWait}.",
+                ex
             );
         }
     }

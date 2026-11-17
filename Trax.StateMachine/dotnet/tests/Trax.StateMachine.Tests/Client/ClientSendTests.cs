@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using System.Text.Json.Nodes;
 using System.Threading.Channels;
@@ -268,10 +269,10 @@ public class ClientSendTests
 
         server.Push(new StreamMessage.Refused("FORBIDDEN", "Not yours."));
         // Settled on the controller's scheduler after the push, so the stop has run.
-        await controller.SendAsync("Coin").WaitAsync(Wait);
+        await controller.SendAsync("Coin").WaitAsync(Wait, CancellationToken.None);
         var afterStop = Timers(controller);
         controller.Dispose();
-        await controller.SendAsync("Coin").WaitAsync(Wait);
+        await controller.SendAsync("Coin").WaitAsync(Wait, CancellationToken.None);
 
         IsDisposed(running).Should().BeTrue("the stop replaced them");
         IsDisposed(afterStop).Should().BeTrue("the controller was disposed");
@@ -413,7 +414,7 @@ public class ClientSendTests
                 NewRequestId = () =>
                     ++calls == 1
                         ? throw new InvalidOperationException("the minter threw")
-                        : $"r{calls}",
+                        : string.Create(CultureInfo.InvariantCulture, $"r{calls}"),
             }
         );
 
@@ -583,7 +584,8 @@ public class ClientSendTests
         public string Serialize(Snapshot snapshot) =>
             string.Equals(snapshot.State, "Unlocked", StringComparison.Ordinal)
                 ? throw new ArgumentException(
-                    "NaN and Infinity are not valid canonical JSON numbers."
+                    "NaN and Infinity are not valid canonical JSON numbers.",
+                    nameof(snapshot)
                 )
                 : inner.Serialize(snapshot);
 
@@ -684,7 +686,7 @@ public class ClientSendTests
 
         controller.Dispose();
 
-        await start.WaitAsync(Wait);
+        await start.WaitAsync(Wait, CancellationToken.None);
         token.IsCancellationRequested.Should().BeTrue();
     }
 

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Npgsql;
@@ -59,7 +60,8 @@ public class RequestIdRingTests
             );
     }
 
-    private static string RequestId(int n) => $"ring-request-{n}";
+    private static string RequestId(int n) =>
+        string.Create(CultureInfo.InvariantCulture, $"ring-request-{n}");
 
     // Odd requests pay, even ones push, so each fires from the state the previous one left.
     private static async Task ClientRequest(Guid id, int n)
@@ -74,7 +76,11 @@ public class RequestIdRingTests
                 RequestId(n)
             )
             .ConfigureAwait(false);
-        outcome.Should().BeOfType<AdvanceOutcome.Advanced>($"request {n} fires");
+        outcome
+            .Should()
+            .BeOfType<AdvanceOutcome.Advanced>(
+                string.Create(CultureInfo.InvariantCulture, $"request {n} fires")
+            );
     }
 
     // A write no client request made, as an outcome or a host's own update is.

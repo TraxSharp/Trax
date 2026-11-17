@@ -7,7 +7,7 @@ namespace Trax.StateMachine.Persistence;
 /// Raw, user-scoped persistence of a snapshot. Engine-agnostic: it moves the four snapshot fields
 /// (context as jsonb) and enforces optimistic concurrency, but does NOT validate — validation lives in
 /// <see cref="SnapshotDraftService{TState,TTrigger}"/>. Every write is total: a concurrency conflict or
-/// a unique-key race returns <c>false</c> rather than throwing (genuine infrastructure failures still
+/// a unique-key race returns <see langword="false"/> rather than throwing (genuine infrastructure failures still
 /// propagate).
 ///
 /// <para>A draft is keyed by its user, its machine and its id: two machines may give one user a draft under
@@ -97,8 +97,8 @@ public interface ISnapshotStore
     }
 
     /// <summary>
-    /// Insert-or-update (the autosave path). Returns <c>false</c> on a concurrent-write conflict
-    /// (the draft changed elsewhere), <c>true</c> otherwise.
+    /// Insert-or-update (the autosave path). Returns <see langword="false"/> on a concurrent-write conflict
+    /// (the draft changed elsewhere), <see langword="true"/> otherwise.
     /// </summary>
     Task<bool> Upsert(
         string userKey,
@@ -108,7 +108,7 @@ public interface ISnapshotStore
     );
 
     /// <summary>
-    /// Creates the caller's draft, and only creates it: returns <c>false</c> when a draft already exists under
+    /// Creates the caller's draft, and only creates it: returns <see langword="false"/> when a draft already exists under
     /// <paramref name="id"/>, which is how a writer that read no draft finds out one was created since. The draft
     /// service creates every draft through this, so a save never overwrites a draft it did not read. A store that
     /// does not override it checks <see cref="Get(string, Guid, CancellationToken)"/> and then writes through
@@ -131,7 +131,7 @@ public interface ISnapshotStore
     /// <summary>
     /// Conditional update used by the authoritative path: writes only if the row still carries
     /// <paramref name="expectedToken"/>, and records <paramref name="requestId"/> as the last applied
-    /// idempotency key. Returns <c>false</c> if the row changed since it was read.
+    /// idempotency key. Returns <see langword="false"/> if the row changed since it was read.
     /// </summary>
     Task<bool> Update(
         string userKey,

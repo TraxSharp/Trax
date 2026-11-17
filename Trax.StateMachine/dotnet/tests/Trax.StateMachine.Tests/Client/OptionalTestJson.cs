@@ -11,6 +11,10 @@ namespace Trax.StateMachine.Tests.Client;
 
 // A source-generated context over the Optional records, as a trimmed or AOT app passes one. Each T an Optional<T> wraps
 // is listed too: the context cannot see through Optional's converter.
+[JsonSourceGenerationOptions(
+    RespectNullableAnnotations = false,
+    RespectRequiredConstructorParameters = false
+)]
 [JsonSerializable(typeof(TraxClientTests.JobVariables))]
 [JsonSerializable(typeof(TraxClientTests.JobResult))]
 [JsonSerializable(typeof(int))]

@@ -39,7 +39,7 @@ internal static partial class Views
             var field = fieldAt.Object(node);
             fieldAt.Closed(field, "from", "labels");
             var from = fieldAt["from"].Text(fieldAt.Required(field, "from"));
-            var match = Names.ViewSource().Match(from);
+            var match = Names.ViewSource.Match(from);
             if (!match.Success)
                 throw fieldAt["from"].Fail("is not 'machine.field' or 'machine.state'.");
             Dictionary<string, string>? labels = null;
@@ -91,10 +91,14 @@ internal static partial class Views
         + "Row";
 
     /// <summary>Whether <paramref name="pascal"/> is a GraphQL name a view's types can start with.</summary>
-    internal static bool IsGraphQLStem(string pascal) => GraphQLStem().IsMatch(pascal);
+    internal static bool IsGraphQLStem(string pascal) => GraphQLStem.IsMatch(pascal);
 
-    [GeneratedRegex(@"\A[A-Za-z][A-Za-z0-9]*\z", RegexOptions.CultureInvariant)]
-    private static partial Regex GraphQLStem();
+    [GeneratedRegex(
+        @"\A[A-Za-z][A-Za-z0-9]*\z",
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex GraphQLStem { get; }
 
     /// <summary>
     /// Refuses a view whose name GraphQL cannot carry: one that is not words of ASCII letters and digits, the first

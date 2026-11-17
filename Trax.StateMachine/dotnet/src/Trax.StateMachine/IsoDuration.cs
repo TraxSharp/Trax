@@ -17,9 +17,10 @@ internal static partial class IsoDuration
 {
     [GeneratedRegex(
         @"^P(?!$)(?:(?<days>[0-9]{1,9})D)?(?:T(?=[0-9])(?:(?<hours>[0-9]{1,9})H)?(?:(?<minutes>[0-9]{1,9})M)?(?:(?<seconds>[0-9]{1,9})(?:\.(?<fraction>[0-9]{1,7}))?S)?)?\z",
-        RegexOptions.CultureInvariant
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000
     )]
-    private static partial Regex Pattern();
+    private static partial Regex Pattern { get; }
 
     /// <summary>Parses <paramref name="text"/>; false for anything outside the subset, never a throw.</summary>
     public static bool TryParse(string? text, out TimeSpan duration)
@@ -27,7 +28,7 @@ internal static partial class IsoDuration
         duration = default;
         if (text is null)
             return false;
-        var match = Pattern().Match(text);
+        var match = Pattern.Match(text);
         if (!match.Success)
             return false;
 

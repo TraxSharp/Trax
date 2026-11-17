@@ -7,7 +7,7 @@ namespace Trax.StateMachine;
 /// <summary>
 /// Evaluates a declarative <see cref="Rule"/> against a context and input. Total: a missing or wrong-typed
 /// field makes the predicate false, never throws. A <see cref="Rule.Custom"/> resolves through a supplied
-/// handler map; an unregistered custom name is <c>false</c> (the server's authoritative reject), never a
+/// handler map; an unregistered custom name is <see langword="false"/> (the server's authoritative reject), never a
 /// crash.
 /// </summary>
 public static class RuleEvaluator

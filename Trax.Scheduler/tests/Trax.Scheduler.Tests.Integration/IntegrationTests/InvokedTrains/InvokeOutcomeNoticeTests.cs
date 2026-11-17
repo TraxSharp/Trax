@@ -127,8 +127,8 @@ public class InvokeOutcomeNoticeTests
         var reconciler = api.Reconciler;
         var subscribed = new SignalCount();
         var swept = new SignalCount();
-        reconciler.Subscribed += subscribed.Increment;
-        reconciler.Sweeping += swept.Increment;
+        reconciler.Subscribed += (_, _) => subscribed.Increment();
+        reconciler.Sweeping += (_, _) => swept.Increment();
         await reconciler.StartAsync(CancellationToken.None);
         try
         {
@@ -179,10 +179,10 @@ public class InvokeOutcomeNoticeTests
         var delivered = new TaskCompletionSource<InvokeDelivery>(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
-        reconciler.Delivered += (run, result) =>
+        reconciler.Delivered += (_, e) =>
         {
-            if (run == token)
-                delivered.TrySetResult(result);
+            if (e.InvokeToken == token)
+                delivered.TrySetResult(e.Delivery);
         };
         return delivered.Task;
     }

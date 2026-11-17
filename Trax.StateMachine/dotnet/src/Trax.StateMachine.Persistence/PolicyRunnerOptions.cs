@@ -33,22 +33,29 @@ public sealed class PolicyRunnerOptions
     internal void Validate()
     {
         if (BatchSize < 1)
-            throw new ArgumentOutOfRangeException(
+            throw OutOfRange(
                 nameof(BatchSize),
                 BatchSize,
                 "PolicyRunnerOptions.BatchSize must be at least 1."
             );
         if (FanOutCap is < 0 or int.MaxValue)
-            throw new ArgumentOutOfRangeException(
+            throw OutOfRange(
                 nameof(FanOutCap),
                 FanOutCap,
                 "PolicyRunnerOptions.FanOutCap must be at least 0 and less than int.MaxValue."
             );
         if (Interval <= TimeSpan.Zero || Interval > LongestInterval)
-            throw new ArgumentOutOfRangeException(
+            throw OutOfRange(
                 nameof(Interval),
                 Interval,
                 $"PolicyRunnerOptions.Interval must be more than zero and at most {LongestInterval}."
             );
     }
+
+    // The option's own name is the parameter it names: the options are set by property, and checked together here.
+    private static ArgumentOutOfRangeException OutOfRange(
+        string option,
+        object value,
+        string message
+    ) => new(option, value, message);
 }

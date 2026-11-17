@@ -234,12 +234,12 @@ internal sealed class SnapshotWatchHub(
     // Called under the gate.
     private void Start()
     {
-        _loop ??= Task.Run(() => Read(_stopping.Token));
+        _loop ??= Task.Run(() => Read(_stopping.Token), CancellationToken.None);
         if (_session is null)
         {
             var session = CancellationTokenSource.CreateLinkedTokenSource(_stopping.Token);
             _session = session;
-            _hearing = Task.Run(() => Hear(session.Token));
+            _hearing = Task.Run(() => Hear(session.Token), CancellationToken.None);
         }
     }
 

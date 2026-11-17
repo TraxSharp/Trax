@@ -17,7 +17,7 @@ namespace Trax.StateMachine.Persistence;
 /// writes of a <see cref="SnapshotDraft"/> with the context in a real <c>jsonb</c> column (<c>TEXT</c> on
 /// SQLite) and optimistic concurrency via its concurrency token. Only EXPECTED races (an optimistic conflict,
 /// or a concurrent create the <paramref name="dialect"/> recognises as a unique violation) are returned as
-/// <c>false</c>; any other database error propagates, so it cannot masquerade as a benign conflict.
+/// <see langword="false"/>; any other database error propagates, so it cannot masquerade as a benign conflict.
 ///
 /// <para>Every <see cref="ISnapshotStore"/> member filters on <c>owner_kind = user</c> as well as the user's key,
 /// so no user path reads, writes, lists or expires a system-owned instance, even one under the same id. System
@@ -284,7 +284,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     /// Inserts the draft of <paramref name="snapshot"/>'s machine, or overwrites its version, state and context,
     /// with a fresh concurrency token and <c>updated_at</c>. It leaves the last-request columns and the invoke
     /// token untouched, and never touches another machine's draft, or a system instance, under the same id.
-    /// Returns <c>false</c> when the row changed between this call's read and its write, or a concurrent insert
+    /// Returns <see langword="false"/> when the row changed between this call's read and its write, or a concurrent insert
     /// of the same <c>(user_key, machine, id)</c> won; any other database error propagates.
     /// </summary>
     /// <param name="userKey">The owning user's key.</param>
@@ -353,7 +353,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     }
 
     /// <summary>
-    /// Inserts a new draft row in one statement. Returns <c>false</c> when a row with the same
+    /// Inserts a new draft row in one statement. Returns <see langword="false"/> when a row with the same
     /// <c>(user_key, machine, id)</c> already exists, which is how a writer that lost the race to create a draft
     /// finds out; any other database error propagates. A system instance under the same id is not a conflict:
     /// the user's draft is a row of its own.
@@ -658,7 +658,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     /// <summary>
     /// Conditional update that records <paramref name="requestId"/> alone and clears the stored trigger and
     /// from-state, so a retry of that request is refused as a reused id rather than replayed. The draft service
-    /// writes through <see cref="UpdateWithRequest"/> instead. Returns <c>false</c> when the row no longer carries
+    /// writes through <see cref="UpdateWithRequest"/> instead. Returns <see langword="false"/> when the row no longer carries
     /// <paramref name="expectedToken"/> or does not exist.
     /// </summary>
     /// <param name="userKey">The owning user's key.</param>
@@ -691,7 +691,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     /// <paramref name="snapshot"/>'s machine that bypasses the change tracker. It writes the snapshot, the
     /// request's id, trigger and from-state (all null when <paramref name="request"/> is
     /// null), a fresh token and <c>updated_at</c>. A write that lost the race, or targets a missing row, updates
-    /// nothing and returns <c>false</c> rather than throwing.
+    /// nothing and returns <see langword="false"/> rather than throwing.
     /// </summary>
     /// <param name="userKey">The owning user's key.</param>
     /// <param name="id">The client-minted draft id.</param>

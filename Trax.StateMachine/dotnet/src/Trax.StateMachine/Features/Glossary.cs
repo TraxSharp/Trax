@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
@@ -57,7 +58,9 @@ internal sealed partial record Glossary(
     {
         var map = at.Object(node);
         if (map.Count < minProperties)
-            throw at.Fail($"must hold at least {minProperties}.");
+            throw at.Fail(
+                string.Create(CultureInfo.InvariantCulture, $"must hold at least {minProperties}.")
+            );
         var result = new Dictionary<string, T>(StringComparer.Ordinal);
         foreach (var (key, value) in map)
         {
@@ -709,12 +712,20 @@ internal sealed partial record Glossary(
             if (!machine.Migrations.ContainsKey(from))
                 throw m["migrations"]
                     .Fail(
-                        $"has none from version {from}, and the machine is version {machine.Version}."
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"has none from version {from}, and the machine is version {machine.Version}."
+                        )
                     );
         foreach (var from in machine.Migrations.Keys.Where(v => v >= machine.Version))
             throw m["migrations"]
                 [from.ToString(System.Globalization.CultureInfo.InvariantCulture)]
-                .Fail($"steps from version {from}, and the machine is version {machine.Version}.");
+                .Fail(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"steps from version {from}, and the machine is version {machine.Version}."
+                    )
+                );
     }
 
     /// <summary>The input field an effect's receipt reaches its trigger in.</summary>
@@ -830,13 +841,17 @@ internal sealed partial record Glossary(
             if (end < 0)
                 throw at.Fail("has a '{' that is never closed.");
             var name = rest[(open + 1)..end];
-            if (!Placeholder().IsMatch(name))
+            if (!Placeholder.IsMatch(name))
                 throw at.Fail($"'{{{name}}}' is not a placeholder: a field name in braces.");
             names.Add(name);
             rest = rest[(end + 1)..];
         }
     }
 
-    [GeneratedRegex(@"\A[A-Za-z_][A-Za-z0-9_]*\z", RegexOptions.CultureInvariant)]
-    private static partial Regex Placeholder();
+    [GeneratedRegex(
+        @"\A[A-Za-z_][A-Za-z0-9_]*\z",
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Placeholder { get; }
 }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -170,7 +171,10 @@ public sealed class TraxHttpTransport : ITraxTransport
         {
             // A timeout surfaces as a cancellation the caller did not ask for.
             return TraxAnswer.Failed(
-                $"The host did not answer within {limit.TotalSeconds:0.###} seconds."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The host did not answer within {limit.TotalSeconds:0.###} seconds."
+                )
             );
         }
         catch (Exception ex) when (ex is HttpRequestException or IOException)
@@ -204,8 +208,10 @@ public sealed class TraxHttpTransport : ITraxTransport
         throw new ArgumentOutOfRangeException(
             paramName,
             timeout,
-            $"The {what} must be positive and at most {MaxTimeout.TotalMilliseconds} milliseconds (about 24.8 days), "
-                + "or Timeout.InfiniteTimeSpan."
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"The {what} must be positive and at most {MaxTimeout.TotalMilliseconds} milliseconds (about 24.8 days), "
+            ) + "or Timeout.InfiniteTimeSpan."
         );
     }
 
@@ -233,7 +239,10 @@ public sealed class TraxHttpTransport : ITraxTransport
                 throw new ArgumentOutOfRangeException(
                     paramName,
                     delay,
-                    $"Each {what} must be from zero to {MaxTimeout.TotalMilliseconds} milliseconds (about 24.8 days)."
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Each {what} must be from zero to {MaxTimeout.TotalMilliseconds} milliseconds (about 24.8 days)."
+                    )
                 );
     }
 
@@ -249,7 +258,10 @@ public sealed class TraxHttpTransport : ITraxTransport
         var status = (int)response.StatusCode;
         if (text is null)
             return TraxAnswer.Failed(
-                $"The server answered with a body larger than {max} bytes.",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The server answered with a body larger than {max} bytes."
+                ),
                 status
             );
         TraxAnswer? answer;

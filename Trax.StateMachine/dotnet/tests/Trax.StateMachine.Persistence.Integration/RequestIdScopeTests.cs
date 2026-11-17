@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -222,7 +223,12 @@ public class RequestIdScopeTests
         var (user, id) = await NewLog();
         var first = await Append(user, id, "1,", "r1");
         for (var i = 2; i <= RequestIdRing.Capacity; i++)
-            await Append(user, id, $"{i},", $"r{i}");
+            await Append(
+                user,
+                id,
+                string.Create(CultureInfo.InvariantCulture, $"{i},"),
+                string.Create(CultureInfo.InvariantCulture, $"r{i}")
+            );
         var stored = await StoredText(user, id);
 
         // r1 is the oldest of the last sixteen: its retry is answered with what r1 was answered with then.
@@ -268,7 +274,7 @@ public class RequestIdScopeTests
                 .BeTrue();
         }
         for (var i = 2; i < RequestIdRing.Capacity; i++)
-            await Append(user, id, "", $"r{i}");
+            await Append(user, id, "", string.Create(CultureInfo.InvariantCulture, $"r{i}"));
         var stored = await StoredText(user, id);
 
         (await Append(user, id, "a", "r1"))
@@ -284,7 +290,7 @@ public class RequestIdScopeTests
         // An evicted id is new again: it fires under every rule, as any request does.
         var (user, id) = await NewLog();
         for (var i = 1; i <= RequestIdRing.Capacity + 1; i++)
-            await Append(user, id, "x", $"r{i}");
+            await Append(user, id, "x", string.Create(CultureInfo.InvariantCulture, $"r{i}"));
         (await TestDb.NewStore().Get(user, id))!
             .RecentRequests.Should()
             .NotBeNull()
@@ -308,7 +314,7 @@ public class RequestIdScopeTests
                     turnstile,
                     i % 2 == 1 ? "Coin" : "Push",
                     i % 2 == 1 ? new JsonObject { ["coin"] = "quarter" } : null,
-                    $"t{i}"
+                    string.Create(CultureInfo.InvariantCulture, $"t{i}")
                 );
         (
             await Service()

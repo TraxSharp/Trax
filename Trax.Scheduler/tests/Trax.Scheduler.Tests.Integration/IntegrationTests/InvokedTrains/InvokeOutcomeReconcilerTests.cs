@@ -114,7 +114,7 @@ public class InvokeOutcomeReconcilerTests(ClusterStore store)
         var queued = await StartedToken();
 
         var deliveries = new ConcurrentBag<string>();
-        void Count(string run, InvokeDelivery _) => deliveries.Add(run);
+        void Count(object? sender, InvokeDeliveredEventArgs e) => deliveries.Add(e.InvokeToken);
         _api.Reconciler.Delivered += Count;
         try
         {

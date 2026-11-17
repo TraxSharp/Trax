@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -134,7 +135,7 @@ public sealed class InstanceHost : IDisposable
         scope.ServiceProvider.GetRequiredService<IMachineInstanceStore>();
 
     /// <summary>Every row under <paramref name="id"/>, whoever owns it, read straight from the table.</summary>
-    public async Task<List<Trax.Effect.Models.SnapshotDraft.SnapshotDraft>> Rows(Guid id)
+    public async Task<IReadOnlyList<Trax.Effect.Models.SnapshotDraft.SnapshotDraft>> Rows(Guid id)
     {
         using var scope = Scope();
         var db = scope.ServiceProvider.GetRequiredService<IDataContext>();
@@ -146,7 +147,7 @@ public sealed class InstanceHost : IDisposable
     }
 
     /// <summary>Every row of <paramref name="machine"/> that <paramref name="userKey"/> owns, read straight from the table.</summary>
-    public async Task<List<Trax.Effect.Models.SnapshotDraft.SnapshotDraft>> UserRows(
+    public async Task<IReadOnlyList<Trax.Effect.Models.SnapshotDraft.SnapshotDraft>> UserRows(
         string userKey,
         string machine
     )
@@ -178,7 +179,9 @@ public sealed class InstanceHost : IDisposable
     }
 
     /// <summary>Every work queue entry with <paramref name="externalId"/>, read straight from the table.</summary>
-    public async Task<List<Trax.Effect.Models.WorkQueue.WorkQueue>> Entries(string externalId)
+    public async Task<IReadOnlyList<Trax.Effect.Models.WorkQueue.WorkQueue>> Entries(
+        string externalId
+    )
     {
         using var scope = Scope();
         return await scope
@@ -245,7 +248,7 @@ public sealed class InstanceHost : IDisposable
         for (var i = 0; i < parameters.Length; i++)
         {
             var parameter = command.CreateParameter();
-            parameter.ParameterName = $"@p{i}";
+            parameter.ParameterName = string.Create(CultureInfo.InvariantCulture, $"@p{i}");
             parameter.Value = parameters[i] ?? DBNull.Value;
             command.Parameters.Add(parameter);
         }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -10,6 +11,9 @@ namespace Trax.StateMachine.Features;
 /// read them, only when the host file and the IRs list the same machines, every name the host file gives is in its
 /// IR, and each IR is the one its host entry was derived from.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal static class MachineFiles
 {
     internal const string HostFileName = "host.json";
@@ -92,7 +96,10 @@ internal static class MachineFiles
         for (var i = 0; i < host.Policies.Count; i++)
         {
             var policy = host.Policies[i];
-            var at = $"{HostFileName} policy {i} ({policy.Shape})";
+            var at = string.Create(
+                CultureInfo.InvariantCulture,
+                $"{HostFileName} policy {i} ({policy.Shape})"
+            );
             if (!machines[policy.When].States.Contains(policy.Enters))
                 problems.Add(
                     $"{at} waits for '{policy.When}' to enter '{policy.Enters}', which is not one of its states."
@@ -175,7 +182,10 @@ internal static class MachineFiles
             .ToHashSet(StringComparer.Ordinal);
         Pair(
             problems,
-            $"'{id}' is version {version}, and steps from version",
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"'{id}' is version {version}, and steps from version"
+            ),
             "migration",
             steps,
             machine.Migrations.Keys.Select(k =>

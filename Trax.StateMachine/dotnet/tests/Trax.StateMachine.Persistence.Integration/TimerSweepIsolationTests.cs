@@ -1,4 +1,5 @@
 using System.Diagnostics.Metrics;
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Enums;
@@ -260,7 +261,7 @@ public class TimerSweepIsolationTests(StoreProvider provider)
                     _host,
                     id,
                     nameof(TimedChargeTrigger.Charge),
-                    $"charge-{i}",
+                    string.Create(CultureInfo.InvariantCulture, $"charge-{i}"),
                     (await RawSql.Now(_host)).AddMinutes(5)
                 )
             )
@@ -290,12 +291,15 @@ public class TimerSweepIsolationTests(StoreProvider provider)
         finally
         {
             foreach (var id in marked)
+            {
+                var rowId = await _host.RowId(id);
                 await RawSql.Execute(
                     _host,
                     $"UPDATE {RawSql.Table(_host)} SET effect_token = NULL, effect_key = NULL, "
                         + "effect_trigger = NULL, effect_request_id = NULL, effect_lease_until = NULL "
-                        + $"WHERE row_id = {await _host.RowId(id)}"
+                        + string.Create(CultureInfo.InvariantCulture, $"WHERE row_id = {rowId}")
                 );
+            }
         }
     }
 

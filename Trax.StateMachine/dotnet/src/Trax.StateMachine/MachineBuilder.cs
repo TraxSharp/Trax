@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Linq.Expressions;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -72,7 +73,7 @@ public sealed partial class MachineBuilder<TState, TTrigger>
     /// <inheritdoc/>
     public IMachineBuilder<TState, TTrigger> Id(string id)
     {
-        if (id is null || !KebabCaseId().IsMatch(id))
+        if (id is null || !KebabCaseId.IsMatch(id))
             throw new ArgumentException(
                 $"The machine id '{id}' is not kebab-case. Use lowercase letters and digits in hyphen-separated "
                     + "words, starting with a letter, e.g. `.Id(\"checkout\")` or `.Id(\"turnstile-two\")`.",
@@ -86,9 +87,10 @@ public sealed partial class MachineBuilder<TState, TTrigger>
     // be built with is one the toolchain can emit. `\z`, not `$`: `$` also matches before a final newline.
     [GeneratedRegex(
         @"^[a-z][a-z0-9]*(-[a-z0-9]+)*\z",
-        RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture
+        RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
     )]
-    private static partial Regex KebabCaseId();
+    private static partial Regex KebabCaseId { get; }
 
     /// <inheritdoc/>
     public IMachineBuilder<TState, TTrigger> Version(int version)
@@ -963,7 +965,10 @@ public sealed partial class MachineBuilder<TState, TTrigger>
             yield return $"the state {state} {doing} but declares no {method}. Every invoking state says "
                 + $"where {run} run goes; add `.{method}({typeof(TState).Name}.X)`.";
         else if (count > 1)
-            yield return $"the state {state} declares {method} {count} times. Declare it exactly once.";
+            yield return string.Create(
+                CultureInfo.InvariantCulture,
+                $"the state {state} declares {method} {count} times. Declare it exactly once."
+            );
     }
 
     // An outcome target means "the train produced this": the draft reaches it with the context its outcome
@@ -1089,7 +1094,10 @@ public sealed partial class MachineBuilder<TState, TTrigger>
                 else if (draft.Max > MachineTimers.MaxDuration)
                     problems.Add(
                         $"the timer of {state} may wait up to {draft.Max}, longer than the "
-                            + $"{MachineTimers.MaxDuration.TotalDays} days a timer may wait (MachineTimers.MaxDuration)."
+                            + string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"{MachineTimers.MaxDuration.TotalDays} days a timer may wait (MachineTimers.MaxDuration)."
+                            )
                     );
                 (field, computed) = TimerDuration(draft, problems);
             }

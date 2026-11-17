@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Trax.StateMachine.Persistence;
 using Trax.StateMachine.Tests.Stress.Fixtures;
@@ -29,7 +30,11 @@ public class ClaimContentionStressTests : StressFixture
         var results = await Fan(
             keys * claimants,
             StressProfile.MaxConcurrency,
-            k => Claim($"claim:{run}:{k / claimants}", TimeSpan.FromMinutes(5))
+            k =>
+                Claim(
+                    string.Create(CultureInfo.InvariantCulture, $"claim:{run}:{k / claimants}"),
+                    TimeSpan.FromMinutes(5)
+                )
         );
 
         var wins = results.Count(r => r is ClaimResult.Won);
@@ -38,7 +43,10 @@ public class ClaimContentionStressTests : StressFixture
         wins.Should().Be(keys, "exactly one claimant wins each of {0} keys", keys);
         losses.Should().Be(keys * (claimants - 1), "everyone else loses");
         await TestContext.Progress.WriteLineAsync(
-            $"[claims] {keys} keys x {claimants} claimants = {keys * claimants} claims, winners={wins}, losers={losses}"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"[claims] {keys} keys x {claimants} claimants = {keys * claimants} claims, winners={wins}, losers={losses}"
+            )
         );
     }
 
@@ -56,7 +64,13 @@ public class ClaimContentionStressTests : StressFixture
             StressProfile.MaxConcurrency,
             async i =>
             {
-                (await Claim($"reclaim:{run}:{i}", TimeSpan.FromSeconds(-10)).ConfigureAwait(false))
+                (
+                    await Claim(
+                            string.Create(CultureInfo.InvariantCulture, $"reclaim:{run}:{i}"),
+                            TimeSpan.FromSeconds(-10)
+                        )
+                        .ConfigureAwait(false)
+                )
                     .Should()
                     .BeOfType<ClaimResult.Won>();
                 return 0;
@@ -67,7 +81,11 @@ public class ClaimContentionStressTests : StressFixture
         var results = await Fan(
             keys * claimants,
             StressProfile.MaxConcurrency,
-            k => Claim($"reclaim:{run}:{k / claimants}", TimeSpan.FromMinutes(5))
+            k =>
+                Claim(
+                    string.Create(CultureInfo.InvariantCulture, $"reclaim:{run}:{k / claimants}"),
+                    TimeSpan.FromMinutes(5)
+                )
         );
 
         results

@@ -22,7 +22,7 @@ public class OrderAutosaveTests
             }
         );
 
-    private async Task<Guid> SeedPlaced(string user)
+    private static async Task<Guid> SeedPlaced(string user)
     {
         // The soft path cannot create a committed draft, so it is seeded straight into the store.
         var id = Guid.NewGuid();
