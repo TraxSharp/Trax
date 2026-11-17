@@ -25,6 +25,9 @@ public class DecisionRuntimeTests : TestSetup
     /// <summary>Long enough never to be reached by a run that is working, so it only names a hang.</summary>
     private static readonly TimeSpan Hang = TimeSpan.FromSeconds(30);
 
+    /// <summary>The clock <see cref="Hang"/> is measured on. A run that hangs never moves a fake clock, so it is the real one.</summary>
+    private static readonly TimeProvider RealTime = TimeProvider.System;
+
     #region Shadows
 
     [Test]
@@ -45,11 +48,11 @@ public class DecisionRuntimeTests : TestSetup
                     .With<IShadow>(shadow)
                     .With<IDecisionObserver>(observer)
             )
-            .WaitAsync(Hang, CancellationToken.None);
+            .WaitAsync(Hang, RealTime, CancellationToken.None);
 
         result.IsRight.Should().BeTrue();
         log.Should().Equal("Left");
-        await shadow.Entered.Task.WaitAsync(Hang, CancellationToken.None);
+        await shadow.Entered.Task.WaitAsync(Hang, RealTime, CancellationToken.None);
         shadow.Token.IsCancellationRequested.Should().BeTrue("a shadow not waited for is stopped");
         observer
             .Decisions.Should()
@@ -79,10 +82,10 @@ public class DecisionRuntimeTests : TestSetup
                     .With<IDecider>(new ScriptedDecider().Choose(Lane.Left))
                     .With<IShadow>(shadow)
             )
-            .WaitAsync(Hang, CancellationToken.None);
+            .WaitAsync(Hang, RealTime, CancellationToken.None);
 
         result.IsRight.Should().BeTrue();
-        await shadow.Entered.Task.WaitAsync(Hang, CancellationToken.None);
+        await shadow.Entered.Task.WaitAsync(Hang, RealTime, CancellationToken.None);
         var handle = () => shadow.Token.WaitHandle;
         handle
             .Should()
@@ -130,7 +133,7 @@ public class DecisionRuntimeTests : TestSetup
             run.ServiceProvider
         )
             .RunEither("x")
-            .WaitAsync(Hang);
+            .WaitAsync(Hang, RealTime);
 
         result.IsRight.Should().BeTrue();
         observer
@@ -167,7 +170,7 @@ public class DecisionRuntimeTests : TestSetup
                     .With<IOtherShadow>(second)
                     .With<IDecisionObserver>(observer)
             )
-            .WaitAsync(Hang);
+            .WaitAsync(Hang, RealTime);
 
         result.IsRight.Should().BeTrue();
         live.Seen.Should().BeSameAs(basket, "the live decider is handed the run's own state");
@@ -196,7 +199,7 @@ public class DecisionRuntimeTests : TestSetup
                     .With<IShadow>(shadow)
                     .With<IDecisionObserver>(observer)
             )
-            .WaitAsync(Hang, CancellationToken.None);
+            .WaitAsync(Hang, RealTime, CancellationToken.None);
 
         result.IsRight.Should().BeTrue();
         shadow.Inner.Requests.Should().BeEmpty("a shadow with no copy of its own is not asked");
@@ -231,7 +234,7 @@ public class DecisionRuntimeTests : TestSetup
                     .With<IShadow>(shadow)
                     .With<IDecisionObserver>(observer)
             )
-            .WaitAsync(Hang, CancellationToken.None);
+            .WaitAsync(Hang, RealTime, CancellationToken.None);
 
         result.IsRight.Should().BeTrue();
         shadow.Inner.Requests.Should().BeEmpty();
@@ -270,11 +273,11 @@ public class DecisionRuntimeTests : TestSetup
             run.ServiceProvider
         )
             .RunEither("x")
-            .WaitAsync(Hang);
+            .WaitAsync(Hang, RealTime);
 
         result.IsRight.Should().BeTrue();
-        var tracked = await made.Task.WaitAsync(Hang);
-        var disposed = () => tracked.Disposed.Task.WaitAsync(Hang);
+        var tracked = await made.Task.WaitAsync(Hang, RealTime);
+        var disposed = () => tracked.Disposed.Task.WaitAsync(Hang, RealTime);
         await disposed
             .Should()
             .NotThrowAsync("a shadow that never returns does not keep its scope for ever");
@@ -291,7 +294,7 @@ public class DecisionRuntimeTests : TestSetup
                     .With<IDecider>(new ScriptedDecider().Throws(new TimeoutException("down")))
                     .With<IShadow>(new HangingShadow())
             )
-            .WaitAsync(Hang);
+            .WaitAsync(Hang, RealTime);
 
         Failure(result).Should().BeOfType<TimeoutException>();
     }
@@ -2217,7 +2220,7 @@ public class DecisionRuntimeTests : TestSetup
             using (resource.Enter())
             {
                 entered.TrySetResult();
-                await shadowDone.Task.WaitAsync(Hang, ct).ConfigureAwait(false);
+                await shadowDone.Task.WaitAsync(Hang, RealTime, ct).ConfigureAwait(false);
             }
 
             return new DecisionResult(
@@ -2240,7 +2243,7 @@ public class DecisionRuntimeTests : TestSetup
         {
             try
             {
-                await liveEntered.Task.WaitAsync(Hang, ct).ConfigureAwait(false);
+                await liveEntered.Task.WaitAsync(Hang, RealTime, ct).ConfigureAwait(false);
 
                 using (resource.Enter())
                     return new DecisionResult(

@@ -33,6 +33,12 @@ public partial class Monad<TInput, TReturn>
     /// </summary>
     private static readonly TimeSpan ShadowGrace = TimeSpan.FromSeconds(1);
 
+    /// <summary>
+    /// The clock that times the shadows: the container's <see cref="TimeProvider"/> when it
+    /// registers one, else the system clock.
+    /// </summary>
+    private TimeProvider Clock => Optional<TimeProvider>() ?? TimeProvider.System;
+
     #region Public API
 
     /// <summary>
@@ -530,6 +536,7 @@ public partial class Monad<TInput, TReturn>
                             request,
                             snapshot,
                             state.NotNull().GetType(),
+                            Clock,
                             shadowing.Token
                         )
                     )
@@ -547,7 +554,7 @@ public partial class Monad<TInput, TReturn>
             catch (Exception e)
             {
                 // The run fails here, so nothing will read what the shadows say.
-                Stop(shadowing);
+                await Stop(shadowing).ConfigureAwait(false);
                 return Failed(e, step);
             }
 
@@ -721,11 +728,11 @@ public partial class Monad<TInput, TReturn>
         /// a shadow that ignores cancellation and never returns does not keep its scope, and the
         /// caller does not wait for either.
         /// </summary>
-        public async Task DisposeAfter(TimeSpan grace)
+        public async Task DisposeAfter(TimeSpan grace, TimeProvider clock)
         {
             try
             {
-                await Task.Delay(grace).ConfigureAwait(false);
+                await Task.Delay(grace, clock).ConfigureAwait(false);
                 await DisposeAsync().ConfigureAwait(false);
             }
             catch
@@ -877,6 +884,7 @@ public partial class Monad<TInput, TReturn>
         DecisionRequest request,
         byte[] snapshot,
         Type stateType,
+        TimeProvider clock,
         CancellationToken cancellationToken
     ) =>
         Task.Run(
@@ -884,7 +892,9 @@ public partial class Monad<TInput, TReturn>
             {
                 // Registered before anything else, so a shadow cancelled before its thread ran
                 // still has its scope released. The callback only starts a timer.
-                var grace = cancellationToken.Register(() => _ = shadow.DisposeAfter(ShadowGrace));
+                var grace = cancellationToken.Register(() =>
+                    _ = shadow.DisposeAfter(ShadowGrace, clock)
+                );
 
                 try
                 {
@@ -946,37 +956,44 @@ public partial class Monad<TInput, TReturn>
 
         if (!all.IsCompleted)
         {
-            using var timer = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken);
-            timer.CancelAfter(wait);
+            using var timer = new CancellationTokenSource(wait, Clock);
+            using var gaveUp = CancellationTokenSource.CreateLinkedTokenSource(
+                CancellationToken,
+                timer.Token
+            );
 
             var gave = new TaskCompletionSource();
 
-            await using (timer.Token.Register(() => gave.TrySetResult()).ConfigureAwait(false))
+            await using (gaveUp.Token.Register(() => gave.TrySetResult()).ConfigureAwait(false))
                 await Task.WhenAny(all, gave.Task).ConfigureAwait(false);
         }
 
-        Stop(shadowing);
+        await Stop(shadowing).ConfigureAwait(false);
 
-        return shadows
-            .Select(s =>
-                s.Asked.IsCompletedSuccessfully
-                    ? s.Asked.Result
+        var results = new List<ShadowResult>(shadows.Count);
+
+        // A shadow that finished has its result read by awaiting it, which does not wait.
+        foreach (var (decider, asked) in shadows)
+            results.Add(
+                asked.IsCompletedSuccessfully
+                    ? await asked.ConfigureAwait(false)
                     : new ShadowResult(
-                        s.Decider,
+                        decider,
                         Answers: null,
                         $"did not answer within {QuestionSpec.Format(wait.TotalSeconds)}s of the live "
                             + "decider's answer, "
                             + "so it was cancelled and not waited for"
                     )
-            )
-            .ToList();
+            );
+
+        return results;
     }
 
-    private static void Stop(CancellationTokenSource shadowing)
+    private static async Task Stop(CancellationTokenSource shadowing)
     {
         try
         {
-            shadowing.Cancel();
+            await shadowing.CancelAsync().ConfigureAwait(false);
         }
         catch (AggregateException)
         {

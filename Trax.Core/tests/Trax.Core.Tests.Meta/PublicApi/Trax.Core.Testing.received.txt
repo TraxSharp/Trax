@@ -72,6 +72,7 @@ namespace Trax.Core.Testing.Guards
     public static class VocabularyGuards
     {
         public static Trax.Core.Testing.GuardResult TraxVocabularyIsUsed(System.Collections.Generic.IReadOnlyList<Trax.Core.Testing.Guards.ForeignVocabulary> banned, Trax.Core.Testing.ArchitectureGuardOptions? options = null, System.Collections.Generic.IReadOnlyDictionary<string, string>? allowed = null) { }
+        public static System.Threading.Tasks.Task<Trax.Core.Testing.GuardResult> TraxVocabularyIsUsedAsync(System.Collections.Generic.IReadOnlyList<Trax.Core.Testing.Guards.ForeignVocabulary> banned, Trax.Core.Testing.ArchitectureGuardOptions? options = null, System.Collections.Generic.IReadOnlyDictionary<string, string>? allowed = null, System.Threading.CancellationToken cancellationToken = default) { }
     }
 }
 namespace Trax.Core.Testing.Infrastructure

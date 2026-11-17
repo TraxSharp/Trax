@@ -165,7 +165,8 @@ public readonly struct Either<TLeft, TRight> : IEquatable<Either<TLeft, TRight>>
         };
 
     /// <inheritdoc />
-    public override bool Equals(object? obj) => obj is Either<TLeft, TRight> other && Equals(other);
+    public override bool Equals([NotNullWhen(true)] object? obj) =>
+        obj is Either<TLeft, TRight> other && Equals(other);
 
     /// <inheritdoc />
     public override int GetHashCode() =>

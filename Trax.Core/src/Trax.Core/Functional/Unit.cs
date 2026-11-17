@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Trax.Core.Functional;
 
 /// <summary>
@@ -15,7 +17,7 @@ public readonly struct Unit : IEquatable<Unit>, IComparable<Unit>
     public bool Equals(Unit other) => true;
 
     /// <inheritdoc />
-    public override bool Equals(object? obj) => obj is Unit;
+    public override bool Equals([NotNullWhen(true)] object? obj) => obj is Unit;
 
     /// <inheritdoc />
     public override int GetHashCode() => 0;

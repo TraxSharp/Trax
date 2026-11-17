@@ -40,6 +40,27 @@ public static partial class VocabularyGuards
         IReadOnlyList<ForeignVocabulary> banned,
         ArchitectureGuardOptions? options = null,
         IReadOnlyDictionary<string, string>? allowed = null
+    ) =>
+        // Every await below is ConfigureAwait(false), so this waits on no context of its own.
+        TraxVocabularyIsUsedAsync(banned, options, allowed).GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Scans the given roots and reports every use of a listed third-party attribute, reading the
+    /// files asynchronously.
+    /// </summary>
+    /// <param name="banned">The vocabularies this repo declines, and their Trax replacements.</param>
+    /// <param name="options">Scan roots and the repo root. Source and test roots are both scanned.</param>
+    /// <param name="allowed">
+    /// Repo-relative paths exempt from the scan, each mapped to why. The translation layer belongs
+    /// here: code that constructs the library's type to speak to the library is the direction that
+    /// is allowed, and so are the tests that have to write the thing being refused.
+    /// </param>
+    /// <param name="cancellationToken">Stops the scan.</param>
+    public static async Task<GuardResult> TraxVocabularyIsUsedAsync(
+        IReadOnlyList<ForeignVocabulary> banned,
+        ArchitectureGuardOptions? options = null,
+        IReadOnlyDictionary<string, string>? allowed = null,
+        CancellationToken cancellationToken = default
     )
     {
         ArgumentNullException.ThrowIfNull(banned);
@@ -73,7 +94,8 @@ public static partial class VocabularyGuards
 
         // A global using makes a library's attributes visible in files that never name it, so a
         // library imported that way counts as present everywhere.
-        var globallyImported = GloballyImported(root, roots);
+        var globallyImported = await GloballyImported(root, roots, cancellationToken)
+            .ConfigureAwait(false);
 
         foreach (var file in SourceFiles.CSharpUnder(root, roots))
         {
@@ -85,7 +107,9 @@ public static partial class VocabularyGuards
 
             // Comments and string literals talk about the banned attributes constantly, not least
             // in the messages that tell a consumer to stop using them.
-            var text = SourceText.StripCommentsAndStrings(File.ReadAllText(file));
+            var text = SourceText.StripCommentsAndStrings(
+                await File.ReadAllTextAsync(file, cancellationToken).ConfigureAwait(false)
+            );
 
             foreach (var (entry, pattern) in patterns)
             {
@@ -132,17 +156,28 @@ public static partial class VocabularyGuards
     /// <c>&lt;Using Include&gt;</c>, with each of its parent namespaces: importing
     /// <c>HotChocolate.Authorization</c> is a use of <c>HotChocolate</c>.
     /// </summary>
-    private static HashSet<string> GloballyImported(string root, string[] roots)
+    private static async Task<HashSet<string>> GloballyImported(
+        string root,
+        string[] roots,
+        CancellationToken cancellationToken
+    )
     {
         var names = new List<string>();
 
         foreach (var file in SourceFiles.CSharpUnder(root, roots))
-        foreach (Match match in GlobalUsing.Matches(File.ReadAllText(file)))
-            names.Add(match.Groups["name"].Value);
+        {
+            var text = await File.ReadAllTextAsync(file, cancellationToken).ConfigureAwait(false);
+            foreach (Match match in GlobalUsing.Matches(text))
+                names.Add(match.Groups["name"].Value);
+        }
 
         foreach (var project in SourceFiles.ProjectsUnder(root, roots))
-        foreach (Match match in ProjectUsing.Matches(File.ReadAllText(project)))
-            names.Add(match.Groups["name"].Value);
+        {
+            var text = await File.ReadAllTextAsync(project, cancellationToken)
+                .ConfigureAwait(false);
+            foreach (Match match in ProjectUsing.Matches(text))
+                names.Add(match.Groups["name"].Value);
+        }
 
         var imported = new HashSet<string>(StringComparer.Ordinal);
         foreach (var name in names)

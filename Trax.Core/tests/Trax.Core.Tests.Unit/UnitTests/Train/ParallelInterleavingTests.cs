@@ -41,6 +41,9 @@ public class ParallelInterleavingTests : TestSetup
     /// <summary>Long enough never to be reached by a run that is working, so it only names a hang.</summary>
     private static readonly TimeSpan Hang = TimeSpan.FromSeconds(30);
 
+    /// <summary>The clock <see cref="Hang"/> is measured on. A run that hangs never moves a fake clock, so it is the real one.</summary>
+    private static readonly TimeProvider RealTime = TimeProvider.System;
+
     #region Every interleaving
 
     /// <summary>
@@ -181,13 +184,16 @@ public class ParallelInterleavingTests : TestSetup
                     };
                     return await Outcome
                         .Of(train, "x")
-                        .WaitAsync(Hang, CancellationToken.None)
+                        .WaitAsync(Hang, RealTime, CancellationToken.None)
                         .ConfigureAwait(false);
                 },
                 (branch, index) =>
                 {
+                    // Cancelled synchronously, so the token's callbacks have run before this point
+                    // returns. CancelAsync would run them later on another thread, and the
+                    // interleaving explored would no longer be the one named.
                     if ((branch, index) == at)
-                        source.Value.NotNull().Cancel();
+                        source.Value.NotNull().Cancel(throwOnFirstException: false);
                 }
             );
 
@@ -273,9 +279,11 @@ public class ParallelInterleavingTests : TestSetup
     {
         // The first branch blocks its thread until the second has run. Started on the caller's
         // thread rather than the pool, the second would never start.
-        var signal = new TaskCompletionSource();
+        using var signal = new ManualResetEventSlim();
 
-        var result = await new BlockingTrain(signal, Hang).RunEither("x").WaitAsync(Hang * 2);
+        var result = await new BlockingTrain(signal, Hang)
+            .RunEither("x")
+            .WaitAsync(Hang * 2, RealTime);
 
         result.IsRight.Should().BeTrue($"branches start on the thread pool ({Adr})");
     }
@@ -283,7 +291,7 @@ public class ParallelInterleavingTests : TestSetup
     [Test]
     public async Task ABlockingJunction_RunInOrder_DoesStopItsSibling_SoTheBudgetCanFail()
     {
-        var signal = new TaskCompletionSource();
+        using var signal = new ManualResetEventSlim();
 
         // negative-wait: the blocked branch has to give up for the run to end at all.
         var result = await new BlockingTrain(signal, TimeSpan.FromMilliseconds(200))
@@ -291,7 +299,7 @@ public class ParallelInterleavingTests : TestSetup
             BranchRunner = new SequentialBranchRunner(),
         }
             .RunEither("x")
-            .WaitAsync(Hang);
+            .WaitAsync(Hang, RealTime);
 
         result
             .Swap()
@@ -314,7 +322,7 @@ public class ParallelInterleavingTests : TestSetup
         var results = await Task.WhenAll(
                 Enumerable.Range(0, trains).Select(_ => new FourBranchTrain(meeting).RunEither("x"))
             )
-            .WaitAsync(Hang);
+            .WaitAsync(Hang, RealTime);
 
         results.Should().OnlyContain(r => r.IsRight, $"branches wait without a thread ({Adr})");
         meeting.Arrived.Should().Be(trains * 4);
@@ -354,7 +362,7 @@ public class ParallelInterleavingTests : TestSetup
     private static Task<Outcome> Run(IReadOnlyList<Element> chain, IBranchRunner runner) =>
         Outcome
             .Of(new ShapeTrain(chain, new RunLog()) { BranchRunner = runner }, "x")
-            .WaitAsync(Hang);
+            .WaitAsync(Hang, RealTime);
 
     /// <summary>How a run differs from the oracle, in the terms the equivalence compares.</summary>
     private static IEnumerable<string> Differences(Outcome run, Outcome oracle)
@@ -462,30 +470,31 @@ public class ParallelInterleavingTests : TestSetup
                 .Resolve();
     }
 
-    // Blocks with Task.Wait, which the thread pool sees: it adds a thread at once for a pool thread
-    // blocked that way, so the sibling starts even when other work in the process holds every pool
-    // thread, instead of waiting for the pool's slow starvation injection.
-    private sealed class BlocksUntil(TaskCompletionSource signal, TimeSpan wait)
+    // Blocks its thread on purpose: that is the junction this test is about. An event, not a task,
+    // because blocking on a task is what the profile refuses. The pool does not add a thread at
+    // once for a thread blocked on an event, as it does for Task.Wait, so with every pool thread
+    // busy the sibling waits for the pool's starvation injection, which is well inside Hang.
+    private sealed class BlocksUntil(ManualResetEventSlim signal, TimeSpan wait)
         : Junction<string, ReadA>
     {
         public override Task<ReadA> Run(string input) => Task.FromResult(WaitForTheSibling());
 
         private ReadA WaitForTheSibling() =>
-            signal.Task.Wait(wait, CancellationToken.None)
+            signal.Wait(wait, CancellationToken.None)
                 ? new ReadA(1)
                 : throw new TimeoutException("the sibling never ran");
     }
 
-    private sealed class Releases(TaskCompletionSource signal) : Junction<string, ReadB>
+    private sealed class Releases(ManualResetEventSlim signal) : Junction<string, ReadB>
     {
         public override Task<ReadB> Run(string input)
         {
-            signal.TrySetResult();
+            signal.Set();
             return Task.FromResult(new ReadB(1));
         }
     }
 
-    private sealed class BlockingTrain(TaskCompletionSource signal, TimeSpan wait)
+    private sealed class BlockingTrain(ManualResetEventSlim signal, TimeSpan wait)
         : Train<string, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>

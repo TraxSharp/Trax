@@ -34,6 +34,9 @@ public class ParallelTests : TestSetup
     /// <summary>Long enough never to be reached by a run that is working, so it only names a hang.</summary>
     private static readonly TimeSpan Hang = TimeSpan.FromSeconds(30);
 
+    /// <summary>The clock <see cref="Hang"/> is measured on. A run that hangs never moves a fake clock, so it is the real one.</summary>
+    private static readonly TimeProvider RealTime = TimeProvider.System;
+
     #region Running
 
     [Test]
@@ -54,7 +57,7 @@ public class ParallelTests : TestSetup
         // Each branch waits for the other to start. Run one after the other, neither could finish.
         var meeting = new Meeting();
 
-        var result = await new MeetingTrain(meeting).RunEither("x").WaitAsync(Hang);
+        var result = await new MeetingTrain(meeting).RunEither("x").WaitAsync(Hang, RealTime);
 
         result.IsRight.Should().BeTrue($"branches start at once on the thread pool ({Adr})");
     }
@@ -64,7 +67,7 @@ public class ParallelTests : TestSetup
     {
         // "reads" runs only after "produces" has put an Embedding in its Memory, and still finds
         // none: each branch has its own copy, taken at the fork.
-        var result = await new IsolationTrain().RunEither("abc").WaitAsync(Hang);
+        var result = await new IsolationTrain().RunEither("abc").WaitAsync(Hang, RealTime);
 
         result
             .Swap()
@@ -94,7 +97,7 @@ public class ParallelTests : TestSetup
     {
         var capture = new Capture();
 
-        var result = await new NestedTrain(capture).RunEither("abc").WaitAsync(Hang);
+        var result = await new NestedTrain(capture).RunEither("abc").WaitAsync(Hang, RealTime);
 
         result.IsRight.Should().BeTrue();
         capture
@@ -116,7 +119,7 @@ public class ParallelTests : TestSetup
     [Test]
     public async Task AChain_MayStartWithAParallel()
     {
-        var result = await new StartsWithParallelTrain().RunEither("abc").WaitAsync(Hang);
+        var result = await new StartsWithParallelTrain().RunEither("abc").WaitAsync(Hang, RealTime);
 
         result.ValueUnsafe().Should().Be("embedding=3, cocitation=6");
         Faults(new StartsWithParallelTrain()).Should().BeEmpty();
@@ -136,7 +139,7 @@ public class ParallelTests : TestSetup
             typeof(string)
         );
 
-        var result = await train.RunEither("abc").WaitAsync(Hang, CancellationToken.None);
+        var result = await train.RunEither("abc").WaitAsync(Hang, RealTime, CancellationToken.None);
 
         result.IsRight.Should().BeTrue();
         var parallel = graph.Nodes.Single(n => n.Kind == ChainStepKind.Parallel);
@@ -165,7 +168,7 @@ public class ParallelTests : TestSetup
 
         var result = await new FailingTrain(BranchFailurePolicy.WaitForAll, joined)
             .RunEither("abc")
-            .WaitAsync(Hang);
+            .WaitAsync(Hang, RealTime);
 
         result.IsLeft.Should().BeTrue();
         var failure = result
@@ -194,9 +197,11 @@ public class ParallelTests : TestSetup
     {
         var waiter = new Waiter();
 
-        var result = await new CancelSiblingsTrain(waiter).RunEither("abc").WaitAsync(Hang);
+        var result = await new CancelSiblingsTrain(waiter)
+            .RunEither("abc")
+            .WaitAsync(Hang, RealTime);
 
-        await waiter.Cancelled.Task.WaitAsync(Hang);
+        await waiter.Cancelled.Task.WaitAsync(Hang, RealTime);
         var failure = result
             .Swap()
             .ValueUnsafe()
@@ -219,9 +224,11 @@ public class ParallelTests : TestSetup
         // library wrapping a cancelled request does. It still stopped because its sibling failed.
         var waiter = new Waiter();
 
-        var result = await new WrappingSiblingTrain(waiter).RunEither("abc").WaitAsync(Hang);
+        var result = await new WrappingSiblingTrain(waiter)
+            .RunEither("abc")
+            .WaitAsync(Hang, RealTime);
 
-        await waiter.Cancelled.Task.WaitAsync(Hang);
+        await waiter.Cancelled.Task.WaitAsync(Hang, RealTime);
         var failure = result
             .Swap()
             .ValueUnsafe()
@@ -242,10 +249,10 @@ public class ParallelTests : TestSetup
         var waiter = new Waiter();
 
         var run = new BothWaitTrain(waiter).Run("abc", cts.Token);
-        await waiter.Entered.Task.WaitAsync(Hang, CancellationToken.None);
+        await waiter.Entered.Task.WaitAsync(Hang, RealTime, CancellationToken.None);
         await cts.CancelAsync();
         var act = async () =>
-            await run.WaitAsync(Hang, CancellationToken.None).ConfigureAwait(false);
+            await run.WaitAsync(Hang, RealTime, CancellationToken.None).ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<OperationCanceledException>(
@@ -258,7 +265,7 @@ public class ParallelTests : TestSetup
     {
         // A cancellation nothing outside the step asked for (an HttpClient timeout, a junction's
         // own token source) fails its branch like any exception, beside the other failures.
-        var result = await new TimeoutTrain().RunEither("abc").WaitAsync(Hang);
+        var result = await new TimeoutTrain().RunEither("abc").WaitAsync(Hang, RealTime);
 
         var failure = result
             .Swap()
@@ -280,7 +287,7 @@ public class ParallelTests : TestSetup
     {
         // What the persisted cancel flag (the dashboard, the API) raises at a junction boundary.
         var run = new RequestedCancellationTrain().Run("abc");
-        var act = async () => await run.WaitAsync(Hang).ConfigureAwait(false);
+        var act = async () => await run.WaitAsync(Hang, RealTime).ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<CancellationRequestedException>(
@@ -342,7 +349,9 @@ public class ParallelTests : TestSetup
         // the join down with it.
         var waiter = new Waiter();
 
-        var result = await new ThrowingCallbackTrain(waiter).RunEither("abc").WaitAsync(Hang);
+        var result = await new ThrowingCallbackTrain(waiter)
+            .RunEither("abc")
+            .WaitAsync(Hang, RealTime);
 
         var failure = result
             .Swap()
@@ -363,7 +372,7 @@ public class ParallelTests : TestSetup
     {
         var result = await new SignalsWithServicesTrain(new NoScopes())
             .RunEither("abc")
-            .WaitAsync(Hang);
+            .WaitAsync(Hang, RealTime);
 
         result
             .Swap()
@@ -389,7 +398,7 @@ public class ParallelTests : TestSetup
         runScope.ServiceProvider.GetRequiredService<Tenant>().Name = "acme";
 
         var train = new ScopedTrain(runScope.ServiceProvider);
-        var result = await train.RunEither("abc").WaitAsync(Hang, CancellationToken.None);
+        var result = await train.RunEither("abc").WaitAsync(Hang, RealTime, CancellationToken.None);
 
         result.IsRight.Should().BeTrue();
         var report = result.ValueUnsafe();
@@ -410,7 +419,7 @@ public class ParallelTests : TestSetup
         services.AddSingleton<IBranchScopeInitializer, ThrowingInitializer>();
         await using var root = services.BuildServiceProvider();
 
-        var result = await new ScopedTrain(root).RunEither("abc").WaitAsync(Hang);
+        var result = await new ScopedTrain(root).RunEither("abc").WaitAsync(Hang, RealTime);
 
         result
             .Swap()
@@ -435,7 +444,9 @@ public class ParallelTests : TestSetup
         };
         ActivitySource.AddActivityListener(listener);
 
-        var result = await new LoggingBranchesTrain(factory).RunEither("abc").WaitAsync(Hang);
+        var result = await new LoggingBranchesTrain(factory)
+            .RunEither("abc")
+            .WaitAsync(Hang, RealTime);
 
         result.IsRight.Should().BeTrue();
 
@@ -585,7 +596,9 @@ public class ParallelTests : TestSetup
     {
         // IChain finds the junction in Memory, which every branch copies with the same
         // references, so both branches would run the one instance at the same time.
-        var result = await new SharedIChainTrain(new SharedNote()).RunEither("abc").WaitAsync(Hang);
+        var result = await new SharedIChainTrain(new SharedNote())
+            .RunEither("abc")
+            .WaitAsync(Hang, RealTime);
 
         result
             .Swap()
@@ -609,7 +622,7 @@ public class ParallelTests : TestSetup
 
         var result = await new NestedSharedIChainTrain(note)
             .RunEither("abc")
-            .WaitAsync(Hang, CancellationToken.None);
+            .WaitAsync(Hang, RealTime, CancellationToken.None);
 
         result.IsRight.Should().BeTrue();
         note.Runs.Should().Be(2);
@@ -620,7 +633,7 @@ public class ParallelTests : TestSetup
     {
         var capture = new Capture();
 
-        var result = await new TwoSwitchesTrain(capture).RunEither("abc").WaitAsync(Hang);
+        var result = await new TwoSwitchesTrain(capture).RunEither("abc").WaitAsync(Hang, RealTime);
 
         result.IsRight.Should().BeTrue();
         capture
@@ -639,7 +652,7 @@ public class ParallelTests : TestSetup
     [Test]
     public async Task ATupleTheJoinNeeds_IsAssembledFromWhatTheBranchesProduced()
     {
-        var result = await new SignalsTrain().RunEither("ab").WaitAsync(Hang);
+        var result = await new SignalsTrain().RunEither("ab").WaitAsync(Hang, RealTime);
 
         result.ValueUnsafe().Should().Be("embedding=2, cocitation=4");
     }
@@ -649,7 +662,7 @@ public class ParallelTests : TestSetup
     {
         var shared = new Shared("before");
 
-        var result = await new SharedServiceTrain(shared).RunEither("x").WaitAsync(Hang);
+        var result = await new SharedServiceTrain(shared).RunEither("x").WaitAsync(Hang, RealTime);
 
         result.ValueUnsafe().Should().Be("before|before");
     }

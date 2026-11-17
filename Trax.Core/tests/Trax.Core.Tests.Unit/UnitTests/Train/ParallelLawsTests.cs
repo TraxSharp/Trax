@@ -45,6 +45,9 @@ public class ParallelLawsTests : TestSetup
     /// <summary>Long enough never to be reached by a run that is working, so it only names a hang.</summary>
     private static readonly TimeSpan Hang = TimeSpan.FromSeconds(30);
 
+    /// <summary>The clock <see cref="Hang"/> is measured on. A run that hangs never moves a fake clock, so it is the real one.</summary>
+    private static readonly TimeProvider RealTime = TimeProvider.System;
+
     #region Concurrency
 
     [Test]
@@ -150,7 +153,7 @@ public class ParallelLawsTests : TestSetup
 
         var outcome = await Outcome
             .Of(train, "x")
-            .WaitAsync(Hang, CancellationToken.None)
+            .WaitAsync(Hang, RealTime, CancellationToken.None)
             .ConfigureAwait(false);
 
         return outcome.Cancelled
@@ -558,7 +561,7 @@ public class ParallelLawsTests : TestSetup
         var log = new RunLog();
         var outcome = await Outcome
             .Of(new ShapeTrain(chain, log) { BranchRunner = runner }, "x")
-            .WaitAsync(Hang)
+            .WaitAsync(Hang, RealTime)
             .ConfigureAwait(false);
         return (outcome, log);
     }

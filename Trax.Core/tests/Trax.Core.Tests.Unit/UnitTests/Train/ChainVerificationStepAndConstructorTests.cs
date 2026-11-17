@@ -22,17 +22,20 @@ namespace Trax.Core.Tests.Unit.UnitTests.Train;
 [Property("adr", "Trax.Docs/adr/0016-a-junction-chain-is-a-declaration-not-a-step-of-the-work.md")]
 public class ChainVerificationStepAndConstructorTests : TestSetup
 {
-    private static IReadOnlyList<ChainFault> Verify<TTrain>(IServiceCollection? services = null)
+    private static async Task<IReadOnlyList<ChainFault>> Verify<TTrain>(
+        IServiceCollection? services = null
+    )
         where TTrain : Train<string, bool>, new()
     {
-        using var provider = (services ?? new ServiceCollection()).BuildServiceProvider();
+        var provider = (services ?? new ServiceCollection()).BuildServiceProvider();
 
-        return ChainVerification.Verify(
-            new TTrain().DeclaredChain(),
-            typeof(string),
-            typeof(bool),
-            provider.GetRequiredService<IServiceProviderIsService>()
-        );
+        await using (provider.ConfigureAwait(false))
+            return ChainVerification.Verify(
+                new TTrain().DeclaredChain(),
+                typeof(string),
+                typeof(bool),
+                provider.GetRequiredService<IServiceProviderIsService>()
+            );
     }
 
     #region Refusals carry their step
@@ -132,9 +135,9 @@ public class ChainVerificationStepAndConstructorTests : TestSetup
     #region Constructor arguments
 
     [Test]
-    public void Verify_AConstructorArgumentNothingSupplies_IsAFaultNamingTheJunctionAndTheType()
+    public async Task Verify_AConstructorArgumentNothingSupplies_IsAFaultNamingTheJunctionAndTheType()
     {
-        var fault = Verify<NeedsClockTrain>().Should().ContainSingle().Which;
+        var fault = (await Verify<NeedsClockTrain>()).Should().ContainSingle().Which;
 
         fault.IsRefusal.Should().BeFalse();
         fault.StepIndex.Should().Be(0);
@@ -143,56 +146,56 @@ public class ChainVerificationStepAndConstructorTests : TestSetup
     }
 
     [Test]
-    public void Verify_AConstructorArgumentTheContainerRegisters_IsNotAFault() =>
-        Verify<NeedsClockTrain>(new ServiceCollection().AddSingleton<IClock, Clock>())
+    public async Task Verify_AConstructorArgumentTheContainerRegisters_IsNotAFault() =>
+        (await Verify<NeedsClockTrain>(new ServiceCollection().AddSingleton<IClock, Clock>()))
             .Should()
             .BeEmpty();
 
     [Test]
-    public void Verify_AConstructorArgumentAnEarlierJunctionProduces_IsNotAFault() =>
-        Verify<ClockProducedFirstTrain>().Should().BeEmpty();
+    public async Task Verify_AConstructorArgumentAnEarlierJunctionProduces_IsNotAFault() =>
+        (await Verify<ClockProducedFirstTrain>()).Should().BeEmpty();
 
     [Test]
-    public void Verify_AConstructorArgumentOnlyALaterJunctionProduces_IsAFault() =>
-        Verify<ClockProducedAfterTrain>()
+    public async Task Verify_AConstructorArgumentOnlyALaterJunctionProduces_IsAFault() =>
+        (await Verify<ClockProducedAfterTrain>())
             .Should()
             .ContainSingle()
             .Which.Junction.Should()
             .Be(typeof(ClockJunction));
 
     [Test]
-    public void Verify_AConstructorArgumentPassedToAddServices_IsNotAFault() =>
-        Verify<ClockPassedAsServiceTrain>().Should().BeEmpty();
+    public async Task Verify_AConstructorArgumentPassedToAddServices_IsNotAFault() =>
+        (await Verify<ClockPassedAsServiceTrain>()).Should().BeEmpty();
 
     [Test]
-    public void Verify_TheServiceProviderItself_IsAlwaysAvailable() =>
-        Verify<NeedsServiceProviderTrain>().Should().BeEmpty();
+    public async Task Verify_TheServiceProviderItself_IsAlwaysAvailable() =>
+        (await Verify<NeedsServiceProviderTrain>()).Should().BeEmpty();
 
     [Test]
-    public void Verify_ALoggerWithLoggingRegistered_IsNotAFault() =>
-        Verify<NeedsLoggerTrain>(new ServiceCollection().AddLogging()).Should().BeEmpty();
+    public async Task Verify_ALoggerWithLoggingRegistered_IsNotAFault() =>
+        (await Verify<NeedsLoggerTrain>(new ServiceCollection().AddLogging())).Should().BeEmpty();
 
     [Test]
-    public void Verify_ALoggerWithAFactoryPassedToAddServices_IsNotAFault() =>
-        Verify<NeedsLoggerWithFactoryTrain>().Should().BeEmpty();
+    public async Task Verify_ALoggerWithAFactoryPassedToAddServices_IsNotAFault() =>
+        (await Verify<NeedsLoggerWithFactoryTrain>()).Should().BeEmpty();
 
     [Test]
-    public void Verify_ALoggerWithNoLoggingAndNoFactory_IsAFault() =>
-        Verify<NeedsLoggerTrain>()
+    public async Task Verify_ALoggerWithNoLoggingAndNoFactory_IsAFault() =>
+        (await Verify<NeedsLoggerTrain>())
             .Should()
             .ContainSingle()
             .Which.Reason.Should()
             .Contain("ILogger");
 
     [Test]
-    public void Verify_ATupleConstructorArgument_IsNotTakenFromTheContainer()
+    public async Task Verify_ATupleConstructorArgument_IsNotTakenFromTheContainer()
     {
         var services = new ServiceCollection().AddSingleton<IClock, Clock>();
         services.Add(
             ServiceDescriptor.Singleton(typeof((string, IClock)), _ => ("x", (IClock)new Clock()))
         );
 
-        Verify<NeedsTupleTrain>(services)
+        (await Verify<NeedsTupleTrain>(services))
             .Should()
             .ContainSingle()
             .Which.Reason.Should()
@@ -203,8 +206,8 @@ public class ChainVerificationStepAndConstructorTests : TestSetup
     }
 
     [Test]
-    public void Verify_AJunctionPassedAsAnInstance_HasItsConstructorLeftUnchecked() =>
-        Verify<ClockInstanceTrain>().Should().BeEmpty();
+    public async Task Verify_AJunctionPassedAsAnInstance_HasItsConstructorLeftUnchecked() =>
+        (await Verify<ClockInstanceTrain>()).Should().BeEmpty();
 
     [Test]
     public void Verify_WithoutTheContainer_LeavesConstructorsUnchecked() =>

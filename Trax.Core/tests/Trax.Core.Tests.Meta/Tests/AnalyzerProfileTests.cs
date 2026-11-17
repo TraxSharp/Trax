@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Core.Tests.Meta.Tests;
 
 /// <summary>
@@ -73,16 +75,31 @@ public partial class AnalyzerProfileTests
             var match = RuleSeverity.Match(line);
             if (!match.Success)
             {
-                problems.Add($"line {i + 1}: '{line}' is not a rule severity");
+                problems.Add(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"line {i + 1}: '{line}' is not a rule severity"
+                    )
+                );
                 continue;
             }
 
             var rule = match.Groups["rule"].Value;
             if (!rules.Contains(rule))
-                problems.Add($"line {i + 1}: {rule} is not a rule in Trax.Analyzers/rules.txt");
+                problems.Add(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"line {i + 1}: {rule} is not a rule in Trax.Analyzers/rules.txt"
+                    )
+                );
 
             if (!ReasonAbove(lines, i))
-                problems.Add($"line {i + 1}: {rule} has no '# Exempt:' or '# Deferred:' reason above it");
+                problems.Add(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"line {i + 1}: {rule} has no '# Exempt:' or '# Deferred:' reason above it"
+                    )
+                );
         }
 
         problems
@@ -95,13 +112,13 @@ public partial class AnalyzerProfileTests
     }
 
     [Test]
-    public void Sources_DoNotSuppressAProfileRule()
+    public async Task Sources_DoNotSuppressAProfileRule()
     {
-        var offenders = Files("*.cs")
-            .Where(file => !IsSelf(file))
-            .Where(file => Suppression.IsMatch(File.ReadAllText(file)))
-            .Select(MonorepoRelative)
-            .ToList();
+        var offenders = new List<string>();
+
+        foreach (var file in Files("*.cs").Where(file => !IsSelf(file)))
+            if (Suppression.IsMatch(await File.ReadAllTextAsync(file)))
+                offenders.Add(MonorepoRelative(file));
 
         offenders
             .Should()
@@ -124,10 +141,18 @@ public partial class AnalyzerProfileTests
             for (var i = 0; i < lines.Length; i++)
             {
                 if (OptOut.IsMatch(lines[i]))
-                    offenders.Add($"{MonorepoRelative(file)}:{i + 1}: {lines[i].Trim()}");
+                    offenders.Add(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{MonorepoRelative(file)}:{i + 1}: {lines[i].Trim()}"
+                        )
+                    );
                 else if (BanSwitch.IsMatch(lines[i]) && !CommentAbove(lines, i))
                     offenders.Add(
-                        $"{MonorepoRelative(file)}:{i + 1}: a ban switched off with no reason above it"
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{MonorepoRelative(file)}:{i + 1}: a ban switched off with no reason above it"
+                        )
                     );
             }
         }
@@ -144,21 +169,30 @@ public partial class AnalyzerProfileTests
     }
 
     [Test]
-    public void NoNearerConfiguration_ChangesTheProfile()
+    public async Task NoNearerConfiguration_ChangesTheProfile()
     {
-        var offenders = Files(".editorconfig")
-            .Concat(Files(".globalconfig"))
-            .Where(file =>
-                !string.Equals(file, MonorepoRoot.Combine(".globalconfig"), StringComparison.Ordinal)
-            )
-            .Where(file => NearerSetting.IsMatch(File.ReadAllText(file)))
-            .Concat(
-                Files("BannedSymbols*.txt")
-                    .Concat(Files("BannedSyntaxes*.txt"))
-                    .Where(file => !IsUnder(file, "Trax.Analyzers"))
-            )
-            .Select(MonorepoRelative)
-            .ToList();
+        var offenders = new List<string>();
+
+        foreach (
+            var file in Files(".editorconfig")
+                .Concat(Files(".globalconfig"))
+                .Where(file =>
+                    !string.Equals(
+                        file,
+                        MonorepoRoot.Combine(".globalconfig"),
+                        StringComparison.Ordinal
+                    )
+                )
+        )
+            if (NearerSetting.IsMatch(await File.ReadAllTextAsync(file)))
+                offenders.Add(MonorepoRelative(file));
+
+        offenders.AddRange(
+            Files("BannedSymbols*.txt")
+                .Concat(Files("BannedSyntaxes*.txt"))
+                .Where(file => !IsUnder(file, "Trax.Analyzers"))
+                .Select(MonorepoRelative)
+        );
 
         offenders
             .Should()
@@ -261,9 +295,8 @@ public partial class AnalyzerProfileTests
                         $"{Path.DirectorySeparatorChar}{part}{Path.DirectorySeparatorChar}",
                         StringComparison.Ordinal
                     )
-                )
-            )
-            .Where(path => !IsUnder(path, "Trax.Analyzers"));
+                ) && !IsUnder(path, "Trax.Analyzers")
+            );
 
     private static readonly string[] Skipped = ["bin", "obj", "node_modules", ".git"];
 
@@ -292,7 +325,7 @@ public partial class AnalyzerProfileTests
 
     [GeneratedRegex(
         @"^\s*# (Exempt|Deferred): \S",
-        RegexOptions.None,
+        RegexOptions.ExplicitCapture,
         matchTimeoutMilliseconds: 5_000
     )]
     private static partial Regex Reason { get; }

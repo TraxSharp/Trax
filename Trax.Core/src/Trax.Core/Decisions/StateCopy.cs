@@ -50,6 +50,11 @@ internal static class StateCopy
     {
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
         {
+            // A copy reproduces what the state holds, nulls in non-nullable members and missing
+            // constructor arguments included; refusing them would make a copy differ from its
+            // state, which is what the copy exists to detect.
+            RespectNullableAnnotations = false,
+            RespectRequiredConstructorParameters = false,
             PreferredObjectCreationHandling = JsonObjectCreationHandling.Populate,
             TypeInfoResolver = new DefaultJsonTypeInfoResolver { Modifiers = { WriteTupleItems } },
         };

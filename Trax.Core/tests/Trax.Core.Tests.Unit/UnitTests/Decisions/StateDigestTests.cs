@@ -343,10 +343,12 @@ public class StateDigestTests : TestSetup
         for (var i = 0; i < 50; i++)
             node = new Fork { Left = node, Right = node };
 
-        var watch = System.Diagnostics.Stopwatch.StartNew();
+        // Real time: the walk is what is being timed, and a fake clock would not move under it.
+        var clock = TimeProvider.System;
+        var started = clock.GetTimestamp();
 
         StateDigest.Of(node).Should().BeNull($"{Adr}: the value cap bounds the walk");
-        watch.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(30));
+        clock.GetElapsedTime(started).Should().BeLessThan(TimeSpan.FromSeconds(30));
     }
 
     [Test]

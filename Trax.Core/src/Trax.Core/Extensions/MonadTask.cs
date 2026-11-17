@@ -61,15 +61,16 @@ public readonly struct MonadTask<TInput, TReturn>
     /// </summary>
     private Task<Monad<TInput, TReturn>> Joined()
     {
+        // The task has finished, so NoteJoined runs to its end before this line returns.
         if (Source.IsCompletedSuccessfully)
-            NoteJoined(Source);
+            _ = NoteJoined(Source);
 
         return Source;
     }
 
-    // Reads a task that has already finished, so nothing blocks.
-    private static void NoteJoined(Task<Monad<TInput, TReturn>> finished) =>
-        finished.Result.Recorder?.NoteJoined();
+    // Awaits a task that has already finished, so nothing waits.
+    private static async Task NoteJoined(Task<Monad<TInput, TReturn>> finished) =>
+        (await finished.ConfigureAwait(false)).Recorder?.NoteJoined();
 
     #region Chain
 

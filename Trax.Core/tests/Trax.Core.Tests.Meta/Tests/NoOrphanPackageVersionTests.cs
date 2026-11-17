@@ -97,10 +97,12 @@ public class NoOrphanPackageVersionTests
 
     /// <summary>
     /// Every package named by a <c>PackageReference</c> anywhere in the repository, every folder
-    /// included, since one root file pins them all. Directory.Build.props counts: it is where a
-    /// folder's shared references live, and a package declared only there is referenced just as
-    /// much as one in a csproj.
+    /// included, since one root file pins them all. A .props file counts: Directory.Build.props is
+    /// where a folder's shared references live, and a props file the projects import (such as
+    /// Trax.Analyzers' Analyzer.props) declares a reference just as much as a csproj does.
     /// </summary>
+    private static readonly string[] Skipped = ["obj", "bin", "node_modules"];
+
     private static HashSet<string> ReferencedPackages()
     {
         var files = Directory
@@ -120,11 +122,16 @@ public class NoOrphanPackageVersionTests
                 )
             )
             .Concat(
-                Directory.EnumerateFiles(
-                    MonorepoRoot.Path,
-                    "Directory.Build.props",
-                    SearchOption.AllDirectories
-                )
+                Directory
+                    .EnumerateFiles(MonorepoRoot.Path, "*.props", SearchOption.AllDirectories)
+                    .Where(f =>
+                        !Skipped.Any(part =>
+                            f.Contains(
+                                $"{Path.DirectorySeparatorChar}{part}{Path.DirectorySeparatorChar}",
+                                StringComparison.Ordinal
+                            )
+                        )
+                    )
             );
 
         var referenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

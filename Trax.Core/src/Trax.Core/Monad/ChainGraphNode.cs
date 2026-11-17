@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -32,7 +33,7 @@ public sealed record ChainGraphNode(
 )
 {
     /// <summary>True when <paramref name="other"/> is the same step with equal tracks.</summary>
-    public bool Equals(ChainGraphNode? other) =>
+    public bool Equals([NotNullWhen(true)] ChainGraphNode? other) =>
         other is not null
         && string.Equals(Id, other.Id, StringComparison.Ordinal)
         && Kind == other.Kind

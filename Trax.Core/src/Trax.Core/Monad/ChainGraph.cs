@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -68,7 +69,7 @@ public sealed record ChainGraph(
     /// True when <paramref name="other"/> draws the same train: the same names, and equal nodes
     /// and refusals in the same order.
     /// </summary>
-    public bool Equals(ChainGraph? other) =>
+    public bool Equals([NotNullWhen(true)] ChainGraph? other) =>
         other is not null
         && string.Equals(Train, other.Train, StringComparison.Ordinal)
         && string.Equals(Input, other.Input, StringComparison.Ordinal)
