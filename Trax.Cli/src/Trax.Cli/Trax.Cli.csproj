@@ -37,6 +37,8 @@
          (aws sso login), and fails without them. -->
     <PackageReference Include="AWSSDK.SSO" />
     <PackageReference Include="AWSSDK.SSOOIDC" />
+    <!-- The Kubernetes target of trax deploy: renders typed manifests and applies them to the current context. -->
+    <PackageReference Include="KubernetesClient" />
     <ProjectReference Include="../../../Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Trax.StateMachine.Persistence.csproj" />
     <ProjectReference Include="../../../Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin/Trax.StateMachine.Gherkin.csproj" />
   </ItemGroup>
