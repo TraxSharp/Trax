@@ -767,10 +767,10 @@ A deploy:
    check, more than one copy of the API or the scheduler);
 2. pushes each service's image to the ECR repository `trax/<stack>/<service>`, tagged with the time and the commit;
 3. creates or updates the stack with the migrate task on the new image, while the services stay where they are
-   (a new stack's at zero);
+   (a new stack's, and a service the stack does not run yet, at zero);
 4. runs the migrate task (`--trax-migrate`) and stops if it does not exit 0;
-5. rolls every service onto the new image with the ECS circuit breaker on, which rolls a version back if it never
-   gets healthy, and prints the address.
+5. rolls every service onto the new image at its count with the ECS circuit breaker on, which rolls a version back
+   if it never gets healthy, and prints the address.
 
 Every security group replaces the default allow-all egress: the services reach HTTPS and the database, the
 database reaches nothing, and only the load balancer takes traffic from outside, on 443 and 80 in production and

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Trax.Effect.Configuration.Deploy;
@@ -12,9 +13,6 @@ namespace Trax.Cli.Deploy.Aws;
 /// </summary>
 internal static class AwsStack
 {
-    /// <summary>The parameter that is "1" once the services run, and "0" while a new stack waits for its migration.</summary>
-    public const string ScaleParameter = "Scale";
-
     public const string MigrateImageParameter = "MigrateImage";
 
     /// <summary>Production only: "true" keeps the database from being deleted, until destroy turns it off.</summary>
@@ -43,6 +41,12 @@ internal static class AwsStack
 
     /// <summary>The template parameter carrying <paramref name="service"/>'s image.</summary>
     public static string ImageParameter(string service) => $"{LogicalId(service)}Image";
+
+    /// <summary>
+    /// The template parameter carrying how many copies of <paramref name="service"/> run: "0" while its image waits
+    /// for a migration.
+    /// </summary>
+    public static string CountParameter(string service) => $"{LogicalId(service)}Count";
 
     /// <summary>The ECS service of <paramref name="service"/>, as the stack's output names it.</summary>
     public static string ServiceOutput(string service) => $"{LogicalId(service)}ServiceName";
@@ -73,14 +77,6 @@ internal static class AwsStack
         var outputs = new JsonObject();
         var parameters = new JsonObject
         {
-            [ScaleParameter] = new JsonObject
-            {
-                ["Type"] = "String",
-                ["AllowedValues"] = new JsonArray("0", "1"),
-                ["Default"] = "1",
-                ["Description"] =
-                    "0 while a new stack waits for its first migration, so no service starts on an empty database.",
-            },
             [MigrateImageParameter] = new JsonObject
             {
                 ["Type"] = "String",
@@ -98,11 +94,22 @@ internal static class AwsStack
                     "Whether the database refuses to be deleted. trax deploy destroy sets it to false first.",
             };
         foreach (var service in file.Services.Keys)
+        {
             parameters[ImageParameter(service)] = new JsonObject
             {
                 ["Type"] = "String",
                 ["Description"] = $"The image the {service} service runs.",
             };
+            parameters[CountParameter(service)] = new JsonObject
+            {
+                ["Type"] = "Number",
+                ["MinValue"] = 0,
+                ["Default"] = file.Count(env, service).ToString(CultureInfo.InvariantCulture),
+                ["Description"] =
+                    $"How many copies of {service} run. 0 while its image waits for the migration, so it never "
+                    + "starts on a schema older than it.",
+            };
+        }
 
         // ---- Network -------------------------------------------------------------------------------------
         JsonNode vpc;
@@ -311,7 +318,7 @@ internal static class AwsStack
                 ["Cluster"] = Ref("Cluster"),
                 ["LaunchType"] = "FARGATE",
                 ["TaskDefinition"] = Ref($"{id}TaskDefinition"),
-                ["DesiredCount"] = If("Running", file.Count(env, service), 0),
+                ["DesiredCount"] = Ref(CountParameter(service)),
                 ["DeploymentConfiguration"] = new JsonObject
                 {
                     // The new copy is healthy before the old one stops, and a version that never gets healthy is
@@ -362,17 +369,20 @@ internal static class AwsStack
         outputs["AssignPublicIp"] = Output(assignPublicIp);
         outputs["Migrator"] = Output(migrator);
 
-        return new JsonObject
+        var template = new JsonObject
         {
             ["AWSTemplateFormatVersion"] = "2010-09-09",
             ["Description"] =
                 $"Trax app {file.App}, environment {environmentName} ({env.Profile}). Written by trax deploy; "
                 + "changes made outside it are reverted on the next deploy.",
             ["Parameters"] = parameters,
-            ["Conditions"] = Conditions(parameters),
-            ["Resources"] = resources,
-            ["Outputs"] = outputs,
         };
+        // Without a Protect parameter there is no condition, and so no Conditions section.
+        if (Conditions(parameters) is { Count: > 0 } conditions)
+            template["Conditions"] = conditions;
+        template["Resources"] = resources;
+        template["Outputs"] = outputs;
+        return template;
     }
 
     /// <summary>The template as CloudFormation receives it: compact, so it fits the 51,200-byte inline limit.</summary>
@@ -420,13 +430,7 @@ internal static class AwsStack
 
     private static JsonObject Conditions(JsonObject parameters)
     {
-        var conditions = new JsonObject
-        {
-            ["Running"] = new JsonObject
-            {
-                ["Fn::Equals"] = new JsonArray(Ref(ScaleParameter), "1"),
-            },
-        };
+        var conditions = new JsonObject();
         if (parameters.ContainsKey(ProtectParameter))
             conditions["Protected"] = new JsonObject
             {

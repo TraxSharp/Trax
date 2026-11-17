@@ -92,21 +92,17 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         }
         var migrator = image[AwsStack.Migrator(file, exports)];
 
-        // Pass 1: the infrastructure, and the migrate task on the new image. A new stack starts its services at
-        // zero; an existing one keeps them on the image they run.
-        var waiting =
-            existing is null
-            || existing.Parameters.GetValueOrDefault(AwsStack.ScaleParameter) == "0";
+        // Pass 1: the infrastructure, and the migrate task on the new image. A service the stack does not run yet
+        // (every service of a new stack) waits at zero on the new image; one it runs keeps its image and count.
         var first = new Dictionary<string, string?>(StringComparer.Ordinal)
         {
-            [AwsStack.ScaleParameter] = waiting ? "0" : "1",
             [AwsStack.MigrateImageParameter] = migrator,
         };
         foreach (var name in file.Services.Keys)
         {
-            var key = AwsStack.ImageParameter(name);
-            first[key] =
-                waiting || existing?.Parameters.ContainsKey(key) is not true ? image[name] : null;
+            var (count, current) = Holding(existing, file, env, name);
+            first[AwsStack.CountParameter(name)] = count;
+            first[AwsStack.ImageParameter(name)] = current ? null : image[name];
         }
         if (existing?.Parameters.ContainsKey(AwsStack.ProtectParameter) is true)
             first[AwsStack.ProtectParameter] = "true";
@@ -136,14 +132,17 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
                     + $"'trax deploy logs migrate --env {environment}'."
             );
 
-        // Pass 2: every service onto the new image, rolled with the circuit breaker on.
+        // Pass 2: every service onto the new image at its count, rolled with the circuit breaker on.
         var second = new Dictionary<string, string?>(StringComparer.Ordinal)
         {
-            [AwsStack.ScaleParameter] = "1",
             [AwsStack.MigrateImageParameter] = migrator,
         };
         foreach (var name in file.Services.Keys)
+        {
+            second[AwsStack.CountParameter(name)] = file.Count(env, name)
+                .ToString(System.Globalization.CultureInfo.InvariantCulture);
             second[AwsStack.ImageParameter(name)] = image[name];
+        }
         if (first.ContainsKey(AwsStack.ProtectParameter))
             second[AwsStack.ProtectParameter] = "true";
         say($"Rolling the services onto {tag}...");
@@ -198,6 +197,31 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
             "Deleted the images and the app's secrets. For seven days 'trax deploy secret set' restores a secret "
                 + "with its new value."
         );
+    }
+
+    /// <summary>
+    /// What pass 1 sends for <paramref name="service"/>: its count (null keeps the stack's), and whether it stays on
+    /// the image it runs. A service the stack holds no image for, or runs none of, waits at zero on the new image.
+    /// A stack from before the count parameters says whether its services run in its "Scale" parameter.
+    /// </summary>
+    private static (string? Count, bool Current) Holding(
+        AwsStackState? existing,
+        DeployFile file,
+        DeployEnvironment env,
+        string service
+    )
+    {
+        if (existing?.Parameters.ContainsKey(AwsStack.ImageParameter(service)) is not true)
+            return ("0", false);
+        if (existing.Parameters.TryGetValue(AwsStack.CountParameter(service), out var count))
+            return count == "0" ? ("0", false) : (null, true);
+        return existing.Parameters.GetValueOrDefault("Scale") == "0"
+            ? ("0", false)
+            : (
+                file.Count(env, service)
+                    .ToString(System.Globalization.CultureInfo.InvariantCulture),
+                true
+            );
     }
 
     /// <summary>The ECR repository of a service: <c>trax/&lt;stack&gt;/&lt;service&gt;</c>.</summary>

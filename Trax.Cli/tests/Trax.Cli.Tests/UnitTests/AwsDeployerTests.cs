@@ -46,9 +46,11 @@ public class AwsDeployerTests
         var url = await Deploy(deployer);
 
         aws.Calls.Should().Equal("deploy", "run-task", "deploy");
-        aws.Deploys[0][AwsStack.ScaleParameter].Should().Be("0");
+        aws.Deploys[0]["HubCount"].Should().Be("0");
+        aws.Deploys[0]["WorkerCount"].Should().Be("0");
         aws.Deploys[0]["HubImage"].Should().Be($"repo/trax/orders-production/hub:{Tag}");
-        aws.Deploys[1][AwsStack.ScaleParameter].Should().Be("1");
+        aws.Deploys[1]["HubCount"].Should().Be("1");
+        aws.Deploys[1]["WorkerCount"].Should().Be("3");
         aws.Deploys[1]["WorkerImage"].Should().Be($"repo/trax/orders-production/worker:{Tag}");
         aws.Task!.TaskDefinition.Should().Be("migrate-td");
         images.Published.Should().Equal("hub", "worker");
@@ -64,12 +66,76 @@ public class AwsDeployerTests
 
         await Deploy(deployer);
 
-        aws.Deploys[0][AwsStack.ScaleParameter].Should().Be("1");
+        aws.Deploys[0]["HubCount"].Should().BeNull("null keeps the previous value");
         aws.Deploys[0]["HubImage"].Should().BeNull("null keeps the previous value");
         aws.Deploys[0][AwsStack.MigrateImageParameter]
             .Should()
             .Be($"repo/trax/orders-production/hub:{Tag}");
         aws.Deploys[1]["HubImage"].Should().Be($"repo/trax/orders-production/hub:{Tag}");
+    }
+
+    [Test]
+    public async Task A_new_service_stays_at_zero_until_the_migration_ran()
+    {
+        var (deployer, aws, _) = Deployer();
+        aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
+        aws.Existing = FakeAws.Running();
+        var file = AwsStackTemplateTests.File_();
+        file.Services["reports"] = new DeployService
+        {
+            Project = "Orders.Reports/Orders.Reports.csproj",
+            Count = 2,
+        };
+        var exports = AwsStackTemplateTests.Exports();
+        exports["reports"] = new DeployManifest
+        {
+            Roles = ["worker"],
+            Database = new DeployDatabase { Provider = "postgres", MigratesOnStart = true },
+        };
+
+        await deployer.DeployAsync(
+            file,
+            "/src/trax.deploy.json",
+            "production",
+            exports,
+            Tag,
+            CancellationToken.None
+        );
+
+        aws.Calls.Should().Equal("deploy", "run-task", "deploy");
+        aws.Deploys[0]["ReportsCount"].Should().Be("0", "its image is new and the schema is not");
+        aws.Deploys[0]["HubCount"].Should().BeNull("a running service keeps its count");
+        aws.Deploys[0]["HubImage"].Should().BeNull("and its image");
+        aws.Deploys[1]["ReportsCount"].Should().Be("2");
+        aws.Deploys[1]["WorkerCount"]
+            .Should()
+            .Be("3", "the environment's count overrides the file's");
+        aws.Deploys[1]["ReportsImage"].Should().Be($"repo/trax/orders-production/reports:{Tag}");
+    }
+
+    [Test]
+    public async Task A_stack_from_before_service_counts_keeps_its_services_running()
+    {
+        var (deployer, aws, _) = Deployer();
+        aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
+        aws.Existing = FakeAws.Running() with
+        {
+            Parameters = new Dictionary<string, string>
+            {
+                ["Scale"] = "1",
+                [AwsStack.MigrateImageParameter] = "old",
+                ["HubImage"] = "old",
+                ["WorkerImage"] = "old",
+                [AwsStack.ProtectParameter] = "true",
+            },
+        };
+
+        await Deploy(deployer);
+
+        aws.Deploys[0]["HubCount"].Should().Be("1");
+        aws.Deploys[0]["WorkerCount"].Should().Be("3");
+        aws.Deploys[0]["HubImage"].Should().BeNull();
+        aws.Deploys[0].Should().NotContainKey("Scale", "the template no longer declares it");
     }
 
     [Test]
@@ -134,7 +200,7 @@ public class AwsDeployerTests
         await Deploy(deployer);
 
         aws.Calls.Should().Equal("deploy", "run-task", "deploy");
-        aws.Deploys[0][AwsStack.ScaleParameter].Should().Be("0");
+        aws.Deploys[0]["HubCount"].Should().Be("0");
         aws.Deploys[0]["HubImage"].Should().Be($"repo/trax/orders-production/hub:{Tag}");
     }
 
@@ -456,7 +522,8 @@ public class AwsDeployerTests
                 Outputs(),
                 new Dictionary<string, string>
                 {
-                    [AwsStack.ScaleParameter] = "1",
+                    ["HubCount"] = "1",
+                    ["WorkerCount"] = "3",
                     [AwsStack.MigrateImageParameter] = "old",
                     ["HubImage"] = "old",
                     ["WorkerImage"] = "old",

@@ -230,18 +230,27 @@ public class AwsStackTemplateTests
     }
 
     [Test]
-    public void Services_wait_at_zero_until_the_stack_is_running_and_run_their_counts_after()
+    public void Each_service_runs_the_count_its_own_parameter_gives()
     {
         var template = Build();
+        var parameters = (JsonObject)template["Parameters"]!;
 
         Properties(template, "HubService")["DesiredCount"]!
             .ToJsonString()
             .Should()
-            .Be("""{"Fn::If":["Running",1,0]}""");
+            .Be("""{"Ref":"HubCount"}""");
         Properties(template, "WorkerService")["DesiredCount"]!
             .ToJsonString()
             .Should()
-            .Be("""{"Fn::If":["Running",3,0]}""", "the environment's count overrides the file's");
+            .Be("""{"Ref":"WorkerCount"}""");
+        parameters["HubCount"]!["Type"]!.GetValue<string>().Should().Be("Number");
+        parameters["HubCount"]!["Default"]!.GetValue<string>().Should().Be("1");
+        parameters["WorkerCount"]!["Default"]!
+            .GetValue<string>()
+            .Should()
+            .Be("3", "the environment's count overrides the file's");
+        parameters.Should().NotContainKey("Scale");
+        ((JsonObject?)template["Conditions"])?.Should().NotContainKey("Running");
     }
 
     [Test]
