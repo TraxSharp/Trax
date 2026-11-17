@@ -8,7 +8,8 @@ namespace Trax.Cli.Commands;
 /// <summary>
 /// The AWS half of <c>trax deploy</c>: deploying an environment, and <c>plan</c>, <c>status</c>, <c>logs</c>,
 /// <c>destroy</c> and <c>secret</c>. Every action names its environment with <c>--env</c>; the environment's region
-/// picks the account's endpoints, and the AWS credential chain picks the account.
+/// picks the account's endpoints, and the AWS credential chain picks the account. <c>plan</c>, <c>status</c>,
+/// <c>logs</c> and <c>destroy</c> on a kubernetes environment go to <see cref="DeployKubernetesCommands"/>.
 /// </summary>
 internal static class DeployAwsCommands
 {
@@ -53,7 +54,8 @@ internal static class DeployAwsCommands
         var file = FileOption();
         var command = new Command(
             "plan",
-            "Write the environment's CloudFormation template under .trax/deploy/aws/ and say what it creates."
+            "Write the environment's CloudFormation template (aws) or manifests (kubernetes) under .trax/deploy/ and "
+                + "say what they create."
         )
         {
             env,
@@ -72,7 +74,7 @@ internal static class DeployAwsCommands
         var file = FileOption();
         var command = new Command(
             "status",
-            "Show the environment's stack, its address and each service."
+            "Show the environment's stack or namespace, and each service."
         )
         {
             env,
@@ -96,7 +98,10 @@ internal static class DeployAwsCommands
             Description = "How many minutes back to start (default 60).",
             DefaultValueFactory = _ => 60,
         };
-        var command = new Command("logs", "Print a service's log from CloudWatch.")
+        var command = new Command(
+            "logs",
+            "Print a service's log, from CloudWatch (aws) or its pods (kubernetes)."
+        )
         {
             service,
             env,
@@ -125,14 +130,18 @@ internal static class DeployAwsCommands
         var deleteData = new Option<bool>("--delete-data")
         {
             Description =
-                "Also delete production's user pool with every user in it, the images and the app's secrets. "
-                + "Production's database still leaves a final snapshot.",
+                "aws: also delete production's user pool with every user in it, the images and the app's secrets; "
+                + "production's database still leaves a final snapshot. kubernetes: also delete the in-cluster "
+                + "database's volume.",
         };
         var yes = new Option<bool>("--yes")
         {
-            Description = "Do not ask for the stack's name to be typed back.",
+            Description = "Do not ask for the stack's or namespace's name to be typed back.",
         };
-        var command = new Command("destroy", "Delete the environment's stack.")
+        var command = new Command(
+            "destroy",
+            "Delete the environment's stack (aws) or the app's objects in its namespace (kubernetes)."
+        )
         {
             env,
             file,
@@ -207,10 +216,10 @@ internal static class DeployAwsCommands
         await Guard(async () =>
         {
             var file = DeployFile.Read(filePath);
-            var env = file.Environment(environment);
+            var env = Aws(file, environment, "deploy");
             var exports = DeployCommand.Export(file, filePath, exporter);
-            var deployer = new AwsDeployer(Client(env.Region), Images, Console.WriteLine);
-            var tag = AwsDeployer.ImageTag(
+            var deployer = new AwsDeployer(Client(env.Region ?? ""), Images, Console.WriteLine);
+            var tag = ImageTags.Create(
                 Path.GetDirectoryName(Path.GetFullPath(filePath))!,
                 DateTime.UtcNow
             );
@@ -226,65 +235,69 @@ internal static class DeployAwsCommands
         IHostExporter exporter,
         CancellationToken ct
     ) =>
-        await Guard(async () =>
-        {
-            var file = DeployFile.Read(filePath);
-            var env = file.Environment(environment);
-            var exports = DeployCommand.Export(file, filePath, exporter);
-            var template = await new AwsDeployer(
-                Client(env.Region),
-                Images,
-                Console.WriteLine
-            ).PlanAsync(file, environment, exports, ct);
-            var dir = Path.Combine(
-                Path.GetDirectoryName(Path.GetFullPath(filePath))!,
-                ".trax",
-                "deploy",
-                "aws"
-            );
-            Directory.CreateDirectory(dir);
-            var path = Path.Combine(dir, $"{file.StackName(environment)}.template.json");
-            File.WriteAllText(path, AwsStack.Indented(template));
-            Console.WriteLine($"Wrote {path}");
-            foreach (var line in AwsPlanSummary.Lines(file, environment, template))
-                Console.WriteLine(line);
-        });
+        TargetOf(filePath, environment) == DeployEnvironment.Kubernetes
+            ? await DeployKubernetesCommands.PlanAsync(filePath, environment, exporter, ct)
+            : await Guard(async () =>
+            {
+                var file = DeployFile.Read(filePath);
+                var env = Aws(file, environment, "plan");
+                var exports = DeployCommand.Export(file, filePath, exporter);
+                var template = await new AwsDeployer(
+                    Client(env.Region ?? ""),
+                    Images,
+                    Console.WriteLine
+                ).PlanAsync(file, environment, exports, ct);
+                var dir = Path.Combine(
+                    Path.GetDirectoryName(Path.GetFullPath(filePath))!,
+                    ".trax",
+                    "deploy",
+                    "aws"
+                );
+                Directory.CreateDirectory(dir);
+                var path = Path.Combine(dir, $"{file.StackName(environment)}.template.json");
+                File.WriteAllText(path, AwsStack.Indented(template));
+                Console.WriteLine($"Wrote {path}");
+                foreach (var line in AwsPlanSummary.Lines(file, environment, template))
+                    Console.WriteLine(line);
+            });
 
     internal static async Task<int> StatusAsync(
         string filePath,
         string environment,
         CancellationToken ct
     ) =>
-        await Guard(async () =>
-        {
-            var file = DeployFile.Read(filePath);
-            var env = file.Environment(environment);
-            var aws = Client(env.Region);
-            var stack = file.StackName(environment);
-            var state = await aws.DescribeStackAsync(stack, ct);
-            if (state is null)
+        TargetOf(filePath, environment) == DeployEnvironment.Kubernetes
+            ? await DeployKubernetesCommands.StatusAsync(filePath, environment, ct)
+            : await Guard(async () =>
             {
-                Console.WriteLine($"{stack} is not deployed.");
-                return;
-            }
-            Console.WriteLine($"{stack}: {state.Status}");
-            if (state.Outputs.TryGetValue("Url", out var url))
-                Console.WriteLine($"  {url}");
-            if (!state.Outputs.TryGetValue("ClusterName", out var cluster))
-                return;
-            var names = file
-                .Services.Keys.Select(s =>
-                    state.Outputs.GetValueOrDefault(AwsStack.ServiceOutput(s))
-                )
-                .OfType<string>()
-                .ToList();
-            foreach (var service in await aws.DescribeServicesAsync(cluster, names, ct))
-                Console.WriteLine(
-                    $"  {service.Name, -16}{service.Running}/{service.Desired} running"
-                        + (service.Pending > 0 ? $", {service.Pending} starting" : "")
-                        + $"  {service.Rollout, -12}{service.TaskDefinition}"
-                );
-        });
+                var file = DeployFile.Read(filePath);
+                var env = Aws(file, environment, "status");
+                var aws = Client(env.Region ?? "");
+                var stack = file.StackName(environment);
+                var state = await aws.DescribeStackAsync(stack, ct);
+                if (state is null)
+                {
+                    Console.WriteLine($"{stack} is not deployed.");
+                    return;
+                }
+                Console.WriteLine($"{stack}: {state.Status}");
+                if (state.Outputs.TryGetValue("Url", out var url))
+                    Console.WriteLine($"  {url}");
+                if (!state.Outputs.TryGetValue("ClusterName", out var cluster))
+                    return;
+                var names = file
+                    .Services.Keys.Select(s =>
+                        state.Outputs.GetValueOrDefault(AwsStack.ServiceOutput(s))
+                    )
+                    .OfType<string>()
+                    .ToList();
+                foreach (var service in await aws.DescribeServicesAsync(cluster, names, ct))
+                    Console.WriteLine(
+                        $"  {service.Name, -16}{service.Running}/{service.Desired} running"
+                            + (service.Pending > 0 ? $", {service.Pending} starting" : "")
+                            + $"  {service.Rollout, -12}{service.TaskDefinition}"
+                    );
+            });
 
     internal static async Task<int> LogsAsync(
         string filePath,
@@ -294,21 +307,30 @@ internal static class DeployAwsCommands
         int sinceMinutes,
         CancellationToken ct
     ) =>
-        await Guard(async () =>
-        {
-            var file = DeployFile.Read(filePath);
-            var env = file.Environment(environment);
-            if (service != AwsStack.MigrateContainer && !file.Services.ContainsKey(service))
-                throw new InvalidOperationException(
-                    $"'{service}' is not a service. Read one of: {string.Join(", ", file.Services.Keys.Append(AwsStack.MigrateContainer))}."
-                );
-            var group = AwsStack.LogGroup(file.StackName(environment), service);
-            await foreach (
-                var line in Client(env.Region)
-                    .LogsAsync(group, DateTime.UtcNow.AddMinutes(-sinceMinutes), follow, ct)
+        TargetOf(filePath, environment) == DeployEnvironment.Kubernetes
+            ? await DeployKubernetesCommands.LogsAsync(
+                filePath,
+                environment,
+                service,
+                follow,
+                sinceMinutes,
+                ct
             )
-                Console.WriteLine(line);
-        });
+            : await Guard(async () =>
+            {
+                var file = DeployFile.Read(filePath);
+                var env = Aws(file, environment, "logs");
+                if (service != AwsStack.MigrateContainer && !file.Services.ContainsKey(service))
+                    throw new InvalidOperationException(
+                        $"'{service}' is not a service. Read one of: {string.Join(", ", file.Services.Keys.Append(AwsStack.MigrateContainer))}."
+                    );
+                var group = AwsStack.LogGroup(file.StackName(environment), service);
+                await foreach (
+                    var line in Client(env.Region ?? "")
+                        .LogsAsync(group, DateTime.UtcNow.AddMinutes(-sinceMinutes), follow, ct)
+                )
+                    Console.WriteLine(line);
+            });
 
     /// <summary>What destroy asks before it deletes anything: what goes, and what happens to the users.</summary>
     internal static string DestroyPrompt(DeployFile file, string environment, bool deleteData)
@@ -337,24 +359,32 @@ internal static class DeployAwsCommands
         bool yes,
         CancellationToken ct
     ) =>
-        await Guard(async () =>
-        {
-            var file = DeployFile.Read(filePath);
-            var env = file.Environment(environment);
-            var stack = file.StackName(environment);
-            if (!yes)
-            {
-                Console.Write(DestroyPrompt(file, environment, deleteData));
-                if (ReadLine()?.Trim() != stack)
-                    throw new InvalidOperationException("Nothing was deleted.");
-            }
-            await new AwsDeployer(Client(env.Region), Images, Console.WriteLine).DestroyAsync(
-                file,
+        TargetOf(filePath, environment) == DeployEnvironment.Kubernetes
+            ? await DeployKubernetesCommands.DestroyAsync(
+                filePath,
                 environment,
                 deleteData,
+                yes,
+                ReadLine,
                 ct
-            );
-        });
+            )
+            : await Guard(async () =>
+            {
+                var file = DeployFile.Read(filePath);
+                var env = Aws(file, environment, "destroy");
+                var stack = file.StackName(environment);
+                if (!yes)
+                {
+                    Console.Write(DestroyPrompt(file, environment, deleteData));
+                    if (ReadLine()?.Trim() != stack)
+                        throw new InvalidOperationException("Nothing was deleted.");
+                }
+                await new AwsDeployer(
+                    Client(env.Region ?? ""),
+                    Images,
+                    Console.WriteLine
+                ).DestroyAsync(file, environment, deleteData, ct);
+            });
 
     internal static async Task<int> SecretSetAsync(
         string filePath,
@@ -366,7 +396,7 @@ internal static class DeployAwsCommands
         await Guard(async () =>
         {
             var file = DeployFile.Read(filePath);
-            var env = file.Environment(environment);
+            var env = Aws(file, environment, "secret set");
             if (!file.Secrets.Contains(name))
                 throw new InvalidOperationException(
                     $"'{name}' is not listed under secrets in {DeployFile.FileName}. Add it there first, so every "
@@ -376,7 +406,7 @@ internal static class DeployAwsCommands
             if (value.Length == 0)
                 throw new InvalidOperationException("The value is empty; nothing was stored.");
             var stack = file.StackName(environment);
-            await Client(env.Region)
+            await Client(env.Region ?? "")
                 .PutSecretAsync(
                     AwsStack.AppSecretName(stack, name),
                     value,
@@ -396,10 +426,11 @@ internal static class DeployAwsCommands
         await Guard(async () =>
         {
             var file = DeployFile.Read(filePath);
-            var env = file.Environment(environment);
+            var env = Aws(file, environment, "secret list");
             var stack = file.StackName(environment);
             var stored = (
-                await Client(env.Region).ListSecretsAsync(AwsStack.AppSecretName(stack, ""), ct)
+                await Client(env.Region ?? "")
+                    .ListSecretsAsync(AwsStack.AppSecretName(stack, ""), ct)
             ).ToDictionary(s => s.Name, s => s.Changed, StringComparer.Ordinal);
             foreach (var name in file.Secrets)
                 Console.WriteLine(
@@ -408,6 +439,39 @@ internal static class DeployAwsCommands
                         : $"  {name, -32}NOT SET"
                 );
         });
+
+    /// <summary>The environment's target, or null when the file cannot say; the action then reports why.</summary>
+    internal static string? TargetOf(string filePath, string environment)
+    {
+        try
+        {
+            return DeployFile.Read(filePath).Environments.GetValueOrDefault(environment)?.Target;
+        }
+        catch (Exception ex) when (DeployCommand.Reported(ex))
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The environment, checked, refused unless its target is aws.</summary>
+    private static DeployEnvironment Aws(DeployFile file, string environment, string command)
+    {
+        var env = file.Environment(environment);
+        return env.Target switch
+        {
+            DeployEnvironment.Aws => env,
+            DeployEnvironment.Kubernetes => throw new InvalidOperationException(
+                $"'trax deploy {command}' is for aws environments, and '{environment}' is a kubernetes one. Its "
+                    + $"secrets live in the Secret {file.StackName(environment)} in its namespace: set them with "
+                    + $"'kubectl create secret generic {file.StackName(environment)} -n <namespace> "
+                    + "--from-literal=<name>=...', and list them with 'kubectl describe secret'."
+            ),
+            _ => throw new InvalidOperationException(
+                $"'trax deploy {command}' is for aws and kubernetes environments, and '{environment}' is a "
+                    + $"{env.Target} one. 'trax deploy --env {environment}' writes its stack."
+            ),
+        };
+    }
 
     /// <summary>The value from standard input when it is redirected, else typed without echo.</summary>
     private static string ReadSecret()

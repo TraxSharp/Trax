@@ -4,7 +4,8 @@ using Trax.Effect.Configuration.Deploy;
 namespace Trax.Cli.Deploy;
 
 /// <summary>
-/// Writes a compose stack for a Trax app, for a host that runs rootless podman compose: Postgres, RabbitMQ when a
+/// Writes a compose stack for a Trax app, for a host that runs rootless podman compose (or docker compose, for an
+/// environment whose engine is docker): Postgres, RabbitMQ when a
 /// host connects to it, a <c>migrate</c> service that runs the new version once with <c>--trax-migrate</c>, and each
 /// deployed service after it with <c>TRAX_MIGRATIONS=skip</c>. Every password, setting and secret comes from the
 /// environment and stops <c>compose up</c> when it is missing.
@@ -21,22 +22,31 @@ internal static class ComposeTarget
     /// <summary>The image a service runs: <c>&lt;app&gt;-&lt;service&gt;</c>, as <c>--build</c> names it.</summary>
     public static string ImageName(DeployFile file, string service) => $"{file.App}-{service}";
 
+    /// <summary>
+    /// Renders the stack for <paramref name="engine"/>: <c>podman</c> gives every service a user namespace that leaves
+    /// the deploying user's uid out (<c>userns_mode: nomap</c>), which docker compose does not accept, so <c>docker</c>
+    /// omits it.
+    /// </summary>
     public static IReadOnlyList<(string Path, string Content)> Render(
         DeployFile file,
-        IReadOnlyDictionary<string, DeployManifest> exports
+        IReadOnlyDictionary<string, DeployManifest> exports,
+        string engine = DeployEnvironment.Podman
     )
     {
+        if (engine is not (DeployEnvironment.Podman or DeployEnvironment.Docker))
+            throw new InvalidOperationException($"Engine '{engine}' is not podman or docker.");
+        var podman = engine == DeployEnvironment.Podman;
         Check(file, exports);
 
         var rabbit = exports.Values.Any(e => e.Transports.Contains("rabbitmq"));
-        var migrator =
-            file.Services.Keys.FirstOrDefault(k => exports[k].Roles.Contains("api"))
-            ?? file.Services.Keys.First();
+        var migrator = Migrator(file, exports);
 
         var y = new StringBuilder();
         y.AppendLine(Header);
         y.AppendLine(
-            "# For rootless podman: every service runs with userns_mode nomap, which docker compose does not accept."
+            podman
+                ? "# For rootless podman: every service runs with userns_mode nomap, which docker compose does not accept."
+                : "# For docker compose: no userns_mode, which docker accepts only as host, so no service has a user namespace of its own."
         );
         y.AppendLine(
             "# Passwords, settings and secrets come from the environment, or from a .env file beside this one: copy"
@@ -75,7 +85,7 @@ internal static class ComposeTarget
         y.AppendLine("    healthcheck:");
         y.AppendLine($"      test: [\"CMD\", \"pg_isready\", \"-U\", \"{file.App}\"]");
         y.AppendLine("      interval: 5s");
-        Hardened(y, ServiceHardening.Database);
+        Hardened(y, ServiceHardening.Database, podman);
         y.AppendLine("    restart: unless-stopped");
 
         if (rabbit)
@@ -89,7 +99,7 @@ internal static class ComposeTarget
             y.AppendLine("    healthcheck:");
             y.AppendLine("      test: [\"CMD\", \"rabbitmq-diagnostics\", \"-q\", \"ping\"]");
             y.AppendLine("      interval: 5s");
-            Hardened(y, ServiceHardening.Broker);
+            Hardened(y, ServiceHardening.Broker, podman);
             y.AppendLine("    restart: unless-stopped");
         }
 
@@ -101,7 +111,7 @@ internal static class ComposeTarget
         y.AppendLine($"    image: {Image(file, migrator)}");
         y.AppendLine($"    command: [\"{TraxMigrate.Argument}\"]");
         y.AppendLine("    environment: *trax");
-        Hardened(y, ServiceHardening.Trax(file.Services[migrator]));
+        Hardened(y, ServiceHardening.Trax(file.Services[migrator]), podman);
         y.AppendLine("    depends_on:");
         y.AppendLine("      database:");
         y.AppendLine("        condition: service_healthy");
@@ -133,7 +143,7 @@ internal static class ComposeTarget
                 y.AppendLine("    ports:");
                 y.AppendLine($"      - \"127.0.0.1:{service.Port ?? FreePort()}:8080\"");
             }
-            Hardened(y, ServiceHardening.Trax(service));
+            Hardened(y, ServiceHardening.Trax(service), podman);
             if (service.Count > 1)
             {
                 y.AppendLine("    deploy:");
@@ -169,15 +179,24 @@ internal static class ComposeTarget
         return [(ComposeFile, y.ToString()), (EnvExampleFile, env.ToString())];
     }
 
+    /// <summary>The service whose image runs the migration: the first that runs the api role, else the first.</summary>
+    internal static string Migrator(
+        DeployFile file,
+        IReadOnlyDictionary<string, DeployManifest> exports
+    ) =>
+        file.Services.Keys.FirstOrDefault(k => exports[k].Roles.Contains("api"))
+        ?? file.Services.Keys.First();
+
     private static string Image(DeployFile file, string service) =>
         $"{ImageName(file, service)}:${{TRAX_IMAGE_TAG:-latest}}";
 
     /// <summary>
     /// Renders <paramref name="hardening"/>. <c>nomap</c> leaves the deploying user's own uid out of the container,
     /// so an escape does not land as them; <c>auto</c> would give each service a range of its own, but fails on a
-    /// host whose existing containers already hold the user's whole subordinate range, which is the default.
+    /// host whose existing containers already hold the user's whole subordinate range, which is the default. Docker
+    /// compose accepts only <c>host</c>, so a docker stack sets none.
     /// </summary>
-    private static void Hardened(StringBuilder y, ServiceHardening hardening)
+    private static void Hardened(StringBuilder y, ServiceHardening hardening, bool podman)
     {
         y.AppendLine("    cap_drop:");
         y.AppendLine("      - ALL");
@@ -189,7 +208,8 @@ internal static class ComposeTarget
         }
         y.AppendLine("    security_opt:");
         y.AppendLine("      - no-new-privileges:true");
-        y.AppendLine("    userns_mode: nomap");
+        if (podman)
+            y.AppendLine("    userns_mode: nomap");
         y.AppendLine($"    pids_limit: {ServiceHardening.Pids}");
         y.AppendLine($"    mem_limit: {hardening.MemoryMiB}m");
     }
@@ -197,13 +217,13 @@ internal static class ComposeTarget
     private static string Required(string name) => $"${{{name}:?set {name}}}";
 
     /// <summary>The roles a service runs as one copy of, until hosts hold leases on their runs.</summary>
-    private static readonly string[] SingleRoles = ["api", "scheduler"];
+    internal static readonly string[] SingleRoles = ["api", "scheduler"];
 
     /// <summary>
     /// Whether compose publishes a port for the service: a hub, which serves HTTP and runs the api or scheduler role,
     /// so runs as one copy. A port on a service with several copies would be bound once per copy.
     /// </summary>
-    private static bool Hub(DeployManifest export) =>
+    internal static bool Hub(DeployManifest export) =>
         (export.Endpoints.GraphQL is not null || export.Endpoints.Health is not null)
         && export.Roles.Intersect(SingleRoles).Any();
 

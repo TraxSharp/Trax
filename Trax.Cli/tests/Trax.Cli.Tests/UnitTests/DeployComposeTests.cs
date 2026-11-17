@@ -591,7 +591,7 @@ public class DeployComposeTests
         """{ "version": 1, "app": "orders", "services": { "hub": { "project": "Orders/Orders.csproj", "memory": 32 } } }""",
         "*service 'hub' has memory 32*"
     )]
-    [TestCase("""{ "version": 2, "app": "orders", "services": {} }""", "*version 2*")]
+    [TestCase("""{ "version": 3, "app": "orders", "services": {} }""", "*version 3*")]
     public void A_file_that_cannot_be_deployed_is_refused_naming_the_problem(
         string json,
         string message

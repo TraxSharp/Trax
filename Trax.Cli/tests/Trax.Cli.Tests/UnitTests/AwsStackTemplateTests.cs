@@ -35,6 +35,7 @@ public class AwsStackTemplateTests
         };
         file.Environments["production"] = new DeployEnvironment
         {
+            Target = DeployEnvironment.Aws,
             Profile = profile,
             Region = "us-west-2",
             Domain = profile == DeployEnvironment.Production ? "orders.example.com" : null,

@@ -462,8 +462,8 @@ public class AwsDeployerTests
 
     [Test]
     public void An_image_tag_starts_with_the_time() =>
-        AwsDeployer
-            .ImageTag(Path.GetTempPath(), new DateTime(2026, 10, 20, 12, 0, 0, DateTimeKind.Utc))
+        ImageTags
+            .Create(Path.GetTempPath(), new DateTime(2026, 10, 20, 12, 0, 0, DateTimeKind.Utc))
             .Should()
             .StartWith("20261020-120000");
 

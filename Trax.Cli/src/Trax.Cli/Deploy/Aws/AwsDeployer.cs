@@ -318,39 +318,6 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
             ["trax:app"] = file.App,
             ["trax:environment"] = environment,
         };
-
-    /// <summary>
-    /// A tag no earlier deploy used: the time, then the commit and whether the tree had changes, so an image says
-    /// what it was built from.
-    /// </summary>
-    public static string ImageTag(string directory, DateTime now)
-    {
-        var tag = now.ToString(
-            "yyyyMMdd-HHmmss",
-            System.Globalization.CultureInfo.InvariantCulture
-        );
-        var commit = Git(directory, "rev-parse", "--short=12", "HEAD");
-        if (commit is null)
-            return tag;
-        var dirty = Git(directory, "status", "--porcelain") is { Length: > 0 };
-        return $"{tag}-{commit}{(dirty ? "-dirty" : "")}";
-    }
-
-    private static string? Git(string directory, params string[] args)
-    {
-        var psi = new ProcessStartInfo("git") { WorkingDirectory = directory };
-        foreach (var arg in args)
-            psi.ArgumentList.Add(arg);
-        try
-        {
-            var (exit, stdout, _) = ChildProcess.Run(psi);
-            return exit == 0 ? stdout.Trim() : null;
-        }
-        catch (System.ComponentModel.Win32Exception)
-        {
-            return null;
-        }
-    }
 }
 
 /// <summary>
