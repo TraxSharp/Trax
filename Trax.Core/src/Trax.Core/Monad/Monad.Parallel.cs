@@ -8,28 +8,6 @@ using Trax.Core.Utils;
 
 namespace Trax.Core.Monad;
 
-/// <summary>
-/// Prepares a branch's own dependency injection scope from the run's, for state a scoped service
-/// holds that a fresh scope would not have: a tenant, a unit of work, anything set imperatively
-/// on a scoped object rather than read from an ambient context.
-/// </summary>
-/// <remarks>
-/// Every registered initializer runs, in registration order, before the branch's first step. One
-/// that throws fails the branch: a branch that cannot see what the run sees does not run.
-/// </remarks>
-public interface IBranchScopeInitializer
-{
-    /// <summary>Copies what the branch needs from the run's scope into the branch's.</summary>
-    /// <param name="run">The run's scope.</param>
-    /// <param name="branch">The branch's new scope.</param>
-    /// <param name="cancellationToken">The branch's token.</param>
-    Task Initialize(
-        IServiceProvider run,
-        IServiceProvider branch,
-        CancellationToken cancellationToken
-    );
-}
-
 /// <summary>The chain steps the train methods of the same name call.</summary>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/train-methods/parallel">SDK reference</seealso>
 public partial class Monad<TInput, TReturn>
@@ -86,11 +64,19 @@ public partial class Monad<TInput, TReturn>
 
         // A resumed run whose point is after this step skips it whole; one resuming at it runs
         // it, each branch from its own checkpoint.
-        if (SkipStep(ChainNodeScope.KeyOf(new ChainStep(ChainStepKind.Parallel, null, null, null))))
+        if (
+            SkipStep(
+                ChainNodeScope.KeyOf(
+                    new ChainStep(ChainStepKind.Parallel, Junction: null, In: null, Out: null)
+                )
+            )
+        )
             return this;
 
         var step = Nodes.Next(
-            ChainNodeScope.KeyOf(new ChainStep(ChainStepKind.Parallel, null, null, null))
+            ChainNodeScope.KeyOf(
+                new ChainStep(ChainStepKind.Parallel, Junction: null, In: null, Out: null)
+            )
         );
         var train = Train.GetType().ReadableName();
 
@@ -98,7 +84,7 @@ public partial class Monad<TInput, TReturn>
         if (declared.AllProblems.ToList() is { Count: > 0 } problems)
         {
             Exception = new TrainException(
-                $"Parallel (train '{train}') {string.Join(" ", problems)}"
+                $"Parallel (train '{train}') {string.Join(' ', problems)}"
             );
             return this;
         }
@@ -284,7 +270,10 @@ public partial class Monad<TInput, TReturn>
     {
         foreach (var (run, branch) in JunctionClaims)
             lock (run)
-                if (!run.TryAdd(junction, branch) && run[junction] != branch)
+                if (
+                    !run.TryAdd(junction, branch)
+                    && !string.Equals(run[junction], branch, StringComparison.Ordinal)
+                )
                     return new TrainException(
                         $"Parallel branches '{run[junction]}' and '{branch}' (train "
                             + $"'{Train.GetType().ReadableName()}') run the same "
@@ -401,10 +390,10 @@ public partial class Monad<TInput, TReturn>
         var recorder = Recorder!;
 
         foreach (var problem in declared.AllProblems)
-            recorder.RefuseStep(ChainStepKind.Parallel, null, $"Parallel {problem}");
+            recorder.RefuseStep(ChainStepKind.Parallel, junction: null, $"Parallel {problem}");
 
         var index = recorder.Steps.Count;
-        recorder.Record(ChainStepKind.Parallel, null, null, null);
+        recorder.Record(ChainStepKind.Parallel, junction: null, tIn: null, tOut: null);
 
         var recorded = new List<ChainTrack>();
 
@@ -422,7 +411,7 @@ public partial class Monad<TInput, TReturn>
                     $"Parallel, branch '{branch.Name}': {refusal.Reason}"
                 );
 
-            recorded.Add(new ChainTrack(branch.Name, null, false, steps));
+            recorded.Add(new ChainTrack(branch.Name, Description: null, IsFallback: false, steps));
         }
 
         recorder.RecordTracks(index, recorded);
@@ -468,43 +457,5 @@ public partial class Monad<TInput, TReturn>
         }
 
         return steps;
-    }
-}
-
-/// <summary>
-/// What a <c>Parallel</c> step's join puts into the run's Memory: each type exactly one branch
-/// added or changed. Apart from the monad so the law it keeps, that the order the branches are
-/// declared in cannot change the result, can be checked on its own.
-/// </summary>
-internal static class BranchMerge
-{
-    /// <summary>
-    /// The values to put into the run's Memory. A type two branches both added is left out:
-    /// neither value is the run's, and the startup check refuses the declared collisions, so only
-    /// an undeclared one (an interface of a tuple element) reaches here.
-    /// </summary>
-    /// <param name="fork">The run's Memory as it was when the branches forked.</param>
-    /// <param name="branches">Each branch's Memory as it ended.</param>
-    public static Dictionary<Type, object> Added(
-        IReadOnlyDictionary<Type, object> fork,
-        IEnumerable<IReadOnlyDictionary<Type, object>> branches
-    )
-    {
-        var added = new Dictionary<Type, object?>();
-
-        foreach (var branch in branches)
-        foreach (var (type, value) in branch)
-        {
-            if (type == typeof(IServiceProvider) || !ChainVerification.Merged(type))
-                continue;
-
-            if (fork.TryGetValue(type, out var before) && ReferenceEquals(before, value))
-                continue;
-
-            // Seen in an earlier branch: a collision, kept as a marker so a third does not win.
-            added[type] = added.ContainsKey(type) ? null : value;
-        }
-
-        return added.Where(a => a.Value is not null).ToDictionary(a => a.Key, a => a.Value!);
     }
 }

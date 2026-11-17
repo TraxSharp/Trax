@@ -377,7 +377,11 @@ namespace Trax.Core.Functional
         public override int GetHashCode() { }
         public override string ToString() { }
         public static bool operator !=(Trax.Core.Functional.Unit a, Trax.Core.Functional.Unit b) { }
+        public static bool operator <(Trax.Core.Functional.Unit left, Trax.Core.Functional.Unit right) { }
+        public static bool operator <=(Trax.Core.Functional.Unit left, Trax.Core.Functional.Unit right) { }
         public static bool operator ==(Trax.Core.Functional.Unit a, Trax.Core.Functional.Unit b) { }
+        public static bool operator >(Trax.Core.Functional.Unit left, Trax.Core.Functional.Unit right) { }
+        public static bool operator >=(Trax.Core.Functional.Unit left, Trax.Core.Functional.Unit right) { }
     }
 }
 namespace Trax.Core.Junction
@@ -508,7 +512,7 @@ namespace Trax.Core.Monad
     {
         System.Threading.Tasks.Task Initialize(System.IServiceProvider run, System.IServiceProvider branch, System.Threading.CancellationToken cancellationToken);
     }
-    public class Monad<TInput, TReturn>
+    public sealed class Monad<TInput, TReturn>
     {
         public Trax.Core.Monad.Monad<TInput, TReturn> AddServices<T1>(T1 service) { }
         public Trax.Core.Monad.Monad<TInput, TReturn> AddServices<T1, T2>(T1 service1, T2 service2) { }

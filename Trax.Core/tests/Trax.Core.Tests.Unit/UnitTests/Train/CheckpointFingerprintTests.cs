@@ -47,8 +47,14 @@ public class CheckpointFingerprintTests : TestSetup
     /// </summary>
     private static void Differ(Type before, Type after, string because)
     {
-        var shape = CheckpointState.Shape(before).Replace(before.FullName!, "T");
-        CheckpointState.Shape(after).Replace(after.FullName!, "T").Should().NotBe(shape, because);
+        var shape = CheckpointState
+            .Shape(before)
+            .Replace(before.FullName!, "T", StringComparison.Ordinal);
+        CheckpointState
+            .Shape(after)
+            .Replace(after.FullName!, "T", StringComparison.Ordinal)
+            .Should()
+            .NotBe(shape, because);
     }
 
     public enum LaneBefore

@@ -54,7 +54,7 @@ public class ActivateTests : TestSetup
         monad.Memory.Count.Should().Be(48);
         monad.Memory.Should().ContainValue(input);
         monad.Memory.Should().ContainValue(1);
-        monad.Memory.Should().ContainValue(false);
+        monad.Memory.Should().ContainValue(expected: false);
         monad.Memory.Should().ContainValue("hello");
         monad.Exception.Should().BeNull();
     }
@@ -75,7 +75,7 @@ public class ActivateTests : TestSetup
         monad.Memory.Count.Should().Be(48);
         monad.Memory.Should().ContainValue(inputObject);
         monad.Memory.Should().ContainValue(2);
-        monad.Memory.Should().ContainValue(false);
+        monad.Memory.Should().ContainValue(expected: false);
         monad.Memory.Should().ContainValue("hello");
         monad.Exception.Should().BeNull();
     }
@@ -95,18 +95,18 @@ public class ActivateTests : TestSetup
         monad.Memory.Count.Should().Be(48);
         monad.Memory.Should().ContainValue(input);
         monad.Memory.Should().ContainValue(1);
-        monad.Memory.Should().ContainValue(false);
+        monad.Memory.Should().ContainValue(expected: false);
         monad.Memory.Should().ContainValue("hello");
         monad.Exception.Should().BeNull();
     }
 
-    private class TestTrain : Train<object, string>
+    private sealed class TestTrain : Train<object, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             throw new NotImplementedException();
     }
 
-    private class TestTupleTrain : Train<(int, object), string>
+    private sealed class TestTupleTrain : Train<(int, object), string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             throw new NotImplementedException();

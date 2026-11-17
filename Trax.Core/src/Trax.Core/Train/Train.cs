@@ -89,7 +89,7 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     {
         CancellationToken = cancellationToken;
 
-        var resultEither = await RunEither(input);
+        var resultEither = await RunEither(input).ConfigureAwait(false);
 
         if (resultEither.IsLeft)
             ExceptionDispatchInfo.Capture(resultEither.Swap().ValueUnsafe()).Throw();
@@ -164,7 +164,7 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     /// <remarks>
     /// The seam <c>ServiceTrain</c> uses, not a consumer extension point:
     /// <see cref="Monad{TInput, TReturn}"/> has no public constructor, so an override outside Trax
-    /// can only return a monad a base implementation built. It stays <c>protected</c> because the published Trax.Effect overrides it as
+    /// can only return a monad a base implementation built. It stays <see langword="protected"/> because the published Trax.Effect overrides it as
     /// <c>protected override</c>, and narrowing it would make every <c>ServiceTrain</c> fail to
     /// load against a newer Trax.Core (Trax.Core ADR 0002).
     /// </remarks>
@@ -313,19 +313,19 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     /// Creates and executes a junction by its type. Input is extracted from Memory.
     /// </summary>
     protected MonadTask<TInput, TReturn> Chain<TJunction>()
-        where TJunction : class => Root("Chain", true).Chain<TJunction>();
+        where TJunction : class => Root("Chain", startsAJunction: true).Chain<TJunction>();
 
     /// <summary>
     /// Executes a junction instance. Input is extracted from Memory.
     /// </summary>
     protected MonadTask<TInput, TReturn> Chain<TJunction>(TJunction instance)
-        where TJunction : class => Root("Chain", true).Chain(instance);
+        where TJunction : class => Root("Chain", startsAJunction: true).Chain(instance);
 
     /// <summary>
     /// Executes a junction resolved from Memory by its interface type.
     /// </summary>
     protected MonadTask<TInput, TReturn> IChain<TJunction>()
-        where TJunction : class => Root("IChain", true).IChain<TJunction>();
+        where TJunction : class => Root("IChain", startsAJunction: true).IChain<TJunction>();
 
     /// <summary>
     /// Executes a junction instance whose input and output types are stated explicitly, for
@@ -333,22 +333,22 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     /// </summary>
     protected MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>(TJunction junction)
         where TJunction : IJunction<TIn, TOut> =>
-        Root("Chain", true).Chain<TJunction, TIn, TOut>(junction);
+        Root("Chain", startsAJunction: true).Chain<TJunction, TIn, TOut>(junction);
 
     /// <inheritdoc cref="Chain{TJunction,TIn,TOut}(TJunction)"/>
     protected MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>()
         where TJunction : IJunction<TIn, TOut>, new() =>
-        Root("Chain", true).Chain<TJunction, TIn, TOut>();
+        Root("Chain", startsAJunction: true).Chain<TJunction, TIn, TOut>();
 
     /// <inheritdoc cref="Chain{TJunction,TIn,TOut}(TJunction)"/>
     protected MonadTask<TInput, TReturn> Chain<TJunction, TIn>(TJunction junction)
         where TJunction : IJunction<TIn, Unit> =>
-        Root("Chain", true).Chain<TJunction, TIn>(junction);
+        Root("Chain", startsAJunction: true).Chain<TJunction, TIn>(junction);
 
     /// <inheritdoc cref="Chain{TJunction,TIn,TOut}(TJunction)"/>
     protected MonadTask<TInput, TReturn> Chain<TJunction, TIn>()
         where TJunction : IJunction<TIn, Unit>, new() =>
-        Root("Chain", true).Chain<TJunction, TIn>();
+        Root("Chain", startsAJunction: true).Chain<TJunction, TIn>();
 
     /// <summary>
     /// Runs a fixed set of named branches side by side, each on its own copy of Memory, and
@@ -356,14 +356,14 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     /// </summary>
     protected MonadTask<TInput, TReturn> Parallel(
         Func<Branches<TInput, TReturn>, Branches<TInput, TReturn>> branches
-    ) => Root("Parallel", true).Parallel(branches);
+    ) => Root("Parallel", startsAJunction: true).Parallel(branches);
 
     /// <summary>
     /// Stores the state in Memory so a later run of the same input can resume here. See
     /// <see cref="Monad{TInput, TReturn}.Checkpoint{TState}"/>.
     /// </summary>
     protected MonadTask<TInput, TReturn> Checkpoint<TState>() =>
-        Root("Checkpoint", true).Checkpoint<TState>();
+        Root("Checkpoint", startsAJunction: true).Checkpoint<TState>();
 
     /// <summary>
     /// Ends a chain that declares no junctions, taking the train's return value from Memory.
@@ -375,19 +375,20 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     /// run, and stating a result directly would make the chain depend on something other than
     /// the junctions it names.
     /// </remarks>
-    protected Either<Exception, TReturn> Resolve() => Root("Resolve", false).Resolve();
+    protected Either<Exception, TReturn> Resolve() =>
+        Root("Resolve", startsAJunction: false).Resolve();
 
     /// <summary>
     /// Extracts a value of type TOut from an object of type TIn in Memory.
     /// </summary>
     protected Monad<TInput, TReturn> Extract<TIn, TOut>() =>
-        Root("Extract", false).Extract<TIn, TOut>();
+        Root("Extract", startsAJunction: false).Extract<TIn, TOut>();
 
     /// <summary>
     /// Extracts a value of type TOut from the provided TIn object.
     /// </summary>
     protected Monad<TInput, TReturn> Extract<TIn, TOut>(TIn input) =>
-        Root("Extract", false).Extract<TIn, TOut>(input);
+        Root("Extract", startsAJunction: false).Extract<TIn, TOut>(input);
 
     /// <summary>
     /// Executes a junction with short-circuit behavior. If the junction returns Right, its
@@ -401,18 +402,20 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     /// count a short circuit's output as available to the junctions after it.
     /// </remarks>
     protected MonadTask<TInput, TReturn> ShortCircuit<TJunction>()
-        where TJunction : class => Root("ShortCircuit", true).ShortCircuit<TJunction>();
+        where TJunction : class =>
+        Root("ShortCircuit", startsAJunction: true).ShortCircuit<TJunction>();
 
     /// <summary>
     /// Executes a junction instance with short-circuit behavior.
     /// </summary>
     protected MonadTask<TInput, TReturn> ShortCircuit<TJunction>(TJunction instance)
-        where TJunction : class => Root("ShortCircuit", true).ShortCircuit(instance);
+        where TJunction : class =>
+        Root("ShortCircuit", startsAJunction: true).ShortCircuit(instance);
 
     /// <inheritdoc cref="Monad{TInput, TReturn}.Decide{TState}"/>
     protected MonadTask<TInput, TReturn> Decide<TState>(
         Func<Decisions.Questions<TState>, Decisions.Questions<TState>> questions
-    ) => Root("Decide", true).Decide<TState>(questions);
+    ) => Root("Decide", startsAJunction: true).Decide<TState>(questions);
 
     /// <inheritdoc cref="Monad{TInput, TReturn}.Switch{TTrack}"/>
     protected MonadTask<TInput, TReturn> Switch<TTrack>(
@@ -421,7 +424,7 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
             Decisions.Tracks<TInput, TReturn, TTrack>
         > tracks
     )
-        where TTrack : struct, Enum => Root("Switch", true).Switch<TTrack>(tracks);
+        where TTrack : struct, Enum => Root("Switch", startsAJunction: true).Switch<TTrack>(tracks);
 
     /// <inheritdoc cref="Monad{TInput, TReturn}.Switch{TState, TTrack}"/>
     protected MonadTask<TInput, TReturn> Switch<TState, TTrack>(
@@ -431,18 +434,19 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
         > tracks,
         string? asking = null
     )
-        where TTrack : struct, Enum => Root("Switch", true).Switch<TState, TTrack>(tracks, asking);
+        where TTrack : struct, Enum =>
+        Root("Switch", startsAJunction: true).Switch<TState, TTrack>(tracks, asking);
 
     /// <inheritdoc cref="Monad{TInput, TReturn}.Gate{TQuestion}"/>
     protected MonadTask<TInput, TReturn> Gate<TQuestion>(
         Func<Decisions.GateTracks<TInput, TReturn>, Decisions.GateTracks<TInput, TReturn>> gate
-    ) => Root("Gate", true).Gate<TQuestion>(gate);
+    ) => Root("Gate", startsAJunction: true).Gate<TQuestion>(gate);
 
     /// <inheritdoc cref="Monad{TInput, TReturn}.Gate{TState, TQuestion}"/>
     protected MonadTask<TInput, TReturn> Gate<TState, TQuestion>(
         Func<Decisions.GateTracks<TInput, TReturn>, Decisions.GateTracks<TInput, TReturn>> gate,
         string? asking = null
-    ) => Root("Gate", true).Gate<TState, TQuestion>(gate, asking);
+    ) => Root("Gate", startsAJunction: true).Gate<TState, TQuestion>(gate, asking);
 
     /// <inheritdoc cref="Monad{TInput, TReturn}.Scale{TLevel}"/>
     protected MonadTask<TInput, TReturn> Scale<TLevel>(
@@ -451,7 +455,7 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
             Decisions.ScaleTracks<TInput, TReturn, TLevel>
         > scale
     )
-        where TLevel : struct, Enum => Root("Scale", true).Scale<TLevel>(scale);
+        where TLevel : struct, Enum => Root("Scale", startsAJunction: true).Scale<TLevel>(scale);
 
     /// <inheritdoc cref="Monad{TInput, TReturn}.Scale{TState, TLevel}"/>
     protected MonadTask<TInput, TReturn> Scale<TState, TLevel>(
@@ -461,25 +465,26 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
         > scale,
         string? asking = null
     )
-        where TLevel : struct, Enum => Root("Scale", true).Scale<TState, TLevel>(scale, asking);
+        where TLevel : struct, Enum =>
+        Root("Scale", startsAJunction: true).Scale<TState, TLevel>(scale, asking);
 
     /// <summary>
     /// Adds a service to the chain's Memory for interface-based junction resolution.
     /// </summary>
     protected Monad<TInput, TReturn> AddServices<T1>(T1 service) =>
-        Root("AddServices", false).AddServices(service);
+        Root("AddServices", startsAJunction: false).AddServices(service);
 
     /// <inheritdoc cref="AddServices{T1}"/>
     protected Monad<TInput, TReturn> AddServices<T1, T2>(T1 s1, T2 s2) =>
-        Root("AddServices", false).AddServices(s1, s2);
+        Root("AddServices", startsAJunction: false).AddServices(s1, s2);
 
     /// <inheritdoc cref="AddServices{T1}"/>
     protected Monad<TInput, TReturn> AddServices<T1, T2, T3>(T1 s1, T2 s2, T3 s3) =>
-        Root("AddServices", false).AddServices(s1, s2, s3);
+        Root("AddServices", startsAJunction: false).AddServices(s1, s2, s3);
 
     /// <inheritdoc cref="AddServices{T1}"/>
     protected Monad<TInput, TReturn> AddServices<T1, T2, T3, T4>(T1 s1, T2 s2, T3 s3, T4 s4) =>
-        Root("AddServices", false).AddServices(s1, s2, s3, s4);
+        Root("AddServices", startsAJunction: false).AddServices(s1, s2, s3, s4);
 
     /// <inheritdoc cref="AddServices{T1}"/>
     protected Monad<TInput, TReturn> AddServices<T1, T2, T3, T4, T5>(
@@ -488,7 +493,7 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
         T3 s3,
         T4 s4,
         T5 s5
-    ) => Root("AddServices", false).AddServices(s1, s2, s3, s4, s5);
+    ) => Root("AddServices", startsAJunction: false).AddServices(s1, s2, s3, s4, s5);
 
     /// <inheritdoc cref="AddServices{T1}"/>
     protected Monad<TInput, TReturn> AddServices<T1, T2, T3, T4, T5, T6>(
@@ -498,7 +503,7 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
         T4 s4,
         T5 s5,
         T6 s6
-    ) => Root("AddServices", false).AddServices(s1, s2, s3, s4, s5, s6);
+    ) => Root("AddServices", startsAJunction: false).AddServices(s1, s2, s3, s4, s5, s6);
 
     /// <inheritdoc cref="AddServices{T1}"/>
     protected Monad<TInput, TReturn> AddServices<T1, T2, T3, T4, T5, T6, T7>(
@@ -509,7 +514,7 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
         T5 s5,
         T6 s6,
         T7 s7
-    ) => Root("AddServices", false).AddServices(s1, s2, s3, s4, s5, s6, s7);
+    ) => Root("AddServices", startsAJunction: false).AddServices(s1, s2, s3, s4, s5, s6, s7);
 
     #endregion
 }

@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Core.Tests.Meta.Tests;
 
 /// <summary>
@@ -7,22 +9,26 @@ namespace Trax.Core.Tests.Meta.Tests;
 /// </summary>
 [Property("adr", "Trax.Docs/adr/0005-a-skipped-test-is-a-runtime-decision.md")]
 [TestFixture]
-public class NoIgnoreAttributeTests
+public partial class NoIgnoreAttributeTests
 {
     // The same two patterns as Trax.Core.Testing's HygieneGuards.NoIgnoreAttribute: an [Ignore]
     // anywhere in an attribute list (qualified, suffixed, or on a later line), and a per-case
     // Ignore = or IgnoreReason = on a case or fixture attribute. Matched over the whole file.
-    private static readonly Regex[] IgnorePatterns =
-    [
-        new(
-            @"(?:\[|,)\s*(?:[\w.]+\.)?Ignore(?:Attribute)?(?=\s*(?:\(|\]|,))",
-            RegexOptions.Compiled
-        ),
-        new(
-            @"\[[^\]]*?\b(?:TestCase|TestCaseSource|TestFixture|TestFixtureSource)(?:Attribute)?\b[^\]]*?\b(?:Ignore|IgnoreReason)\s*=(?!=)",
-            RegexOptions.Compiled
-        ),
-    ];
+    private static readonly Regex[] IgnorePatterns = [IgnoreAttribute, IgnoreNamedArgument];
+
+    [GeneratedRegex(
+        @"(?:\[|,)\s*(?:[\w.]+\.)?Ignore(?:Attribute)?(?=\s*(?:\(|\]|,))",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 5_000
+    )]
+    private static partial Regex IgnoreAttribute { get; }
+
+    [GeneratedRegex(
+        @"\[[^\]]*?\b(?:TestCase|TestCaseSource|TestFixture|TestFixtureSource)(?:Attribute)?\b[^\]]*?\b(?:Ignore|IgnoreReason)\s*=(?!=)",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 5_000
+    )]
+    private static partial Regex IgnoreNamedArgument { get; }
 
     [Test]
     public void TestSources_DoNotUse_IgnoreAttribute()
@@ -36,7 +42,9 @@ public class NoIgnoreAttributeTests
                 continue;
 
             foreach (var line in OffendingLines(File.ReadAllText(file)))
-                offenders.Add($"{RepoRoot.Relative(file)}:{line}");
+                offenders.Add(
+                    string.Create(CultureInfo.InvariantCulture, $"{RepoRoot.Relative(file)}:{line}")
+                );
         }
 
         offenders

@@ -1,22 +1,6 @@
 namespace Trax.Core.Monad;
 
 /// <summary>
-/// How a <c>Parallel</c> step's branches are run relative to each other.
-/// </summary>
-internal enum BranchExecution
-{
-    /// <summary>Every branch starts at once. What a shipped host always does.</summary>
-    Concurrent,
-
-    /// <summary>
-    /// One branch after another, in declared order, each finishing before the next starts. The
-    /// oracle the concurrency tests compare a concurrent run against: whatever the branches do
-    /// side by side has to be explainable as something they could have done one at a time.
-    /// </summary>
-    Sequential,
-}
-
-/// <summary>
 /// Starts a <c>Parallel</c> step's branches and waits for them. A run uses
 /// <see cref="ThreadPoolBranchRunner"/>; the seam exists so a test can control the interleaving
 /// of branches, which the thread pool leaves to chance.
@@ -55,23 +39,4 @@ internal interface IBranchRunner
     /// <param name="parent">The path of the branch whose chain holds the step, or null when the run's own chain does.</param>
     /// <param name="branches">Completes when every branch of the step has finished.</param>
     Task Join(string? parent, Task branches);
-}
-
-/// <summary>
-/// Runs every branch at once on the thread pool, so a junction that blocks its thread holds up
-/// only its own branch.
-/// </summary>
-internal sealed class ThreadPoolBranchRunner : IBranchRunner
-{
-    public static readonly ThreadPoolBranchRunner Instance = new();
-
-    private ThreadPoolBranchRunner() { }
-
-    public BranchExecution Execution => BranchExecution.Concurrent;
-
-    public Task Start(string branch, Func<Task> run) => Task.Run(run, CancellationToken.None);
-
-    public Task BeforeJunction(string branch, string node) => Task.CompletedTask;
-
-    public Task Join(string? parent, Task branches) => branches;
 }

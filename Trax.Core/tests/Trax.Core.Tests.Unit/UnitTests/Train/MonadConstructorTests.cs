@@ -45,7 +45,7 @@ public class MonadConstructorTests : TestSetup
         monad.Memory[typeof(IDisposable)].Should().BeSameAs(mock.Object);
     }
 
-    private class TestTrain : Train<int, string>
+    private sealed class TestTrain : Train<int, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             throw new NotImplementedException();

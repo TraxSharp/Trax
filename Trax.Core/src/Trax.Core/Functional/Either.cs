@@ -1,21 +1,6 @@
 namespace Trax.Core.Functional;
 
 /// <summary>
-/// Which side of an <see cref="Either{TLeft, TRight}"/> holds its value.
-/// </summary>
-public enum EitherStatus : byte
-{
-    /// <summary>Neither side: the value of <c>default(Either&lt;TLeft, TRight&gt;)</c>.</summary>
-    IsBottom = 0,
-
-    /// <summary>The left side, which by convention is the failure track.</summary>
-    IsLeft = 1,
-
-    /// <summary>The right side, which by convention is the success track.</summary>
-    IsRight = 2,
-}
-
-/// <summary>
 /// A value on one of two tracks: <c>Left</c>, which Trax uses for the exception that switched a train to the
 /// failure track, or <c>Right</c>, the result it carried. A train's <c>Junctions()</c> returns
 /// <c>Either&lt;Exception, TOutput&gt;</c>, and <c>RunEither</c> hands it to the caller.
@@ -158,7 +143,7 @@ public readonly struct Either<TLeft, TRight> : IEquatable<Either<TLeft, TRight>>
         };
 
     /// <summary>
-    /// The right value, or <c>default</c> when the value is not on the right side. Check
+    /// The right value, or <see langword="default"/> when the value is not on the right side. Check
     /// <see cref="IsRight"/> first, or use <c>Swap().ValueUnsafe()</c> to read the left value.
     /// </summary>
     public TRight ValueUnsafe() => right;

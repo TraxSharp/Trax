@@ -80,7 +80,7 @@ internal static class StateCopy
     private static bool IsValueTuple(Type type) =>
         type.IsValueType
         && type.IsGenericType
-        && type.Namespace == "System"
+        && string.Equals(type.Namespace, "System", StringComparison.Ordinal)
         && type.Name.StartsWith("ValueTuple`", StringComparison.Ordinal);
 
     /// <summary>

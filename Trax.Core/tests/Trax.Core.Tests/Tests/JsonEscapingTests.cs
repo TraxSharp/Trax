@@ -15,7 +15,7 @@ namespace Trax.Core.Tests.Tests;
 /// </summary>
 public class JsonEscapingTests
 {
-    private class DummyTrain : Train<string, string>
+    private sealed class DummyTrain : Train<string, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain<PassThrough1_963>().Resolve();
@@ -30,7 +30,7 @@ public class JsonEscapingTests
     /// Test junction that throws an exception with JSON content in the message.
     /// This simulates the scenario where an API exception contains JSON in its message.
     /// </summary>
-    private class TestJunctionWithJsonException : Junction<string, string>
+    private sealed class TestJunctionWithJsonException : Junction<string, string>
     {
         public override Task<string> Run(string input)
         {
@@ -140,7 +140,7 @@ public class JsonEscapingTests
     /// <summary>
     /// Test junction that throws an exception with special characters that need JSON escaping.
     /// </summary>
-    private class TestJunctionWithSpecialCharacters : Junction<string, string>
+    private sealed class TestJunctionWithSpecialCharacters : Junction<string, string>
     {
         public override Task<string> Run(string input)
         {

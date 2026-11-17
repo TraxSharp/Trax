@@ -19,7 +19,11 @@ public class PlainTrainRunStaysVirtualTests
     public void Run_StaysVirtualAndUnsealed()
     {
         var train = typeof(Trax.Core.Train.Train<,>);
-        var run = train.GetMethods().Single(m => m.Name == "Run" && m.DeclaringType == train);
+        var run = train
+            .GetMethods()
+            .Single(m =>
+                string.Equals(m.Name, "Run", StringComparison.Ordinal) && m.DeclaringType == train
+            );
 
         run.IsVirtual.Should()
             .BeTrue(

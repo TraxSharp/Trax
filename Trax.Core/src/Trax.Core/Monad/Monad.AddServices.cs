@@ -1,3 +1,4 @@
+using System.Globalization;
 using Trax.Core.Exceptions;
 using Trax.Core.Extensions;
 using Trax.Core.Functional;
@@ -190,14 +191,14 @@ public partial class Monad<TInput, TReturn>
                 if (services[i] is null)
                     Recorder.RefuseStep(
                         ChainStepKind.Seed,
-                        null,
+                        junction: null,
                         NullServiceMessage(i, typeArray, whileRecording: true)
                     );
                 else if (services[i]!.GetType().IsValueType)
                     // A struct passed as an interface is boxed, and the runtime refuses it.
                     Recorder.RefuseStep(
                         ChainStepKind.Seed,
-                        null,
+                        junction: null,
                         $"AddServices<{serviceType.Name}> received a value of the struct type "
                             + $"{services[i]!.GetType().Name}; a service must be a class."
                     );
@@ -207,12 +208,12 @@ public partial class Monad<TInput, TReturn>
                 if (!serviceType.IsInterface)
                     Recorder.RefuseStep(
                         ChainStepKind.Seed,
-                        null,
+                        junction: null,
                         $"AddServices<{serviceType.Name}> names a class; a service is stored "
                             + "under an interface it implements. Pass it as that interface."
                     );
 
-                Recorder.Record(ChainStepKind.Seed, null, null, serviceType);
+                Recorder.Record(ChainStepKind.Seed, junction: null, tIn: null, serviceType);
 
                 // Kept where the run would keep it, so a decider handed over here can vet the
                 // questions it will be asked. Nothing else reads Memory while a chain is read.
@@ -291,7 +292,10 @@ public partial class Monad<TInput, TReturn>
             $"AddServices<{typeArray[position].Name}> received null"
             + (
                 typeArray.Length > 1
-                    ? $" for the service at position {position + 1} of {typeArray.Length}"
+                    ? string.Create(
+                        CultureInfo.InvariantCulture,
+                        $" for the service at position {position + 1} of {typeArray.Length}"
+                    )
                     : ""
             );
 

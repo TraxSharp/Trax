@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using AwesomeAssertions;
 using CsCheck;
 using Microsoft.Extensions.DependencyInjection;
@@ -134,7 +135,7 @@ public class ParallelTests : TestSetup
             typeof(string)
         );
 
-        var result = await train.RunEither("abc").WaitAsync(Hang);
+        var result = await train.RunEither("abc").WaitAsync(Hang, CancellationToken.None);
 
         result.IsRight.Should().BeTrue();
         var parallel = graph.Nodes.Single(n => n.Kind == ChainStepKind.Parallel);
@@ -240,9 +241,10 @@ public class ParallelTests : TestSetup
         var waiter = new Waiter();
 
         var run = new BothWaitTrain(waiter).Run("abc", cts.Token);
-        await waiter.Entered.Task.WaitAsync(Hang);
+        await waiter.Entered.Task.WaitAsync(Hang, CancellationToken.None);
         await cts.CancelAsync();
-        var act = async () => await run.WaitAsync(Hang);
+        var act = async () =>
+            await run.WaitAsync(Hang, CancellationToken.None).ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<OperationCanceledException>(
@@ -277,7 +279,7 @@ public class ParallelTests : TestSetup
     {
         // What the persisted cancel flag (the dashboard, the API) raises at a junction boundary.
         var run = new RequestedCancellationTrain().Run("abc");
-        var act = async () => await run.WaitAsync(Hang);
+        var act = async () => await run.WaitAsync(Hang).ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<CancellationRequestedException>(
@@ -386,7 +388,7 @@ public class ParallelTests : TestSetup
         runScope.ServiceProvider.GetRequiredService<Tenant>().Name = "acme";
 
         var train = new ScopedTrain(runScope.ServiceProvider);
-        var result = await train.RunEither("abc").WaitAsync(Hang);
+        var result = await train.RunEither("abc").WaitAsync(Hang, CancellationToken.None);
 
         result.IsRight.Should().BeTrue();
         var report = result.ValueUnsafe();
@@ -425,7 +427,8 @@ public class ParallelTests : TestSetup
         var factory = LoggerFactory.Create(b => b.AddProvider(lines));
         using var listener = new ActivityListener
         {
-            ShouldListenTo = source => source.Name == BranchDiagnostics.SourceName,
+            ShouldListenTo = source =>
+                string.Equals(source.Name, BranchDiagnostics.SourceName, StringComparison.Ordinal),
             Sample = (ref ActivityCreationOptions<ActivityContext> _) =>
                 ActivitySamplingResult.AllData,
         };
@@ -435,8 +438,12 @@ public class ParallelTests : TestSetup
 
         result.IsRight.Should().BeTrue();
 
-        var embedding = lines.Lines.Single(l => l.Message == "embedding");
-        var cocitation = lines.Lines.Single(l => l.Message == "cocitation");
+        var embedding = lines.Lines.Single(l =>
+            string.Equals(l.Message, "embedding", StringComparison.Ordinal)
+        );
+        var cocitation = lines.Lines.Single(l =>
+            string.Equals(l.Message, "cocitation", StringComparison.Ordinal)
+        );
 
         NamesBranch(embedding.Scopes, "Parallel#0/embedding")
             .Should()
@@ -463,14 +470,18 @@ public class ParallelTests : TestSetup
             .BeTrue($"each Activity carries its branch's path ({Adr})");
 
         static bool NamesBranch(IReadOnlyList<object?> scopes, string path) =>
-            scopes.Any(s => s?.ToString()?.Contains(path) == true);
+            scopes.Any(s => s?.ToString()?.Contains(path, StringComparison.Ordinal) == true);
 
         static bool Carries(Activity? activity, string path) =>
             activity is not null
             && (
-                activity.DisplayName.Contains(path)
-                || activity.Tags.Any(t => (t.Value ?? string.Empty).Contains(path))
-                || activity.Baggage.Any(b => (b.Value ?? string.Empty).Contains(path))
+                activity.DisplayName.Contains(path, StringComparison.Ordinal)
+                || activity.Tags.Any(t =>
+                    (t.Value ?? string.Empty).Contains(path, StringComparison.Ordinal)
+                )
+                || activity.Baggage.Any(b =>
+                    (b.Value ?? string.Empty).Contains(path, StringComparison.Ordinal)
+                )
             );
     }
 
@@ -508,7 +519,12 @@ public class ParallelTests : TestSetup
         // Each branch's tuple carries a string, which was in Memory before the Parallel. At run
         // time the two strings collide and neither is merged, so the join would read the old one.
         Faults(new TupleOverwritingTrain())
-            .Where(f => f.Reason.Contains("produces 'System.String', which was in Memory before"))
+            .Where(f =>
+                f.Reason.Contains(
+                    "produces 'System.String', which was in Memory before",
+                    StringComparison.Ordinal
+                )
+            )
             .Should()
             .HaveCount(2, $"a tuple's elements enter Memory like any output ({Adr})");
     }
@@ -590,7 +606,9 @@ public class ParallelTests : TestSetup
         // The outer branch waits at its nested join, so the instance never runs twice at once.
         var note = new SharedNote();
 
-        var result = await new NestedSharedIChainTrain(note).RunEither("abc").WaitAsync(Hang);
+        var result = await new NestedSharedIChainTrain(note)
+            .RunEither("abc")
+            .WaitAsync(Hang, CancellationToken.None);
 
         result.IsRight.Should().BeTrue();
         note.Runs.Should().Be(2);
@@ -671,7 +689,9 @@ public class ParallelTests : TestSetup
         ChainVerification.Verify(train.DeclaredChain(), typeof(TIn), typeof(TOut));
 
     private static HashSet<string> Ids(IEnumerable<ChainGraphNode> nodes) =>
-        nodes.SelectMany(n => Ids(n.Tracks.SelectMany(t => t.Nodes)).Prepend(n.Id)).ToHashSet();
+        nodes
+            .SelectMany(n => Ids(n.Tracks.SelectMany(t => t.Nodes)).Prepend(n.Id))
+            .ToHashSet(StringComparer.Ordinal);
 
     [Asks("Which lane?")]
     public enum Lane
@@ -719,7 +739,12 @@ public class ParallelTests : TestSetup
     private sealed class Combine : Junction<(Embedding, CoCitation), string>
     {
         public override Task<string> Run((Embedding, CoCitation) input) =>
-            Task.FromResult($"embedding={input.Item1.Score}, cocitation={input.Item2.Score}");
+            Task.FromResult(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"embedding={input.Item1.Score}, cocitation={input.Item2.Score}"
+                )
+            );
     }
 
     private sealed class SignalsTrain : Train<string, string>
@@ -752,7 +777,7 @@ public class ParallelTests : TestSetup
         public override async Task<Embedding> Run(string input)
         {
             meeting.A.SetResult();
-            await meeting.B.Task;
+            await meeting.B.Task.ConfigureAwait(false);
             return new Embedding(1);
         }
     }
@@ -762,7 +787,7 @@ public class ParallelTests : TestSetup
         public override async Task<CoCitation> Run(string input)
         {
             meeting.B.SetResult();
-            await meeting.A.Task;
+            await meeting.A.Task.ConfigureAwait(false);
             return new CoCitation(1);
         }
     }
@@ -797,7 +822,7 @@ public class ParallelTests : TestSetup
     {
         public override async Task<Functional.Unit> Run(string input)
         {
-            await meeting.A.Task;
+            await meeting.A.Task.ConfigureAwait(false);
             return Functional.Unit.Default;
         }
     }
@@ -965,8 +990,8 @@ public class ParallelTests : TestSetup
         var cancelled = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
-        await using (token.Register(() => cancelled.TrySetCanceled(token)))
-            await cancelled.Task;
+        await using (token.Register(() => cancelled.TrySetCanceled(token)).ConfigureAwait(false))
+            await cancelled.Task.ConfigureAwait(false);
     }
 
     private sealed class Waiter
@@ -985,7 +1010,7 @@ public class ParallelTests : TestSetup
 
             try
             {
-                await UntilCancelled(CancellationToken);
+                await UntilCancelled(CancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -1001,7 +1026,7 @@ public class ParallelTests : TestSetup
     {
         public override async Task<Functional.Unit> Run(string input)
         {
-            await waiter.Entered.Task;
+            await waiter.Entered.Task.ConfigureAwait(false);
             throw new InvalidOperationException("the sibling fails");
         }
     }
@@ -1022,8 +1047,8 @@ public class ParallelTests : TestSetup
         public override async Task<Embedding> Run(string input)
         {
             using var own = new CancellationTokenSource();
-            await own.CancelAsync();
-            await UntilCancelled(own.Token);
+            await own.CancelAsync().ConfigureAwait(false);
+            await UntilCancelled(own.Token).ConfigureAwait(false);
             return new Embedding(0);
         }
     }
@@ -1074,7 +1099,7 @@ public class ParallelTests : TestSetup
 
             try
             {
-                await UntilCancelled(CancellationToken);
+                await UntilCancelled(CancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException e)
             {
@@ -1091,7 +1116,7 @@ public class ParallelTests : TestSetup
     {
         public override async Task<Functional.Unit> Run(string input)
         {
-            await waiter.Entered.Task;
+            await waiter.Entered.Task.ConfigureAwait(false);
             throw new TrainException(
                 System.Text.Json.JsonSerializer.Serialize(
                     new TrainExceptionData
@@ -1123,12 +1148,15 @@ public class ParallelTests : TestSetup
     {
         public override async Task<Embedding> Run(string input)
         {
-            await using var callback = CancellationToken.Register(() =>
+            var callback = CancellationToken.Register(() =>
                 throw new InvalidOperationException("the callback throws")
             );
-            waiter.Entered.TrySetResult();
-            await UntilCancelled(CancellationToken);
-            return new Embedding(0);
+            await using (callback.ConfigureAwait(false))
+            {
+                waiter.Entered.TrySetResult();
+                await UntilCancelled(CancellationToken).ConfigureAwait(false);
+                return new Embedding(0);
+            }
         }
     }
 
@@ -1171,7 +1199,7 @@ public class ParallelTests : TestSetup
     {
         public override async Task<CoCitation> Run(string input)
         {
-            await UntilCancelled(CancellationToken);
+            await UntilCancelled(CancellationToken).ConfigureAwait(false);
             return new CoCitation(0);
         }
     }
@@ -1358,7 +1386,7 @@ public class ParallelTests : TestSetup
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain<Echo>()
                 .Parallel(p =>
-                    name == "twice"
+                    string.Equals(name, "twice", StringComparison.Ordinal)
                         ? p.Branch(name, b => b.Chain<ScoreEmbedding>())
                             .Branch(name, b => b.Chain<ScoreCoCitation>())
                         : p.Branch(name, b => b.Chain<ScoreEmbedding>())

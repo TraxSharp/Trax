@@ -4,4 +4,4 @@ using Trax.Core.Tests.Integration.Examples.Brewery.Junctions.Prepare;
 
 namespace Trax.Core.Tests.Integration.Examples.Brewery.Junctions.Ferment;
 
-public interface IFerment : IJunction<BrewingJug, Unit> { }
+public interface IFerment : IJunction<BrewingJug, Unit>;

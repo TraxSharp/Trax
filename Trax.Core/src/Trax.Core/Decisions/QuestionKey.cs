@@ -91,7 +91,7 @@ public static class QuestionKey
         }
 
         var name = type.Name;
-        var tick = name.IndexOf('`');
+        var tick = name.IndexOf('`', StringComparison.Ordinal);
 
         if (tick >= 0)
             name = name[..tick];
@@ -100,6 +100,6 @@ public static class QuestionKey
 
         return own.Length == 0
             ? prefix + name
-            : $"{prefix}{name}<{string.Join(",", own.Select(For))}>";
+            : $"{prefix}{name}<{string.Join(',', own.Select(For))}>";
     }
 }

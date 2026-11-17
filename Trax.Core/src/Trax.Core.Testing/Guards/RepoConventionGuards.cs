@@ -31,7 +31,13 @@ public static class RepoConventionGuards
                 .FirstOrDefault()
                 ?.Value.Trim();
 
-            if (version != options.ExpectedDirectoryBuildPropsVersion)
+            if (
+                !string.Equals(
+                    version,
+                    options.ExpectedDirectoryBuildPropsVersion,
+                    StringComparison.Ordinal
+                )
+            )
                 offenders.Add(
                     $"Directory.Build.props <Version> is '{version ?? "<missing>"}', expected "
                         + $"'{options.ExpectedDirectoryBuildPropsVersion}'"

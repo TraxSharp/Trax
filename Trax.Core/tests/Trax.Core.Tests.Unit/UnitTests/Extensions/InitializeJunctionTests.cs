@@ -26,7 +26,7 @@ public class InitializeJunctionTests : TestSetup
         junction.Should().NotBeNull();
 
         var result = await junction!.Run(input);
-        result.Should().Be(input.ToString());
+        result.Should().Be(input.ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
 
     [Theory]
@@ -86,36 +86,38 @@ public class InitializeJunctionTests : TestSetup
         act.Should().Throw<OperationCanceledException>();
     }
 
-    private class ThrowingConstructorJunction : Junction<int, string>
+    private sealed class ThrowingConstructorJunction : Junction<int, string>
     {
         public const string Reason = "the junction could not be built";
 
         public ThrowingConstructorJunction() => throw new InvalidOperationException(Reason);
 
-        public override Task<string> Run(int input) => Task.FromResult(input.ToString());
+        public override Task<string> Run(int input) =>
+            Task.FromResult(input.ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
 
-    private class CancellingConstructorJunction : Junction<int, string>
+    private sealed class CancellingConstructorJunction : Junction<int, string>
     {
         public CancellingConstructorJunction() => throw new OperationCanceledException();
 
-        public override Task<string> Run(int input) => Task.FromResult(input.ToString());
+        public override Task<string> Run(int input) =>
+            Task.FromResult(input.ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
 
-    private class TestTrain : Train<int, string>
+    private sealed class TestTrain : Train<int, string>
     {
         protected override async Task<Either<Exception, string>> Junctions() => Resolve();
     }
 
-    private class TestValidJunction : Junction<int, string>
+    private sealed class TestValidJunction : Junction<int, string>
     {
         public override async Task<string> Run(int input)
         {
-            return input.ToString();
+            return input.ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
     }
 
 #pragma warning disable CS9113 // Parameter is unread - intentionally invalid junction for testing
-    private class TestInvalidJunction(int _intInput, string _stringInput) { }
+    private sealed class TestInvalidJunction(int _intInput, string _stringInput);
 #pragma warning restore CS9113
 }

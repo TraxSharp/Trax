@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
@@ -45,7 +46,10 @@ public class CheckpointResumeTests : TestSetup
             .Tracks.Should()
             .ContainSingle()
             .Which.Should()
-            .Be(new TrackTaken<Source>("Papers", null), $"the route taken before it ({Adr})");
+            .Be(
+                new TrackTaken<Source>("Papers", FallbackReason: null),
+                $"the route taken before it ({Adr})"
+            );
     }
 
     [Test]
@@ -261,8 +265,8 @@ public class CheckpointResumeTests : TestSetup
         {
             Resume = new ResumePlan(
                 "Summarize#7",
-                false,
-                new Dictionary<string, RestoredCheckpoint>()
+                Inclusive: false,
+                new Dictionary<string, RestoredCheckpoint>(StringComparer.Ordinal)
             ),
         };
 
@@ -441,7 +445,9 @@ public class CheckpointResumeTests : TestSetup
             crash,
             round,
             With(store, new ScriptedDecider())
-        ).RunEither("graphs");
+        )
+            .RunEither("graphs")
+            .ConfigureAwait(false);
         first.IsLeft.Should().BeTrue();
 
         crash.Failing = false;
@@ -467,7 +473,7 @@ public class CheckpointResumeTests : TestSetup
 
         outcome.Refusal.Should().BeNull();
 
-        var restored = new Dictionary<string, RestoredCheckpoint>();
+        var restored = new Dictionary<string, RestoredCheckpoint>(StringComparer.Ordinal);
         if (outcome.MainCheckpoint is { } main)
             restored[""] = store.Restored(main);
         foreach (var (branch, node) in outcome.BranchCheckpoints)
@@ -498,7 +504,9 @@ public class CheckpointResumeTests : TestSetup
             if (weigh.Failing)
             {
                 if (weigh.FailsAfter is { } after)
-                    await after.WaitAsync(TimeSpan.FromSeconds(30));
+                    await after
+                        .WaitAsync(TimeSpan.FromSeconds(30), CancellationToken.None)
+                        .ConfigureAwait(false);
                 throw new TimeoutException("weighing timed out");
             }
 
@@ -518,7 +526,10 @@ public class CheckpointResumeTests : TestSetup
             var (found, weighed) = input;
             return Task.FromResult(
                 new Report(
-                    $"{found.Topic} from {found.Source}, {found.Pages} pages, weighed {weighed.Value}"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{found.Topic} from {found.Source}, {found.Pages} pages, weighed {weighed.Value}"
+                    )
                 )
             );
         }
@@ -563,7 +574,11 @@ public class CheckpointResumeTests : TestSetup
         public override Task<Brief> Run(Brief input)
         {
             ran.Note(nameof(Refine));
-            return Task.FromResult(new Brief($"{input.Topic}-v{round.Value}"));
+            return Task.FromResult(
+                new Brief(
+                    string.Create(CultureInfo.InvariantCulture, $"{input.Topic}-v{round.Value}")
+                )
+            );
         }
     }
 

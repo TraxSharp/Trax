@@ -4,6 +4,9 @@ using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
 using Trax.Core.Monad;
 using Trax.Core.Tests.Integration.Examples.Decisions;
+using static Trax.Core.Tests.Integration.Examples.Decisions.Lending;
+using static Trax.Core.Tests.Integration.Examples.Decisions.Moderation;
+using static Trax.Core.Tests.Integration.Examples.Decisions.SupportDesk;
 
 namespace Trax.Core.Tests.Integration.IntegrationTests;
 
@@ -32,7 +35,11 @@ public class DecisionExampleTests
     public async Task SupportDesk_AnOutageReport_PagesOnCall()
     {
         var resolution = await new TriageTicket(new KeywordTriageDecider()).Run(
-            new SupportRequest("cus_2", "Your API is down, total outage since 9am", null)
+            new SupportRequest(
+                "cus_2",
+                "Your API is down, total outage since 9am",
+                OrderTotal: null
+            )
         );
 
         resolution.Track.Should().Be("Escalate");
@@ -59,7 +66,10 @@ public class DecisionExampleTests
         var decider = new KeywordTriageDecider();
         var train = new TriageTicketObserved(decider, observer);
 
-        var resolution = await train.Run(new SupportRequest("cus_4", "please refund", 9m));
+        var resolution = await train.Run(
+            new SupportRequest("cus_4", "please refund", 9m),
+            CancellationToken.None
+        );
 
         resolution.Track.Should().Be("Otherwise");
         observer
@@ -75,7 +85,8 @@ public class DecisionExampleTests
         var decider = new ScriptedDecider().Choose(TicketTrack.SelfServe);
 
         await new TriageTicket(decider).Run(
-            new SupportRequest("cus_5", "  How do I export my invoices?  ", null)
+            new SupportRequest("cus_5", "  How do I export my invoices?  ", OrderTotal: null),
+            CancellationToken.None
         );
 
         var request = decider.Requests.Should().ContainSingle().Subject;
@@ -104,7 +115,10 @@ public class DecisionExampleTests
         var observer = new RecordingObserver();
         var train = new TriageTicketObserved(new KeywordTriageDecider(), observer);
 
-        await train.Run(new SupportRequest("cus_6", "I want a refund, charged twice", 20m));
+        await train.Run(
+            new SupportRequest("cus_6", "I want a refund, charged twice", 20m),
+            CancellationToken.None
+        );
 
         var decided = observer.Decisions.Should().ContainSingle().Subject;
         decided.RunId.Should().Be(train.ExternalId);
@@ -122,7 +136,7 @@ public class DecisionExampleTests
                     train.ExternalId,
                     typeof(TicketTrack),
                     "Refund",
-                    null
+                    FallbackReason: null
                 )
             );
     }
@@ -211,7 +225,10 @@ public class DecisionExampleTests
     {
         var decider = new ScriptedDecider().Choose(Underwriting.ManualReview, confidence: 0.1);
 
-        var decision = await new UnderwriteLoan(decider).Run(new LoanApplication("a4", 690, 0.4m));
+        var decision = await new UnderwriteLoan(decider).Run(
+            new LoanApplication("a4", 690, 0.4m),
+            CancellationToken.None
+        );
 
         decision.Outcome.Should().Be("assigned to an underwriter");
     }
@@ -260,7 +277,10 @@ public class DecisionExampleTests
             .Choose(Verdict.Allow)
             .Score<Severity>(0.1);
 
-        var outcome = await new ModeratePost(decider).Run(new Post("p1", "nice cat"));
+        var outcome = await new ModeratePost(decider).Run(
+            new Post("p1", "nice cat"),
+            CancellationToken.None
+        );
 
         outcome.Action.Should().Be("published");
         decider
@@ -283,7 +303,7 @@ public class DecisionExampleTests
             .Choose(Verdict.Allow)
             .Score<Severity>(0);
 
-        (await new ModeratePost(decider).Run(new Post("p2", "...")))
+        (await new ModeratePost(decider).Run(new Post("p2", "..."), CancellationToken.None))
             .Action.Should()
             .Be("taken down");
     }
@@ -296,7 +316,7 @@ public class DecisionExampleTests
             .Choose(Verdict.Allow)
             .Score<Severity>(0);
 
-        (await new ModeratePost(decider).Run(new Post("p3", "...")))
+        (await new ModeratePost(decider).Run(new Post("p3", "..."), CancellationToken.None))
             .Action.Should()
             .Be("paged trust and safety", "0.5 is between the No bar (0.3) and the Yes bar (0.7)");
     }
@@ -311,7 +331,9 @@ public class DecisionExampleTests
             .Choose(Verdict.Review)
             .Score<Severity>(severity);
 
-        (await new ModeratePost(decider).Run(new Post("p4", "..."))).Action.Should().Be(action);
+        (await new ModeratePost(decider).Run(new Post("p4", "..."), CancellationToken.None))
+            .Action.Should()
+            .Be(action);
     }
 
     [Test]
@@ -345,7 +367,8 @@ public class DecisionExampleTests
         var slow = new ScriptedDecider().YesNo<ContainsThreat>(0.04);
 
         var outcome = await new ModeratePost(new CascadingDecider(fast, slow)).Run(
-            new Post("p5", "...")
+            new Post("p5", "..."),
+            CancellationToken.None
         );
 
         outcome.Action.Should().Be("published");
@@ -385,7 +408,8 @@ public class DecisionExampleTests
         var observer = new RecordingObserver();
 
         var outcome = await new ShadowedModeration(live, candidate, observer).Run(
-            new Post("p6", "...")
+            new Post("p6", "..."),
+            CancellationToken.None
         );
 
         outcome.Action.Should().Be("published", "the live decider's answer is the one acted on");
@@ -412,7 +436,8 @@ public class DecisionExampleTests
         var observer = new RecordingObserver();
 
         var outcome = await new ShadowedModeration(live, candidate, observer).Run(
-            new Post("p7", "...")
+            new Post("p7", "..."),
+            CancellationToken.None
         );
 
         outcome.Action.Should().Be("published");
@@ -442,7 +467,10 @@ public class DecisionExampleTests
         var decider = new ScriptedDecider().Choose(Underwriting.Decline);
         var observer = new RecordingObserver();
 
-        var decision = await new ReplayedUnderwriting(decider, journal, observer).Run(application);
+        var decision = await new ReplayedUnderwriting(decider, journal, observer).Run(
+            application,
+            CancellationToken.None
+        );
 
         decision.Outcome.Should().Be("offer made");
         decider.Requests.Should().BeEmpty();

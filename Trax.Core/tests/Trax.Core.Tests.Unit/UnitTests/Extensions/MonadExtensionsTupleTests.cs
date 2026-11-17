@@ -72,35 +72,35 @@ public class MonadExtensionsTupleTests : TestSetup
 
     private static Trax.Core.Monad.Monad<int, string> NewActivated() => new TestTrain().Activate(0);
 
-    private interface IA { }
+    private interface IA;
 
-    private interface IB { }
+    private interface IB;
 
-    private interface IC { }
+    private interface IC;
 
-    private interface ID { }
+    private interface ID;
 
-    private interface IE { }
+    private interface IE;
 
-    private interface IF { }
+    private interface IF;
 
-    private interface IG { }
+    private interface IG;
 
-    private class A : IA { }
+    private sealed class A : IA;
 
-    private class B : IB { }
+    private sealed class B : IB;
 
-    private class C : IC { }
+    private sealed class C : IC;
 
-    private class D : ID { }
+    private sealed class D : ID;
 
-    private class E : IE { }
+    private sealed class E : IE;
 
-    private class F : IF { }
+    private sealed class F : IF;
 
-    private class G : IG { }
+    private sealed class G : IG;
 
-    private class TestTrain : Train<int, string>
+    private sealed class TestTrain : Train<int, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             throw new NotImplementedException();

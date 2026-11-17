@@ -113,7 +113,7 @@ public partial class Monad<TInput, TReturn>
 
         if (Recorder is not null)
         {
-            RecordDecide(question, step);
+            _ = RecordDecide(question, step);
             return RecordRouting<TTrack>(
                 ChainStepKind.Switch,
                 step,
@@ -165,7 +165,7 @@ public partial class Monad<TInput, TReturn>
         var declared = gate(new GateTracks<TInput, TReturn>());
         var question = new Questions<TState>()
             .Add(
-                new YesNoSpec<TQuestion>(asking, null, null)
+                new YesNoSpec<TQuestion>(asking, yes: null, no: null)
                 {
                     Route = d => declared.Route(((YesNoDecision<TQuestion>)d).Probability)?.Name,
                 }
@@ -175,7 +175,7 @@ public partial class Monad<TInput, TReturn>
 
         if (Recorder is not null)
         {
-            RecordDecide(question, step);
+            _ = RecordDecide(question, step);
             return RecordRouting<TQuestion>(
                 ChainStepKind.Gate,
                 step,
@@ -238,7 +238,7 @@ public partial class Monad<TInput, TReturn>
 
         if (Recorder is not null)
         {
-            RecordDecide(question, step);
+            _ = RecordDecide(question, step);
             return RecordRouting<TLevel>(
                 ChainStepKind.Scale,
                 step,
@@ -267,7 +267,7 @@ public partial class Monad<TInput, TReturn>
     )
     {
         if (Exception is null && trackProblems.ToList() is { Count: > 0 } problems)
-            return Refuse(step, $"{step} {string.Join(" ", problems)}");
+            return Refuse(step, $"{step} {string.Join(' ', problems)}");
 
         var monad = await DecideAsync(question, step).ConfigureAwait(false);
         return await route(monad).ConfigureAwait(false);
@@ -293,7 +293,7 @@ public partial class Monad<TInput, TReturn>
 
         // A declaration the startup check refuses is refused here too, for a host that skips it.
         if (questions.Problems.ToList() is { Count: > 0 } problems)
-            return Refuse(step, $"{step} {string.Join(" ", problems)}");
+            return Refuse(step, $"{step} {string.Join(' ', problems)}");
 
         foreach (var spec in questions.Specs)
             if (!_askedAbout.TryAdd(spec.Key, spec.On) && _askedAbout[spec.Key] != spec.On)
@@ -312,16 +312,22 @@ public partial class Monad<TInput, TReturn>
         var specs = questions.Specs;
         var nodeIds = specs.ToDictionary(
             s => s.Key,
-            s => Nodes.Next(ChainNodeScope.DecideKey(s.DecisionType))
+            s => Nodes.Next(ChainNodeScope.DecideKey(s.DecisionType)),
+            StringComparer.Ordinal
         );
-        var answers = new Dictionary<string, Answer>();
-        var occurrences = new Dictionary<string, int>();
-        var replayed = new System.Collections.Generic.HashSet<string>();
-        var replayRefused = new Dictionary<string, string>();
-        var questionsAsked = specs.ToDictionary(s => s.Key, s => s.ToQuestion());
+        var answers = new Dictionary<string, Answer>(StringComparer.Ordinal);
+        var occurrences = new Dictionary<string, int>(StringComparer.Ordinal);
+        var replayed = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
+        var replayRefused = new Dictionary<string, string>(StringComparer.Ordinal);
+        var questionsAsked = specs.ToDictionary(
+            s => s.Key,
+            s => s.ToQuestion(),
+            StringComparer.Ordinal
+        );
         var fingerprints = specs.ToDictionary(
             s => s.Key,
-            s => QuestionFingerprint.Of(step, typeof(TState), questionsAsked[s.Key])
+            s => QuestionFingerprint.Of(step, typeof(TState), questionsAsked[s.Key]),
+            StringComparer.Ordinal
         );
 
         // The state hashed once, on first need and before the decider or any step after this one
@@ -372,11 +378,14 @@ public partial class Monad<TInput, TReturn>
                 // repeat what that run did, so the decider is asked as if nothing had been
                 // recorded.
                 // The reason names what does not fit, never the recorded answer itself.
-                var problem =
-                    earlier.Fingerprint != fingerprints[spec.Key]
-                        ? "it was given to the question as an earlier version of the chain asked "
-                            + "it, and the question or the steps asking it have changed since"
-                        : spec.ReplayProblem(earlier.Answer);
+                var problem = !string.Equals(
+                    earlier.Fingerprint,
+                    fingerprints[spec.Key],
+                    StringComparison.Ordinal
+                )
+                    ? "it was given to the question as an earlier version of the chain asked "
+                        + "it, and the question or the steps asking it have changed since"
+                    : spec.ReplayProblem(earlier.Answer);
 
                 if (problem is not null)
                 {
@@ -493,7 +502,7 @@ public partial class Monad<TInput, TReturn>
             byte[]? snapshot = null;
             string? uncopied = null;
 
-            if (shadowDeciders.Any(s => s.Shadow is not null))
+            if (shadowDeciders.Exists(s => s.Shadow is not null))
                 try
                 {
                     snapshot = StateCopy.Snapshot(state!);
@@ -513,7 +522,7 @@ public partial class Monad<TInput, TReturn>
                     (
                         Decider: s.Type,
                         Asked: s.Shadow is null
-                            ? Task.FromResult(new ShadowResult(s.Type, null, s.Error))
+                            ? Task.FromResult(new ShadowResult(s.Type, Answers: null, s.Error))
                         : snapshot is null ? Unasked(s.Type, s.Shadow, uncopied!)
                         : AskShadow(
                             s.Type,
@@ -615,7 +624,7 @@ public partial class Monad<TInput, TReturn>
                 step,
                 $"{at}: "
                     + string.Join(
-                        " ",
+                        ' ',
                         refused.Select(
                             (r, i) => (i == 0 ? "the decider " : "The decider ") + r.Sentence
                         )
@@ -640,12 +649,12 @@ public partial class Monad<TInput, TReturn>
                                 s.Decider,
                                 shadow,
                                 spec.SameOutcome(answer, shadow),
-                                null
+                                Error: null
                             )
                             : new ShadowAnswer(
                                 s.Decider,
-                                null,
-                                false,
+                                Answer: null,
+                                Agrees: false,
                                 s.Error ?? $"gave no answer to '{spec.Key}'"
                             )
                     )
@@ -734,14 +743,14 @@ public partial class Monad<TInput, TReturn>
     private async Task<Shadow?> ResolveShadow(Type type)
     {
         if (Memory.GetValueOrDefault(type) is { } held)
-            return held is IDecider given ? new Shadow(given, null) : null;
+            return held is IDecider given ? new Shadow(given, scope: null) : null;
 
         if (Memory.GetValueOrDefault(typeof(IServiceProvider)) is not IServiceProvider container)
             return null;
 
         if (container.GetService(typeof(IServiceScopeFactory)) is not IServiceScopeFactory scopes)
             return container.GetService(type) is IDecider unscoped
-                ? new Shadow(unscoped, null)
+                ? new Shadow(unscoped, scope: null)
                 : null;
 
         var scope = scopes.CreateAsyncScope();
@@ -852,7 +861,7 @@ public partial class Monad<TInput, TReturn>
             // The shadow's problem, not the run's.
         }
 
-        return new ShadowResult(deciderType, null, why);
+        return new ShadowResult(deciderType, Answers: null, why);
     }
 
     /// <summary>
@@ -887,19 +896,19 @@ public partial class Monad<TInput, TReturn>
                     }
                     catch (Exception e)
                     {
-                        return new ShadowResult(deciderType, null, Uncopied(e.Message));
+                        return new ShadowResult(deciderType, Answers: null, Uncopied(e.Message));
                     }
 
                     var result = await shadow
                         .Decider.Decide(request with { State = copy }, cancellationToken)
                         .ConfigureAwait(false);
-                    return new ShadowResult(deciderType, result?.Answers, null);
+                    return new ShadowResult(deciderType, result?.Answers, Error: null);
                 }
                 catch (Exception e)
                 {
                     // Including an ObjectDisposedException from a scope disposed under a shadow
                     // that outlived its grace period: by then nothing reads this result.
-                    return new ShadowResult(deciderType, null, $"failed: {e.Message}");
+                    return new ShadowResult(deciderType, Answers: null, $"failed: {e.Message}");
                 }
                 finally
                 {
@@ -954,7 +963,7 @@ public partial class Monad<TInput, TReturn>
                     ? s.Asked.Result
                     : new ShadowResult(
                         s.Decider,
-                        null,
+                        Answers: null,
                         $"did not answer within {QuestionSpec.Format(wait.TotalSeconds)}s of the live "
                             + "decider's answer, "
                             + "so it was cancelled and not waited for"
@@ -1020,7 +1029,7 @@ public partial class Monad<TInput, TReturn>
         CancellationToken.ThrowIfCancellationRequested();
 
         if (SwitchProblems(tracks).Concat(unasked ?? []).ToList() is { Count: > 0 } problems)
-            return Refuse(step, $"{step} {string.Join(" ", problems)}");
+            return Refuse(step, $"{step} {string.Join(' ', problems)}");
 
         if (
             await SkipRouting<TTrack>(ChainStepKind.Switch, step, tracks.Set)
@@ -1058,7 +1067,7 @@ public partial class Monad<TInput, TReturn>
         CancellationToken.ThrowIfCancellationRequested();
 
         if (gate.Problems.Concat(unasked ?? []).ToList() is { Count: > 0 } problems)
-            return Refuse(step, $"{step} {string.Join(" ", problems)}");
+            return Refuse(step, $"{step} {string.Join(' ', problems)}");
 
         if (
             await SkipRouting<TQuestion>(ChainStepKind.Gate, step, gate.Set)
@@ -1078,7 +1087,7 @@ public partial class Monad<TInput, TReturn>
                 ChainStepKind.Gate,
                 step,
                 gate.Route(p),
-                null,
+                fallbackReason: null,
                 $"the probability of yes was {QuestionSpec.Format(p)}, between the No bar "
                     + $"({QuestionSpec.Format(gate.NoBelow)}) and the Yes bar "
                     + $"({QuestionSpec.Format(gate.YesAtLeast)}), and it declares no Unsure track."
@@ -1099,7 +1108,7 @@ public partial class Monad<TInput, TReturn>
         CancellationToken.ThrowIfCancellationRequested();
 
         if (scale.Problems.Concat(unasked ?? []).ToList() is { Count: > 0 } problems)
-            return Refuse(step, $"{step} {string.Join(" ", problems)}");
+            return Refuse(step, $"{step} {string.Join(' ', problems)}");
 
         if (
             await SkipRouting<TLevel>(ChainStepKind.Scale, step, scale.Set).ConfigureAwait(false) is
@@ -1221,7 +1230,7 @@ public partial class Monad<TInput, TReturn>
         var first = recorder.Steps.Count;
 
         if (questions.Specs.Count == 0)
-            recorder.Record(ChainStepKind.Decide, questions.Decider, typeof(TState), null);
+            recorder.Record(ChainStepKind.Decide, questions.Decider, typeof(TState), tOut: null);
 
         foreach (var spec in questions.Specs)
             recorder.Record(
@@ -1333,10 +1342,10 @@ public partial class Monad<TInput, TReturn>
         var recorder = Recorder!;
 
         foreach (var problem in problems)
-            recorder.RefuseStep(kind, null, $"{step} {problem}");
+            recorder.RefuseStep(kind, junction: null, $"{step} {problem}");
 
         var index = recorder.Steps.Count;
-        recorder.Record(kind, null, decision, typeof(TrackTaken<TKey>));
+        recorder.Record(kind, junction: null, decision, typeof(TrackTaken<TKey>));
 
         var recorded = new List<ChainTrack>();
 

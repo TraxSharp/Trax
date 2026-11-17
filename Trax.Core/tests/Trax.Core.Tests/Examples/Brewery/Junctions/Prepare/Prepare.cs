@@ -13,7 +13,8 @@ public class Prepare(IFerment _ferment) : Junction<Ingredients, BrewingJug>, IPr
     {
         const int gallonWater = 1;
 
-        var gallonAppleJuice = await Boil(gallonWater, input.Apples, input.BrownSugar);
+        var gallonAppleJuice = await Boil(gallonWater, input.Apples, input.BrownSugar)
+            .ConfigureAwait(false);
 
         if (gallonAppleJuice.IsLeft)
             throw gallonAppleJuice.Swap().ValueUnsafe();
@@ -21,7 +22,7 @@ public class Prepare(IFerment _ferment) : Junction<Ingredients, BrewingJug>, IPr
         return new BrewingJug() { Gallons = gallonAppleJuice.ValueUnsafe(), Ingredients = input };
     }
 
-    private async Task<Either<TrainException, int>> Boil(
+    private static async Task<Either<TrainException, int>> Boil(
         int gallonWater,
         int numApples,
         int ozBrownSugar

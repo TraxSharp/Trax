@@ -320,7 +320,9 @@ public class TrainTests : TestSetup
         // Act
         // Assert
 
-        await Assert.ThrowsAsync<TrainException>(async () => await train.Run(Unit.Default));
+        await Assert.ThrowsAsync<TrainException>(async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false)
+        );
     }
 
     [Theory]
@@ -334,7 +336,7 @@ public class TrainTests : TestSetup
         var train = new ChainTestWithLoggerProvider(loggerProvider, testService);
 
         // Act
-        var result = await train.Run(Unit.Default);
+        var result = await train.Run(Unit.Default, CancellationToken.None);
 
         // Assert
         result.Should().Be(Unit.Default);
@@ -352,7 +354,7 @@ public class TrainTests : TestSetup
         var train = new ChainTestWithServiceProvider(serviceProvider);
 
         // Act
-        var result = await train.Run(Unit.Default);
+        var result = await train.Run(Unit.Default, CancellationToken.None);
 
         // Assert
         result.Should().Be(Unit.Default);
@@ -367,60 +369,60 @@ public class TrainTests : TestSetup
         var train = new MemoryInterfaceTest();
 
         // Act
-        var result = await train.Run(inheritedObject);
+        var result = await train.Run(inheritedObject, CancellationToken.None);
 
         // Assert
         result.Should().Be(Unit.Default);
     }
 
-    private class StubFerment : Junction<BrewingJug, Unit>, IFerment
+    private sealed class StubFerment : Junction<BrewingJug, Unit>, IFerment
     {
         public override Task<Unit> Run(BrewingJug input) => Task.FromResult(Unit.Default);
     }
 
-    private class ThrowsJunction : Junction<Unit, Unit>
+    private sealed class ThrowsJunction : Junction<Unit, Unit>
     {
         public override Task<Unit> Run(Unit input) =>
             throw new TrainException("This is a train exception.");
     }
 
-    private class OuterProperty
+    private sealed class OuterProperty
     {
         public string OuterString { get; set; } = null!;
 
         public InnerProperty InnerProperty { get; set; } = null!;
     }
 
-    private class InnerProperty
+    private sealed class InnerProperty
     {
         public int Number { get; set; }
     }
 
-    private class OuterField
+    private sealed class OuterField
     {
         public string OuterString = null!;
 
         public InnerField InnerProperty = null!;
     }
 
-    private class InnerField
+    private sealed class InnerField
     {
         public int Number;
     }
 
-    private class AccessInnerPropertyTypeTrain : Train<OuterProperty, InnerProperty>
+    private sealed class AccessInnerPropertyTypeTrain : Train<OuterProperty, InnerProperty>
     {
         protected override Task<Either<Exception, InnerProperty>> Junctions() =>
             Task.FromResult(Extract<OuterProperty, InnerProperty>().Resolve());
     }
 
-    private class AccessInnerFieldTypeTrain : Train<OuterField, InnerField>
+    private sealed class AccessInnerFieldTypeTrain : Train<OuterField, InnerField>
     {
         protected override Task<Either<Exception, InnerField>> Junctions() =>
             Task.FromResult(Extract<OuterField, InnerField>().Resolve());
     }
 
-    private class TwoTupleJunctionTest : Junction<(Ingredients, BrewingJug), Unit>
+    private sealed class TwoTupleJunctionTest : Junction<(Ingredients, BrewingJug), Unit>
     {
         public override async Task<Unit> Run((Ingredients, BrewingJug) input)
         {
@@ -436,7 +438,7 @@ public class TrainTests : TestSetup
     /// <summary>
     /// Tests to ensure that tuple casting to interface works correctly
     /// </summary>
-    private class TwoTupleJunctionInterfaceTest : Junction<(Ingredients, IBrewingJug), Unit>
+    private sealed class TwoTupleJunctionInterfaceTest : Junction<(Ingredients, IBrewingJug), Unit>
     {
         public override async Task<Unit> Run((Ingredients, IBrewingJug) input)
         {
@@ -449,7 +451,7 @@ public class TrainTests : TestSetup
         }
     }
 
-    private class CastBrewingJug : Junction<IBrewingJug, BrewingJug>
+    private sealed class CastBrewingJug : Junction<IBrewingJug, BrewingJug>
     {
         public override async Task<BrewingJug> Run(IBrewingJug input)
         {
@@ -458,7 +460,7 @@ public class TrainTests : TestSetup
         }
     }
 
-    private class TupleReturnJunction : Junction<Unit, (bool, double, object)>
+    private sealed class TupleReturnJunction : Junction<Unit, (bool, double, object)>
     {
         public override async Task<(bool, double, object)> Run(Unit input)
         {
@@ -466,7 +468,7 @@ public class TrainTests : TestSetup
         }
     }
 
-    private class ThreeTupleJunctionTest : Junction<(Ingredients, BrewingJug, Unit), Unit>
+    private sealed class ThreeTupleJunctionTest : Junction<(Ingredients, BrewingJug, Unit), Unit>
     {
         public override async Task<Unit> Run((Ingredients, BrewingJug, Unit) input)
         {
@@ -479,13 +481,13 @@ public class TrainTests : TestSetup
         }
     }
 
-    private interface IFirstInheritedInterface { }
+    private interface IFirstInheritedInterface;
 
-    private interface ISecondInheritedInterface { }
+    private interface ISecondInheritedInterface;
 
-    private class InheritedObject : IFirstInheritedInterface, ISecondInheritedInterface { }
+    private sealed class InheritedObject : IFirstInheritedInterface, ISecondInheritedInterface;
 
-    private class TestMemoryJunction : Junction<ISecondInheritedInterface, Unit>
+    private sealed class TestMemoryJunction : Junction<ISecondInheritedInterface, Unit>
     {
         public override async Task<Unit> Run(ISecondInheritedInterface input)
         {
@@ -493,12 +495,12 @@ public class TrainTests : TestSetup
         }
     }
 
-    private interface ITestService { }
+    private interface ITestService;
 
-    private class TestService : ITestService { }
+    private sealed class TestService : ITestService;
 
 #pragma warning disable CS9113 // Parameter is unread - injected via DI for testing
-    private class LoggerTest(ILogger<LoggerTest> logger, ITestService _testService)
+    private sealed class LoggerTest(ILogger<LoggerTest> logger, ITestService _testService)
         : Junction<Unit, Unit>
 #pragma warning restore CS9113
     {
@@ -510,7 +512,7 @@ public class TrainTests : TestSetup
         }
     }
 
-    private class ChainTest(IBrew brew, IPrepare prepare, IBottle bottle)
+    private sealed class ChainTest(IBrew brew, IPrepare prepare, IBottle bottle)
         : Train<Ingredients, List<GlassBottle>>
     {
         protected override Task<Either<Exception, List<GlassBottle>>> Junctions() =>
@@ -523,7 +525,7 @@ public class TrainTests : TestSetup
                 .Resolve();
     }
 
-    private class MemoryInterfaceTest : Train<IFirstInheritedInterface, Unit>
+    private sealed class MemoryInterfaceTest : Train<IFirstInheritedInterface, Unit>
     {
         protected override Task<Either<Exception, Unit>> Junctions() =>
 #pragma warning disable CHAIN001 // Analyzer sees TInput as IFirstInheritedInterface; runtime concrete type also implements ISecondInheritedInterface
@@ -532,7 +534,7 @@ public class TrainTests : TestSetup
             .Resolve();
     }
 
-    private class ChainTestWithNoInputs : Train<Ingredients, List<GlassBottle>>
+    private sealed class ChainTestWithNoInputs : Train<Ingredients, List<GlassBottle>>
     {
         protected override Task<Either<Exception, List<GlassBottle>>> Junctions()
         {
@@ -549,7 +551,7 @@ public class TrainTests : TestSetup
         }
     }
 
-    private class ChainTestWithInterfaceTuple : Train<Ingredients, List<GlassBottle>>
+    private sealed class ChainTestWithInterfaceTuple : Train<Ingredients, List<GlassBottle>>
     {
         protected override Task<Either<Exception, List<GlassBottle>>> Junctions()
         {
@@ -567,7 +569,7 @@ public class TrainTests : TestSetup
         }
     }
 
-    private class ChainTestWithOneTypedService : Train<Ingredients, List<GlassBottle>>
+    private sealed class ChainTestWithOneTypedService : Train<Ingredients, List<GlassBottle>>
     {
         protected override Task<Either<Exception, List<GlassBottle>>> Junctions()
         {
@@ -590,7 +592,7 @@ public class TrainTests : TestSetup
         }
     }
 
-    private class ChainTestWithTwoTypedServices : Train<Ingredients, List<GlassBottle>>
+    private sealed class ChainTestWithTwoTypedServices : Train<Ingredients, List<GlassBottle>>
     {
         protected override Task<Either<Exception, List<GlassBottle>>> Junctions()
         {
@@ -614,7 +616,7 @@ public class TrainTests : TestSetup
         }
     }
 
-    private class ChainTestWithMockedService : Train<Ingredients, List<GlassBottle>>
+    private sealed class ChainTestWithMockedService : Train<Ingredients, List<GlassBottle>>
     {
         protected override Task<Either<Exception, List<GlassBottle>>> Junctions()
         {
@@ -631,13 +633,14 @@ public class TrainTests : TestSetup
         }
     }
 
-    private class TrainTestWithTupleInput : Train<(int, string, object), (bool, double, object)>
+    private sealed class TrainTestWithTupleInput
+        : Train<(int, string, object), (bool, double, object)>
     {
         protected override Task<Either<Exception, (bool, double, object)>> Junctions() =>
             Chain<TupleReturnJunction>().ShortCircuit<TupleReturnJunction>().Resolve();
     }
 
-    private class ChainTestWithUnitInput : Train<Ingredients, List<GlassBottle>>
+    private sealed class ChainTestWithUnitInput : Train<Ingredients, List<GlassBottle>>
     {
         protected override Task<Either<Exception, List<GlassBottle>>> Junctions()
         {
@@ -655,7 +658,7 @@ public class TrainTests : TestSetup
         }
     }
 
-    private class ChainTestWithShortCircuit(IPrepare prepare, IFerment ferment)
+    private sealed class ChainTestWithShortCircuit(IPrepare prepare, IFerment ferment)
         : Train<Ingredients, List<GlassBottle>>
     {
         protected override Task<Either<Exception, List<GlassBottle>>> Junctions()
@@ -673,7 +676,7 @@ public class TrainTests : TestSetup
         }
     }
 
-    private class ChainTestWithShortCircuitStaysLeft(IPrepare prepare, IFerment ferment)
+    private sealed class ChainTestWithShortCircuitStaysLeft(IPrepare prepare, IFerment ferment)
         : Train<Ingredients, List<GlassBottle>>
     {
         protected override Task<Either<Exception, List<GlassBottle>>> Junctions()
@@ -691,13 +694,13 @@ public class TrainTests : TestSetup
         }
     }
 
-    private class ChainTestWithException : Train<Unit, Unit>
+    private sealed class ChainTestWithException : Train<Unit, Unit>
     {
         protected override Task<Either<Exception, Unit>> Junctions() =>
             Chain<ThrowsJunction>().Resolve();
     }
 
-    private class ChainTestWithLoggerProvider(
+    private sealed class ChainTestWithLoggerProvider(
         ILoggerFactory loggerFactory,
         ITestService testService
     ) : Train<Unit, Unit>
@@ -706,7 +709,8 @@ public class TrainTests : TestSetup
             AddServices(loggerFactory, testService).Chain<LoggerTest>().Resolve();
     }
 
-    private class ChainTestWithServiceProvider(IServiceProvider serviceProvider) : Train<Unit, Unit>
+    private sealed class ChainTestWithServiceProvider(IServiceProvider serviceProvider)
+        : Train<Unit, Unit>
     {
         protected override Task<Either<Exception, Unit>> Junctions() =>
             AddServices(serviceProvider).Chain<LoggerTest>().Resolve();

@@ -70,7 +70,7 @@ public class PublicApiSurfaceTests
                 continue;
 
             // An analyzer loads into the compiler; it has no API a consumer calls.
-            if (name == "Trax.Core.Analyzers")
+            if (string.Equals(name, "Trax.Core.Analyzers", StringComparison.Ordinal))
                 continue;
 
             if (!File.Exists(Path.Combine(BaselineSourceDir, $"{name}.received.txt")))
@@ -125,7 +125,8 @@ public class PublicApiSurfaceTests
         var baseline = File.ReadAllText(baselinePath);
 
         // Normalise line endings + trailing whitespace for cross-platform stability.
-        string Normalize(string s) => s.Replace("\r\n", "\n").TrimEnd() + "\n";
+        string Normalize(string s) =>
+            s.Replace("\r\n", "\n", StringComparison.Ordinal).TrimEnd() + "\n";
 
         Normalize(current)
             .Should()

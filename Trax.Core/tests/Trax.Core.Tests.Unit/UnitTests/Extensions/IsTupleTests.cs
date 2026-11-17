@@ -88,7 +88,10 @@ public class IsTupleTests : TestSetup
     public async Task TestTupleWithGenericTypeIsTuple()
     {
         // Arrange
-        var genericTuple = (new List<int>(), new Dictionary<string, int>()).GetType();
+        var genericTuple = (
+            new List<int>(),
+            new Dictionary<string, int>(StringComparer.Ordinal)
+        ).GetType();
 
         // Act
         var result = genericTuple.IsTuple();
@@ -123,7 +126,7 @@ public class IsTupleTests : TestSetup
         result.Should().BeFalse();
     }
 
-    private class ClassWithTupleField
+    private sealed class ClassWithTupleField
     {
         public (int, string) TupleField = default;
     }

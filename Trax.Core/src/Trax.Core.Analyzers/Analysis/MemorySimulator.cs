@@ -129,6 +129,10 @@ internal sealed class MemorySimulator
 
     private static bool IsUnit(ITypeSymbol type)
     {
-        return type.ToDisplayString() == UnitMetadataName;
+        return string.Equals(
+            type.ToDisplayString(),
+            UnitMetadataName,
+            System.StringComparison.Ordinal
+        );
     }
 }

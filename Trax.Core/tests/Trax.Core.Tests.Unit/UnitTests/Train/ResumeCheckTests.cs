@@ -119,7 +119,14 @@ public class ResumeCheckTests : TestSetup
         string[] written = ["Checkpoint<Findings>#0"];
 
         ChainVerification
-            .CheckResume(chain, typeof(string), typeof(Report), t => t.IsInterface, written, null)
+            .CheckResume(
+                chain,
+                typeof(string),
+                typeof(Report),
+                t => t.IsInterface,
+                written,
+                resumeAt: null
+            )
             .CanResume.Should()
             .BeTrue("the checkpoint holds the route when the store keeps it");
 
@@ -129,7 +136,7 @@ public class ResumeCheckTests : TestSetup
             typeof(Report),
             t => t.IsInterface,
             written,
-            null,
+            resumeAt: null,
             withheld: key => key == typeof(Source)
         );
 

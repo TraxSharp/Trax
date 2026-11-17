@@ -25,7 +25,7 @@ public class AddTupleToMemoryTests : TestSetup
         // Assert
         monad.Exception.Should().BeNull();
         monad.Memory.Count.Should().Be(47); // Unit is always added, along with input.
-        monad.Memory.Values.Should().Contain(false);
+        monad.Memory.Values.Should().Contain(expected: false);
         monad.Memory.Values.Should().Contain("hello");
     }
 
@@ -126,7 +126,7 @@ public class AddTupleToMemoryTests : TestSetup
         monad.Memory.Values.Should().Contain("second");
     }
 
-    private class TestTrain : Train<int, string>
+    private sealed class TestTrain : Train<int, string>
     {
         protected override async Task<Either<Exception, string>> Junctions() => Resolve();
     }

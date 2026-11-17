@@ -17,7 +17,11 @@ internal static class LoggerExtensions
         typeof(LoggerFactoryExtensions)
             .GetMethods(BindingFlags.Static | BindingFlags.Public)
             .First(m =>
-                m.Name == nameof(LoggerFactoryExtensions.CreateLogger)
+                string.Equals(
+                    m.Name,
+                    nameof(LoggerFactoryExtensions.CreateLogger),
+                    StringComparison.Ordinal
+                )
                 && m.GetParameters().Length == 1
                 && m.IsGenericMethod
             )

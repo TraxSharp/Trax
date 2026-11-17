@@ -39,7 +39,13 @@ public sealed class TrainChainAnalyzer : DiagnosticAnalyzer
             return;
 
         // Verify the receiver is a Train<,> subclass
-        var methodSymbol = context.SemanticModel.GetSymbolInfo(invocation).Symbol as IMethodSymbol;
+        var methodSymbol =
+            context
+                .SemanticModel.GetSymbolInfo(
+                    invocation,
+                    cancellationToken: context.CancellationToken
+                )
+                .Symbol as IMethodSymbol;
         if (methodSymbol?.ContainingType == null)
             return;
 
@@ -53,7 +59,7 @@ public sealed class TrainChainAnalyzer : DiagnosticAnalyzer
             return;
 
         // Verify chain starts with Activate
-        if (calls[0].MethodName != "Activate")
+        if (!string.Equals(calls[0].MethodName, "Activate", System.StringComparison.Ordinal))
             return;
 
         // Get monad type parameters: Monad<TInput, TReturn>
@@ -219,7 +225,10 @@ public sealed class TrainChainAnalyzer : DiagnosticAnalyzer
         // Skip the first argument (TInput, already seeded via Initialize)
         for (var i = 1; i < arguments.Count; i++)
         {
-            var typeInfo = context.SemanticModel.GetTypeInfo(arguments[i].Expression);
+            var typeInfo = context.SemanticModel.GetTypeInfo(
+                arguments[i].Expression,
+                cancellationToken: context.CancellationToken
+            );
             if (typeInfo.Type != null)
             {
                 memory.AddType(typeInfo.Type);
@@ -270,7 +279,7 @@ public sealed class TrainChainAnalyzer : DiagnosticAnalyzer
     {
         // Quick syntax check before doing expensive semantic analysis
         var methodName = GetMethodName(invocation);
-        if (methodName != "Resolve")
+        if (!string.Equals(methodName, "Resolve", System.StringComparison.Ordinal))
             return false;
 
         var symbolInfo = semanticModel.GetSymbolInfo(invocation);
@@ -293,8 +302,12 @@ public sealed class TrainChainAnalyzer : DiagnosticAnalyzer
             if (
                 current.IsGenericType
                 && current.TypeArguments.Length == 2
-                && current.Name == MonadTypeName
-                && current.ContainingNamespace?.ToDisplayString() == MonadNamespace
+                && string.Equals(current.Name, MonadTypeName, System.StringComparison.Ordinal)
+                && string.Equals(
+                    current.ContainingNamespace?.ToDisplayString(),
+                    MonadNamespace,
+                    System.StringComparison.Ordinal
+                )
             )
             {
                 return current;

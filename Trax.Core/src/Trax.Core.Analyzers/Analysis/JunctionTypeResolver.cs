@@ -23,8 +23,12 @@ internal static class JunctionTypeResolver
             if (
                 iface.IsGenericType
                 && iface.TypeArguments.Length == 2
-                && iface.Name == IJunctionTypeName
-                && iface.ContainingNamespace?.ToDisplayString() == IJunctionNamespace
+                && string.Equals(iface.Name, IJunctionTypeName, System.StringComparison.Ordinal)
+                && string.Equals(
+                    iface.ContainingNamespace?.ToDisplayString(),
+                    IJunctionNamespace,
+                    System.StringComparison.Ordinal
+                )
             )
             {
                 return (iface.TypeArguments[0], iface.TypeArguments[1]);

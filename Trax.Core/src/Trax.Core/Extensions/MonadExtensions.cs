@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
@@ -141,7 +142,7 @@ internal static class MonadExtensions
         Type tIn
     )
     {
-        if (tIn.IsGenericType == false || tIn.GetGenericTypeDefinition() != typeof(ILogger<>))
+        if (!tIn.IsGenericType || tIn.GetGenericTypeDefinition() != typeof(ILogger<>))
             return null;
 
         // Without a factory the caller reports the logger as missing, saying who needed it.
@@ -158,7 +159,7 @@ internal static class MonadExtensions
                 $"Incorrect number of generic arguments for input type ({tIn}). Found ({generics.Length}) generics with types ({string.Join(", ", generics.Select(x => x.Name))})."
             );
 
-        return loggerFactory.CreateGenericLogger(generics.First());
+        return loggerFactory.CreateGenericLogger(generics[0]);
     }
 
     /// <summary>
@@ -296,7 +297,10 @@ internal static class MonadExtensions
         if (count == 1)
             return null;
 
-        return $"Junction '{junctionType.ReadableName()}'{train} has {count} public constructors; "
+        return string.Create(
+                CultureInfo.InvariantCulture,
+                $"Junction '{junctionType.ReadableName()}'{train} has {count} public constructors; "
+            )
             + "Trax builds a junction through its single public constructor. Give it exactly one.";
     }
 

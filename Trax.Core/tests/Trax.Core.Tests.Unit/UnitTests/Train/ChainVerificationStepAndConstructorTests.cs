@@ -228,22 +228,22 @@ public class ChainVerificationStepAndConstructorTests : TestSetup
         public NotAJunctionWithTwoConstructors(IClock clock) => _ = clock;
     }
 
-    private class StringToBool : Junction<string, bool>
+    private sealed class StringToBool : Junction<string, bool>
     {
         public override Task<bool> Run(string input) => Task.FromResult(input.Length > 0);
     }
 
-    private class StringToInt : Junction<string, int>
+    private sealed class StringToInt : Junction<string, int>
     {
         public override Task<int> Run(string input) => Task.FromResult(input.Length);
     }
 
-    private class IntToBool : Junction<int, bool>
+    private sealed class IntToBool : Junction<int, bool>
     {
         public override Task<bool> Run(int input) => Task.FromResult(input > 0);
     }
 
-    private class TwoConstructors : Junction<string, bool>
+    private sealed class TwoConstructors : Junction<string, bool>
     {
         public TwoConstructors() { }
 
@@ -252,116 +252,116 @@ public class ChainVerificationStepAndConstructorTests : TestSetup
         public override Task<bool> Run(string input) => Task.FromResult(true);
     }
 
-    private class ClockJunction(IClock clock) : Junction<string, bool>
+    private sealed class ClockJunction(IClock clock) : Junction<string, bool>
     {
         public override Task<bool> Run(string input) => Task.FromResult(clock is not null);
     }
 
-    private class ProducesClock : Junction<string, IClock>
+    private sealed class ProducesClock : Junction<string, IClock>
     {
         public override Task<IClock> Run(string input) => Task.FromResult<IClock>(new Clock());
     }
 
-    private class ServiceProviderJunction(IServiceProvider services) : Junction<string, bool>
+    private sealed class ServiceProviderJunction(IServiceProvider services) : Junction<string, bool>
     {
         public override Task<bool> Run(string input) => Task.FromResult(services is not null);
     }
 
-    private class LoggerJunction(ILogger<LoggerJunction> logger) : Junction<string, bool>
+    private sealed class LoggerJunction(ILogger<LoggerJunction> logger) : Junction<string, bool>
     {
         public override Task<bool> Run(string input) => Task.FromResult(logger is not null);
     }
 
-    private class TupleJunction((string, IClock) pair) : Junction<string, bool>
+    private sealed class TupleJunction((string, IClock) pair) : Junction<string, bool>
     {
         public override Task<bool> Run(string input) => Task.FromResult(pair.Item2 is not null);
     }
 
-    private class NotAJunctionFirstTrain : Train<string, bool>
+    private sealed class NotAJunctionFirstTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<NotAJunction>().Chain<StringToBool>().Resolve();
     }
 
-    private class NotAJunctionWithTwoConstructorsTrain : Train<string, bool>
+    private sealed class NotAJunctionWithTwoConstructorsTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<NotAJunctionWithTwoConstructors>().Chain<StringToBool>().Resolve();
     }
 
-    private class TwoConstructorsSecondTrain : Train<string, bool>
+    private sealed class TwoConstructorsSecondTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<StringToInt>().Chain<TwoConstructors>().Resolve();
     }
 
-    private class NullServiceSecondTrain : Train<string, bool>
+    private sealed class NullServiceSecondTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<StringToBool>().AddServices<IClock>(null!).Resolve();
     }
 
-    private class ResolvesAValueTrain : Train<string, bool>
+    private sealed class ResolvesAValueTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
-            Chain<StringToBool>().Resolve(true);
+            Chain<StringToBool>().Resolve(returnType: true);
     }
 
-    private class MissingInputTrain : Train<string, bool>
+    private sealed class MissingInputTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<IntToBool>().Resolve();
     }
 
-    private class NeedsClockTrain : Train<string, bool>
+    private sealed class NeedsClockTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<ClockJunction>().Resolve();
     }
 
-    private class ClockProducedFirstTrain : Train<string, bool>
+    private sealed class ClockProducedFirstTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<ProducesClock>().Chain<ClockJunction>().Resolve();
     }
 
-    private class ClockProducedAfterTrain : Train<string, bool>
+    private sealed class ClockProducedAfterTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<ClockJunction>().Chain<ProducesClock>().Resolve();
     }
 
-    private class ClockPassedAsServiceTrain : Train<string, bool>
+    private sealed class ClockPassedAsServiceTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             AddServices<IClock>(new Clock()).Chain<ClockJunction>().Resolve();
     }
 
-    private class NeedsServiceProviderTrain : Train<string, bool>
+    private sealed class NeedsServiceProviderTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<ServiceProviderJunction>().Resolve();
     }
 
-    private class NeedsLoggerTrain : Train<string, bool>
+    private sealed class NeedsLoggerTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<LoggerJunction>().Resolve();
     }
 
-    private class NeedsLoggerWithFactoryTrain : Train<string, bool>
+    private sealed class NeedsLoggerWithFactoryTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             AddServices<ILoggerFactory>(new LoggerFactory()).Chain<LoggerJunction>().Resolve();
     }
 
-    private class NeedsTupleTrain : Train<string, bool>
+    private sealed class NeedsTupleTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<TupleJunction>().Resolve();
     }
 
-    private class ClockInstanceTrain : Train<string, bool>
+    private sealed class ClockInstanceTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain(new ClockJunction(new Clock())).Resolve();

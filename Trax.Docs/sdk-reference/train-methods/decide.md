@@ -10,7 +10,11 @@ namespace:
 source:
   - Trax.Core/src/Trax.Core/Monad/Monad.Decisions.cs
   - Trax.Core/src/Trax.Core/Decisions/Questions.cs
-  - Trax.Core/src/Trax.Core/Decisions/Decisions.cs
+  - Trax.Core/src/Trax.Core/Decisions/AsksAttribute.cs
+  - Trax.Core/src/Trax.Core/Decisions/ChoiceDecision.cs
+  - Trax.Core/src/Trax.Core/Decisions/ScoreDecision.cs
+  - Trax.Core/src/Trax.Core/Decisions/YesNoDecision.cs
+  - Trax.Core/src/Trax.Core/Decisions/TrackTaken.cs
   - Trax.Core/src/Trax.Core/Decisions/QuestionKey.cs
 parent: Train Methods
 grand_parent: SDK Reference

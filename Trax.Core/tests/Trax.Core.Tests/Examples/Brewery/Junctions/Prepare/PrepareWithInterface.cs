@@ -1,9 +1,9 @@
 using Trax.Core.Exceptions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
-using Trax.Core.Tests.Integration.Examples.Brewery.Junctions.Ferment;
+using Trax.Core.Tests.Examples.Brewery.Junctions.Ferment;
 
-namespace Trax.Core.Tests.Integration.Examples.Brewery.Junctions.Prepare;
+namespace Trax.Core.Tests.Examples.Brewery.Junctions.Prepare;
 
 #pragma warning disable CS9113 // Parameter is unread - injected via DI for testing
 public class PrepareWithInterface(IFerment _ferment) : Junction<Ingredients, IBrewingJug>
@@ -13,7 +13,8 @@ public class PrepareWithInterface(IFerment _ferment) : Junction<Ingredients, IBr
     {
         const int gallonWater = 1;
 
-        var gallonAppleJuice = await Boil(gallonWater, input.Apples, input.BrownSugar);
+        var gallonAppleJuice = await Boil(gallonWater, input.Apples, input.BrownSugar)
+            .ConfigureAwait(false);
 
         if (gallonAppleJuice.IsLeft)
             throw gallonAppleJuice.Swap().ValueUnsafe();
@@ -21,7 +22,7 @@ public class PrepareWithInterface(IFerment _ferment) : Junction<Ingredients, IBr
         return new BrewingJug() { Gallons = gallonAppleJuice.ValueUnsafe(), Ingredients = input };
     }
 
-    private async Task<Either<TrainException, int>> Boil(
+    private static async Task<Either<TrainException, int>> Boil(
         int gallonWater,
         int numApples,
         int ozBrownSugar

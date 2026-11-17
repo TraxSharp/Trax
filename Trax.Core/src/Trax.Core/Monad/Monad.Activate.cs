@@ -6,7 +6,7 @@ using Trax.Core.Functional;
 
 namespace Trax.Core.Monad;
 
-public partial class Monad<TInput, TReturn>
+public sealed partial class Monad<TInput, TReturn>
 {
     private static readonly ConcurrentDictionary<Type, Type[]> InterfaceCache = new();
 
