@@ -73,6 +73,27 @@ public sealed class DecisionJournal(
     )
         : this(contextFactory, logger, options: null) { }
 
+    /// <summary>
+    /// A journal that stamps decisions and ages recorded answers on <paramref name="timeProvider"/>.
+    /// The container uses this one, with the clock it registers.
+    /// </summary>
+    /// <param name="contextFactory">Creates the short-lived data contexts the journal reads and writes through.</param>
+    /// <param name="logger">Optional; without one, decisions are recorded but not logged.</param>
+    /// <param name="options">How decisions are recorded and replayed; the defaults when null.</param>
+    /// <param name="timeProvider">The clock decisions are stamped with and replay ages are measured on.</param>
+    public DecisionJournal(
+        IDataContextProviderFactory contextFactory,
+        ILogger<DecisionJournal>? logger,
+        DecisionRecordingOptions? options,
+        TimeProvider timeProvider
+    )
+        : this(contextFactory, logger, options) => _clock = timeProvider;
+
+    // A journal built without a clock (by hand, or by an older registration) uses the system's.
+    private readonly TimeProvider _clock = TimeProvider.System;
+
+    private DateTime UtcNow => _clock.GetUtcNow().UtcDateTime;
+
     /// <summary>How decisions are recorded and replayed, as <c>AddDecisionRecording</c> configured them.</summary>
     internal DecisionRecordingOptions Options { get; } = options ?? new();
 
@@ -130,7 +151,7 @@ public sealed class DecisionJournal(
 
         try
         {
-            record = Record(decision, metadataId, StateHashToRecord(decision));
+            record = Record(decision, metadataId, StateHashToRecord(decision), UtcNow);
         }
         catch (NotSupportedException e)
         {
@@ -244,7 +265,7 @@ public sealed class DecisionJournal(
             Model = refusal.Answer?.Model,
             Decider = refusal.Decider.FullName,
             Refused = reason,
-            DecidedAt = DateTime.UtcNow,
+            DecidedAt = UtcNow,
         };
 
         await Write(
@@ -349,7 +370,8 @@ public sealed class DecisionJournal(
     private static RecordedDecision Record(
         DecisionMade decision,
         long metadataId,
-        string? stateHash
+        string? stateHash,
+        DateTime decidedAt
     ) =>
         new()
         {
@@ -366,7 +388,7 @@ public sealed class DecisionJournal(
             Replayed = decision.Replayed,
             StateHash = stateHash,
             Shadows = DecisionJson.Write(decision.Shadows),
-            DecidedAt = DateTime.UtcNow,
+            DecidedAt = decidedAt,
         };
 
     /// <inheritdoc />
@@ -778,7 +800,7 @@ public sealed class DecisionJournal(
             .GroupBy(d => (d.BranchPath, d.Key, d.Occurrence))
             .ToList();
         // A bound longer than the time since DateTime.MinValue means no bound at all.
-        var now = DateTime.UtcNow;
+        var now = UtcNow;
         var oldest =
             Options.MaxReplayAge >= now - DateTime.MinValue
                 ? DateTime.MinValue

@@ -59,7 +59,7 @@ public class SnapshotTransition
     [Column("to_state")]
     public string ToState
     {
-        get => field.NotNull(nameof(ToState));
+        get => field ?? string.Empty;
         set;
     }
 

@@ -26,7 +26,8 @@ public class EffectRunnerPendingClaimTests
                 Name = "Train",
                 ExternalId = "ext",
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
         (await runner.TryClaimPendingRun(metadata, CancellationToken.None)).Should().BeTrue();
@@ -46,7 +47,8 @@ public class EffectRunnerPendingClaimTests
                 Name = "Train",
                 ExternalId = "ext",
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
         (await runner.TryClaimPendingRun(metadata, CancellationToken.None)).Should().BeFalse();

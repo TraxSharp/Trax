@@ -55,7 +55,11 @@ public class InputRecordedAtStartTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.NotNull().DisposeAsync();
+    public async Task DisposeProvider()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [Test]
     public async Task The_row_is_in_progress_with_its_input_while_the_body_runs()

@@ -74,7 +74,11 @@ public class PostgresParallelRunTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.NotNull().DisposeAsync();
+    public async Task DisposeProvider()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [SetUp]
     public void Reset()
@@ -191,7 +195,11 @@ public class PostgresParallelRunTests
         var train = Train<IPgParWaitTrain>(scope);
 
         var running = train.Run(new PgParOrder("o"), cancel.Token);
-        await PgParSignals.BothWaiting.WaitAsync(TimeSpan.FromSeconds(30), CancellationToken.None);
+        await PgParSignals.BothWaiting.WaitAsync(
+            TimeSpan.FromSeconds(30),
+            TimeProvider.System,
+            CancellationToken.None
+        );
         await cancel.CancelAsync();
 
         await FluentActions
@@ -211,7 +219,11 @@ public class PostgresParallelRunTests
         var train = Train<IPgParFlagTrain>(scope);
 
         var running = train.Run(new PgParOrder("o"), CancellationToken.None);
-        await PgParSignals.BothWaiting.WaitAsync(TimeSpan.FromSeconds(30), CancellationToken.None);
+        await PgParSignals.BothWaiting.WaitAsync(
+            TimeSpan.FromSeconds(30),
+            TimeProvider.System,
+            CancellationToken.None
+        );
 
         // What the dashboard's cancel and the scheduler's job timeout write for a run on another
         // host. Branch a's next junction reads it before it runs.
@@ -281,7 +293,8 @@ public class PostgresParallelRunTests
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = input,
                 ReplayDecisionsOf = replayDecisionsOf,
-            }
+            },
+            TestTime.Clock
         );
 
         var output = await train.Run(input, metadata, CancellationToken.None).ConfigureAwait(false);

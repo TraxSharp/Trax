@@ -57,7 +57,8 @@ public class CancellationCheckProviderTests
                 Name = "T",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         SetTrainMetadata(train, meta);
         var junction = new TestEffectJunction();

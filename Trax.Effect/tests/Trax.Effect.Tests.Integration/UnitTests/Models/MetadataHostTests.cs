@@ -39,7 +39,8 @@ public class MetadataHostTests
                 Name = "TestTrain",
                 ExternalId = Guid.NewGuid().ToString(),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
         metadata.HostName.Should().Be("test-host");
@@ -59,7 +60,8 @@ public class MetadataHostTests
                 Name = "TestTrain",
                 ExternalId = Guid.NewGuid().ToString(),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
         metadata.HostName.Should().BeNull();
@@ -89,7 +91,8 @@ public class MetadataHostTests
                 Name = "TestTrain",
                 ExternalId = Guid.NewGuid().ToString(),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
         metadata.HostLabels.Should().NotBeNull();
@@ -117,7 +120,8 @@ public class MetadataHostTests
                 Name = "TestTrain",
                 ExternalId = Guid.NewGuid().ToString(),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
         metadata.HostLabels.Should().BeNull();

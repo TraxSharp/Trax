@@ -19,6 +19,7 @@ internal sealed class BroadcastLifecycleHook : ITrainLifecycleHook
     private readonly ITrainEventBroadcaster _broadcaster;
     private readonly BroadcastInstance _instance;
     private readonly ILogger<BroadcastLifecycleHook>? _logger;
+    private readonly TimeProvider _clock;
 
     /// <summary>
     /// Creates the hook. Registered by <c>UseBroadcaster()</c>; not intended to be constructed directly.
@@ -26,12 +27,15 @@ internal sealed class BroadcastLifecycleHook : ITrainLifecycleHook
     /// <param name="broadcaster">The transport each event is published through.</param>
     /// <param name="logger">Optional debug logging of each published event.</param>
     /// <param name="instance">This host's broadcast identity, stamped on every message.</param>
+    /// <param name="timeProvider">The clock an event without an end time is stamped from; the system's when null.</param>
     public BroadcastLifecycleHook(
         ITrainEventBroadcaster broadcaster,
         ILogger<BroadcastLifecycleHook>? logger = null,
-        BroadcastInstance? instance = null
+        BroadcastInstance? instance = null,
+        TimeProvider? timeProvider = null
     )
     {
+        _clock = timeProvider ?? TimeProvider.System;
         _broadcaster = broadcaster;
         _logger = logger;
         _instance = instance ?? BroadcastInstance.Unregistered;
@@ -106,7 +110,7 @@ internal sealed class BroadcastLifecycleHook : ITrainLifecycleHook
             ExternalId: metadata.ExternalId,
             TrainName: metadata.Name,
             TrainState: metadata.TrainState.ToString(),
-            Timestamp: metadata.EndTime ?? DateTime.UtcNow,
+            Timestamp: metadata.EndTime ?? _clock.GetUtcNow().UtcDateTime,
             FailureJunction: metadata.FailureJunction,
             FailureReason: metadata.FailureReason,
             EventType: eventType,

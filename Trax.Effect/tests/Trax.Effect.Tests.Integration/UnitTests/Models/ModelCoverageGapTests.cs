@@ -233,7 +233,8 @@ public class ModelCoverageGapTests
                 Name = "X",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
     #endregion
@@ -249,7 +250,7 @@ public class ModelCoverageGapTests
             {
                 Name = "Jx",
                 ExternalId = Guid.NewGuid().ToString("N"),
-                StartTimeUtc = DateTime.UtcNow,
+                StartTimeUtc = TestTime.UtcDateTime,
                 InputType = typeof(int),
                 OutputType = typeof(string),
                 State = Trax.Core.Functional.EitherStatus.IsRight,
@@ -277,7 +278,7 @@ public class ModelCoverageGapTests
             {
                 Name = "Jx",
                 ExternalId = Guid.NewGuid().ToString("N"),
-                StartTimeUtc = DateTime.UtcNow,
+                StartTimeUtc = TestTime.UtcDateTime,
                 InputType = typeof(int),
                 OutputType = typeof(string),
                 State = Trax.Core.Functional.EitherStatus.IsRight,
@@ -301,7 +302,7 @@ public class ModelCoverageGapTests
             {
                 Name = "Jx",
                 ExternalId = Guid.NewGuid().ToString("N"),
-                StartTimeUtc = DateTime.UtcNow,
+                StartTimeUtc = TestTime.UtcDateTime,
                 InputType = typeof(int),
                 OutputType = typeof(string),
                 State = Trax.Core.Functional.EitherStatus.IsRight,

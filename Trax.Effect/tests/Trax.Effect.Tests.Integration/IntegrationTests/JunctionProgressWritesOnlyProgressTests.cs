@@ -227,7 +227,11 @@ public class JunctionProgressWritesOnlyProgressTests
 
         var running = train.Run(Unit.Default, cancel.Token);
         await Waits
-            .AllWaiting.WaitAsync(TimeSpan.FromSeconds(30), CancellationToken.None)
+            .AllWaiting.WaitAsync(
+                TimeSpan.FromSeconds(30),
+                TimeProvider.System,
+                CancellationToken.None
+            )
             .ConfigureAwait(false);
 
         // The column is set while the junction runs, so the test proves the clear rather than
@@ -570,8 +574,8 @@ public class JunctionProgressWritesOnlyProgressTests
                     new ManifestGroup
                     {
                         Name = TracksThenFailsTrain.Group,
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow,
+                        CreatedAt = TestTime.UtcDateTime,
+                        UpdatedAt = TestTime.UtcDateTime,
                     }
                 )
                 .ConfigureAwait(false);

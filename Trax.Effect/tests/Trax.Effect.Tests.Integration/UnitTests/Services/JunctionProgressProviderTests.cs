@@ -47,7 +47,7 @@ public class JunctionProgressProviderTests
         _factory = new RecordingFactory(
             _services.GetRequiredService<IDataContextProviderFactory>()
         );
-        _provider = new JunctionProgressProvider(_factory);
+        _provider = new JunctionProgressProvider(_factory, TestTime.Clock);
         _fakeEffectRunner = new FakeEffectRunner();
     }
 
@@ -83,7 +83,6 @@ public class JunctionProgressProviderTests
         // Arrange
         var (train, junction) = await CreateTestTrainAndJunction("ProcessDataJunction")
             .ConfigureAwait(false);
-        var before = DateTime.UtcNow;
 
         // Act
         await _provider
@@ -92,8 +91,7 @@ public class JunctionProgressProviderTests
 
         // Assert
         train.Metadata.NotNull().JunctionStartedAt.Should().NotBeNull();
-        train.Metadata.NotNull().JunctionStartedAt.Should().BeOnOrAfter(before);
-        train.Metadata.NotNull().JunctionStartedAt.Should().BeOnOrBefore(DateTime.UtcNow);
+        train.Metadata.NotNull().JunctionStartedAt.Should().Be(TestTime.UtcDateTime);
     }
 
     [Test]
@@ -168,7 +166,11 @@ public class JunctionProgressProviderTests
 
         var before = _provider.BeforeJunctionExecution(junction, train, cts.Token);
         await _factory
-            .Entered.WaitAsync(TimeSpan.FromSeconds(30), CancellationToken.None)
+            .Entered.WaitAsync(
+                TimeSpan.FromSeconds(30),
+                TimeProvider.System,
+                CancellationToken.None
+            )
             .ConfigureAwait(false);
         await cts.CancelAsync().ConfigureAwait(false);
 
@@ -203,7 +205,11 @@ public class JunctionProgressProviderTests
             CancellationToken.None
         );
         await _factory
-            .Entered.WaitAsync(TimeSpan.FromSeconds(30), CancellationToken.None)
+            .Entered.WaitAsync(
+                TimeSpan.FromSeconds(30),
+                TimeProvider.System,
+                CancellationToken.None
+            )
             .ConfigureAwait(false);
 
         var others = Enumerable
@@ -254,7 +260,7 @@ public class JunctionProgressProviderTests
         var (train, junction) = await CreateTestTrainAndJunction("ProcessDataJunction")
             .ConfigureAwait(false);
         train.Metadata.NotNull().CurrentlyRunningJunction = "ProcessDataJunction";
-        train.Metadata.NotNull().JunctionStartedAt = DateTime.UtcNow;
+        train.Metadata.NotNull().JunctionStartedAt = TestTime.UtcDateTime;
 
         // Act
         await _provider
@@ -272,7 +278,7 @@ public class JunctionProgressProviderTests
         var (train, junction) = await CreateTestTrainAndJunction("ProcessDataJunction")
             .ConfigureAwait(false);
         train.Metadata.NotNull().CurrentlyRunningJunction = "ProcessDataJunction";
-        train.Metadata.NotNull().JunctionStartedAt = DateTime.UtcNow;
+        train.Metadata.NotNull().JunctionStartedAt = TestTime.UtcDateTime;
 
         // Act
         await _provider
@@ -556,7 +562,8 @@ public class JunctionProgressProviderTests
                 Name = "TestTrain",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
     /// <summary>

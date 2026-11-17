@@ -12,4 +12,16 @@
     />
     <Using Include="Trax.Testing.Red" />
   </ItemGroup>
+
+  <!-- A fixed instant and a clock that reads it, for tests that stamp what they build without a
+       test of the clock in it. -->
+  <ItemGroup Condition="'$(IsTestProject)' == 'true'">
+    <Compile Include="$(MSBuildThisFileDirectory)TestTime.cs" Link="TestTime.cs" Visible="false" />
+    <Compile
+      Include="$(MSBuildThisFileDirectory)FixedClock.cs"
+      Link="FixedClock.cs"
+      Visible="false"
+    />
+    <Using Include="Trax.Testing" />
+  </ItemGroup>
 </Project>

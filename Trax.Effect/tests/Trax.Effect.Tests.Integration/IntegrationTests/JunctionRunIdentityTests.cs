@@ -94,7 +94,8 @@ public class JunctionRunIdentityTests : TestSetup
                 Name = "JunctionRunIdentityTest",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(metadata);

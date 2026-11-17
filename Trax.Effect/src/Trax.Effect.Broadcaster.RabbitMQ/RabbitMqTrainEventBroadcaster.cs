@@ -107,7 +107,21 @@ internal sealed class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IA
         RabbitMqBroadcasterOptions options,
         ILogger<RabbitMqTrainEventBroadcaster>? logger = null
     )
-        : this(options, logger, DefaultQueueCapacity) { }
+        : this(options, logger, DefaultQueueCapacity, timeProvider: TimeProvider.System) { }
+
+    /// <summary>
+    /// Creates a broadcaster as <see cref="RabbitMqTrainEventBroadcaster(RabbitMqBroadcasterOptions, ILogger{RabbitMqTrainEventBroadcaster}?)"/>
+    /// does, timing its retries and signing its messages on <paramref name="timeProvider"/>.
+    /// </summary>
+    /// <param name="options">The connection URI and exchange name.</param>
+    /// <param name="logger">Optional logger; each publish is logged at Debug.</param>
+    /// <param name="timeProvider">The clock retries wait on and signatures are stamped with.</param>
+    public RabbitMqTrainEventBroadcaster(
+        RabbitMqBroadcasterOptions options,
+        ILogger<RabbitMqTrainEventBroadcaster>? logger,
+        TimeProvider timeProvider
+    )
+        : this(options, logger, DefaultQueueCapacity, timeProvider: timeProvider) { }
 
     internal RabbitMqTrainEventBroadcaster(
         RabbitMqBroadcasterOptions options,
@@ -115,11 +129,17 @@ internal sealed class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IA
         int queueCapacity,
         Func<CancellationToken, Task<IConnection>>? connect = null,
         TimeSpan? publishTimeout = null,
-        TimeSpan? firstRetryDelay = null
+        TimeSpan? firstRetryDelay = null,
+        TimeProvider? timeProvider = null
     )
     {
         if (options.Problem() is { } problem)
             throw new InvalidOperationException(problem);
+
+        // A broadcaster built without a container (or by a caller that passes none) runs on the
+        // system clock; one the container builds gets the container's.
+        _clock = timeProvider ?? TimeProvider.System;
+        UtcNow = () => _clock.GetUtcNow().UtcDateTime;
 
         _options = options;
         _logger = logger;
@@ -144,7 +164,9 @@ internal sealed class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IA
     internal long RefusedEvents => Interlocked.Read(ref _refused);
 
     /// <summary>The clock the junction backoff is measured on. For tests.</summary>
-    internal Func<DateTime> UtcNow { get; set; } = () => DateTime.UtcNow;
+    internal Func<DateTime> UtcNow { get; set; }
+
+    private readonly TimeProvider _clock;
 
     /// <summary>Until when junction events are dropped without being tried, after a failure.</summary>
     internal DateTime JunctionUnavailableUntil => _junctionUnavailableUntil;
@@ -278,7 +300,7 @@ internal sealed class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IA
                 else
                     _logger?.LogDebug(ex, "RabbitMQ broadcaster publish attempt failed.");
 
-                await Task.Delay(delay, ct).ConfigureAwait(false);
+                await Task.Delay(delay, _clock, ct).ConfigureAwait(false);
                 delay = TimeSpan.FromTicks(Math.Min(delay.Ticks * 2, MaxRetryDelay.Ticks));
             }
         }
@@ -377,7 +399,7 @@ internal sealed class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IA
                     key,
                     exchange,
                     body,
-                    UtcNow()
+                    new DateTimeOffset(UtcNow())
                 ),
             };
 
@@ -554,7 +576,7 @@ internal sealed class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IA
         try
         {
             await _sender
-                .WaitAsync(DisposeDrainTimeout, CancellationToken.None)
+                .WaitAsync(DisposeDrainTimeout, _clock, CancellationToken.None)
                 .ConfigureAwait(false);
         }
         catch (TimeoutException)

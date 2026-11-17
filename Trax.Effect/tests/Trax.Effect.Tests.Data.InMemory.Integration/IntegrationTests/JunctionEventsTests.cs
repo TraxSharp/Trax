@@ -67,7 +67,11 @@ public class JunctionEventsTests
             .BuildServiceProvider();
 
     [OneTimeTearDown]
-    public async Task Dispose() => await _provider.NotNull().DisposeAsync();
+    public async Task Dispose()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [Test]
     public async Task A_run_publishes_each_junction_and_decision_in_order()
@@ -321,7 +325,8 @@ public class JunctionEventsTests
                 Name = typeof(ILaneTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = JunctionEventTrains.Parcel(),
-            }
+            },
+            TestTime.Clock
         );
 
         var run = await publisher.BeginAsync(
@@ -355,7 +360,7 @@ public class JunctionEventsTests
         // Set here, in the test's own frame, as ServiceTrain.Run sets it in the run's.
         JunctionEventRun.Current = run;
         var metadataId = run.Metadata.Id;
-        var observer = new JunctionEventDecisionObserver();
+        var observer = new JunctionEventDecisionObserver(TimeProvider.System);
 
         await observer.Decided(
             new DecisionMade(
@@ -397,7 +402,8 @@ public class JunctionEventsTests
                 Name = typeof(ILaneTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = JunctionEventTrains.Parcel(),
-            }
+            },
+            TestTime.Clock
         );
         await context.Track(metadata).ConfigureAwait(false);
         await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
@@ -1160,7 +1166,7 @@ public class JunctionEventsTests
         Decider.Use(new ScriptedDecider().Choose(Lane.Express, 0.9));
 
         var metadataId = await RunForManifest(provider, manifestId: 777)
-            .WaitAsync(TimeSpan.FromSeconds(10));
+            .WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
 
         handler
             .For(metadataId)
@@ -1194,7 +1200,8 @@ public class JunctionEventsTests
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = JunctionEventTrains.Parcel(),
                     ManifestId = manifest.Id,
-                }
+                },
+                TestTime.Clock
             );
 
             if (state == TrainState.Pending)
@@ -1238,7 +1245,8 @@ public class JunctionEventsTests
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = input,
                 ManifestId = manifestId,
-            }
+            },
+            TestTime.Clock
         );
 
         (await train.Run(input, metadata, CancellationToken.None).ConfigureAwait(false))

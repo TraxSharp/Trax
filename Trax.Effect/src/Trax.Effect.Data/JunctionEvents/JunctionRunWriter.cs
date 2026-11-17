@@ -260,7 +260,12 @@ internal sealed class JunctionRunWriter
             if (!rows.TryGetValue(key, out var row))
             {
                 // A start that was dropped leaves its end to write the whole row.
-                row = new JunctionRun { MetadataId = metadataId, Position = step.Position };
+                row = new JunctionRun
+                {
+                    MetadataId = metadataId,
+                    Position = step.Position,
+                    Name = step.Name,
+                };
                 context.JunctionRuns.Add(row);
                 rows[key] = row;
             }

@@ -134,7 +134,7 @@ public class SqliteSchedulerColumnStorageTests : TestSetup
         await using (context.ConfigureAwait(false))
         {
             await context.SchedulerConfigs.ExecuteDeleteAsync();
-            var row = new SchedulerConfig { UpdatedAt = DateTime.UtcNow };
+            var row = new SchedulerConfig { UpdatedAt = TestTime.UtcDateTime };
             row.SetOverride("MaxActiveJobs", 20);
             row.SetOverride("FailureCountWindow", TimeSpan.FromHours(6));
             context.SchedulerConfigs.Add(row);
@@ -162,8 +162,8 @@ public class SqliteSchedulerColumnStorageTests : TestSetup
         var group = new ManifestGroup
         {
             Name = $"columns-{Guid.NewGuid():N}",
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TestTime.UtcDateTime,
+            UpdatedAt = TestTime.UtcDateTime,
         };
         await context.Track(group).ConfigureAwait(false);
         await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);

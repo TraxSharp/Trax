@@ -37,7 +37,7 @@ public class RabbitMqJunctionExchangeTests
             ExternalId: eventType,
             TrainName: "Exchange.ITrain",
             TrainState: "InProgress",
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TestTime.UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             EventType: eventType,
@@ -51,7 +51,7 @@ public class RabbitMqJunctionExchangeTests
                     JunctionRunKind.Junction,
                     "Ship",
                     JunctionRunState.InProgress,
-                    DateTime.UtcNow
+                    TestTime.UtcDateTime
                 )
                 : null,
         };
@@ -165,8 +165,16 @@ public class RabbitMqJunctionExchangeTests
                 Message("Completed", junction: false),
                 CancellationToken.None
             );
-            await currentGotBoth.Task.WaitAsync(Timeout, CancellationToken.None);
-            await legacyGotTrainEvent.Task.WaitAsync(Timeout, CancellationToken.None);
+            await currentGotBoth.Task.WaitAsync(
+                Timeout,
+                TimeProvider.System,
+                CancellationToken.None
+            );
+            await legacyGotTrainEvent.Task.WaitAsync(
+                Timeout,
+                TimeProvider.System,
+                CancellationToken.None
+            );
         }
 
         current.Should().BeEquivalentTo(["JunctionStarted", "Completed"]);
@@ -233,7 +241,7 @@ public class RabbitMqJunctionExchangeTests
                             TestBroadcastKey.Value,
                             exchange,
                             body,
-                            DateTimeOffset.UtcNow
+                            TimeProvider.System.GetUtcNow()
                         ),
                     },
                 },
@@ -304,7 +312,7 @@ public class RabbitMqJunctionExchangeTests
                 ExternalId = "step",
             }
         );
-        await gotBoth.Task.WaitAsync(Timeout, CancellationToken.None);
+        await gotBoth.Task.WaitAsync(Timeout, TimeProvider.System, CancellationToken.None);
 
         received
             .Should()
@@ -365,7 +373,7 @@ public class RabbitMqJunctionExchangeTests
             CancellationToken.None
         );
 
-        (await received.Task.WaitAsync(Timeout, CancellationToken.None))
+        (await received.Task.WaitAsync(Timeout, TimeProvider.System, CancellationToken.None))
             .Should()
             .Be(
                 "Completed",
@@ -411,7 +419,7 @@ public class RabbitMqJunctionExchangeTests
                     Message("Completed", junction: false),
                     CancellationToken.None
                 );
-                await received.Task.WaitAsync(Timeout, CancellationToken.None);
+                await received.Task.WaitAsync(Timeout, TimeProvider.System, CancellationToken.None);
             }
 
             await receiver.StopAsync(CancellationToken.None);

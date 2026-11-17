@@ -72,7 +72,7 @@ public class Log : ILog
     [JsonPropertyName("message")]
     public string Message
     {
-        get => field.NotNull(nameof(Message));
+        get => field ?? string.Empty;
         set;
     }
 
@@ -84,7 +84,7 @@ public class Log : ILog
     [JsonPropertyName("category")]
     public string Category
     {
-        get => field.NotNull(nameof(Category));
+        get => field ?? string.Empty;
         set;
     }
 

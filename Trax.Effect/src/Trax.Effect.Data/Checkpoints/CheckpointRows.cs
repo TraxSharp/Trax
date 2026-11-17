@@ -73,6 +73,8 @@ internal sealed class CheckpointRows(IDataContextProviderFactory contexts) : ICh
                     NodeId = c.NodeId,
                     BranchPath = c.BranchPath,
                     StateType = c.StateType,
+                    // Not read here; the states are read by id once a resume picks its node.
+                    State = string.Empty,
                     Tracks = c.Tracks,
                     ChainHash = c.ChainHash,
                     StateFingerprint = c.StateFingerprint,

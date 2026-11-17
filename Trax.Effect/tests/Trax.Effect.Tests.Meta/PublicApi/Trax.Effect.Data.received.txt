@@ -5,6 +5,7 @@ namespace Trax.Effect.Data.Decisions
         public const int MaxReplayChain = 32;
         public DecisionJournal(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory contextFactory, Microsoft.Extensions.Logging.ILogger<Trax.Effect.Data.Decisions.DecisionJournal>? logger) { }
         public DecisionJournal(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory contextFactory, Microsoft.Extensions.Logging.ILogger<Trax.Effect.Data.Decisions.DecisionJournal>? logger = null, Trax.Effect.Data.Decisions.DecisionRecordingOptions? options = null) { }
+        public DecisionJournal(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory contextFactory, Microsoft.Extensions.Logging.ILogger<Trax.Effect.Data.Decisions.DecisionJournal>? logger, Trax.Effect.Data.Decisions.DecisionRecordingOptions? options, System.TimeProvider timeProvider) { }
         public bool Required { get; }
         public System.Threading.Tasks.Task Decided(Trax.Core.Decisions.DecisionMade decision, System.Threading.CancellationToken cancellationToken) { }
         public System.Threading.Tasks.Task Refused(Trax.Core.Decisions.DecisionRefused refusal, System.Threading.CancellationToken cancellationToken) { }
@@ -30,7 +31,7 @@ namespace Trax.Effect.Data.Extensions
     {
         [System.Obsolete("Call UsePostgres(...), UseSqlite(...) or UseInMemory(...) before AddDataContextLo" +
             "gging(...).", true)]
-        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData AddDataContextLogging(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder configurationBuilder, Microsoft.Extensions.Logging.LogLevel? minimumLogLevel = default, System.Collections.Generic.List<string>? blacklist = null) { }
+        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData AddDataContextLogging(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder configurationBuilder, Microsoft.Extensions.Logging.LogLevel? minimumLogLevel = default, System.Collections.Generic.IReadOnlyList<string>? blacklist = null) { }
         [System.Obsolete("Call UsePostgres(...), UseSqlite(...) or UseInMemory(...) before AddDecisionRecor" +
             "ding().", true)]
         public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData AddDecisionRecording(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder configurationBuilder) { }
@@ -43,7 +44,7 @@ namespace Trax.Effect.Data.Extensions
     }
     public static class ServiceExtensions
     {
-        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData AddDataContextLogging(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData configurationBuilder, Microsoft.Extensions.Logging.LogLevel? minimumLogLevel = default, System.Collections.Generic.List<string>? blacklist = null) { }
+        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData AddDataContextLogging(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData configurationBuilder, Microsoft.Extensions.Logging.LogLevel? minimumLogLevel = default, System.Collections.Generic.IReadOnlyList<string>? blacklist = null) { }
         public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData AddDecisionRecording(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData configurationBuilder) { }
         public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData AddDecisionRecording(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData configurationBuilder, System.Action<Trax.Effect.Data.Decisions.DecisionRecordingOptions> configure) { }
         public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData AddJunctionEvents(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData configurationBuilder) { }
@@ -179,7 +180,7 @@ namespace Trax.Effect.Data.Services.DataContextLoggingProvider
 {
     public class DataContextLogger : Microsoft.Extensions.Logging.ILogger
     {
-        public DataContextLogger(System.Threading.Channels.ChannelWriter<Trax.Effect.Models.Log.Log> logChannel, string categoryName, Microsoft.Extensions.Logging.LogLevel minimumLogLevel, System.Collections.Generic.HashSet<string> exactBlacklist, System.Collections.Generic.List<System.Text.RegularExpressions.Regex> wildcardBlacklist) { }
+        public DataContextLogger(System.Threading.Channels.ChannelWriter<Trax.Effect.Models.Log.Log> logChannel, string categoryName, Microsoft.Extensions.Logging.LogLevel minimumLogLevel, System.Collections.Generic.IReadOnlyCollection<string> exactBlacklist, System.Collections.Generic.IReadOnlyList<System.Text.RegularExpressions.Regex> wildcardBlacklist) { }
         public System.IDisposable? BeginScope<TState>(TState state)
             where TState :  notnull { }
         public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) { }
@@ -188,18 +189,19 @@ namespace Trax.Effect.Data.Services.DataContextLoggingProvider
     public class DataContextLoggingProvider : Microsoft.Extensions.Logging.ILoggerProvider, System.IDisposable
     {
         public DataContextLoggingProvider(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dbContextFactory, Trax.Effect.Data.Services.DataContextLoggingProvider.IDataContextLoggingProviderConfiguration configuration) { }
+        public DataContextLoggingProvider(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dbContextFactory, Trax.Effect.Data.Services.DataContextLoggingProvider.IDataContextLoggingProviderConfiguration configuration, System.TimeProvider timeProvider) { }
         public Microsoft.Extensions.Logging.ILogger CreateLogger(string categoryName) { }
         public void Dispose() { }
     }
     public class DataContextLoggingProviderConfiguration : Trax.Effect.Data.Services.DataContextLoggingProvider.IDataContextLoggingProviderConfiguration
     {
         public DataContextLoggingProviderConfiguration() { }
-        public System.Collections.Generic.List<string> Blacklist { get; set; }
+        public System.Collections.Generic.IReadOnlyList<string> Blacklist { get; set; }
         public Microsoft.Extensions.Logging.LogLevel MinimumLogLevel { get; set; }
     }
     public interface IDataContextLoggingProviderConfiguration
     {
-        System.Collections.Generic.List<string> Blacklist { get; }
+        System.Collections.Generic.IReadOnlyList<string> Blacklist { get; }
         Microsoft.Extensions.Logging.LogLevel MinimumLogLevel { get; }
     }
 }
@@ -307,6 +309,7 @@ namespace Trax.Effect.Data.Services.WorkQueuePromotion
     public class WorkQueuePromotion : Trax.Effect.Data.Services.WorkQueuePromotion.IWorkQueuePromotion
     {
         public WorkQueuePromotion(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory contextFactory) { }
+        public WorkQueuePromotion(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory contextFactory, System.TimeProvider timeProvider) { }
         public System.Threading.Tasks.Task<int> CancelStaleAsync(System.TimeSpan olderThan, System.Threading.CancellationToken cancellationToken) { }
         public System.Threading.Tasks.Task<bool> PromoteAsync(long workQueueId, System.Threading.CancellationToken cancellationToken) { }
         public System.Threading.Tasks.Task<int> PromoteStaleAsync(System.TimeSpan olderThan, System.Threading.CancellationToken cancellationToken) { }

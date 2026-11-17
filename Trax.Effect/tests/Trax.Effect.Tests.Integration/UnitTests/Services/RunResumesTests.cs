@@ -40,7 +40,7 @@ public class RunResumesTests
                     .From(chain, typeof(ResearchTrain), typeof(string), typeof(string))
                     .Hash,
                 StateFingerprint = Fingerprint(typeof(CheckedFindings)),
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = TestTime.UtcDateTime,
             }
         );
         var resumes = new RunResumes([rows], new ServiceCollection().BuildServiceProvider());

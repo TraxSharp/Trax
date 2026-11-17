@@ -74,8 +74,8 @@ public class ChangeSignalCoalescerTests
 
     private static async Task<bool> WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
     {
-        var deadline = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow() + timeout;
+        while (TimeProvider.System.GetUtcNow() < deadline)
         {
             if (condition())
                 return true;
@@ -330,9 +330,9 @@ public class ChangeSignalCoalescerTests
     // has drained the backlog. Bounded so a stuck pipeline fails the test rather than hanging.
     private static async Task WaitUntilQuiescentAsync(CapturingSink sink)
     {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        var deadline = TimeProvider.System.GetUtcNow() + TimeSpan.FromSeconds(10);
         var last = -1;
-        while (DateTime.UtcNow < deadline)
+        while (TimeProvider.System.GetUtcNow() < deadline)
         {
             var now = sink.Count;
             if (now == last)
@@ -559,14 +559,18 @@ public class ChangeSignalCoalescerTests
         // Wait until the sink is actually inside FlushAsync (blocked on the token) before stopping.
         // allowed-delay: fail-safe ceiling, not a fixed wait — WhenAny returns the instant the sink
         // enters its flush; the delay only bounds a hang so a regression fails fast instead of hanging.
-        var entered = await Task.WhenAny(flushEntered.Task, Task.Delay(FlushTimeout));
+        var entered = await Task.WhenAny(
+            flushEntered.Task,
+            // allowed-delay: the fail-safe ceiling named above, not a wait.
+            Task.Delay(FlushTimeout, TimeProvider.System)
+        );
         entered.Should().Be(flushEntered.Task, "the sink should reach its flush before we stop");
 
         // StopAsync cancels the stopping token; the sink's wait throws, the flush rethrows the
         // cancellation, and the loop breaks. This must complete rather than hang or throw.
         var stop = coalescer.StopAsync(CancellationToken.None);
         // allowed-delay: fail-safe ceiling on StopAsync; WhenAny returns the moment it completes.
-        var finished = await Task.WhenAny(stop, Task.Delay(FlushTimeout));
+        var finished = await Task.WhenAny(stop, Task.Delay(FlushTimeout, TimeProvider.System));
         finished
             .Should()
             .Be(stop, "StopAsync must unwind cleanly when a sink is cancelled mid-flush");

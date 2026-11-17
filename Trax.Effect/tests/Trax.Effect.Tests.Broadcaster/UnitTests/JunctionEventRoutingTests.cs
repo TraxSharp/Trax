@@ -32,7 +32,7 @@ public class JunctionEventRoutingTests
             ExternalId: "run-7",
             TrainName: "Routing.ITrain",
             TrainState: "InProgress",
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TestTime.UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             EventType: eventType,
@@ -75,7 +75,10 @@ public class JunctionEventRoutingTests
 
         var service = new TrainEventReceiverService(receiver, services);
         await service.StartAsync(CancellationToken.None).ConfigureAwait(false);
-        return (await started.Task.WaitAsync(Timeout).ConfigureAwait(false), service);
+        return (
+            await started.Task.WaitAsync(Timeout, TimeProvider.System).ConfigureAwait(false),
+            service
+        );
     }
 
     [Test]

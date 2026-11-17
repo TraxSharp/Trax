@@ -139,7 +139,8 @@ public sealed class CheckpointHost : IAsyncDisposable
                 ResumeFrom = resumeFrom,
                 ResumeAt = resumeAt,
                 ManifestId = manifestId,
-            }
+            },
+            TestTime.Clock
         );
 
         // As a host that saves train inputs stores it, so a resume compares it with its source's.

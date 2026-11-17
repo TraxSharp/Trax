@@ -15,6 +15,20 @@ namespace Trax.Effect.Data.Services.WorkQueuePromotion;
 [EditorBrowsable(EditorBrowsableState.Never)]
 public class WorkQueuePromotion(IDataContextProviderFactory contextFactory) : IWorkQueuePromotion
 {
+    /// <summary>
+    /// A promotion that confirms entries and measures their age on <paramref name="timeProvider"/>.
+    /// The container uses this one, with the clock it registers.
+    /// </summary>
+    /// <param name="contextFactory">Creates the data contexts the queue is read and written through.</param>
+    /// <param name="timeProvider">The clock confirmation times and cutoffs are read from.</param>
+    public WorkQueuePromotion(IDataContextProviderFactory contextFactory, TimeProvider timeProvider)
+        : this(contextFactory) => _clock = timeProvider;
+
+    // Built without a clock, it uses the system's.
+    private readonly TimeProvider _clock = TimeProvider.System;
+
+    private DateTime UtcNow => _clock.GetUtcNow().UtcDateTime;
+
     /// <inheritdoc />
     public async Task<bool> PromoteAsync(long workQueueId, CancellationToken cancellationToken)
     {
@@ -85,9 +99,9 @@ public class WorkQueuePromotion(IDataContextProviderFactory contextFactory) : IW
             .ConfigureAwait(false);
     }
 
-    private static Expression<Func<WorkQueue, bool>> Stale(TimeSpan olderThan)
+    private Expression<Func<WorkQueue, bool>> Stale(TimeSpan olderThan)
     {
-        var cutoff = DateTime.UtcNow - olderThan;
+        var cutoff = UtcNow - olderThan;
 
         return w =>
             w.ConfirmedAt == null && w.Status == WorkQueueStatus.Queued && w.CreatedAt < cutoff;
@@ -98,9 +112,9 @@ public class WorkQueuePromotion(IDataContextProviderFactory contextFactory) : IW
     /// <paramref name="olderThan"/>. That is what the sweep cancels, and also an entry an
     /// operator cancelled while its hook ran; either way it never ran and has no metadata.
     /// </summary>
-    private static Expression<Func<WorkQueue, bool>> CancelledPastRetention(TimeSpan olderThan)
+    private Expression<Func<WorkQueue, bool>> CancelledPastRetention(TimeSpan olderThan)
     {
-        var cutoff = DateTime.UtcNow - olderThan;
+        var cutoff = UtcNow - olderThan;
 
         return w =>
             w.ConfirmedAt == null
@@ -145,14 +159,14 @@ public class WorkQueuePromotion(IDataContextProviderFactory contextFactory) : IW
     /// deferring train usable in tests and local development rather than throwing after its hook
     /// has already run.
     /// </remarks>
-    private static async Task<int> UpdateAsync(
+    private async Task<int> UpdateAsync(
         IDataContext context,
         Expression<Func<WorkQueue, bool>> match,
         bool confirm,
         CancellationToken cancellationToken
     )
     {
-        var now = DateTime.UtcNow;
+        var now = UtcNow;
 
         if (context is DbContext db && db.Database.IsRelational())
             return confirm

@@ -23,7 +23,7 @@ public class RunnerNonce
     [Column("nonce")]
     public string Nonce
     {
-        get => field.NotNull(nameof(Nonce));
+        get => field ?? string.Empty;
         set;
     }
 

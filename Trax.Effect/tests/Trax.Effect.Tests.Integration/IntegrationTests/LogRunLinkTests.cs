@@ -56,7 +56,11 @@ public class LogRunLinkTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.NotNull().DisposeAsync();
+    public async Task DisposeProvider()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [Test]
     public async Task A_line_logged_in_a_run_names_that_run_and_one_logged_outside_names_none()
@@ -105,8 +109,8 @@ public class LogRunLinkTests
 
         // The writer logs its line when it opens its data context, on its own schedule. Disposing
         // closes the queue, so wait for that line to be queued first; disposing then drains it.
-        await _writerLogged.NotNull().Task.WaitAsync(TimeSpan.FromSeconds(15));
-        _builtInRun.NotNull().Dispose();
+        await _writerLogged.NotNull().Task.WaitAsync(TimeSpan.FromSeconds(15), TimeProvider.System);
+        _builtInRun?.Dispose();
 
         var rows = await WaitForLines(tag, count: 2);
 
@@ -131,7 +135,7 @@ public class LogRunLinkTests
         var factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
 
         // Polled rather than waited on: the writer flushes on its own schedule.
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+        var deadline = TimeProvider.System.GetUtcNow() + TimeSpan.FromSeconds(15);
         while (true)
         {
             var context = (IDataContext)factory.Create();
@@ -142,7 +146,7 @@ public class LogRunLinkTests
                 .ToDictionaryAsync(l => l.Message, l => l.MetadataId, StringComparer.Ordinal)
                 .ConfigureAwait(false);
 
-            if (rows.Count >= count || DateTime.UtcNow > deadline)
+            if (rows.Count >= count || TimeProvider.System.GetUtcNow() > deadline)
                 return rows;
 
             await Task.Yield();

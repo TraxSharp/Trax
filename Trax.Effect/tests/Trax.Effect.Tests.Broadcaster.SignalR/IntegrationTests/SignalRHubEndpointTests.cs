@@ -49,7 +49,7 @@ public class SignalRHubEndpointTests
         var connection = server.CreateClient();
         await using var connectionDisposal = connection.ConfigureAwait(false);
 
-        await connection.StartAsync().WaitAsync(Timeout);
+        await connection.StartAsync().WaitAsync(Timeout, TimeProvider.System);
 
         connection.State.Should().Be(HubConnectionState.Connected);
     }
@@ -65,7 +65,7 @@ public class SignalRHubEndpointTests
         var tcs = new TaskCompletionSource<TraxClientEvent>();
         connection.On<TraxClientEvent>("TrainEvent", evt => tcs.TrySetResult(evt));
 
-        await connection.StartAsync().WaitAsync(Timeout);
+        await connection.StartAsync().WaitAsync(Timeout, TimeProvider.System);
 
         var hub = server.GetService<IHubContext<TraxTrainEventHub, ITraxTrainEventClient>>();
         var payload = new TraxClientEvent(
@@ -73,12 +73,12 @@ public class SignalRHubEndpointTests
             "ext-7",
             "T.IDoThing",
             "Completed",
-            DateTime.UtcNow,
+            TestTime.UtcDateTime,
             FailureReason: null
         );
         await hub.Clients.All.TrainEvent(payload);
 
-        var received = await tcs.Task.WaitAsync(Timeout);
+        var received = await tcs.Task.WaitAsync(Timeout, TimeProvider.System);
         received.ExternalId.Should().Be("ext-7");
         received.MetadataId.Should().Be(7);
         received.TrainName.Should().Be("T.IDoThing");
@@ -95,12 +95,12 @@ public class SignalRHubEndpointTests
         var tcs = new TaskCompletionSource<TraxClientEvent>();
         connection.On<TraxClientEvent>("TrainEvent", evt => tcs.TrySetResult(evt));
 
-        await connection.StartAsync().WaitAsync(Timeout);
+        await connection.StartAsync().WaitAsync(Timeout, TimeProvider.System);
 
         var dispatcher = server.GetService<SignalRTrainEventDispatcher>();
         await dispatcher.HandleAsync(Message(externalId: "end-to-end"), CancellationToken.None);
 
-        var received = await tcs.Task.WaitAsync(Timeout);
+        var received = await tcs.Task.WaitAsync(Timeout, TimeProvider.System);
         received.ExternalId.Should().Be("end-to-end");
     }
 
@@ -115,7 +115,7 @@ public class SignalRHubEndpointTests
         var tcs = new TaskCompletionSource<TraxClientEvent>();
         connection.On<TraxClientEvent>("TrainEvent", evt => tcs.TrySetResult(evt));
 
-        await connection.StartAsync().WaitAsync(Timeout);
+        await connection.StartAsync().WaitAsync(Timeout, TimeProvider.System);
 
         var dispatcher = server.GetService<SignalRTrainEventDispatcher>();
 
@@ -131,7 +131,7 @@ public class SignalRHubEndpointTests
             CancellationToken.None
         );
 
-        var received = await tcs.Task.WaitAsync(Timeout);
+        var received = await tcs.Task.WaitAsync(Timeout, TimeProvider.System);
 
         // Positive proof: received the *included* event, not the excluded one.
         received.ExternalId.Should().Be("included");

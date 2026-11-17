@@ -381,7 +381,7 @@ public class RabbitMqMessageSigningTests
         await using (broadcaster.ConfigureAwait(false))
         {
             await broadcaster.PublishAsync(Message("signed"), CancellationToken.None);
-            await gotSigned.Task.WaitAsync(Timeout, CancellationToken.None);
+            await gotSigned.Task.WaitAsync(Timeout, TimeProvider.System, CancellationToken.None);
         }
 
         received.Should().Equal(["signed"]);
@@ -405,7 +405,7 @@ public class RabbitMqMessageSigningTests
                     key,
                     exchange,
                     body,
-                    DateTimeOffset.UtcNow
+                    TimeProvider.System.GetUtcNow()
                 ),
             };
         await channel
@@ -426,7 +426,7 @@ public class RabbitMqMessageSigningTests
             ExternalId: externalId,
             TrainName: "Signing.ITrain",
             TrainState: "Completed",
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TestTime.UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             EventType: "Completed",

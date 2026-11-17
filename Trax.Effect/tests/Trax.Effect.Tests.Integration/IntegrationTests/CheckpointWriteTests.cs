@@ -63,7 +63,11 @@ public class CheckpointWriteTests(CheckpointStoreKind store)
         );
 
     [OneTimeTearDown]
-    public async Task DisposeHost() => await _host.NotNull().DisposeAsync();
+    public async Task DisposeHost()
+    {
+        if (_host is not null)
+            await _host.DisposeAsync();
+    }
 
     [SetUp]
     public void Reset()

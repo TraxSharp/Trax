@@ -66,7 +66,11 @@ public class PostgresJunctionRunTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.NotNull().DisposeAsync();
+    public async Task DisposeProvider()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [Test]
     public async Task A_runs_steps_are_rows_read_back_in_order()
@@ -113,8 +117,8 @@ public class PostgresJunctionRunTests
             var group = new ManifestGroup
             {
                 Name = $"junction-runs-{Guid.NewGuid():N}",
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
+                CreatedAt = TestTime.UtcDateTime,
+                UpdatedAt = TestTime.UtcDateTime,
             };
             await context.Track(group);
             await context.SaveChanges(CancellationToken.None);
@@ -147,7 +151,7 @@ public class PostgresJunctionRunTests
         var metadataId = await Run();
         var writer = _provider.NotNull().GetRequiredService<JunctionRunWriter>();
         var dropped = writer.DroppedSteps;
-        var start = DateTime.UtcNow;
+        var start = TestTime.UtcDateTime;
         const int Junctions = 1500;
 
         // Several batches' worth of starts, then their ends, which update rows written by an
@@ -244,7 +248,8 @@ public class PostgresJunctionRunTests
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = input,
                 ManifestId = manifestId,
-            }
+            },
+            TestTime.Clock
         );
         var run = async () =>
             await train.Run(input, metadata, CancellationToken.None).ConfigureAwait(false);

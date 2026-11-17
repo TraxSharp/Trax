@@ -27,7 +27,8 @@ public class SqliteDispatchSqlTests : TestSetup
         var context = await factory.CreateDbContextAsync(CancellationToken.None);
         await using var contextDisposal = context.ConfigureAwait(false);
         var entry = WorkQueue.Create(
-            new CreateWorkQueue { TrainName = "Sqlite.Claim", InputTypeName = "Sqlite.Input" }
+            new CreateWorkQueue { TrainName = "Sqlite.Claim", InputTypeName = "Sqlite.Input" },
+            TestTime.Clock
         );
         await context.Track(entry);
         await context.SaveChanges(CancellationToken.None);
@@ -66,7 +67,8 @@ public class SqliteDispatchSqlTests : TestSetup
                 Name = "Sqlite.Subject",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         await context.Track(metadata);
         await context.SaveChanges(CancellationToken.None);
@@ -77,7 +79,8 @@ public class SqliteDispatchSqlTests : TestSetup
                 TrainName = "Sqlite.Subject",
                 InputTypeName = "Sqlite.Input",
                 SubjectKey = "customer-1",
-            }
+            },
+            TestTime.Clock
         );
         running.Status = Trax.Effect.Enums.WorkQueueStatus.Dispatched;
         running.MetadataId = metadata.Id;
@@ -87,7 +90,8 @@ public class SqliteDispatchSqlTests : TestSetup
                 TrainName = "Sqlite.Subject",
                 InputTypeName = "Sqlite.Input",
                 SubjectKey = "customer-1",
-            }
+            },
+            TestTime.Clock
         );
         var other = WorkQueue.Create(
             new CreateWorkQueue
@@ -95,7 +99,8 @@ public class SqliteDispatchSqlTests : TestSetup
                 TrainName = "Sqlite.Subject",
                 InputTypeName = "Sqlite.Input",
                 SubjectKey = "customer-2",
-            }
+            },
+            TestTime.Clock
         );
         await context.Track(running);
         await context.Track(sibling);
@@ -144,14 +149,20 @@ public class SqliteDispatchSqlTests : TestSetup
                 Name = "Sqlite.NullSubject",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         await context.Track(metadata);
         await context.SaveChanges(CancellationToken.None);
 
         // In flight, and carrying no subject: a manifest entry looks exactly like this.
         var subjectless = WorkQueue.Create(
-            new CreateWorkQueue { TrainName = "Sqlite.NullSubject", InputTypeName = "Sqlite.Input" }
+            new CreateWorkQueue
+            {
+                TrainName = "Sqlite.NullSubject",
+                InputTypeName = "Sqlite.Input",
+            },
+            TestTime.Clock
         );
         subjectless.Status = Trax.Effect.Enums.WorkQueueStatus.Dispatched;
         subjectless.MetadataId = metadata.Id;
@@ -162,7 +173,8 @@ public class SqliteDispatchSqlTests : TestSetup
                 TrainName = "Sqlite.NullSubject",
                 InputTypeName = "Sqlite.Input",
                 SubjectKey = "unrelated-subject",
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(subjectless);
@@ -204,7 +216,8 @@ public class SqliteDispatchSqlTests : TestSetup
                 Name = "Sqlite.History",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         finished.TrainState = Trax.Effect.Enums.TrainState.Completed;
         await context.Track(finished);
@@ -216,7 +229,8 @@ public class SqliteDispatchSqlTests : TestSetup
                 TrainName = "Sqlite.History",
                 InputTypeName = "Sqlite.Input",
                 SubjectKey = "customer-history",
-            }
+            },
+            TestTime.Clock
         );
         past.Status = Trax.Effect.Enums.WorkQueueStatus.Dispatched;
         past.MetadataId = finished.Id;
@@ -227,7 +241,8 @@ public class SqliteDispatchSqlTests : TestSetup
                 TrainName = "Sqlite.History",
                 InputTypeName = "Sqlite.Input",
                 SubjectKey = "customer-history",
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(past);

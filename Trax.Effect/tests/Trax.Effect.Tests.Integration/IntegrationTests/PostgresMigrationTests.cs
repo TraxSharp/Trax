@@ -921,7 +921,9 @@ public class PostgresMigrationTests
                     Backoff: TimeSpan.Zero
                 );
                 var migrate = () =>
-                    DatabaseMigrator.Migrate(connectionString, policy).WaitAsync(Bounded);
+                    DatabaseMigrator
+                        .Migrate(connectionString, policy, logger: null, TimeProvider.System)
+                        .WaitAsync(Bounded, TimeProvider.System);
 
                 (await migrate.Should().ThrowAsync<PostgresException>().ConfigureAwait(false))
                     .Which.SqlState.Should()
@@ -956,7 +958,12 @@ public class PostgresMigrationTests
                     Attempts: 50,
                     Backoff: TimeSpan.Zero
                 );
-                var migration = DatabaseMigrator.Migrate(named, policy);
+                var migration = DatabaseMigrator.Migrate(
+                    named,
+                    policy,
+                    logger: null,
+                    TimeProvider.System
+                );
 
                 // Two distinct waits by the script session prove the first one timed out and the
                 // script was run again. Only then is the lock released.
@@ -965,11 +972,12 @@ public class PostgresMigrationTests
                 {
                     await observer.OpenAsync().ConfigureAwait(false);
                     var waits = new HashSet<string>(StringComparer.Ordinal);
-                    var deadline = DateTime.UtcNow + Bounded;
+                    var deadline = TimeProvider.System.GetUtcNow() + Bounded;
                     while (waits.Count < 2)
                     {
-                        DateTime
-                            .UtcNow.Should()
+                        TimeProvider
+                            .System.GetUtcNow()
+                            .Should()
                             .BeBefore(deadline, "the script should have waited on the lock twice");
                         migration.IsCompleted.Should().BeFalse("the lock is still held");
                         foreach (
@@ -989,7 +997,7 @@ public class PostgresMigrationTests
                 await held.RollbackAsync().ConfigureAwait(false);
                 await held.DisposeAsync().ConfigureAwait(false);
 
-                await migration.WaitAsync(Bounded).ConfigureAwait(false);
+                await migration.WaitAsync(Bounded, TimeProvider.System).ConfigureAwait(false);
 
                 var connection = new NpgsqlConnection(connectionString);
                 await using var connectionDisposal = connection.ConfigureAwait(false);

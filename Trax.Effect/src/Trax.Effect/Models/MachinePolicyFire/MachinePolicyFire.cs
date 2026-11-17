@@ -20,7 +20,7 @@ public class MachinePolicyFire
     [Column("policy")]
     public string Policy
     {
-        get => field.NotNull(nameof(Policy));
+        get => field ?? string.Empty;
         set;
     }
 

@@ -26,5 +26,6 @@ namespace Trax.Effect.Data.Postgres.Utils
     {
         public static DbUp.Engine.UpgradeEngine CreateEngineWithEmbeddedScripts(string connectionString) { }
         public static System.Threading.Tasks.Task Migrate(string connectionString) { }
+        public static System.Threading.Tasks.Task Migrate(string connectionString, Microsoft.Extensions.Logging.ILogger? logger) { }
     }
 }

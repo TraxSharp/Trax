@@ -55,7 +55,8 @@ public class SqliteFailureClassStorageTests : TestSetup
                 Name = "Sqlite.FailureClass",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         var failure = new InvalidOperationException("conflict");
         failure.Data["TrainExceptionData"] = new TrainExceptionData

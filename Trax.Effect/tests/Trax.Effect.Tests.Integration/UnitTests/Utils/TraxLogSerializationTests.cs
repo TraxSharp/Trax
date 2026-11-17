@@ -44,7 +44,8 @@ public class TraxLogSerializationTests
     public void WorkQueue_ToString_writes_its_input_as_omitted()
     {
         var entry = WorkQueue.Create(
-            new CreateWorkQueue { TrainName = "T", Input = $$"""{"apiKey":"{{Secret}}"}""" }
+            new CreateWorkQueue { TrainName = "T", Input = $$"""{"apiKey":"{{Secret}}"}""" },
+            TestTime.Clock
         );
 
         entry
@@ -58,7 +59,8 @@ public class TraxLogSerializationTests
     public void BackgroundJob_ToString_writes_its_input_as_omitted()
     {
         var job = BackgroundJob.Create(
-            new CreateBackgroundJob { MetadataId = 1, Input = $$"""{"apiKey":"{{Secret}}"}""" }
+            new CreateBackgroundJob { MetadataId = 1, Input = $$"""{"apiKey":"{{Secret}}"}""" },
+            TestTime.Clock
         );
 
         job.ToString()
@@ -76,7 +78,8 @@ public class TraxLogSerializationTests
                 Name = "Train",
                 ExternalId = "ext",
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         var manifest = Manifest.Create(
             new CreateManifest
@@ -101,7 +104,10 @@ public class TraxLogSerializationTests
     [Test]
     public void A_missing_run_from_copy_is_left_out_rather_than_marked()
     {
-        var entry = WorkQueue.Create(new CreateWorkQueue { TrainName = "T", Input = null });
+        var entry = WorkQueue.Create(
+            new CreateWorkQueue { TrainName = "T", Input = null },
+            TestTime.Clock
+        );
 
         entry.ToString().Should().NotContain(TraxLogSerialization.OmittedProperty);
     }

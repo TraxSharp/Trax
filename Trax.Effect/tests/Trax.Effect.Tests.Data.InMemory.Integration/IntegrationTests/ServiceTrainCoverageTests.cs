@@ -73,7 +73,8 @@ public class ServiceTrainCoverageTests : TestSetup
                 Name = typeof(ICancellingJunctionTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         metadata.TrainState = TrainState.InProgress;
 

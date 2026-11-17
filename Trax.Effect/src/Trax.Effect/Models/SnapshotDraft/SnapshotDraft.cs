@@ -55,7 +55,7 @@ public class SnapshotDraft
     [Column("machine")]
     public string Machine
     {
-        get => field.NotNull(nameof(Machine));
+        get => field ?? string.Empty;
         set;
     }
 
@@ -71,7 +71,7 @@ public class SnapshotDraft
     [Column("state")]
     public string State
     {
-        get => field.NotNull(nameof(State));
+        get => field ?? string.Empty;
         set;
     }
 

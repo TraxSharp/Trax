@@ -165,7 +165,7 @@ public class DataContextChangeTrackingTests
 
         // Mutate the entity (it's Unchanged → becomes Modified via snapshot)
         metadata.TrainState = TrainState.Failed;
-        metadata.EndTime = DateTime.UtcNow;
+        metadata.EndTime = TestTime.UtcDateTime;
 
         // Update is a no-op for already-tracked entities
         await context.Update(metadata);
@@ -216,7 +216,7 @@ public class DataContextChangeTrackingTests
 
         // Step 4-5: Finish with final state
         metadata.TrainState = TrainState.Completed;
-        metadata.EndTime = DateTime.UtcNow;
+        metadata.EndTime = TestTime.UtcDateTime;
         await context.Update(metadata);
 
         // Step 6: Second SaveChanges (UPDATE)
@@ -244,7 +244,7 @@ public class DataContextChangeTrackingTests
 
         // Error path
         metadata.TrainState = TrainState.Failed;
-        metadata.EndTime = DateTime.UtcNow;
+        metadata.EndTime = TestTime.UtcDateTime;
         await context.Update(metadata);
         await context.SaveChanges(CancellationToken.None);
 
@@ -397,7 +397,8 @@ public class DataContextChangeTrackingTests
                 Name = name,
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
     #endregion

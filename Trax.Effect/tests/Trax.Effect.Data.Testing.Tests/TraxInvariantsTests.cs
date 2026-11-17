@@ -544,8 +544,11 @@ public class TraxInvariantsTests
     [Property("adr", MachineApiAdr)]
     public async Task AUserDraftOlderThanTheMaximumLifetime_IsReportedWithItsRow()
     {
-        var old = await SeedUserDraftAsync("u1", createdAt: DateTimeOffset.UtcNow.AddDays(-3));
-        await SeedUserDraftAsync("u2", createdAt: DateTimeOffset.UtcNow.AddHours(-1));
+        var old = await SeedUserDraftAsync(
+            "u1",
+            createdAt: TimeProvider.System.GetUtcNow().AddDays(-3)
+        );
+        await SeedUserDraftAsync("u2", createdAt: TimeProvider.System.GetUtcNow().AddHours(-1));
         // A system instance lives as long as the system keeps it.
         await SeedSnapshotAsync(Guid.NewGuid(), "Built", token: null);
         await SqlAsync(
@@ -579,7 +582,7 @@ public class TraxInvariantsTests
     [Property("adr", MachineApiAdr)]
     public async Task TheLifetimeCheck_CountsAsTheSweepDoes()
     {
-        var longAgo = DateTimeOffset.UtcNow.AddDays(-3);
+        var longAgo = TimeProvider.System.GetUtcNow().AddDays(-3);
         // Built is kept by the sweep however old: the record of what the server did.
         await SeedUserDraftAsync("u1", createdAt: longAgo, state: "Built");
         var editable = await SeedUserDraftAsync("u1", createdAt: longAgo, state: "Editing");
@@ -660,9 +663,9 @@ public class TraxInvariantsTests
         command.Parameters.AddWithValue("state", state);
         command.Parameters.AddWithValue(
             "created",
-            noCreatedAt ? DBNull.Value : (object)(createdAt ?? DateTimeOffset.UtcNow)
+            noCreatedAt ? DBNull.Value : (object)(createdAt ?? TimeProvider.System.GetUtcNow())
         );
-        command.Parameters.AddWithValue("updated", updatedAt ?? DateTimeOffset.UtcNow);
+        command.Parameters.AddWithValue("updated", updatedAt ?? TimeProvider.System.GetUtcNow());
         command.Parameters.AddWithValue("token", (object?)token ?? DBNull.Value);
         return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull();
     }
@@ -721,12 +724,15 @@ public class TraxInvariantsTests
             .BeTrue("a fixture's base class can carry the mark for every subclass");
     }
 
-    private static class Marked
+    // Stands in for a test fixture, whose tests are instance methods.
+    private sealed class Marked
     {
-        [LeavesStuckRuns("simulates a host crashing mid-run")]
-        public static void Stuck() { }
+        private int _ran;
 
-        public static void Clean() { }
+        [LeavesStuckRuns("simulates a host crashing mid-run")]
+        public void Stuck() => _ran++;
+
+        public void Clean() => _ran++;
     }
 
     [LeavesStuckRuns("every test here abandons a claim")]

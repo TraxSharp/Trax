@@ -128,7 +128,9 @@ public class SignalRLifecycleHookForwarderTests
 
         await ForwarderFrom(dispatcher).OnStarted(NewRun(), CancellationToken.None);
 
-        (await seen.Task.WaitAsync(TimeSpan.FromSeconds(10))).Should().BeNull();
+        (await seen.Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System))
+            .Should()
+            .BeNull();
     }
 
     private static ITrainLifecycleHook ForwarderFrom(SignalRTrainEventDispatcher dispatcher) =>
@@ -155,7 +157,8 @@ public class SignalRLifecycleHookForwarderTests
                 Name = "T.IDoThing",
                 ExternalId = "run-1",
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         metadata.TrainState = TrainState.InProgress;
         return metadata;

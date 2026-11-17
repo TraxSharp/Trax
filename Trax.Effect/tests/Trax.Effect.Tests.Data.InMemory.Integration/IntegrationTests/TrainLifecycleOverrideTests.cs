@@ -275,7 +275,8 @@ public class TrainLifecycleOverrideTests : TestSetup
                 Name = typeof(IRecordingTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
         await train.Run(Unit.Default, metadata, cts.Token);
@@ -297,7 +298,8 @@ public class TrainLifecycleOverrideTests : TestSetup
                 Name = typeof(IRecordingTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
         await train.Run(Unit.Default, metadata, cts.Token);
@@ -321,7 +323,8 @@ public class TrainLifecycleOverrideTests : TestSetup
                 Name = typeof(IRecordingTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
         await train.Run(Unit.Default, metadata, CancellationToken.None);
@@ -342,7 +345,8 @@ public class TrainLifecycleOverrideTests : TestSetup
                 Name = typeof(ICancellingRecordingTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
         await cts.CancelAsync();
@@ -513,7 +517,8 @@ public class TrainLifecycleOverrideTests : TestSetup
                 Name = typeof(IQueueRecordingTrain).FullName.NotNull(),
                 ExternalId = "ext-queue-1",
                 Input = "hello",
-            }
+            },
+            TestTime.Clock
         );
 
         await train.InvokeOnQueueAsync(metadata, CancellationToken.None);
@@ -535,7 +540,8 @@ public class TrainLifecycleOverrideTests : TestSetup
                 Name = typeof(ITypedAccessTrain).FullName.NotNull(),
                 ExternalId = "ext-queue-2",
                 Input = "queued",
-            }
+            },
+            TestTime.Clock
         );
 
         using (train.EnterQueueHooks(queued))
@@ -557,7 +563,8 @@ public class TrainLifecycleOverrideTests : TestSetup
                 Name = typeof(IQueueRecordingTrain).FullName.NotNull(),
                 ExternalId = "boom",
                 Input = "throw",
-            }
+            },
+            TestTime.Clock
         );
 
         var act = async () =>

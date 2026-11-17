@@ -21,13 +21,13 @@ public class Exclusion
     /// Days of the week to exclude. Used when <see cref="Type"/> is
     /// <see cref="ExclusionType.DaysOfWeek"/>.
     /// </summary>
-    public IList<DayOfWeek>? DaysOfWeek { get; set; }
+    public IReadOnlyList<DayOfWeek>? DaysOfWeek { get; set; }
 
     /// <summary>
     /// Specific dates to exclude. Used when <see cref="Type"/> is
     /// <see cref="ExclusionType.Dates"/>.
     /// </summary>
-    public IList<DateOnly>? Dates { get; set; }
+    public IReadOnlyList<DateOnly>? Dates { get; set; }
 
     /// <summary>
     /// Start date of the exclusion range (inclusive). Used when <see cref="Type"/> is

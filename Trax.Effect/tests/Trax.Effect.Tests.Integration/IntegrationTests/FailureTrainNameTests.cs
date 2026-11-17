@@ -34,7 +34,11 @@ public class FailureTrainNameTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.NotNull().DisposeAsync();
+    public async Task DisposeProvider()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [Test]
     public async Task A_failure_inside_a_junction_carries_the_canonical_name()

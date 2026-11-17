@@ -54,7 +54,8 @@ public class InMemorySchedulerColumnTests : TestSetup
                     TrainName = manifest.Name,
                     ManifestId = manifest.Id,
                     ExplicitTrigger = true,
-                }
+                },
+                TestTime.Clock
             );
             await context.Track(entry);
 

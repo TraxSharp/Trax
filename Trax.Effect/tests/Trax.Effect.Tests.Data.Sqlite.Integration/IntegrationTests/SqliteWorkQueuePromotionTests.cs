@@ -28,7 +28,12 @@ public class SqliteWorkQueuePromotionTests : TestSetup
     private static readonly TimeSpan Window = TimeSpan.FromMinutes(10);
 
     public override ServiceProvider ConfigureServices(IServiceCollection services) =>
-        services.AddScoped<IWorkQueuePromotion, WorkQueuePromotion>().BuildServiceProvider();
+        services
+            .AddScoped<IWorkQueuePromotion>(sp => new WorkQueuePromotion(
+                sp.GetRequiredService<IDataContextProviderFactory>(),
+                TestTime.Clock
+            ))
+            .BuildServiceProvider();
 
     private IWorkQueuePromotion Promotion =>
         Scope.ServiceProvider.GetRequiredService<IWorkQueuePromotion>();
@@ -127,7 +132,11 @@ public class SqliteWorkQueuePromotionTests : TestSetup
             );
         }
 
-        await Promotion.CancelStaleAsync(Window, CancellationToken.None);
+        // The database wrote created_at from its own clock, so the sweep compares on the real one.
+        await new WorkQueuePromotion(Factory, TimeProvider.System).CancelStaleAsync(
+            Window,
+            CancellationToken.None
+        );
 
         (await LoadByExternalId(staleExternalId)).Status.Should().Be(WorkQueueStatus.Cancelled);
         (await LoadByExternalId(recentExternalId)).Status.Should().Be(WorkQueueStatus.Queued);
@@ -137,7 +146,7 @@ public class SqliteWorkQueuePromotionTests : TestSetup
     public async Task CancelStaleAsync_deletes_what_an_earlier_pass_cancelled_once_past_the_retention()
     {
         // Retention is 30 days from creation. Rows are aged rather than a clock advanced: the
-        // sweep reads DateTime.UtcNow, and created_at is what it measures from.
+        // sweep reads its clock (a fixed one here), and created_at is what it measures from.
         var run = Guid.NewGuid().ToString("N");
         await StageMany($"Sqlite.Expired.{run}", 1000, age: TimeSpan.FromDays(31));
         await StageMany($"Sqlite.Fresh.{run}", 1000, age: TimeSpan.FromHours(1));
@@ -201,9 +210,10 @@ public class SqliteWorkQueuePromotionTests : TestSetup
                     TrainName = trainName,
                     InputTypeName = "Sqlite.Input",
                     DeferPromotion = true,
-                }
+                },
+                TestTime.Clock
             );
-            entry.CreatedAt = DateTime.UtcNow - age;
+            entry.CreatedAt = TestTime.UtcDateTime - age;
             entry.Status = status;
             if (confirmed)
                 entry.ConfirmedAt = entry.CreatedAt;
@@ -242,9 +252,10 @@ public class SqliteWorkQueuePromotionTests : TestSetup
                 TrainName = "Sqlite.Staged",
                 InputTypeName = "Sqlite.Input",
                 DeferPromotion = true,
-            }
+            },
+            TestTime.Clock
         );
-        entry.CreatedAt = DateTime.UtcNow - (age ?? TimeSpan.Zero);
+        entry.CreatedAt = TestTime.UtcDateTime - (age ?? TimeSpan.Zero);
         entry.Status = status;
         if (confirmed)
             entry.ConfirmedAt = entry.CreatedAt;

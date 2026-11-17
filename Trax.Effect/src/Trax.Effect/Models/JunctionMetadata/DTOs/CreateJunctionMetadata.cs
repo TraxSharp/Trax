@@ -16,7 +16,7 @@ public class CreateJunctionMetadata
     /// </summary>
     public string Name
     {
-        get => field.NotNull(nameof(Name));
+        get => field ?? string.Empty;
         set;
     }
 
@@ -26,7 +26,7 @@ public class CreateJunctionMetadata
     /// </summary>
     public string ExternalId
     {
-        get => field.NotNull(nameof(ExternalId));
+        get => field ?? string.Empty;
         set;
     }
 

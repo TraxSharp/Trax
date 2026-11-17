@@ -34,11 +34,13 @@ public class JunctionRunWriterFlowTests
                 JunctionRunKind.Junction,
                 "J",
                 JunctionRunState.InProgress,
-                DateTime.UtcNow
+                TestTime.UtcDateTime
             )
         );
 
-        (await factory.Seen.Task.WaitAsync(TimeSpan.FromSeconds(10))).Should().BeNull();
+        (await factory.Seen.Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System))
+            .Should()
+            .BeNull();
     }
 
     private sealed class ObservingFactory : IDataContextProviderFactory

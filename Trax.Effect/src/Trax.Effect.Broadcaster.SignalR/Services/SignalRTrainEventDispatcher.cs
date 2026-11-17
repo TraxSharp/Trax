@@ -49,6 +49,7 @@ internal sealed class SignalRTrainEventDispatcher
     private readonly DeliveryQueue _queue;
     private readonly CancellationTokenSource _abandon = new();
     private readonly Task _sender;
+    private readonly TimeProvider _clock;
 
     private long _dropped;
     private long _droppedSinceReport;
@@ -57,9 +58,11 @@ internal sealed class SignalRTrainEventDispatcher
     public SignalRTrainEventDispatcher(
         IHubContext<TraxTrainEventHub, ITraxTrainEventClient> hub,
         SignalRSinkConfiguration config,
-        ILogger<SignalRTrainEventDispatcher>? logger = null
+        ILogger<SignalRTrainEventDispatcher>? logger = null,
+        TimeProvider? timeProvider = null
     )
     {
+        _clock = timeProvider ?? TimeProvider.System;
         _hub = hub;
         _config = config;
         _logger = logger;
@@ -240,13 +243,13 @@ internal sealed class SignalRTrainEventDispatcher
             _abandon.Cancel();
     }
 
-    private static TrainLifecycleEventMessage BuildMessage(Metadata metadata, string eventType) =>
+    private TrainLifecycleEventMessage BuildMessage(Metadata metadata, string eventType) =>
         new(
             MetadataId: metadata.Id,
             ExternalId: metadata.ExternalId,
             TrainName: metadata.Name,
             TrainState: metadata.TrainState.ToString(),
-            Timestamp: metadata.EndTime ?? DateTime.UtcNow,
+            Timestamp: metadata.EndTime ?? _clock.GetUtcNow().UtcDateTime,
             FailureJunction: metadata.FailureJunction,
             FailureReason: metadata.FailureReason,
             EventType: eventType,

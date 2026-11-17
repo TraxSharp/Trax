@@ -189,7 +189,7 @@ public class ManifestSchedulingTests
     {
         // Arrange
         var manifest = Manifest.Create(new CreateManifest { Name = typeof(Unit) });
-        var successTime = DateTime.UtcNow;
+        var successTime = TestTime.UtcDateTime;
 
         // Act
         manifest.LastSuccessfulRun = successTime;

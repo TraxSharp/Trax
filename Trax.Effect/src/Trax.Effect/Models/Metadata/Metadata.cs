@@ -76,7 +76,7 @@ public class Metadata : IModel, IDisposable
     [Column("external_id")]
     public string ExternalId
     {
-        get => field.NotNull(nameof(ExternalId));
+        get => field ?? string.Empty;
         set;
     }
 
@@ -91,7 +91,7 @@ public class Metadata : IModel, IDisposable
     [Column("name")]
     public string Name
     {
-        get => field.NotNull(nameof(Name));
+        get => field ?? string.Empty;
         set;
     }
 
@@ -553,6 +553,15 @@ public class Metadata : IModel, IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static Metadata Create(CreateMetadata metadata)
     {
+        return Create(metadata, TimeProvider.System);
+    }
+
+    /// <summary>Creates a new Metadata as the overload without a clock does, with its start time read from the given clock.</summary>
+    /// <param name="metadata">As for the overload without a clock.</param>
+    /// <param name="timeProvider">The clock the times it stamps are read from.</param>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public static Metadata Create(CreateMetadata metadata, TimeProvider timeProvider)
+    {
         var host = TraxHostInfo.Current;
 
         var newTrain = new Metadata
@@ -561,7 +570,7 @@ public class Metadata : IModel, IDisposable
             ExternalId = metadata.ExternalId,
             TrainState = TrainState.Pending,
             Executor = Assembly.GetEntryAssembly()?.GetAssemblyProject(),
-            StartTime = DateTime.UtcNow,
+            StartTime = timeProvider.GetUtcNow().UtcDateTime,
             ParentId = metadata.ParentId,
             ManifestId = metadata.ManifestId,
             ReplayDecisionsOf = metadata.ReplayDecisionsOf,

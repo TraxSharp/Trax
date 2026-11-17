@@ -17,6 +17,9 @@ namespace Trax.Effect.Tests.Benchmarks.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 10)]
 public class TrainOverheadBenchmarks
 {
+    // BenchmarkDotNet runs instance methods only; each benchmark starts its chain from this.
+    private readonly int _input = 0;
+
     private ServiceProvider? _noEffectsProvider;
     private ServiceProvider? _inMemoryProvider;
 
@@ -47,17 +50,17 @@ public class TrainOverheadBenchmarks
     [GlobalCleanup]
     public void Cleanup()
     {
-        _noEffectsProvider.NotNull().Dispose();
-        _inMemoryProvider.NotNull().Dispose();
+        _noEffectsProvider?.Dispose();
+        _inMemoryProvider?.Dispose();
     }
 
     // ===== Arithmetic: Add 1 (single junction) =====
 
     [Benchmark(Baseline = true, Description = "Serial_Add1")]
-    public static Task<int> Serial_AddOne() => SerialOperations.AddOneSerial(0);
+    public Task<int> Serial_AddOne() => SerialOperations.AddOneSerial(_input);
 
     [Benchmark(Description = "BaseTrain_Add1")]
-    public static Task<int> BaseTrain_AddOne() => new AddOneTrain().Run(0);
+    public Task<int> BaseTrain_AddOne() => new AddOneTrain().Run(_input);
 
     [Benchmark(Description = "EffectTrain_NoEffects_Add1")]
     public async Task<int> EffectTrain_NoEffects_AddOne()
@@ -80,10 +83,10 @@ public class TrainOverheadBenchmarks
     // ===== Arithmetic: Add 3 (three steps) =====
 
     [Benchmark(Description = "Serial_Add3")]
-    public static Task<int> Serial_AddThree() => SerialOperations.AddThreeSerial(0);
+    public Task<int> Serial_AddThree() => SerialOperations.AddThreeSerial(_input);
 
     [Benchmark(Description = "BaseTrain_Add3")]
-    public static Task<int> BaseTrain_AddThree() => new AddThreeTrain().Run(0);
+    public Task<int> BaseTrain_AddThree() => new AddThreeTrain().Run(_input);
 
     [Benchmark(Description = "EffectTrain_NoEffects_Add3")]
     public async Task<int> EffectTrain_NoEffects_AddThree()
@@ -132,10 +135,10 @@ public class TrainOverheadBenchmarks
     // ===== Simulated I/O (3 Task.Yield steps) =====
 
     [Benchmark(Description = "Serial_SimulatedIO")]
-    public static Task<int> Serial_SimulatedIo() => SerialOperations.SimulatedIoSerial(0, 3);
+    public Task<int> Serial_SimulatedIo() => SerialOperations.SimulatedIoSerial(_input, 3);
 
     [Benchmark(Description = "BaseTrain_SimulatedIO")]
-    public static Task<int> BaseTrain_SimulatedIo() => new SimulatedIoTrain().Run(0);
+    public Task<int> BaseTrain_SimulatedIo() => new SimulatedIoTrain().Run(_input);
 
     [Benchmark(Description = "EffectTrain_NoEffects_SimulatedIO")]
     public async Task<int> EffectTrain_NoEffects_SimulatedIo()

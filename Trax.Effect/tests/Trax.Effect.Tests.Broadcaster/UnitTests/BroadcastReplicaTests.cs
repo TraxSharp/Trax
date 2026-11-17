@@ -85,7 +85,7 @@ public class BroadcastReplicaTests
                 ExternalId: "old-publisher",
                 TrainName: "T",
                 TrainState: "Completed",
-                Timestamp: DateTime.UtcNow,
+                Timestamp: TestTime.UtcDateTime,
                 FailureJunction: null,
                 FailureReason: null,
                 EventType: "Completed",
@@ -106,7 +106,8 @@ public class BroadcastReplicaTests
                 Name = "Replica.ITrain",
                 ExternalId = externalId,
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         metadata.TrainState = TrainState.Completed;
         return metadata;
@@ -161,7 +162,9 @@ public class BroadcastReplicaTests
 
             // ExecuteAsync runs in the background, so wait for it to subscribe before publishing.
             await receiverService.StartAsync(CancellationToken.None).ConfigureAwait(false);
-            await receiver.Subscribed.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+            await receiver
+                .Subscribed.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System)
+                .ConfigureAwait(false);
             return new Replica(provider, receiverService, handler);
         }
 

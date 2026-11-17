@@ -21,7 +21,7 @@ public class BroadcastLifecycleHookTests
     public void SetUp()
     {
         _broadcaster = Substitute.For<ITrainEventBroadcaster>();
-        _hook = new BroadcastLifecycleHook(_broadcaster.NotNull());
+        _hook = new BroadcastLifecycleHook(_broadcaster.NotNull(), timeProvider: TestTime.Clock);
     }
 
     private static Metadata CreateMetadata(
@@ -37,7 +37,8 @@ public class BroadcastLifecycleHookTests
                 Name = name,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         metadata.TrainState = state;
 
@@ -186,11 +187,9 @@ public class BroadcastLifecycleHookTests
                 Arg.Any<CancellationToken>()
             );
 
-        var before = DateTime.UtcNow;
         await _hook.NotNull().OnStarted(metadata, CancellationToken.None);
-        var after = DateTime.UtcNow;
 
-        captured.NotNull().Timestamp.Should().BeOnOrAfter(before).And.BeOnOrBefore(after);
+        captured.NotNull().Timestamp.Should().Be(TestTime.UtcDateTime);
     }
 
     [Test]

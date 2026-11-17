@@ -129,6 +129,8 @@ internal static class OutOfTrainOutcomes
     )
     {
         var bound = timeout ?? PublishTimeout;
+        // The container's clock (AddTrax registers the system's), or the system's without one.
+        var clock = services.GetService<TimeProvider>() ?? TimeProvider.System;
 
         async Task PublishBoundedAsync(long runId)
         {
@@ -136,9 +138,9 @@ internal static class OutOfTrainOutcomes
             {
                 // The read and the hooks share one bound, so neither an unreachable store nor a
                 // hook that ignores its token holds the caller up for longer.
-                using var bounded = new CancellationTokenSource(bound);
+                using var bounded = new CancellationTokenSource(bound, clock);
                 await PublishOneAsync(services, runId, state, publish, bounded.Token)
-                    .WaitAsync(bound, CancellationToken.None)
+                    .WaitAsync(bound, clock, CancellationToken.None)
                     .ConfigureAwait(false);
             }
             catch (Exception ex)

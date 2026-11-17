@@ -60,7 +60,11 @@ public class PostgresDecisionRecordingTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.NotNull().DisposeAsync();
+    public async Task DisposeProvider()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [Test]
     public async Task A_decision_is_a_row_written_while_the_run_is_in_progress()
@@ -250,7 +254,8 @@ public class PostgresDecisionRecordingTests
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = order,
                 ReplayDecisionsOf = replayDecisionsOf,
-            }
+            },
+            TestTime.Clock
         );
 
         return (

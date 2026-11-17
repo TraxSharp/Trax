@@ -47,7 +47,11 @@ public class ExcludedOutputHookCopyTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.NotNull().DisposeAsync();
+    public async Task DisposeProvider()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [Test]
     public async Task An_excluded_output_is_not_serialized_in_full_for_the_hooks()

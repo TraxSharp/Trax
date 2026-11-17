@@ -95,7 +95,7 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
             await BeforeJunction(serviceTrain.JunctionEffectRunner, serviceTrain, previousOutput)
                 .ConfigureAwait(false);
 
-        Metadata.StartTimeUtc = DateTime.UtcNow;
+        Metadata.StartTimeUtc = serviceTrain.Clock.GetUtcNow().UtcDateTime;
 
         // A junction skipped because an earlier one failed did not run, so it is not a step.
         var events = previousOutput.IsRight ? JunctionEventRun.For(serviceTrain.Metadata) : null;
@@ -118,7 +118,7 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
             throw;
         }
 
-        Metadata.EndTimeUtc = DateTime.UtcNow;
+        Metadata.EndTimeUtc = serviceTrain.Clock.GetUtcNow().UtcDateTime;
         Metadata.State = result.State;
         // A Left input skips Run: an earlier junction failed and this one never executed.
         Metadata.HasRan = previousOutput.IsRight;
@@ -232,8 +232,8 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
                     events,
                     position,
                     Metadata.NotNull().Name,
-                    Metadata.StartTimeUtc ?? DateTime.UtcNow,
-                    Metadata.EndTimeUtc ?? DateTime.UtcNow,
+                    Metadata.StartTimeUtc ?? serviceTrain.Clock.GetUtcNow().UtcDateTime,
+                    Metadata.EndTimeUtc ?? serviceTrain.Clock.GetUtcNow().UtcDateTime,
                     failure,
                     failure is not null && IsCancellation(serviceTrain, failure),
                     serviceTrain.ServiceProvider,

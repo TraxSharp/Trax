@@ -46,7 +46,7 @@ public class RabbitMqBroadcasterFlowTests
                 ExternalId: "e",
                 TrainName: "Flow.ITrain",
                 TrainState: "InProgress",
-                Timestamp: DateTime.UtcNow,
+                Timestamp: TestTime.UtcDateTime,
                 FailureJunction: null,
                 FailureReason: null,
                 EventType: "Started",
@@ -56,6 +56,8 @@ public class RabbitMqBroadcasterFlowTests
             CancellationToken.None
         );
 
-        (await seen.Task.WaitAsync(TimeSpan.FromSeconds(10))).Should().BeNull();
+        (await seen.Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System))
+            .Should()
+            .BeNull();
     }
 }

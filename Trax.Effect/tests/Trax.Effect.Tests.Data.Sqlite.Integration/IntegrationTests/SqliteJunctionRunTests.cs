@@ -58,7 +58,8 @@ public class SqliteJunctionRunTests
     [OneTimeTearDown]
     public async Task DisposeProvider()
     {
-        await _provider.NotNull().DisposeAsync();
+        if (_provider is not null)
+            await _provider.DisposeAsync();
 
         foreach (
             var path in new[]

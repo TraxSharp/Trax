@@ -33,7 +33,8 @@ internal static class ServiceTrainExtensions
                 ExternalId = serviceTrain.ExternalId,
                 Input = null,
                 ParentId = serviceTrain.ParentId,
-            }
+            },
+            serviceTrain.Clock
         );
 
         return await serviceTrain
@@ -157,7 +158,7 @@ internal static class ServiceTrainExtensions
             resultState.ToString()
         );
         serviceTrain.Metadata.TrainState = resultState;
-        serviceTrain.Metadata.EndTime = DateTime.UtcNow;
+        serviceTrain.Metadata.EndTime = serviceTrain.Clock.GetUtcNow().UtcDateTime;
         serviceTrain.Metadata.CurrentlyRunningJunction = null;
         serviceTrain.Metadata.JunctionStartedAt = null;
 

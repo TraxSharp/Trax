@@ -483,7 +483,8 @@ public class EffectCoverageGapTests
                 Name = "TestTrain",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
     private sealed class TestTrain : ServiceTrain<string, string>

@@ -75,10 +75,11 @@ public class PostgresLogBatchTests : TestSetup
 
         // Polled rather than waited on: the loop flushes on its own schedule. A batch Postgres
         // refuses never lands, so the count stays at zero until the deadline.
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+        var deadline = TimeProvider.System.GetUtcNow() + TimeSpan.FromSeconds(15);
         var stored = 0;
         while (
-            DateTime.UtcNow < deadline && (stored = await CountStored().ConfigureAwait(false)) < 10
+            TimeProvider.System.GetUtcNow() < deadline
+            && (stored = await CountStored().ConfigureAwait(false)) < 10
         )
             await Task.Yield();
 

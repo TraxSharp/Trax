@@ -39,7 +39,11 @@ public class UnserializableParameterRunTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.NotNull().DisposeAsync();
+    public async Task DisposeProvider()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [Test]
     public async Task An_output_with_a_throwing_getter_completes_with_the_placeholder()
@@ -85,7 +89,10 @@ public class UnserializableParameterRunTests
 
     public sealed class ThrowingGetter
     {
-        public static string Broken => throw new InvalidOperationException("getter failed");
+        // An instance property, so the serializer reads it and the getter throws there.
+        private readonly string _failure = "getter failed";
+
+        public string Broken => throw new InvalidOperationException(_failure);
     }
 
     public sealed class CollidingNames

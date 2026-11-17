@@ -33,7 +33,7 @@ public class SignalRSlowClientTests
             ExternalId: "ext-1",
             TrainName: "Some.ITrain",
             TrainState: "Failed",
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TestTime.UtcDateTime,
             FailureJunction: null,
             FailureReason: reason,
             EventType: "Failed",
@@ -82,7 +82,7 @@ public class SignalRSlowClientTests
         var handshake = new byte[256];
         await socket
             .ReceiveAsync(handshake, CancellationToken.None)
-            .WaitAsync(TimeSpan.FromSeconds(10), CancellationToken.None);
+            .WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System, CancellationToken.None);
 
         var dispatcher = app.Services.GetRequiredService<SignalRTrainEventDispatcher>();
         var reason = new string('x', 256 * 1024);
@@ -93,10 +93,11 @@ public class SignalRSlowClientTests
         var slowest = TimeSpan.Zero;
         for (var i = 0; i < 64; i++)
         {
-            var started = System.Diagnostics.Stopwatch.StartNew();
+            var started = TimeProvider.System.GetTimestamp();
             await dispatcher.HandleAsync(Failed(reason), CancellationToken.None);
-            if (started.Elapsed > slowest)
-                slowest = started.Elapsed;
+            var elapsed = TimeProvider.System.GetElapsedTime(started);
+            if (elapsed > slowest)
+                slowest = elapsed;
         }
 
         slowest

@@ -196,7 +196,7 @@ internal static class SchedulingHelpers
     /// The next instant after <paramref name="cursor"/> at which any exclusion could start or
     /// stop matching: midnight for the day-based kinds, a time window's start and end.
     /// </summary>
-    private static DateTime? NextExclusionBoundary(List<Exclusion> exclusions, DateTime cursor)
+    private static DateTime? NextExclusionBoundary(IList<Exclusion> exclusions, DateTime cursor)
     {
         if (exclusions.Count == 0)
             return null;

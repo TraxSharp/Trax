@@ -50,7 +50,9 @@ internal static class ParMeeting
     public static async Task Arrive(bool isA)
     {
         (isA ? _a : _b).TrySetResult();
-        await (isA ? _b : _a).Task.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+        await (isA ? _b : _a)
+            .Task.WaitAsync(TimeSpan.FromSeconds(30), TimeProvider.System)
+            .ConfigureAwait(false);
         Met = true;
     }
 

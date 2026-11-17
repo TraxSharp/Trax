@@ -22,7 +22,10 @@ public class NulCharacterKeyTests : TestSetup
     {
         var context = (IDataContext)DataContextFactory.Create();
         await using var contextDisposal = context.ConfigureAwait(false);
-        var entry = WorkQueue.Create(new CreateWorkQueue { TrainName = "Nul.Key.Train" });
+        var entry = WorkQueue.Create(
+            new CreateWorkQueue { TrainName = "Nul.Key.Train" },
+            TestTime.Clock
+        );
         var externalId = "nul\0" + Guid.NewGuid().ToString("N")[..20];
         entry.ExternalId = externalId;
         await context.Track(entry);
@@ -49,7 +52,8 @@ public class NulCharacterKeyTests : TestSetup
     {
         var create = () =>
             WorkQueue.Create(
-                new CreateWorkQueue { TrainName = "Nul.Key.Train", SubjectKey = "a\0" }
+                new CreateWorkQueue { TrainName = "Nul.Key.Train", SubjectKey = "a\0" },
+                TestTime.Clock
             );
 
         create.Should().Throw<ArgumentException>().WithMessage("*NUL*");

@@ -49,7 +49,22 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
         IDataContextProviderFactory dbContextFactory,
         IDataContextLoggingProviderConfiguration configuration
     )
+        : this(dbContextFactory, configuration, TimeProvider.System) { }
+
+    /// <summary>
+    /// Creates the provider as the two-argument constructor does, timing the wait for its writer
+    /// at dispose on <paramref name="timeProvider"/>. The container uses this one.
+    /// </summary>
+    /// <param name="dbContextFactory">Creates the data contexts the log rows are written through.</param>
+    /// <param name="configuration">Which categories are logged, at what level.</param>
+    /// <param name="timeProvider">The clock the drain at dispose is timed on.</param>
+    public DataContextLoggingProvider(
+        IDataContextProviderFactory dbContextFactory,
+        IDataContextLoggingProviderConfiguration configuration,
+        TimeProvider timeProvider
+    )
     {
+        _clock = timeProvider;
         _dbContextFactory = dbContextFactory;
         _configuration = configuration;
 
@@ -202,6 +217,8 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
 
     private int _disposed;
 
+    private readonly TimeProvider _clock;
+
     /// <summary>
     /// True when the writer has stopped within <paramref name="timeout"/>. A writer that failed
     /// (its database unreachable, say) has stopped too, and logging never throws into the caller.
@@ -210,7 +227,9 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
     {
         try
         {
-            await _flushTask.WaitAsync(timeout, CancellationToken.None).ConfigureAwait(false);
+            await _flushTask
+                .WaitAsync(timeout, _clock, CancellationToken.None)
+                .ConfigureAwait(false);
             return true;
         }
         catch (TimeoutException) when (!_flushTask.IsCompleted)

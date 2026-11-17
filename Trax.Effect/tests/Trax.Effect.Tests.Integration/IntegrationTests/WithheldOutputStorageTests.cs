@@ -34,7 +34,11 @@ public class WithheldOutputStorageTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.NotNull().DisposeAsync();
+    public async Task DisposeProvider()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [Test]
     public async Task A_withheld_output_is_not_stored_and_the_input_still_is()

@@ -53,7 +53,7 @@ public class JunctionRun
     [Column("name")]
     public string Name
     {
-        get => field.NotNull(nameof(Name));
+        get => field ?? string.Empty;
         set;
     }
 

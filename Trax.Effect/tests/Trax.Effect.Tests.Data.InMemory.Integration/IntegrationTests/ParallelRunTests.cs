@@ -55,7 +55,11 @@ public class ParallelRunTests
             .BuildServiceProvider();
 
     [OneTimeTearDown]
-    public async Task Dispose() => await _provider.NotNull().DisposeAsync();
+    public async Task Dispose()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [SetUp]
     public void Reset()
@@ -202,7 +206,11 @@ public class ParallelRunTests
                 (object)scope.ServiceProvider.GetRequiredService<IParWaitTrain>();
 
         var running = train.Run(new ParOrder("o"), cancel.Token);
-        await ParMeeting.BothWaiting.WaitAsync(TimeSpan.FromSeconds(30), CancellationToken.None);
+        await ParMeeting.BothWaiting.WaitAsync(
+            TimeSpan.FromSeconds(30),
+            TimeProvider.System,
+            CancellationToken.None
+        );
         await cancel.CancelAsync();
 
         await FluentActions
@@ -268,7 +276,8 @@ public class ParallelRunTests
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = input,
                 ReplayDecisionsOf = replayDecisionsOf,
-            }
+            },
+            TestTime.Clock
         );
 
         var output = await train.Run(input, metadata, CancellationToken.None).ConfigureAwait(false);

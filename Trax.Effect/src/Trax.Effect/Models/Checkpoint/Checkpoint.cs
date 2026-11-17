@@ -39,7 +39,7 @@ public class Checkpoint
     [Column("node_id")]
     public string NodeId
     {
-        get => field.NotNull(nameof(NodeId));
+        get => field ?? string.Empty;
         set;
     }
 
@@ -58,7 +58,7 @@ public class Checkpoint
     [Column("state_type")]
     public string StateType
     {
-        get => field.NotNull(nameof(StateType));
+        get => field ?? string.Empty;
         set;
     }
 
@@ -69,7 +69,7 @@ public class Checkpoint
     [Column("state")]
     public string State
     {
-        get => field.NotNull(nameof(State));
+        get => field ?? string.Empty;
         set;
     }
 
@@ -89,7 +89,7 @@ public class Checkpoint
     [Column("chain_hash")]
     public string ChainHash
     {
-        get => field.NotNull(nameof(ChainHash));
+        get => field ?? string.Empty;
         set;
     }
 
@@ -101,7 +101,7 @@ public class Checkpoint
     [Column("state_fingerprint")]
     public string StateFingerprint
     {
-        get => field.NotNull(nameof(StateFingerprint));
+        get => field ?? string.Empty;
         set;
     }
 

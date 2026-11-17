@@ -254,6 +254,8 @@ public static class TraxInvariants
                     timedStates.Distinct().ToList(),
                     maxDraftLifetime,
                     (keptStates ?? []).ToHashSet(),
+                    // A static check with no container: the drafts are aged on the system clock.
+                    TimeProvider.System,
                     cancellationToken
                 )
                 .ConfigureAwait(false)
@@ -603,6 +605,7 @@ public static class TraxInvariants
         IReadOnlyCollection<TimedState> timed,
         TimeSpan? maxDraftLifetime,
         IReadOnlySet<KeptState> kept,
+        TimeProvider clock,
         CancellationToken cancellationToken
     )
     {
@@ -615,7 +618,7 @@ public static class TraxInvariants
             return [];
 
         var table = dialect.Table("snapshot_draft");
-        var bornBefore = DateTimeOffset.UtcNow - maxDraftLifetime;
+        var bornBefore = clock.GetUtcNow() - maxDraftLifetime;
 
         var command = connection.CreateCommand();
         await using var commandDisposal = command.ConfigureAwait(false);

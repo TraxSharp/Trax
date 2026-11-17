@@ -26,7 +26,8 @@ public class ParameterEffectTests
                 Name = name,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = input,
-            }
+            },
+            TestTime.Clock
         );
         if (output is not null)
             meta.SetOutputObject(output);
@@ -466,7 +467,10 @@ public class ParameterEffectTests
     {
         public string Name { get; set; } = "x";
 
-        public static string Broken => throw new InvalidOperationException("getter failed");
+        // An instance property, so the serializer reads it and the getter throws there.
+        private readonly string _failure = "getter failed";
+
+        public string Broken => throw new InvalidOperationException(_failure);
     }
 
     private sealed class CollidingNames
@@ -1051,7 +1055,7 @@ public class ParameterEffectTests
             await effect.Track(meta).ConfigureAwait(false);
             return meta;
         });
-        var result = await track.WaitAsync(TimeSpan.FromSeconds(30));
+        var result = await track.WaitAsync(TimeSpan.FromSeconds(30), TimeProvider.System);
 
         result.Output.Should().Contain("_truncated");
     }
@@ -1081,7 +1085,8 @@ public class ParameterEffectTests
             })
             .ToArray();
 
-        var results = await Task.WhenAll(work).WaitAsync(TimeSpan.FromSeconds(45));
+        var results = await Task.WhenAll(work)
+            .WaitAsync(TimeSpan.FromSeconds(45), TimeProvider.System);
 
         results.Should().OnlyContain(m => m.Output.NotNull().Contains("_truncated"));
     }

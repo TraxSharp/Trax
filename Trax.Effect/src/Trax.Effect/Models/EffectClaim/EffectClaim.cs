@@ -19,7 +19,7 @@ public class EffectClaim
     [Column("effect_key")]
     public string EffectKey
     {
-        get => field.NotNull(nameof(EffectKey));
+        get => field ?? string.Empty;
         set;
     }
 

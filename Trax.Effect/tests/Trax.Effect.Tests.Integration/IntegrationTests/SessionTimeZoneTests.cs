@@ -89,7 +89,8 @@ public class SessionTimeZoneTests : TestSetup
             await context.SaveChanges(CancellationToken.None);
 
             var entry = WorkQueue.Create(
-                new CreateWorkQueue { TrainName = typeof(ITimeZoneTrain).FullName.NotNull() }
+                new CreateWorkQueue { TrainName = typeof(ITimeZoneTrain).FullName.NotNull() },
+                TestTime.Clock
             );
             entry.CreatedAt = Created;
             entry.DispatchedAt = Dispatched;

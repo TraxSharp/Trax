@@ -1,5 +1,6 @@
 using DbUp;
 using DbUp.Engine;
+using Microsoft.Extensions.Logging;
 
 namespace Trax.Effect.Data.Sqlite.Utils;
 
@@ -31,11 +32,22 @@ public static class DatabaseMigrator
     /// <param name="connectionString">SQLite connection string for the target database.</param>
     /// <returns>A completed task.</returns>
     /// <remarks>
-    /// <c>UseSqlite</c> calls this during service registration unless migrations are skipped. The
-    /// failing exception is also written to standard output before it is rethrown.
+    /// <c>UseSqlite</c> calls this during service registration unless migrations are skipped. A
+    /// failure reaches the caller as the exception; <see cref="Migrate(string, ILogger)"/> also
+    /// logs it.
     /// </remarks>
     /// <exception cref="Exception">The script that failed, as reported by DbUp, is rethrown unchanged.</exception>
-    public static Task Migrate(string connectionString)
+    public static Task Migrate(string connectionString) => Migrate(connectionString, logger: null);
+
+    /// <summary>
+    /// Applies the pending scripts as <see cref="Migrate(string)"/> does, and logs the error it
+    /// fails with to <paramref name="logger"/> before rethrowing it.
+    /// </summary>
+    /// <param name="connectionString">The SQLite connection string.</param>
+    /// <param name="logger">Where the failure is logged, at error.</param>
+    /// <returns>A completed task; the scripts run synchronously.</returns>
+    /// <exception cref="Exception">The script that failed, as reported by DbUp, is rethrown unchanged.</exception>
+    public static Task Migrate(string connectionString, ILogger? logger)
     {
         try
         {
@@ -46,9 +58,7 @@ public static class DatabaseMigrator
         }
         catch (Exception e)
         {
-            Console.WriteLine(
-                $"Caught Exception ({e.GetType()}) while attempting to migrate SQLite database: {e}"
-            );
+            logger?.LogError(e, "Migrating the Trax SQLite database failed.");
             throw;
         }
 

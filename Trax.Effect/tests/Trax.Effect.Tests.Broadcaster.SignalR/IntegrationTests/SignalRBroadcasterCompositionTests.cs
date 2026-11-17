@@ -28,7 +28,7 @@ public class SignalRBroadcasterCompositionTests
             ExternalId: externalId,
             TrainName: "T.IDoThing",
             TrainState: "Completed",
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TestTime.UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             EventType: "Completed",
@@ -126,7 +126,7 @@ public class SignalRBroadcasterCompositionTests
 
             var tcs = new TaskCompletionSource<TraxClientEvent>();
             connection.On<TraxClientEvent>("TrainEvent", evt => tcs.TrySetResult(evt));
-            await connection.StartAsync().WaitAsync(Timeout);
+            await connection.StartAsync().WaitAsync(Timeout, TimeProvider.System);
 
             // Simulate the receiver service: dispatch a remote message through every
             // registered ITrainEventHandler. The SignalR dispatcher is one of them.
@@ -141,7 +141,7 @@ public class SignalRBroadcasterCompositionTests
             foreach (var h in handlers)
                 await h.HandleAsync(Message("remote-1"), CancellationToken.None);
 
-            var received = await tcs.Task.WaitAsync(Timeout);
+            var received = await tcs.Task.WaitAsync(Timeout, TimeProvider.System);
             received.ExternalId.Should().Be("remote-1");
         }
         finally

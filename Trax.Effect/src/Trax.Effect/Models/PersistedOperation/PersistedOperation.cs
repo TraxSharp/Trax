@@ -34,7 +34,7 @@ public class PersistedOperation
     [Column("id")]
     public string Id
     {
-        get => field.NotNull(nameof(Id));
+        get => field ?? string.Empty;
         set;
     }
 
@@ -44,7 +44,7 @@ public class PersistedOperation
     [Column("operation_name")]
     public string OperationName
     {
-        get => field.NotNull(nameof(OperationName));
+        get => field ?? string.Empty;
         set;
     }
 
@@ -60,7 +60,7 @@ public class PersistedOperation
     [Column("document")]
     public string Document
     {
-        get => field.NotNull(nameof(Document));
+        get => field ?? string.Empty;
         set;
     }
 
@@ -70,7 +70,7 @@ public class PersistedOperation
     [Column("shape_fingerprint")]
     public string ShapeFingerprint
     {
-        get => field.NotNull(nameof(ShapeFingerprint));
+        get => field ?? string.Empty;
         set;
     }
 

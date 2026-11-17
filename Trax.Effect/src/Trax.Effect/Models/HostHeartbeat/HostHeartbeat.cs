@@ -37,7 +37,7 @@ public class HostHeartbeat
     [Column("instance_id")]
     public string InstanceId
     {
-        get => field.NotNull(nameof(InstanceId));
+        get => field ?? string.Empty;
         set;
     }
 
@@ -45,7 +45,7 @@ public class HostHeartbeat
     [Column("host_name")]
     public string HostName
     {
-        get => field.NotNull(nameof(HostName));
+        get => field ?? string.Empty;
         set;
     }
 
@@ -57,7 +57,7 @@ public class HostHeartbeat
     [Column("host_environment")]
     public string HostEnvironment
     {
-        get => field.NotNull(nameof(HostEnvironment));
+        get => field ?? string.Empty;
         set;
     }
 
@@ -65,7 +65,7 @@ public class HostHeartbeat
     [Column("trax_version")]
     public string TraxVersion
     {
-        get => field.NotNull(nameof(TraxVersion));
+        get => field ?? string.Empty;
         set;
     }
 

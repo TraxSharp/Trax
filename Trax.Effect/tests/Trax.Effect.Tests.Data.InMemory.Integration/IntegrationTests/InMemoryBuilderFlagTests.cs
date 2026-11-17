@@ -23,7 +23,11 @@ public class InMemoryBuilderFlagTests
     }
 
     [OneTimeTearDown]
-    public async Task TearDown() => await _provider.NotNull().DisposeAsync();
+    public async Task TearDown()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [Test]
     public void UseInMemory_DoesNotRegister_ISqlDialect()

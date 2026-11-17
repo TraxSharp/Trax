@@ -55,7 +55,11 @@ public class JsonEffectManifestPropertiesTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.NotNull().DisposeAsync();
+    public async Task DisposeProvider()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [Test]
     public async Task A_scheduled_runs_manifest_properties_are_not_written_to_the_log()
@@ -87,7 +91,8 @@ public class JsonEffectManifestPropertiesTests
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
                     ManifestId = manifest.Id,
-                }
+                },
+                TestTime.Clock
             );
             seed.Metadatas.Add(pending);
             await seed.SaveChanges(CancellationToken.None);

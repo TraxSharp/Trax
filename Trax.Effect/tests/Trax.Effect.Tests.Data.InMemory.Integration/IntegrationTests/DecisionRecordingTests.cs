@@ -54,7 +54,11 @@ public class DecisionRecordingTests
             .BuildServiceProvider();
 
     [OneTimeTearDown]
-    public async Task Dispose() => await _provider.NotNull().DisposeAsync();
+    public async Task Dispose()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [Test]
     public async Task A_run_records_each_decision_and_the_track_it_took()
@@ -274,7 +278,7 @@ public class DecisionRecordingTests
             original.Metadata.NotNull().Id,
             d =>
                 d.DecidedAt =
-                    DateTime.UtcNow
+                    TestTime.UtcDateTime
                     - DecisionRecordingOptions.DefaultMaxReplayAge
                     - TimeSpan.FromMinutes(1)
         );
@@ -308,7 +312,7 @@ public class DecisionRecordingTests
             original.Metadata.Id,
             d =>
                 d.DecidedAt =
-                    DateTime.UtcNow
+                    TestTime.UtcDateTime
                     - DecisionRecordingOptions.DefaultMaxReplayAge
                     - TimeSpan.FromMinutes(1)
         );
@@ -714,7 +718,8 @@ public class DecisionRecordingTests
                 Input = order,
                 ReplayDecisionsOf = replayDecisionsOf,
                 ManifestId = manifestId,
-            }
+            },
+            TestTime.Clock
         );
 
         // As a host that saves train inputs stores it, so a replay can compare it.
@@ -1165,7 +1170,7 @@ public class DecisionRecordingTests
         );
 
         var outputs = await Task.WhenAll(replayRun(), askRun())
-            .WaitAsync(Wait, CancellationToken.None);
+            .WaitAsync(Wait, TimeProvider.System, CancellationToken.None);
 
         outputs.Should().Equal("held for review", "shipped");
         decider.Requests.Should().ContainSingle("only the run that replays nothing asks");
@@ -1407,7 +1412,7 @@ public class DecisionRecordingTests
         );
 
         var outputs = await Task.WhenAll(firstRun(), secondRun())
-            .WaitAsync(Wait, CancellationToken.None);
+            .WaitAsync(Wait, TimeProvider.System, CancellationToken.None);
 
         outputs.Should().Equal("shipped", "shipped");
         decider.Requests.Should().HaveCount(2);
@@ -1426,7 +1431,7 @@ public class DecisionRecordingTests
 
         var (train, run) = Start<IRunAPlainTrainOffFlow>(new Order("o-plain", 20m), shared);
 
-        (await run().WaitAsync(Wait)).Should().Be("shipped");
+        (await run().WaitAsync(Wait, TimeProvider.System)).Should().Be("shipped");
         DecideInAPlainTrainOffFlow.Decided.Should().BeTrue("the plain train did decide");
         (await Recorded(train.Metadata.NotNull().Id))
             .Select(d => d.QuestionKey)
@@ -1478,7 +1483,8 @@ public class DecisionRecordingTests
                 ExternalId = externalId ?? Id(),
                 Input = order,
                 ReplayDecisionsOf = replayDecisionsOf,
-            }
+            },
+            TestTime.Clock
         );
 
         return (
@@ -1515,7 +1521,8 @@ public class DecisionRecordingTests
                 Input = new Order("seeded", 1m),
                 ReplayDecisionsOf = replayDecisionsOf,
                 ManifestId = manifestId,
-            }
+            },
+            TestTime.Clock
         );
 
         metadata.DecisionsRecorded = decisionsRecorded;

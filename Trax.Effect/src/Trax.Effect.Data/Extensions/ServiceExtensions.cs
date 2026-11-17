@@ -167,10 +167,7 @@ public static class ServiceExtensions
         // Trax.Core keys each state hash with the StateHashKey it finds in the container. One the
         // host registered itself is kept; otherwise the options' key, else configuration's, else
         // none, and the hash is unkeyed.
-        services.TryAddSingleton<StateHashKey>(sp =>
-            sp.GetRequiredService<DecisionRecordingOptions>().StateHashKey
-            ?? ConfiguredStateHashKey(sp).NotNull()
-        );
+        services.TryAddSingleton<StateHashKey>(sp => StateHashKeyOrNone(sp) ?? NoStateHashKey());
         // Beside any other observer (a host's own, junction events), never in place of one.
         DecisionObservers.Add(
             services,
@@ -254,7 +251,9 @@ public static class ServiceExtensions
         DecisionObservers.Add(
             services,
             typeof(JunctionEventDecisionObserver),
-            _ => new JunctionEventDecisionObserver(),
+            sp => new JunctionEventDecisionObserver(
+                sp.GetService<TimeProvider>() ?? TimeProvider.System
+            ),
             ServiceLifetime.Singleton
         );
 
@@ -267,6 +266,18 @@ public static class ServiceExtensions
     /// none. One that is not base64 or is shorter than 32 bytes throws, so the state is not hashed
     /// and nothing replays, rather than falling back to an unkeyed hash.
     /// </summary>
+    /// <summary>
+    /// No key. A container factory is typed to return a service, but Trax.Core reads this one with
+    /// GetService and takes null as "hash unkeyed", so with no key configured the factory hands it
+    /// null on purpose. An array of a reference type starts out holding nulls.
+    /// </summary>
+    private static StateHashKey NoStateHashKey() => (new StateHashKey[1])[0];
+
+    /// <summary>The options' key, else configuration's, else null.</summary>
+    private static StateHashKey? StateHashKeyOrNone(IServiceProvider services) =>
+        services.GetRequiredService<DecisionRecordingOptions>().StateHashKey
+        ?? ConfiguredStateHashKey(services);
+
     private static StateHashKey? ConfiguredStateHashKey(IServiceProvider services)
     {
         var configured = services

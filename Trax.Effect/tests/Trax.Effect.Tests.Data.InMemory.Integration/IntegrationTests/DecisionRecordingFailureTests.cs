@@ -79,7 +79,8 @@ public class DecisionRecordingFailureTests
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new Order("unconfigured", 20m),
                 ReplayDecisionsOf = 42,
-            }
+            },
+            TestTime.Clock
         );
 
         var run = () => train.Run(new Order("unconfigured", 20m), metadata, CancellationToken.None);

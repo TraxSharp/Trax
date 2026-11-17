@@ -123,7 +123,10 @@ public class CheckpointTableTests : TestSetup
 
     private static WorkQueue Resuming(long source)
     {
-        var entry = WorkQueue.Create(new CreateWorkQueue { TrainName = "Resume.Unique.Train" });
+        var entry = WorkQueue.Create(
+            new CreateWorkQueue { TrainName = "Resume.Unique.Train" },
+            TestTime.Clock
+        );
         entry.ResumeFrom = source;
         entry.ResumeAt = "Checkpoint<Scores>#0";
         return entry;
@@ -139,7 +142,7 @@ public class CheckpointTableTests : TestSetup
             State = """{"score": 3}""",
             ChainHash = new string('a', 64),
             StateFingerprint = "fp",
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = TestTime.UtcDateTime,
         };
 
     private static async Task<long> NewRun(IDataContext context)
@@ -150,7 +153,8 @@ public class CheckpointTableTests : TestSetup
                 Name = "Checkpoint.Table.Train",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         context.Metadatas.Add(metadata);
         await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);

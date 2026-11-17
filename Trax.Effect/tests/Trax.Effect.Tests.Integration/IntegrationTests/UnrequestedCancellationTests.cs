@@ -53,7 +53,11 @@ public class UnrequestedCancellationTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.NotNull().DisposeAsync();
+    public async Task DisposeProvider()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [SetUp]
     public void ResetClassifier() => Classifier.Result = null;

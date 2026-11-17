@@ -17,7 +17,7 @@ public record TraxHostInfo
     /// </summary>
     public string HostName
     {
-        get => field.NotNull(nameof(HostName));
+        get => field ?? string.Empty;
         init;
     }
 
@@ -27,7 +27,7 @@ public record TraxHostInfo
     /// </summary>
     public string HostEnvironment
     {
-        get => field.NotNull(nameof(HostEnvironment));
+        get => field ?? string.Empty;
         init;
     }
 
@@ -37,7 +37,7 @@ public record TraxHostInfo
     /// </summary>
     public string HostInstanceId
     {
-        get => field.NotNull(nameof(HostInstanceId));
+        get => field ?? string.Empty;
         init;
     }
 
@@ -50,7 +50,7 @@ public record TraxHostInfo
 
     /// <summary>
     /// Process-wide singleton set once at startup by the builder.
-    /// Read by <see cref="Metadata.Metadata.Create"/> and
+    /// Read by <see cref="Trax.Effect.Models.Metadata.Metadata.Create(Trax.Effect.Models.Metadata.DTOs.CreateMetadata)"/> and
     /// <see cref="Extensions.ServiceTrainExtensions"/> to stamp host identity.
     /// </summary>
     public static TraxHostInfo? Current { get; internal set; }

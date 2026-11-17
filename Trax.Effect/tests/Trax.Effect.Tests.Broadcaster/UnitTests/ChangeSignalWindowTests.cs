@@ -40,8 +40,8 @@ public class ChangeSignalWindowTests
 
     private static async Task<bool> WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
     {
-        var deadline = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow() + timeout;
+        while (TimeProvider.System.GetUtcNow() < deadline)
         {
             if (condition())
                 return true;
@@ -61,8 +61,8 @@ public class ChangeSignalWindowTests
         int targetCount
     )
     {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-        while (sink.Count < targetCount && DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow() + TimeSpan.FromSeconds(10);
+        while (sink.Count < targetCount && TimeProvider.System.GetUtcNow() < deadline)
         {
             time.Advance(Window);
             // allowed-delay: poll interval that yields so the background coalescer's continuation

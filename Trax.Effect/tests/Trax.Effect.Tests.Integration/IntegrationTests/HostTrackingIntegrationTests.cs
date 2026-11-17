@@ -49,7 +49,8 @@ public class HostTrackingIntegrationTests : TestSetup
                 Name = "HostTrackingTest",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(metadata);
@@ -92,7 +93,8 @@ public class HostTrackingIntegrationTests : TestSetup
                 Name = "HostLabelsTest",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(metadata);
@@ -128,7 +130,8 @@ public class HostTrackingIntegrationTests : TestSetup
                 Name = "NullLabelsTest",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(metadata);
@@ -160,7 +163,8 @@ public class HostTrackingIntegrationTests : TestSetup
                 Name = "QueryTest1",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         await context.Track(metadata1);
         await context.SaveChanges(CancellationToken.None);
@@ -180,7 +184,8 @@ public class HostTrackingIntegrationTests : TestSetup
                 Name = "QueryTest2",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         await context.Track(metadata2);
         await context.SaveChanges(CancellationToken.None);
@@ -215,7 +220,8 @@ public class HostTrackingIntegrationTests : TestSetup
                 Name = "EnvQueryTest1",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         await context.Track(metadata1);
         await context.SaveChanges(CancellationToken.None);
@@ -235,7 +241,8 @@ public class HostTrackingIntegrationTests : TestSetup
                 Name = "EnvQueryTest2",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         await context.Track(metadata2);
         await context.SaveChanges(CancellationToken.None);

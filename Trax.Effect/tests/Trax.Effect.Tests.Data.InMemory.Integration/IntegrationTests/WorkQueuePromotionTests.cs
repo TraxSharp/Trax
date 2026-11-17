@@ -24,7 +24,12 @@ namespace Trax.Effect.Tests.Data.InMemory.Integration.IntegrationTests;
 public class WorkQueuePromotionTests : TestSetup
 {
     public override ServiceProvider ConfigureServices(IServiceCollection services) =>
-        services.AddScoped<IWorkQueuePromotion, WorkQueuePromotion>().BuildServiceProvider();
+        services
+            .AddScoped<IWorkQueuePromotion>(sp => new WorkQueuePromotion(
+                sp.GetRequiredService<IDataContextProviderFactory>(),
+                TestTime.Clock
+            ))
+            .BuildServiceProvider();
 
     private IWorkQueuePromotion Promotion =>
         Scope.ServiceProvider.GetRequiredService<IWorkQueuePromotion>();
@@ -118,7 +123,7 @@ public class WorkQueuePromotionTests : TestSetup
     public async Task The_stale_sweep_deletes_what_an_earlier_pass_cancelled_once_past_the_retention()
     {
         // Retention is 30 days from creation. Rows are aged rather than a clock advanced: the
-        // sweep reads DateTime.UtcNow, and created_at is what it measures from.
+        // sweep reads its clock (a fixed one here), and created_at is what it measures from.
         var run = Guid.NewGuid().ToString("N");
         await StageMany($"Staged.Expired.{run}", 50, age: TimeSpan.FromDays(31));
         await StageMany($"Staged.Fresh.{run}", 50, age: TimeSpan.FromHours(1));
@@ -185,9 +190,10 @@ public class WorkQueuePromotionTests : TestSetup
                     TrainName = trainName,
                     InputTypeName = "Staged.Input",
                     DeferPromotion = true,
-                }
+                },
+                TestTime.Clock
             );
-            entry.CreatedAt = DateTime.UtcNow - age;
+            entry.CreatedAt = TestTime.UtcDateTime - age;
             entry.Status = status;
             if (confirmed)
                 entry.ConfirmedAt = entry.CreatedAt;
@@ -226,9 +232,10 @@ public class WorkQueuePromotionTests : TestSetup
                 TrainName = "Staged.Train",
                 InputTypeName = "Staged.Input",
                 DeferPromotion = true,
-            }
+            },
+            TestTime.Clock
         );
-        entry.CreatedAt = DateTime.UtcNow - (age ?? TimeSpan.Zero);
+        entry.CreatedAt = TestTime.UtcDateTime - (age ?? TimeSpan.Zero);
         entry.Status = status;
         if (confirmed)
             entry.ConfirmedAt = entry.CreatedAt;

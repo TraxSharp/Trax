@@ -282,7 +282,7 @@ public class SignalRJunctionEventTests
         var d = Create(NewOptions().WithJunctionEvents().WithDeliveryQueueCapacity(2).Build());
 
         await d.HandleAsync(Step(), CancellationToken.None);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10)); // the sender holds this one
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System); // the sender holds this one
         await d.HandleAsync(Step(), CancellationToken.None);
         await d.HandleAsync(Step(), CancellationToken.None); // the queue is full
         var completed = Step(eventType: "Completed") with { Junction = null, ExternalId = "other" };

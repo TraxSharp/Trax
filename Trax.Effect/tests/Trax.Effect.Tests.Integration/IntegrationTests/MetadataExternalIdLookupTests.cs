@@ -113,7 +113,8 @@ public class MetadataExternalIdLookupTests : TestSetup
                 Name = "Trax.Effect.Tests.ExternalIdLookup",
                 ExternalId = externalId,
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         metadata.TrainState = TrainState.Completed;
         await context.Track(metadata).ConfigureAwait(false);

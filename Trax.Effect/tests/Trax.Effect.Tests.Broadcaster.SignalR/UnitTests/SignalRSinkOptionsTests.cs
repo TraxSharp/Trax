@@ -24,7 +24,7 @@ public class SignalRSinkOptionsTests
             ExternalId: "x",
             TrainName: trainName,
             TrainState: "Completed",
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TestTime.UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             EventType: eventType,

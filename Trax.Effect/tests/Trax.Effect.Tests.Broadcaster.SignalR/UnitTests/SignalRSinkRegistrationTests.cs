@@ -159,7 +159,7 @@ public class SignalRSinkRegistrationTests
             ExternalId: "x",
             TrainName: "T.IT",
             TrainState: "Completed",
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TestTime.UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             EventType: "Completed",

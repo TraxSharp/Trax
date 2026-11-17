@@ -40,7 +40,8 @@ public class InMemoryProviderTests : TestSetup
                 Name = "TestMetadata",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         // Act
@@ -71,7 +72,8 @@ public class InMemoryProviderTests : TestSetup
                 Name = "TrackUpdateTest",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         // Track (entity goes to Added state)
@@ -106,7 +108,8 @@ public class InMemoryProviderTests : TestSetup
                 Name = "MultiSaveTest",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         // First save: INSERT
@@ -118,7 +121,7 @@ public class InMemoryProviderTests : TestSetup
 
         // Modify and save again: UPDATE
         metadata.TrainState = TrainState.Completed;
-        metadata.EndTime = DateTime.UtcNow;
+        metadata.EndTime = TestTime.UtcDateTime;
         await context.Update(metadata);
         await context.SaveChanges(CancellationToken.None);
 
@@ -143,7 +146,8 @@ public class InMemoryProviderTests : TestSetup
                 Name = "DoubleTrackTest",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(metadata);
@@ -171,7 +175,8 @@ public class InMemoryProviderTests : TestSetup
                 Name = "SnapshotTest",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(metadata);
@@ -200,7 +205,8 @@ public class InMemoryProviderTests : TestSetup
                 Name = "Multi1",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         var metadata2 = Metadata.Create(
@@ -209,7 +215,8 @@ public class InMemoryProviderTests : TestSetup
                 Name = "Multi2",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(metadata1);
@@ -261,7 +268,7 @@ public class InMemoryProviderTests : TestSetup
             LocalWorkerCount = 8,
             MetadataCleanupInterval = TimeSpan.FromMinutes(7),
             MetadataCleanupRetention = TimeSpan.FromHours(3),
-            UpdatedAt = DateTime.UtcNow,
+            UpdatedAt = TestTime.UtcDateTime,
         };
 
         context.SchedulerConfigs.Add(row);
@@ -297,7 +304,7 @@ public class InMemoryProviderTests : TestSetup
             ((Microsoft.EntityFrameworkCore.DbContext)context).Remove(existing);
         await context.SaveChanges(CancellationToken.None);
 
-        var now = DateTime.UtcNow;
+        var now = TestTime.UtcDateTime;
         var row = new Effect.Models.PersistedOperation.PersistedOperation
         {
             TenantKey = "tenant-rt",
@@ -349,8 +356,8 @@ public class InMemoryProviderTests : TestSetup
             ShapeFingerprint = "fp",
             DeprecationReason = null,
             Description = null,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TestTime.UtcDateTime,
+            UpdatedAt = TestTime.UtcDateTime,
         };
 
         context.PersistedOperations.Add(row);
@@ -377,7 +384,7 @@ public class InMemoryProviderTests : TestSetup
             ((Microsoft.EntityFrameworkCore.DbContext)context).Remove(existing);
         await context.SaveChanges(CancellationToken.None);
 
-        var now = DateTime.UtcNow;
+        var now = TestTime.UtcDateTime;
         var entry = new Effect.Models.PersistedOperationHistory.PersistedOperationHistory
         {
             TenantKey = "tenant-h",
@@ -429,8 +436,8 @@ public class InMemoryProviderTests : TestSetup
                 Document = "{ x }",
                 ShapeFingerprint = "fp",
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
+                CreatedAt = TestTime.UtcDateTime,
+                UpdatedAt = TestTime.UtcDateTime,
             },
             new Effect.Models.PersistedOperation.PersistedOperation
             {
@@ -441,8 +448,8 @@ public class InMemoryProviderTests : TestSetup
                 Document = "{ x }",
                 ShapeFingerprint = "fp",
                 IsActive = false,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
+                CreatedAt = TestTime.UtcDateTime,
+                UpdatedAt = TestTime.UtcDateTime,
             }
         );
         await context.SaveChanges(CancellationToken.None);
@@ -504,7 +511,7 @@ public class InMemoryProviderTests : TestSetup
             LocalWorkerCount = null,
             MetadataCleanupInterval = null,
             MetadataCleanupRetention = null,
-            UpdatedAt = DateTime.UtcNow,
+            UpdatedAt = TestTime.UtcDateTime,
         };
 
         context.SchedulerConfigs.Add(row);
@@ -599,7 +606,8 @@ public class InMemoryProviderTests : TestSetup
                 Name = "TransactionCommitTest",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         var transaction = await context.BeginTransaction();
@@ -628,7 +636,8 @@ public class InMemoryProviderTests : TestSetup
                 Name = "ScheduleMany1",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         var metadata2 = Metadata.Create(
@@ -637,7 +646,8 @@ public class InMemoryProviderTests : TestSetup
                 Name = "ScheduleMany2",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         var transaction = await context.BeginTransaction();
@@ -684,7 +694,8 @@ public class InMemoryProviderTests : TestSetup
                 Name = "SharedRootTest",
                 Input = Unit.Default,
                 ExternalId = externalId,
-            }
+            },
+            TestTime.Clock
         );
 
         // Write via factory context (scheduler path)

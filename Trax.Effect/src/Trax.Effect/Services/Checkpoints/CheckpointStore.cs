@@ -23,7 +23,8 @@ namespace Trax.Effect.Services.Checkpoints;
 /// </remarks>
 internal sealed partial class CheckpointStore(
     IEnumerable<ICheckpointRows> rows,
-    CheckpointOptions options
+    CheckpointOptions options,
+    TimeProvider timeProvider
 ) : ICheckpointStore
 {
     private readonly ICheckpointRows? _rows = rows.FirstOrDefault();
@@ -117,7 +118,7 @@ internal sealed partial class CheckpointStore(
                     Tracks = Tracks(checkpoint.Tracks),
                     ChainHash = chainHash,
                     StateFingerprint = CheckpointState.Fingerprint(checkpoint.StateType),
-                    CreatedAt = DateTime.UtcNow,
+                    CreatedAt = timeProvider.GetUtcNow().UtcDateTime,
                 },
                 cancellationToken
             )

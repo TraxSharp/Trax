@@ -71,5 +71,5 @@ public sealed class DomainDataLayerGuardFixtureSelfTest : DomainDataLayerGuardFi
             );
 
     [OneTimeTearDown]
-    public void Cleanup() => _repo.NotNull().Dispose();
+    public void Cleanup() => _repo?.Dispose();
 }

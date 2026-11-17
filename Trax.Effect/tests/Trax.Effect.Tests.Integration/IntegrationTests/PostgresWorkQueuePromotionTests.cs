@@ -20,13 +20,14 @@ public class PostgresWorkQueuePromotionTests : TestSetup
 {
     private static readonly TimeSpan Window = TimeSpan.FromMinutes(10);
 
-    private IWorkQueuePromotion Promotion => new WorkQueuePromotion(DataContextFactory);
+    private IWorkQueuePromotion Promotion =>
+        new WorkQueuePromotion(DataContextFactory, TestTime.Clock);
 
     [Test]
     public async Task CancelStaleAsync_deletes_what_an_earlier_pass_cancelled_once_past_the_retention()
     {
         // Retention is 30 days from creation. Rows are aged rather than a clock advanced: the
-        // sweep reads DateTime.UtcNow, and created_at is what it measures from.
+        // sweep reads its clock (a fixed one here), and created_at is what it measures from.
         var run = Guid.NewGuid().ToString("N");
         await StageMany($"Postgres.Expired.{run}", 1000, age: TimeSpan.FromDays(31));
         await StageMany($"Postgres.Fresh.{run}", 1000, age: TimeSpan.FromHours(1));
@@ -93,9 +94,10 @@ public class PostgresWorkQueuePromotionTests : TestSetup
                     TrainName = trainName,
                     InputTypeName = "Postgres.Input",
                     DeferPromotion = true,
-                }
+                },
+                TestTime.Clock
             );
-            entry.CreatedAt = DateTime.UtcNow - age;
+            entry.CreatedAt = TestTime.UtcDateTime - age;
             entry.Status = status;
             if (confirmed)
                 entry.ConfirmedAt = entry.CreatedAt;

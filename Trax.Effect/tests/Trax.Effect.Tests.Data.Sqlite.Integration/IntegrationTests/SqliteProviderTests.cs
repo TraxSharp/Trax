@@ -53,7 +53,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "TestMetadata",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(metadata);
@@ -78,7 +79,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "IdAssignmentTest",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         metadata.Id.Should().Be(0, "Id should be 0 before save");
@@ -101,7 +103,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "Multi1",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         var metadata2 = Metadata.Create(
@@ -110,7 +113,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "Multi2",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(metadata1);
@@ -138,7 +142,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "TrackUpdateTest",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(metadata);
@@ -164,7 +169,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "MultiSaveTest",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(metadata);
@@ -173,7 +179,7 @@ public class SqliteProviderTests : TestSetup
         idAfterInsert.Should().BeGreaterThan(0);
 
         metadata.TrainState = TrainState.Completed;
-        metadata.EndTime = DateTime.UtcNow;
+        metadata.EndTime = TestTime.UtcDateTime;
         await context.Update(metadata);
         await context.SaveChanges(CancellationToken.None);
 
@@ -196,7 +202,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "DoubleTrackTest",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(metadata);
@@ -231,7 +238,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "SnapshotTest",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(metadata);
@@ -278,7 +286,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "TransactionCommitTest",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         var transaction = await context.BeginTransaction();
@@ -306,7 +315,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "TransactionRollbackTest",
                 Input = Unit.Default,
                 ExternalId = externalId,
-            }
+            },
+            TestTime.Clock
         );
 
         var transaction = await context.BeginTransaction();
@@ -374,7 +384,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "ScheduleMany1",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         var metadata2 = Metadata.Create(
@@ -383,7 +394,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "ScheduleMany2",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         var transaction = await context.BeginTransaction();
@@ -429,7 +441,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "LogParent",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(metadata);
@@ -497,7 +510,7 @@ public class SqliteProviderTests : TestSetup
             LocalWorkerCount = 8,
             MetadataCleanupInterval = TimeSpan.FromMinutes(7),
             MetadataCleanupRetention = TimeSpan.FromHours(3),
-            UpdatedAt = DateTime.UtcNow,
+            UpdatedAt = TestTime.UtcDateTime,
         };
 
         context.SchedulerConfigs.Add(row);
@@ -544,7 +557,7 @@ public class SqliteProviderTests : TestSetup
             LocalWorkerCount = null,
             MetadataCleanupInterval = null,
             MetadataCleanupRetention = null,
-            UpdatedAt = DateTime.UtcNow,
+            UpdatedAt = TestTime.UtcDateTime,
         };
 
         context.SchedulerConfigs.Add(row);
@@ -571,7 +584,7 @@ public class SqliteProviderTests : TestSetup
             new Effect.Models.SchedulerConfig.SchedulerConfig
             {
                 DefaultMaxRetries = 5,
-                UpdatedAt = DateTime.UtcNow,
+                UpdatedAt = TestTime.UtcDateTime,
             }
         );
         await context.SaveChanges(CancellationToken.None);
@@ -601,7 +614,7 @@ public class SqliteProviderTests : TestSetup
         await context.PersistedOperationHistories.ExecuteDeleteAsync();
         await context.PersistedOperations.ExecuteDeleteAsync();
 
-        var now = DateTime.UtcNow;
+        var now = TestTime.UtcDateTime;
         var row = new Effect.Models.PersistedOperation.PersistedOperation
         {
             TenantKey = "tenant-rt",
@@ -655,8 +668,8 @@ public class SqliteProviderTests : TestSetup
             ShapeFingerprint = "fp",
             DeprecationReason = null,
             Description = null,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TestTime.UtcDateTime,
+            UpdatedAt = TestTime.UtcDateTime,
         };
 
         context.PersistedOperations.Add(row);
@@ -688,8 +701,8 @@ public class SqliteProviderTests : TestSetup
                 Version = 1,
                 Document = "query Shared { a }",
                 ShapeFingerprint = "h1",
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
+                CreatedAt = TestTime.UtcDateTime,
+                UpdatedAt = TestTime.UtcDateTime,
             },
             new Effect.Models.PersistedOperation.PersistedOperation
             {
@@ -699,8 +712,8 @@ public class SqliteProviderTests : TestSetup
                 Version = 1,
                 Document = "query Shared { b }",
                 ShapeFingerprint = "h2",
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
+                CreatedAt = TestTime.UtcDateTime,
+                UpdatedAt = TestTime.UtcDateTime,
             }
         );
         await context.SaveChanges(CancellationToken.None);
@@ -723,7 +736,7 @@ public class SqliteProviderTests : TestSetup
         var context = (IDataContext)factory.Create();
         await context.PersistedOperationHistories.ExecuteDeleteAsync();
 
-        var now = DateTime.UtcNow;
+        var now = TestTime.UtcDateTime;
         var entry = new Effect.Models.PersistedOperationHistory.PersistedOperationHistory
         {
             TenantKey = "tenant-h",
@@ -770,7 +783,7 @@ public class SqliteProviderTests : TestSetup
                     Document = string.Create(CultureInfo.InvariantCulture, $"v{i}"),
                     ShapeFingerprint = "fp",
                     ChangeType = "Upsert",
-                    ChangedAt = DateTime.UtcNow.AddMinutes(i),
+                    ChangedAt = TestTime.UtcDateTime.AddMinutes(i),
                     ChangedReason = string.Create(CultureInfo.InvariantCulture, $"step{i}"),
                 }
             );
@@ -805,8 +818,8 @@ public class SqliteProviderTests : TestSetup
                 Document = "{ x }",
                 ShapeFingerprint = "fp",
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
+                CreatedAt = TestTime.UtcDateTime,
+                UpdatedAt = TestTime.UtcDateTime,
             },
             new Effect.Models.PersistedOperation.PersistedOperation
             {
@@ -817,8 +830,8 @@ public class SqliteProviderTests : TestSetup
                 Document = "{ x }",
                 ShapeFingerprint = "fp",
                 IsActive = false,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
+                CreatedAt = TestTime.UtcDateTime,
+                UpdatedAt = TestTime.UtcDateTime,
             }
         );
         await context.SaveChanges(CancellationToken.None);
@@ -843,8 +856,8 @@ public class SqliteProviderTests : TestSetup
             Name = $"test-group-{Guid.NewGuid():N}",
             Priority = 5,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TestTime.UtcDateTime,
+            UpdatedAt = TestTime.UtcDateTime,
         };
 
         await context.Track(group);
@@ -874,8 +887,8 @@ public class SqliteProviderTests : TestSetup
             Name = $"manifest-test-group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TestTime.UtcDateTime,
+            UpdatedAt = TestTime.UtcDateTime,
         };
 
         await context.Track(group);
@@ -922,7 +935,8 @@ public class SqliteProviderTests : TestSetup
                 Input = """{"key":"value"}""",
                 InputTypeName = "System.String",
                 Priority = 10,
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(workQueue);
@@ -954,7 +968,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "BackgroundJobParent",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(metadata);
@@ -967,7 +982,8 @@ public class SqliteProviderTests : TestSetup
                 Input = """{"task":"process"}""",
                 InputType = "System.String",
                 Priority = 3,
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(job);
@@ -998,8 +1014,8 @@ public class SqliteProviderTests : TestSetup
             Name = $"deadletter-group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TestTime.UtcDateTime,
+            UpdatedAt = TestTime.UtcDateTime,
         };
 
         await context.Track(group);
@@ -1019,7 +1035,8 @@ public class SqliteProviderTests : TestSetup
                 Manifest = manifest,
                 Reason = "Max retries exceeded",
                 RetryCount = 3,
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(deadLetter);
@@ -1051,7 +1068,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "SharedDatabaseTest",
                 Input = Unit.Default,
                 ExternalId = externalId,
-            }
+            },
+            TestTime.Clock
         );
 
         await factoryContext.Track(metadata);
@@ -1080,7 +1098,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "MultiFactoryTest",
                 Input = Unit.Default,
                 ExternalId = externalId,
-            }
+            },
+            TestTime.Clock
         );
 
         await context1.Track(metadata);
@@ -1107,7 +1126,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "ResetTest",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(metadata);
@@ -1133,7 +1153,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "ResetQueryTest",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(metadata);
@@ -1162,7 +1183,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "JsonInputTest",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         // Manually set Input JSON to verify TEXT storage
@@ -1189,7 +1211,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "JsonOutputTest",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         metadata.Output = """{"result":"success","count":7}""";
@@ -1215,7 +1238,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "HostLabelsTest",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         metadata.HostLabels = """{"region":"us-east-1","team":"platform"}""";
@@ -1241,7 +1265,8 @@ public class SqliteProviderTests : TestSetup
                 TrainName = typeof(ITestTrain).FullName.NotNull(),
                 Input = """{"items":[1,2,3],"nested":{"a":"b"}}""",
                 InputTypeName = "TestInput",
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(workQueue);
@@ -1264,8 +1289,8 @@ public class SqliteProviderTests : TestSetup
             Name = $"json-props-group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TestTime.UtcDateTime,
+            UpdatedAt = TestTime.UtcDateTime,
         };
 
         await context.Track(group);
@@ -1297,8 +1322,8 @@ public class SqliteProviderTests : TestSetup
             Name = $"exclusions-group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TestTime.UtcDateTime,
+            UpdatedAt = TestTime.UtcDateTime,
         };
 
         await context.Track(group);
@@ -1337,7 +1362,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "BgJobJsonTest",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(metadata);
@@ -1349,7 +1375,8 @@ public class SqliteProviderTests : TestSetup
                 MetadataId = metadata.Id,
                 Input = """{"command":"run","args":["--verbose"]}""",
                 InputType = "CommandInput",
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(job);
@@ -1373,7 +1400,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "NullJsonTest",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         // Explicitly null out JSON fields
@@ -1402,14 +1430,15 @@ public class SqliteProviderTests : TestSetup
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var context = (IDataContext)factory.Create();
 
-        var now = DateTime.UtcNow;
+        var now = TestTime.UtcDateTime;
         var metadata = Metadata.Create(
             new CreateMetadata
             {
                 Name = "UtcTest",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         metadata.EndTime = now;
@@ -1438,7 +1467,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "NullableDateTimeTest",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         metadata.ScheduledTime = scheduledTime;
@@ -1504,7 +1534,8 @@ public class SqliteProviderTests : TestSetup
                     Name = $"EnumTest_{state}",
                     Input = Unit.Default,
                     ExternalId = Guid.NewGuid().ToString("N"),
-                }
+                },
+                TestTime.Clock
             );
 
             metadata.TrainState = state;
@@ -1533,7 +1564,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "LogLevelEnumParent",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(metadata);
@@ -1586,8 +1618,8 @@ public class SqliteProviderTests : TestSetup
             Name = $"schedule-enum-group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TestTime.UtcDateTime,
+            UpdatedAt = TestTime.UtcDateTime,
         };
 
         await context.Track(group);
@@ -1628,8 +1660,8 @@ public class SqliteProviderTests : TestSetup
             Name = $"dl-enum-group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TestTime.UtcDateTime,
+            UpdatedAt = TestTime.UtcDateTime,
         };
 
         await context.Track(group);
@@ -1651,14 +1683,15 @@ public class SqliteProviderTests : TestSetup
                     Manifest = manifest,
                     Reason = $"Status test: {status}",
                     RetryCount = 1,
-                }
+                },
+                TestTime.Clock
             );
 
             // DeadLetter.Create sets status to AwaitingIntervention; override it
             if (status == DeadLetterStatus.Retried)
-                deadLetter.Requeue("test retry");
+                deadLetter.Requeue("test retry", TestTime.Clock);
             else if (status == DeadLetterStatus.Acknowledged)
-                deadLetter.Acknowledge("test");
+                deadLetter.Acknowledge("test", TestTime.Clock);
 
             await context.Track(deadLetter);
             await context.SaveChanges(CancellationToken.None);
@@ -1680,7 +1713,8 @@ public class SqliteProviderTests : TestSetup
         foreach (var status in Enum.GetValues<WorkQueueStatus>())
         {
             var workQueue = WorkQueue.Create(
-                new CreateWorkQueue { TrainName = typeof(ITestTrain).FullName.NotNull() }
+                new CreateWorkQueue { TrainName = typeof(ITestTrain).FullName.NotNull() },
+                TestTime.Clock
             );
             workQueue.Status = status;
 
@@ -1706,8 +1740,8 @@ public class SqliteProviderTests : TestSetup
             Name = $"misfire-enum-group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TestTime.UtcDateTime,
+            UpdatedAt = TestTime.UtcDateTime,
         };
 
         await context.Track(group);
@@ -1754,7 +1788,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "ChangeTrackingAdded",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(metadata);
@@ -1776,7 +1811,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "ChangeTrackingUnchanged",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(metadata);
@@ -1799,7 +1835,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "ChangeTrackingModified",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(metadata);
@@ -1825,7 +1862,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "ChangeTrackingReset1",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         var metadata2 = Metadata.Create(
@@ -1834,7 +1872,8 @@ public class SqliteProviderTests : TestSetup
                 Name = "ChangeTrackingReset2",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(metadata1);

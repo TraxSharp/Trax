@@ -76,7 +76,7 @@ public class SqliteRunnerNonceStorageTests : TestSetup
     [Test]
     public async Task Expiry_compares_updates_and_deletes_as_seconds()
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = TestTime.Instant;
         var expired = NewNonce();
         var live = NewNonce();
         await Insert(expired, now.AddMinutes(-1));
@@ -112,9 +112,9 @@ public class SqliteRunnerNonceStorageTests : TestSetup
     public async Task A_second_insert_of_one_nonce_is_a_unique_violation()
     {
         var nonce = NewNonce();
-        await Insert(nonce, DateTimeOffset.UtcNow.AddMinutes(5));
+        await Insert(nonce, TestTime.Instant.AddMinutes(5));
 
-        var act = () => Insert(nonce, DateTimeOffset.UtcNow.AddMinutes(5));
+        var act = () => Insert(nonce, TestTime.Instant.AddMinutes(5));
 
         (await act.Should().ThrowAsync<DbUpdateException>())
             .Which.Should()
@@ -128,7 +128,7 @@ public class SqliteRunnerNonceStorageTests : TestSetup
     public async Task Two_concurrent_inserts_of_one_nonce_are_one_row_and_one_unique_violation()
     {
         var nonce = NewNonce();
-        var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
+        var expiresAt = TestTime.Instant.AddMinutes(5);
 
         var outcomes = await Task.WhenAll(
             Enumerable

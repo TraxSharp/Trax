@@ -19,7 +19,7 @@ public class WorkQueueCreateTests
     [Test]
     public void Create_WithNoSubjectKey_LeavesTheEntryUnserialized()
     {
-        var entry = WorkQueue.Create(new CreateWorkQueue { TrainName = "T" });
+        var entry = WorkQueue.Create(new CreateWorkQueue { TrainName = "T" }, TestTime.Clock);
 
         entry.SubjectKey.Should().BeNull();
     }
@@ -29,7 +29,10 @@ public class WorkQueueCreateTests
     {
         var key = new string('k', WorkQueue.MaxSubjectKeyLength);
 
-        var entry = WorkQueue.Create(new CreateWorkQueue { TrainName = "T", SubjectKey = key });
+        var entry = WorkQueue.Create(
+            new CreateWorkQueue { TrainName = "T", SubjectKey = key },
+            TestTime.Clock
+        );
 
         entry.SubjectKey.Should().Be(key);
     }
@@ -37,7 +40,11 @@ public class WorkQueueCreateTests
     [Test]
     public void Create_WithAnEmptyKey_IsRefused()
     {
-        var act = () => WorkQueue.Create(new CreateWorkQueue { TrainName = "T", SubjectKey = "" });
+        var act = () =>
+            WorkQueue.Create(
+                new CreateWorkQueue { TrainName = "T", SubjectKey = "" },
+                TestTime.Clock
+            );
 
         act.Should()
             .Throw<ArgumentException>()
@@ -52,7 +59,11 @@ public class WorkQueueCreateTests
     {
         var key = new string('k', WorkQueue.MaxSubjectKeyLength + 1);
 
-        var act = () => WorkQueue.Create(new CreateWorkQueue { TrainName = "T", SubjectKey = key });
+        var act = () =>
+            WorkQueue.Create(
+                new CreateWorkQueue { TrainName = "T", SubjectKey = key },
+                TestTime.Clock
+            );
 
         act.Should()
             .Throw<ArgumentException>()
@@ -69,7 +80,11 @@ public class WorkQueueCreateTests
     [TestCase("\u00A0\u3000")]
     public void Create_WithAWhitespaceOnlyKey_IsRefused(string key)
     {
-        var act = () => WorkQueue.Create(new CreateWorkQueue { TrainName = "T", SubjectKey = key });
+        var act = () =>
+            WorkQueue.Create(
+                new CreateWorkQueue { TrainName = "T", SubjectKey = key },
+                TestTime.Clock
+            );
 
         act.Should()
             .Throw<ArgumentException>()
@@ -84,7 +99,8 @@ public class WorkQueueCreateTests
     public void Create_WithWhitespaceAroundAKey_KeepsItAsGiven()
     {
         var entry = WorkQueue.Create(
-            new CreateWorkQueue { TrainName = "T", SubjectKey = " customer-7 " }
+            new CreateWorkQueue { TrainName = "T", SubjectKey = " customer-7 " },
+            TestTime.Clock
         );
 
         entry.SubjectKey.Should().Be(" customer-7 ", "the key is opaque and compared exactly");
@@ -97,7 +113,10 @@ public class WorkQueueCreateTests
         var key = string.Concat(Enumerable.Repeat("\U0001F600", WorkQueue.MaxSubjectKeyLength));
         key.Length.Should().Be(2 * WorkQueue.MaxSubjectKeyLength);
 
-        var entry = WorkQueue.Create(new CreateWorkQueue { TrainName = "T", SubjectKey = key });
+        var entry = WorkQueue.Create(
+            new CreateWorkQueue { TrainName = "T", SubjectKey = key },
+            TestTime.Clock
+        );
 
         entry
             .SubjectKey.Should()
@@ -109,7 +128,11 @@ public class WorkQueueCreateTests
     {
         var key = string.Concat(Enumerable.Repeat("\U0001F600", WorkQueue.MaxSubjectKeyLength + 1));
 
-        var act = () => WorkQueue.Create(new CreateWorkQueue { TrainName = "T", SubjectKey = key });
+        var act = () =>
+            WorkQueue.Create(
+                new CreateWorkQueue { TrainName = "T", SubjectKey = key },
+                TestTime.Clock
+            );
 
         act.Should()
             .Throw<ArgumentException>()
@@ -135,7 +158,11 @@ public class WorkQueueCreateTests
     [TestCaseSource(nameof(LoneSurrogates))]
     public void Create_WithALoneSurrogate_IsRefused(string key, int index)
     {
-        var act = () => WorkQueue.Create(new CreateWorkQueue { TrainName = "T", SubjectKey = key });
+        var act = () =>
+            WorkQueue.Create(
+                new CreateWorkQueue { TrainName = "T", SubjectKey = key },
+                TestTime.Clock
+            );
 
         act.Should()
             .Throw<ArgumentException>()
@@ -153,7 +180,8 @@ public class WorkQueueCreateTests
     public void Create_WithAPairedSurrogate_KeepsIt()
     {
         var entry = WorkQueue.Create(
-            new CreateWorkQueue { TrainName = "T", SubjectKey = "order:\U0001F600" }
+            new CreateWorkQueue { TrainName = "T", SubjectKey = "order:\U0001F600" },
+            TestTime.Clock
         );
 
         entry.SubjectKey.Should().Be("order:\U0001F600");
@@ -165,7 +193,8 @@ public class WorkQueueCreateTests
         // The parameterless constructor is protected so an entry cannot be built without
         // Create, but deserialization still has to reach it through [JsonConstructor].
         var entry = WorkQueue.Create(
-            new CreateWorkQueue { TrainName = "Some.Train", SubjectKey = "customer-7" }
+            new CreateWorkQueue { TrainName = "Some.Train", SubjectKey = "customer-7" },
+            TestTime.Clock
         );
 
         var read = JsonSerializer.Deserialize<WorkQueue>(JsonSerializer.Serialize(entry));

@@ -208,9 +208,9 @@ public partial class DataContextLoggingProviderTests
         // Poll for the flush loop to land at least one batch instead of waiting a fixed
         // window: CI scheduling can delay the background writer, and once any log is
         // persisted the flush path is known to work.
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+        var deadline = TimeProvider.System.GetUtcNow() + TimeSpan.FromSeconds(15);
         var landed = 0;
-        while (DateTime.UtcNow < deadline)
+        while (TimeProvider.System.GetUtcNow() < deadline)
         {
             context.Reset();
             landed = await context
@@ -341,17 +341,17 @@ public partial class DataContextLoggingProviderTests
         provider
             .CreateLogger("Writer.Stuck")
             .Log(LogLevel.Information, default, "m", exception: null, (_, _) => "m");
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
 
         // measuring-interval: the stopwatch measures how long shutdown is held up.
-        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var started = TimeProvider.System.GetTimestamp();
         provider.Dispose();
-        clock.Stop();
+        var elapsed = TimeProvider.System.GetElapsedTime(started);
 
         cancelled
             .Task.IsCompleted.Should()
             .BeTrue("the writer is cancelled once the drain runs out");
-        clock.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(8));
+        elapsed.Should().BeLessThan(TimeSpan.FromSeconds(8));
     }
 
     [GeneratedRegex(@"^Microsoft\..*$", RegexOptions.Compiled, matchTimeoutMilliseconds: 1000)]

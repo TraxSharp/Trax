@@ -61,7 +61,7 @@ public class SqliteEnumPartialIndexTests : TestSetup
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var context = (IDataContext)await factory.CreateDbContextAsync(CancellationToken.None);
         await using var contextDisposal = context.ConfigureAwait(false);
-        var source = Random.Shared.NextInt64(1_000_000_000, long.MaxValue);
+        var source = UnusedRunId();
 
         var dispatched = Replaying(source);
         dispatched.Status = WorkQueueStatus.Dispatched;
@@ -83,7 +83,8 @@ public class SqliteEnumPartialIndexTests : TestSetup
             {
                 TrainName = typeof(IQueuedTrain).FullName.NotNull(),
                 ReplayDecisionsOf = source,
-            }
+            },
+            TestTime.Clock
         );
 
     [Test]
@@ -182,6 +183,14 @@ public class SqliteEnumPartialIndexTests : TestSetup
             {
                 TrainName = typeof(IQueuedTrain).FullName.NotNull(),
                 ManifestId = manifestId,
-            }
+            },
+            TestTime.Clock
         );
+
+    // A run id no other test or earlier run of this one used: the database is shared and kept.
+    private static long UnusedRunId() =>
+        (long)(
+            BitConverter.ToUInt64(Guid.NewGuid().ToByteArray())
+            % (ulong)(long.MaxValue - 1_000_000_000)
+        ) + 1_000_000_000;
 }

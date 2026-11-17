@@ -23,7 +23,7 @@ namespace Trax.Effect.Services.JunctionEvents;
 [System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
     System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
 )]
-internal sealed class JunctionEventDecisionObserver : IDecisionObserver
+internal sealed class JunctionEventDecisionObserver(TimeProvider timeProvider) : IDecisionObserver
 {
     /// <inheritdoc />
     public async Task Decided(DecisionMade decision, CancellationToken cancellationToken)
@@ -37,7 +37,7 @@ internal sealed class JunctionEventDecisionObserver : IDecisionObserver
         var key = decision.Question.Key;
         var withheld = SensitiveQuestions.IsSensitive(decision.QuestionType, key);
         var (answer, confidence) = withheld ? (null, null) : Summarise(decision.Answer);
-        var now = DateTime.UtcNow;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
 
         await run.Publish(
                 TrainLifecycleEventMessage.DecidedEventType,
@@ -72,7 +72,7 @@ internal sealed class JunctionEventDecisionObserver : IDecisionObserver
             return;
 
         var key = refusal.Question.Key;
-        var now = DateTime.UtcNow;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
 
         // The refused answer and the reason are left out: the answer is one the run would not act
         // on, and the reason quotes it.
@@ -104,7 +104,7 @@ internal sealed class JunctionEventDecisionObserver : IDecisionObserver
 
         var key = QuestionKey.For(routing.On);
         var withheld = SensitiveQuestions.IsSensitive(routing.On);
-        var now = DateTime.UtcNow;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
 
         var position = run.NextPosition();
 

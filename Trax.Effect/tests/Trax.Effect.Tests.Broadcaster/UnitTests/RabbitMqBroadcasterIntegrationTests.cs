@@ -44,7 +44,7 @@ public class RabbitMqBroadcasterIntegrationTests
             ExternalId: "ext-1",
             TrainName: trainName,
             TrainState: "InProgress",
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TestTime.UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             EventType: "Started",
@@ -81,7 +81,11 @@ public class RabbitMqBroadcasterIntegrationTests
 
         // determinism: the wait is on the TaskCompletionSource; the delay is only the
         // fail-safe ceiling so a lost message fails the test instead of hanging it.
-        var awaited = await Task.WhenAny(received.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var awaited = await Task.WhenAny(
+            received.Task,
+            // determinism: the fail-safe ceiling named above, not a wait.
+            Task.Delay(TimeSpan.FromSeconds(10), TimeProvider.System)
+        );
         awaited.Should().Be(received.Task);
         (await received.Task.ConfigureAwait(false)).TrainName.Should().Be("RoundTrip.Train");
 
@@ -147,7 +151,7 @@ public class RabbitMqBroadcasterIntegrationTests
             ExternalId: string.Empty,
             TrainName: string.Empty,
             TrainState: string.Empty,
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TestTime.UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             EventType: TrainLifecycleEventMessage.DataChangedEventType,
@@ -159,7 +163,11 @@ public class RabbitMqBroadcasterIntegrationTests
 
         // determinism: the wait is on the TaskCompletionSource; the delay is only the
         // fail-safe ceiling so a lost message fails the test instead of hanging it.
-        var awaited = await Task.WhenAny(received.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var awaited = await Task.WhenAny(
+            received.Task,
+            // determinism: the fail-safe ceiling named above, not a wait.
+            Task.Delay(TimeSpan.FromSeconds(10), TimeProvider.System)
+        );
         awaited
             .Should()
             .Be(received.Task, "the data-change message should be delivered over RabbitMQ");
@@ -206,7 +214,11 @@ public class RabbitMqBroadcasterIntegrationTests
 
         // determinism: the wait is on the TaskCompletionSource; the delay is only the
         // fail-safe ceiling so a lost message fails the test instead of hanging it.
-        var awaited = await Task.WhenAny(second.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var awaited = await Task.WhenAny(
+            second.Task,
+            // determinism: the fail-safe ceiling named above, not a wait.
+            Task.Delay(TimeSpan.FromSeconds(10), TimeProvider.System)
+        );
         awaited.Should().Be(second.Task);
         calls.Should().BeGreaterThanOrEqualTo(2);
 
@@ -306,7 +318,13 @@ public class RabbitMqBroadcasterIntegrationTests
                 );
 
             // determinism: the wait is on the TaskCompletionSource; the delay is only the ceiling.
-            (await Task.WhenAny(entered.Task, Task.Delay(TimeSpan.FromSeconds(10))))
+            (
+                await Task.WhenAny(
+                    entered.Task,
+                    // determinism: the fail-safe ceiling named above, not a wait.
+                    Task.Delay(TimeSpan.FromSeconds(10), TimeProvider.System)
+                )
+            )
                 .Should()
                 .Be(entered.Task);
 
@@ -327,7 +345,7 @@ public class RabbitMqBroadcasterIntegrationTests
                     .GetValue(receiver)
                     .NotNull();
 
-            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+            var deadline = TimeProvider.System.GetUtcNow() + TimeSpan.FromSeconds(10);
             uint ready;
             do
             {
@@ -336,7 +354,7 @@ public class RabbitMqBroadcasterIntegrationTests
                     break;
                 // determinism: polls the broker's counter until it reaches the expected depth.
                 await Task.Delay(50, CancellationToken.None);
-            } while (DateTime.UtcNow < deadline);
+            } while (TimeProvider.System.GetUtcNow() < deadline);
 
             ready.Should().Be(8u, "only PrefetchCount deliveries may be unacknowledged at once");
         }
@@ -346,7 +364,13 @@ public class RabbitMqBroadcasterIntegrationTests
         }
 
         // determinism: the wait is on the TaskCompletionSource; the delay is only the ceiling.
-        (await Task.WhenAny(allHandled.Task, Task.Delay(TimeSpan.FromSeconds(10))))
+        (
+            await Task.WhenAny(
+                allHandled.Task,
+                // determinism: the fail-safe ceiling named above, not a wait.
+                Task.Delay(TimeSpan.FromSeconds(10), TimeProvider.System)
+            )
+        )
             .Should()
             .Be(allHandled.Task, "releasing the handler lets the rest of the queue through");
 

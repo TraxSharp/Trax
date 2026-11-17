@@ -89,6 +89,14 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     public IServiceProvider? ServiceProvider { get; set; }
 
     /// <summary>
+    /// The clock the run's times are read from: the container's <see cref="TimeProvider"/> when it
+    /// registers one (AddTrax registers the system's), and the system's when the train has no
+    /// container.
+    /// </summary>
+    internal TimeProvider Clock =>
+        ServiceProvider?.GetService(typeof(TimeProvider)) as TimeProvider ?? TimeProvider.System;
+
+    /// <summary>
     /// The canonical (interface) name for this train, set during DI registration.
     /// When null, falls back to the concrete type's FullName.
     /// </summary>
@@ -1127,7 +1135,11 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// <c>Run</c>: the monad is what the chain runs on, so a service train does not replace it.
     /// </summary>
     protected sealed override Monad<TIn, TOut> NewMonad() =>
-        new(this, ServiceProvider.NotNull(), CancellationToken);
+        // A train run without a container (reading its declared chain, say) gets the monad a
+        // plain train gets.
+        ServiceProvider is { } services
+            ? new(this, services, CancellationToken)
+            : new(this, CancellationToken);
 
     /// <summary>
     /// Releases the run: clears the in-memory input and output objects, disposes the effect, junction effect and

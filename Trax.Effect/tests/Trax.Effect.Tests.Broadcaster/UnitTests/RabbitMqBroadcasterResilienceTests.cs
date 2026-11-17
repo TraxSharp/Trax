@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.Reflection;
 using AwesomeAssertions;
@@ -35,7 +34,7 @@ public class RabbitMqBroadcasterResilienceTests
             ExternalId: externalId,
             TrainName: "Resilience.ITrain",
             TrainState: "InProgress",
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TestTime.UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             EventType: "Started",
@@ -58,16 +57,16 @@ public class RabbitMqBroadcasterResilienceTests
         await using var broadcasterDisposal = broadcaster.ConfigureAwait(false);
 
         // measuring-interval: the stopwatch measures how long the publishing train is held up.
-        var clock = Stopwatch.StartNew();
+        var started = TimeProvider.System.GetTimestamp();
         await Task.WhenAll(
             broadcaster.PublishAsync(Message("a"), CancellationToken.None),
             broadcaster.PublishAsync(Message("b"), CancellationToken.None),
             broadcaster.PublishAsync(Message("c"), CancellationToken.None)
         );
-        clock.Stop();
+        var elapsed = TimeProvider.System.GetElapsedTime(started);
 
-        clock
-            .Elapsed.Should()
+        elapsed
+            .Should()
             .BeLessThan(
                 TimeSpan.FromSeconds(1),
                 "a train must not wait on a broker it cannot reach"
@@ -89,12 +88,12 @@ public class RabbitMqBroadcasterResilienceTests
         await broadcaster.PublishAsync(Message(), CancellationToken.None);
 
         // measuring-interval: the stopwatch measures how long shutdown is held up.
-        var clock = Stopwatch.StartNew();
+        var started = TimeProvider.System.GetTimestamp();
         await broadcaster.DisposeAsync();
-        clock.Stop();
+        var elapsed = TimeProvider.System.GetElapsedTime(started);
 
-        clock
-            .Elapsed.Should()
+        elapsed
+            .Should()
             .BeLessThan(
                 RabbitMqTrainEventBroadcaster.DisposeDrainTimeout + TimeSpan.FromSeconds(2)
             );
@@ -199,7 +198,7 @@ public class RabbitMqBroadcasterResilienceTests
         }
 
         // determinism: the wait is on the TaskCompletionSource; the delay is only the ceiling.
-        (await Task.WhenAny(all.Task, Task.Delay(TimeSpan.FromSeconds(10))))
+        (await Task.WhenAny(all.Task, Task.Delay(TimeSpan.FromSeconds(10), TimeProvider.System)))
             .Should()
             .Be(all.Task);
         received
@@ -247,7 +246,11 @@ public class RabbitMqBroadcasterResilienceTests
             await broadcaster.PublishAsync(Message("mismatch"), CancellationToken.None);
 
             // determinism: the wait is on the logged refusal; the timeout is only the ceiling.
-            await logger.Logged.WaitAsync(TimeSpan.FromSeconds(15), CancellationToken.None);
+            await logger.Logged.WaitAsync(
+                TimeSpan.FromSeconds(15),
+                TimeProvider.System,
+                CancellationToken.None
+            );
             broadcaster.RefusedEvents.Should().Be(1);
         }
         finally

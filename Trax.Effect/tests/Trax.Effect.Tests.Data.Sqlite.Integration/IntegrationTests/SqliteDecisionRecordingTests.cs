@@ -57,7 +57,8 @@ public class SqliteDecisionRecordingTests
     [OneTimeTearDown]
     public async Task DisposeProvider()
     {
-        await _provider.NotNull().DisposeAsync();
+        if (_provider is not null)
+            await _provider.DisposeAsync();
 
         foreach (
             var path in new[]
@@ -235,7 +236,8 @@ public class SqliteDecisionRecordingTests
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = order,
                 ReplayDecisionsOf = replayDecisionsOf,
-            }
+            },
+            TestTime.Clock
         );
 
         return (

@@ -36,7 +36,8 @@ public class SubjectKeyStorageTests : TestSetup
         await using (context.ConfigureAwait(false))
         {
             var entry = WorkQueue.Create(
-                new CreateWorkQueue { TrainName = "Subject.Key.Train", SubjectKey = key }
+                new CreateWorkQueue { TrainName = "Subject.Key.Train", SubjectKey = key },
+                TestTime.Clock
             );
             await context.Track(entry);
             await context.SaveChanges(CancellationToken.None);

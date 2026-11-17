@@ -28,7 +28,8 @@ public class SignalRConsecutiveRunTests
                 Name = "T.IDoThing",
                 ExternalId = externalId,
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         metadata.TrainState = TrainState.Completed;
         return metadata;
@@ -76,12 +77,12 @@ public class SignalRConsecutiveRunTests
                     secondRunArrived.TrySetResult();
             }
         );
-        await connection.StartAsync().WaitAsync(Timeout);
+        await connection.StartAsync().WaitAsync(Timeout, TimeProvider.System);
 
         await RunOnce(server.Host.Services, "run-1");
         await RunOnce(server.Host.Services, "run-2");
 
-        await secondRunArrived.Task.WaitAsync(Timeout);
+        await secondRunArrived.Task.WaitAsync(Timeout, TimeProvider.System);
         received.Select(e => e.ExternalId).Should().Contain(["run-1", "run-2"]);
     }
 }

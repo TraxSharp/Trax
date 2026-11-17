@@ -20,7 +20,7 @@ public class SignalRConcurrencyTests
             ExternalId: externalId,
             TrainName: "T.IDoThing",
             TrainState: "Completed",
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TestTime.UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             EventType: eventType,
@@ -30,8 +30,8 @@ public class SignalRConcurrencyTests
 
     private static async Task<bool> WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
     {
-        var deadline = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow() + timeout;
+        while (TimeProvider.System.GetUtcNow() < deadline)
         {
             if (condition())
                 return true;
@@ -51,7 +51,7 @@ public class SignalRConcurrencyTests
         var received = new ConcurrentBag<TraxClientEvent>();
         connection.On<TraxClientEvent>("TrainEvent", evt => received.Add(evt));
 
-        await connection.StartAsync().WaitAsync(Timeout);
+        await connection.StartAsync().WaitAsync(Timeout, TimeProvider.System);
 
         var dispatcher = server.GetService<SignalRTrainEventDispatcher>();
 
@@ -83,7 +83,7 @@ public class SignalRConcurrencyTests
         var received = new ConcurrentBag<TraxClientEvent>();
         connection.On<TraxClientEvent>("TrainEvent", evt => received.Add(evt));
 
-        await connection.StartAsync().WaitAsync(Timeout);
+        await connection.StartAsync().WaitAsync(Timeout, TimeProvider.System);
 
         var dispatcher = server.GetService<SignalRTrainEventDispatcher>();
 

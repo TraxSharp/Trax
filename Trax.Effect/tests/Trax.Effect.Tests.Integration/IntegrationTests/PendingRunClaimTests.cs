@@ -49,7 +49,11 @@ public class PendingRunClaimTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.NotNull().DisposeAsync();
+    public async Task DisposeProvider()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [SetUp]
     public void ResetCount() => CountingTrain.BodyRuns = 0;
@@ -118,7 +122,8 @@ public class PendingRunClaimTests
                 Name = typeof(ICountingTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
         await train.Run(Unit.Default, unsaved, CancellationToken.None);
@@ -158,7 +163,8 @@ public class PendingRunClaimTests
                 Name = typeof(ICountingTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = Unit.Default,
-            }
+            },
+            TestTime.Clock
         );
         await context.Track(metadata).ConfigureAwait(false);
         await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);

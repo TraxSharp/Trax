@@ -3,6 +3,7 @@ using System.Runtime.ExceptionServices;
 using System.Text.RegularExpressions;
 using DbUp;
 using DbUp.Engine;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 using Trax.Core.Extensions;
 using Trax.Core.Functional;
@@ -93,12 +94,36 @@ public static partial class DatabaseMigrator
     /// <para>
     /// <c>UsePostgres</c> calls this during service registration unless migrations are skipped.
     /// </para>
+    /// <para>
+    /// This overload reports nothing while it runs; a failure still reaches the caller as the
+    /// exception. <see cref="Migrate(string, ILogger)"/> also logs each rerun and the failure.
+    /// </para>
     /// </remarks>
     public static Task Migrate(string connectionString) =>
-        Migrate(connectionString, MigrationLockPolicy.Default);
+        Migrate(connectionString, MigrationLockPolicy.Default, logger: null, TimeProvider.System);
 
-    internal static async Task Migrate(string connectionString, MigrationLockPolicy policy)
+    /// <summary>
+    /// Applies the pending scripts as <see cref="Migrate(string)"/> does, logging to
+    /// <paramref name="logger"/> each time it runs the pending scripts again and the error it
+    /// fails with.
+    /// </summary>
+    /// <param name="connectionString">The connection string to the PostgreSQL database</param>
+    /// <param name="logger">Where reruns (warning) and the failure (error) are logged.</param>
+    /// <returns>A task representing the asynchronous operation</returns>
+    /// <exception cref="Exception">Thrown if the migration fails</exception>
+    public static Task Migrate(string connectionString, ILogger? logger) =>
+        Migrate(connectionString, MigrationLockPolicy.Default, logger, TimeProvider.System);
+
+    internal static async Task Migrate(
+        string connectionString,
+        MigrationLockPolicy policy,
+        ILogger? logger,
+        TimeProvider? timeProvider = null
+    )
     {
+        // A static entry point with no container: it waits on the system clock unless a test
+        // hands it another.
+        var clock = timeProvider ?? TimeProvider.System;
         // The lock is held on one connection while DbUp runs the scripts on another, so the
         // migration's connections must not come from the host's pool: a host that caps its pool
         // at one connection would otherwise wait on itself until the pool timeout.
@@ -125,7 +150,7 @@ public static partial class DatabaseMigrator
             var lockConnection = new NpgsqlConnection(migrationConnectionString);
             await using var lockConnectionDisposal = lockConnection.ConfigureAwait(false);
             await lockConnection.OpenAsync().ConfigureAwait(false);
-            await AcquireMigrationLock(lockConnection).ConfigureAwait(false);
+            await AcquireMigrationLock(lockConnection, clock).ConfigureAwait(false);
 
             try
             {
@@ -161,14 +186,13 @@ public static partial class DatabaseMigrator
                     )
                         ExceptionDispatchInfo.Capture(result.Error).Throw();
 
-                    Console.WriteLine(
-                        string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"A Trax migration script gave up waiting for a table lock, or met a duplicate while building a unique index (attempt {attempt} of {policy.Attempts}); running the pending scripts again."
-                        )
+                    logger?.LogWarning(
+                        "A Trax migration script gave up waiting for a table lock, or met a duplicate while building a unique index (attempt {Attempt} of {Attempts}); running the pending scripts again.",
+                        attempt,
+                        policy.Attempts
                     );
                     if (policy.Backoff > TimeSpan.Zero)
-                        await Task.Delay(policy.Backoff * attempt).ConfigureAwait(false);
+                        await Task.Delay(policy.Backoff * attempt, clock).ConfigureAwait(false);
                 }
             }
             finally
@@ -179,9 +203,7 @@ public static partial class DatabaseMigrator
         }
         catch (Exception e)
         {
-            Console.WriteLine(
-                $"Caught Exception ({e.GetType()}) while attempting to migrate Trax.Core database: {e}"
-            );
+            logger?.LogError(e, "Migrating the Trax database failed.");
             throw;
         }
     }
@@ -327,7 +349,7 @@ public static partial class DatabaseMigrator
     /// for it, forever, and Postgres cannot see that as a deadlock. Between two tries the waiter
     /// holds no snapshot, so the build finishes and the lock is released.
     /// </remarks>
-    private static async Task AcquireMigrationLock(NpgsqlConnection connection)
+    private static async Task AcquireMigrationLock(NpgsqlConnection connection, TimeProvider clock)
     {
         while (true)
         {
@@ -337,7 +359,7 @@ public static partial class DatabaseMigrator
             if ((bool)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull())
                 return;
 
-            await Task.Delay(MigrationLockPollInterval).ConfigureAwait(false);
+            await Task.Delay(MigrationLockPollInterval, clock).ConfigureAwait(false);
         }
     }
 

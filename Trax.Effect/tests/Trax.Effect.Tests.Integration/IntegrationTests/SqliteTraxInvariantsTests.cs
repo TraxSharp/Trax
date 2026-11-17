@@ -33,7 +33,8 @@ public class SqliteTraxInvariantsTests
     [TearDown]
     public async Task DeleteDatabase()
     {
-        await _connection.NotNull().DisposeAsync();
+        if (_connection is not null)
+            await _connection.DisposeAsync();
         SqliteConnection.ClearAllPools();
         foreach (var suffix in new[] { "", "-wal", "-shm" })
             File.Delete(_file.NotNull() + suffix);

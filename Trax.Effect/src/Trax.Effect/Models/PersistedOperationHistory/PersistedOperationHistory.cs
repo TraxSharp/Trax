@@ -31,7 +31,7 @@ public class PersistedOperationHistory
     [Column("id")]
     public string Id
     {
-        get => field.NotNull(nameof(Id));
+        get => field ?? string.Empty;
         set;
     }
 
@@ -41,7 +41,7 @@ public class PersistedOperationHistory
     [Column("document")]
     public string Document
     {
-        get => field.NotNull(nameof(Document));
+        get => field ?? string.Empty;
         set;
     }
 
@@ -51,7 +51,7 @@ public class PersistedOperationHistory
     [Column("shape_fingerprint")]
     public string ShapeFingerprint
     {
-        get => field.NotNull(nameof(ShapeFingerprint));
+        get => field ?? string.Empty;
         set;
     }
 
@@ -61,7 +61,7 @@ public class PersistedOperationHistory
     [Column("change_type")]
     public string ChangeType
     {
-        get => field.NotNull(nameof(ChangeType));
+        get => field ?? string.Empty;
         set;
     }
 

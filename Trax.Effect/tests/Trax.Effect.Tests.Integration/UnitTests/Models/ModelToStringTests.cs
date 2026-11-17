@@ -28,9 +28,10 @@ public class ModelToStringTests
                 InputTypeName = "Trax.Tests.In",
                 ManifestId = 5,
                 Priority = 3,
-                ScheduledAt = DateTime.UtcNow,
+                ScheduledAt = TestTime.UtcDateTime,
                 DeadLetterId = null,
-            }
+            },
+            TestTime.Clock
         );
 
         entry.TrainName.Should().Be("T");
@@ -57,7 +58,8 @@ public class ModelToStringTests
                 Input = "{}",
                 InputTypeName = "X",
                 Priority = -50,
-            }
+            },
+            TestTime.Clock
         );
         var high = WorkQueue.Create(
             new CreateWorkQueue
@@ -66,7 +68,8 @@ public class ModelToStringTests
                 Input = "{}",
                 InputTypeName = "X",
                 Priority = 9999,
-            }
+            },
+            TestTime.Clock
         );
 
         low.Priority.Should().BeGreaterThanOrEqualTo(0);
@@ -104,8 +107,8 @@ public class ModelToStringTests
             MaxActiveJobs = 4,
             Priority = 1,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TestTime.UtcDateTime,
+            UpdatedAt = TestTime.UtcDateTime,
         };
 
         group.MaxActiveJobs.Should().Be(4);
@@ -133,7 +136,8 @@ public class ModelToStringTests
                 Manifest = manifest,
                 Reason = "boom",
                 RetryCount = 4,
-            }
+            },
+            TestTime.Clock
         );
 
         dl.Reason.Should().Be("boom");
@@ -153,7 +157,8 @@ public class ModelToStringTests
                 Input = "{\"value\":\"x\"}",
                 InputType = "Sample",
                 Priority = 1,
-            }
+            },
+            TestTime.Clock
         );
 
         job.MetadataId.Should().Be(99);
@@ -189,7 +194,7 @@ public class ModelToStringTests
         cfg.MetadataCleanupRetention.Should().BeNull();
         cfg.UpdatedAt.Should().Be(default);
 
-        var when = DateTime.UtcNow;
+        var when = TestTime.UtcDateTime;
         cfg.Id = 1;
         cfg.ManifestManagerEnabled = false;
         cfg.JobDispatcherEnabled = false;

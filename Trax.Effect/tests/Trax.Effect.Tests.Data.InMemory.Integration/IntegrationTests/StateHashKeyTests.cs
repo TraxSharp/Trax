@@ -80,7 +80,8 @@ public class StateHashKeyTests
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = input.NotNull(),
                 ReplayDecisionsOf = replayDecisionsOf,
-            }
+            },
+            TestTime.Clock
         );
         await train.Run(input, metadata, CancellationToken.None).ConfigureAwait(false);
         return train.Metadata.NotNull().Id;

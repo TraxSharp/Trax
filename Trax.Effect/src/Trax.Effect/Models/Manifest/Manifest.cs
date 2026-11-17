@@ -44,7 +44,7 @@ public class Manifest : IModel
     [Column("external_id")]
     public string ExternalId
     {
-        get => field.NotNull(nameof(ExternalId));
+        get => field ?? string.Empty;
         set;
     }
 
@@ -55,9 +55,12 @@ public class Manifest : IModel
     [Column("name")]
     public string Name
     {
-        get => field.NotNull(nameof(Name));
-        set;
+        get => _name ?? string.Empty;
+        set => _name = value;
     }
+
+    // Null until the manifest is named; NameType reads an unnamed manifest as Unit.
+    private string? _name;
 
     /// <summary>
     /// FullName of the <see cref="IManifestProperties"/> type serialized in <see cref="Properties"/>,
@@ -104,7 +107,7 @@ public class Manifest : IModel
     /// <exception cref="TypeLoadException">No loaded assembly defines the named type.</exception>
     [NotMapped]
     [JsonIgnore]
-    public Type NameType => Name == null ? typeof(Unit) : ResolveType(Name);
+    public Type NameType => _name == null ? typeof(Unit) : ResolveType(_name);
 
     #region Scheduling Properties
 
@@ -337,11 +340,7 @@ public class Manifest : IModel
     /// <summary>
     /// Gets or sets the ManifestGroup this manifest belongs to.
     /// </summary>
-    public ManifestGroup.ManifestGroup ManifestGroup
-    {
-        get => field.NotNull(nameof(ManifestGroup));
-        set;
-    }
+    public ManifestGroup.ManifestGroup? ManifestGroup { get; set; }
 
     /// <summary>
     /// Gets or sets the parent manifest that this manifest depends on.

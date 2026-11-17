@@ -30,10 +30,14 @@ namespace Trax.Effect.JunctionProvider.Progress.Services.JunctionProgressProvide
 /// the one after it, never for a queue of writes. The run settles the writer before its terminal
 /// write, which clears both columns, so no write outlives the run.</para>
 /// </remarks>
-internal sealed class JunctionProgressProvider(IDataContextProviderFactory dataContextFactory)
-    : IJunctionProgressProvider,
-        ISettlesBeforeTheRunEnds
+internal sealed class JunctionProgressProvider(
+    IDataContextProviderFactory dataContextFactory,
+    TimeProvider? timeProvider = null
+) : IJunctionProgressProvider, ISettlesBeforeTheRunEnds
 {
+    // The container's clock when it builds the provider, or the system's.
+    private readonly TimeProvider _clock = timeProvider ?? TimeProvider.System;
+
     /// <summary>Guards every field below.</summary>
     private readonly Lock _gate = new();
 
@@ -84,7 +88,9 @@ internal sealed class JunctionProgressProvider(IDataContextProviderFactory dataC
         Task written;
         lock (_gate)
         {
-            _running.Add((effectJunction, effectJunction.Metadata?.Name, DateTime.UtcNow));
+            _running.Add(
+                (effectJunction, effectJunction.Metadata?.Name, _clock.GetUtcNow().UtcDateTime)
+            );
             written = Request(serviceTrain.Metadata);
         }
 

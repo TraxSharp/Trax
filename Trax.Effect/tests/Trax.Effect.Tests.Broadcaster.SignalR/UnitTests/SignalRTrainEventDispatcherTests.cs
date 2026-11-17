@@ -50,7 +50,12 @@ public class SignalRTrainEventDispatcherTests
 
     private SignalRTrainEventDispatcher Create(SignalRSinkConfiguration config)
     {
-        var dispatcher = new SignalRTrainEventDispatcher(_hub.NotNull(), config, _logger.NotNull());
+        var dispatcher = new SignalRTrainEventDispatcher(
+            _hub.NotNull(),
+            config,
+            _logger.NotNull(),
+            TestTime.Clock
+        );
         _created.Add(dispatcher);
         return dispatcher;
     }
@@ -396,7 +401,6 @@ public class SignalRTrainEventDispatcherTests
     [Test]
     public async Task BuildMessage_EndTimeNull_PayloadTimestampUsesNowFallback()
     {
-        var before = DateTime.UtcNow.AddSeconds(-1);
         var d = Create(NewOptions().Build());
         TraxClientEvent? captured = null;
         await _client
@@ -413,8 +417,7 @@ public class SignalRTrainEventDispatcherTests
         await d.StopAsync(CancellationToken.None);
 
         captured.Should().NotBeNull();
-        captured.NotNull().Timestamp.Should().BeOnOrAfter(before);
-        captured.Timestamp.Should().BeOnOrBefore(DateTime.UtcNow.AddSeconds(1));
+        captured.NotNull().Timestamp.Should().Be(TestTime.UtcDateTime);
     }
 
     [Test]
@@ -453,8 +456,8 @@ public class SignalRTrainEventDispatcherTests
             ExternalId = "x",
             Name = "T.IT",
             TrainState = Effect.Enums.TrainState.Completed,
-            StartTime = DateTime.UtcNow,
-            EndTime = DateTime.UtcNow,
+            StartTime = TestTime.UtcDateTime,
+            EndTime = TestTime.UtcDateTime,
         };
 
         Func<Task> act = () => d.OnCompleted(metadata, CancellationToken.None);
@@ -489,7 +492,7 @@ public class SignalRTrainEventDispatcherTests
         var d = Create(NewOptions().Build());
 
         await d.OnStarted(Metadata(), CancellationToken.None);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
 
         // The sender is stuck inside Clients.All. Every later hook still completes synchronously.
         for (var i = 0; i < 10; i++)
@@ -508,7 +511,7 @@ public class SignalRTrainEventDispatcherTests
 
         // The first event is taken by the sender, which then waits on the held send.
         await d.HandleAsync(Message(externalId: "held"), CancellationToken.None);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
 
         // Four fill the queue; three more have nowhere to go.
         for (var i = 0; i < 7; i++)
@@ -578,12 +581,12 @@ public class SignalRTrainEventDispatcherTests
                 Message(externalId: string.Create(CultureInfo.InvariantCulture, $"q{i}")),
                 CancellationToken.None
             );
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
 
         var stop = d.StopAsync(CancellationToken.None);
         stop.IsCompleted.Should().BeFalse("the queue is still waiting on the held send");
         release.SetResult();
-        await stop.WaitAsync(TimeSpan.FromSeconds(10));
+        await stop.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
 
         await _client.NotNull().Received(20).TrainEvent(Arg.Any<object>());
     }
@@ -601,12 +604,12 @@ public class SignalRTrainEventDispatcherTests
                 Message(externalId: string.Create(CultureInfo.InvariantCulture, $"q{i}")),
                 CancellationToken.None
             );
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
 
         using var cts = new CancellationTokenSource();
         var stop = d.StopAsync(cts.Token);
         await cts.CancelAsync();
-        await stop.WaitAsync(TimeSpan.FromSeconds(10), CancellationToken.None);
+        await stop.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System, CancellationToken.None);
 
         _logger
             .NotNull()

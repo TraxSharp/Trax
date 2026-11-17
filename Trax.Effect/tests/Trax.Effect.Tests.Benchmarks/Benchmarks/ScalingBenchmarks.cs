@@ -33,7 +33,7 @@ public class ScalingBenchmarks
     }
 
     [GlobalCleanup]
-    public void Cleanup() => _provider.NotNull().Dispose();
+    public void Cleanup() => _provider?.Dispose();
 
     [Benchmark(Baseline = true, Description = "Serial")]
     public Task<int> Serial() => SerialOperations.AddNSerial(0, JunctionCount);

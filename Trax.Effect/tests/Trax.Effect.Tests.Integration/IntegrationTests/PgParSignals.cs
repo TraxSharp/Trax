@@ -55,7 +55,9 @@ internal static class PgParSignals
     {
         var (a, b) = Meetings.GetOrAdd(run, _ => (New(), New()));
         (isA ? a : b).TrySetResult();
-        await (isA ? b : a).Task.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+        await (isA ? b : a)
+            .Task.WaitAsync(TimeSpan.FromSeconds(30), TimeProvider.System)
+            .ConfigureAwait(false);
         Met = true;
     }
 

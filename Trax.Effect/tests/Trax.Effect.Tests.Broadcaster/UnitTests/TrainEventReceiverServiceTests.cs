@@ -33,7 +33,8 @@ public class TrainEventReceiverServiceTests
     public async Task TearDown()
     {
         if (_serviceProvider is not null)
-            await _serviceProvider.NotNull().DisposeAsync().ConfigureAwait(false);
+            if (_serviceProvider is not null)
+                await _serviceProvider.DisposeAsync().ConfigureAwait(false);
         if (_receiver is IAsyncDisposable disposable)
             await disposable.DisposeAsync();
     }
@@ -61,7 +62,7 @@ public class TrainEventReceiverServiceTests
                 Arg.Any<CancellationToken>()
             )
             .Returns(Task.CompletedTask);
-        return started.Task.WaitAsync(Timeout);
+        return started.Task.WaitAsync(Timeout, TimeProvider.System);
     }
 
     private static TrainLifecycleEventMessage CreateMessage(
@@ -73,7 +74,7 @@ public class TrainEventReceiverServiceTests
             ExternalId: "abc123",
             TrainName: "TestTrain",
             TrainState: "Completed",
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TestTime.UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             EventType: eventType,
@@ -254,8 +255,8 @@ public class TrainEventReceiverServiceTests
         // call instead of sleeping a fixed window: the test then reflects the
         // service's real retry timing rather than racing GitHub Actions
         // scheduling overhead.
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
-        while (DateTime.UtcNow < deadline && callCount <= 1)
+        var deadline = TimeProvider.System.GetUtcNow() + TimeSpan.FromSeconds(15);
+        while (TimeProvider.System.GetUtcNow() < deadline && callCount <= 1)
             // allowed-delay: polls for the retry's second StartAsync call.
             await Task.Delay(100, CancellationToken.None);
 
@@ -293,8 +294,8 @@ public class TrainEventReceiverServiceTests
 
         await service.StartAsync(cts.Token);
 
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
-        while (DateTime.UtcNow < deadline && startCount <= 1)
+        var deadline = TimeProvider.System.GetUtcNow() + TimeSpan.FromSeconds(15);
+        while (TimeProvider.System.GetUtcNow() < deadline && startCount <= 1)
             // allowed-delay: polls for the retry's second StartAsync call.
             await Task.Delay(100, CancellationToken.None);
 

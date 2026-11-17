@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -55,6 +56,8 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
 
     private readonly SemaphoreSlim? _slots;
 
+    private readonly TimeProvider _clock;
+
     private int _disposed;
 
     /// <summary>
@@ -63,28 +66,51 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
     /// </summary>
     /// <exception cref="ArgumentException">The options are not usable.</exception>
     public SystemOneDecider(SystemOneOptions options)
-        : this(
-            options,
-            new HttpClient(
-                new SocketsHttpHandler
-                {
-                    PooledConnectionLifetime = TimeSpan.FromMinutes(5),
-                    AllowAutoRedirect = false,
-                }
-            )
-            {
-                Timeout = Timeout.InfiniteTimeSpan,
-            },
-            ownsHttp: true
-        ) { }
+        : this(options, TimeProvider.System) { }
+
+    /// <summary>
+    /// Creates a decider with an HTTP client of its own, as
+    /// <see cref="SystemOneDecider(SystemOneOptions)"/> does, that waits between retries and reads
+    /// a <c>Retry-After</c> date on <paramref name="timeProvider"/>.
+    /// </summary>
+    /// <exception cref="ArgumentException">The options are not usable.</exception>
+    public SystemOneDecider(SystemOneOptions options, TimeProvider timeProvider)
+        : this(options, OwnHttpClient(), ownsHttp: true, timeProvider) { }
 
     /// <summary>Creates a decider that sends through <paramref name="http"/>, which it does not dispose.</summary>
     /// <exception cref="ArgumentException">The options are not usable.</exception>
     public SystemOneDecider(SystemOneOptions options, HttpClient http)
-        : this(options, http, ownsHttp: false) { }
+        : this(options, http, ownsHttp: false, TimeProvider.System) { }
 
-    private SystemOneDecider(SystemOneOptions options, HttpClient http, bool ownsHttp)
+    /// <summary>
+    /// Creates a decider that sends through <paramref name="http"/>, which it does not dispose, and
+    /// waits between retries on <paramref name="timeProvider"/>.
+    /// </summary>
+    /// <exception cref="ArgumentException">The options are not usable.</exception>
+    public SystemOneDecider(SystemOneOptions options, HttpClient http, TimeProvider timeProvider)
+        : this(options, http, ownsHttp: false, timeProvider) { }
+
+    private static HttpClient OwnHttpClient() =>
+        new(
+            new SocketsHttpHandler
+            {
+                PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+                AllowAutoRedirect = false,
+            }
+        )
+        {
+            Timeout = Timeout.InfiniteTimeSpan,
+        };
+
+    private SystemOneDecider(
+        SystemOneOptions options,
+        HttpClient http,
+        bool ownsHttp,
+        TimeProvider timeProvider
+    )
     {
+        _clock = timeProvider;
+        Wait = (delay, ct) => Task.Delay(delay, _clock, ct);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(http);
 
@@ -111,11 +137,11 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
     internal SystemOneOptions Options => _options;
 
     /// <summary>How the decider waits before a retry. Replaced in tests to record the waits.</summary>
-    internal Func<TimeSpan, CancellationToken, Task> Wait { get; set; } =
-        (delay, ct) => Task.Delay(delay, ct);
+    internal Func<TimeSpan, CancellationToken, Task> Wait { get; set; }
 
     /// <summary>A number in [0, 1) that spreads retries out. Replaced in tests to fix it.</summary>
-    internal Func<double> Jitter { get; set; } = Random.Shared.NextDouble;
+    internal Func<double> Jitter { get; set; } =
+        () => RandomNumberGenerator.GetInt32(int.MaxValue) / (double)int.MaxValue;
 
     /// <inheritdoc />
     public async Task<DecisionResult> Decide(
@@ -687,9 +713,9 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
                     and not HttpStatusCode.HttpVersionNotSupported
         );
 
-    private static TimeSpan? RetryAfter(RetryConditionHeaderValue? header) =>
+    private TimeSpan? RetryAfter(RetryConditionHeaderValue? header) =>
         header?.Delta
-        ?? (header?.Date is { } date ? Max(date - DateTimeOffset.UtcNow, TimeSpan.Zero) : null);
+        ?? (header?.Date is { } date ? Max(date - _clock.GetUtcNow(), TimeSpan.Zero) : null);
 
     /// <summary>
     /// What a failed status means, in a few words. The response body is never quoted: a server's

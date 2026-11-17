@@ -103,11 +103,11 @@ public class WorkQueueSubjectIndexTests : TestSetup
         await using var commandDisposal = command.ConfigureAwait(false);
         command.Parameters.AddWithValue("subject", subject);
         command.Parameters.AddWithValue("id", 0L);
-        command.Parameters.AddWithValue("now", DateTime.UtcNow);
+        command.Parameters.AddWithValue("now", TestTime.UtcDateTime);
         command.Parameters.AddWithValue("priority", (short)1);
         command.Parameters.AddWithValue(
             "created",
-            DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified)
+            DateTime.SpecifyKind(TestTime.UtcDateTime, DateTimeKind.Unspecified)
         );
 
         var lines = new List<string>();

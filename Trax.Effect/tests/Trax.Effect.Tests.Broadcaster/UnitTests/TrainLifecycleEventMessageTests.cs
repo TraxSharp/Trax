@@ -47,7 +47,7 @@ public class TrainLifecycleEventMessageTests
             ExternalId: "fail-ext",
             TrainName: "FailingTrain",
             TrainState: "Failed",
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TestTime.UtcDateTime,
             FailureJunction: "JunctionA",
             FailureReason: "Something went wrong",
             EventType: "Failed",
@@ -70,7 +70,7 @@ public class TrainLifecycleEventMessageTests
             ExternalId: "no-exec",
             TrainName: "OrphanTrain",
             TrainState: "Completed",
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TestTime.UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             EventType: "Completed",
@@ -92,7 +92,7 @@ public class TrainLifecycleEventMessageTests
             ExternalId: "test",
             TrainName: "Train",
             TrainState: "Completed",
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TestTime.UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             EventType: "Completed",
@@ -150,7 +150,7 @@ public class TrainLifecycleEventMessageTests
             ExternalId: "ext",
             TrainName: "Train",
             TrainState: "Completed",
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TestTime.UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             EventType: "Completed",
@@ -169,7 +169,7 @@ public class TrainLifecycleEventMessageTests
     [Test]
     public void RecordEquality_WorksCorrectly()
     {
-        var timestamp = DateTime.UtcNow;
+        var timestamp = TestTime.UtcDateTime;
         var msg1 = new TrainLifecycleEventMessage(
             1,
             "ext",
@@ -219,7 +219,7 @@ public class TrainLifecycleEventMessageTests
             "ext",
             "Train",
             "Completed",
-            DateTime.UtcNow,
+            TestTime.UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             "Completed",
@@ -259,7 +259,7 @@ public class TrainLifecycleEventMessageTests
             "ext",
             "Train",
             "Failed",
-            DateTime.UtcNow,
+            TestTime.UtcDateTime,
             "Junction",
             "The card was declined.",
             "Failed",

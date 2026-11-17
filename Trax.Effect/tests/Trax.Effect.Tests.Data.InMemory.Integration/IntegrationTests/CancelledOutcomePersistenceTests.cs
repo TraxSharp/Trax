@@ -141,7 +141,7 @@ public class CancelledOutcomePersistenceTests : TestSetup
     private static async Task BodyStarted(Task runTask)
     {
         var first = await Task.WhenAny(Probe.Started.Task, runTask)
-            .WaitAsync(TimeSpan.FromSeconds(15))
+            .WaitAsync(TimeSpan.FromSeconds(15), TimeProvider.System)
             .ConfigureAwait(false);
 
         if (first == runTask)

@@ -192,12 +192,17 @@ public static class ServiceExtensions
 
         if (name is null)
         {
-            services.AddSingleton(_ => new SystemOneDecider(settings));
+            services.AddSingleton(sp => new SystemOneDecider(settings, Clock(sp)));
             services.AddSingleton<IDecider>(sp => sp.GetRequiredService<SystemOneDecider>());
         }
         else
         {
-            services.AddKeyedSingleton(name, (_, _) => new SystemOneDecider(settings));
+            services.AddKeyedSingleton(name, (sp, _) => new SystemOneDecider(settings, Clock(sp)));
         }
     }
+
+    // The clock the container registers (AddTrax registers the system's), or the system's when a
+    // host built the container without one.
+    private static TimeProvider Clock(IServiceProvider services) =>
+        services.GetService<TimeProvider>() ?? TimeProvider.System;
 }

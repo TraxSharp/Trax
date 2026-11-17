@@ -47,7 +47,7 @@ public class TerminalHookCancellationTests : TestSetup
         try
         {
             await Task.WhenAny(Probe.Started.Task, runTask)
-                .WaitAsync(TimeSpan.FromSeconds(15), CancellationToken.None);
+                .WaitAsync(TimeSpan.FromSeconds(15), TimeProvider.System, CancellationToken.None);
             await cts.CancelAsync();
 
             var awaiting = async () => await runTask.ConfigureAwait(false);
@@ -74,7 +74,7 @@ public class TerminalHookCancellationTests : TestSetup
 
         var runTask = train.Run(Unit.Default, cts.Token);
         await Task.WhenAny(Probe.Started.Task, runTask)
-            .WaitAsync(TimeSpan.FromSeconds(15), CancellationToken.None);
+            .WaitAsync(TimeSpan.FromSeconds(15), TimeProvider.System, CancellationToken.None);
 
         // Cancel while the body is mid-flight, then let it finish anyway, as a downstream call with
         // no cancellation support would.

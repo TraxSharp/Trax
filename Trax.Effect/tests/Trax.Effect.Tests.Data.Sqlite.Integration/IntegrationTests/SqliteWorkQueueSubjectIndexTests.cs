@@ -65,7 +65,7 @@ public class SqliteWorkQueueSubjectIndexTests : TestSetup
             """;
         AddParameter(command, "$subject", "customer-42");
         AddParameter(command, "$id", 0L);
-        AddParameter(command, "$now", DateTime.UtcNow);
+        AddParameter(command, "$now", TestTime.UtcDateTime);
         AddParameter(command, "$priority", 1);
 
         // EXPLAIN QUERY PLAN returns (id, parent, notused, detail); detail names the index.

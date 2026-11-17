@@ -33,7 +33,7 @@ public class RecordedDecision
     [Column("question_key")]
     public string QuestionKey
     {
-        get => field.NotNull(nameof(QuestionKey));
+        get => field ?? string.Empty;
         set;
     }
 
@@ -57,7 +57,7 @@ public class RecordedDecision
     [Column("kind")]
     public string Kind
     {
-        get => field.NotNull(nameof(Kind));
+        get => field ?? string.Empty;
         set;
     }
 
@@ -65,7 +65,7 @@ public class RecordedDecision
     [Column("question")]
     public string Question
     {
-        get => field.NotNull(nameof(Question));
+        get => field ?? string.Empty;
         set;
     }
 
@@ -95,7 +95,7 @@ public class RecordedDecision
     [Column("fingerprint")]
     public string Fingerprint
     {
-        get => field.NotNull(nameof(Fingerprint));
+        get => field ?? string.Empty;
         set;
     }
 

@@ -93,7 +93,8 @@ public class SqlitePendingRunClaimTests : TestSetup
                 Name = typeof(ICountingTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
         await train.Run(Unit.Default, unsaved, CancellationToken.None);
@@ -126,7 +127,8 @@ public class SqlitePendingRunClaimTests : TestSetup
                 Name = typeof(ICountingTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = Unit.Default,
-            }
+            },
+            TestTime.Clock
         );
         await context.Track(metadata).ConfigureAwait(false);
         await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);

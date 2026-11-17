@@ -40,7 +40,8 @@ public class JunctionLoggerProviderTests
                 Name = "TestTrain",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         typeof(ServiceTrain<string, string>)
             .GetProperty("Metadata", BindingFlags.Public | BindingFlags.Instance)

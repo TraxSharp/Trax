@@ -153,8 +153,8 @@ public class PostgresDisabledManifestDispatchTests : TestSetup
         {
             Name = $"disabled-dispatch-{Guid.NewGuid():N}",
             IsEnabled = groupEnabled,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TestTime.UtcDateTime,
+            UpdatedAt = TestTime.UtcDateTime,
         };
         await context.Track(group).ConfigureAwait(false);
         await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
@@ -173,7 +173,8 @@ public class PostgresDisabledManifestDispatchTests : TestSetup
                 TrainName = manifest.Name,
                 ManifestId = manifest.Id,
                 ExplicitTrigger = explicitTrigger,
-            }
+            },
+            TestTime.Clock
         );
         await context.Track(entry).ConfigureAwait(false);
         await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);

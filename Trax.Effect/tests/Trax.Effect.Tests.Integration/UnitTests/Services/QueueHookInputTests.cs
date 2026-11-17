@@ -26,7 +26,8 @@ public class QueueHookInputTests
                 Name = typeof(OrderTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = input,
-            }
+            },
+            TestTime.Clock
         );
 
     [Test]
@@ -123,7 +124,11 @@ public class QueueHookInputTests
                     bothEntered.SetResult();
 
                 await bothEntered
-                    .Task.WaitAsync(TimeSpan.FromSeconds(5), CancellationToken.None)
+                    .Task.WaitAsync(
+                        TimeSpan.FromSeconds(5),
+                        TimeProvider.System,
+                        CancellationToken.None
+                    )
                     .ConfigureAwait(false);
                 return train.Input?.Id;
             }

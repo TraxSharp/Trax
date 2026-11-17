@@ -125,7 +125,12 @@ public static class DomainDataContextServiceCollectionExtensions
             // The lock is held from before the schema is created until the creates commit, so the
             // probes below see what an earlier host created.
             if (serialized)
-                await AcquireBootstrapLock(db, cancellationToken).ConfigureAwait(false);
+                await AcquireBootstrapLock(
+                        db,
+                        services.GetService<TimeProvider>() ?? TimeProvider.System,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
 
             await CreateTheObjects(db, schema, model, operations, cancellationToken)
                 .ConfigureAwait(false);
@@ -285,6 +290,7 @@ public static class DomainDataContextServiceCollectionExtensions
     /// </summary>
     private static async Task AcquireBootstrapLock(
         DbContext db,
+        TimeProvider clock,
         CancellationToken cancellationToken
     )
     {
@@ -297,7 +303,8 @@ public static class DomainDataContextServiceCollectionExtensions
             if (await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is true)
                 return;
 
-            await Task.Delay(BootstrapLockPollInterval, cancellationToken).ConfigureAwait(false);
+            await Task.Delay(BootstrapLockPollInterval, clock, cancellationToken)
+                .ConfigureAwait(false);
         }
     }
 

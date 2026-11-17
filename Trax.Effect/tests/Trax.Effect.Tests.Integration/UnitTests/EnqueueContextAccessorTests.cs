@@ -104,7 +104,9 @@ public class EnqueueContextAccessorTests
                     bothEntered.SetResult();
 
                 // Both flows are inside Enter at once before either reads.
-                await bothEntered.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+                await bothEntered
+                    .Task.WaitAsync(TimeSpan.FromSeconds(5), TimeProvider.System)
+                    .ConfigureAwait(false);
                 return accessor.Current;
             }
         }
@@ -285,14 +287,18 @@ public class EnqueueContextAccessorTests
                 using (accessor.Suppress())
                 {
                     suppressed.SetResult();
-                    await observed.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+                    await observed
+                        .Task.WaitAsync(TimeSpan.FromSeconds(5), TimeProvider.System)
+                        .ConfigureAwait(false);
                     return accessor.Current;
                 }
             });
 
             var reading = Task.Run(async () =>
             {
-                await suppressed.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+                await suppressed
+                    .Task.WaitAsync(TimeSpan.FromSeconds(5), TimeProvider.System)
+                    .ConfigureAwait(false);
                 var seen = accessor.Current;
                 observed.SetResult();
                 return seen;

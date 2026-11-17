@@ -57,7 +57,8 @@ public class SqliteParallelRunTests
     [OneTimeTearDown]
     public async Task DisposeProvider()
     {
-        await _provider.NotNull().DisposeAsync();
+        if (_provider is not null)
+            await _provider.DisposeAsync();
 
         foreach (
             var path in new[]
@@ -138,7 +139,8 @@ public class SqliteParallelRunTests
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = input,
                 ReplayDecisionsOf = replayDecisionsOf,
-            }
+            },
+            TestTime.Clock
         );
 
         await train.Run(input, metadata, CancellationToken.None).ConfigureAwait(false);

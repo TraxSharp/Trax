@@ -31,6 +31,9 @@ internal sealed class JunctionEventPublisher
     private readonly Lazy<IJunctionRunSink?> _sink;
     private readonly Lazy<string> _instanceId;
 
+    // The container's clock (AddTrax registers the system's), or the system's without one.
+    private readonly Lazy<TimeProvider> _clock;
+
     public JunctionEventPublisher(
         IServiceProvider root,
         ILogger<JunctionEventPublisher>? logger = null
@@ -40,6 +43,7 @@ internal sealed class JunctionEventPublisher
         _logger = logger;
         _broadcaster = new(() => _root.GetService<ITrainEventBroadcaster>());
         _sink = new(() => _root.GetService<IJunctionRunSink>());
+        _clock = new(() => _root.GetService<TimeProvider>() ?? TimeProvider.System);
         _instanceId = new(() =>
             (_root.GetService<BroadcastInstance>() ?? BroadcastInstance.Unregistered).Id
         );
@@ -81,13 +85,14 @@ internal sealed class JunctionEventPublisher
                 {
                     // The run waits on this, so it is bounded: a busy pool or a slow database
                     // costs the run at most AttemptTimeout, and its events carry no attempt.
+                    using var timeout = new CancellationTokenSource(AttemptTimeout, _clock.Value);
                     using var bound = CancellationTokenSource.CreateLinkedTokenSource(
-                        cancellationToken
+                        cancellationToken,
+                        timeout.Token
                     );
-                    bound.CancelAfter(AttemptTimeout);
                     attempt = await attempts
                         .AttemptOf(metadata, bound.Token)
-                        .WaitAsync(AttemptTimeout, cancellationToken)
+                        .WaitAsync(AttemptTimeout, _clock.Value, cancellationToken)
                         .ConfigureAwait(false);
                 }
             }
@@ -132,7 +137,7 @@ internal sealed class JunctionEventPublisher
             ExternalId: metadata.ExternalId,
             TrainName: metadata.Name,
             TrainState: nameof(TrainState.InProgress),
-            Timestamp: DateTime.UtcNow,
+            Timestamp: _clock.Value.GetUtcNow().UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             EventType: eventType,

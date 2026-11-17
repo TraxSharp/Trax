@@ -44,7 +44,7 @@ public class EffectProviderFactoryRetentionTests
     }
 
     [TearDown]
-    public void TearDown() => _provider.NotNull().Dispose();
+    public void TearDown() => _provider?.Dispose();
 
     [Test]
     public void EffectProviderFactories_DisposedProviders_AreNotRetained()

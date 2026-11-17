@@ -23,7 +23,8 @@ public class JsonEffectProviderLogStateTests
                 Name = "LoggedAsString",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
         await provider.Track(model);

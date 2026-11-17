@@ -49,7 +49,13 @@ internal sealed class HostHeartbeatWriter(
             .ConfigureAwait(false);
         if (row is null)
         {
-            row = new HostRow { InstanceId = host.HostInstanceId };
+            row = new HostRow
+            {
+                InstanceId = host.HostInstanceId,
+                HostName = host.HostName,
+                HostEnvironment = host.HostEnvironment,
+                TraxVersion = TraxVersion,
+            };
             context.HostHeartbeats.Add(row);
         }
 

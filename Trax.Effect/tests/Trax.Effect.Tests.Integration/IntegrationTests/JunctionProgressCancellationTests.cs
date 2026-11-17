@@ -38,7 +38,11 @@ public class JunctionProgressCancellationTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.NotNull().DisposeAsync();
+    public async Task DisposeProvider()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [Test]
     public async Task Work_that_finished_after_the_caller_cancelled_is_recorded_completed_with_junction_progress()
@@ -51,7 +55,11 @@ public class JunctionProgressCancellationTests
         Downstream.Reset();
 
         var run = train.Run(Unit.Default, cts.Token);
-        await Downstream.Started.Task.WaitAsync(TimeSpan.FromSeconds(15), CancellationToken.None);
+        await Downstream.Started.Task.WaitAsync(
+            TimeSpan.FromSeconds(15),
+            TimeProvider.System,
+            CancellationToken.None
+        );
         await cts.CancelAsync();
         Downstream.Answer.SetResult();
 

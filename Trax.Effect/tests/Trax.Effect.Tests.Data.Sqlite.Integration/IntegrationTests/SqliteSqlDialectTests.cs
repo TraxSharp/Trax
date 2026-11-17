@@ -29,7 +29,8 @@ public class SqliteSqlDialectTests
     [OneTimeTearDown]
     public async Task TearDown()
     {
-        await _provider.NotNull().DisposeAsync();
+        if (_provider is not null)
+            await _provider.DisposeAsync();
         if (File.Exists(_dbPath.NotNull()))
             File.Delete(_dbPath.NotNull());
     }

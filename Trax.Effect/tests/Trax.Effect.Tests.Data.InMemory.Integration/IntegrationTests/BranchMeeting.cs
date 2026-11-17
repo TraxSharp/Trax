@@ -63,7 +63,7 @@ internal static class BranchMeeting
             ? (_a, _b)
             : (_b, _a);
         mine.TrySetResult();
-        return theirs.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        return theirs.Task.WaitAsync(TimeSpan.FromSeconds(30), TimeProvider.System);
     }
 
     private static TaskCompletionSource New() =>
