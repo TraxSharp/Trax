@@ -49,7 +49,7 @@ using Microsoft.Extensions.Hosting;
 using Trax.Effect.Data.Extensions;
 
 var host = builder.Build();
-await host.RunTraxAsync(args: []); // in place of host.Run()
+await host.RunTraxAsync(args); // in place of host.Run()
 ```
 
 ```bash

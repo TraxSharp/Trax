@@ -26,11 +26,14 @@ public static class TraxClientManifestExtensions
     /// <see cref="TraxClientExport.Requested"/> is checked, so an export reaches none of it.
     /// </summary>
     /// <param name="app">The built host.</param>
-    /// <param name="args">The process's arguments; null reads them from the command line.</param>
+    /// <param name="args">
+    /// The process's arguments. A flag counts when it is in these or in the process's own command line; null reads
+    /// only the command line.
+    /// </param>
     public static async Task RunTraxAsync(this WebApplication app, string[]? args = null)
     {
         ArgumentNullException.ThrowIfNull(app);
-        var path = args is null ? TraxClientExport.Path : TraxClientExport.PathIn(args);
+        var path = (args is null ? null : TraxClientExport.PathIn(args)) ?? TraxClientExport.Path;
         if (path is null)
         {
             // Serves, or migrates or exports the deploy manifest and exits (TraxDeployExtensions).

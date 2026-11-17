@@ -44,7 +44,7 @@ public static Task RunTraxAsync(
 | `Requested` | Whether this process's command line contains `--trax-migrate`. |
 | `RequestedIn(args)` | Whether `args` contain `--trax-migrate`. |
 | `MigrateOnDeploy<TContext>()` | Names one of the application's own contexts for a migrate process to bring up to date. |
-| `RunTraxAsync(host, args)` | Runs the host as `host.RunAsync()` does, or, for a migrate process, migrates the named contexts and returns without starting it. |
+| `RunTraxAsync(host, args)` | Runs the host as `host.RunAsync()` does, or, for a migrate process, migrates the named contexts and returns without starting it. A flag counts when it is in `args` or in the process's own command line, which is where registration reads it. |
 
 ## Behavior
 
@@ -91,7 +91,7 @@ builder.Services.AddTrax(trax => trax
 );
 
 var host = builder.Build();
-await host.RunTraxAsync(args: []);
+await host.RunTraxAsync(args);
 ```
 
 A deployment runs it once with `--trax-migrate`, and every serving process with `TRAX_MIGRATIONS=skip`.
