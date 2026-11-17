@@ -731,9 +731,11 @@ and so is a `compose.yaml` trax did not write.
 ### `--target aws`
 
 `trax deploy --env <name>` deploys one environment of `trax.deploy.json` to AWS, as the CloudFormation stack
-`<app>-<name>`. Credentials come from the standard AWS chain (a profile, SSO, the environment, a role); trax stores
-none. Nothing beyond the .NET SDK is needed: the stack is CloudFormation that trax generates, and the images are
-built and pushed with `dotnet publish -t:PublishContainer`.
+`<app>-<name>`. An environment's name is lower-case letters and digits only, so no two apps share a stack name;
+trax also refuses a stack whose `trax:app` tag names another app, or that has none. Credentials come from the
+standard AWS chain (a profile, SSO, the environment, a role); trax stores none. Nothing beyond the .NET SDK is
+needed: the stack is CloudFormation that trax generates, and the images are built and pushed with
+`dotnet publish -t:PublishContainer`.
 
 ```json
 "environments": {

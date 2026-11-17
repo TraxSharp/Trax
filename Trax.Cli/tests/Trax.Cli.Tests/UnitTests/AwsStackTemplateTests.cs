@@ -314,6 +314,30 @@ public class AwsStackTemplateTests
     public void It_fits_CloudFormations_inline_limit() =>
         AwsStack.Compact(Build()).Length.Should().BeLessThan(AwsDeployer.InlineTemplateLimit);
 
+    [TestCase("eu-prod")]
+    [TestCase("Prod")]
+    [TestCase("prod_eu")]
+    public void An_environment_name_other_than_letters_and_digits_is_refused(string name)
+    {
+        var file = File_();
+        file.Environments[name] = file.Environments["production"];
+
+        var act = () => file.Environment(name);
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage($"*'{name}'*lower-case letters and digits only*");
+    }
+
+    [Test]
+    public void An_environment_name_of_letters_and_digits_is_accepted()
+    {
+        var file = File_();
+        file.Environments["2eu"] = file.Environments["production"];
+
+        file.Environment("2eu").Should().BeSameAs(file.Environments["production"]);
+    }
+
     [Test]
     public void Production_without_a_domain_is_refused()
     {

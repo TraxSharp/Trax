@@ -45,6 +45,12 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         var env = file.Environment(environment);
         var stack = file.StackName(environment);
         var tags = Tags(file, environment);
+        var existing = await aws.DescribeStackAsync(stack, ct);
+        // A first deploy that stopped before its change set ran left an empty stack in review: create it again.
+        if (existing is { Created: false })
+            existing = null;
+        if (existing is not null)
+            CheckOwner(existing, file, stack);
 
         // Nothing is created until every secret the app needs has a value.
         var stored = (await aws.ListSecretsAsync(AwsStack.AppSecretName(stack, ""), ct))
@@ -59,10 +65,6 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
                     + $"'trax deploy secret set <name> --env {environment}'."
             );
 
-        var existing = await aws.DescribeStackAsync(stack, ct);
-        // A first deploy that stopped before its change set ran left an empty stack in review: create it again.
-        if (existing is { Created: false })
-            existing = null;
         if (existing is { Dead: true })
             throw new InvalidOperationException(
                 $"{stack} is {existing.Status}: its creation failed and it can only be deleted. Run "
@@ -169,6 +171,7 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
             say($"{stack} does not exist.");
         else
         {
+            CheckOwner(existing, file, stack);
             if (existing.Parameters.ContainsKey(AwsStack.ProtectParameter) && !existing.Dead)
             {
                 say("Turning off the database's deletion protection...");
@@ -222,6 +225,24 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
                     .ToString(System.Globalization.CultureInfo.InvariantCulture),
                 true
             );
+    }
+
+    /// <summary>
+    /// Refuses a stack another app deployed. An app and an environment name can join to the same stack name as
+    /// another app's (<c>orders-eu</c> + <c>prod</c>, <c>orders</c> + <c>eu-prod</c>), and changing that stack would
+    /// move the other app's services onto this app's images.
+    /// </summary>
+    private static void CheckOwner(AwsStackState existing, DeployFile file, string stack)
+    {
+        var owner = existing.Tags.GetValueOrDefault("trax:app");
+        if (owner == file.App)
+            return;
+        throw new InvalidOperationException(
+            owner is null
+                ? $"{stack} has no trax:app tag, so trax deploy did not create it. trax changes only the stacks it "
+                    + "created."
+                : $"{stack} belongs to app '{owner}', not '{file.App}'. Rename this app or its environment."
+        );
     }
 
     /// <summary>The ECR repository of a service: <c>trax/&lt;stack&gt;/&lt;service&gt;</c>.</summary>

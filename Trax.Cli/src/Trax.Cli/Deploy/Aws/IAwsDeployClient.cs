@@ -85,6 +85,10 @@ internal sealed record AwsStackState(
     IReadOnlyDictionary<string, string> Parameters
 )
 {
+    /// <summary>The stack's tags: <c>trax:app</c> names the app that deployed it.</summary>
+    public IReadOnlyDictionary<string, string> Tags { get; init; } =
+        new Dictionary<string, string>(StringComparer.Ordinal);
+
     /// <summary>Whether the stack is settled and can be changed.</summary>
     public bool Settled => !Status.EndsWith("_IN_PROGRESS", StringComparison.Ordinal);
 

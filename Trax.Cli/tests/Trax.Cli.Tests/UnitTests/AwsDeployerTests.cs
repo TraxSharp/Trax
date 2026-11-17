@@ -139,6 +139,29 @@ public class AwsDeployerTests
     }
 
     [Test]
+    public async Task Refuses_a_stack_another_app_owns()
+    {
+        var (deployer, aws, images) = Deployer();
+        aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
+        aws.Existing = FakeAws.Running() with
+        {
+            Tags = new Dictionary<string, string>
+            {
+                ["trax:app"] = "orders-eu",
+                ["trax:environment"] = "production",
+            },
+        };
+
+        var act = () => Deploy(deployer);
+
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*orders-production*app 'orders-eu'*not 'orders'*");
+        aws.Calls.Should().BeEmpty();
+        images.Published.Should().BeEmpty();
+    }
+
+    [Test]
     public async Task A_failed_migration_moves_no_service()
     {
         var (deployer, aws, _) = Deployer();
@@ -177,7 +200,10 @@ public class AwsDeployerTests
             "ROLLBACK_COMPLETE",
             new Dictionary<string, string>(),
             new Dictionary<string, string>()
-        );
+        )
+        {
+            Tags = new Dictionary<string, string> { ["trax:app"] = "orders" },
+        };
 
         var act = () => Deploy(deployer);
 
@@ -529,7 +555,14 @@ public class AwsDeployerTests
                     ["WorkerImage"] = "old",
                     [AwsStack.ProtectParameter] = "true",
                 }
-            );
+            )
+            {
+                Tags = new Dictionary<string, string>
+                {
+                    ["trax:app"] = "orders",
+                    ["trax:environment"] = "production",
+                },
+            };
 
         private static Dictionary<string, string> Outputs() =>
             new()

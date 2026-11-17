@@ -128,7 +128,10 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
                 found.StackStatus.Value,
                 (found.Outputs ?? []).ToDictionary(o => o.OutputKey, o => o.OutputValue),
                 (found.Parameters ?? []).ToDictionary(p => p.ParameterKey, p => p.ParameterValue)
-            );
+            )
+            {
+                Tags = (found.Tags ?? []).ToDictionary(t => t.Key, t => t.Value),
+            };
         }
         catch (AmazonCloudFormationException ex)
             when (ex.Message.Contains("does not exist", StringComparison.Ordinal))

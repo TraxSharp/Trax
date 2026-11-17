@@ -59,10 +59,11 @@ internal sealed partial class DeployFile
                     : $"{FileName} has no environment '{name}'. It has: {string.Join(", ", Environments.Keys)}."
             );
         string Problem(string what) => $"Environment '{name}': {what}";
-        if (!Name().IsMatch(name))
+        if (!EnvironmentName().IsMatch(name))
             throw new InvalidOperationException(
                 Problem(
-                    "its name must be lower case, a letter first, then letters, digits or dashes."
+                    "its name must be lower-case letters and digits only. The stack is <app>-<environment>, and "
+                        + "a dash here would give two apps the same stack."
                 )
             );
         if (env.Profile is not (DeployEnvironment.Production or DeployEnvironment.Try))
@@ -244,6 +245,9 @@ internal sealed partial class DeployFile
 
     [GeneratedRegex("^[a-z][a-z0-9-]*$")]
     internal static partial Regex Name();
+
+    [GeneratedRegex("^[a-z0-9]+$")]
+    private static partial Regex EnvironmentName();
 
     [GeneratedRegex("^[A-Za-z_][A-Za-z0-9_]*$")]
     private static partial Regex Variable();
