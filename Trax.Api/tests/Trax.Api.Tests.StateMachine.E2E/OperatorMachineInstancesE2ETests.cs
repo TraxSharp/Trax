@@ -220,7 +220,8 @@ public class OperatorMachineInstancesE2ETests
         page.GetProperty("nextCursor").ValueKind.Should().Be(JsonValueKind.Null);
 
         // The console reads the field; the field reads the service. Both list the same rows.
-        using (var scope = _host.Services.CreateScope())
+        var scope = _host.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var served = await scope
                 .ServiceProvider.GetRequiredService<IOperationsService>()

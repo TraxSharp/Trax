@@ -65,9 +65,9 @@ public class ConsoleDocumentsTests
     }
 
     [Test]
-    public void The_host_and_trax_client_name_a_console_document_alike()
+    public async Task The_host_and_trax_client_name_a_console_document_alike()
     {
-        var cases = FixtureCases();
+        var cases = await FixtureCasesAsync();
         cases.Should().NotBeEmpty();
         foreach (var (name, text, id) in cases)
             ConsoleDocuments
@@ -162,7 +162,7 @@ public class ConsoleDocumentsTests
     }
 
     // The cases both this suite and trax client's read, from the source tree above the test's directory.
-    private static List<(string Name, string Text, string Id)> FixtureCases()
+    private static async Task<List<(string Name, string Text, string Id)>> FixtureCasesAsync()
     {
         for (
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
@@ -181,7 +181,9 @@ public class ConsoleDocumentsTests
             );
             if (!File.Exists(candidate))
                 continue;
-            using var json = System.Text.Json.JsonDocument.Parse(File.ReadAllText(candidate));
+            using var json = System.Text.Json.JsonDocument.Parse(
+                await File.ReadAllTextAsync(candidate).ConfigureAwait(false)
+            );
             return json
                 .RootElement.GetProperty("cases")
                 .EnumerateArray()

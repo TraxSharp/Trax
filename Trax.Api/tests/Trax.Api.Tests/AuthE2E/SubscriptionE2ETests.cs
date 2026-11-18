@@ -338,7 +338,8 @@ public class SubscriptionE2ETests
                 );
 
             if (result.Count > 0)
-                ms.Write(buffer, 0, result.Count);
+                await ms.WriteAsync(buffer, 0, result.Count, CancellationToken.None)
+                    .ConfigureAwait(false);
 
             if (result.EndOfMessage && ms.Length > 0)
                 break;
@@ -375,7 +376,8 @@ public class SubscriptionE2ETests
                         return true;
 
                     if (result.Count > 0)
-                        ms.Write(buffer, 0, result.Count);
+                        await ms.WriteAsync(buffer, 0, result.Count, CancellationToken.None)
+                            .ConfigureAwait(false);
 
                     if (result.EndOfMessage)
                         break;

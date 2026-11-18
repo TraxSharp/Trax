@@ -94,18 +94,21 @@ public class JunctionEventPublishBoundTests
             .PublishAsync(Topic, Event(0), TimeSpan.FromSeconds(30), cancel.Token)
             .AsTask();
         await sender.FirstSendStarted;
-        cancel.Cancel();
+        await cancel.CancelAsync().ConfigureAwait(false);
 
         await FluentActions
             .Awaiting(() => cancelled)
             .Should()
-            .ThrowAsync<OperationCanceledException>();
+            .ThrowAsync<OperationCanceledException>()
+            .ConfigureAwait(false);
 
-        (await publisher.LastPublishedAsync(Topic, default))
+        (await publisher.LastPublishedAsync(Topic, default).ConfigureAwait(false))
             .Should()
             .Be(1, "the send may still arrive numbered 1");
 
-        await publisher.PublishAsync(Topic, Event(1), TimeSpan.FromSeconds(1), default);
+        await publisher
+            .PublishAsync(Topic, Event(1), TimeSpan.FromSeconds(1), default)
+            .ConfigureAwait(false);
 
         sender
             .Delivered.Single()

@@ -77,16 +77,20 @@ public class CustomStepsTests
         );
         derived.Problems.Should().BeEmpty();
         _directory = Directory.CreateTempSubdirectory("trax-custom-steps-").FullName;
-        File.WriteAllText(Path.Combine(_directory, "host.json"), derived.Host!);
+        await File.WriteAllTextAsync(Path.Combine(_directory, "host.json"), derived.Host!)
+            .ConfigureAwait(false);
         foreach (var (id, ir) in derived.Irs)
-            File.WriteAllText(Path.Combine(_directory, $"{id}.ir.json"), ir);
+            await File.WriteAllTextAsync(Path.Combine(_directory, $"{id}.ir.json"), ir)
+                .ConfigureAwait(false);
 
-        await E2EHost.RecreateDatabaseAsync(Database);
-        _host = await E2EHost.StartAsync(
-            Database,
-            new CountingCharge(),
-            new E2EHostOptions { Machines = o => o.ServeFeatures(_directory) }
-        );
+        await E2EHost.RecreateDatabaseAsync(Database).ConfigureAwait(false);
+        _host = await E2EHost
+            .StartAsync(
+                Database,
+                new CountingCharge(),
+                new E2EHostOptions { Machines = o => o.ServeFeatures(_directory) }
+            )
+            .ConfigureAwait(false);
     }
 
     [OneTimeTearDown]

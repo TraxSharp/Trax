@@ -388,7 +388,8 @@ public class QueryModelProjectionTests
 
         var provider = services.BuildServiceProvider();
 
-        using (var scope = provider.CreateScope())
+        var scope = provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var db = scope.ServiceProvider.GetRequiredService<ProjectionDbContext>();
             db.Gadgets.AddRange(

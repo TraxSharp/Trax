@@ -73,7 +73,8 @@ internal sealed class QueryModelScalarCollectionIndexValidator(
         if (filterable.Count == 0)
             return;
 
-        using var scope = serviceProvider.CreateScope();
+        var scope = serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
 
         var targets = new List<(DbContext Context, List<QueryModelRegistration> Registrations)>();
         foreach (var group in filterable.GroupBy(r => r.DbContextType))

@@ -9,6 +9,7 @@ using Microsoft.Extensions.Hosting;
 using Trax.Api.Dashboard.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.StateMachine.E2E;
 
@@ -284,21 +285,33 @@ public partial class ConsoleDocumentsE2ETests
         );
 
     // A console document's text as the dashboard package embeds it, so a test that sends it raw sends a valid document.
-    private static string ConsoleTextOf(string name)
+    private static string ConsoleTextOf(string name) =>
+        ConsoleTexts.Single(d => string.Equals(d.Name, name, StringComparison.Ordinal)).Text;
+
+    private static List<(string Name, string Text)> ConsoleTexts = [];
+
+    [OneTimeSetUp]
+    public async Task ReadConsoleTexts()
     {
-        using var stream =
-            typeof(ApiDashboardEndpointExtensions).Assembly.GetManifestResourceStream(
-                "TraxApiDashboardDocuments/console-documents.json"
-            )!;
-        using var file = JsonDocument.Parse(stream);
-        return file
-            .RootElement.GetProperty("documents")
-            .EnumerateArray()
-            .Single(d =>
-                string.Equals(d.GetProperty("name").GetString(), name, StringComparison.Ordinal)
-            )
-            .GetProperty("text")
-            .GetString()!;
+        var stream = typeof(ApiDashboardEndpointExtensions)
+            .Assembly.GetManifestResourceStream("TraxApiDashboardDocuments/console-documents.json")
+            .NotNull();
+        await using var streamDisposal = stream.ConfigureAwait(false);
+        using var file = await JsonDocument
+            .ParseAsync(stream, cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
+        ConsoleTexts =
+        [
+            .. file
+                .RootElement.GetProperty("documents")
+                .EnumerateArray()
+                .Select(d =>
+                    (
+                        d.GetProperty("name").GetString().NotNull(),
+                        d.GetProperty("text").GetString().NotNull()
+                    )
+                ),
+        ];
     }
 
     // The ids the page is told, read from the runtime config the dashboard writes into its entry page.

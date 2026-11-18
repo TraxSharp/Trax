@@ -175,8 +175,8 @@ public class ClientDocumentsE2ETests
     public async Task A_version_another_node_registered_runs_on_this_one()
     {
         const string database = "trax_sm_client_docs_versions";
-        var v1 = DocumentsFile(("OrderCard", OrderCard));
-        var v2 = DocumentsFile(("OrderCard", OrderCardV2));
+        var v1 = await DocumentsFileAsync(("OrderCard", OrderCard));
+        var v2 = await DocumentsFileAsync(("OrderCard", OrderCardV2));
         await E2EHost.RecreateDatabaseAsync(database);
         var a = await E2EHost.StartAsync(database, new CountingCharge(), Options(v1, "a"));
         IHost? b = null;
@@ -257,24 +257,25 @@ public class ClientDocumentsE2ETests
         codes.Should().Equal([RefusalCode.ClientOutdated.ToWire()]);
     }
 
-    private string DocumentsFile(params (string Name, string Text)[] documents)
+    private async Task<string> DocumentsFileAsync(params (string Name, string Text)[] documents)
     {
         var path = Path.Combine(Path.GetTempPath(), $"trax-documents-{Guid.NewGuid():N}.json");
-        File.WriteAllText(
-            path,
-            JsonSerializer.Serialize(
-                new
-                {
-                    format = 1,
-                    documents = documents.Select(d => new
+        await File.WriteAllTextAsync(
+                path,
+                JsonSerializer.Serialize(
+                    new
                     {
-                        name = d.Name,
-                        source = $"src/{d.Name}.graphql",
-                        text = d.Text,
-                    }),
-                }
+                        format = 1,
+                        documents = documents.Select(d => new
+                        {
+                            name = d.Name,
+                            source = $"src/{d.Name}.graphql",
+                            text = d.Text,
+                        }),
+                    }
+                )
             )
-        );
+            .ConfigureAwait(false);
         _files.Add(path);
         return path;
     }
@@ -304,7 +305,10 @@ public class ClientDocumentsE2ETests
         int? maxExecutionDepth = null
     )
     {
-        file ??= DocumentsFile(texts.Select(t => (t.Split(' ', '(', '{')[1], t)).ToArray());
+        file ??= await DocumentsFileAsync(
+                texts.Select(t => (t.Split(' ', '(', '{')[1], t)).ToArray()
+            )
+            .ConfigureAwait(false);
         await E2EHost.RecreateDatabaseAsync(database).ConfigureAwait(false);
         try
         {

@@ -121,7 +121,8 @@ public class MetricSeriesStressTests : StressTestSetup
             .MetricSeriesRefusal(scope, MetricSeriesRange.Last30Days)
             .Should()
             .NotBeNull();
-        using var services = ServiceProvider.CreateScope();
+        var services = ServiceProvider.CreateAsyncScope();
+        await using var servicesDisposal = services.ConfigureAwait(false);
         var read = () =>
             new MetricsQueries().GetSeries(
                 Operations(services.ServiceProvider),

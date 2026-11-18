@@ -46,9 +46,11 @@ namespace Trax.Api.Auth.Jwt.Cognito.Issuer;
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/api-auth/cognito-token-issuer">SDK reference</seealso>
 public sealed class CognitoTokenIssuer
 {
-    private static readonly JsonWriterOptions JsonWriterOptions = new()
+    private static readonly JsonSerializerOptions IdentitiesJson = new()
     {
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
     };
 
     /// <summary>
@@ -312,27 +314,20 @@ public sealed class CognitoTokenIssuer
     /// </summary>
     private static string SerializeIdentities(IReadOnlyList<FederatedIdentity> identities)
     {
-        using var buffer = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(buffer, JsonWriterOptions))
-        {
-            writer.WriteStartArray();
-            foreach (var identity in identities)
-            {
-                writer.WriteStartObject();
-                writer.WriteString("userId", identity.UserId);
-                writer.WriteString("providerName", identity.ProviderName);
-                writer.WriteString("providerType", identity.ProviderType);
-                writer.WriteBoolean("primary", identity.Primary);
-                writer.WriteString(
-                    "dateCreated",
-                    identity
+        var array = new System.Text.Json.Nodes.JsonArray();
+        foreach (var identity in identities)
+            array.Add(
+                new System.Text.Json.Nodes.JsonObject
+                {
+                    ["userId"] = identity.UserId,
+                    ["providerName"] = identity.ProviderName,
+                    ["providerType"] = identity.ProviderType,
+                    ["primary"] = identity.Primary,
+                    ["dateCreated"] = identity
                         .DateCreated.ToUnixTimeMilliseconds()
-                        .ToString(System.Globalization.CultureInfo.InvariantCulture)
-                );
-                writer.WriteEndObject();
-            }
-            writer.WriteEndArray();
-        }
-        return System.Text.Encoding.UTF8.GetString(buffer.ToArray());
+                        .ToString(System.Globalization.CultureInfo.InvariantCulture),
+                }
+            );
+        return array.ToJsonString(IdentitiesJson);
     }
 }

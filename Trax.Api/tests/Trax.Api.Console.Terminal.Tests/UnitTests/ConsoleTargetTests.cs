@@ -12,9 +12,9 @@ namespace Trax.Api.Console.Terminal.Tests.UnitTests;
 public class ConsoleTargetTests
 {
     [Test]
-    public void The_host_names_the_endpoint_and_its_socket()
+    public async Task The_host_names_the_endpoint_and_its_socket()
     {
-        var target = Resolve("https://ops.example.com", env: []);
+        var target = await ResolveAsync("https://ops.example.com", env: []);
 
         target.Endpoint.Should().Be(new Uri("https://ops.example.com/trax/graphql"));
         target.Socket.Should().Be(new Uri("wss://ops.example.com/trax/graphql"));
@@ -22,45 +22,55 @@ public class ConsoleTargetTests
     }
 
     [Test]
-    public void The_host_may_come_from_the_environment() =>
-        Resolve(
-            host: null,
-            env: new(StringComparer.Ordinal)
-            {
-                [ConsoleTarget.HostVariable] = "https://ops.example.com",
-            }
+    public async Task The_host_may_come_from_the_environment() =>
+        (
+            await ResolveAsync(
+                host: null,
+                env: new(StringComparer.Ordinal)
+                {
+                    [ConsoleTarget.HostVariable] = "https://ops.example.com",
+                }
+            )
         )
             .Endpoint.Host.Should()
             .Be("ops.example.com");
 
     [Test]
-    public void An_api_key_from_the_environment_is_its_first_line_trimmed() =>
-        Resolve(
-            "https://ops.example.com",
-            env: new(StringComparer.Ordinal) { [ConsoleTarget.ApiKeyVariable] = " sk_live_1 \n" }
+    public async Task An_api_key_from_the_environment_is_its_first_line_trimmed() =>
+        (
+            await ResolveAsync(
+                "https://ops.example.com",
+                env: new(StringComparer.Ordinal)
+                {
+                    [ConsoleTarget.ApiKeyVariable] = " sk_live_1 \n",
+                }
+            )
         )
             .Credential.Should()
             .Be(new Credential.ApiKey("sk_live_1"));
 
     [Test]
-    public void A_file_wins_over_the_environment()
+    public async Task A_file_wins_over_the_environment()
     {
         var file = new FileInfo(Path.GetTempFileName());
         try
         {
-            File.WriteAllText(file.FullName, "eyJ.token\n");
+            await File.WriteAllTextAsync(file.FullName, "eyJ.token\n").ConfigureAwait(false);
 
-            var target = ConsoleTarget.Resolve(
-                "https://ops.example.com",
-                ConsoleTarget.DefaultGraphQLPath,
-                apiKeyFile: null,
-                tokenFile: file,
-                sendText: false,
-                n =>
-                    string.Equals(n, ConsoleTarget.ApiKeyVariable, StringComparison.Ordinal)
-                        ? "sk_live_1"
-                        : null
-            );
+            var target = await ConsoleTarget
+                .ResolveAsync(
+                    "https://ops.example.com",
+                    ConsoleTarget.DefaultGraphQLPath,
+                    apiKeyFile: null,
+                    tokenFile: file,
+                    sendText: false,
+                    n =>
+                        string.Equals(n, ConsoleTarget.ApiKeyVariable, StringComparison.Ordinal)
+                            ? "sk_live_1"
+                            : null,
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
 
             target.Credential.Should().Be(new Credential.Bearer("eyJ.token"));
         }
@@ -73,25 +83,28 @@ public class ConsoleTargetTests
     [Test]
     [Platform(Exclude = "Win")]
     [UnsupportedOSPlatform("windows")]
-    public void A_file_other_users_can_read_is_refused()
+    public async Task A_file_other_users_can_read_is_refused()
     {
         var file = new FileInfo(Path.GetTempFileName());
         try
         {
-            File.WriteAllText(file.FullName, "sk_live_1\n");
+            await File.WriteAllTextAsync(file.FullName, "sk_live_1\n").ConfigureAwait(false);
             File.SetUnixFileMode(
                 file.FullName,
                 UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.OtherRead
             );
 
-            FluentActions
-                .Invoking(() => FromFile(file))
+            await FluentActions
+                .Awaiting(() => FromFileAsync(file))
                 .Should()
-                .Throw<InvalidOperationException>()
-                .WithMessage($"*other users can read*chmod 600 {file.FullName}*");
+                .ThrowAsync<InvalidOperationException>()
+                .WithMessage($"*other users can read*chmod 600 {file.FullName}*")
+                .ConfigureAwait(false);
 
             File.SetUnixFileMode(file.FullName, UnixFileMode.UserRead | UnixFileMode.UserWrite);
-            FromFile(file).Credential.Should().Be(new Credential.ApiKey("sk_live_1"));
+            (await FromFileAsync(file).ConfigureAwait(false))
+                .Credential.Should()
+                .Be(new Credential.ApiKey("sk_live_1"));
         }
         finally
         {
@@ -100,18 +113,23 @@ public class ConsoleTargetTests
     }
 
     [Test]
-    public void A_file_larger_than_a_credential_is_refused()
+    public async Task A_file_larger_than_a_credential_is_refused()
     {
         var file = new FileInfo(Path.GetTempFileName());
         try
         {
-            File.WriteAllText(file.FullName, new string('k', ConsoleTarget.MaxFileSize + 1));
+            await File.WriteAllTextAsync(
+                    file.FullName,
+                    new string('k', ConsoleTarget.MaxFileSize + 1)
+                )
+                .ConfigureAwait(false);
 
-            FluentActions
-                .Invoking(() => FromFile(file))
+            await FluentActions
+                .Awaiting(() => FromFileAsync(file))
                 .Should()
-                .Throw<InvalidOperationException>()
-                .WithMessage("*larger than 64 KiB*");
+                .ThrowAsync<InvalidOperationException>()
+                .WithMessage("*larger than 64 KiB*")
+                .ConfigureAwait(false);
         }
         finally
         {
@@ -121,18 +139,18 @@ public class ConsoleTargetTests
 
     [Test]
     [Platform(Include = "Linux")]
-    public void A_device_is_refused() =>
-        FluentActions
-            .Invoking(() => FromFile(new FileInfo("/dev/zero")))
+    public async Task A_device_is_refused() =>
+        await FluentActions
+            .Awaiting(() => FromFileAsync(new FileInfo("/dev/zero")))
             .Should()
-            .Throw<InvalidOperationException>()
+            .ThrowAsync<InvalidOperationException>()
             .WithMessage("*not a regular file*");
 
     [Test]
-    public void Two_credentials_are_refused() =>
-        FluentActions
-            .Invoking(() =>
-                Resolve(
+    public async Task Two_credentials_are_refused() =>
+        await FluentActions
+            .Awaiting(() =>
+                ResolveAsync(
                     "https://ops.example.com",
                     env: new(StringComparer.Ordinal)
                     {
@@ -142,45 +160,50 @@ public class ConsoleTargetTests
                 )
             )
             .Should()
-            .Throw<InvalidOperationException>()
+            .ThrowAsync<InvalidOperationException>()
             .WithMessage("Give one credential*");
 
     [Test]
-    public void A_credential_is_not_sent_in_the_clear_to_another_machine() =>
-        FluentActions
-            .Invoking(() =>
-                Resolve(
+    public async Task A_credential_is_not_sent_in_the_clear_to_another_machine() =>
+        await FluentActions
+            .Awaiting(() =>
+                ResolveAsync(
                     "http://ops.example.com",
                     env: new(StringComparer.Ordinal) { [ConsoleTarget.ApiKeyVariable] = "k" }
                 )
             )
             .Should()
-            .Throw<InvalidOperationException>()
+            .ThrowAsync<InvalidOperationException>()
             .WithMessage("*plain HTTP to another machine*");
 
     [TestCase("http://localhost:5000")]
     [TestCase("http://127.0.0.1:5000")]
-    public void Plain_HTTP_to_this_machine_is_allowed(string host) =>
-        Resolve(host, env: new(StringComparer.Ordinal) { [ConsoleTarget.ApiKeyVariable] = "k" })
+    public async Task Plain_HTTP_to_this_machine_is_allowed(string host) =>
+        (
+            await ResolveAsync(
+                host,
+                env: new(StringComparer.Ordinal) { [ConsoleTarget.ApiKeyVariable] = "k" }
+            )
+        )
             .Socket.Scheme.Should()
             .Be("ws");
 
     [TestCase("ops.example.com")]
     [TestCase("ftp://ops.example.com")]
-    public void A_host_that_is_not_an_http_url_is_refused(string host) =>
-        FluentActions
-            .Invoking(() => Resolve(host, env: []))
+    public async Task A_host_that_is_not_an_http_url_is_refused(string host) =>
+        await FluentActions
+            .Awaiting(() => ResolveAsync(host, env: []))
             .Should()
-            .Throw<InvalidOperationException>()
+            .ThrowAsync<InvalidOperationException>()
             .WithMessage("*is not an http or https URL*");
 
     [TestCase("//evil.example.com/trax/graphql")]
     [TestCase("//user@evil.example.com/x")]
     [TestCase("trax/graphql")]
-    public void A_graphql_path_that_leaves_the_host_is_refused(string path) =>
-        FluentActions
-            .Invoking(() =>
-                ConsoleTarget.Resolve(
+    public async Task A_graphql_path_that_leaves_the_host_is_refused(string path) =>
+        await FluentActions
+            .Awaiting(() =>
+                ConsoleTarget.ResolveAsync(
                     "https://ops.example.com",
                     path,
                     apiKeyFile: null,
@@ -189,35 +212,40 @@ public class ConsoleTargetTests
                     n =>
                         string.Equals(n, ConsoleTarget.ApiKeyVariable, StringComparison.Ordinal)
                             ? "k"
-                            : null
+                            : null,
+                    CancellationToken.None
                 )
             )
             .Should()
-            .Throw<InvalidOperationException>()
+            .ThrowAsync<InvalidOperationException>()
             .WithMessage("*is not a path on the host*");
 
     [Test]
-    public void A_graphql_path_on_the_host_keeps_its_port() =>
-        ConsoleTarget
-            .Resolve(
+    public async Task A_graphql_path_on_the_host_keeps_its_port() =>
+        (
+            await ConsoleTarget.ResolveAsync(
                 "https://ops.example.com:8443",
                 "/ops/graphql",
                 apiKeyFile: null,
                 tokenFile: null,
                 sendText: false,
-                _ => null
+                _ => null,
+                CancellationToken.None
             )
+        )
             .Endpoint.Should()
             .Be(new Uri("https://ops.example.com:8443/ops/graphql"));
 
     [TestCase("https://admin:hunter2@ops.example.com")]
     [TestCase("https://hunter2@ops.example.com")]
     [TestCase("hunter2@ops.example.com")]
-    public void A_host_with_a_user_name_or_password_is_refused_without_printing_it(string host) =>
-        FluentActions
-            .Invoking(() => Resolve(host, env: []))
+    public async Task A_host_with_a_user_name_or_password_is_refused_without_printing_it(
+        string host
+    ) =>
+        await FluentActions
+            .Awaiting(() => ResolveAsync(host, env: []))
             .Should()
-            .Throw<InvalidOperationException>()
+            .ThrowAsync<InvalidOperationException>()
             .Where(e =>
                 e.Message.Contains("user name or password") && !e.Message.Contains("hunter2")
             );
@@ -235,11 +263,13 @@ public class ConsoleTargetTests
 
             // A blocking open of a pipe waits for a writer forever; the bound only turns that into a failure.
             var reading = Task.Run(() =>
-                FluentActions.Invoking(() => FromFile(new FileInfo(fifo)))
+                FluentActions
+                    .Awaiting(() => FromFileAsync(new FileInfo(fifo)))
+                    .Should()
+                    .ThrowAsync<InvalidOperationException>()
+                    .WithMessage("*not a regular file*")
             );
-            var act = await reading.WaitAsync(TimeSpan.FromSeconds(30));
-
-            act.Should().Throw<InvalidOperationException>().WithMessage("*not a regular file*");
+            await reading.WaitAsync(TimeSpan.FromSeconds(30));
         }
         finally
         {
@@ -250,23 +280,24 @@ public class ConsoleTargetTests
     [Test]
     [Platform(Exclude = "Win")]
     [UnsupportedOSPlatform("windows")]
-    public void A_link_is_refused_even_to_a_file_only_you_can_read()
+    public async Task A_link_is_refused_even_to_a_file_only_you_can_read()
     {
         var dir = Directory.CreateTempSubdirectory("trax-console-link-");
         try
         {
             var target = Path.Combine(dir.FullName, "key");
-            File.WriteAllText(target, "sk_live_1\n");
+            await File.WriteAllTextAsync(target, "sk_live_1\n").ConfigureAwait(false);
             File.SetUnixFileMode(target, UnixFileMode.UserRead | UnixFileMode.UserWrite);
             var link = Path.Combine(dir.FullName, "link");
             File.CreateSymbolicLink(link, target);
 
-            FluentActions
-                .Invoking(() => FromFile(new FileInfo(link)))
+            await FluentActions
+                .Awaiting(() => FromFileAsync(new FileInfo(link)))
                 .Should()
-                .Throw<InvalidOperationException>()
-                .WithMessage("*is a link*");
-            FromFile(new FileInfo(target))
+                .ThrowAsync<InvalidOperationException>()
+                .WithMessage("*is a link*")
+                .ConfigureAwait(false);
+            (await FromFileAsync(new FileInfo(target)).ConfigureAwait(false))
                 .Credential.Should()
                 .Be(new Credential.ApiKey("sk_live_1"));
         }
@@ -277,16 +308,16 @@ public class ConsoleTargetTests
     }
 
     [Test]
-    public void A_directory_or_a_missing_file_is_refused()
+    public async Task A_directory_or_a_missing_file_is_refused()
     {
         var dir = Directory.CreateTempSubdirectory("trax-console-dir-");
         try
         {
             foreach (var path in new[] { dir.FullName, Path.Combine(dir.FullName, "missing") })
-                FluentActions
-                    .Invoking(() => FromFile(new FileInfo(path)))
+                await FluentActions
+                    .Awaiting(() => FromFileAsync(new FileInfo(path)))
                     .Should()
-                    .Throw<InvalidOperationException>()
+                    .ThrowAsync<InvalidOperationException>()
                     .WithMessage("*cannot read*");
         }
         finally
@@ -336,23 +367,25 @@ public class ConsoleTargetTests
         uint mode
     );
 
-    private static ConsoleTarget FromFile(FileInfo file) =>
-        ConsoleTarget.Resolve(
+    private static Task<ConsoleTarget> FromFileAsync(FileInfo file) =>
+        ConsoleTarget.ResolveAsync(
             "https://ops.example.com",
             ConsoleTarget.DefaultGraphQLPath,
             apiKeyFile: file,
             tokenFile: null,
             sendText: false,
-            _ => null
+            _ => null,
+            CancellationToken.None
         );
 
-    private static ConsoleTarget Resolve(string? host, Dictionary<string, string> env) =>
-        ConsoleTarget.Resolve(
+    private static Task<ConsoleTarget> ResolveAsync(string? host, Dictionary<string, string> env) =>
+        ConsoleTarget.ResolveAsync(
             host,
             ConsoleTarget.DefaultGraphQLPath,
             apiKeyFile: null,
             tokenFile: null,
             sendText: false,
-            n => env.GetValueOrDefault(n)
+            n => env.GetValueOrDefault(n),
+            CancellationToken.None
         );
 }

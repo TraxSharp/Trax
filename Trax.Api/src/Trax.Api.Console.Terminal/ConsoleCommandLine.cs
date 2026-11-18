@@ -71,14 +71,15 @@ internal static class ConsoleCommandLine
             Recursive = true,
         };
 
-        ConsoleTarget Target(ParseResult p) =>
-            ConsoleTarget.Resolve(
+        Task<ConsoleTarget> Target(ParseResult p, CancellationToken cancellationToken) =>
+            ConsoleTarget.ResolveAsync(
                 p.GetValue(host),
                 p.GetValue(graphQLPath) ?? ConsoleTarget.DefaultGraphQLPath,
                 p.GetValue(apiKeyFile),
                 p.GetValue(tokenFile),
                 p.GetValue(sendText),
-                environment
+                environment,
+                cancellationToken
             );
 
         var root = new RootCommand(
@@ -99,7 +100,7 @@ internal static class ConsoleCommandLine
                 Run(
                     open,
                     stderr,
-                    () => Target(p),
+                    c => Target(p, c),
                     p.GetValue(anyVersion),
                     async (session, version) =>
                         await ConsoleApp
@@ -140,7 +141,7 @@ internal static class ConsoleCommandLine
                 Run(
                     open,
                     stderr,
-                    () => Target(p),
+                    c => Target(p, c),
                     p.GetValue(anyVersion),
                     (session, _) =>
                         HeadlessCommands.ListAsync(
@@ -193,7 +194,7 @@ internal static class ConsoleCommandLine
                 Run(
                     open,
                     stderr,
-                    () => Target(p),
+                    c => Target(p, c),
                     p.GetValue(anyVersion),
                     (session, _) =>
                         HeadlessCommands.DoAsync(
@@ -234,7 +235,7 @@ internal static class ConsoleCommandLine
                 Run(
                     open,
                     stderr,
-                    () => Target(p),
+                    c => Target(p, c),
                     p.GetValue(anyVersion),
                     (session, _) =>
                         HeadlessCommands.BulkAsync(
@@ -272,7 +273,7 @@ internal static class ConsoleCommandLine
                 Run(
                     open,
                     stderr,
-                    () => Target(p),
+                    c => Target(p, c),
                     p.GetValue(anyVersion),
                     (session, _) =>
                         HeadlessCommands.WatchAsync(
@@ -297,7 +298,7 @@ internal static class ConsoleCommandLine
                 Run(
                     open,
                     stderr,
-                    () => Target(p),
+                    c => Target(p, c),
                     p.GetValue(anyVersion),
                     (session, _) =>
                         HeadlessCommands.TraceAsync(session, p.GetValue(run), stdout, stderr, ct),
@@ -322,7 +323,7 @@ internal static class ConsoleCommandLine
                 Run(
                     open,
                     stderr,
-                    () => Target(p),
+                    c => Target(p, c),
                     p.GetValue(anyVersion),
                     (session, _) =>
                         HeadlessCommands.GraphAsync(
@@ -346,7 +347,7 @@ internal static class ConsoleCommandLine
                 Run(
                     open,
                     stderr,
-                    () => Target(p),
+                    c => Target(p, c),
                     anyVersion: true,
                     (session, version) => HeadlessCommands.CheckAsync(session, version, stdout),
                     ct,
@@ -379,7 +380,7 @@ internal static class ConsoleCommandLine
     private static async Task<int> Run(
         Func<ConsoleTarget, ConsoleSession> open,
         TextWriter error,
-        Func<ConsoleTarget> target,
+        Func<CancellationToken, Task<ConsoleTarget>> target,
         bool anyVersion,
         Func<ConsoleSession, VersionCheck, Task<int>> command,
         CancellationToken ct,
@@ -389,11 +390,11 @@ internal static class ConsoleCommandLine
         ConsoleSession session;
         try
         {
-            session = open(target());
+            session = open(await target(ct).ConfigureAwait(false));
         }
         catch (InvalidOperationException ex)
         {
-            error.WriteLine(TerminalText.Block(ex.Message));
+            await error.WriteLineAsync(TerminalText.Block(ex.Message)).ConfigureAwait(false);
             return Usage;
         }
         await using (session.ConfigureAwait(false))
@@ -410,16 +411,20 @@ internal static class ConsoleCommandLine
             switch (version)
             {
                 case VersionCheck.Failed failed when !reports:
-                    error.WriteLine(
-                        TerminalText.Block(
-                            failed.Code is null
-                                ? failed.Message
-                                : $"{failed.Code}: {failed.Message}"
+                    await error
+                        .WriteLineAsync(
+                            TerminalText.Block(
+                                failed.Code is null
+                                    ? failed.Message
+                                    : $"{failed.Code}: {failed.Message}"
+                            )
                         )
-                    );
+                        .ConfigureAwait(false);
                     return Refused;
                 case VersionCheck.Other other when !anyVersion && !reports:
-                    error.WriteLine(TerminalText.Line(other.Message));
+                    await error
+                        .WriteLineAsync(TerminalText.Line(other.Message))
+                        .ConfigureAwait(false);
                     return Refused;
             }
             try
@@ -428,7 +433,7 @@ internal static class ConsoleCommandLine
             }
             catch (InvalidOperationException ex)
             {
-                error.WriteLine(TerminalText.Block(ex.Message));
+                await error.WriteLineAsync(TerminalText.Block(ex.Message)).ConfigureAwait(false);
                 return Usage;
             }
         }

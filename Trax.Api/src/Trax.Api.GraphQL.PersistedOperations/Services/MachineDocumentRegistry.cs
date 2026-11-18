@@ -121,9 +121,9 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
             Task<IReadOnlyDictionary<string, StoredMachineDocument>>
         > readStored,
         CancellationToken cancellationToken
-    ) => ValueTask.FromResult(Classify(id, readStored));
+    ) => ValueTask.FromResult(Verdict(id, readStored));
 
-    private MachineDocumentVerdict Classify(
+    private MachineDocumentVerdict Verdict(
         string id,
         Func<CancellationToken, Task<IReadOnlyDictionary<string, StoredMachineDocument>>> readStored
     )

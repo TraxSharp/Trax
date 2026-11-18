@@ -89,7 +89,7 @@ public static class E2ESql
                         reader.GetString(0),
                         reader.GetString(1),
                         reader.GetGuid(2),
-                        reader.GetFieldValue<DateTimeOffset>(3),
+                        (await reader.GetFieldValueAsync<DateTimeOffset>(3).ConfigureAwait(false)),
                         reader.GetString(4)
                     );
                 }

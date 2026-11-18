@@ -564,10 +564,10 @@ public partial class ApiDashboardHostTests
     }
 
     [Test]
-    public void The_package_carries_the_documents_the_app_sends()
+    public async Task The_package_carries_the_documents_the_app_sends()
     {
-        ConsoleDocumentsResource
-            .Documents.Select(d => d.Name)
+        (await ConsoleDocumentsResource.DocumentsAsync())
+            .Select(d => d.Name)
             .Should()
             .Contain(["Overview", "OnJunctionEvent", "RequeueDeadLetter"])
             .And.NotContain("PersistedOperations", "management runs as text behind its own gate");
@@ -807,13 +807,14 @@ public partial class ApiDashboardHostTests
     [Test]
     public async Task The_embedded_app_is_served_with_every_file_its_page_names()
     {
-        if (DashboardAssets.Embedded.IndexTemplate is null)
+        var embedded = await DashboardAssets.EmbeddedAsync();
+        if (embedded.IndexTemplate is null)
             Unavailable(
                 "This build carries no app: Trax.Api/src/Trax.Api.Dashboard/ClientApp has no "
                     + "node_modules."
             );
 
-        await using var app = await StartAsync(e => Anonymous(e), assets: DashboardAssets.Embedded);
+        await using var app = await StartAsync(e => Anonymous(e), assets: embedded);
 
         var page = await GetAsync(app, "/trax/dashboard/");
         page.StatusCode.Should().Be(HttpStatusCode.OK);

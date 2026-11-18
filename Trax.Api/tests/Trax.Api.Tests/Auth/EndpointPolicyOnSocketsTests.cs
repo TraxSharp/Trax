@@ -19,6 +19,7 @@ using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Subscriptions;
 using Trax.Api.Services.HealthCheck;
 using Trax.Effect.Configuration.TraxBuilder;
+using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Services.JobSubmitter;
@@ -188,6 +189,9 @@ public class EndpointPolicyOnSocketsTests
 
     private static async Task<IHost> StartApiKeyHostAsync(ITraxScheduler scheduler)
     {
+        var seeded = await Trax
+            .Api.Tests.Fakes.SeededManifests.WithAsync("m-1")
+            .ConfigureAwait(false);
         var host = new HostBuilder()
             .ConfigureWebHost(web =>
                 web.UseTestServer()
@@ -210,7 +214,7 @@ public class EndpointPolicyOnSocketsTests
                                 .RequireAuthorization(AdminPolicy)
                                 .GateOperations(policy: AdminPolicy)
                         );
-                        AddOperationStubs(services, scheduler);
+                        AddOperationStubs(services, scheduler, seeded);
                     })
                     .Configure(Pipeline)
             )
@@ -222,6 +226,9 @@ public class EndpointPolicyOnSocketsTests
 
     private static async Task<IHost> StartOidcHostAsync()
     {
+        var seeded = await Trax
+            .Api.Tests.Fakes.SeededManifests.WithAsync("m-1")
+            .ConfigureAwait(false);
         var host = new HostBuilder()
             .ConfigureWebHost(web =>
                 web.UseTestServer()
@@ -238,7 +245,7 @@ public class EndpointPolicyOnSocketsTests
                                 .RequireAuthorization()
                                 .GateOperationsToAuthenticatedUsers()
                         );
-                        AddOperationStubs(services, Substitute.For<ITraxScheduler>());
+                        AddOperationStubs(services, Substitute.For<ITraxScheduler>(), seeded);
                     })
                     .Configure(Pipeline)
             )
@@ -257,7 +264,11 @@ public class EndpointPolicyOnSocketsTests
         services.AddSingleton(Substitute.For<IEffectRegistry>());
     }
 
-    private static void AddOperationStubs(IServiceCollection services, ITraxScheduler scheduler)
+    private static void AddOperationStubs(
+        IServiceCollection services,
+        ITraxScheduler scheduler,
+        IDataContextProviderFactory seeded
+    )
     {
         // Registered after AddTraxGraphQL so they win over the real services, which would need a
         // database.
@@ -268,7 +279,7 @@ public class EndpointPolicyOnSocketsTests
         );
         services.AddScoped(_ => scheduler);
         services.AddScoped(_ => Substitute.For<IJobSubmitter>());
-        services.AddSingleton(Trax.Api.Tests.Fakes.SeededManifests.With("m-1"));
+        services.AddSingleton(seeded);
     }
 
     private static void Pipeline(IApplicationBuilder app)

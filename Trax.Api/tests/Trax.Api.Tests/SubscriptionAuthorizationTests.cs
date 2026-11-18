@@ -103,7 +103,7 @@ public class SubscriptionAuthorizationTests
         sub.Refused.Should().BeFalse();
 
         var received = await sub.NextAsync(() =>
-            Publish(Event("Some.Unbroadcast.Train", failureReason: "db at 10.0.0.5 refused"))
+            PublishAsync(Event("Some.Unbroadcast.Train", failureReason: "db at 10.0.0.5 refused"))
         );
 
         received["trainName"].Should().Be("Some.Unbroadcast.Train");
@@ -126,7 +126,7 @@ public class SubscriptionAuthorizationTests
 
         await using var sub = await SubscribeAsync(executor, LifecycleQuery, User("Admin"));
         var received = await sub.NextAsync(() =>
-            hook.OnCompleted(Completed("Some.Later.Train"), default).GetAwaiter().GetResult()
+            hook.OnCompleted(Completed("Some.Later.Train"), default)
         );
 
         received["trainName"].Should().Be("Some.Later.Train");
@@ -177,10 +177,10 @@ public class SubscriptionAuthorizationTests
 
         // The gated train's event goes first; the first thing the player receives must be the
         // public one.
-        var received = await sub.NextAsync(() =>
+        var received = await sub.NextAsync(async () =>
         {
-            Publish(Event(typeof(IAdminOnlyTrain).FullName!));
-            Publish(Event(typeof(IPublicTrain).FullName!));
+            await PublishAsync(Event(typeof(IAdminOnlyTrain).FullName!)).ConfigureAwait(false);
+            await PublishAsync(Event(typeof(IPublicTrain).FullName!)).ConfigureAwait(false);
         });
 
         received["trainName"]
@@ -197,7 +197,9 @@ public class SubscriptionAuthorizationTests
         var executor = await BuildAsync(g => g, Broadcast<IAdminOnlyTrain>(roles: "Admin"));
         await using var sub = await SubscribeAsync(executor, LifecycleQuery, User("Admin"));
 
-        var received = await sub.NextAsync(() => Publish(Event(typeof(IAdminOnlyTrain).FullName!)));
+        var received = await sub.NextAsync(() =>
+            PublishAsync(Event(typeof(IAdminOnlyTrain).FullName!))
+        );
 
         received["trainName"].Should().Be(typeof(IAdminOnlyTrain).FullName);
     }
@@ -214,10 +216,10 @@ public class SubscriptionAuthorizationTests
         );
         await using var sub = await SubscribeAsync(executor, LifecycleQuery, User("admin"));
 
-        var received = await sub.NextAsync(() =>
+        var received = await sub.NextAsync(async () =>
         {
-            Publish(Event(typeof(IAdminOnlyTrain).FullName!));
-            Publish(Event(typeof(IPublicTrain).FullName!));
+            await PublishAsync(Event(typeof(IAdminOnlyTrain).FullName!)).ConfigureAwait(false);
+            await PublishAsync(Event(typeof(IPublicTrain).FullName!)).ConfigureAwait(false);
         });
 
         received["trainName"]
@@ -245,7 +247,9 @@ public class SubscriptionAuthorizationTests
         await using var sub = await SubscribeAsync(executor, LifecycleQuery, Anonymous());
 
         var received = await sub.NextAsync(() =>
-            Publish(Event(typeof(IPublicTrain).FullName!, failureReason: "db at 10.0.0.5 refused"))
+            PublishAsync(
+                Event(typeof(IPublicTrain).FullName!, failureReason: "db at 10.0.0.5 refused")
+            )
         );
 
         received["failureReason"]
@@ -266,7 +270,7 @@ public class SubscriptionAuthorizationTests
         await using var sub = await SubscribeAsync(executor, LifecycleQuery, Anonymous());
 
         var received = await sub.NextAsync(() =>
-            Publish(
+            PublishAsync(
                 Event(
                     typeof(IPublicTrain).FullName!,
                     failureReason: "Card declined.",
@@ -285,7 +289,7 @@ public class SubscriptionAuthorizationTests
         await using var sub = await SubscribeAsync(executor, LifecycleQuery, Anonymous());
 
         var received = await sub.NextAsync(() =>
-            Publish(Event(typeof(IPublicTrain).FullName!, output: """{"total":3}"""))
+            PublishAsync(Event(typeof(IPublicTrain).FullName!, output: """{"total":3}"""))
         );
 
         received["trainName"].Should().Be(typeof(IPublicTrain).FullName);
@@ -307,7 +311,7 @@ public class SubscriptionAuthorizationTests
         await using var sub = await SubscribeAsync(executor, LifecycleQuery, User("Admin"));
 
         var received = await sub.NextAsync(() =>
-            Publish(Event(typeof(IPublicTrain).FullName!, output: """{"total":3}"""))
+            PublishAsync(Event(typeof(IPublicTrain).FullName!, output: """{"total":3}"""))
         );
 
         received["output"].Should().NotBeNull("the operations view sees every run's detail");
@@ -317,7 +321,7 @@ public class SubscriptionAuthorizationTests
     public async Task OutputOptIn_ForATrainThatIsNotRegistered_FailsAtStartup()
     {
         var act = async () =>
-            await BuildAsync(
+            BuildAsync(
                     g => g.AllowOutputForBroadcastSubscribers<IPublicTrain>(),
                     Broadcast<IAdminOnlyTrain>(roles: "Admin")
                 )
@@ -338,7 +342,9 @@ public class SubscriptionAuthorizationTests
         await using var sub = await SubscribeAsync(executor, LifecycleQuery, Anonymous());
 
         var received = await sub.NextAsync(() =>
-            Publish(Event(typeof(IPublicTrain).FullName!, output: """{"total":3,"items":["a"]}"""))
+            PublishAsync(
+                Event(typeof(IPublicTrain).FullName!, output: """{"total":3,"items":["a"]}""")
+            )
         );
 
         var output = received["output"]
@@ -362,7 +368,7 @@ public class SubscriptionAuthorizationTests
     public async Task BroadcastTrainWithoutPosture_OnAnOpenEndpoint_FailsAtStartup()
     {
         var act = async () =>
-            await BuildAsync(g => g, Undeclared<IUndeclaredTrain>()).ConfigureAwait(false);
+            BuildAsync(g => g, Undeclared<IUndeclaredTrain>()).ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -523,13 +529,12 @@ public class SubscriptionAuthorizationTests
             FailureException = failureException,
         };
 
-    private void Publish(TrainLifecycleEvent e) =>
-        _provider!
+    private async Task PublishAsync(TrainLifecycleEvent e) =>
+        await _provider!
             .GetRequiredService<ITopicEventSender>()
             .SendAsync(nameof(LifecycleSubscriptions.OnTrainCompleted), e)
             .AsTask()
-            .GetAwaiter()
-            .GetResult();
+            .ConfigureAwait(false);
 
     private async Task<IRequestExecutor> BuildAsync(
         Func<TraxGraphQLBuilder, TraxGraphQLBuilder> configure,
@@ -589,7 +594,7 @@ public class SubscriptionAuthorizationTests
         /// Publishes with <paramref name="publish"/> until the subscriber receives something, and
         /// returns the first payload it receives.
         /// </summary>
-        public async Task<IReadOnlyDictionary<string, object?>> NextAsync(Action publish)
+        public async Task<IReadOnlyDictionary<string, object?>> NextAsync(Func<Task> publish)
         {
             stream.Should().NotBeNull();
             var received = new TaskCompletionSource<OperationResult>(
@@ -609,7 +614,7 @@ public class SubscriptionAuthorizationTests
             var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
             while (!received.Task.IsCompleted && DateTime.UtcNow < deadline)
             {
-                publish();
+                await publish().ConfigureAwait(false);
                 // allowed-delay: re-publish interval, bounded by the 10s deadline; WhenAny wakes
                 // the instant the subscriber receives.
                 await Task.WhenAny(received.Task, Task.Delay(100)).ConfigureAwait(false);

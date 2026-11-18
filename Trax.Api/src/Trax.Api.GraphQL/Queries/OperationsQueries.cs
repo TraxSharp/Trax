@@ -282,7 +282,8 @@ public partial class OperationsQueries
         CancellationToken ct
     )
     {
-        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var manifest = await db
             .Manifests.AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == manifestId, ct)
@@ -337,7 +338,8 @@ public partial class OperationsQueries
         take = OperationsPageBounds.Take(take);
         skip = OperationsPageBounds.Skip(skip);
 
-        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         IQueryable<Effect.Models.Manifest.Manifest> baseQuery = db
             .Manifests.AsNoTracking()
@@ -427,7 +429,8 @@ public partial class OperationsQueries
         CancellationToken ct
     )
     {
-        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         var detail = await db
             .Manifests.AsNoTracking()
@@ -512,7 +515,8 @@ public partial class OperationsQueries
         CancellationToken ct
     )
     {
-        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var scoped = db.Metadatas.AsNoTracking().Where(m => m.Name == trainName);
 
         var byState = await scoped
@@ -566,7 +570,8 @@ public partial class OperationsQueries
     )
     {
         var now = (timeProvider ?? TimeProvider.System).GetUtcNow();
-        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         // One row per process seen in the last day, pruned by every beat, so the table is small.
         var beats = await db.HostHeartbeats.AsNoTracking().ToListAsync(ct).ConfigureAwait(false);
@@ -668,7 +673,8 @@ public partial class OperationsQueries
         take = OperationsPageBounds.Take(take);
         skip = OperationsPageBounds.Skip(skip);
 
-        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         var filter = new BulkExecutionFilter
         {
@@ -877,7 +883,8 @@ public partial class OperationsQueries
         CancellationToken ct
     )
     {
-        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         var row = await db
             .Metadatas.AsNoTracking()
@@ -1001,7 +1008,8 @@ public partial class OperationsQueries
     {
         take = OperationsPageBounds.Take(take);
 
-        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         var baseQuery = db.Metadatas.AsNoTracking().Where(m => m.ParentId == parentId);
         var totalCount = await baseQuery.CountAsync(ct).ConfigureAwait(false);
@@ -1075,7 +1083,8 @@ public partial class OperationsQueries
         RunIdArgument.Require(metadataId);
         take = OperationsPageBounds.Take(take);
 
-        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         IQueryable<JunctionRun> rows = db.JunctionRuns.AsNoTracking().ForRun(metadataId);
         if (afterPosition is { } after)
@@ -1119,7 +1128,8 @@ public partial class OperationsQueries
     {
         RunIdArgument.Require(metadataId);
 
-        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         return await RunGraphs
             .ReadAsync(db, chainGraphs, services?.GetService<IRunResumes>(), metadataId, ct)
             .ConfigureAwait(false);

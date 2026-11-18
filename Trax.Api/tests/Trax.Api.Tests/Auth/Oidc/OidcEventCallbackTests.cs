@@ -46,7 +46,8 @@ public class OidcEventCallbackTests
     [Test]
     public async Task OnRedirectToLogin_SetsStatus401()
     {
-        using var sp = (ServiceProvider)BuildProvider();
+        var sp = (ServiceProvider)BuildProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
         var opts = GetCookieOptions(sp);
         var http = new DefaultHttpContext { RequestServices = sp };
 
@@ -70,7 +71,8 @@ public class OidcEventCallbackTests
     [Test]
     public async Task OnRedirectToAccessDenied_SetsStatus403()
     {
-        using var sp = (ServiceProvider)BuildProvider();
+        var sp = (ServiceProvider)BuildProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
         var opts = GetCookieOptions(sp);
         var http = new DefaultHttpContext { RequestServices = sp };
 
@@ -94,7 +96,8 @@ public class OidcEventCallbackTests
     [Test]
     public async Task OnTokenValidated_NullPrincipal_FailsContext()
     {
-        using var sp = (ServiceProvider)BuildProvider();
+        var sp = (ServiceProvider)BuildProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
         var opts = GetOidcOptions(sp);
         var ctx = NewTokenValidatedContext(sp, opts, principal: null);
 
@@ -108,7 +111,8 @@ public class OidcEventCallbackTests
     [Test]
     public async Task OnTokenValidated_ResolverReturnsNull_FailsContext()
     {
-        using var sp = (ServiceProvider)BuildResolverProvider(new StubResolver(returns: null));
+        var sp = (ServiceProvider)BuildResolverProvider(new StubResolver(returns: null));
+        await using var spDisposal = sp.ConfigureAwait(false);
         var opts = GetOidcOptions(sp);
         var principal = new ClaimsPrincipal(
             new ClaimsIdentity([new Claim("sub", "user-1")], "test")
@@ -125,7 +129,8 @@ public class OidcEventCallbackTests
     public async Task OnTokenValidated_ResolverThrows_FailsContextWithException()
     {
         var boom = new InvalidOperationException("resolver explosion");
-        using var sp = (ServiceProvider)BuildResolverProvider(new StubResolver(throws: boom));
+        var sp = (ServiceProvider)BuildResolverProvider(new StubResolver(throws: boom));
+        await using var spDisposal = sp.ConfigureAwait(false);
         var opts = GetOidcOptions(sp);
         var principal = new ClaimsPrincipal(
             new ClaimsIdentity([new Claim("sub", "user-1")], "test")
@@ -148,9 +153,8 @@ public class OidcEventCallbackTests
             Claims: null,
             PrincipalType: OidcDefaults.PrincipalType
         );
-        using var sp = (ServiceProvider)BuildResolverProvider(
-            new StubResolver(returns: traxPrincipal)
-        );
+        var sp = (ServiceProvider)BuildResolverProvider(new StubResolver(returns: traxPrincipal));
+        await using var spDisposal = sp.ConfigureAwait(false);
         var opts = GetOidcOptions(sp);
         var inputPrincipal = new ClaimsPrincipal(
             new ClaimsIdentity([new Claim("sub", "u-1")], "test")
@@ -180,7 +184,8 @@ public class OidcEventCallbackTests
         );
         services.Remove(resolverDescriptor);
 
-        using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
         var opts = GetOidcOptions(sp);
         var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", "u")], "test"));
         var ctx = NewTokenValidatedContext(sp, opts, principal);
@@ -196,7 +201,7 @@ public class OidcEventCallbackTests
     {
         // Wire a customizer that installs an OnTokenValidated which sets
         // Result. Trax's wrapper must defer to it and stop.
-        using var sp = (ServiceProvider)BuildResolverProvider(
+        var sp = (ServiceProvider)BuildResolverProvider(
             new StubResolver(throws: new Exception("should not be called")),
             customize: o =>
             {
@@ -207,6 +212,7 @@ public class OidcEventCallbackTests
                 };
             }
         );
+        await using var spDisposal = sp.ConfigureAwait(false);
         var opts = GetOidcOptions(sp);
         var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", "u")], "test"));
         var ctx = NewTokenValidatedContext(sp, opts, principal);

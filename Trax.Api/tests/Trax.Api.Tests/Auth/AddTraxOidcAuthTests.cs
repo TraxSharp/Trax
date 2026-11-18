@@ -97,7 +97,8 @@ public class AddTraxOidcAuthTests
         var services = NewServices();
 
         services.AddTraxOidcAuth(ConfigureDefault);
-        using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
 
         var policyProvider = sp.GetRequiredService<IAuthorizationPolicyProvider>();
         var policy = await policyProvider.GetPolicyAsync(OidcDefaults.PolicyName);
@@ -113,7 +114,8 @@ public class AddTraxOidcAuthTests
         var services = NewServices();
 
         services.AddTraxOidcAuth(ConfigureDefault);
-        using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
 
         var policyProvider = sp.GetRequiredService<IAuthorizationPolicyProvider>();
         var policy = await policyProvider.GetPolicyAsync(TraxAuthClaimTypes.TraxAuthPolicy);

@@ -222,7 +222,8 @@ public class CustomSocketInterceptorE2ETests
                     $"WebSocket closed unexpectedly: {result.CloseStatus} {result.CloseStatusDescription}"
                 );
             if (result.Count > 0)
-                ms.Write(buffer, 0, result.Count);
+                await ms.WriteAsync(buffer, 0, result.Count, CancellationToken.None)
+                    .ConfigureAwait(false);
             if (result.EndOfMessage && ms.Length > 0)
                 break;
         }
@@ -244,7 +245,8 @@ public class CustomSocketInterceptorE2ETests
                     if (result.MessageType == WebSocketMessageType.Close)
                         return true;
                     if (result.Count > 0)
-                        ms.Write(buffer, 0, result.Count);
+                        await ms.WriteAsync(buffer, 0, result.Count, CancellationToken.None)
+                            .ConfigureAwait(false);
                     if (result.EndOfMessage)
                         break;
                 }

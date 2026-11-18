@@ -12,7 +12,7 @@ using Trax.Api.GraphQL.Validation;
 
 namespace Trax.Api.GraphQL.PersistedOperations.Services;
 
-/// <summary>One client document, as <see cref="ClientDocuments.Load"/> reads it.</summary>
+/// <summary>One client document, as <see cref="ClientDocuments.LoadAsync"/> reads it.</summary>
 /// <param name="Id">The persisted id.</param>
 /// <param name="Text">The GraphQL document text, exactly as the file holds it.</param>
 /// <param name="Name">The operation's name.</param>

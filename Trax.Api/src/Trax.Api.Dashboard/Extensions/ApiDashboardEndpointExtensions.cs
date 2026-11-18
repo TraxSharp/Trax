@@ -56,14 +56,20 @@ public static class ApiDashboardEndpointExtensions
             nameof(UseTraxOperatorConsoleDocuments),
             "console"
         );
-        HandOverConsoleDocuments(graphQL, nameof(UseTraxOperatorConsoleDocuments));
+        // Mapping is synchronous and happens once, at startup, so the documents are waited on here.
+        HandOverConsoleDocumentsAsync(graphQL, nameof(UseTraxOperatorConsoleDocuments))
+            .GetAwaiter()
+            .GetResult();
         return endpoints;
     }
 
     // Hands the console's documents to the GraphQL configuration, for a host that runs persisted operations to
     // register when it starts. Idempotent before the host has started; after, the registration has read them for the
     // last time, so a call then would silently register nothing.
-    private static void HandOverConsoleDocuments(GraphQLConfiguration graphQL, string caller)
+    private static async Task HandOverConsoleDocumentsAsync(
+        GraphQLConfiguration graphQL,
+        string caller
+    )
     {
         if (graphQL.ConsoleDocumentsClosed)
             throw new InvalidOperationException(
@@ -71,7 +77,9 @@ public static class ApiDashboardEndpointExtensions
                     + "already been registered, so they would never be. Call it while configuring the "
                     + "app, before app.Run() or app.StartAsync()."
             );
-        graphQL.ConsoleDocuments = ConsoleDocumentsResource.Documents;
+        graphQL.ConsoleDocuments = await ConsoleDocumentsResource
+            .DocumentsAsync()
+            .ConfigureAwait(false);
     }
 
     // The GraphQL configuration an operator frontend's documents need: AddTraxGraphQL, exposing the operations
@@ -164,7 +172,10 @@ public static class ApiDashboardEndpointExtensions
 
         var graphQL = OperationsGraphQL(services, nameof(UseTraxApiDashboard), "dashboard");
 
-        var assets = services.GetService<DashboardAssets>() ?? DashboardAssets.Embedded;
+        // Mapping is synchronous and happens once, at startup, so the embedded app is waited on here.
+        var assets =
+            services.GetService<DashboardAssets>()
+            ?? DashboardAssets.EmbeddedAsync().GetAwaiter().GetResult();
         if (assets.IndexTemplate is null)
             throw new InvalidOperationException(
                 "This build of Trax.Api.Dashboard carries no app. The package from nuget.org always "
@@ -182,9 +193,13 @@ public static class ApiDashboardEndpointExtensions
 
         // The documents the app sends, for a host that runs persisted operations to register when it starts; it hands
         // back the id of each, which the app is told in its runtime config.
-        HandOverConsoleDocuments(graphQL, nameof(UseTraxApiDashboard));
+        HandOverConsoleDocumentsAsync(graphQL, nameof(UseTraxApiDashboard))
+            .GetAwaiter()
+            .GetResult();
 
-        VerifyAuthorizationPosture(services, options);
+        // Mapping is synchronous and happens once, at startup, so the check is waited on here; a
+        // host without the posture it needs fails before the endpoint serves anything.
+        VerifyAuthorizationPostureAsync(services, options).GetAwaiter().GetResult();
 
         var endpoint = new DashboardEndpoint(
             assets,
@@ -299,7 +314,7 @@ public static class ApiDashboardEndpointExtensions
         && !path.Contains('\\', StringComparison.Ordinal)
         && !path.Contains("://", StringComparison.Ordinal);
 
-    private static void VerifyAuthorizationPosture(
+    private static async Task VerifyAuthorizationPostureAsync(
         IServiceProvider services,
         TraxApiDashboardOptions options
     )
@@ -325,7 +340,7 @@ public static class ApiDashboardEndpointExtensions
             );
         var policy = options.Policy is null
             ? null
-            : policies.GetPolicyAsync(options.Policy).GetAwaiter().GetResult();
+            : await policies.GetPolicyAsync(options.Policy).ConfigureAwait(false);
         if (options.Policy is not null && policy is null)
             throw new InvalidOperationException(
                 $"The dashboard requires the authorization policy '{options.Policy}', which is "
@@ -333,14 +348,14 @@ public static class ApiDashboardEndpointExtensions
                     + $"o.AddPolicy(\"{options.Policy}\", ...))."
             );
 
-        VerifyChallengeScheme(services, policy);
+        await VerifyChallengeSchemeAsync(services, policy).ConfigureAwait(false);
     }
 
     // A refused request is answered by challenging (or forbidding) through an authentication
     // scheme: the ones the policy names, or else the host's default. With none, ASP.NET Core
     // throws on every request the posture refuses, so the dashboard would answer 500 instead of
     // 401 or 403. Refuse at startup instead, naming what is missing.
-    private static void VerifyChallengeScheme(
+    private static async Task VerifyChallengeSchemeAsync(
         IServiceProvider services,
         AuthorizationPolicy? policy
     )
@@ -348,11 +363,13 @@ public static class ApiDashboardEndpointExtensions
         var schemes = services.GetService<IAuthenticationSchemeProvider>();
         if (policy is { AuthenticationSchemes.Count: > 0 })
         {
-            var missing = policy
-                .AuthenticationSchemes.Where(name =>
-                    schemes?.GetSchemeAsync(name).GetAwaiter().GetResult() is null
+            var missing = new List<string>();
+            foreach (var name in policy.AuthenticationSchemes)
+                if (
+                    schemes is null
+                    || await schemes.GetSchemeAsync(name).ConfigureAwait(false) is null
                 )
-                .ToList();
+                    missing.Add(name);
             if (missing.Count == 0)
                 return;
 
@@ -364,7 +381,10 @@ public static class ApiDashboardEndpointExtensions
             );
         }
 
-        if (schemes?.GetDefaultChallengeSchemeAsync().GetAwaiter().GetResult() is null)
+        if (
+            schemes is null
+            || await schemes.GetDefaultChallengeSchemeAsync().ConfigureAwait(false) is null
+        )
             throw new InvalidOperationException(
                 "The dashboard requires authorization, but the host has no authentication scheme "
                     + "to challenge a caller with, so every request it refuses would fail with a "
@@ -374,7 +394,7 @@ public static class ApiDashboardEndpointExtensions
                     + "AddAuthenticationSchemes(...)."
             );
 
-        if (schemes.GetDefaultForbidSchemeAsync().GetAwaiter().GetResult() is null)
+        if (await schemes.GetDefaultForbidSchemeAsync().ConfigureAwait(false) is null)
         {
             var named = services
                 .GetService<IOptions<AuthenticationOptions>>()

@@ -257,7 +257,8 @@ public static class E2EHost
     )
     {
         var wire = System.Text.Json.Nodes.JsonNode.Parse(snapshotJson)!.AsObject();
-        using var scope = host.Services.CreateScope();
+        var scope = host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var stored = await scope
             .ServiceProvider.GetRequiredService<ISnapshotStore>()
             .Upsert(

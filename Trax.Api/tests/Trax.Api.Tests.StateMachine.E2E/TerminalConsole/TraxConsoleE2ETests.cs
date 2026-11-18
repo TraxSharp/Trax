@@ -34,7 +34,7 @@ public class TraxConsoleE2ETests
     public async Task It_reads_the_hosts_release_and_finds_it_is_its_own()
     {
         await using var host = await HostAsync("trax_sm_tui_version");
-        await using var session = host.Session(E2EHost.OperatorKey);
+        await using var session = await host.SessionAsync(E2EHost.OperatorKey);
 
         var version = await session.CheckVersionAsync();
 
@@ -45,7 +45,7 @@ public class TraxConsoleE2ETests
     public async Task It_lists_runs_by_the_documents_id_with_no_text()
     {
         await using var host = await HostAsync("trax_sm_tui_runs");
-        await using var session = host.Session(E2EHost.OperatorKey);
+        await using var session = await host.SessionAsync(E2EHost.OperatorKey);
 
         var page = await Catalog.Runs.LoadAsync(
             session.Client,
@@ -67,7 +67,7 @@ public class TraxConsoleE2ETests
     public async Task It_requeues_a_dead_letter_through_the_hosts_scheduler()
     {
         await using var host = await HostAsync("trax_sm_tui_requeue");
-        await using var session = host.Session(E2EHost.OperatorKey);
+        await using var session = await host.SessionAsync(E2EHost.OperatorKey);
 
         var outcome = await Catalog.DeadLetters.RunAsync(
             session.Client,
@@ -85,7 +85,7 @@ public class TraxConsoleE2ETests
     public async Task A_document_the_host_did_not_register_is_refused()
     {
         await using var host = await HostAsync("trax_sm_tui_unregistered");
-        await using var session = host.Session(E2EHost.OperatorKey);
+        await using var session = await host.SessionAsync(E2EHost.OperatorKey);
         var registered = TraxOperations.Executions;
 
         var byId = await session.Client.SendAsync(
@@ -124,7 +124,7 @@ public class TraxConsoleE2ETests
     public async Task The_operations_gate_still_decides()
     {
         await using var host = await HostAsync("trax_sm_tui_gate");
-        await using var session = host.Session(E2EHost.BobKey);
+        await using var session = await host.SessionAsync(E2EHost.BobKey);
 
         var page = await Catalog.Runs.LoadAsync(
             session.Client,
@@ -140,7 +140,7 @@ public class TraxConsoleE2ETests
     public async Task A_host_that_registers_the_documents_without_the_page_serves_it()
     {
         await using var host = await HostAsync("trax_sm_tui_bare", page: false);
-        await using var session = host.Session(E2EHost.OperatorKey);
+        await using var session = await host.SessionAsync(E2EHost.OperatorKey);
 
         var version = await session.CheckVersionAsync();
         var page = await Catalog.Manifests.LoadAsync(
@@ -157,7 +157,7 @@ public class TraxConsoleE2ETests
     public async Task The_headless_list_prints_one_row_per_line_and_the_page_on_standard_error()
     {
         await using var host = await HostAsync("trax_sm_tui_headless");
-        await using var session = host.Session(E2EHost.OperatorKey);
+        await using var session = await host.SessionAsync(E2EHost.OperatorKey);
         var output = new StringWriter();
         var error = new StringWriter();
 
@@ -240,19 +240,26 @@ public class TraxConsoleE2ETests
                 )
                 .ToList();
 
-        public ConsoleSession Session(string apiKey) =>
+        public async Task<ConsoleSession> SessionAsync(string apiKey) =>
             ConsoleSession.Open(
-                ConsoleTarget.Resolve(
-                    "http://localhost",
-                    ConsoleTarget.DefaultGraphQLPath,
-                    apiKeyFile: null,
-                    tokenFile: null,
-                    sendText: false,
-                    name =>
-                        string.Equals(name, ConsoleTarget.ApiKeyVariable, StringComparison.Ordinal)
-                            ? apiKey
-                            : null
-                ),
+                await ConsoleTarget
+                    .ResolveAsync(
+                        "http://localhost",
+                        ConsoleTarget.DefaultGraphQLPath,
+                        apiKeyFile: null,
+                        tokenFile: null,
+                        sendText: false,
+                        name =>
+                            string.Equals(
+                                name,
+                                ConsoleTarget.ApiKeyVariable,
+                                StringComparison.Ordinal
+                            )
+                                ? apiKey
+                                : null,
+                        CancellationToken.None
+                    )
+                    .ConfigureAwait(false),
                 _recording
             );
 

@@ -244,7 +244,8 @@ public class KeyedRegistrationTests
     {
         var services = new ServiceCollection();
         services.AddKeyedTraxGraphQLClient("serverB", ServerB);
-        using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
 
         // An assembly with no request marked [GraphQLClient("serverB")] resolves the keyed
         // validator, finds nothing to check without a schema fetch, and refuses: a validation

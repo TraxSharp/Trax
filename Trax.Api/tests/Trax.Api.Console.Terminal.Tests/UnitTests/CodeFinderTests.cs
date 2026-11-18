@@ -14,19 +14,22 @@ public class CodeFinderTests
     private DirectoryInfo _root = null!;
 
     [SetUp]
-    public void Checkout()
+    public async Task Checkout()
     {
         _root = Directory.CreateTempSubdirectory("trax-console-code-");
-        Write(
+        await WriteAsync(
             "src/Shop/Trains/IShipOrderTrain.cs",
             "namespace Shop.Trains;\npublic interface IShipOrderTrain { }\n"
         );
-        Write(
+        await WriteAsync(
             "src/Shop/Trains/ShipOrderTrain.cs",
             "namespace Shop.Trains;\n\n// The train.\ninternal sealed class ShipOrderTrain : IShipOrderTrain { }\n"
         );
-        Write("src/Shop/Junctions/ChargeCard.cs", "namespace Shop;\npublic class ChargeCard { }\n");
-        Write("src/Shop/bin/Debug/Copy.cs", "public class ChargeCard { }\n");
+        await WriteAsync(
+            "src/Shop/Junctions/ChargeCard.cs",
+            "namespace Shop;\npublic class ChargeCard { }\n"
+        );
+        await WriteAsync("src/Shop/bin/Debug/Copy.cs", "public class ChargeCard { }\n");
     }
 
     [TearDown]
@@ -61,7 +64,11 @@ public class CodeFinderTests
         var outside = Directory.CreateTempSubdirectory("trax-console-outside-");
         try
         {
-            File.WriteAllText(Path.Combine(outside.FullName, "Secret.cs"), "class Leaked { }\n");
+            await File.WriteAllTextAsync(
+                    Path.Combine(outside.FullName, "Secret.cs"),
+                    "class Leaked { }\n"
+                )
+                .ConfigureAwait(false);
             File.CreateSymbolicLink(
                 Path.Combine(_root.FullName, "src", "Linked.cs"),
                 Path.Combine(outside.FullName, "Secret.cs")
@@ -71,7 +78,9 @@ public class CodeFinderTests
                 outside.FullName
             );
 
-            (await CodeFinder.FindAsync(_root.FullName, "Leaked")).Should().BeNull();
+            (await CodeFinder.FindAsync(_root.FullName, "Leaked").ConfigureAwait(false))
+                .Should()
+                .BeNull();
         }
         finally
         {
@@ -356,10 +365,10 @@ public class CodeFinderTests
 
     private static bool AnyFile(string path) => true;
 
-    private void Write(string path, string text)
+    private async Task WriteAsync(string path, string text)
     {
         var full = Path.Combine(_root.FullName, path);
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-        File.WriteAllText(full, text);
+        await File.WriteAllTextAsync(full, text).ConfigureAwait(false);
     }
 }

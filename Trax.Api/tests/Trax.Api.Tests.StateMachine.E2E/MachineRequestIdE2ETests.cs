@@ -417,7 +417,8 @@ public class MachineRequestIdE2ETests
     // recorded as its run, and ended Failed, so the outcome reconciler applies the failed outcome.
     private static async Task FailQueuedRunsAsync(IHost node, Guid instance)
     {
-        using var scope = node.Services.CreateScope();
+        var scope = node.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var db = scope.ServiceProvider.GetRequiredService<IDataContext>();
         var queued = await db
             .WorkQueues.AsNoTracking()

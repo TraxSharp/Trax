@@ -287,7 +287,7 @@ internal sealed class MainWindow : Window
     private void OpenTrace(long run)
     {
         var window = new RunTraceWindow(_context, run);
-        _context.App.Run(window);
+        Ui.RunModal(_context.App, window);
         var code = window.CodeToOpen;
         window.Dispose();
         if (code is not null)

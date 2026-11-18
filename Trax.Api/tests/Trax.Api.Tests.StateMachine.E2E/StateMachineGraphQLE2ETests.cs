@@ -190,7 +190,8 @@ public class StateMachineGraphQLE2ETests
 
         // The generic save serves only machines with no server-side behaviour, and the order has an effect, so its
         // draft is written by the host. The API key scheme qualifies the principal id with its name.
-        using (var scope = _host.Services.CreateScope())
+        var scope = _host.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var review = System.Text.Json.Nodes.JsonNode.Parse(OrderMachine.ReviewSnapshot(1, 2))!;
             (

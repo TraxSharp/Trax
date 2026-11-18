@@ -105,7 +105,7 @@ public sealed class TraxAuditWriter(
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                Abandon();
+                await AbandonAsync().ConfigureAwait(false);
             }
         }
 
@@ -124,7 +124,7 @@ public sealed class TraxAuditWriter(
     /// Counts every outstanding entry as dropped and cancels the loop's sink write, retry wait or
     /// read. Runs once, under the gate, so the loop cannot read another entry afterwards.
     /// </summary>
-    private void Abandon()
+    private async Task AbandonAsync()
     {
         int dropped;
         lock (_gate)
@@ -139,7 +139,7 @@ public sealed class TraxAuditWriter(
                 dropped++;
         }
 
-        _abort.Cancel();
+        await _abort.CancelAsync().ConfigureAwait(false);
         logger.LogError(
             "Trax audit writer ran out of shutdown time with {Count} entries unwritten.",
             dropped
@@ -163,7 +163,7 @@ public sealed class TraxAuditWriter(
 
     /// <summary>
     /// Marks the batch written, or counts it as dropped, and clears it. Does nothing to the counts
-    /// once shutdown has abandoned the drain, because <see cref="Abandon"/> already counted it.
+    /// once shutdown has abandoned the drain, because <see cref="AbandonAsync"/> already counted it.
     /// </summary>
     private void Resolve(List<TraxAuditEntry> batch, bool dropped, string reason)
     {
@@ -258,7 +258,8 @@ public sealed class TraxAuditWriter(
         {
             try
             {
-                using var scope = serviceProvider.CreateScope();
+                var scope = serviceProvider.CreateAsyncScope();
+                await using var scopeDisposal = scope.ConfigureAwait(false);
                 var sink = scope.ServiceProvider.GetRequiredService<ITraxAuditSink>();
                 await sink.WriteAsync(batch, ct).ConfigureAwait(false);
                 return true;

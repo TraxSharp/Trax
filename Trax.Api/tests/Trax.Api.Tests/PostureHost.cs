@@ -90,9 +90,25 @@ internal static class PostureHost
             return;
 
         var options = new DbContextOptionsBuilder<TContext>().UseInMemoryDatabase(name).Options;
-        using var context = (TContext)Activator.CreateInstance(typeof(TContext), options)!;
-        seed(context);
-        context.SaveChanges();
+        // Seeded when the host starts, before it serves a request.
+        services.AddHostedService(_ => new Seeding<TContext>(options, seed));
+    }
+
+    private sealed class Seeding<TContext>(
+        DbContextOptions<TContext> options,
+        Action<TContext> seed
+    ) : IHostedService
+        where TContext : DbContext
+    {
+        public async Task StartAsync(CancellationToken cancellationToken)
+        {
+            var context = (TContext)Activator.CreateInstance(typeof(TContext), options)!;
+            await using var contextDisposal = context.ConfigureAwait(false);
+            seed(context);
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     public static async Task<string> PostAsync(this IHost host, string query, string? apiKey = null)

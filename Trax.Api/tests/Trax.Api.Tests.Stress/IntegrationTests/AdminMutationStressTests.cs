@@ -796,7 +796,8 @@ public class AdminMutationStressTests : StressTestSetup
             ListBudget,
             async () =>
             {
-                using var scope = Services.CreateScope();
+                var scope = Services.CreateAsyncScope();
+                await using var scopeDisposal = scope.ConfigureAwait(false);
                 await Operations(scope.ServiceProvider)
                     .UpdateSchedulerConfigAsync(
                         new UpdateSchedulerConfigInput(DefaultMaxRetries: original),

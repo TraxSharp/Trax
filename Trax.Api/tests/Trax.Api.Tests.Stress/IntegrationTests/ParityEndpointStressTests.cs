@@ -191,14 +191,16 @@ public class ParityEndpointStressTests : StressTestSetup
                         sqlDialect: Dialect(sp)
                     )
                     .ConfigureAwait(false);
-                TestContext.Out.WriteLine(
-                    string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"  {label}: {page.Items.Count} rows, total {page.TotalCount}"
+                await TestContext
+                    .Out.WriteLineAsync(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"  {label}: {page.Items.Count} rows, total {page.TotalCount}"
+                        )
+                            + (page.IsEstimatedCount ? " (estimate)" : "")
+                            + (page.IsCountCapped ? " (capped)" : "")
                     )
-                        + (page.IsEstimatedCount ? " (estimate)" : "")
-                        + (page.IsCountCapped ? " (capped)" : "")
-                );
+                    .ConfigureAwait(false);
                 check(page).Should().BeTrue($"the page of {label} is the one asked for");
             }
         );
@@ -517,14 +519,16 @@ public class ParityEndpointStressTests : StressTestSetup
                         sqlDialect: Dialect(sp)
                     )
                     .ConfigureAwait(false);
-                TestContext.Out.WriteLine(
-                    string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"  {label}: {page.Items.Count} rows, total {page.TotalCount}"
+                await TestContext
+                    .Out.WriteLineAsync(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"  {label}: {page.Items.Count} rows, total {page.TotalCount}"
+                        )
+                            + (page.IsEstimatedCount ? " (estimate)" : "")
+                            + (page.IsCountCapped ? " (capped)" : "")
                     )
-                        + (page.IsEstimatedCount ? " (estimate)" : "")
-                        + (page.IsCountCapped ? " (capped)" : "")
-                );
+                    .ConfigureAwait(false);
                 check(page).Should().BeTrue($"the page of {label} is the one asked for");
             }
         );
@@ -662,7 +666,8 @@ public class ParityEndpointStressTests : StressTestSetup
         // A page deep into the run also reads which questions routed before it, to know whether
         // the track it is on is withheld: the widest read this field makes.
         long cursor;
-        using (var scope = Services.CreateScope())
+        var scope = Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var first = await new OperationsQueries().GetDecisions(
                 BulkSeeder.ChattyDecisionRun,

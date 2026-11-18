@@ -60,12 +60,17 @@ public class IrMachineViewSchemaTests
     }
 
     // A host serving the turnstile from its IR and the given views, each its state under the field named field.
-    private static Task<Exception?> RefusalAsync(string field, params string[] names)
+    private static async Task<Exception?> RefusalAsync(string field, params string[] names)
     {
         if (names.Length == 0)
             names = ["turnstile"];
         var ir = JsonNode
-            .Parse(File.ReadAllText(IrMachineSchemaTests.IrFile("turnstile")))!
+            .Parse(
+                (
+                    await File.ReadAllTextAsync(IrMachineSchemaTests.IrFile("turnstile"))
+                        .ConfigureAwait(false)
+                )
+            )!
             .AsObject();
         ir["id"] = "ir-turnstile";
         var host = new HostMachine(
@@ -94,13 +99,15 @@ public class IrMachineViewSchemaTests
             ),
             StringComparer.Ordinal
         );
-        return MachineSchemaHost.RefusalAsync(
-            [],
-            services: s =>
-            {
-                s.AddIrMachines(machines);
-                s.AddSingleton(new MachineViewCatalog(views));
-            }
-        );
+        return await MachineSchemaHost
+            .RefusalAsync(
+                [],
+                services: s =>
+                {
+                    s.AddIrMachines(machines);
+                    s.AddSingleton(new MachineViewCatalog(views));
+                }
+            )
+            .ConfigureAwait(false);
     }
 }

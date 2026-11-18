@@ -213,20 +213,22 @@ public class PersistedOperationStressTests : StressTestSetup
                 samples[i] = sw.Elapsed.TotalMilliseconds;
             }
             Array.Sort(samples);
-            TestContext.Out.WriteLine(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"{label}: mean {samples.Average():F3}ms, p50 {samples[Rounds / 2]:F3}ms, "
+            await TestContext
+                .Out.WriteLineAsync(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{label}: mean {samples.Average():F3}ms, p50 {samples[Rounds / 2]:F3}ms, "
+                    )
+                        + string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"p99 {samples[(int)(Rounds * 0.99)]:F3}ms over {Rounds:N0} requests "
+                        )
+                        + string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"({Profile.PersistedOperations:N0} stored operations)"
+                        )
                 )
-                    + string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"p99 {samples[(int)(Rounds * 0.99)]:F3}ms over {Rounds:N0} requests "
-                    )
-                    + string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"({Profile.PersistedOperations:N0} stored operations)"
-                    )
-            );
+                .ConfigureAwait(false);
             samples[(int)(Rounds * 0.99)]
                 .Should()
                 .BeLessThan(

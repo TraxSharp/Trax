@@ -10,16 +10,19 @@ internal static class Hosts
     public const string Url = "https://ops.example.com";
 
     /// <summary>A session that sends through <paramref name="host"/>.</summary>
-    public static ConsoleSession Session(ITraxTransport host) =>
+    public static async Task<ConsoleSession> SessionAsync(ITraxTransport host) =>
         ConsoleSession.Over(
-            ConsoleTarget.Resolve(
-                Url,
-                ConsoleTarget.DefaultGraphQLPath,
-                apiKeyFile: null,
-                tokenFile: null,
-                sendText: false,
-                _ => null
-            ),
+            await ConsoleTarget
+                .ResolveAsync(
+                    Url,
+                    ConsoleTarget.DefaultGraphQLPath,
+                    apiKeyFile: null,
+                    tokenFile: null,
+                    sendText: false,
+                    _ => null,
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false),
             host
         );
 

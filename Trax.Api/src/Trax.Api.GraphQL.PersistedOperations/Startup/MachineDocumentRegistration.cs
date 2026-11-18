@@ -105,7 +105,8 @@ internal sealed class MachineDocumentRegistration(
             .. ProgressDocuments.Generate(executor.Schema),
             .. ViewDocuments.Generate(executor.Schema),
         ];
-        var clientDocuments = LoadClientDocuments();
+        var clientDocuments = await LoadClientDocumentsAsync(cancellationToken)
+            .ConfigureAwait(false);
         // What a client document may reach, decided from what the host registered: the same reach judges the stored
         // documents other nodes registered (MachineDocumentMiddleware).
         var reach = ClientDocumentReach.Of(
@@ -154,14 +155,20 @@ internal sealed class MachineDocumentRegistration(
 
     // Every client document the host names, each file resolved against the content root; a document's name used twice
     // across files refuses the start.
-    private IReadOnlyList<ClientDocument> LoadClientDocuments()
+    private async Task<IReadOnlyList<ClientDocument>> LoadClientDocumentsAsync(
+        CancellationToken cancellationToken
+    )
     {
         var root =
             services.GetService<IHostEnvironment>()?.ContentRootPath
             ?? Directory.GetCurrentDirectory();
         var documents = new List<ClientDocument>();
         foreach (var file in options.ClientDocumentFiles)
-        foreach (var document in Services.ClientDocuments.Load(Path.GetFullPath(file, root)))
+        foreach (
+            var document in await Services
+                .ClientDocuments.LoadAsync(Path.GetFullPath(file, root), cancellationToken)
+                .ConfigureAwait(false)
+        )
         {
             if (
                 documents.Exists(d =>

@@ -173,7 +173,7 @@ public class CommandLineTests
     [Test]
     public async Task A_host_that_moves_mid_session_is_named_in_an_actions_outcome_as_the_console_shows_it()
     {
-        await using var session = Hosts.Session(Deployed());
+        await using var session = await Hosts.SessionAsync(Deployed());
         await session.CheckVersionAsync();
 
         var outcome = await Catalog.DeadLetters.RunAsync(
@@ -193,7 +193,7 @@ public class CommandLineTests
     public async Task A_stream_the_host_ends_outdated_is_named_too()
     {
         var host = new StreamingHost(Hosts.Same());
-        await using var session = Hosts.Session(host);
+        await using var session = await Hosts.SessionAsync(host);
         await session.CheckVersionAsync();
         var ended = new TaskCompletionSource<TraxStreamEvent<OnDataChangedResult>.Ended>(
             TaskCreationOptions.RunContinuationsAsynchronously

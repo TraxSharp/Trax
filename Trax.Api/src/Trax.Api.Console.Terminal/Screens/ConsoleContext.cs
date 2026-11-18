@@ -49,5 +49,8 @@ internal sealed class ConsoleContext(
     public CancellationToken Closed => _closed.Token;
 
     /// <summary>Stops the work that follows <see cref="Closed"/>.</summary>
-    public void Close() => _closed.Cancel();
+    /// <remarks>
+    /// <see cref="Closed"/> reads as cancelled once this returns; what was registered on it runs on the thread pool.
+    /// </remarks>
+    public void Close() => _ = _closed.CancelAsync();
 }

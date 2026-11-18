@@ -123,7 +123,8 @@ public class RunProgressRecheckE2ETests
         var running = RunAsync();
         var runId = await RunningIdAsync();
 
-        await using var alice = await RunProgressE2ETests.Socket.ConnectAsync(_host, AliceKey);
+        var alice = await RunProgressE2ETests.Socket.ConnectAsync(_host, AliceKey);
+        await using var aliceDisposal = alice.ConfigureAwait(false);
         await alice.SubscribeAsync(
             $$"""subscription { runProgress(runId: "{{runId}}") { {{EventFields}} } }"""
         );
@@ -157,7 +158,8 @@ public class RunProgressRecheckE2ETests
         var running = RunAsync();
         var runId = await RunningIdAsync();
 
-        await using var alice = await RunProgressE2ETests.Socket.ConnectAsync(_host, AliceKey);
+        var alice = await RunProgressE2ETests.Socket.ConnectAsync(_host, AliceKey);
+        await using var aliceDisposal = alice.ConfigureAwait(false);
         await alice.SubscribeAsync(
             $$"""subscription { runProgress(runId: "{{runId}}") { {{EventFields}} } }"""
         );
@@ -199,10 +201,11 @@ public class RunProgressRecheckE2ETests
         await ProgressMarkerTrain
             .Waiting.Task.WaitAsync(TimeSpan.FromSeconds(30))
             .ConfigureAwait(false);
-        using var db = await _host
+        var db = await _host
             .Services.GetRequiredService<IDataContextProviderFactory>()
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         return await db
             .Metadatas.AsNoTracking()
             .Where(m =>

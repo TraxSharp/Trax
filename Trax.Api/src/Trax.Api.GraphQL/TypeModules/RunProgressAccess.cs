@@ -79,7 +79,8 @@ internal sealed class RunProgressAccess(
             return null;
         var names = _trains.Value.Keys.ToList();
 
-        using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var ran = await db
             .Metadatas.AsNoTracking()
             .Where(m =>
@@ -156,7 +157,8 @@ internal sealed class RunProgressAccess(
     /// </summary>
     public async Task<QueuedFate> QueuedFateAsync(RunProgressRun run, CancellationToken ct)
     {
-        using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var status = await db
             .WorkQueues.AsNoTracking()
             .Where(w => w.ExternalId == run.RunId && w.StarterHash == run.Starter)
@@ -188,7 +190,8 @@ internal sealed class RunProgressAccess(
         CancellationToken ct
     )
     {
-        using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         // A run first seen while queued knows neither its metadata nor its manifest yet: its row has them now.
         var ran = await db

@@ -117,7 +117,8 @@ public partial class OperationsMutations
         CancellationToken ct
     )
     {
-        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         var manifest = await db
             .Manifests.FirstOrDefaultAsync(m => m.Id == id, ct)

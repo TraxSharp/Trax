@@ -89,7 +89,8 @@ public static partial class CrossSchemaGuards
             if (!rel.Contains($"{crossSchemaProjectSuffix}/", StringComparison.Ordinal))
                 continue;
 
-            foreach (var extension in TypeExtensions(file))
+            // A guard runs synchronously, from a test; the file is read and parsed before it goes on.
+            foreach (var extension in TypeExtensionsAsync(file).GetAwaiter().GetResult())
             foreach (var resolver in extension.Members.OfType<MethodDeclarationSyntax>())
             {
                 if (!IsResolver(resolver))
@@ -139,7 +140,8 @@ public static partial class CrossSchemaGuards
         {
             var rel = Path.GetRelativePath(root, file).Replace('\\', '/');
 
-            foreach (var extension in TypeExtensions(file))
+            // A guard runs synchronously, from a test; the file is read and parsed before it goes on.
+            foreach (var extension in TypeExtensionsAsync(file).GetAwaiter().GetResult())
             foreach (var method in extension.Members.OfType<MethodDeclarationSyntax>())
             foreach (var parameter in method.ParameterList.Parameters)
             {
@@ -180,16 +182,14 @@ public static partial class CrossSchemaGuards
     /// <c>[ObjectType&lt;T&gt;]</c>. A quick text check skips files that cannot hold one before
     /// parsing.
     /// </summary>
-    private static IEnumerable<ClassDeclarationSyntax> TypeExtensions(string file)
+    private static async Task<IEnumerable<ClassDeclarationSyntax>> TypeExtensionsAsync(string file)
     {
-        var text = File.ReadAllText(file);
+        var text = await File.ReadAllTextAsync(file).ConfigureAwait(false);
         if (!text.Contains("ObjectType", StringComparison.Ordinal))
             return [];
 
-        return CSharpSyntaxTree
-            .ParseText(text)
-            .GetRoot()
-            .DescendantNodes()
+        var root = await CSharpSyntaxTree.ParseText(text).GetRootAsync().ConfigureAwait(false);
+        return root.DescendantNodes()
             .OfType<ClassDeclarationSyntax>()
             .Where(c => Attributes(c.AttributeLists).Any(IsTypeExtensionAttribute));
     }

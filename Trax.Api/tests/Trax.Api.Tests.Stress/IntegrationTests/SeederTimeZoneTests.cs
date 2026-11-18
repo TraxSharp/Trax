@@ -69,7 +69,7 @@ public class SeederTimeZoneTests
                 PersistedOperations: 10,
                 Decisions: 100
             ),
-            _ => { }
+            _ => Task.CompletedTask
         );
 
         await using var connection = new NpgsqlConnection(ConnectionString);

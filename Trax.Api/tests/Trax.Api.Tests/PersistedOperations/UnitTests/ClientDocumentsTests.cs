@@ -41,9 +41,9 @@ public class ClientDocumentsTests
     #region Ids
 
     [Test]
-    public void The_cli_and_the_host_hash_a_document_alike()
+    public async Task The_cli_and_the_host_hash_a_document_alike()
     {
-        foreach (var (name, text, id) in FixtureCases())
+        foreach (var (name, text, id) in await FixtureCasesAsync())
             ClientDocuments.IdOf(name, text).Should().Be(id, $"the fixture's id for {name}");
     }
 
@@ -85,9 +85,9 @@ public class ClientDocumentsTests
     #region The file
 
     [Test]
-    public void A_file_reads_back_in_name_order_with_its_ids()
+    public async Task A_file_reads_back_in_name_order_with_its_ids()
     {
-        var path = Write(
+        var path = await WriteAsync(
             """
             { "format": 1, "documents": [
               { "name": "Zed", "source": "src/zed.graphql", "text": "query Zed { a }" },
@@ -96,7 +96,7 @@ public class ClientDocumentsTests
             """
         );
 
-        var documents = ClientDocuments.Load(path);
+        var documents = await ClientDocuments.LoadAsync(path, CancellationToken.None);
 
         documents.Select(d => d.Name).Should().Equal("OrderCard", "Zed");
         documents[0].Id.Should().Be(ClientDocuments.IdOf("OrderCard", "query OrderCard { a }"));
@@ -104,13 +104,15 @@ public class ClientDocumentsTests
     }
 
     [Test]
-    public void A_missing_file_refuses_naming_it()
+    public async Task A_missing_file_refuses_naming_it()
     {
         var path = Path.Combine(_dir, "nope.json");
 
-        var act = () => ClientDocuments.Load(path);
+        var act = () => ClientDocuments.LoadAsync(path, CancellationToken.None);
 
-        act.Should().Throw<InvalidOperationException>().WithMessage($"*'{path}'*cannot be read*");
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage($"*'{path}'*cannot be read*");
     }
 
     [TestCase("not json", "*not JSON trax client wrote*")]
@@ -130,13 +132,13 @@ public class ClientDocumentsTests
         """{ "format": 1, "documents": [ { "name": "A", "text": "query A { x }" }, { "name": "A", "text": "query A { y }" } ] }""",
         "*client document 'A'*twice*"
     )]
-    public void A_file_it_cannot_trust_refuses(string json, string message)
+    public async Task A_file_it_cannot_trust_refuses(string json, string message)
     {
-        var path = Write(json);
+        var path = await WriteAsync(json);
 
-        var act = () => ClientDocuments.Load(path);
+        var act = () => ClientDocuments.LoadAsync(path, CancellationToken.None);
 
-        act.Should().Throw<InvalidOperationException>().WithMessage(message);
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage(message);
     }
 
     #endregion
@@ -366,14 +368,16 @@ public class ClientDocumentsTests
         public string State { get; init; } = "";
     }
 
-    private string Write(string json)
+    private async Task<string> WriteAsync(string json)
     {
         var path = Path.Combine(_dir, $"{Guid.NewGuid():N}.json");
-        File.WriteAllText(path, json);
+        await File.WriteAllTextAsync(path, json).ConfigureAwait(false);
         return path;
     }
 
-    internal static IEnumerable<(string Name, string Text, string Id)> FixtureCases()
+    internal static async Task<
+        IEnumerable<(string Name, string Text, string Id)>
+    > FixtureCasesAsync()
     {
         for (
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
@@ -392,7 +396,9 @@ public class ClientDocumentsTests
             );
             if (!File.Exists(candidate))
                 continue;
-            using var json = JsonDocument.Parse(File.ReadAllText(candidate));
+            using var json = JsonDocument.Parse(
+                await File.ReadAllTextAsync(candidate).ConfigureAwait(false)
+            );
             return json
                 .RootElement.GetProperty("cases")
                 .EnumerateArray()

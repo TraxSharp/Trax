@@ -62,7 +62,8 @@ public class OperatorMachineFeedE2ETests
     [Test]
     public async Task The_operator_subscription_is_gated_and_shows_state_revision_and_runs()
     {
-        await using var operatorWs = await GraphQLWs.ConnectAsync(_host, E2EHost.OperatorKey);
+        var operatorWs = await GraphQLWs.ConnectAsync(_host, E2EHost.OperatorKey);
+        await using var operatorWsDisposal = operatorWs.ConfigureAwait(false);
         await operatorWs.SubscribeAsync("feed", MachineChangedOps.SubscribeOperator());
 
         // A row written by any path reaches the feed: here one written by hand.
@@ -92,7 +93,7 @@ public class OperatorMachineFeedE2ETests
             {
                 continue; // refused at the handshake
             }
-            await using (ws)
+            await using ((ws).ConfigureAwait(false))
             {
                 await ws.SubscribeAsync("feed", MachineChangedOps.SubscribeOperator());
                 var answer = await ws.NextAsync("feed");
@@ -114,7 +115,8 @@ public class OperatorMachineFeedE2ETests
     public async Task A_users_draft_change_appears_to_an_operator_without_its_context()
     {
         const string Secret = "Secret-Atlas-7731";
-        await using var operatorWs = await GraphQLWs.ConnectAsync(_host, E2EHost.OperatorKey);
+        var operatorWs = await GraphQLWs.ConnectAsync(_host, E2EHost.OperatorKey);
+        await using var operatorWsDisposal = operatorWs.ConfigureAwait(false);
         await operatorWs.SubscribeAsync("feed", MachineChangedOps.SubscribeOperator());
         await WaitUntilListeningAsync(operatorWs);
         var raw = new List<string>();
@@ -162,7 +164,8 @@ public class OperatorMachineFeedE2ETests
     public async Task Each_host_runs_one_listener_shared_by_the_dashboard_and_GraphQL()
     {
         // The dashboard's feed: the shared operations service, read the way the Blazor page reads it.
-        using var scope = _host.Services.CreateScope();
+        var scope = _host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         using var stop = new CancellationTokenSource();
         var dashboard = scope
             .ServiceProvider.GetRequiredService<IOperationsService>()
@@ -171,18 +174,20 @@ public class OperatorMachineFeedE2ETests
         var dashboardReading = dashboard.MoveNextAsync().AsTask();
 
         var started = await _host.StartWizardAsync(E2EHost.AliceKey);
-        await using var userWs = await GraphQLWs.ConnectAsync(
+        var userWs = await GraphQLWs.ConnectAsync(
             _host,
             E2EHost.AliceKey,
             cancellationToken: CancellationToken.None
         );
+        await using var userWsDisposal = userWs.ConfigureAwait(false);
         await userWs.SubscribeAsync("mine", MachineChangedOps.Subscribe(started.Id));
         await userWs.NextChangeAsync("mine");
-        await using var operatorWs = await GraphQLWs.ConnectAsync(
+        var operatorWs = await GraphQLWs.ConnectAsync(
             _host,
             E2EHost.OperatorKey,
             cancellationToken: CancellationToken.None
         );
+        await using var operatorWsDisposal = operatorWs.ConfigureAwait(false);
         await operatorWs.SubscribeAsync("feed", MachineChangedOps.SubscribeOperator());
         await WaitUntilListeningAsync(operatorWs);
         await _host.AdvanceWizardAsync(
@@ -227,7 +232,8 @@ public class OperatorMachineFeedE2ETests
     [Test]
     public async Task After_a_listener_reconnect_the_operator_feed_sends_a_reload()
     {
-        await using var operatorWs = await GraphQLWs.ConnectAsync(_host, E2EHost.OperatorKey);
+        var operatorWs = await GraphQLWs.ConnectAsync(_host, E2EHost.OperatorKey);
+        await using var operatorWsDisposal = operatorWs.ConfigureAwait(false);
         await operatorWs.SubscribeAsync(
             "feed",
             $"subscription {{ onMachineInstanceChanged(machine: {WizardOps.Literal(WizardMachine.MachineId)}) {{ {MachineChangedOps.OperatorFields} reload }} }}"

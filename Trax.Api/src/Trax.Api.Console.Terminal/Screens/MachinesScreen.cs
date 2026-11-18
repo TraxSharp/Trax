@@ -316,7 +316,7 @@ internal sealed class MachinesScreen : View
         )
             return false;
         var window = new MachineInstanceWindow(_context, machine, _instances[index]);
-        _context.App.Run(window);
+        Ui.RunModal(_context.App, window);
         var run = window.RunToTrace;
         window.Dispose();
         if (run is { } id)

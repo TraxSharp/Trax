@@ -100,7 +100,8 @@ public class SocketInterceptorScopeTests
     [Test]
     public async Task ApiKeyInterceptor_ResolvesTheScopedResolverPerConnection()
     {
-        using var provider = NewAppProvider();
+        var provider = NewAppProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         var interceptor = new TraxApiKeySocketInterceptor(
             new TraxApplicationServices(provider),
             provider.GetRequiredService<ILogger<TraxApiKeySocketInterceptor>>()
@@ -135,9 +136,10 @@ public class SocketInterceptorScopeTests
                 seen.Add(resolver);
             return resolver;
         });
-        using var provider = services.BuildServiceProvider(
+        var provider = services.BuildServiceProvider(
             new ServiceProviderOptions { ValidateScopes = true }
         );
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var interceptor = new TraxApiKeySocketInterceptor(
             new TraxApplicationServices(provider),
@@ -175,9 +177,10 @@ public class SocketInterceptorScopeTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddScoped<ITraxPrincipalResolver<string>>(_ => created = new());
-        using var provider = services.BuildServiceProvider(
+        var provider = services.BuildServiceProvider(
             new ServiceProviderOptions { ValidateScopes = true }
         );
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var interceptor = new TraxApiKeySocketInterceptor(
             new TraxApplicationServices(provider),
@@ -207,9 +210,10 @@ public class SocketInterceptorScopeTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddScoped<ITraxPrincipalResolver<string>>(_ => created = new() { Throw = true });
-        using var provider = services.BuildServiceProvider(
+        var provider = services.BuildServiceProvider(
             new ServiceProviderOptions { ValidateScopes = true }
         );
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var interceptor = new TraxApiKeySocketInterceptor(
             new TraxApplicationServices(provider),

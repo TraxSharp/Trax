@@ -306,7 +306,7 @@ public class ParityMutationStressTests : StressTestSetup
     public async Task ConfigureEffect_WithinBudget()
     {
         var effect = Services
-            .CreateScope()
+            .CreateAsyncScope()
             .ServiceProvider.GetRequiredService<IEffectSettingsService>()
             .GetEffects()
             .First(e =>

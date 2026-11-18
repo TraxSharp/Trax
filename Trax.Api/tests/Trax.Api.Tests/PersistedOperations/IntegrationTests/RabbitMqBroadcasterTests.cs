@@ -53,13 +53,14 @@ public class RabbitMqBroadcasterTests
             },
         };
 
-    private static bool IsRabbitMqReachable()
+    private static async Task<bool> IsRabbitMqReachableAsync()
     {
         try
         {
             var factory = new RabbitMQ.Client.ConnectionFactory { Uri = new Uri(AmqpUri) };
-            using var conn = factory.CreateConnectionAsync().GetAwaiter().GetResult();
-            return conn.IsOpen;
+            var conn = await factory.CreateConnectionAsync().ConfigureAwait(false);
+            await using (conn.ConfigureAwait(false))
+                return conn.IsOpen;
         }
         catch
         {
@@ -68,9 +69,9 @@ public class RabbitMqBroadcasterTests
     }
 
     [SetUp]
-    public void SetUp()
+    public async Task SetUp()
     {
-        if (!IsRabbitMqReachable())
+        if (!await IsRabbitMqReachableAsync())
             Assert.Ignore("RabbitMQ not reachable.");
     }
 
@@ -503,11 +504,11 @@ public class RabbitMqBroadcasterTests
 
             var id = $"after_channel_close_{Guid.NewGuid():N}";
             var received = await WaitUntilAsync(
-                () =>
+                async () =>
                 {
                     try
                     {
-                        publisher
+                        await publisher
                             .PublishAsync(
                                 new PersistedOperationChangedMessage(
                                     TenantKey: null,
@@ -517,8 +518,7 @@ public class RabbitMqBroadcasterTests
                                 ),
                                 CancellationToken.None
                             )
-                            .GetAwaiter()
-                            .GetResult();
+                            .ConfigureAwait(false);
                     }
                     catch (RabbitMQ.Client.Exceptions.PublishException)
                     {
@@ -674,17 +674,20 @@ public class RabbitMqBroadcasterTests
             NullLogger<HotChocolateOperationCacheInvalidator>.Instance
         );
 
-    private static async Task<bool> WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
+    private static Task<bool> WaitUntilAsync(Func<bool> condition, TimeSpan timeout) =>
+        WaitUntilAsync(() => Task.FromResult(condition()), timeout);
+
+    private static async Task<bool> WaitUntilAsync(Func<Task<bool>> condition, TimeSpan timeout)
     {
         var deadline = DateTimeOffset.UtcNow + timeout;
         while (DateTimeOffset.UtcNow < deadline)
         {
-            if (condition())
+            if (await condition().ConfigureAwait(false))
                 return true;
             // determinism: the poll interval of a wait bounded by the deadline above.
             await Task.Delay(50).ConfigureAwait(false);
         }
-        return condition();
+        return await condition().ConfigureAwait(false);
     }
 
     private sealed class RecordingCache : IPersistedOperationCache

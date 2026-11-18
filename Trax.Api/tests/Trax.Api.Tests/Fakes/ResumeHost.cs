@@ -122,7 +122,8 @@ internal sealed class ResumeHost : IAsyncDisposable
         ResumeProbe.FailIn = failIn;
         try
         {
-            using var scope = Services.CreateScope();
+            var scope = Services.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             var train = scope.ServiceProvider.GetRequiredService<TTrain>();
             try
             {
@@ -179,7 +180,8 @@ internal sealed class ResumeHost : IAsyncDisposable
     {
         var entry = await With(d => d.WorkQueues.AsNoTracking().SingleAsync(q => q.Id == entryId))
             .ConfigureAwait(false);
-        using var scope = Services.CreateScope();
+        var scope = Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train =
             (ServiceTrain<ResumableInput, string>)
                 (object)scope.ServiceProvider.GetRequiredService<TTrain>();
@@ -255,7 +257,8 @@ internal sealed class ResumeHost : IAsyncDisposable
     /// <summary>The dashboard's resume: the operations service, inside its trusted scope.</summary>
     public async Task<OperationResult> ResumeAsTheDashboardAsync(long id, string? from)
     {
-        using var scope = Services.CreateScope();
+        var scope = Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var trusted = scope.ServiceProvider.GetRequiredService<ITrustedExecutionScope>();
         using (trusted.BeginTrusted("dashboard"))
             return await scope

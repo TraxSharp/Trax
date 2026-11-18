@@ -81,7 +81,8 @@ public class QueryModelUndeclaredNavigationTests
             throw;
         }
 
-        using (var scope = provider.CreateScope())
+        var scope = provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var db = scope.ServiceProvider.GetRequiredService<UndeclaredNavDbContext>();
             var account = new UndeclaredAccount

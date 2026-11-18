@@ -18,7 +18,7 @@ public class UiTests
     public async Task Any_exception_the_work_throws_is_reported()
     {
         var (terminal, _) = await TerminalHarness.StartAsync(_ => new Window());
-        await using var __ = terminal;
+        await using var terminalDisposal = terminal.ConfigureAwait(false);
         string? failed = null;
 
         await terminal.OnUi(() =>
@@ -38,34 +38,38 @@ public class UiTests
     public async Task A_cancellation_the_caller_asked_for_is_not_reported()
     {
         var (terminal, _) = await TerminalHarness.StartAsync(_ => new Window());
-        await using var __ = terminal;
+        await using var terminalDisposal = terminal.ConfigureAwait(false);
         using var cancel = new CancellationTokenSource();
-        cancel.Cancel();
+        await cancel.CancelAsync().ConfigureAwait(false);
         var reported = new List<string>();
         var later = false;
 
-        await terminal.OnUi(() =>
-            Ui.Start<int>(
-                terminal.App,
-                () => Task.FromCanceled<int>(cancel.Token),
-                _ => reported.Add("done"),
-                m => reported.Add(m),
-                cancel.Token
+        await terminal
+            .OnUi(() =>
+                Ui.Start(
+                    terminal.App,
+                    () => Task.FromCanceled<int>(cancel.Token),
+                    _ => reported.Add("done"),
+                    m => reported.Add(m),
+                    cancel.Token
+                )
             )
-        );
-        await terminal.OnUi(() =>
-            Ui.Start(
-                terminal.App,
-                () => Task.FromResult(1),
-                _ => later = true,
-                _ => { },
-                cancellation: CancellationToken.None
+            .ConfigureAwait(false);
+        await terminal
+            .OnUi(() =>
+                Ui.Start(
+                    terminal.App,
+                    () => Task.FromResult(1),
+                    _ => later = true,
+                    _ => { },
+                    cancellation: CancellationToken.None
+                )
             )
-        );
-        await terminal.Until(() => later, "a later start finishes");
+            .ConfigureAwait(false);
+        await terminal.Until(() => later, "a later start finishes").ConfigureAwait(false);
         // negative-wait: a report for the cancelled start, were one made, would arrive within this window.
-        await Task.Delay(100, cancellationToken: CancellationToken.None);
-        await terminal.OnUi(() => { });
+        await Task.Delay(100, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+        await terminal.OnUi(() => { }).ConfigureAwait(false);
 
         reported.Should().BeEmpty();
     }
@@ -94,7 +98,7 @@ public class UiTests
                 );
                 return new Window();
             });
-            await using var __ = terminal;
+            await using var terminalDisposal = terminal.ConfigureAwait(false);
 
             BulkProgress.Follow(context, Guid.NewGuid(), () => { });
             await terminal.Until(

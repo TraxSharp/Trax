@@ -37,7 +37,8 @@ internal static class QueueDispatch
             return false;
         if (services.GetService<IDataContextProviderFactory>() is not { } factory)
             return false;
-        using var db = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         return db is DbContext context && !context.Database.IsRelational();
     }
 

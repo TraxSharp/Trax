@@ -55,7 +55,8 @@ internal sealed class QueryModelAuthorizationSchemaValidator(
         // Materialise the schema. Building it now (a) catches any other schema
         // misconfiguration at host start instead of on the first request, and
         // (b) lets us walk the resolved types.
-        using var scope = serviceProvider.CreateScope();
+        var scope = serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var resolver = scope.ServiceProvider.GetRequiredService<IRequestExecutorProvider>();
         var executor = await resolver
             .GetExecutorAsync(TraxSchemaName, cancellationToken)

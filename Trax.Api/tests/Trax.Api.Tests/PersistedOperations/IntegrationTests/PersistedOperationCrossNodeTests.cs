@@ -40,7 +40,7 @@ public class PersistedOperationCrossNodeTests
     {
         if (!PostgresFixture.IsPostgresReachable())
             Unavailable("Postgres");
-        if (!IsRabbitMqReachable())
+        if (!await IsRabbitMqReachableAsync())
             Unavailable("RabbitMQ");
 
         _nodeA = await StartNodeAsync();
@@ -232,13 +232,14 @@ public class PersistedOperationCrossNodeTests
         Assert.Ignore($"{service} not reachable.");
     }
 
-    private static bool IsRabbitMqReachable()
+    private static async Task<bool> IsRabbitMqReachableAsync()
     {
         try
         {
             var factory = new RabbitMQ.Client.ConnectionFactory { Uri = new Uri(AmqpUri) };
-            using var conn = factory.CreateConnectionAsync().GetAwaiter().GetResult();
-            return conn.IsOpen;
+            var conn = await factory.CreateConnectionAsync().ConfigureAwait(false);
+            await using (conn.ConfigureAwait(false))
+                return conn.IsOpen;
         }
         catch
         {

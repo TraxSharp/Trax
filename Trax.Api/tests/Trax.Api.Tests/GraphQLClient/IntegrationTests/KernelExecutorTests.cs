@@ -195,12 +195,12 @@ public class KernelExecutorTests
     public async Task Run_PreCancelledToken_ThrowsOperationCanceled()
     {
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync().ConfigureAwait(false);
 
         var act = async () =>
             await _executor.Run(new AllItemsRequest(), cts.Token).ConfigureAwait(false);
 
-        await act.Should().ThrowAsync<OperationCanceledException>();
+        await act.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
     }
 
     #endregion

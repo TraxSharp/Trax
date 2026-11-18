@@ -272,29 +272,34 @@ public class OperationsExposureTests
             _emptyDiscovery,
             graphql => graphql.ExposeOperationQueries().AllowAnonymousOperations()
         );
-        var probe = File.ReadAllText(
-            System.IO.Path.Combine(
-                RepoFolder("Trax.Api"),
-                "src",
-                "Trax.Api.Dashboard",
-                "ClientApp",
-                "src",
-                "graphql",
-                "PersistedOperationsAvailable.graphql"
-            )
+        var probe = (
+            await File.ReadAllTextAsync(
+                    System.IO.Path.Combine(
+                        RepoFolder("Trax.Api"),
+                        "src",
+                        "Trax.Api.Dashboard",
+                        "ClientApp",
+                        "src",
+                        "graphql",
+                        "PersistedOperationsAvailable.graphql"
+                    )
+                )
+                .ConfigureAwait(false)
         );
         var operator_ = new ClaimsPrincipal(
             new ClaimsIdentity([new Claim(ClaimTypes.Role, "Operator")], "Test")
         );
 
         var result = (OperationResult)
-            await executor.ExecuteAsync(
-                OperationRequestBuilder
-                    .New()
-                    .SetDocument(probe)
-                    .SetGlobalState(nameof(ClaimsPrincipal), operator_)
-                    .Build()
-            );
+            await executor
+                .ExecuteAsync(
+                    OperationRequestBuilder
+                        .New()
+                        .SetDocument(probe)
+                        .SetGlobalState(nameof(ClaimsPrincipal), operator_)
+                        .Build()
+                )
+                .ConfigureAwait(false);
 
         result
             .Errors.Should()
@@ -855,7 +860,9 @@ public class OperationsExposureTests
         if (registerScheduler)
         {
             services.AddScoped(_ => _scheduler ?? Substitute.For<ITraxScheduler>());
-            services.AddSingleton(Trax.Api.Tests.Fakes.SeededManifests.With("abc"));
+            services.AddSingleton(
+                await Trax.Api.Tests.Fakes.SeededManifests.WithAsync("abc").ConfigureAwait(false)
+            );
         }
 
         // Always register stubs in case the schema asks for them via type wiring.

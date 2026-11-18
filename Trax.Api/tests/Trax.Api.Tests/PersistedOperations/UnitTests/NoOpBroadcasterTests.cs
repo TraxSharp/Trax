@@ -50,7 +50,7 @@ public class NoOpBroadcasterTests
         // broadcaster-error path expects this so that publish failures are
         // never user-visible.
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync().ConfigureAwait(false);
         var b = new NoOpPersistedOperationBroadcaster();
         var task = b.PublishAsync(
             new PersistedOperationChangedMessage(
@@ -62,7 +62,7 @@ public class NoOpBroadcasterTests
             cts.Token
         );
         task.IsCompletedSuccessfully.Should().BeTrue();
-        await task;
+        await task.ConfigureAwait(false);
     }
 
     [Test]

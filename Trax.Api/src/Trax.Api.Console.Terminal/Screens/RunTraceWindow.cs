@@ -59,8 +59,9 @@ internal sealed class RunTraceWindow : Window
         // Read once the window runs, so every answer lands on the UI thread.
         IsRunningChanged += (_, e) =>
         {
+            // The token reads as cancelled once CancelAsync returns; its callbacks run on the thread pool.
             if (!e.Value && !_open.IsCancellationRequested)
-                _open.Cancel();
+                _ = _open.CancelAsync();
             if (!e.Value || _stream is not null)
                 return;
             _lines.SetFocus();

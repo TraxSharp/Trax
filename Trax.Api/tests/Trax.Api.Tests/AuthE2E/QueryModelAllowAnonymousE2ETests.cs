@@ -329,7 +329,8 @@ public class QueryModelAllowAnonymousE2ETests
         // surfaces in code review with the full implication ("you just
         // changed the public contract of TraxPrincipal injection") visible.
         using var host = await StartAsync(Schemes.ApiKey);
-        using var scope = host.Services.CreateScope();
+        var scope = host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
 
         var act = () => scope.ServiceProvider.GetRequiredService<TraxPrincipal>();
 
@@ -349,7 +350,8 @@ public class QueryModelAllowAnonymousE2ETests
         // false rather than constructing a partial principal — same canary
         // as above, applied to the safe API surface.
         using var host = await StartAsync(Schemes.ApiKey);
-        using var scope = host.Services.CreateScope();
+        var scope = host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
 
         var anonymousUser = new System.Security.Claims.ClaimsPrincipal(
             new System.Security.Claims.ClaimsIdentity()

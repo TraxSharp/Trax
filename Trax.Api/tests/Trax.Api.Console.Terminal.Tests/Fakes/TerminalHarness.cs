@@ -4,6 +4,7 @@ using Terminal.Gui.Input;
 using Terminal.Gui.Testing;
 using Terminal.Gui.Time;
 using Terminal.Gui.Views;
+using Trax.Api.Console.Terminal.Screens;
 
 namespace Trax.Api.Console.Terminal.Tests.Fakes;
 
@@ -65,7 +66,7 @@ internal sealed class TerminalHarness : IAsyncDisposable
                 if (e.Value)
                     started.TrySetResult(window);
             };
-            app.Run(window);
+            Ui.RunModal(app, window);
             stopped.TrySetResult();
             window.Dispose();
         })

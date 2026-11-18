@@ -16,20 +16,25 @@ internal static class ConsoleDocumentsResource
 
     private const int Format = 1;
 
-    private static readonly Lazy<IReadOnlyList<ConsoleDocumentText>> Embedded = new(Read);
+    private static readonly Lazy<Task<IReadOnlyList<ConsoleDocumentText>>> Embedded = new(
+        ReadAsync
+    );
 
-    /// <summary>The documents this build of the app sends.</summary>
-    public static IReadOnlyList<ConsoleDocumentText> Documents => Embedded.Value;
+    /// <summary>The documents this build of the app sends, read once.</summary>
+    public static Task<IReadOnlyList<ConsoleDocumentText>> DocumentsAsync() => Embedded.Value;
 
-    private static IReadOnlyList<ConsoleDocumentText> Read()
+    private static async Task<IReadOnlyList<ConsoleDocumentText>> ReadAsync()
     {
-        using var stream =
+        var stream =
             typeof(ConsoleDocumentsResource).Assembly.GetManifestResourceStream(Name)
             ?? throw new InvalidOperationException(
                 $"This build of Trax.Api.Dashboard carries no '{Name}'. The package from nuget.org always does."
             );
+        await using var streamDisposal = stream.ConfigureAwait(false);
         var file =
-            JsonSerializer.Deserialize<DocumentsFile>(stream, Json)
+            await JsonSerializer
+                .DeserializeAsync<DocumentsFile>(stream, Json, CancellationToken.None)
+                .ConfigureAwait(false)
             ?? throw new InvalidOperationException($"'{Name}' is empty.");
         if (file.Format != Format || file.Documents is null)
             throw new InvalidOperationException(

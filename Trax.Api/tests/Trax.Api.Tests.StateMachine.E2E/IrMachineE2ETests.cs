@@ -31,7 +31,9 @@ public class IrMachineE2ETests
     {
         await E2EHost.RecreateDatabaseAsync(Database);
 
-        var ir = JsonNode.Parse(File.ReadAllText(IrFile("turnstile")))!.AsObject();
+        var ir = JsonNode
+            .Parse((await File.ReadAllTextAsync(IrFile("turnstile")).ConfigureAwait(false)))!
+            .AsObject();
         ir["id"] = "ir-turnstile";
         var approvers = new AccessRule([
             [Approver],
@@ -53,11 +55,9 @@ public class IrMachineE2ETests
         );
         var machines = IrMachines.Create([new IrMachines.Source(ir, entry)], []);
 
-        _host = await E2EHost.StartAsync(
-            Database,
-            new CountingCharge(),
-            new E2EHostOptions { Instances = machines }
-        );
+        _host = await E2EHost
+            .StartAsync(Database, new CountingCharge(), new E2EHostOptions { Instances = machines })
+            .ConfigureAwait(false);
     }
 
     [OneTimeTearDown]

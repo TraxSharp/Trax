@@ -21,9 +21,9 @@ public partial class ApiDashboardPackageTests
     private string _root = null!;
 
     [SetUp]
-    public void SetUp()
+    public async Task SetUp()
     {
-        var node = Run("node", Path.GetTempPath(), "--version");
+        var node = await RunAsync("node", Path.GetTempPath(), "--version");
         if (node.ExitCode != 0)
             Unavailable("node is not on PATH; packing Trax.Api.Dashboard builds its app with it.");
         if (!Directory.Exists(Path.Combine(ClientApp(), "node_modules", "vite")))
@@ -52,9 +52,9 @@ public partial class ApiDashboardPackageTests
     }
 
     [Test]
-    public void The_package_carries_the_built_app_with_content_hashed_assets()
+    public async Task The_package_carries_the_built_app_with_content_hashed_assets()
     {
-        var unpacked = PackAndUnpack();
+        var unpacked = await PackAndUnpackAsync();
 
         var assembly = Path.Combine(unpacked, "lib", "net10.0", "Trax.Api.Dashboard.dll");
         File.Exists(assembly).Should().BeTrue("the package ships the assembly");
@@ -62,7 +62,7 @@ public partial class ApiDashboardPackageTests
             .Should()
             .BeTrue("every package carries a README");
 
-        var resources = ManifestResources(assembly);
+        var resources = await ManifestResourcesAsync(assembly);
         resources.Should().Contain("TraxApiDashboard/index.html");
         var assets = resources
             .Where(r => r.StartsWith("TraxApiDashboard/assets/", StringComparison.Ordinal))
@@ -95,9 +95,10 @@ public partial class ApiDashboardPackageTests
     )]
     private static partial Regex HashedStyle { get; }
 
-    private static List<string> ManifestResources(string assemblyPath)
+    private static async Task<List<string>> ManifestResourcesAsync(string assemblyPath)
     {
-        using var stream = File.OpenRead(assemblyPath);
+        var stream = File.OpenRead(assemblyPath);
+        await using var streamDisposal = stream.ConfigureAwait(false);
         using var pe = new PEReader(stream);
         var metadata = pe.GetMetadataReader();
         return metadata
@@ -106,7 +107,7 @@ public partial class ApiDashboardPackageTests
     }
 
     // Packs the project as this test run built it, the way CI packs after its build.
-    private string PackAndUnpack()
+    private async Task<string> PackAndUnpackAsync()
     {
         var project = Path.Combine(
             RepoFolder("Trax.Api"),
@@ -115,22 +116,29 @@ public partial class ApiDashboardPackageTests
             "Trax.Api.Dashboard.csproj"
         );
         var packages = Path.Combine(_root, "packages");
-        var (exitCode, output) = Run(
-            "dotnet",
-            _root,
-            "pack",
-            project,
-            "--no-build",
-            "--configuration",
-            BuildConfiguration(),
-            "--output",
-            packages,
-            "-p:Version=0.0.0-packtest"
-        );
+        var (exitCode, output) = await RunAsync(
+                "dotnet",
+                _root,
+                "pack",
+                project,
+                "--no-build",
+                "--configuration",
+                BuildConfiguration(),
+                "--output",
+                packages,
+                "-p:Version=0.0.0-packtest"
+            )
+            .ConfigureAwait(false);
         exitCode.Should().Be(0, output);
 
         var unpacked = Path.Combine(_root, "package");
-        ZipFile.ExtractToDirectory(Directory.GetFiles(packages, "*.nupkg").Single(), unpacked);
+        await ZipFile
+            .ExtractToDirectoryAsync(
+                Directory.GetFiles(packages, "*.nupkg").Single(),
+                unpacked,
+                CancellationToken.None
+            )
+            .ConfigureAwait(false);
         return unpacked;
     }
 
@@ -161,7 +169,7 @@ public partial class ApiDashboardPackageTests
         throw new InvalidOperationException($"No {name} folder above {AppContext.BaseDirectory}.");
     }
 
-    private static (int ExitCode, string Output) Run(
+    private static async Task<(int ExitCode, string Output)> RunAsync(
         string fileName,
         string workingDirectory,
         params string[] args
@@ -194,7 +202,9 @@ public partial class ApiDashboardPackageTests
             if (!exited)
                 process.Kill(entireProcessTree: true);
             Task.WaitAll([stdout, stderr], TimeSpan.FromSeconds(30));
-            var output = Drained(stdout) + Drained(stderr);
+            var output =
+                await DrainedAsync(stdout).ConfigureAwait(false)
+                + await DrainedAsync(stderr).ConfigureAwait(false);
             return exited
                 ? (process.ExitCode, output)
                 : (
@@ -208,6 +218,8 @@ public partial class ApiDashboardPackageTests
         }
     }
 
-    private static string Drained(Task<string> read) =>
-        read.IsCompletedSuccessfully ? read.Result : "(output still held open by a child process)";
+    private static async Task<string> DrainedAsync(Task<string> read) =>
+        read.IsCompletedSuccessfully
+            ? await read.ConfigureAwait(false)
+            : "(output still held open by a child process)";
 }

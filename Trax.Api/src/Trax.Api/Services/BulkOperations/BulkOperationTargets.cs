@@ -77,7 +77,8 @@ internal static class BulkOperationTargets
         var after = long.MinValue;
         while (true)
         {
-            using var db = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            var db = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            await using var dbDisposal = db.ConfigureAwait(false);
             IQueryable<long> matching = filter switch
             {
                 { Executions: { } runs } => ListFilters
@@ -135,7 +136,8 @@ internal static class BulkOperationTargets
         (long ManifestId, long Id) after = (long.MinValue, long.MinValue);
         while (true)
         {
-            using var db = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            var db = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            await using var dbDisposal = db.ConfigureAwait(false);
             var (manifest, id) = after;
             var page = await ListFilters
                 .DeadLetters(db.DeadLetters.AsNoTracking(), filter)
@@ -298,7 +300,8 @@ internal static class BulkOperationTargets
         CancellationToken ct
     )
     {
-        using var db = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var rows = await db
             .Metadatas.AsNoTracking()
             .Where(m => batch.Contains(m.Id))
@@ -344,7 +347,8 @@ internal static class BulkOperationTargets
         CancellationToken ct
     )
     {
-        using var db = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var rows = await db
             .DeadLetters.AsNoTracking()
             .Where(d => batch.Contains(d.Id))
@@ -384,7 +388,8 @@ internal static class BulkOperationTargets
         CancellationToken ct
     )
     {
-        using var db = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var rows = await db
             .Manifests.AsNoTracking()
             .Where(m => batch.Contains(m.Id))

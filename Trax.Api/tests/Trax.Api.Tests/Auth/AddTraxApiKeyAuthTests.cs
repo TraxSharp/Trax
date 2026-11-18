@@ -58,7 +58,8 @@ public class AddTraxApiKeyAuthTests
         var services = NewServices();
 
         services.AddTraxApiKeyAuth<TestResolver>();
-        using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
 
         var policyProvider = sp.GetRequiredService<IAuthorizationPolicyProvider>();
         var policy = await policyProvider.GetPolicyAsync(ApiKeyDefaults.PolicyName);
@@ -73,7 +74,8 @@ public class AddTraxApiKeyAuthTests
         var services = NewServices();
 
         services.AddTraxApiKeyAuth<TestResolver>();
-        using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
 
         var policyProvider = sp.GetRequiredService<IAuthorizationPolicyProvider>();
         var policy = await policyProvider.GetPolicyAsync(TraxAuthClaimTypes.TraxAuthPolicy);
@@ -118,7 +120,8 @@ public class AddTraxApiKeyAuthTests
         var services = NewServices();
 
         services.AddTraxApiKeyAuth(keys => keys.Add("admin-key", id: "admin", "Admin", "Player"));
-        using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
 
         var resolver = sp.GetRequiredService<ITraxPrincipalResolver<string>>();
         var result = await resolver.ResolveAsync("admin-key", CancellationToken.None);
@@ -136,7 +139,8 @@ public class AddTraxApiKeyAuthTests
         var services = NewServices();
 
         services.AddTraxApiKeyAuth(keys => keys.Add("known", id: "alice"));
-        using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
 
         var resolver = sp.GetRequiredService<ITraxPrincipalResolver<string>>();
         var result = await resolver.ResolveAsync("unknown", CancellationToken.None);
@@ -184,7 +188,8 @@ public class AddTraxApiKeyAuthTests
         services.AddSingleton<ILoggerFactory>(new RecordingLoggerFactory(logger));
 
         services.AddTraxApiKeyAuth<TestResolver>();
-        using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
 
         var hostedServices = sp.GetServices<IHostedService>()
             .Where(s => s.GetType().Name.Contains("Disclaimer", StringComparison.Ordinal))

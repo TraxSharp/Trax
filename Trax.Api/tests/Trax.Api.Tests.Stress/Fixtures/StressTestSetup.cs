@@ -110,7 +110,7 @@ public abstract class StressTestSetup
         await BulkSeeder.SeedAsync(
             connectionString,
             Profile,
-            message => TestContext.Progress.WriteLine($"[seed] {message}")
+            message => TestContext.Progress.WriteLineAsync($"[seed] {message}")
         );
     }
 
@@ -266,25 +266,29 @@ public abstract class StressTestSetup
         await prepare().ConfigureAwait(false);
         try
         {
-            using (var warm = _serviceProvider.CreateScope())
+            var warm = _serviceProvider.CreateAsyncScope();
+            await using (warm.ConfigureAwait(false))
                 await action(warm.ServiceProvider, CancellationToken.None).ConfigureAwait(false);
             await prepare().ConfigureAwait(false);
 
-            using var scope = _serviceProvider.CreateScope();
+            var scope = _serviceProvider.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             var sw = Stopwatch.StartNew();
             await action(scope.ServiceProvider, CancellationToken.None).ConfigureAwait(false);
             sw.Stop();
 
-            TestContext.Out.WriteLine(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"{label}: {sw.Elapsed.TotalMilliseconds:F0}ms "
-                )
-                    + string.Create(
+            await TestContext
+                .Out.WriteLineAsync(
+                    string.Create(
                         CultureInfo.InvariantCulture,
-                        $"(budget {budget.TotalMilliseconds:F0}ms, {Profile.Metadata:N0} metadata rows)"
+                        $"{label}: {sw.Elapsed.TotalMilliseconds:F0}ms "
                     )
-            );
+                        + string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"(budget {budget.TotalMilliseconds:F0}ms, {Profile.Metadata:N0} metadata rows)"
+                        )
+                )
+                .ConfigureAwait(false);
 
             sw.Elapsed.Should()
                 .BeLessThan(
@@ -323,24 +327,28 @@ public abstract class StressTestSetup
     )
     {
         // Warm-up (untimed).
-        using (var warm = _serviceProvider.CreateScope())
+        var warm = _serviceProvider.CreateAsyncScope();
+        await using (warm.ConfigureAwait(false))
             await action(warm.ServiceProvider, CancellationToken.None).ConfigureAwait(false);
 
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var sw = Stopwatch.StartNew();
         await action(scope.ServiceProvider, CancellationToken.None).ConfigureAwait(false);
         sw.Stop();
 
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"{label}: {sw.Elapsed.TotalMilliseconds:F0}ms "
-            )
-                + string.Create(
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
                     CultureInfo.InvariantCulture,
-                    $"(budget {budget.TotalMilliseconds:F0}ms, {Profile.Metadata:N0} metadata rows)"
+                    $"{label}: {sw.Elapsed.TotalMilliseconds:F0}ms "
                 )
-        );
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"(budget {budget.TotalMilliseconds:F0}ms, {Profile.Metadata:N0} metadata rows)"
+                    )
+            )
+            .ConfigureAwait(false);
 
         sw.Elapsed.Should()
             .BeLessThan(
@@ -361,10 +369,12 @@ public abstract class StressTestSetup
     /// <summary>Times <paramref name="action"/> once (warm-up + measure) without asserting a budget.</summary>
     protected async Task<TimeSpan> TimeAsync(Func<IServiceProvider, CancellationToken, Task> action)
     {
-        using (var warm = _serviceProvider.CreateScope())
+        var warm = _serviceProvider.CreateAsyncScope();
+        await using (warm.ConfigureAwait(false))
             await action(warm.ServiceProvider, CancellationToken.None).ConfigureAwait(false);
 
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var sw = Stopwatch.StartNew();
         await action(scope.ServiceProvider, CancellationToken.None).ConfigureAwait(false);
         sw.Stop();

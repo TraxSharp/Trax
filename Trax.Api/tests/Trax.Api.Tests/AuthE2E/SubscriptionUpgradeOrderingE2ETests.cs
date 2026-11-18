@@ -37,7 +37,8 @@ public class SubscriptionUpgradeOrderingE2ETests
     [Test]
     public async Task DashboardShapePipeline_UpgradesTo101()
     {
-        await using var app = await StartHostAsync(dashboardShape: true);
+        var app = await StartHostAsync(dashboardShape: true);
+        await using var appDisposal = app.ConfigureAwait(false);
         var status = await RawHandshakeStatusAsync(app);
         status.Should().Be("HTTP/1.1 101 Switching Protocols");
     }
@@ -45,7 +46,8 @@ public class SubscriptionUpgradeOrderingE2ETests
     [Test]
     public async Task DashboardShapePipeline_ConnectionAck()
     {
-        await using var app = await StartHostAsync(dashboardShape: true);
+        var app = await StartHostAsync(dashboardShape: true);
+        await using var appDisposal = app.ConfigureAwait(false);
         var type = await ConnectionInitTypeAsync(app);
         type.Should().Be("connection_ack");
     }
@@ -53,7 +55,8 @@ public class SubscriptionUpgradeOrderingE2ETests
     [Test]
     public async Task NoExplicitUseWebSockets_StillUpgrades()
     {
-        await using var app = await StartHostAsync(dashboardShape: false);
+        var app = await StartHostAsync(dashboardShape: false);
+        await using var appDisposal = app.ConfigureAwait(false);
         var status = await RawHandshakeStatusAsync(app);
         status.Should().Be("HTTP/1.1 101 Switching Protocols");
     }
@@ -106,7 +109,8 @@ public class SubscriptionUpgradeOrderingE2ETests
         using var tcp = new TcpClient();
         await tcp.ConnectAsync(uri.Host, uri.Port, cancellationToken: CancellationToken.None)
             .ConfigureAwait(false);
-        using var stream = tcp.GetStream();
+        var stream = tcp.GetStream();
+        await using var streamDisposal = stream.ConfigureAwait(false);
         var handshake =
             "GET /trax/graphql HTTP/1.1\r\n"
             + string.Create(CultureInfo.InvariantCulture, $"Host: {uri.Host}:{uri.Port}\r\n")
@@ -159,7 +163,8 @@ public class SubscriptionUpgradeOrderingE2ETests
             if (r.MessageType == WebSocketMessageType.Close)
                 return "(closed)";
             if (r.Count > 0)
-                ms.Write(buffer, 0, r.Count);
+                await ms.WriteAsync(buffer, 0, r.Count, CancellationToken.None)
+                    .ConfigureAwait(false);
             if (r.EndOfMessage && ms.Length > 0)
                 break;
         }

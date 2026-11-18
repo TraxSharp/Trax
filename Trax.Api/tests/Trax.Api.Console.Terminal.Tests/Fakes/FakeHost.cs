@@ -57,11 +57,12 @@ internal sealed class FakeHost : ITraxTransport
                 var held = new TaskCompletionSource<JsonObject>(
                     TaskCreationOptions.RunContinuationsAsynchronously
                 );
-                using var registration = ct.Register(() =>
+                var registration = ct.Register(() =>
                 {
                     held.TrySetCanceled(ct);
                     cancelled.TrySetResult();
                 });
+                await using var registrationDisposal = registration.ConfigureAwait(false);
                 return await held.Task.ConfigureAwait(false);
             }
         );

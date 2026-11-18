@@ -13,7 +13,7 @@ namespace Trax.Api.Console.Terminal.Screens;
 /// </summary>
 internal static class ConsoleApp
 {
-    public static Task<int> RunAsync(
+    public static async Task<int> RunAsync(
         ConsoleSession session,
         VersionCheck version,
         bool verticalGraphs,
@@ -35,7 +35,8 @@ internal static class ConsoleApp
             using (var app = Application.Create())
             {
                 app.Init();
-                using var stop = cancellationToken.Register(() => app.Invoke(app.RequestStop));
+                var stop = cancellationToken.Register(() => app.Invoke(app.RequestStop));
+                await using var stopDisposal = stop.ConfigureAwait(false);
                 // Ends a search for source when the window stops before it is done.
                 using var searching = CancellationTokenSource.CreateLinkedTokenSource(
                     cancellationToken
@@ -77,19 +78,20 @@ internal static class ConsoleApp
                         cancellationToken
                     );
                 };
-                app.Run(window);
-                searching.Cancel();
+                await app.RunAsync(window, CancellationToken.None).ConfigureAwait(false);
+                await searching.CancelAsync().ConfigureAwait(false);
                 state ??= window.State;
                 window.Dispose();
             }
             if (open is null)
-                return Task.FromResult(0);
+                return 0;
 
             var editor = CodeFinder.Editor(Environment.GetEnvironmentVariable);
             try
             {
                 using var process = Process.Start(CodeFinder.Open(editor, open));
-                process?.WaitForExit();
+                if (process is not null)
+                    await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception ex)
                 when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)

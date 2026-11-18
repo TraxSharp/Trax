@@ -28,7 +28,7 @@ public class RedirectTests
                 $"HTTP/1.1 307 Temporary Redirect\r\nLocation: http://127.0.0.1:{elsewhere.Port}/trax/graphql\r\n"
             ) + "Content-Length: 0\r\nConnection: close\r\n\r\n"
         );
-        await using var session = ConsoleSession.Open(Target(host.Port));
+        await using var session = ConsoleSession.Open(await TargetAsync(host.Port));
 
         var version = await session.CheckVersionAsync().WaitAsync(Deadline);
 
@@ -62,7 +62,7 @@ public class RedirectTests
                 $"HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:{elsewhere.Port}/trax/graphql\r\n"
             ) + "Content-Length: 0\r\nConnection: close\r\n\r\n"
         );
-        await using var session = ConsoleSession.Open(Target(host.Port));
+        await using var session = ConsoleSession.Open(await TargetAsync(host.Port));
         var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         using var stream = session.Client.OnDataChanged(e =>
@@ -108,8 +108,8 @@ public class RedirectTests
             .And.NotContain("\u001b");
     }
 
-    private static ConsoleTarget Target(int port) =>
-        ConsoleTarget.Resolve(
+    private static Task<ConsoleTarget> TargetAsync(int port) =>
+        ConsoleTarget.ResolveAsync(
             string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}"),
             ConsoleTarget.DefaultGraphQLPath,
             apiKeyFile: null,
@@ -118,7 +118,8 @@ public class RedirectTests
             n =>
                 string.Equals(n, ConsoleTarget.ApiKeyVariable, StringComparison.Ordinal)
                     ? "sk_live_1"
-                    : null
+                    : null,
+            CancellationToken.None
         );
 
     private sealed class Answering(HttpResponseMessage response) : HttpMessageHandler

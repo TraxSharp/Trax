@@ -41,7 +41,8 @@ internal sealed class QueryModelReachValidator(
 
     protected override async Task CheckAsync(CancellationToken cancellationToken)
     {
-        using var scope = serviceProvider.CreateScope();
+        var scope = serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var executor = await scope
             .ServiceProvider.GetRequiredService<IRequestExecutorProvider>()
             .GetExecutorAsync(TraxSchemaName, cancellationToken)

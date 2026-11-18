@@ -107,7 +107,7 @@ public class TraxAuditWriterTests
                 ChannelCapacity = 100,
             }
         );
-        using (sp)
+        await using ((sp).ConfigureAwait(false))
         {
             channel.TryEnqueue(SampleEntry("a"));
             channel.TryEnqueue(SampleEntry("b"));
@@ -139,7 +139,7 @@ public class TraxAuditWriterTests
                 ChannelCapacity = 100,
             }
         );
-        using (sp)
+        await using ((sp).ConfigureAwait(false))
         {
             await writer.StartAsync(CancellationToken.None);
             channel.TryEnqueue(SampleEntry("a"));
@@ -170,7 +170,7 @@ public class TraxAuditWriterTests
                 ChannelCapacity = 100,
             }
         );
-        using (sp)
+        await using ((sp).ConfigureAwait(false))
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             await writer.StartAsync(cts.Token);
@@ -215,7 +215,7 @@ public class TraxAuditWriterTests
                 ChannelCapacity = 100,
             }
         );
-        using (sp)
+        await using ((sp).ConfigureAwait(false))
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             await writer.StartAsync(cts.Token);
@@ -248,7 +248,7 @@ public class TraxAuditWriterTests
                 ChannelCapacity = 100,
             }
         );
-        using (sp)
+        await using ((sp).ConfigureAwait(false))
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             channel.TryEnqueue(SampleEntry("a"));
@@ -282,7 +282,7 @@ public class TraxAuditWriterTests
                 ChannelCapacity = 100,
             }
         );
-        using (sp)
+        await using ((sp).ConfigureAwait(false))
         {
             await writer.StartAsync(CancellationToken.None);
             channel.TryEnqueue(SampleEntry("a"));
@@ -315,7 +315,7 @@ public class TraxAuditWriterTests
                 ChannelCapacity = 100,
             }
         );
-        using (sp)
+        await using ((sp).ConfigureAwait(false))
         {
             await writer.StartAsync(CancellationToken.None);
             for (var i = 0; i < 10; i++)
@@ -352,7 +352,7 @@ public class TraxAuditWriterTests
                 ChannelCapacity = 100,
             }
         );
-        using (sp)
+        await using ((sp).ConfigureAwait(false))
         {
             await writer.StartAsync(CancellationToken.None);
             for (var i = 0; i < 5; i++)
@@ -405,7 +405,7 @@ public class TraxAuditWriterTests
                 ChannelCapacity = 100,
             }
         );
-        using (sp)
+        await using ((sp).ConfigureAwait(false))
         {
             await writer.StartAsync(CancellationToken.None);
             // One entry written proves the loop ran; after it the channel is quiet and the loop
@@ -441,7 +441,7 @@ public class TraxAuditWriterTests
             },
             new WarningThrowingLogger()
         );
-        using (sp)
+        await using ((sp).ConfigureAwait(false))
         {
             await writer.StartAsync(CancellationToken.None);
             channel.TryEnqueue(SampleEntry("lost"));
@@ -492,7 +492,7 @@ public class TraxAuditWriterTests
                 ChannelCapacity = 100,
             }
         );
-        using (sp)
+        await using ((sp).ConfigureAwait(false))
         {
             await writer.StartAsync(CancellationToken.None);
             channel.TryEnqueue(SampleEntry("a"));
@@ -548,7 +548,7 @@ public class TraxAuditWriterTests
                 ChannelCapacity = 100,
             }
         );
-        using (sp)
+        await using ((sp).ConfigureAwait(false))
         {
             await writer.StartAsync(CancellationToken.None);
             channel.TryEnqueue(SampleEntry("a"));
@@ -599,7 +599,7 @@ public class TraxAuditWriterTests
                 ChannelCapacity = 100,
             }
         );
-        using (sp)
+        await using ((sp).ConfigureAwait(false))
         {
             await writer.StartAsync(CancellationToken.None);
             for (var i = 0; i < 3; i++)
@@ -629,7 +629,7 @@ public class TraxAuditWriterTests
                 ChannelCapacity = 100,
             }
         );
-        using (sp)
+        await using ((sp).ConfigureAwait(false))
         {
             await writer.StartAsync(CancellationToken.None);
 
@@ -710,7 +710,7 @@ public class TraxAuditWriterTests
                 ChannelCapacity = 100,
             }
         );
-        using (sp)
+        await using ((sp).ConfigureAwait(false))
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             await writer.StartAsync(cts.Token);

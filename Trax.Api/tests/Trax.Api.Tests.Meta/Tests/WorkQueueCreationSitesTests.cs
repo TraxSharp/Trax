@@ -15,12 +15,13 @@ namespace Trax.Api.Tests.Meta.Tests;
 public partial class WorkQueueCreationSitesTests
 {
     [Test]
-    public void No_source_file_builds_a_work_queue_row_directly()
+    public async Task No_source_file_builds_a_work_queue_row_directly()
     {
-        SourceFiles
-            .CSharp("src")
-            .Where(f => DirectCreate.IsMatch(File.ReadAllText(f)))
-            .Select(RepoRoot.Relative)
+        var offenders = new List<string>();
+        foreach (var f in SourceFiles.CSharp("src"))
+            if (DirectCreate.IsMatch(await File.ReadAllTextAsync(f).ConfigureAwait(false)))
+                offenders.Add(RepoRoot.Relative(f));
+        offenders
             .Should()
             .BeEmpty(
                 "an enqueue from the API is a caller's enqueue and must go through the mediator. "

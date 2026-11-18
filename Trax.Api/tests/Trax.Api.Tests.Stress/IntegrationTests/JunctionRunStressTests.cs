@@ -74,12 +74,14 @@ public class JunctionRunStressTests : StressTestSetup
         )
             return;
 
-        TestContext.Progress.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"[seed] junction_run: {bulkRuns:N0} runs x {StepsPerRun} steps + one run of {LongRunSteps:N0}"
+        await TestContext
+            .Progress.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"[seed] junction_run: {bulkRuns:N0} runs x {StepsPerRun} steps + one run of {LongRunSteps:N0}"
+                )
             )
-        );
+            .ConfigureAwait(false);
         await ExecSqlAsync("TRUNCATE trax.junction_run RESTART IDENTITY").ConfigureAwait(false);
         // Each run's steps: a junction, a question, its route, and two junctions on the track, the
         // shape a routed run records.
@@ -138,9 +140,11 @@ public class JunctionRunStressTests : StressTestSetup
         if (placed == ParallelSteps)
             return;
 
-        TestContext.Progress.WriteLine(
-            $"[seed] junction_run: one Parallel run of {Branches} branches, {ParallelSteps} steps"
-        );
+        await TestContext
+            .Progress.WriteLineAsync(
+                $"[seed] junction_run: one Parallel run of {Branches} branches, {ParallelSteps} steps"
+            )
+            .ConfigureAwait(false);
         await ExecSqlAsync(
                 string.Create(
                     CultureInfo.InvariantCulture,

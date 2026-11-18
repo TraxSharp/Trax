@@ -134,7 +134,8 @@ public class ApplicationServiceBridgeTests
         var executor = await BuildAsync(services);
 
         var holder = executor.Schema.Services.GetRequiredService<TraxApplicationServices>();
-        using var scope = holder.Services.CreateScope();
+        var scope = holder.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
 
         scope.ServiceProvider.GetRequiredService<IProbe>().Marker.Should().Be("scoped-app");
     }

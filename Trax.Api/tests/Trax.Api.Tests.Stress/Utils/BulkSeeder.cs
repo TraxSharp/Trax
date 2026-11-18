@@ -62,7 +62,7 @@ public static partial class BulkSeeder
     public static async Task SeedAsync(
         string connectionString,
         StressProfile profile,
-        Action<string> log,
+        Func<string, Task> log,
         CancellationToken ct = default
     )
     {
@@ -73,12 +73,13 @@ public static partial class BulkSeeder
 
             if (await AlreadySeeded(conn, profile, ct).ConfigureAwait(false))
             {
-                log(
-                    string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"Already seeded (metadata≈{profile.Metadata:N0}, log≈{profile.Log:N0}); skipping."
+                await log(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"Already seeded (metadata≈{profile.Metadata:N0}, log≈{profile.Log:N0}); skipping."
+                        )
                     )
-                );
+                    .ConfigureAwait(false);
                 // A seed from before decisions were seeded gets them without reseeding the rest.
                 await SeedDecisionsAsync(conn, profile, log, ct).ConfigureAwait(false);
                 await SeedSnapshotDraftsAsync(conn, profile, log, ct).ConfigureAwait(false);
@@ -86,7 +87,7 @@ public static partial class BulkSeeder
                 return;
             }
 
-            log("Truncating tables (RESTART IDENTITY CASCADE)...");
+            await log("Truncating tables (RESTART IDENTITY CASCADE)...").ConfigureAwait(false);
             await Exec(
                     conn,
                     "TRUNCATE trax.log, trax.work_queue, trax.dead_letter, trax.metadata, "
@@ -99,12 +100,13 @@ public static partial class BulkSeeder
             var sw = System.Diagnostics.Stopwatch.StartNew();
 
             // ── manifest_group (serial id 1..Groups) ─────────────────────────────
-            log(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"Seeding {profile.Groups:N0} manifest_group..."
+            await log(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Seeding {profile.Groups:N0} manifest_group..."
+                    )
                 )
-            );
+                .ConfigureAwait(false);
             await SeedTable(
                     conn,
                     profile.Groups,
@@ -115,12 +117,13 @@ public static partial class BulkSeeder
                 .ConfigureAwait(false);
 
             // ── manifest (identity id 1..Manifests) ──────────────────────────────
-            log(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"Seeding {profile.Manifests:N0} manifest..."
+            await log(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Seeding {profile.Manifests:N0} manifest..."
+                    )
                 )
-            );
+                .ConfigureAwait(false);
             await SeedTable(
                     conn,
                     profile.Manifests,
@@ -147,12 +150,13 @@ public static partial class BulkSeeder
             // failureClass filter has a real share of the table to count; every other run keeps the
             // column's default, unclassified. A failed run names the junction it failed in and a
             // reason: see FailureReasonSql for the terms the failure text searches find.
-            log(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"Seeding {profile.Metadata:N0} metadata..."
+            await log(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Seeding {profile.Metadata:N0} metadata..."
+                    )
                 )
-            );
+                .ConfigureAwait(false);
             await SeedTable(
                     conn,
                     profile.Metadata,
@@ -193,12 +197,13 @@ public static partial class BulkSeeder
                 .ConfigureAwait(false);
 
             // ── dead_letter (identity id 1..DeadLetter) ──────────────────────────
-            log(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"Seeding {profile.DeadLetter:N0} dead_letter..."
+            await log(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Seeding {profile.DeadLetter:N0} dead_letter..."
+                    )
                 )
-            );
+                .ConfigureAwait(false);
             await SeedTable(
                     conn,
                     profile.DeadLetter,
@@ -219,12 +224,13 @@ public static partial class BulkSeeder
             // ── work_queue (serial id 1..WorkQueue) ──────────────────────────────
             // status mix: dispatched, dispatched, cancelled, queued. Queued rows get a NULL
             // manifest_id to avoid the unique partial index ix_work_queue_unique_queued_manifest.
-            log(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"Seeding {profile.WorkQueue:N0} work_queue..."
+            await log(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Seeding {profile.WorkQueue:N0} work_queue..."
+                    )
                 )
-            );
+                .ConfigureAwait(false);
             await SeedTable(
                     conn,
                     profile.WorkQueue,
@@ -252,12 +258,13 @@ public static partial class BulkSeeder
             // returns a realistic page (a chatty train), not ~1 row under a uniform spread.
             var logMetaSpread = (int)
                 Math.Max(1, Math.Min(profile.Metadata / 1000, profile.Metadata));
-            log(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"Seeding {profile.Log:N0} log (metadata_id spread over {logMetaSpread:N0} ids)..."
+            await log(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Seeding {profile.Log:N0} log (metadata_id spread over {logMetaSpread:N0} ids)..."
+                    )
                 )
-            );
+                .ConfigureAwait(false);
             await SeedTable(
                     conn,
                     profile.Log,
@@ -279,12 +286,13 @@ public static partial class BulkSeeder
             // Ten tenants plus the no-tenant set, ids in the name_vN form HotChocolate accepts as a document id, one in
             // four retired, updated_at spread like the other tables so the list's newest-first
             // order has a real sort to do.
-            log(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"Seeding {profile.PersistedOperations:N0} persisted_operation..."
+            await log(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Seeding {profile.PersistedOperations:N0} persisted_operation..."
+                    )
                 )
-            );
+                .ConfigureAwait(false);
             await SeedTable(
                     conn,
                     profile.PersistedOperations,
@@ -323,12 +331,13 @@ public static partial class BulkSeeder
             // covering indexes serve heap-free Index Only Scans immediately, the way
             // autovacuum keeps them in production. PARALLEL 0 keeps VACUUM off the shared-
             // memory segment so it works regardless of the container's /dev/shm size.
-            log(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"Inserts done in {sw.Elapsed.TotalSeconds:F0}s. Running VACUUM ANALYZE..."
+            await log(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Inserts done in {sw.Elapsed.TotalSeconds:F0}s. Running VACUUM ANALYZE..."
+                    )
                 )
-            );
+                .ConfigureAwait(false);
             await Exec(
                     conn,
                     "VACUUM (ANALYZE, PARALLEL 0) trax.manifest_group, trax.manifest, trax.metadata",
@@ -342,12 +351,13 @@ public static partial class BulkSeeder
                     ct
                 )
                 .ConfigureAwait(false);
-            log(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"Seed complete in {sw.Elapsed.TotalSeconds:F0}s."
+            await log(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Seed complete in {sw.Elapsed.TotalSeconds:F0}s."
+                    )
                 )
-            );
+                .ConfigureAwait(false);
         }
     }
 
@@ -407,7 +417,7 @@ public static partial class BulkSeeder
     private static async Task SeedDecisionsAsync(
         NpgsqlConnection conn,
         StressProfile profile,
-        Action<string> log,
+        Func<string, Task> log,
         CancellationToken ct
     )
     {
@@ -417,12 +427,13 @@ public static partial class BulkSeeder
         if (existing >= (bulk + ChattyDecisionCount) * 0.95)
             return;
 
-        log(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"Seeding {bulk + ChattyDecisionCount:N0} decision..."
+        await log(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Seeding {bulk + ChattyDecisionCount:N0} decision..."
+                )
             )
-        );
+            .ConfigureAwait(false);
         await Exec(conn, "TRUNCATE trax.decision RESTART IDENTITY", ct).ConfigureAwait(false);
         await SeedTable(
                 conn,
@@ -485,7 +496,7 @@ public static partial class BulkSeeder
     private static async Task SeedSnapshotDraftsAsync(
         NpgsqlConnection conn,
         StressProfile profile,
-        Action<string> log,
+        Func<string, Task> log,
         CancellationToken ct
     )
     {
@@ -496,12 +507,13 @@ public static partial class BulkSeeder
         if (existing >= profile.SnapshotDrafts * 0.95)
             return;
 
-        log(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"Seeding {profile.SnapshotDrafts:N0} snapshot_draft..."
+        await log(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Seeding {profile.SnapshotDrafts:N0} snapshot_draft..."
+                )
             )
-        );
+            .ConfigureAwait(false);
         // The row_id sequence is never restarted: a row_id names one incarnation of an instance, and a reused one
         // would look to a client still watching the old row like the row it holds. TRUNCATE sends no change notices,
         // so this runs before any host watches the table.
@@ -541,7 +553,7 @@ public static partial class BulkSeeder
     private static async Task SeedSnapshotTransitionsAsync(
         NpgsqlConnection conn,
         StressProfile profile,
-        Action<string> log,
+        Func<string, Task> log,
         CancellationToken ct
     )
     {
@@ -560,12 +572,13 @@ public static partial class BulkSeeder
         if (existing >= expected * 0.95 && spread > 0)
             return;
 
-        log(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"Seeding {expected:N0} snapshot_transition..."
+        await log(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Seeding {expected:N0} snapshot_transition..."
+                )
             )
-        );
+            .ConfigureAwait(false);
         await Exec(conn, "TRUNCATE trax.snapshot_transition", ct).ConfigureAwait(false);
         var low = await ScalarLong(
                 conn,

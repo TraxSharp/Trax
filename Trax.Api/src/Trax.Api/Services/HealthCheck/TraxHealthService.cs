@@ -17,7 +17,8 @@ internal sealed class TraxHealthService(IDataContextProviderFactory dataContextF
     /// <inheritdoc/>
     public async Task<HealthStatus> GetHealthAsync(CancellationToken ct = default)
     {
-        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         var cutoff = DateTime.UtcNow.AddHours(-1);
 

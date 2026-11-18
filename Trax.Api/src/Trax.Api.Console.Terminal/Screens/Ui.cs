@@ -95,7 +95,7 @@ internal static class Ui
             Add(choices[i], i);
         Add("Cancel", index: null);
         Default(buttons, buttons[0]);
-        app.Run(dialog);
+        RunModal(app, dialog);
         dialog.Dispose();
         return chosen;
     }
@@ -170,7 +170,7 @@ internal static class Ui
             Button(clear, 1);
         Button("Cancel", 2);
         Default(buttons, buttons[0]);
-        app.Run(dialog);
+        RunModal(app, dialog);
         var values = inputs.Select(i => i.Value ?? "").ToList();
         dialog.Dispose();
         return chosen switch
@@ -215,7 +215,21 @@ internal static class Ui
             e.Handled = true;
         };
         dialog.AddButton(close);
-        app.Run(dialog);
+        RunModal(app, dialog);
         dialog.Dispose();
+    }
+
+    /// <summary>
+    /// Runs <paramref name="runnable"/> as a modal session and returns when it closes. Terminal.Gui's
+    /// <c>RunAsync</c> runs the session on the calling thread, as <c>Run</c> does, and hands back a task that is
+    /// already finished; an error the session ended with is thrown here, where <c>Run</c> threw it.
+    /// </summary>
+    public static void RunModal(IApplication app, IRunnable runnable)
+    {
+        var session = app.RunAsync(runnable, CancellationToken.None);
+        if (session.Exception is { } failed)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(
+                failed.InnerExceptions.Count == 1 ? failed.InnerExceptions[0] : failed
+            );
     }
 }

@@ -77,7 +77,8 @@ public class AddTraxJwtAuthTests
         var services = NewServices();
 
         services.AddTraxJwtAuth(ConfigureDefault);
-        using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
 
         var policyProvider = sp.GetRequiredService<IAuthorizationPolicyProvider>();
         var policy = await policyProvider.GetPolicyAsync(JwtDefaults.PolicyName);
@@ -92,7 +93,8 @@ public class AddTraxJwtAuthTests
         var services = NewServices();
 
         services.AddTraxJwtAuth(ConfigureDefault);
-        using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
 
         var policyProvider = sp.GetRequiredService<IAuthorizationPolicyProvider>();
         var policy = await policyProvider.GetPolicyAsync(TraxAuthClaimTypes.TraxAuthPolicy);
@@ -137,7 +139,8 @@ public class AddTraxJwtAuthTests
         var services = NewServices();
 
         services.AddTraxJwtAuth(ConfigureDefault);
-        using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
 
         var hostedServices = sp.GetServices<IHostedService>()
             .Where(s => s.GetType().Name.Contains("Disclaimer", StringComparison.Ordinal))

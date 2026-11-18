@@ -36,7 +36,8 @@ public class DeadLetterQueries
         take = OperationsPageBounds.Take(take);
         skip = OperationsPageBounds.Skip(skip);
 
-        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         var baseQuery = db.DeadLetters.AsNoTracking().OrderByDescending(dl => dl.Id);
 
@@ -110,7 +111,8 @@ public class DeadLetterQueries
         CancellationToken ct
     )
     {
-        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         return await db
             .DeadLetters.AsNoTracking()

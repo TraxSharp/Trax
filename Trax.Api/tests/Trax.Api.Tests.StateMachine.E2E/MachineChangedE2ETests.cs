@@ -139,7 +139,8 @@ public class MachineChangedE2ETests
             WizardMachine.MachineId,
             MachineDocumentOps.MachineChanged
         );
-        await using var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        await using var wsDisposal = ws.ConfigureAwait(false);
 
         await ws.SubscribePersistedAsync("1", documentId, new { id = started.Id });
         var first = await ws.NextChangeAsync("1");
@@ -158,7 +159,8 @@ public class MachineChangedE2ETests
     public async Task The_subscriber_registers_before_the_initial_read_and_the_first_event_is_the_current_snapshot()
     {
         var started = await A.StartWizardAsync(E2EHost.AliceKey);
-        await using var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        await using var wsDisposal = ws.ConfigureAwait(false);
 
         // Writes from the other node race the subscription's opening read; none may fall between its registration
         // and that read.
@@ -182,7 +184,8 @@ public class MachineChangedE2ETests
     public async Task Revisions_arrive_in_order_never_repeating_or_decreasing()
     {
         var started = await A.StartWizardAsync(E2EHost.AliceKey);
-        await using var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        await using var wsDisposal = ws.ConfigureAwait(false);
         await ws.SubscribeAsync("1", MachineChangedOps.Subscribe(started.Id));
         var first = await ws.NextChangeAsync("1");
 
@@ -202,7 +205,8 @@ public class MachineChangedE2ETests
     public async Task A_burst_is_coalesced_to_the_latest_revision_and_a_skipped_revision_triggers_no_reload()
     {
         var started = await A.StartWizardAsync(E2EHost.AliceKey);
-        await using var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        await using var wsDisposal = ws.ConfigureAwait(false);
         await ws.SubscribeAsync("1", MachineChangedOps.Subscribe(started.Id));
         var first = await ws.NextChangeAsync("1");
 
@@ -228,7 +232,8 @@ public class MachineChangedE2ETests
     public async Task A_server_made_outcome_applied_on_another_host_reaches_the_subscriber()
     {
         var approving = await A.WizardInApprovingAsync(E2EHost.AliceKey);
-        await using var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        await using var wsDisposal = ws.ConfigureAwait(false);
         await ws.SubscribeAsync("1", MachineChangedOps.Subscribe(approving.Id));
         await ws.NextChangeAsync("1");
         await A.AdvanceWizardAsync(E2EHost.AliceKey, "approve", approving.Id);
@@ -251,13 +256,15 @@ public class MachineChangedE2ETests
     public async Task A_missing_id_another_users_id_and_a_system_instance_id_get_the_same_answer()
     {
         var alices = await A.StartWizardAsync(E2EHost.AliceKey);
-        await using (var own = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey))
+        var own = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        await using (own.ConfigureAwait(false))
         {
             await own.SubscribeAsync("own", MachineChangedOps.Subscribe(alices.Id));
             (await own.NextChangeAsync("own")).State.Should().NotBeNull("the owner may watch");
         }
         var system = await InsertSystemInstanceAsync();
-        await using var ws = await GraphQLWs.ConnectAsync(A, E2EHost.BobKey);
+        var ws = await GraphQLWs.ConnectAsync(A, E2EHost.BobKey);
+        await using var wsDisposal = ws.ConfigureAwait(false);
 
         await ws.SubscribeAsync("1", MachineChangedOps.Subscribe(Guid.NewGuid()));
         await ws.SubscribeAsync("2", MachineChangedOps.Subscribe(alices.Id));
@@ -285,7 +292,8 @@ public class MachineChangedE2ETests
     {
         var started = await A.StartWizardAsync(E2EHost.AliceKey);
         var principalReads = A.Services.GetRequiredService<PrincipalReads>();
-        await using var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        await using var wsDisposal = ws.ConfigureAwait(false);
         await ws.SubscribeAsync("1", MachineChangedOps.Subscribe(started.Id));
         await ws.NextChangeAsync("1");
         var before = principalReads.Count;
@@ -307,12 +315,14 @@ public class MachineChangedE2ETests
     public async Task A_principal_whose_read_rule_fails_is_refused_at_subscribe()
     {
         var alices = await A.StartWizardAsync(E2EHost.AliceKey);
-        await using (var own = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey))
+        var own = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        await using (own.ConfigureAwait(false))
         {
             await own.SubscribeAsync("own", MachineChangedOps.Subscribe(alices.Id));
             (await own.NextChangeAsync("own")).State.Should().NotBeNull("the owner may watch");
         }
-        await using var ws = await GraphQLWs.ConnectAsync(A, E2EHost.BobKey);
+        var ws = await GraphQLWs.ConnectAsync(A, E2EHost.BobKey);
+        await using var wsDisposal = ws.ConfigureAwait(false);
 
         await ws.SubscribeAsync("1", MachineChangedOps.Subscribe(alices.Id));
         var (refused, _, raw) = await ws.RefusalAsync("1");
@@ -333,7 +343,8 @@ public class MachineChangedE2ETests
     public async Task Delete_yields_gone_without_a_re_read_and_completes()
     {
         var started = await A.StartWizardAsync(E2EHost.AliceKey);
-        await using var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        await using var wsDisposal = ws.ConfigureAwait(false);
         await ws.SubscribeAsync("1", MachineChangedOps.Subscribe(started.Id));
         await ws.NextChangeAsync("1");
 
@@ -353,7 +364,8 @@ public class MachineChangedE2ETests
     public async Task Expiry_by_the_sweeper_yields_gone()
     {
         var started = await A.StartWizardAsync(E2EHost.AliceKey);
-        await using var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        await using var wsDisposal = ws.ConfigureAwait(false);
         await ws.SubscribeAsync("1", MachineChangedOps.Subscribe(started.Id));
         await ws.NextChangeAsync("1");
 
@@ -377,7 +389,8 @@ public class MachineChangedE2ETests
         var userKey = (
             await E2ESql.DraftAsync(Database, WizardMachine.MachineId, started.Id)
         )!.UserKey;
-        await using var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        await using var wsDisposal = ws.ConfigureAwait(false);
         await ws.SubscribeAsync("old", MachineChangedOps.Subscribe(started.Id));
         await ws.NextChangeAsync("old");
 
@@ -433,10 +446,8 @@ public class MachineChangedE2ETests
         var shortLived = Tokens.Mint(b =>
             b.WithSubject(subject).WithExpires(DateTime.UtcNow.AddSeconds(5))
         );
-        await using var ws = await GraphQLWs.ConnectWithPayloadAsync(
-            A,
-            new { authToken = shortLived }
-        );
+        var ws = await GraphQLWs.ConnectWithPayloadAsync(A, new { authToken = shortLived });
+        await using var wsDisposal = ws.ConfigureAwait(false);
         await ws.SubscribeAsync("1", MachineChangedOps.Subscribe(started));
         await ws.NextChangeAsync("1");
 
@@ -486,11 +497,13 @@ public class MachineChangedE2ETests
         var subject = $"jwt-user-{Guid.NewGuid():N}";
         var jwtOwned = await StartAsJwtAsync(subject);
         var keyOwned = await A.StartWizardAsync(E2EHost.AliceKey);
-        await using var jwt = await GraphQLWs.ConnectWithPayloadAsync(
+        var jwt = await GraphQLWs.ConnectWithPayloadAsync(
             A,
             new { authToken = Tokens.Mint(b => b.WithSubject(subject)) }
         );
-        await using var key = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        await using var jwtDisposal = jwt.ConfigureAwait(false);
+        var key = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        await using var keyDisposal = key.ConfigureAwait(false);
 
         await jwt.SubscribeAsync("jwt-own", MachineChangedOps.Subscribe(jwtOwned));
         await key.SubscribeAsync("key-own", MachineChangedOps.Subscribe(keyOwned.Id));
@@ -523,7 +536,8 @@ public class MachineChangedE2ETests
             );
             b = await ShelfHosts.StartAsync(VersionsDatabase, ShelfShape.V2, "versions_b");
             var id = await b.StartShelfAsync(E2EHost.AliceKey);
-            await using var ws = await GraphQLWs.ConnectAsync(b, E2EHost.AliceKey);
+            var ws = await GraphQLWs.ConnectAsync(b, E2EHost.AliceKey);
+            await using var wsDisposal = ws.ConfigureAwait(false);
 
             await ws.SubscribePersistedAsync("1", v1, new { id });
             var (refused, codes, raw) = await ws.RefusalAsync("1");
@@ -554,7 +568,8 @@ public class MachineChangedE2ETests
         {
             a = await ShelfHosts.StartAsync(VersionsDatabase, ShelfShape.V1, "versions_a");
             var id = await a.StartShelfAsync(E2EHost.AliceKey);
-            await using var ws = await GraphQLWs.ConnectAsync(a, E2EHost.AliceKey);
+            var ws = await GraphQLWs.ConnectAsync(a, E2EHost.AliceKey);
+            await using var wsDisposal = ws.ConfigureAwait(false);
             await ws.SubscribeAsync("1", MachineChangedOps.Subscribe(id, ShelfMachine.MachineId));
             await ws.NextChangeAsync("1");
             b = await ShelfHosts.StartAsync(VersionsDatabase, ShelfShape.V2, "versions_b");
@@ -657,7 +672,8 @@ public class MachineChangedE2ETests
         var instances = new List<Guid> { first };
         for (var i = 0; i < 100; i++)
             instances.Add(await InsertUserInstanceAsync(userKey!));
-        await using var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        await using var wsDisposal = ws.ConfigureAwait(false);
 
         for (var i = 0; i < 100; i++)
         {
@@ -707,7 +723,8 @@ public class MachineChangedE2ETests
         var aborted = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
         await aborted.SubscribeAsync("1", MachineChangedOps.Subscribe(watched.Id));
         await aborted.NextChangeAsync("1");
-        await using var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        await using var wsDisposal = ws.ConfigureAwait(false);
         await ws.SubscribeAsync("sentinel", MachineChangedOps.Subscribe(sentinel.Id));
         await ws.NextChangeAsync("sentinel");
 
@@ -747,7 +764,7 @@ public class MachineChangedE2ETests
             return; // refused at the handshake
         }
 
-        await using (ws)
+        await using ((ws).ConfigureAwait(false))
         {
             await ws.SubscribeAsync("1", MachineChangedOps.Subscribe(started.Id));
             var (refused, codes, raw) = await ws.RefusalAsync("1");
@@ -776,7 +793,8 @@ public class MachineChangedE2ETests
     {
         var watched = await A.StartWizardAsync(E2EHost.AliceKey);
         var sentinel = await A.StartWizardAsync(E2EHost.AliceKey);
-        await using var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        await using var wsDisposal = ws.ConfigureAwait(false);
         await ws.SubscribeAsync("1", MachineChangedOps.Subscribe(watched.Id));
         await ws.NextChangeAsync("1");
         await ws.SubscribeAsync("sentinel", MachineChangedOps.Subscribe(sentinel.Id));
@@ -800,7 +818,8 @@ public class MachineChangedE2ETests
         var watched = await A.StartWizardAsync(E2EHost.AliceKey);
         var sentinel = await A.StartWizardAsync(E2EHost.AliceKey);
         var reads = A.Services.GetRequiredService<CountingDataContexts>();
-        await using var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        await using var wsDisposal = ws.ConfigureAwait(false);
         for (var i = 0; i < 3; i++)
         {
             await ws.SubscribeAsync(
@@ -833,7 +852,8 @@ public class MachineChangedE2ETests
     {
         var broken = await A.StartWizardAsync(E2EHost.AliceKey);
         var healthy = await A.StartWizardAsync(E2EHost.AliceKey);
-        await using var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
+        await using var wsDisposal = ws.ConfigureAwait(false);
         await ws.SubscribeAsync("broken", MachineChangedOps.Subscribe(broken.Id));
         await ws.NextChangeAsync("broken");
         await ws.SubscribeAsync("healthy", MachineChangedOps.Subscribe(healthy.Id));
@@ -989,7 +1009,8 @@ public class MachineChangedE2ETests
     // recorded as its run, and ended Failed, so the outcome reconciler applies the failed outcome.
     private static async Task FailQueuedRunsAsync(IHost node, Guid instance)
     {
-        using var scope = node.Services.CreateScope();
+        var scope = node.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var db = scope.ServiceProvider.GetRequiredService<IDataContext>();
         var queued = await db
             .WorkQueues.AsNoTracking()

@@ -126,16 +126,18 @@ public class BulkOperationStressTests : StressTestSetup
             )
             .ConfigureAwait(false);
         answer.Stop();
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"startBulkOperation({kind}) over {matching:N0} answered in "
-            )
-                + string.Create(
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
                     CultureInfo.InvariantCulture,
-                    $"{answer.Elapsed.TotalMilliseconds:F0}ms"
+                    $"startBulkOperation({kind}) over {matching:N0} answered in "
                 )
-        );
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{answer.Elapsed.TotalMilliseconds:F0}ms"
+                    )
+            )
+            .ConfigureAwait(false);
 
         started
             .GetProperty("success")
@@ -166,24 +168,26 @@ public class BulkOperationStressTests : StressTestSetup
 
         var operation = jobs.Get(id)!;
         var run = jobs.Run(id)!;
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"{kind}: {operation.Done:N0} done, {operation.Failed:N0} failed in "
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{kind}: {operation.Done:N0} done, {operation.Failed:N0} failed in "
+                )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{finish.Elapsed.TotalSeconds:F1}s over {run.Batches} batches; longest batch "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{run.LongestBatch.TotalMilliseconds:F0}ms; {reads.Count} reads meanwhile, "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"slowest {(reads.Count == 0 ? 0 : reads.Max().TotalMilliseconds):F0}ms"
+                    )
             )
-                + string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"{finish.Elapsed.TotalSeconds:F1}s over {run.Batches} batches; longest batch "
-                )
-                + string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"{run.LongestBatch.TotalMilliseconds:F0}ms; {reads.Count} reads meanwhile, "
-                )
-                + string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"slowest {(reads.Count == 0 ? 0 : reads.Max().TotalMilliseconds):F0}ms"
-                )
-        );
+            .ConfigureAwait(false);
 
         operation.Status.Should().Be(BulkOperationStatus.Finished, operation.Message);
         operation.Total.Should().Be(matching);

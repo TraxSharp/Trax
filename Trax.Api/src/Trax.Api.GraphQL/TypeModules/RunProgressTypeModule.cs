@@ -182,10 +182,11 @@ internal sealed class RunProgressTypeModule(ITrainDiscoveryService discovery) : 
         var steps = new List<JunctionStep>();
         if (run.MetadataId is { } metadataId)
         {
-            using var db = await ctx
+            var db = await ctx
                 .Services.GetRequiredService<IDataContextProviderFactory>()
                 .CreateDbContextAsync(ctx.RequestAborted)
                 .ConfigureAwait(false);
+            await using var dbDisposal = db.ConfigureAwait(false);
             var rows = await db
                 .JunctionRuns.AsNoTracking()
                 .ForRun(metadataId)

@@ -105,7 +105,7 @@ public class ConfigurationLifecycleTests
     }
 
     [Test]
-    public void Dispose_DisposeHttpClientTrue_DisposesClient()
+    public async Task Dispose_DisposeHttpClientTrue_DisposesClient()
     {
         var http = new HttpClient();
         var config = new GraphQLClientConfiguration(
@@ -125,8 +125,8 @@ public class ConfigurationLifecycleTests
 
         config.Dispose();
 
-        var act = () => http.GetAsync("http://x/y").GetAwaiter().GetResult();
-        act.Should().Throw<ObjectDisposedException>();
+        var act = () => http.GetAsync("http://x/y");
+        await act.Should().ThrowAsync<ObjectDisposedException>();
     }
 
     [Test]

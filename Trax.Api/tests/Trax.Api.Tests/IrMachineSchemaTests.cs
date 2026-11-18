@@ -25,7 +25,9 @@ public class IrMachineSchemaTests
     [OneTimeSetUp]
     public async Task SetUp()
     {
-        var ir = JsonNode.Parse(File.ReadAllText(IrFile("turnstile")))!.AsObject();
+        var ir = JsonNode
+            .Parse((await File.ReadAllTextAsync(IrFile("turnstile")).ConfigureAwait(false)))!
+            .AsObject();
         ir["id"] = "ir-turnstile";
         var approvers = new AccessRule([
             [Approver],
@@ -46,7 +48,9 @@ public class IrMachineSchemaTests
             new Dictionary<string, HostInvoke>(StringComparer.Ordinal)
         );
         var machines = IrMachines.Create([new IrMachines.Source(ir, host)], []);
-        _host = await MachineSchemaHost.StartAsync([], services: s => s.AddIrMachines(machines));
+        _host = await MachineSchemaHost
+            .StartAsync([], services: s => s.AddIrMachines(machines))
+            .ConfigureAwait(false);
     }
 
     [OneTimeTearDown]

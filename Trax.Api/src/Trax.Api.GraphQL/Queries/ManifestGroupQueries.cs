@@ -35,7 +35,8 @@ public class ManifestGroupQueries
         take = OperationsPageBounds.Take(take);
         skip = OperationsPageBounds.Skip(skip);
 
-        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         IQueryable<Effect.Models.ManifestGroup.ManifestGroup> baseQuery = db
             .ManifestGroups.AsNoTracking()
@@ -101,7 +102,8 @@ public class ManifestGroupQueries
         CancellationToken ct
     )
     {
-        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         return await db
             .ManifestGroups.AsNoTracking()

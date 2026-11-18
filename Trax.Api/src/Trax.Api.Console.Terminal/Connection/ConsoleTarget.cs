@@ -30,13 +30,14 @@ internal sealed record ConsoleTarget(
     /// </summary>
     /// <exception cref="InvalidOperationException">The host is not an http(s) URL, two credentials are given, a file
     /// cannot be read or is empty, or a credential would go over plain HTTP to another machine.</exception>
-    public static ConsoleTarget Resolve(
+    public static async Task<ConsoleTarget> ResolveAsync(
         string? host,
         string graphQLPath,
         FileInfo? apiKeyFile,
         FileInfo? tokenFile,
         bool sendText,
-        Func<string, string?> environment
+        Func<string, string?> environment,
+        CancellationToken cancellationToken
     )
     {
         host ??= environment(HostVariable);
@@ -85,9 +86,19 @@ internal sealed record ConsoleTarget(
 
         var credentials = new List<Credential>();
         if (apiKeyFile is not null)
-            credentials.Add(new Credential.ApiKey(Read(apiKeyFile, "--api-key-file")));
+            credentials.Add(
+                new Credential.ApiKey(
+                    await ReadAsync(apiKeyFile, "--api-key-file", cancellationToken)
+                        .ConfigureAwait(false)
+                )
+            );
         if (tokenFile is not null)
-            credentials.Add(new Credential.Bearer(Read(tokenFile, "--token-file")));
+            credentials.Add(
+                new Credential.Bearer(
+                    await ReadAsync(tokenFile, "--token-file", cancellationToken)
+                        .ConfigureAwait(false)
+                )
+            );
         // A file named on the command line wins over the environment.
         if (credentials.Count == 0)
         {
@@ -122,7 +133,11 @@ internal sealed record ConsoleTarget(
     // refused rather than warned of. A link, a device, a pipe or anything longer than a credential is refused too.
     // The file is looked at before it is opened, and opened without waiting, so naming a pipe cannot hang the
     // console until something writes to it.
-    private static string Read(FileInfo file, string option)
+    private static async Task<string> ReadAsync(
+        FileInfo file,
+        string option,
+        CancellationToken cancellationToken
+    )
     {
         var path = file.FullName;
         string text;
@@ -137,7 +152,8 @@ internal sealed record ConsoleTarget(
                 throw new InvalidOperationException(
                     $"{option}: cannot read {path} (it does not exist, or is not a file)."
                 );
-            using var stream = OpenWithoutWaiting(path);
+            var stream = OpenWithoutWaiting(path);
+            await using var streamDisposal = stream.ConfigureAwait(false);
             // A pipe, a socket or a terminal cannot seek; a regular file can.
             if (!stream.CanSeek)
                 throw new InvalidOperationException($"{option}: {path} is not a regular file.");
@@ -150,7 +166,12 @@ internal sealed record ConsoleTarget(
             var read = 0;
             int got;
             while (
-                read < buffer.Length && (got = stream.Read(buffer, read, buffer.Length - read)) > 0
+                read < buffer.Length
+                && (
+                    got = await stream
+                        .ReadAsync(buffer.AsMemory(read, buffer.Length - read), cancellationToken)
+                        .ConfigureAwait(false)
+                ) > 0
             )
                 read += got;
             // A regular file holds as much as its length says; a device such as /dev/zero says 0 and holds more.

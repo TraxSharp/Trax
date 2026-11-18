@@ -65,12 +65,14 @@ public class MachineInstanceStressTests : StressTestSetup
                 var page = await new OperationsQueries()
                     .GetMachineInstances(Operations(sp), ct, machine, state, ownerKind, skip, take)
                     .ConfigureAwait(false);
-                TestContext.Out.WriteLine(
-                    string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"  {label}: {page.Items.Count} rows, total {page.TotalCount}"
-                    ) + (page.IsCountCapped ? " (capped)" : "")
-                );
+                await TestContext
+                    .Out.WriteLineAsync(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"  {label}: {page.Items.Count} rows, total {page.TotalCount}"
+                        ) + (page.IsCountCapped ? " (capped)" : "")
+                    )
+                    .ConfigureAwait(false);
                 page.Items.Select(i => i.UpdatedAt)
                     .Should()
                     .BeInDescendingOrder("the list is newest first");

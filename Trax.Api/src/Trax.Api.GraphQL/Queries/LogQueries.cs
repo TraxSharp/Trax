@@ -94,7 +94,8 @@ public class LogQueries
         }
         else
         {
-            using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            await using var dbDisposal = db.ConfigureAwait(false);
             (totalCount, isEstimate) = await CountEstimator
                 .EstimateOrCountAsync(
                     db,

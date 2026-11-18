@@ -174,7 +174,8 @@ public partial class OperationsMutations
         CancellationToken ct
     )
     {
-        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var exists = await db
             .Manifests.AsNoTracking()
             .AnyAsync(m => m.ExternalId == externalId, ct)

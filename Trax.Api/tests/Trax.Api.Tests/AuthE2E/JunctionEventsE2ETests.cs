@@ -155,11 +155,13 @@ public class JunctionEventsE2ETests
     [Test]
     public async Task Admin_FollowsARunsSteps_WithoutItsDataAndWithTheSensitiveAnswerWithheld()
     {
-        await using var admin = await Subscriber.ConnectAsync(_host, AdminKey);
-        await using var run = await StartRunAsync<IHiddenMarkerTrain>(fail: true);
+        var admin = await Subscriber.ConnectAsync(_host, AdminKey);
+        await using var adminDisposal = admin.ConfigureAwait(false);
+        var run = await StartRunAsync<IHiddenMarkerTrain>(fail: true);
+        await using var runDisposal = run.ConfigureAwait(false);
         await admin.SubscribeAsync(Subscription(run.MetadataId));
         await admin.WaitUntilListeningAsync(() =>
-            Probe(run.MetadataId, typeof(IHiddenMarkerTrain))
+            ProbeAsync(run.MetadataId, typeof(IHiddenMarkerTrain))
         );
 
         run.Release();
@@ -230,18 +232,21 @@ public class JunctionEventsE2ETests
     [Test]
     public async Task Player_ReceivesNoneOfTheStepsOfARunWhoseTrainItCannotSee()
     {
-        await using var admin = await Subscriber.ConnectAsync(_host, AdminKey);
-        await using var player = await Subscriber.ConnectAsync(_host, PlayerKey);
-        await using var run = await StartRunAsync<IHiddenMarkerTrain>(fail: false);
+        var admin = await Subscriber.ConnectAsync(_host, AdminKey);
+        await using var adminDisposal = admin.ConfigureAwait(false);
+        var player = await Subscriber.ConnectAsync(_host, PlayerKey);
+        await using var playerDisposal = player.ConfigureAwait(false);
+        var run = await StartRunAsync<IHiddenMarkerTrain>(fail: false);
+        await using var runDisposal = run.ConfigureAwait(false);
 
         await admin.SubscribeAsync(Subscription(run.MetadataId));
         await player.SubscribeAsync(Subscription(run.MetadataId));
         // The probes name a train the player may see, so both are known to be listening.
         await admin.WaitUntilListeningAsync(() =>
-            Probe(run.MetadataId, typeof(IBroadcastMarkerTrain))
+            ProbeAsync(run.MetadataId, typeof(IBroadcastMarkerTrain))
         );
         await player.WaitUntilListeningAsync(() =>
-            Probe(run.MetadataId, typeof(IBroadcastMarkerTrain))
+            ProbeAsync(run.MetadataId, typeof(IBroadcastMarkerTrain))
         );
 
         run.Release();
@@ -250,7 +255,7 @@ public class JunctionEventsE2ETests
 
         // Published after every real step, on the same topic: the player reads it next only if
         // it was handed none of the hidden train's steps.
-        Probe(run.MetadataId, typeof(IBroadcastMarkerTrain), name: "barrier");
+        await ProbeAsync(run.MetadataId, typeof(IBroadcastMarkerTrain), name: "barrier");
         var next = await player.NextStepAsync();
         while (string.Equals(next.Name, "probe", StringComparison.Ordinal))
             next = await player.NextStepAsync();
@@ -265,11 +270,13 @@ public class JunctionEventsE2ETests
     [Test]
     public async Task Player_FollowsABroadcastRun_WithHostDetailWithheld()
     {
-        await using var player = await Subscriber.ConnectAsync(_host, PlayerKey);
-        await using var run = await StartRunAsync<IBroadcastMarkerTrain>(fail: true);
+        var player = await Subscriber.ConnectAsync(_host, PlayerKey);
+        await using var playerDisposal = player.ConfigureAwait(false);
+        var run = await StartRunAsync<IBroadcastMarkerTrain>(fail: true);
+        await using var runDisposal = run.ConfigureAwait(false);
         await player.SubscribeAsync(Subscription(run.MetadataId));
         await player.WaitUntilListeningAsync(() =>
-            Probe(run.MetadataId, typeof(IBroadcastMarkerTrain))
+            ProbeAsync(run.MetadataId, typeof(IBroadcastMarkerTrain))
         );
 
         run.Release();
@@ -306,7 +313,8 @@ public class JunctionEventsE2ETests
     [Test]
     public async Task Guest_WhoCouldSeeNoTrain_IsRefused()
     {
-        await using var guest = await Subscriber.ConnectAsync(_host, GuestKey);
+        var guest = await Subscriber.ConnectAsync(_host, GuestKey);
+        await using var guestDisposal = guest.ConfigureAwait(false);
 
         (await guest.SubscribeRefusedAsync(Subscription(1)))
             .Should()
@@ -322,7 +330,8 @@ public class JunctionEventsE2ETests
     [Test]
     public async Task Timeline_IsReadableExactlyWhenTheRunsDetailIs()
     {
-        await using var run = await StartRunAsync<IHiddenMarkerTrain>(fail: true);
+        var run = await StartRunAsync<IHiddenMarkerTrain>(fail: true);
+        await using var runDisposal = run.ConfigureAwait(false);
         run.Release();
         await run.Finished;
         var timeline = await TimelineWhenCompleteAsync(run.MetadataId);
@@ -350,7 +359,8 @@ public class JunctionEventsE2ETests
     [Test]
     public async Task Timeline_CarriesNoRunDataAndWithholdsTheSensitiveAnswer()
     {
-        await using var run = await StartRunAsync<IBroadcastMarkerTrain>(fail: true);
+        var run = await StartRunAsync<IBroadcastMarkerTrain>(fail: true);
+        await using var runDisposal = run.ConfigureAwait(false);
         run.Release();
         await run.Finished;
         var timeline = await TimelineWhenCompleteAsync(run.MetadataId);
@@ -399,7 +409,8 @@ public class JunctionEventsE2ETests
     [Test]
     public async Task Timeline_PagesByPosition()
     {
-        await using var run = await StartRunAsync<IHiddenMarkerTrain>(fail: false);
+        var run = await StartRunAsync<IHiddenMarkerTrain>(fail: false);
+        await using var runDisposal = run.ConfigureAwait(false);
         run.Release();
         await run.Finished;
         await TimelineWhenCompleteAsync(run.MetadataId);
@@ -479,7 +490,8 @@ public class JunctionEventsE2ETests
     [Test]
     public async Task RunGraph_PlacesEveryRecordedStep_OnItsNodeOrAsUnmatched()
     {
-        await using var run = await StartRunAsync<IHiddenMarkerTrain>(fail: true);
+        var run = await StartRunAsync<IHiddenMarkerTrain>(fail: true);
+        await using var runDisposal = run.ConfigureAwait(false);
         run.Release();
         await run.Finished;
         var timeline = await TimelineWhenCompleteAsync(run.MetadataId);
@@ -646,7 +658,8 @@ public class JunctionEventsE2ETests
         string forkState
     )
     {
-        await using var run = await StartRunAsync<IParallelMarkerTrain>(fail);
+        var run = await StartRunAsync<IParallelMarkerTrain>(fail);
+        await using var runDisposal = run.ConfigureAwait(false);
         run.Release();
         await run.Finished;
         var rows = await StableStepsAsync(run.MetadataId, fail ? 2 : 6);
@@ -720,7 +733,8 @@ public class JunctionEventsE2ETests
         List<JunctionStep>? last = null;
         while (true)
         {
-            using var context = await factory.CreateDbContextAsync(default).ConfigureAwait(false);
+            var context = await factory.CreateDbContextAsync(default).ConfigureAwait(false);
+            await using var contextDisposal = context.ConfigureAwait(false);
             var steps = (
                 await context
                     .JunctionRuns.AsNoTracking()
@@ -864,7 +878,7 @@ public class JunctionEventsE2ETests
     /// Publishes a made-up step of <paramref name="metadataId"/> through the host's own junction
     /// event handler, as the run's path does.
     /// </summary>
-    private void Probe(long metadataId, Type train, string name = "probe")
+    private async Task ProbeAsync(long metadataId, Type train, string name = "probe")
     {
         var message = new TrainLifecycleEventMessage(
             MetadataId: metadataId,
@@ -889,7 +903,7 @@ public class JunctionEventsE2ETests
         };
 
         foreach (var handler in _host.Services.GetServices<IJunctionEventHandler>())
-            handler.HandleAsync(message, default).GetAwaiter().GetResult();
+            await handler.HandleAsync(message, default).ConfigureAwait(false);
     }
 
     private async Task<RunningTrain> StartRunAsync<TTrain>(bool fail)
@@ -897,7 +911,7 @@ public class JunctionEventsE2ETests
     {
         var key = Guid.NewGuid().ToString("N");
         var gate = MarkerGates.Hold(key);
-        var scope = _host.Services.CreateScope();
+        var scope = _host.Services.CreateAsyncScope();
         var train = scope.ServiceProvider.GetRequiredService<TTrain>();
         var finished = Task.Run(async () =>
         {
@@ -1028,7 +1042,7 @@ public class JunctionEventsE2ETests
         /// Publishes probes until this subscriber receives one. A real step that arrives first is
         /// kept for <see cref="ReadUntilAsync"/>.
         /// </summary>
-        public async Task WaitUntilListeningAsync(Action probe)
+        public async Task WaitUntilListeningAsync(Func<Task> probe)
         {
             var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
             var next = ReceiveStepAsync();
@@ -1044,7 +1058,7 @@ public class JunctionEventsE2ETests
                     continue;
                 }
 
-                probe();
+                await probe().ConfigureAwait(false);
                 // allowed-delay: re-probe interval, bounded by the deadline; WhenAny wakes on receipt.
                 await Task.WhenAny(next, Task.Delay(100)).ConfigureAwait(false);
             }
@@ -1117,7 +1131,8 @@ public class JunctionEventsE2ETests
                         $"The socket closed: {result.CloseStatus} {result.CloseStatusDescription}"
                     );
 
-                ms.Write(buffer, 0, result.Count);
+                await ms.WriteAsync(buffer, 0, result.Count, CancellationToken.None)
+                    .ConfigureAwait(false);
                 if (result.EndOfMessage && ms.Length > 0)
                     break;
             }

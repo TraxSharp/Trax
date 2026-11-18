@@ -135,7 +135,7 @@ public class SubscriptionStressTests
         const int SignalsPerWriter = 25_000;
         var domains = Enum.GetValues<ChangeDomain>();
 
-        await using var subscribers = await Subscribers<ChangeDomain>.AttachAsync(
+        var subscribers = await Subscribers<ChangeDomain>.AttachAsync(
             _executor,
             "subscription { onDataChanged { domain timestamp } }",
             SubscriberCount,
@@ -149,6 +149,7 @@ public class SubscriptionStressTests
                     )
                     .AsTask()
         );
+        await using var subscribersDisposal = subscribers.ConfigureAwait(false);
 
         var signal = _provider.GetRequiredService<ITraxChangeSignal>();
         var sw = Stopwatch.StartNew();
@@ -172,29 +173,31 @@ public class SubscriptionStressTests
         sw.Stop();
 
         var events = subscribers.EventCounts();
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"onDataChanged: {Writers * SignalsPerWriter:N0} signals notified in "
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"onDataChanged: {Writers * SignalsPerWriter:N0} signals notified in "
+                )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{notified.TotalMilliseconds:F0}ms, every one of {SubscriberCount:N0} subscribers had "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"all {domains.Length} domains after {sw.Elapsed.TotalMilliseconds:F0}ms; events "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"per subscriber min {events.Min()} max {events.Max()}; "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{_provider.GetRequiredService<TraxChangeSignal>().TotalDropped:N0} signals "
+                    )
+                    + "dropped at the full channel"
             )
-                + string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"{notified.TotalMilliseconds:F0}ms, every one of {SubscriberCount:N0} subscribers had "
-                )
-                + string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"all {domains.Length} domains after {sw.Elapsed.TotalMilliseconds:F0}ms; events "
-                )
-                + string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"per subscriber min {events.Min()} max {events.Max()}; "
-                )
-                + string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"{_provider.GetRequiredService<TraxChangeSignal>().TotalDropped:N0} signals "
-                )
-                + "dropped at the full channel"
-        );
+            .ConfigureAwait(false);
 
         delivered.Should().BeTrue("every subscriber should hear about every changed domain");
         notified
@@ -231,7 +234,8 @@ public class SubscriptionStressTests
         const int PerTick = 50;
         const int TargetPerSecond = 500;
 
-        await using var subscribers = await AttachLifecycleSubscribersAsync();
+        var subscribers = await AttachLifecycleSubscribersAsync();
+        await using var subscribersDisposal = subscribers.ConfigureAwait(false);
 
         var sw = Stopwatch.StartNew();
         for (var i = 1; i <= Events; i++)
@@ -251,32 +255,34 @@ public class SubscriptionStressTests
         var outcomes = subscribers.Streams().Select(Outcome).ToArray();
         var complete = outcomes.Count(o => o.Received == Events);
         var gapped = outcomes.Count(o => o.Gap);
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"onTrainStateChanged (sustained): {Events:N0} events over "
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"onTrainStateChanged (sustained): {Events:N0} events over "
+                )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{published.TotalMilliseconds:F0}ms ({Events / published.TotalSeconds:F0}/s "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"against a ceiling of {TargetPerSecond}/s) reached all {SubscriberCount:N0} subscribers "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{drained.TotalMilliseconds:F0}ms after the last publish; {complete:N0} received "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"all of them, {gapped:N0} saw a gap in sequence; events per subscriber min "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{outcomes.Min(o => o.Received)} max {outcomes.Max(o => o.Received)}"
+                    )
             )
-                + string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"{published.TotalMilliseconds:F0}ms ({Events / published.TotalSeconds:F0}/s "
-                )
-                + string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"against a ceiling of {TargetPerSecond}/s) reached all {SubscriberCount:N0} subscribers "
-                )
-                + string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"{drained.TotalMilliseconds:F0}ms after the last publish; {complete:N0} received "
-                )
-                + string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"all of them, {gapped:N0} saw a gap in sequence; events per subscriber min "
-                )
-                + string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"{outcomes.Min(o => o.Received)} max {outcomes.Max(o => o.Received)}"
-                )
-        );
+            .ConfigureAwait(false);
 
         delivered.Should().BeTrue("the last run's state change should reach every subscriber");
         drained.Should().BeLessThan(TimeSpan.FromSeconds(1));
@@ -381,36 +387,38 @@ public class SubscriptionStressTests
                     );
                 })
                 .ToArray();
-            TestContext.Out.WriteLine(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"onTrainStateChanged(externalId): {Runs * ChangesPerRun:N0} changes of {Runs} runs "
+            await TestContext
+                .Out.WriteLineAsync(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"onTrainStateChanged(externalId): {Runs * ChangesPerRun:N0} changes of {Runs} runs "
+                    )
+                        + string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"over {published.TotalMilliseconds:F0}ms "
+                        )
+                        + string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"({Runs * ChangesPerRun / published.TotalSeconds:F0}/s against a ceiling of "
+                        )
+                        + string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{TargetPerSecond}/s) to {outcomes.Length:N0} subscribers "
+                        )
+                        + string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"({outcomes.Length / Runs} per run); drained {drained.TotalMilliseconds:F0}ms "
+                        )
+                        + string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"after the last publish; {outcomes.Count(o => o.Received == ChangesPerRun):N0} "
+                        )
+                        + string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"received their run in full, {outcomes.Count(o => o.Gap):N0} saw a gap"
+                        )
                 )
-                    + string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"over {published.TotalMilliseconds:F0}ms "
-                    )
-                    + string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"({Runs * ChangesPerRun / published.TotalSeconds:F0}/s against a ceiling of "
-                    )
-                    + string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"{TargetPerSecond}/s) to {outcomes.Length:N0} subscribers "
-                    )
-                    + string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"({outcomes.Length / Runs} per run); drained {drained.TotalMilliseconds:F0}ms "
-                    )
-                    + string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"after the last publish; {outcomes.Count(o => o.Received == ChangesPerRun):N0} "
-                    )
-                    + string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"received their run in full, {outcomes.Count(o => o.Gap):N0} saw a gap"
-                    )
-            );
+                .ConfigureAwait(false);
 
             delivered.Should().BeTrue("each run's last state change should reach its followers");
             drained.Should().BeLessThan(TimeSpan.FromSeconds(1));
@@ -428,7 +436,7 @@ public class SubscriptionStressTests
         finally
         {
             foreach (var group in subscribers)
-                await group.DisposeAsync();
+                await group.DisposeAsync().ConfigureAwait(false);
         }
     }
 
@@ -472,7 +480,8 @@ public class SubscriptionStressTests
         // state, and quickly. The count each one kept is reported, not asserted.
         const int Events = 2_000;
 
-        await using var subscribers = await AttachLifecycleSubscribersAsync();
+        var subscribers = await AttachLifecycleSubscribersAsync();
+        await using var subscribersDisposal = subscribers.ConfigureAwait(false);
 
         var sw = Stopwatch.StartNew();
         for (var i = 1; i <= Events; i++)
@@ -486,24 +495,26 @@ public class SubscriptionStressTests
         sw.Stop();
 
         var events = subscribers.EventCounts();
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"onTrainStateChanged (burst): {Events:N0} events published in "
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"onTrainStateChanged (burst): {Events:N0} events published in "
+                )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{published.TotalMilliseconds:F0}ms, the last one reached all {SubscriberCount:N0} "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"subscribers after {sw.Elapsed.TotalMilliseconds:F0}ms; events kept per "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"subscriber min {events.Min()} max {events.Max()}"
+                    )
             )
-                + string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"{published.TotalMilliseconds:F0}ms, the last one reached all {SubscriberCount:N0} "
-                )
-                + string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"subscribers after {sw.Elapsed.TotalMilliseconds:F0}ms; events kept per "
-                )
-                + string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"subscriber min {events.Min()} max {events.Max()}"
-                )
-        );
+            .ConfigureAwait(false);
 
         delivered.Should().BeTrue("the last run's state change should reach every subscriber");
         sw.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(5));
@@ -587,40 +598,42 @@ public class SubscriptionStressTests
                     );
                 })
                 .ToArray();
-            TestContext.Out.WriteLine(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"onJunctionEvent: {Runs * StepsPerRun:N0} steps of {Runs} runs over "
+            await TestContext
+                .Out.WriteLineAsync(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"onJunctionEvent: {Runs * StepsPerRun:N0} steps of {Runs} runs over "
+                    )
+                        + string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{published.TotalMilliseconds:F0}ms "
+                        )
+                        + string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"({Runs * StepsPerRun / published.TotalSeconds:F0}/s against a ceiling of "
+                        )
+                        + string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{TargetPerSecond}/s) to {outcomes.Length:N0} subscribers "
+                        )
+                        + string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"({outcomes.Length / Runs} per run); slowest publish on the run's path "
+                        )
+                        + string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{slowest.TotalMilliseconds:F0}ms; drained {drained.TotalMilliseconds:F0}ms "
+                        )
+                        + string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"after the last publish; {outcomes.Count(o => o.Received == StepsPerRun):N0} "
+                        )
+                        + string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"received their run in full, {outcomes.Count(o => o.Gap):N0} saw a gap"
+                        )
                 )
-                    + string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"{published.TotalMilliseconds:F0}ms "
-                    )
-                    + string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"({Runs * StepsPerRun / published.TotalSeconds:F0}/s against a ceiling of "
-                    )
-                    + string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"{TargetPerSecond}/s) to {outcomes.Length:N0} subscribers "
-                    )
-                    + string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"({outcomes.Length / Runs} per run); slowest publish on the run's path "
-                    )
-                    + string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"{slowest.TotalMilliseconds:F0}ms; drained {drained.TotalMilliseconds:F0}ms "
-                    )
-                    + string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"after the last publish; {outcomes.Count(o => o.Received == StepsPerRun):N0} "
-                    )
-                    + string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"received their run in full, {outcomes.Count(o => o.Gap):N0} saw a gap"
-                    )
-            );
+                .ConfigureAwait(false);
 
             delivered.Should().BeTrue("each run's last step should reach its subscribers");
             drained.Should().BeLessThan(TimeSpan.FromSeconds(1));
@@ -641,7 +654,7 @@ public class SubscriptionStressTests
         finally
         {
             foreach (var group in subscribers)
-                await group.DisposeAsync();
+                await group.DisposeAsync().ConfigureAwait(false);
         }
     }
 

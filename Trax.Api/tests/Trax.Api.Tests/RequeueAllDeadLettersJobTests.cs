@@ -174,28 +174,23 @@ public class RequeueAllDeadLettersJobTests
         return JsonDocument.Parse(json).RootElement.GetProperty("data");
     }
 
-    private Task<JsonElement> StartAsync(CancellationToken ct = default) =>
-        ExecuteAsync(
-                """
-                mutation {
-                  operations {
-                    deadLetters {
-                      requeueAllDeadLetters {
-                        id status awaitingAtStart startedAt finishedAt count message started
+    private async Task<JsonElement> StartAsync(CancellationToken ct = default) => (
+            await ExecuteAsync(
+                    """
+                    mutation {
+                      operations {
+                        deadLetters {
+                          requeueAllDeadLetters {
+                            id status awaitingAtStart startedAt finishedAt count message started
+                          }
+                        }
                       }
                     }
-                  }
-                }
-                """,
-                ct
-            )
-            .ContinueWith(
-                t =>
-                    t.Result.GetProperty("operations")
-                        .GetProperty("deadLetters")
-                        .GetProperty("requeueAllDeadLetters"),
-                cancellationToken: ct
-            );
+                    """,
+                    ct
+                )
+                .ConfigureAwait(false)
+        ).GetProperty("operations").GetProperty("deadLetters").GetProperty("requeueAllDeadLetters");
 
     private async Task<JsonElement> ReadAsync(string id)
     {

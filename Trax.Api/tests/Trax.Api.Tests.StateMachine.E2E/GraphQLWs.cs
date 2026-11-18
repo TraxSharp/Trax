@@ -219,7 +219,8 @@ public sealed class GraphQLWs : IAsyncDisposable
                     throw new WebSocketException(
                         $"The server closed the socket ({received.CloseStatus}): {received.CloseStatusDescription}"
                     );
-                text.Write(_buffer, 0, received.Count);
+                await text.WriteAsync(_buffer, 0, received.Count, CancellationToken.None)
+                    .ConfigureAwait(false);
             } while (!received.EndOfMessage);
 
             if (text.Length == 0)

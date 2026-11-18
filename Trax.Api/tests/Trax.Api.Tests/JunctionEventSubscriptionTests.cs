@@ -160,7 +160,7 @@ public class JunctionEventSubscriptionTests
         sub.Refused.Should().BeFalse();
 
         var received = await sub.NextAsync(() =>
-            Handle(Failed("Some.Unbroadcast.Train", Run, exception: "NpgsqlException"))
+            HandleAsync(Failed("Some.Unbroadcast.Train", Run, exception: "NpgsqlException"))
         );
 
         received["trainName"].Should().Be("Some.Unbroadcast.Train");
@@ -181,10 +181,10 @@ public class JunctionEventSubscriptionTests
         );
         await using var sub = await SubscribeAsync(executor, OnJunctionEvent(Run), User("Admin"));
 
-        var received = await sub.NextAsync(() =>
+        var received = await sub.NextAsync(async () =>
         {
-            Handle(Started("Some.Train", Run + 1, position: 7));
-            Handle(Started("Some.Train", Run, position: 3));
+            await HandleAsync(Started("Some.Train", Run + 1, position: 7)).ConfigureAwait(false);
+            await HandleAsync(Started("Some.Train", Run, position: 3)).ConfigureAwait(false);
         });
 
         received["metadataId"].Should().Be(Run);
@@ -204,10 +204,12 @@ public class JunctionEventSubscriptionTests
 
         // The gated train's step goes first, for the same run id; the first thing the player
         // receives must be the public one.
-        var received = await sub.NextAsync(() =>
+        var received = await sub.NextAsync(async () =>
         {
-            Handle(Started(typeof(IAdminOnlyTrain).FullName!, Run, position: 0));
-            Handle(Started(typeof(IPublicTrain).FullName!, Run, position: 1));
+            await HandleAsync(Started(typeof(IAdminOnlyTrain).FullName!, Run, position: 0))
+                .ConfigureAwait(false);
+            await HandleAsync(Started(typeof(IPublicTrain).FullName!, Run, position: 1))
+                .ConfigureAwait(false);
         });
 
         received["trainName"]
@@ -225,7 +227,7 @@ public class JunctionEventSubscriptionTests
         await using var sub = await SubscribeAsync(executor, OnJunctionEvent(Run), Anonymous());
 
         var received = await sub.NextAsync(() =>
-            Handle(Failed(typeof(IPublicTrain).FullName!, Run, exception: "NpgsqlException"))
+            HandleAsync(Failed(typeof(IPublicTrain).FullName!, Run, exception: "NpgsqlException"))
         );
 
         var step = Step(received);
@@ -247,7 +249,7 @@ public class JunctionEventSubscriptionTests
         await using var sub = await SubscribeAsync(executor, OnJunctionEvent(Run), Anonymous());
 
         var received = await sub.NextAsync(() =>
-            Handle(Failed(typeof(IPublicTrain).FullName!, Run, exception: "TrainException"))
+            HandleAsync(Failed(typeof(IPublicTrain).FullName!, Run, exception: "TrainException"))
         );
 
         Step(received)["failureException"].Should().Be("TrainException");
@@ -260,7 +262,7 @@ public class JunctionEventSubscriptionTests
         await using var sub = await SubscribeAsync(executor, OnJunctionEvent(Run), Anonymous());
 
         var received = await sub.NextAsync(() =>
-            Handle(Decided(typeof(IPublicTrain).FullName!, withheld: false))
+            HandleAsync(Decided(typeof(IPublicTrain).FullName!, withheld: false))
         );
 
         var step = Step(received);
@@ -285,7 +287,7 @@ public class JunctionEventSubscriptionTests
         await using var sub = await SubscribeAsync(executor, OnJunctionEvent(Run), Anonymous());
 
         var received = await sub.NextAsync(() =>
-            Handle(Decided(typeof(IPublicTrain).FullName!, withheld: false))
+            HandleAsync(Decided(typeof(IPublicTrain).FullName!, withheld: false))
         );
 
         var step = Step(received);
@@ -304,7 +306,7 @@ public class JunctionEventSubscriptionTests
         await using var sub = await SubscribeAsync(executor, OnJunctionEvent(Run), Anonymous());
 
         var received = await sub.NextAsync(() =>
-            Handle(Decided(typeof(IPublicTrain).FullName!, withheld: true))
+            HandleAsync(Decided(typeof(IPublicTrain).FullName!, withheld: true))
         );
 
         var step = Step(received);
@@ -320,7 +322,7 @@ public class JunctionEventSubscriptionTests
         await using var sub = await SubscribeAsync(executor, OnJunctionEvent(Run), Anonymous());
 
         var received = await sub.NextAsync(() =>
-            Handle(OnTrack(typeof(IPublicTrain).FullName!, nameWithheld: false))
+            HandleAsync(OnTrack(typeof(IPublicTrain).FullName!, nameWithheld: false))
         );
 
         var step = Step(received);
@@ -342,7 +344,7 @@ public class JunctionEventSubscriptionTests
         await using var sub = await SubscribeAsync(executor, OnJunctionEvent(Run), Anonymous());
 
         var received = await sub.NextAsync(() =>
-            Handle(Started(typeof(IPublicTrain).FullName!, Run, position: 0))
+            HandleAsync(Started(typeof(IPublicTrain).FullName!, Run, position: 0))
         );
 
         Step(received)["name"].Should().Be("Step");
@@ -359,7 +361,7 @@ public class JunctionEventSubscriptionTests
         await using var sub = await SubscribeAsync(executor, OnJunctionEvent(Run), Anonymous());
 
         var received = await sub.NextAsync(() =>
-            Handle(OnTrack(typeof(IPublicTrain).FullName!, nameWithheld: false))
+            HandleAsync(OnTrack(typeof(IPublicTrain).FullName!, nameWithheld: false))
         );
 
         Step(received)["name"].Should().Be("ChargeCard");
@@ -384,7 +386,7 @@ public class JunctionEventSubscriptionTests
         await using var sub = await SubscribeAsync(executor, OnJunctionEvent(Run), Anonymous());
 
         var received = await sub.NextAsync(() =>
-            Handle(QuestionOnTrack(typeof(IPublicTrain).FullName!, kind, eventType))
+            HandleAsync(QuestionOnTrack(typeof(IPublicTrain).FullName!, kind, eventType))
         );
 
         var step = Step(received);
@@ -415,7 +417,7 @@ public class JunctionEventSubscriptionTests
         await using var sub = await SubscribeAsync(executor, OnJunctionEvent(Run), Anonymous());
 
         var received = await sub.NextAsync(() =>
-            Handle(QuestionOnTrack(typeof(IPublicTrain).FullName!, kind, eventType))
+            HandleAsync(QuestionOnTrack(typeof(IPublicTrain).FullName!, kind, eventType))
         );
 
         var step = Step(received);
@@ -438,7 +440,7 @@ public class JunctionEventSubscriptionTests
         await using var sub = await SubscribeAsync(executor, OnJunctionEvent(Run), User("Admin"));
 
         var received = await sub.NextAsync(() =>
-            Handle(QuestionOnTrack("Some.Train", kind, eventType))
+            HandleAsync(QuestionOnTrack("Some.Train", kind, eventType))
         );
 
         var step = Step(received);
@@ -488,7 +490,9 @@ public class JunctionEventSubscriptionTests
 
         // The run writes the placeholder itself; a payload that still carries a name must not
         // leak it.
-        var received = await sub.NextAsync(() => Handle(OnTrack("Some.Train", nameWithheld: true)));
+        var received = await sub.NextAsync(() =>
+            HandleAsync(OnTrack("Some.Train", nameWithheld: true))
+        );
 
         Step(received)["name"].Should().Be(JunctionStep.WithheldName);
         Step(received)["nameWithheld"].Should().Be(expected: true);
@@ -542,7 +546,9 @@ public class JunctionEventSubscriptionTests
         );
         await using var sub = await SubscribeAsync(executor, OnJunctionEvent(Run), User("Admin"));
 
-        var received = await sub.NextAsync(() => Handle(Decided("Some.Train", withheld: false)));
+        var received = await sub.NextAsync(() =>
+            HandleAsync(Decided("Some.Train", withheld: false))
+        );
 
         var step = Step(received);
         step["answer"].Should().Be("Fast");
@@ -558,7 +564,7 @@ public class JunctionEventSubscriptionTests
         await using var sub = await SubscribeAsync(executor, OnJunctionEvent(Run), User("Admin"));
 
         var received = await sub.NextAsync(() =>
-            Handle(
+            HandleAsync(
                 Message(
                     "Some.Train",
                     Run,
@@ -686,7 +692,7 @@ public class JunctionEventSubscriptionTests
         await using var sub = await SubscribeAsync(executor, OnJunctionEvent(Run), User("Admin"));
 
         var received = await sub.NextAsync(() =>
-            receiver.Deliver(
+            receiver.DeliverAsync(
                 FromAnotherHost(Failed("Some.Unbroadcast.Train", Run, exception: "IOException"))
             )
         );
@@ -707,7 +713,7 @@ public class JunctionEventSubscriptionTests
         await using var sub = await SubscribeAsync(executor, OnJunctionEvent(Run), Anonymous());
 
         var received = await sub.NextAsync(() =>
-            receiver.Deliver(
+            receiver.DeliverAsync(
                 FromAnotherHost(OnTrack(typeof(IPublicTrain).FullName!, nameWithheld: false))
             )
         );
@@ -746,8 +752,11 @@ public class JunctionEventSubscriptionTests
         CapturingReceiver transport
     ) : IAsyncDisposable
     {
-        public void Deliver(TrainLifecycleEventMessage message) =>
-            transport.Started.Result(message, default).GetAwaiter().GetResult();
+        public async Task DeliverAsync(TrainLifecycleEventMessage message)
+        {
+            var handle = await transport.Started.ConfigureAwait(false);
+            await handle(message, default).ConfigureAwait(false);
+        }
 
         public async ValueTask DisposeAsync()
         {
@@ -935,10 +944,10 @@ public class JunctionEventSubscriptionTests
             Junction = junction,
         };
 
-    private void Handle(TrainLifecycleEventMessage message)
+    private async Task HandleAsync(TrainLifecycleEventMessage message)
     {
         foreach (var handler in _provider!.GetServices<IJunctionEventHandler>())
-            handler.HandleAsync(message, default).GetAwaiter().GetResult();
+            await handler.HandleAsync(message, default).ConfigureAwait(false);
     }
 
     private async Task<IRequestExecutor> BuildAsync(
@@ -999,7 +1008,7 @@ public class JunctionEventSubscriptionTests
         /// Publishes with <paramref name="publish"/> until the subscriber receives something, and
         /// returns the first payload it receives.
         /// </summary>
-        public async Task<IReadOnlyDictionary<string, object?>> NextAsync(Action publish)
+        public async Task<IReadOnlyDictionary<string, object?>> NextAsync(Func<Task> publish)
         {
             stream.Should().NotBeNull();
             var received = new TaskCompletionSource<OperationResult>(
@@ -1019,7 +1028,7 @@ public class JunctionEventSubscriptionTests
             var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
             while (!received.Task.IsCompleted && DateTime.UtcNow < deadline)
             {
-                publish();
+                await publish().ConfigureAwait(false);
                 // allowed-delay: re-publish interval, bounded by the 10s deadline; WhenAny wakes
                 // the instant the subscriber receives.
                 await Task.WhenAny(received.Task, Task.Delay(100)).ConfigureAwait(false);

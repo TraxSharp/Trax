@@ -265,11 +265,12 @@ public class HeadlessCommandsTests
 
         (await host.StreamAsync("OnDataChanged")).Error(new IOException("Connection reset."));
         await WaitAsync(() => run.IsCompleted || Interrupted(host));
-        stop.Cancel();
+        await stop.CancelAsync().ConfigureAwait(false);
         var (exit, _, error) = await run.WaitAsync(
-            TimeSpan.FromSeconds(10),
-            cancellationToken: CancellationToken.None
-        );
+                TimeSpan.FromSeconds(10),
+                cancellationToken: CancellationToken.None
+            )
+            .ConfigureAwait(false);
 
         exit.Should().Be(0);
         Lines(error)

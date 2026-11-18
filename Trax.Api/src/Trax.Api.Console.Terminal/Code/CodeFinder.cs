@@ -52,9 +52,9 @@ internal static partial class CodeFinder
         string root,
         string name,
         CancellationToken cancellationToken = default
-    ) => Task.Run(() => Find(root, name, cancellationToken), cancellationToken);
+    ) => Task.Run(() => Scan(root, name, cancellationToken), cancellationToken);
 
-    private static SourceLocation? Find(
+    private static SourceLocation? Scan(
         string root,
         string name,
         CancellationToken cancellationToken

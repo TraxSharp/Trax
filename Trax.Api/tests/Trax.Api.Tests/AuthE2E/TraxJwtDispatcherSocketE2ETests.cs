@@ -157,7 +157,8 @@ public class TraxJwtDispatcherSocketE2ETests
     public async Task CognitoJwksToken_Acks()
     {
         var (host, jwks) = await StartAsync();
-        await using var _ = jwks;
+        var _ = jwks;
+        await using var _Disposal = _.ConfigureAwait(false);
         using var __ = host;
 
         var token = jwks.CreateIssuer(Audience)
@@ -174,7 +175,8 @@ public class TraxJwtDispatcherSocketE2ETests
     public async Task InternalSymmetricToken_Acks()
     {
         var (host, jwks) = await StartAsync();
-        await using var _ = jwks;
+        var _ = jwks;
+        await using var _Disposal = _.ConfigureAwait(false);
         using var __ = host;
 
         var token = TestTokenIssuer
@@ -192,7 +194,8 @@ public class TraxJwtDispatcherSocketE2ETests
     public async Task UnknownIssuer_Rejected()
     {
         var (host, jwks) = await StartAsync();
-        await using var _ = jwks;
+        var _ = jwks;
+        await using var _Disposal = _.ConfigureAwait(false);
         using var __ = host;
 
         var token = TestTokenIssuer
@@ -257,7 +260,8 @@ public class TraxJwtDispatcherSocketE2ETests
                     $"WebSocket closed unexpectedly: {result.CloseStatus} {result.CloseStatusDescription}"
                 );
             if (result.Count > 0)
-                ms.Write(buffer, 0, result.Count);
+                await ms.WriteAsync(buffer, 0, result.Count, CancellationToken.None)
+                    .ConfigureAwait(false);
             if (result.EndOfMessage && ms.Length > 0)
                 break;
         }
@@ -279,7 +283,8 @@ public class TraxJwtDispatcherSocketE2ETests
                     if (result.MessageType == WebSocketMessageType.Close)
                         return true;
                     if (result.Count > 0)
-                        ms.Write(buffer, 0, result.Count);
+                        await ms.WriteAsync(buffer, 0, result.Count, CancellationToken.None)
+                            .ConfigureAwait(false);
                     if (result.EndOfMessage)
                         break;
                 }

@@ -80,12 +80,15 @@ internal static class ClientDocuments
     /// The file is missing or unreadable, is not the format this version reads, or names a document twice or with a
     /// name its text does not hold.
     /// </exception>
-    public static IReadOnlyList<ClientDocument> Load(string path)
+    public static async Task<IReadOnlyList<ClientDocument>> LoadAsync(
+        string path,
+        CancellationToken cancellationToken
+    )
     {
         string json;
         try
         {
-            json = File.ReadAllText(path);
+            json = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

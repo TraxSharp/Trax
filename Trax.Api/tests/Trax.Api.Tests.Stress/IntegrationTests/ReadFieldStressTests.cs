@@ -57,7 +57,8 @@ public class ReadFieldStressTests : StressTestSetup
         await SeedLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            using var db = await Factory(sp).CreateDbContextAsync(ct).ConfigureAwait(false);
+            var db = await Factory(sp).CreateDbContextAsync(ct).ConfigureAwait(false);
+            await using var dbDisposal = db.ConfigureAwait(false);
             var ctx = (DbContext)db;
             var existing = await db
                 .WorkQueues.CountAsync(q => q.SubjectKey != null, ct)
@@ -105,7 +106,8 @@ public class ReadFieldStressTests : StressTestSetup
     )
     {
         await EnsureSubjectRowsAsync(sp, ct).ConfigureAwait(false);
-        using var db = await Factory(sp).CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await Factory(sp).CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         return await db
             .WorkQueues.Where(q => q.SubjectKey == subject && q.Status == WorkQueueStatus.Queued)
             .OrderByDescending(q => q.Id)
@@ -209,12 +211,14 @@ public class ReadFieldStressTests : StressTestSetup
                 detail!.SubjectKey.Should().Be("subject-7");
             }
         );
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"subject-keyed work_queue rows: {_subjectRows:N0}"
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"subject-keyed work_queue rows: {_subjectRows:N0}"
+                )
             )
-        );
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -233,7 +237,8 @@ public class ReadFieldStressTests : StressTestSetup
                 if (id == 0)
                 {
                     await EnsureSubjectRowsAsync(sp, ct).ConfigureAwait(false);
-                    using var db = await Factory(sp).CreateDbContextAsync(ct).ConfigureAwait(false);
+                    var db = await Factory(sp).CreateDbContextAsync(ct).ConfigureAwait(false);
+                    await using var dbDisposal = db.ConfigureAwait(false);
                     var entry = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
                         new Trax.Effect.Models.WorkQueue.DTOs.CreateWorkQueue
                         {

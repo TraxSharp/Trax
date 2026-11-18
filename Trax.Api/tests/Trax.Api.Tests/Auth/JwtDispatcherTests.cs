@@ -133,7 +133,8 @@ public class JwtDispatcherTests
             jwt => jwt.UseSymmetricKey(IssuerAlpha, AudienceAlpha, KeyAlpha)
         );
         services.AddTraxJwtDispatcher(d => d.MapIssuer(IssuerAlpha, "alpha"));
-        using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
 
         var policy =
             await sp.GetRequiredService<Microsoft.AspNetCore.Authorization.IAuthorizationPolicyProvider>()

@@ -35,7 +35,7 @@ internal static class HeadlessCommands
         var answer = await list.LoadAsync(session.Client, new ListQuery(take, after, filters), ct)
             .ConfigureAwait(false);
         if (answer.Data is not { } page)
-            return Refused(answer, error);
+            return await RefusedAsync(answer, error).ConfigureAwait(false);
         foreach (var row in page.Rows)
             await output.WriteLineAsync(row.Json?.ToJsonString() ?? "null").ConfigureAwait(false);
         await error
@@ -256,7 +256,8 @@ internal static class HeadlessCommands
                 $"'{stream}' is not a stream. Use runs, changes, run <id> or machines [name]."
             ),
         };
-        using var stop = ct.Register(() => ended.TrySetResult(0));
+        var stop = ct.Register(() => ended.TrySetResult(0));
+        await using var stopDisposal = stop.ConfigureAwait(false);
         return await ended.Task.ConfigureAwait(false);
     }
 
@@ -270,7 +271,7 @@ internal static class HeadlessCommands
     {
         var answer = await RunTrace.LoadAsync(session.Client, run, ct).ConfigureAwait(false);
         if (answer.Data is not { } entries)
-            return Refused(answer, error);
+            return await RefusedAsync(answer, error).ConfigureAwait(false);
         foreach (var entry in entries)
             await output
                 .WriteLineAsync(
@@ -313,7 +314,7 @@ internal static class HeadlessCommands
     {
         var answer = await session.Client.MachinesAsync(ct).ConfigureAwait(false);
         if (answer.Data?.Operations?.Machines is not { } machines)
-            return Refused(answer, error);
+            return await RefusedAsync(answer, error).ConfigureAwait(false);
         var shown = machines
             .Where(m =>
                 machine is null
@@ -403,11 +404,13 @@ internal static class HeadlessCommands
         }
     }
 
-    private static int Refused<T>(TraxAnswer<T> answer, TextWriter error)
+    private static async Task<int> RefusedAsync<T>(TraxAnswer<T> answer, TextWriter error)
     {
-        error.WriteLine(
-            Error(answer.Message ?? "The host refused it.", answer.Code).ToJsonString()
-        );
+        await error
+            .WriteLineAsync(
+                Error(answer.Message ?? "The host refused it.", answer.Code).ToJsonString()
+            )
+            .ConfigureAwait(false);
         return 1;
     }
 

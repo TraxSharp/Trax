@@ -38,17 +38,14 @@ internal sealed class MachineChangedStream(
 
     IAsyncEnumerable<object?> ISourceStream.ReadEventsAsync() => Read<object?>();
 
-    public ValueTask DisposeAsync()
-    {
-        Release();
-        return ValueTask.CompletedTask;
-    }
+    public ValueTask DisposeAsync() => ReleaseAsync();
 
-    private void Release()
+    private async ValueTask ReleaseAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
             return;
-        watch?.Dispose();
+        if (watch is not null)
+            await watch.DisposeAsync().ConfigureAwait(false);
         lease?.Dispose();
     }
 
@@ -74,7 +71,7 @@ internal sealed class MachineChangedStream(
         }
         finally
         {
-            Release();
+            await ReleaseAsync().ConfigureAwait(false);
         }
     }
 

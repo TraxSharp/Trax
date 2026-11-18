@@ -327,25 +327,29 @@ public class ScenarioDriverParityTests
 
         // Served as from-gherkin writes it, so the policies, the system instance and the views run as on a host.
         _directory = Directory.CreateTempSubdirectory("trax-parity-").FullName;
-        File.WriteAllText(Path.Combine(_directory, "host.json"), derived.Host!);
+        await File.WriteAllTextAsync(Path.Combine(_directory, "host.json"), derived.Host!)
+            .ConfigureAwait(false);
         foreach (var (id, ir) in derived.Irs)
-            File.WriteAllText(Path.Combine(_directory, $"{id}.ir.json"), ir);
+            await File.WriteAllTextAsync(Path.Combine(_directory, $"{id}.ir.json"), ir)
+                .ConfigureAwait(false);
 
-        await E2EHost.RecreateDatabaseAsync(Database);
-        _host = await E2EHost.StartAsync(
-            Database,
-            new CountingCharge(),
-            new E2EHostOptions
-            {
-                // The sweep fires due timers; the default would let the shop's close outlast the driver's slack.
-                Machines = o =>
+        await E2EHost.RecreateDatabaseAsync(Database).ConfigureAwait(false);
+        _host = await E2EHost
+            .StartAsync(
+                Database,
+                new CountingCharge(),
+                new E2EHostOptions
                 {
-                    o.ServeFeatures(_directory);
-                    o.InvokeOutcomeSweepInterval = TimeSpan.FromMilliseconds(500);
-                    o.InvokeOutcomeSweepIntervalWhileListening = TimeSpan.FromMilliseconds(500);
-                },
-            }
-        );
+                    // The sweep fires due timers; the default would let the shop's close outlast the driver's slack.
+                    Machines = o =>
+                    {
+                        o.ServeFeatures(_directory);
+                        o.InvokeOutcomeSweepInterval = TimeSpan.FromMilliseconds(500);
+                        o.InvokeOutcomeSweepIntervalWhileListening = TimeSpan.FromMilliseconds(500);
+                    },
+                }
+            )
+            .ConfigureAwait(false);
     }
 
     [OneTimeTearDown]

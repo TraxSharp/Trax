@@ -54,7 +54,8 @@ public class LookupStressTests : StressTestSetup
             "operations.lookup (run external id)",
             async (sp, ct) =>
             {
-                using var db = await Factory(sp).CreateDbContextAsync(ct).ConfigureAwait(false);
+                var db = await Factory(sp).CreateDbContextAsync(ct).ConfigureAwait(false);
+                await using var dbDisposal = db.ConfigureAwait(false);
                 var id = Profile.Metadata / 2;
                 return (
                     await db
@@ -103,7 +104,8 @@ public class LookupStressTests : StressTestSetup
             "operations.lookup (instance GUID)",
             async (sp, ct) =>
             {
-                using var db = await Factory(sp).CreateDbContextAsync(ct).ConfigureAwait(false);
+                var db = await Factory(sp).CreateDbContextAsync(ct).ConfigureAwait(false);
+                await using var dbDisposal = db.ConfigureAwait(false);
                 var count = await db.SnapshotDrafts.CountAsync(ct).ConfigureAwait(false);
                 count.Should().BePositive("the seed holds state-machine instances");
                 return (

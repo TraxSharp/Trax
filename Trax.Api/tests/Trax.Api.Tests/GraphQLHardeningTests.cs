@@ -12,6 +12,7 @@ using NSubstitute;
 using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Validation;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests;
 
@@ -137,34 +138,33 @@ public class GraphQLHardeningTests
         return context;
     }
 
-    private static ISchemaDefinition ValidationSchema =>
-        field_ValidationSchema ??= BuildValidationSchema();
+    private static ISchemaDefinition ValidationSchema => field_ValidationSchema.NotNull();
 
     private static ISchemaDefinition? field_ValidationSchema;
 
-    private static ISchemaDefinition BuildValidationSchema() =>
-        new ServiceCollection()
-            .AddGraphQL()
-            .AddQueryType(d =>
-            {
-                d.Name("Query");
-                d.Field("foo").Type<StringType>().Resolve("foo");
-                d.Field("a").Type<StringType>().Resolve("a");
-                d.Field("b").Type<StringType>().Resolve("b");
-                d.Field("c").Type<StringType>().Resolve("c");
-                d.Field("d").Type<StringType>().Resolve("d");
-                d.Field("e").Type<StringType>().Resolve("e");
-                d.Field("f").Type<StringType>().Resolve("f");
-                d.Field("g").Type<StringType>().Resolve("g");
-                d.Field("h").Type<StringType>().Resolve("h");
-            })
-            .Services.BuildServiceProvider()
-            .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync()
-            .AsTask()
-            .GetAwaiter()
-            .GetResult()
-            .Schema;
+    [OneTimeSetUp]
+    public async Task BuildValidationSchema() =>
+        field_ValidationSchema = (
+            await new ServiceCollection()
+                .AddGraphQL()
+                .AddQueryType(d =>
+                {
+                    d.Name("Query");
+                    d.Field("foo").Type<StringType>().Resolve("foo");
+                    d.Field("a").Type<StringType>().Resolve("a");
+                    d.Field("b").Type<StringType>().Resolve("b");
+                    d.Field("c").Type<StringType>().Resolve("c");
+                    d.Field("d").Type<StringType>().Resolve("d");
+                    d.Field("e").Type<StringType>().Resolve("e");
+                    d.Field("f").Type<StringType>().Resolve("f");
+                    d.Field("g").Type<StringType>().Resolve("g");
+                    d.Field("h").Type<StringType>().Resolve("h");
+                })
+                .Services.BuildServiceProvider()
+                .GetRequiredService<IRequestExecutorProvider>()
+                .GetExecutorAsync()
+                .ConfigureAwait(false)
+        ).Schema;
 
     [Test]
     public void OperationCountValidator_UnderCap_DoesNotReport()

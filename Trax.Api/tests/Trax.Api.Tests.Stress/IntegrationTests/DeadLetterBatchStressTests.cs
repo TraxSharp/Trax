@@ -99,12 +99,14 @@ public class DeadLetterBatchStressTests : StressTestSetup
                     )
                     .ConfigureAwait(false);
                 answer.Stop();
-                TestContext.Out.WriteLine(
-                    string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"requeueAllDeadLetters answered in {answer.Elapsed.TotalMilliseconds:F0}ms"
+                await TestContext
+                    .Out.WriteLineAsync(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"requeueAllDeadLetters answered in {answer.Elapsed.TotalMilliseconds:F0}ms"
+                        )
                     )
-                );
+                    .ConfigureAwait(false);
 
                 answer
                     .Elapsed.Should()

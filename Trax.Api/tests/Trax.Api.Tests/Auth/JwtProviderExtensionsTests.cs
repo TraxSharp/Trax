@@ -291,7 +291,8 @@ public class JwtProviderExtensionsTests
         var services = NewServices();
 
         services.AddTraxGoogleJwtAuth("cid");
-        using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
 
         var schemes = sp.GetRequiredService<IAuthenticationSchemeProvider>();
         var scheme = await schemes.GetSchemeAsync(JwtDefaults.SchemeName);

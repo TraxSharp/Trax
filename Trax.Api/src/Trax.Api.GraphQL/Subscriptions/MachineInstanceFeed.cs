@@ -101,12 +101,11 @@ internal static class MachineInstanceFeed
         IAsyncEnumerable<object?> ISourceStream.ReadEventsAsync() =>
             Read<object?>(CancellationToken.None);
 
-        public ValueTask DisposeAsync()
+        public async ValueTask DisposeAsync()
         {
             // Cancelled, never disposed: the feed's enumeration may still be reading its token.
             if (Interlocked.Exchange(ref _disposed, 1) == 0)
-                _stop.Cancel();
-            return ValueTask.CompletedTask;
+                await _stop.CancelAsync().ConfigureAwait(false);
         }
 
         private async Task PumpAsync(
@@ -131,7 +130,7 @@ internal static class MachineInstanceFeed
             }
             finally
             {
-                _stop.Cancel();
+                await _stop.CancelAsync().ConfigureAwait(false);
             }
             _buffer.Writer.TryComplete();
         }

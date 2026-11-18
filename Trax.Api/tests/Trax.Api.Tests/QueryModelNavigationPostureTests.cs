@@ -62,7 +62,8 @@ public class QueryModelNavigationPostureTests
     public async Task An_anonymous_target_declared_on_its_class_is_readable_and_filterable()
     {
         var (provider, executor) = await StartAsync<OpenTargetContext>();
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         var json = await RunAsync(
             executor,
@@ -90,7 +91,8 @@ public class QueryModelNavigationPostureTests
     )
     {
         var (provider, executor) = await StartAsync<GatedTargetContext>();
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         var json = await RunAsync(executor, query, Anonymous());
 
@@ -107,7 +109,8 @@ public class QueryModelNavigationPostureTests
     )
     {
         var (provider, executor) = await StartAsync<GatedTargetContext>();
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         var json = await RunAsync(executor, query, InRole("Player"));
 
@@ -124,7 +127,8 @@ public class QueryModelNavigationPostureTests
     )
     {
         var (provider, executor) = await StartAsync<GatedTargetContext>();
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         var json = await RunAsync(executor, query, InRole("Admin"));
 
@@ -136,7 +140,8 @@ public class QueryModelNavigationPostureTests
     public async Task A_target_gated_on_its_class_refuses_an_anonymous_filter_passed_as_a_variable()
     {
         var (provider, executor) = await StartAsync<GatedTargetContext>();
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         var result = await executor.ExecuteAsync(
             OperationRequestBuilder
@@ -169,7 +174,8 @@ public class QueryModelNavigationPostureTests
     public async Task A_navigation_left_out_of_the_exposed_field_set_needs_no_declaration()
     {
         var (provider, executor) = await StartAsync<HiddenNavigationContext>();
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         var json = await RunAsync(executor, "{ discover { hiddenNavPosts { nodes { title } } } }");
 
@@ -180,7 +186,8 @@ public class QueryModelNavigationPostureTests
     public async Task An_owned_value_is_part_of_its_entity_and_needs_no_declaration()
     {
         var (provider, executor) = await StartAsync<OwnedValueContext>();
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         var json = await RunAsync(
             executor,
@@ -209,7 +216,8 @@ public class QueryModelNavigationPostureTests
     public async Task A_gated_entity_reached_through_a_method_refuses_an_anonymous_read()
     {
         var (provider, executor) = await StartAsync<MethodGatedContext>();
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         var json = await RunAsync(
             executor,
@@ -240,7 +248,8 @@ public class QueryModelNavigationPostureTests
     public async Task A_context_that_cannot_be_resolved_fails_closed()
     {
         var (provider, _) = await StartAsync<OwnedValueContext>();
-        await using var _p = provider;
+        var _p = provider;
+        await using var _pDisposal = _p.ConfigureAwait(false);
         var validator = new Trax.Api.GraphQL.Startup.QueryModelReachValidator(
             provider.GetRequiredService<Trax.Api.GraphQL.Configuration.GraphQLConfiguration>(),
             new WithoutService(provider, typeof(OwnedValueContext))
@@ -406,7 +415,8 @@ public class QueryModelNavigationPostureTests
             throw;
         }
 
-        using (var scope = provider.CreateScope())
+        var scope = provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             await scope
                 .ServiceProvider.GetRequiredService<TContext>()
                 .SeedAsync()

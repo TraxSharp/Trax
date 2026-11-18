@@ -276,9 +276,11 @@ public class CaseInsensitiveFilterTests
                 .ConfigureFiltering(f => f.AddCaseInsensitiveStringOperations())
         );
 
-        await using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
-        using (var scope = provider.CreateScope())
+        var scope = provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var ctx = scope.ServiceProvider.GetRequiredService<PeopleDbContext>();
             ctx.People.AddRange(

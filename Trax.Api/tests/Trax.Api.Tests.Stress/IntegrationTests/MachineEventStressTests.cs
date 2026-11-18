@@ -145,7 +145,8 @@ public class MachineEventStressTests
             .Should()
             .BeTrue("the start is audited");
 
-        await using var listener = new NpgsqlConnection(ConnectionString);
+        var listener = new NpgsqlConnection(ConnectionString);
+        await using var listenerDisposal = listener.ConfigureAwait(false);
         await listener.OpenAsync();
         var notices = 0;
         listener.Notification += (_, e) =>
@@ -153,7 +154,8 @@ public class MachineEventStressTests
             if (string.Equals(e.Channel, Channel, StringComparison.Ordinal))
                 Interlocked.Increment(ref notices);
         };
-        await using (var listen = new NpgsqlCommand($"LISTEN {Channel}", listener))
+        var listen = new NpgsqlCommand($"LISTEN {Channel}", listener);
+        await using (listen.ConfigureAwait(false))
             await listen.ExecuteNonQueryAsync();
 
         var runsBefore = await AdvanceRunsAsync();
@@ -184,22 +186,24 @@ public class MachineEventStressTests
 
         var perEvent = clock.Elapsed / Events;
         var runsSince = await AdvanceRunsAsync() - runsBefore;
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"{Events} events: {clock.Elapsed.TotalMilliseconds:F0} ms, {perEvent.TotalMilliseconds:F2} ms each; "
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{Events} events: {clock.Elapsed.TotalMilliseconds:F0} ms, {perEvent.TotalMilliseconds:F2} ms each; "
+                )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"runs {runsSince}, audits {CountingAuditSink.Entries - auditsBefore}, "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"notices {Volatile.Read(ref notices)}"
+                    )
             )
-                + string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"runs {runsSince}, audits {CountingAuditSink.Entries - auditsBefore}, "
-                )
-                + string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"notices {Volatile.Read(ref notices)}"
-                )
-        );
+            .ConfigureAwait(false);
 
-        (await AdvanceRunsAsync() - runsBefore)
+        (await AdvanceRunsAsync().ConfigureAwait(false) - runsBefore)
             .Should()
             .Be(Events, "each event records one run of the internal advance train, per " + Adr);
         (CountingAuditSink.Entries - auditsBefore).Should().Be(Events, "one audit entry per event");
@@ -245,7 +249,8 @@ public class MachineEventStressTests
         var read = Stopwatch.StartNew();
         foreach (var id in ids)
         {
-            await using var scope = _host.Services.CreateAsyncScope();
+            var scope = _host.Services.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             var page = await scope
                 .ServiceProvider.GetRequiredService<IOperationsService>()
                 .GetMachineInstanceTransitionsAsync(
@@ -281,20 +286,22 @@ public class MachineEventStressTests
         }
         read.Stop();
 
-        TestContext.Out.WriteLine(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"{ConcurrentInstances} instances x {EventsPerInstance} events at once: {clock.Elapsed.TotalMilliseconds:F0} ms, "
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{ConcurrentInstances} instances x {EventsPerInstance} events at once: {clock.Elapsed.TotalMilliseconds:F0} ms, "
+                )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{perEvent.TotalMilliseconds:F2} ms per event; {ConcurrentInstances} histories read in "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{read.Elapsed.TotalMilliseconds:F0} ms"
+                    )
             )
-                + string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"{perEvent.TotalMilliseconds:F2} ms per event; {ConcurrentInstances} histories read in "
-                )
-                + string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"{read.Elapsed.TotalMilliseconds:F0} ms"
-                )
-        );
+            .ConfigureAwait(false);
         perEvent
             .Should()
             .BeLessThan(PerEventBudget, "the history row keeps an event's cost bounded");

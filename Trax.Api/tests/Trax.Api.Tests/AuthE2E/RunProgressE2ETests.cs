@@ -238,7 +238,8 @@ public class RunProgressE2ETests
         var running = RunAsync(AliceKey, fail: false);
         var runId = await RunningIdAsync();
 
-        await using var alice = await Socket.ConnectAsync(_host, AliceKey);
+        var alice = await Socket.ConnectAsync(_host, AliceKey);
+        await using var aliceDisposal = alice.ConfigureAwait(false);
         await alice.SubscribeAsync(
             $$"""subscription { runProgress(runId: "{{runId}}") { {{EventFields}} } }"""
         );
@@ -264,7 +265,8 @@ public class RunProgressE2ETests
     {
         var runId = await RunAsync(AliceKey, fail: false);
 
-        await using var alice = await Socket.ConnectAsync(_host, AliceKey);
+        var alice = await Socket.ConnectAsync(_host, AliceKey);
+        await using var aliceDisposal = alice.ConfigureAwait(false);
         await alice.SubscribeAsync(
             $$"""subscription { runProgress(runId: "{{runId}}") { {{EventFields}} } }"""
         );
@@ -287,18 +289,18 @@ public class RunProgressE2ETests
         RunProgressStream.QueuedPoll = TimeSpan.FromMilliseconds(100);
         try
         {
-            await using var alice = await Socket.ConnectAsync(_host, AliceKey);
+            var alice = await Socket.ConnectAsync(_host, AliceKey);
+            await using var aliceDisposal = alice.ConfigureAwait(false);
             await alice.SubscribeAsync(
                 $$"""subscription { runProgress(runId: "{{runId}}") { {{EventFields}} } }"""
             );
             (await alice.NextAsync()).GetProperty("state").GetString().Should().Be("QUEUED");
 
             // As leaving an invoking state or the operations surface cancels it: the entry, and no lifecycle event.
-            await using (
-                var db = await _host
-                    .Services.GetRequiredService<IDataContextProviderFactory>()
-                    .CreateDbContextAsync(CancellationToken.None)
-            )
+            var db = await _host
+                .Services.GetRequiredService<IDataContextProviderFactory>()
+                .CreateDbContextAsync(CancellationToken.None);
+            await using (db.ConfigureAwait(false))
                 await db
                     .WorkQueues.Where(w => w.ExternalId == runId)
                     .ExecuteUpdateAsync(u =>
@@ -327,7 +329,8 @@ public class RunProgressE2ETests
         var running = RunAsync(AliceKey, fail: false);
         var runId = await RunningIdAsync();
 
-        await using var bob = await Socket.ConnectAsync(_host, BobKey);
+        var bob = await Socket.ConnectAsync(_host, BobKey);
+        await using var bobDisposal = bob.ConfigureAwait(false);
         await bob.SubscribeAsync(
             $$"""subscription { runProgress(runId: "{{runId}}") { {{EventFields}} } }"""
         );
@@ -362,7 +365,8 @@ public class RunProgressE2ETests
             .Should()
             .Be(retry, "the starter follows a manifest's retries run by run, per " + Adr);
 
-        await using var socket = await Socket.ConnectAsync(_host, AliceKey);
+        var socket = await Socket.ConnectAsync(_host, AliceKey);
+        await using var socketDisposal = socket.ConfigureAwait(false);
         await socket.SubscribeAsync(
             $$"""subscription { runProgress(runId: "{{failed}}") { sequence state retriedAs } }"""
         );
@@ -478,10 +482,11 @@ public class RunProgressE2ETests
             return Dispatched(response);
 
         // A failed run answers an error rather than its handle; its id is on its row.
-        using var db = await _host
+        var db = await _host
             .Services.GetRequiredService<IDataContextProviderFactory>()
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         return await db
             .Metadatas.AsNoTracking()
             .Where(m =>
@@ -509,10 +514,11 @@ public class RunProgressE2ETests
         await ProgressMarkerTrain
             .Waiting.Task.WaitAsync(TimeSpan.FromSeconds(30))
             .ConfigureAwait(false);
-        using var db = await _host
+        var db = await _host
             .Services.GetRequiredService<IDataContextProviderFactory>()
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         return await db
             .Metadatas.AsNoTracking()
             .Where(m =>
@@ -655,7 +661,8 @@ public class RunProgressE2ETests
                     throw new InvalidOperationException(
                         $"The socket closed: {result.CloseStatus} {result.CloseStatusDescription}"
                     );
-                ms.Write(buffer, 0, result.Count);
+                await ms.WriteAsync(buffer, 0, result.Count, CancellationToken.None)
+                    .ConfigureAwait(false);
                 if (result.EndOfMessage && ms.Length > 0)
                     break;
             }
