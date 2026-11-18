@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using HotChocolate;
 using Microsoft.EntityFrameworkCore;
@@ -42,7 +43,10 @@ namespace Trax.Api.Tests;
 public class OperationsParityReadsTests
 {
     private static readonly string ConnectionString =
-        $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_operations;Username=trax;Password=trax123;"
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_operations;Username=trax;Password=trax123;"
+        )
         + "Maximum Pool Size=8;Minimum Pool Size=0;Connection Idle Lifetime=30;"
         + "Timeout=30;Tcp Keepalive=true";
 
@@ -522,7 +526,7 @@ public class OperationsParityReadsTests
     {
         var run = await SeedRun();
         for (var i = 0; i < 5; i++)
-            await SeedLog(run, $"step {i}", "Shop");
+            await SeedLog(run, string.Create(CultureInfo.InvariantCulture, $"step {i}"), "Shop");
         var queries = new LogQueries();
 
         var first = await queries.GetLogs(
@@ -748,24 +752,27 @@ public class OperationsParityReadsTests
         )[] steps
     )
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var position = 0;
-        foreach (var step in steps)
-            db.JunctionRuns.Add(
-                new JunctionRun
-                {
-                    MetadataId = run,
-                    Position = position++,
-                    Kind = step.Kind,
-                    Name = step.Name,
-                    State = step.State,
-                    StartedAt = DateTime.UtcNow,
-                    QuestionKey = step.Kind == JunctionRunKind.Junction ? null : step.Name,
-                    Answer = step.Answer,
-                    NodeId = step.NodeId,
-                }
-            );
-        await db.SaveChanges(default);
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var position = 0;
+            foreach (var step in steps)
+                db.JunctionRuns.Add(
+                    new JunctionRun
+                    {
+                        MetadataId = run,
+                        Position = position++,
+                        Kind = step.Kind,
+                        Name = step.Name,
+                        State = step.State,
+                        StartedAt = DateTime.UtcNow,
+                        QuestionKey = step.Kind == JunctionRunKind.Junction ? null : step.Name,
+                        Answer = step.Answer,
+                        NodeId = step.NodeId,
+                    }
+                );
+            await db.SaveChanges(default).ConfigureAwait(false);
+        }
     }
 
     #endregion
@@ -779,18 +786,22 @@ public class OperationsParityReadsTests
         discovery
             .DiscoverTrains()
             .Returns([
-                Registration(typeof(ISubjectTrain), true),
-                Registration(typeof(IPlainTrain), false),
+                Registration(typeof(ISubjectTrain), hasSubjectKey: true),
+                Registration(typeof(IPlainTrain), hasSubjectKey: false),
             ]);
 
         var trains = new OperationsQueries().GetTrains(discovery);
 
         trains
-            .Single(t => t.FullName == typeof(ISubjectTrain).FullName)
+            .Single(t =>
+                string.Equals(t.FullName, typeof(ISubjectTrain).FullName, StringComparison.Ordinal)
+            )
             .HasQueueSubjectKey.Should()
             .BeTrue();
         trains
-            .Single(t => t.FullName == typeof(IPlainTrain).FullName)
+            .Single(t =>
+                string.Equals(t.FullName, typeof(IPlainTrain).FullName, StringComparison.Ordinal)
+            )
             .HasQueueSubjectKey.Should()
             .BeFalse();
     }
@@ -825,19 +836,22 @@ public class OperationsParityReadsTests
 
     private async Task<long> SeedRun(Action<Metadata>? configure = null)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var meta = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = "Trax.X.Parity",
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = null,
-            }
-        );
-        configure?.Invoke(meta);
-        await db.Track(meta);
-        await db.SaveChanges(default);
-        return meta.Id;
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var meta = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = "Trax.X.Parity",
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                }
+            );
+            configure?.Invoke(meta);
+            await db.Track(meta).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return meta.Id;
+        }
     }
 
     /// <summary>
@@ -850,96 +864,131 @@ public class OperationsParityReadsTests
         string? hostName = null
     )
     {
-        var id = await SeedRun(m => m.HostName = hostName);
-        await using var db = await _factory.CreateDbContextAsync(default);
-        await ((DbContext)db).Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE trax.metadata SET train_state = 'failed', failure_reason = {reason}, failure_junction = {junction} WHERE id = {id}"
-        );
-        return id;
+        var id = await SeedRun(m => m.HostName = hostName).ConfigureAwait(false);
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            await ((DbContext)db)
+                .Database.ExecuteSqlInterpolatedAsync(
+                    $"UPDATE trax.metadata SET train_state = 'failed', failure_reason = {reason}, failure_junction = {junction} WHERE id = {id}"
+                )
+                .ConfigureAwait(false);
+            return id;
+        }
     }
 
     private async Task<string> ExternalIdOf(long id)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        return await db.Metadatas.Where(m => m.Id == id).Select(m => m.ExternalId).SingleAsync();
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            return await db
+                .Metadatas.Where(m => m.Id == id)
+                .Select(m => m.ExternalId)
+                .SingleAsync()
+                .ConfigureAwait(false);
+        }
     }
 
     private async Task<long> SeedGroup()
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var group = new ManifestGroup
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
-            Name = $"group-{Guid.NewGuid():N}",
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
-        };
-        await db.Track(group);
-        await db.SaveChanges(default);
-        return group.Id;
+            var group = new ManifestGroup
+            {
+                Name = $"group-{Guid.NewGuid():N}",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            await db.Track(group).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return group.Id;
+        }
     }
 
     private async Task<long> SeedManifest(long groupId, string? name = null)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var manifest = Manifest.Create(new CreateManifest { Name = typeof(IPlainTrain) });
-        manifest.ManifestGroupId = groupId;
-        if (name is not null)
-            manifest.Name = name;
-        await db.Track(manifest);
-        await db.SaveChanges(default);
-        return manifest.Id;
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var manifest = Manifest.Create(new CreateManifest { Name = typeof(IPlainTrain) });
+            manifest.ManifestGroupId = groupId;
+            if (name is not null)
+                manifest.Name = name;
+            await db.Track(manifest).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return manifest.Id;
+        }
     }
 
     private async Task SeedDeadLetter(long manifestId)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var manifest = await db.Manifests.SingleAsync(m => m.Id == manifestId);
-        await db.Track(
-            DeadLetter.Create(
-                new CreateDeadLetter
-                {
-                    Manifest = manifest,
-                    Reason = "failed",
-                    RetryCount = 3,
-                }
-            )
-        );
-        await db.SaveChanges(default);
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var manifest = await db
+                .Manifests.SingleAsync(m => m.Id == manifestId)
+                .ConfigureAwait(false);
+            await db.Track(
+                    DeadLetter.Create(
+                        new CreateDeadLetter
+                        {
+                            Manifest = manifest,
+                            Reason = "failed",
+                            RetryCount = 3,
+                        }
+                    )
+                )
+                .ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+        }
     }
 
     private async Task<long> SeedEntry(CreateWorkQueue create)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var entry = WorkQueue.Create(create);
-        await db.Track(entry);
-        await db.SaveChanges(default);
-        return entry.Id;
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var entry = WorkQueue.Create(create);
+            await db.Track(entry).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return entry.Id;
+        }
     }
 
     private async Task SeedLog(long metadataId, string message, string category)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        await ((DbContext)db).Database.ExecuteSqlInterpolatedAsync(
-            $"INSERT INTO trax.log (metadata_id, event_id, level, message, category) VALUES ({metadataId}, 0, {LogLevel.Information.ToString().ToLowerInvariant()}::trax.log_level, {message}, {category})"
-        );
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            await ((DbContext)db)
+                .Database.ExecuteSqlInterpolatedAsync(
+                    $"INSERT INTO trax.log (metadata_id, event_id, level, message, category) VALUES ({metadataId}, 0, {nameof(LogLevel.Information).ToLowerInvariant()}::trax.log_level, {message}, {category})"
+                )
+                .ConfigureAwait(false);
+        }
     }
 
     private async Task SeedDecision(long metadataId, string key, int occurrence, string answer)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        db.RecordedDecisions.Add(
-            new RecordedDecision
-            {
-                MetadataId = metadataId,
-                QuestionKey = key,
-                Occurrence = occurrence,
-                Fingerprint = new string('0', 64),
-                Kind = "choice",
-                Question = "{}",
-                Answer = answer,
-                DecidedAt = DateTime.UtcNow,
-            }
-        );
-        await db.SaveChanges(default);
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            db.RecordedDecisions.Add(
+                new RecordedDecision
+                {
+                    MetadataId = metadataId,
+                    QuestionKey = key,
+                    Occurrence = occurrence,
+                    Fingerprint = new string('0', 64),
+                    Kind = "choice",
+                    Question = "{}",
+                    Answer = answer,
+                    DecidedAt = DateTime.UtcNow,
+                }
+            );
+            await db.SaveChanges(default).ConfigureAwait(false);
+        }
     }
 }

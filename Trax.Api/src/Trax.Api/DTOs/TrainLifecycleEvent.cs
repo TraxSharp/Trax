@@ -21,7 +21,7 @@ public record TrainLifecycleEvent(
     /// <summary>
     /// The type name of the exception the train failed with, as recorded on its metadata. Not
     /// part of the GraphQL type: it decides whether a subscriber outside the operations view may
-    /// see <see cref="FailureReason"/>. <c>null</c> when unknown, which withholds the reason.
+    /// see <see cref="FailureReason"/>. <see langword="null"/> when unknown, which withholds the reason.
     /// </summary>
     public string? FailureException { get; init; }
 

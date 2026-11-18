@@ -60,8 +60,8 @@ public sealed class TraxAuditChannel : IDisposable
     }
 
     /// <summary>
-    /// Attempts to enqueue an audit entry without blocking. Returns <c>true</c>
-    /// when accepted, <c>false</c> when dropped (the channel is full, or the writer has
+    /// Attempts to enqueue an audit entry without blocking. Returns <see langword="true"/>
+    /// when accepted, <see langword="false"/> when dropped (the channel is full, or the writer has
     /// stopped accepting entries for shutdown). A drop is counted like every other one.
     /// </summary>
     internal bool TryEnqueue(TraxAuditEntry entry)

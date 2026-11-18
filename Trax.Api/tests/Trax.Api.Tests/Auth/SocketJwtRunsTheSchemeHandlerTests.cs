@@ -42,8 +42,11 @@ public class SocketJwtRunsTheSchemeHandlerTests
 
     // The bearer handler maps "sub" to NameIdentifier unless MapInboundClaims is off.
     private static bool IsRevoked(ClaimsPrincipal? principal) =>
-        (principal?.FindFirst(ClaimTypes.NameIdentifier) ?? principal?.FindFirst("sub"))?.Value
-        == "revoked";
+        string.Equals(
+            (principal?.FindFirst(ClaimTypes.NameIdentifier) ?? principal?.FindFirst("sub"))?.Value,
+            "revoked",
+            StringComparison.Ordinal
+        );
 
     private static TraxCompositeSocketInterceptor Composite(IServiceProvider services) =>
         new(new TraxApplicationServices(services));
@@ -74,7 +77,7 @@ public class SocketJwtRunsTheSchemeHandlerTests
         interceptor
             .OnConnectAsync(
                 session,
-                Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, null)),
+                Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, Bearer: null)),
                 CancellationToken.None
             )
             .AsTask();
@@ -92,7 +95,7 @@ public class SocketJwtRunsTheSchemeHandlerTests
                     context.Fail("This user has been revoked.");
                     return;
                 }
-                await trax(context);
+                await trax(context).ConfigureAwait(false);
             };
         });
         var interceptor = Composite(sp);
@@ -106,7 +109,7 @@ public class SocketJwtRunsTheSchemeHandlerTests
         refused
             .Accepted.Should()
             .BeFalse("the host's OnTokenValidated refused this token, per " + Adr);
-        revokedHttp.User.Identity?.IsAuthenticated.Should().NotBe(true);
+        revokedHttp.User.Identity?.IsAuthenticated.Should().NotBe(unexpected: true);
 
         var (alice, aliceHttp) = NewSession();
         var accepted = await ConnectAsync(
@@ -164,7 +167,7 @@ public class SocketJwtRunsTheSchemeHandlerTests
                                 context.Fail("This user has been revoked.");
                                 return;
                             }
-                            await trax(context);
+                            await trax(context).ConfigureAwait(false);
                         };
                     })
         );
@@ -253,7 +256,13 @@ public class SocketJwtRunsTheSchemeHandlerTests
     private static IEnumerable<ConnectionCloseReason> Closes(ISocketSession session) =>
         session
             .Connection.ReceivedCalls()
-            .Where(call => call.GetMethodInfo().Name == nameof(ISocketConnection.CloseAsync))
+            .Where(call =>
+                string.Equals(
+                    call.GetMethodInfo().Name,
+                    nameof(ISocketConnection.CloseAsync),
+                    StringComparison.Ordinal
+                )
+            )
             .Select(call => call.GetArguments()[1])
             .OfType<ConnectionCloseReason>();
 }

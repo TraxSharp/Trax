@@ -54,7 +54,7 @@ public class OidcEventCallbackTests
             http,
             new AuthenticationScheme(
                 OidcDefaults.CookieSchemeName,
-                null,
+                displayName: null,
                 typeof(CookieAuthenticationHandler)
             ),
             opts,
@@ -78,7 +78,7 @@ public class OidcEventCallbackTests
             http,
             new AuthenticationScheme(
                 OidcDefaults.CookieSchemeName,
-                null,
+                displayName: null,
                 typeof(CookieAuthenticationHandler)
             ),
             opts,
@@ -251,7 +251,7 @@ public class OidcEventCallbackTests
         var http = new DefaultHttpContext { RequestServices = sp };
         var scheme = new AuthenticationScheme(
             OidcDefaults.SchemeName,
-            null,
+            displayName: null,
             typeof(OpenIdConnectHandler)
         );
         var ctx = new TokenValidatedContext(

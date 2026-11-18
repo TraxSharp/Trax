@@ -163,8 +163,13 @@ public class RunProgressCrossNodeE2ETests
         // The run waits at the gate on node B, so all of this arrived over the transport.
         var live = new List<JsonElement>();
         while (
-            !live.Any(e => e.GetProperty("state").GetString() == "IN_PROGRESS")
-            || !live.Any(e => e.GetProperty("step").ValueKind == JsonValueKind.Object)
+            !live.Exists(e =>
+                string.Equals(
+                    e.GetProperty("state").GetString(),
+                    "IN_PROGRESS",
+                    StringComparison.Ordinal
+                )
+            ) || !live.Exists(e => e.GetProperty("step").ValueKind == JsonValueKind.Object)
         )
             live.Add(await alice.NextAsync());
         await ProgressMarkerTrain.Waiting.Task.WaitAsync(TimeSpan.FromSeconds(30));
@@ -178,8 +183,7 @@ public class RunProgressCrossNodeE2ETests
             .Should()
             .BeInAscendingOrder()
             .And.OnlyHaveUniqueItems();
-        events
-            .Last()
+        events[^1]
             .GetProperty("state")
             .GetString()
             .Should()
@@ -215,9 +219,10 @@ public class RunProgressCrossNodeE2ETests
     private async Task<string> QueueAsync(string key)
     {
         using var response = await _api.PostGraphQLAsync(
-            $$"""mutation { dispatch { progressMarker(input: { note: "{{RunProgressE2ETests.Marker}}", fail: false }, mode: QUEUE) { externalId } } }""",
-            r => r.Headers.Add("X-Api-Key", key)
-        );
+                $$"""mutation { dispatch { progressMarker(input: { note: "{{RunProgressE2ETests.Marker}}", fail: false }, mode: QUEUE) { externalId } } }""",
+                r => r.Headers.Add("X-Api-Key", key)
+            )
+            .ConfigureAwait(false);
         var data = response.RootElement.GetProperty("data");
         data.ValueKind.Should().NotBe(JsonValueKind.Null, response.RootElement.GetRawText());
         return data.GetProperty("dispatch")
@@ -294,14 +299,21 @@ internal sealed class LoopbackBus
                 new UnboundedChannelOptions { SingleReader = true }
             );
             _inbox = inbox;
-            _pump = Task.Run(async () =>
-            {
-                await foreach (var body in inbox.Reader.ReadAllAsync())
+            _pump = Task.Run(
+                async () =>
                 {
-                    var message = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(body)!;
-                    await handler(message, CancellationToken.None);
-                }
-            });
+                    await foreach (
+                        var body in inbox
+                            .Reader.ReadAllAsync(cancellationToken: ct)
+                            .ConfigureAwait(false)
+                    )
+                    {
+                        var message = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(body)!;
+                        await handler(message, CancellationToken.None).ConfigureAwait(false);
+                    }
+                },
+                cancellationToken: ct
+            );
             bus.Start(this);
             return Task.CompletedTask;
         }
@@ -311,10 +323,11 @@ internal sealed class LoopbackBus
             bus.Stop(this);
             _inbox?.Writer.TryComplete();
             if (_pump is not null)
-                await _pump.WaitAsync(TimeSpan.FromSeconds(10), ct);
+                await _pump.WaitAsync(TimeSpan.FromSeconds(10), ct).ConfigureAwait(false);
         }
 
-        public async ValueTask DisposeAsync() => await StopAsync(CancellationToken.None);
+        public async ValueTask DisposeAsync() =>
+            await StopAsync(CancellationToken.None).ConfigureAwait(false);
 
         internal void Enqueue(byte[] body) => _inbox?.Writer.TryWrite(body);
     }

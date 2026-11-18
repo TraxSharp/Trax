@@ -67,7 +67,7 @@ public class GeneratedTrainDocumentsRemovedE2ETests
                 Served = [typeof(WizardMachine)],
                 GraphQL = graphql =>
                     graphql.UsePersistedOperations(po =>
-                        po.SingleNode().RequirePersisted(true).ClientDocuments(_file)
+                        po.SingleNode().RequirePersisted(require: true).ClientDocuments(_file)
                     ),
             }
         );
@@ -172,13 +172,18 @@ public class GeneratedTrainDocumentsRemovedE2ETests
             var text = await File.ReadAllTextAsync(path);
             var manifest = ClientManifest.Read(text);
 
-            var record = manifest.Trains.Single(t => t.Field == "recordNote");
+            var record = manifest.Trains.Single(t =>
+                string.Equals(t.Field, "recordNote", StringComparison.Ordinal)
+            );
             record.Root.Should().Be("mutation");
             record.Requires!.RoleSets.Should().ContainSingle().Which.Should().Equal("Approver");
             record
                 .Arguments.Should()
                 .Contain(a => a.Name == "input" && a.Type == "RecordNoteInput!");
-            manifest.Trains.Single(t => t.Field == "ping").Requires!.Anonymous.Should().BeTrue();
+            manifest
+                .Trains.Single(t => string.Equals(t.Field, "ping", StringComparison.Ordinal))
+                .Requires!.Anonymous.Should()
+                .BeTrue();
             text.Should().NotContain(TrainDocuments.ReservedIdPrefix);
             manifest
                 .Types.Should()
@@ -195,17 +200,26 @@ public class GeneratedTrainDocumentsRemovedE2ETests
 
     private static async Task<IReadOnlyList<string>> TrainIdsAsync()
     {
-        await using var connection = new NpgsqlConnection(E2EHost.ConnectionString(Database));
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(
-            "SELECT id FROM trax.persisted_operation WHERE tenant_key = '' AND starts_with(id, @prefix)",
-            connection
-        );
-        command.Parameters.AddWithValue("prefix", TrainDocuments.ReservedIdPrefix);
-        var ids = new List<string>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-            ids.Add(reader.GetString(0));
-        return ids;
+        var connection = new NpgsqlConnection(E2EHost.ConnectionString(Database));
+        await using (connection.ConfigureAwait(false))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            var command = new NpgsqlCommand(
+                "SELECT id FROM trax.persisted_operation WHERE tenant_key = '' AND starts_with(id, @prefix)",
+                connection
+            );
+            await using (command.ConfigureAwait(false))
+            {
+                command.Parameters.AddWithValue("prefix", TrainDocuments.ReservedIdPrefix);
+                var ids = new List<string>();
+                var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+                await using (reader.ConfigureAwait(false))
+                {
+                    while (await reader.ReadAsync().ConfigureAwait(false))
+                        ids.Add(reader.GetString(0));
+                    return ids;
+                }
+            }
+        }
     }
 }

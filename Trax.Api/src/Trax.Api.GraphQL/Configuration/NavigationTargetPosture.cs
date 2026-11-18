@@ -96,7 +96,7 @@ internal sealed record NavigationTargetPosture(
             : type;
 
     /// <summary>
-    /// The class a member navigates to, unwrapping a collection, or <c>null</c> when the member
+    /// The class a member navigates to, unwrapping a collection, or <see langword="null"/> when the member
     /// holds a scalar.
     /// </summary>
     private static Type? Candidate(Type memberType)
@@ -127,7 +127,10 @@ internal sealed record NavigationTargetPosture(
         // like) are scalars to HotChocolate, never navigations.
         if (
             type.Namespace is { } ns
-            && (ns == "System" || ns.StartsWith("System.", StringComparison.Ordinal))
+            && (
+                string.Equals(ns, "System", StringComparison.Ordinal)
+                || ns.StartsWith("System.", StringComparison.Ordinal)
+            )
         )
             return null;
 

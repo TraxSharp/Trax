@@ -37,7 +37,9 @@ public class MachineViewDocumentsTests
                 Views = new MachineViewCatalog(host.Views),
                 ApplicationName = "view_docs",
                 GraphQL = graphql =>
-                    graphql.UsePersistedOperations(po => po.SingleNode().RequirePersisted(true)),
+                    graphql.UsePersistedOperations(po =>
+                        po.SingleNode().RequirePersisted(require: true)
+                    ),
                 Services = s =>
                 {
                     s.AddSingleton(host);
@@ -110,7 +112,11 @@ public class MachineViewDocumentsTests
     {
         var executor = await _host
             .Services.GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
-        return ViewDocuments.Generate(executor.Schema).Single(d => d.Field == field).Id;
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
+        return ViewDocuments
+            .Generate(executor.Schema)
+            .Single(d => string.Equals(d.Field, field, StringComparison.Ordinal))
+            .Id;
     }
 }

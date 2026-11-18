@@ -200,7 +200,11 @@ public class AddTraxPrincipalAccessorTests
             "alice",
             "Alice",
             ["Admin"],
-            Claims: new Dictionary<string, string> { ["tenant"] = "acme", ["tier"] = "enterprise" },
+            Claims: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["tenant"] = "acme",
+                ["tier"] = "enterprise",
+            },
             PrincipalType: "apikey"
         );
 

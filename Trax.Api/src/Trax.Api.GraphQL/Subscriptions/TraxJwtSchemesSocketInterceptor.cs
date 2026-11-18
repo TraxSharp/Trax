@@ -41,20 +41,23 @@ internal sealed class TraxJwtSchemesSocketInterceptor(
             return ConnectionStatus.Reject("Missing auth token in connection_init payload.");
 
         var rejection = JwtSocketAuthentication.RejectedMessage;
-        await using (var scope = applicationServices.Services.CreateAsyncScope())
+        var scope = applicationServices.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             foreach (var scheme in registry.SchemeNames)
             {
                 AuthenticateResult result;
                 try
                 {
-                    result = await JwtSocketAuthentication.AuthenticateAsync(
-                        scope.ServiceProvider,
-                        session.Connection.HttpContext,
-                        scheme,
-                        token,
-                        cancellationToken
-                    );
+                    result = await JwtSocketAuthentication
+                        .AuthenticateAsync(
+                            scope.ServiceProvider,
+                            session.Connection.HttpContext,
+                            scheme,
+                            token,
+                            cancellationToken
+                        )
+                        .ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -77,7 +80,8 @@ internal sealed class TraxJwtSchemesSocketInterceptor(
                     applicationServices.Services,
                     logger
                 );
-                return await base.OnConnectAsync(session, connectionInitMessage, cancellationToken);
+                return await base.OnConnectAsync(session, connectionInitMessage, cancellationToken)
+                    .ConfigureAwait(false);
             }
         }
 

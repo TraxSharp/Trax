@@ -352,7 +352,7 @@ public class CognitoIssuerRoundTripTests
 
     private static async Task<PrincipalSnapshot> ReadPrincipalSnapshot(HttpResponseMessage resp)
     {
-        var json = await resp.Content.ReadAsStringAsync();
+        var json = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
         using var doc = System.Text.Json.JsonDocument.Parse(json);
         var root = doc.RootElement;
         return new PrincipalSnapshot
@@ -448,7 +448,7 @@ public class CognitoIssuerRoundTripTests
                     })
             )
             .Build();
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
     }
 

@@ -1,3 +1,5 @@
+using Trax.Core.Extensions;
+
 namespace Trax.Api.Tests.Meta.Tests;
 
 /// <summary>
@@ -110,15 +112,15 @@ public class DependencyDirectionTests
             }
         }
 
-        Offenders(repo!, projects)
+        Offenders(repo.NotNull(), projects)
             .Should()
             .BeEmpty(
                 $"{repo} may reference only its own family and its allowed upstream "
-                    + $"[{string.Join(", ", AllowedUpstream[repo!])}] per the Trax dependency chain. A "
+                    + $"[{string.Join(", ", AllowedUpstream[repo.NotNull()])}] per the Trax dependency chain. A "
                     + "package or project reference to any other Trax family points the wrong way "
                     + "(downstream or parallel), and one to a Trax id with no family must be mapped "
                     + "to the folder that ships it, in Families or Unprefixed. Offenders:\n  "
-                    + string.Join("\n  ", Offenders(repo!, projects))
+                    + string.Join("\n  ", Offenders(repo.NotNull(), projects))
             );
     }
 

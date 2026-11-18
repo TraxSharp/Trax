@@ -188,7 +188,7 @@ public class AddTraxOidcAuthTests
 
         var hostedCount = services.Count(sd =>
             sd.ServiceType == typeof(IHostedService)
-            && sd.ImplementationType?.Name.Contains("Disclaimer") == true
+            && sd.ImplementationType?.Name.Contains("Disclaimer", StringComparison.Ordinal) == true
         );
 
         hostedCount.Should().Be(1);
@@ -317,7 +317,7 @@ public class AddTraxOidcAuthTests
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
     }
 

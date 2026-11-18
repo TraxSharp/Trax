@@ -134,7 +134,7 @@ public class DataChangeSignalTests
         var sender = new RecordingTopicEventSender();
         var handler = new GraphQLDataChangeHandler(sender);
 
-        await handler.HandleAsync(DataChangedMessage(null), CancellationToken.None);
+        await handler.HandleAsync(DataChangedMessage(domain: null), CancellationToken.None);
 
         sender.Events.Should().BeEmpty();
     }

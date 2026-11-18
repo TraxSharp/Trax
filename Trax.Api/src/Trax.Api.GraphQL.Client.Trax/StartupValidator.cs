@@ -32,7 +32,7 @@ internal sealed class GraphQLClientStartupValidator : IHostedService
     /// </summary>
     /// <param name="validator">The client's validator.</param>
     /// <param name="assemblies">The assemblies whose request types are validated.</param>
-    /// <param name="typeFilter">Which request types to validate; <c>null</c> for all.</param>
+    /// <param name="typeFilter">Which request types to validate; <see langword="null"/> for all.</param>
     /// <param name="logger">Logs progress and the failing query; optional.</param>
     public GraphQLClientStartupValidator(
         IGraphQLClientValidator validator,
@@ -64,7 +64,7 @@ internal sealed class GraphQLClientStartupValidator : IHostedService
     /// <summary>
     /// The validator <c>UseStartupValidation</c> registers: it checks the request types that
     /// belong to the client registered under <paramref name="serviceKey"/> (marked with that key,
-    /// or unmarked for <c>null</c>; see <see cref="GraphQLClientAttribute"/>) and refuses to start
+    /// or unmarked for <see langword="null"/>; see <see cref="GraphQLClientAttribute"/>) and refuses to start
     /// when there are none, or when a request in the assemblies is marked with a key
     /// <paramref name="isRegisteredKey"/> says no client is registered under.
     /// </summary>

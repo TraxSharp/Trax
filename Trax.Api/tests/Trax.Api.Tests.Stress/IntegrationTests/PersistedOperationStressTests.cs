@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using HotChocolate.Execution;
 using HotChocolate.Language;
@@ -74,7 +75,9 @@ public class PersistedOperationStressTests : StressTestSetup
             async (sp, ct) =>
             {
                 var storage = (IOperationDocumentStorage)Store(sp);
-                var document = await storage.TryReadAsync(new OperationDocumentId(SeededId), ct);
+                var document = await storage
+                    .TryReadAsync(new OperationDocumentId(SeededId), ct)
+                    .ConfigureAwait(false);
                 document.Should().NotBeNull();
             }
         );
@@ -90,10 +93,9 @@ public class PersistedOperationStressTests : StressTestSetup
             async (sp, ct) =>
             {
                 var storage = (IOperationDocumentStorage)Store(sp);
-                var document = await storage.TryReadAsync(
-                    new OperationDocumentId("NoSuchOperation_v1"),
-                    ct
-                );
+                var document = await storage
+                    .TryReadAsync(new OperationDocumentId("NoSuchOperation_v1"), ct)
+                    .ConfigureAwait(false);
                 document.Should().BeNull();
             }
         );
@@ -140,7 +142,10 @@ public class PersistedOperationStressTests : StressTestSetup
             (
                 "ordinary id (stored)",
                 async _ =>
-                    (await hot.TryReadAsync(new OperationDocumentId(SeededId), default))
+                    (
+                        await hot.TryReadAsync(new OperationDocumentId(SeededId), default)
+                            .ConfigureAwait(false)
+                    )
                         .Should()
                         .NotBeNull()
             ),
@@ -148,10 +153,13 @@ public class PersistedOperationStressTests : StressTestSetup
                 "own machine document (read and verified)",
                 async _ =>
                 {
-                    (await registry.ClassifyAsync(own.Id, read, default))
+                    (await registry.ClassifyAsync(own.Id, read, default).ConfigureAwait(false))
                         .Should()
                         .Be(MachineDocumentVerdict.Own);
-                    (await hot.TryReadAsync(new OperationDocumentId(own.Id), default))
+                    (
+                        await hot.TryReadAsync(new OperationDocumentId(own.Id), default)
+                            .ConfigureAwait(false)
+                    )
                         .Should()
                         .NotBeNull();
                 }
@@ -160,11 +168,18 @@ public class PersistedOperationStressTests : StressTestSetup
                 "machine this node does not serve",
                 async i =>
                     (
-                        await registry.ClassifyAsync(
-                            MachineDocuments.IdOf("unserved", "get", irHash, i.ToString()),
-                            read,
-                            default
-                        )
+                        await registry
+                            .ClassifyAsync(
+                                MachineDocuments.IdOf(
+                                    "unserved",
+                                    "get",
+                                    irHash,
+                                    i.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                                ),
+                                read,
+                                default
+                            )
+                            .ConfigureAwait(false)
                     )
                         .Should()
                         .NotBe(MachineDocumentVerdict.Own)
@@ -172,16 +187,18 @@ public class PersistedOperationStressTests : StressTestSetup
             (
                 "unseen id of a served machine",
                 async i =>
-                    await registry.ClassifyAsync(
-                        MachineDocuments.IdOf(
-                            "stress-machine",
-                            "get",
-                            $"{i:x8}".PadLeft(MachineDocuments.IrHashLength, 'b'),
-                            Text
-                        ),
-                        read,
-                        default
-                    )
+                    await registry
+                        .ClassifyAsync(
+                            MachineDocuments.IdOf(
+                                "stress-machine",
+                                "get",
+                                $"{i:x8}".PadLeft(MachineDocuments.IrHashLength, 'b'),
+                                Text
+                            ),
+                            read,
+                            default
+                        )
+                        .ConfigureAwait(false)
             ),
         };
 
@@ -197,9 +214,18 @@ public class PersistedOperationStressTests : StressTestSetup
             }
             Array.Sort(samples);
             TestContext.Out.WriteLine(
-                $"{label}: mean {samples.Average():F3}ms, p50 {samples[Rounds / 2]:F3}ms, "
-                    + $"p99 {samples[(int)(Rounds * 0.99)]:F3}ms over {Rounds:N0} requests "
-                    + $"({Profile.PersistedOperations:N0} stored operations)"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{label}: mean {samples.Average():F3}ms, p50 {samples[Rounds / 2]:F3}ms, "
+                )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"p99 {samples[(int)(Rounds * 0.99)]:F3}ms over {Rounds:N0} requests "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"({Profile.PersistedOperations:N0} stored operations)"
+                    )
             );
             samples[(int)(Rounds * 0.99)]
                 .Should()
@@ -222,11 +248,9 @@ public class PersistedOperationStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var page = await new PersistedOperationQueries().PersistedOperations(
-                    Factory(sp),
-                    ct,
-                    take: 50
-                );
+                var page = await new PersistedOperationQueries()
+                    .PersistedOperations(Factory(sp), ct, take: 50)
+                    .ConfigureAwait(false);
                 page.Items.Should().HaveCount(50);
                 page.TotalCount.Should().BeGreaterThanOrEqualTo(Profile.PersistedOperations);
             }
@@ -241,12 +265,14 @@ public class PersistedOperationStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var page = await new PersistedOperationQueries().PersistedOperations(
-                    Factory(sp),
-                    ct,
-                    new PersistedOperationFilter(IsActive: true, TenantKey: "tenant-3"),
-                    take: 50
-                );
+                var page = await new PersistedOperationQueries()
+                    .PersistedOperations(
+                        Factory(sp),
+                        ct,
+                        new PersistedOperationFilter(IsActive: true, TenantKey: "tenant-3"),
+                        take: 50
+                    )
+                    .ConfigureAwait(false);
                 page.Items.Should().NotBeEmpty();
                 page.Items.Should().OnlyContain(p => p.IsActive && p.TenantKey == "tenant-3");
             }
@@ -261,12 +287,14 @@ public class PersistedOperationStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var page = await new PersistedOperationQueries().PersistedOperations(
-                    Factory(sp),
-                    ct,
-                    new PersistedOperationFilter(IdStartsWith: "StressOp4242"),
-                    take: 50
-                );
+                var page = await new PersistedOperationQueries()
+                    .PersistedOperations(
+                        Factory(sp),
+                        ct,
+                        new PersistedOperationFilter(IdStartsWith: "StressOp4242"),
+                        take: 50
+                    )
+                    .ConfigureAwait(false);
                 page.Items.Should().NotBeEmpty();
             }
         );
@@ -281,12 +309,14 @@ public class PersistedOperationStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var page = await new PersistedOperationQueries().PersistedOperations(
-                    Factory(sp),
-                    ct,
-                    skip: Profile.PersistedOperations - 50,
-                    take: 50
-                );
+                var page = await new PersistedOperationQueries()
+                    .PersistedOperations(
+                        Factory(sp),
+                        ct,
+                        skip: Profile.PersistedOperations - 50,
+                        take: 50
+                    )
+                    .ConfigureAwait(false);
                 page.Items.Should().NotBeEmpty();
             }
         );
@@ -300,11 +330,9 @@ public class PersistedOperationStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var row = await new PersistedOperationQueries().PersistedOperation(
-                    SeededId,
-                    Factory(sp),
-                    ct
-                );
+                var row = await new PersistedOperationQueries()
+                    .PersistedOperation(SeededId, Factory(sp), ct)
+                    .ConfigureAwait(false);
                 row.Should().NotBeNull();
             }
         );
@@ -318,11 +346,9 @@ public class PersistedOperationStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var history = await new PersistedOperationQueries().PersistedOperationHistory(
-                    SeededId,
-                    Factory(sp),
-                    ct
-                );
+                var history = await new PersistedOperationQueries()
+                    .PersistedOperationHistory(SeededId, Factory(sp), ct)
+                    .ConfigureAwait(false);
                 history.Should().NotBeEmpty();
             }
         );
@@ -347,14 +373,16 @@ public class PersistedOperationStressTests : StressTestSetup
                 ),
             async (sp, ct) =>
             {
-                var payload = await new PersistedOperationMutations().UploadPersistedOperation(
-                    new UploadPersistedOperationInput(
-                        UploadedId,
-                        "query StressUpload { operations { health { status } } }"
-                    ),
-                    Store(sp),
-                    ct
-                );
+                var payload = await new PersistedOperationMutations()
+                    .UploadPersistedOperation(
+                        new UploadPersistedOperationInput(
+                            UploadedId,
+                            "query StressUpload { operations { health { status } } }"
+                        ),
+                        Store(sp),
+                        ct
+                    )
+                    .ConfigureAwait(false);
                 payload.Errors.Should().BeEmpty();
             }
         );
@@ -369,11 +397,13 @@ public class PersistedOperationStressTests : StressTestSetup
             ReactivateSeededOperation,
             async (sp, ct) =>
                 (
-                    await new PersistedOperationMutations().DeactivatePersistedOperation(
-                        new DeactivatePersistedOperationInput(SeededId, "stress"),
-                        Store(sp),
-                        ct
-                    )
+                    await new PersistedOperationMutations()
+                        .DeactivatePersistedOperation(
+                            new DeactivatePersistedOperationInput(SeededId, "stress"),
+                            Store(sp),
+                            ct
+                        )
+                        .ConfigureAwait(false)
                 )
                     .Success.Should()
                     .BeTrue()
@@ -393,12 +423,14 @@ public class PersistedOperationStressTests : StressTestSetup
                 ),
             async (sp, ct) =>
                 (
-                    await new PersistedOperationMutations().RestorePersistedOperation(
-                        new RestorePersistedOperationInput(SeededId),
-                        Store(sp),
-                        Factory(sp),
-                        ct
-                    )
+                    await new PersistedOperationMutations()
+                        .RestorePersistedOperation(
+                            new RestorePersistedOperationInput(SeededId),
+                            Store(sp),
+                            Factory(sp),
+                            ct
+                        )
+                        .ConfigureAwait(false)
                 )
                     .Success.Should()
                     .BeTrue(),

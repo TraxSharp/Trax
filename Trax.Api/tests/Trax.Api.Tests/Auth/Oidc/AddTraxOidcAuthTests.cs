@@ -194,7 +194,7 @@ public class AddTraxOidcAuthTests
         oidcOptions.Events.OnTokenValidated.Should().NotBeNull();
     }
 
-    private class CustomResolver : ITraxPrincipalResolver<OidcTokenInput>
+    private sealed class CustomResolver : ITraxPrincipalResolver<OidcTokenInput>
     {
         public ValueTask<TraxPrincipal?> ResolveAsync(OidcTokenInput input, CancellationToken ct) =>
             ValueTask.FromResult<TraxPrincipal?>(null);

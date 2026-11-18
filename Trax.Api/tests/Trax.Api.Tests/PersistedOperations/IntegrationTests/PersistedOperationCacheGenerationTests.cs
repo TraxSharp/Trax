@@ -55,11 +55,16 @@ public class PersistedOperationCacheGenerationTests
     {
         var id = $"held_deactivate_{Guid.NewGuid():N}";
         var held = GraphQLFixture.Hold(id);
-        await _store.UpsertAsync(id, GraphQLFixture.HeldDocument(id), null, CancellationToken.None);
+        await _store.UpsertAsync(
+            id,
+            GraphQLFixture.HeldDocument(id),
+            options: null,
+            CancellationToken.None
+        );
 
         var running = ExecuteByIdAsync(_sp, id);
         await held.Entered;
-        await _store.DeactivateAsync(id, null, "retired", CancellationToken.None);
+        await _store.DeactivateAsync(id, tenantKey: null, "retired", CancellationToken.None);
         held.Release();
         (await running).Should().Contain("\"held\"", "the request had already started");
 
@@ -74,7 +79,12 @@ public class PersistedOperationCacheGenerationTests
     {
         var id = $"held_reupload_{Guid.NewGuid():N}";
         var held = GraphQLFixture.Hold(id);
-        await _store.UpsertAsync(id, GraphQLFixture.HeldDocument(id), null, CancellationToken.None);
+        await _store.UpsertAsync(
+            id,
+            GraphQLFixture.HeldDocument(id),
+            options: null,
+            CancellationToken.None
+        );
 
         var running = ExecuteByIdAsync(_sp, id);
         await held.Entered;
@@ -94,10 +104,12 @@ public class PersistedOperationCacheGenerationTests
 
     internal static async Task<string> ExecuteByIdAsync(IServiceProvider sp, string id)
     {
-        var executor = await GraphQLFixture.GetExecutorAsync(sp);
-        var result = await executor.ExecuteAsync(
-            OperationRequestBuilder.New().SetDocumentId(new OperationDocumentId(id)).Build()
-        );
+        var executor = await GraphQLFixture.GetExecutorAsync(sp).ConfigureAwait(false);
+        var result = await executor
+            .ExecuteAsync(
+                OperationRequestBuilder.New().SetDocumentId(new OperationDocumentId(id)).Build()
+            )
+            .ConfigureAwait(false);
         return ((OperationResult)result).ToJson();
     }
 }

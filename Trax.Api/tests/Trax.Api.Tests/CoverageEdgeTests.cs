@@ -88,8 +88,8 @@ public class CoverageEdgeTests
         dict["i"].Should().Be(42L);
         dict["d"].Should().Be(3.14);
         dict["longBig"].Should().Be(9007199254740993L);
-        dict["t"].Should().Be(true);
-        dict["f"].Should().Be(false);
+        dict["t"].Should().Be(expected: true);
+        dict["f"].Should().Be(expected: false);
         dict["n"].Should().BeNull();
     }
 

@@ -60,7 +60,7 @@ internal sealed record ConsoleTarget(
         if (
             Uri.TryCreate(host, UriKind.Absolute, out var root)
                 ? root.UserInfo.Length > 0
-                : host.Contains('@')
+                : host.Contains('@', StringComparison.Ordinal)
         )
             throw new InvalidOperationException(
                 "--host carries a user name or password. Give the URL alone, and the credential with "
@@ -90,7 +90,9 @@ internal sealed record ConsoleTarget(
 
         var socket = new UriBuilder(endpoint)
         {
-            Scheme = endpoint.Scheme == "https" ? "wss" : "ws",
+            Scheme = string.Equals(endpoint.Scheme, "https", StringComparison.Ordinal)
+                ? "wss"
+                : "ws",
         }.Uri;
 
         var credentials = new List<Credential>();
@@ -113,7 +115,11 @@ internal sealed record ConsoleTarget(
             );
         var credential = credentials.SingleOrDefault();
 
-        if (credential is not null && endpoint.Scheme == "http" && !IsThisMachine(endpoint))
+        if (
+            credential is not null
+            && string.Equals(endpoint.Scheme, "http", StringComparison.Ordinal)
+            && !IsThisMachine(endpoint)
+        )
             throw new InvalidOperationException(
                 $"{endpoint} is plain HTTP to another machine, and the credential would cross the network in "
                     + "the clear. Use https."
@@ -178,7 +184,7 @@ internal sealed record ConsoleTarget(
                     | UnixFileMode.GroupWrite
                     | UnixFileMode.OtherRead
                     | UnixFileMode.OtherWrite;
-                if ((mode & others) != 0)
+                if ((mode & others) != UnixFileMode.None)
                     throw new InvalidOperationException(
                         $"{option}: other users can read or change {path}. Make it yours alone with "
                             + $"chmod 600 {path}."

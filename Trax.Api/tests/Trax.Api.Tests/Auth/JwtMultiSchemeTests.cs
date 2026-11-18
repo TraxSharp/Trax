@@ -462,7 +462,7 @@ public class JwtMultiSchemeTests
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
     }
 
@@ -499,7 +499,7 @@ public class JwtMultiSchemeTests
             ?? principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (sub is null)
             return null;
-        return new TraxPrincipal(sub, sub, [], null, PrincipalType: discriminator);
+        return new TraxPrincipal(sub, sub, [], Claims: null, PrincipalType: discriminator);
     }
 
     private sealed class TestHostEnvironment : IHostEnvironment

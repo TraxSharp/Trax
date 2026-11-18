@@ -191,9 +191,9 @@ public class AskAfreshMutationsTests
             ReplayDecisionsOf: 77
         );
         await SeedManifestAsync("m");
-        scheduler.TriggerAsync("m", true, Arg.Any<CancellationToken>()).Returns(claimed);
+        scheduler.TriggerAsync("m", askAfresh: true, Arg.Any<CancellationToken>()).Returns(claimed);
         scheduler
-            .TriggerAsync("m", Arg.Any<TimeSpan>(), true, Arg.Any<CancellationToken>())
+            .TriggerAsync("m", Arg.Any<TimeSpan>(), askAfresh: true, Arg.Any<CancellationToken>())
             .Returns(claimed);
         var mutations = new OperationsMutations();
 
@@ -221,8 +221,16 @@ public class AskAfreshMutationsTests
         await SeedManifestAsync("m");
         var scheduler = Substitute.For<ITraxScheduler>();
         scheduler
-            .TriggerAsync("m", true, Arg.Any<CancellationToken>())
-            .Returns(new ManifestTriggerResult(9, false, null, false, null));
+            .TriggerAsync("m", askAfresh: true, Arg.Any<CancellationToken>())
+            .Returns(
+                new ManifestTriggerResult(
+                    9,
+                    Created: false,
+                    ScheduledAt: null,
+                    AlreadyDispatched: false,
+                    ReplayDecisionsOf: null
+                )
+            );
 
         var response = await new OperationsMutations().TriggerManifest(
             "m",
@@ -245,7 +253,7 @@ public class AskAfreshMutationsTests
 
         var off = await mutations.SetManifestsReplayDecisionsOnRetry(
             [manifest.Id],
-            false,
+            replay: false,
             Operations,
             default
         );
@@ -268,7 +276,7 @@ public class AskAfreshMutationsTests
 
         var again = await mutations.SetManifestsReplayDecisionsOnRetry(
             [manifest.Id],
-            false,
+            replay: false,
             Operations,
             default
         );
@@ -276,7 +284,7 @@ public class AskAfreshMutationsTests
 
         var on = await mutations.SetManifestsReplayDecisionsOnRetry(
             [manifest.Id],
-            true,
+            replay: true,
             Operations,
             default
         );
@@ -298,7 +306,7 @@ public class AskAfreshMutationsTests
     {
         var response = await new OperationsMutations().SetManifestsReplayDecisionsOnRetry(
             [],
-            false,
+            replay: false,
             Operations,
             default
         );
@@ -316,7 +324,7 @@ public class AskAfreshMutationsTests
         var scheduler = Substitute.For<ITraxScheduler>();
         scheduler
             .RequeueDeadLetterAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
-            .Returns(new DeadLetterOperationResult(true, 1, "ok"));
+            .Returns(new DeadLetterOperationResult(Success: true, 1, "ok"));
         scheduler
             .RequeueDeadLettersAsync(Arg.Any<long[]>(), Arg.Any<CancellationToken>())
             .Returns(new BatchDeadLetterResult(1, "ok"));
@@ -393,7 +401,7 @@ public class AskAfreshMutationsTests
         await scheduler
             .Received(1)
             .RequeueAllDeadLettersAsync(
-                false,
+                askAfresh: false,
                 Arg.Any<IProgress<int>?>(),
                 Arg.Any<CancellationToken>()
             );
@@ -462,22 +470,29 @@ public class AskAfreshMutationsTests
 
         await operations
             .Received(1)
-            .TriggerManifestAsync("m", null, true, Arg.Any<CancellationToken>());
+            .TriggerManifestAsync("m", delay: null, askAfresh: true, Arg.Any<CancellationToken>());
         await operations
             .Received(1)
-            .TriggerManifestAsync("m", TimeSpan.FromMinutes(5), true, Arg.Any<CancellationToken>());
-        await scheduler.Received(1).RequeueDeadLetterAsync(1, true, Arg.Any<CancellationToken>());
+            .TriggerManifestAsync(
+                "m",
+                TimeSpan.FromMinutes(5),
+                askAfresh: true,
+                Arg.Any<CancellationToken>()
+            );
+        await scheduler
+            .Received(1)
+            .RequeueDeadLetterAsync(1, askAfresh: true, Arg.Any<CancellationToken>());
         await scheduler
             .Received(1)
             .RequeueDeadLettersAsync(
                 Arg.Is<long[]>(ids => ids != null && ids.SequenceEqual(new[] { 1L })),
-                true,
+                askAfresh: true,
                 Arg.Any<CancellationToken>()
             );
         await scheduler
             .Received(1)
             .RequeueAllDeadLettersAsync(
-                true,
+                askAfresh: true,
                 Arg.Any<IProgress<int>?>(),
                 Arg.Any<CancellationToken>()
             );
@@ -487,10 +502,12 @@ public class AskAfreshMutationsTests
                 Arg.Is<IReadOnlyCollection<long>>(ids =>
                     ids != null && ids.SequenceEqual(new[] { 1L })
                 ),
-                false,
+                replay: false,
                 Arg.Any<CancellationToken>()
             );
-        await operations.Received(1).RequeueExecutionAsync(1, true, Arg.Any<CancellationToken>());
+        await operations
+            .Received(1)
+            .RequeueExecutionAsync(1, askAfresh: true, Arg.Any<CancellationToken>());
         await host.StopAsync();
     }
 
@@ -501,12 +518,12 @@ public class AskAfreshMutationsTests
     )> StartHostAsync()
     {
         // The triggers refuse an unknown manifest, so the one the documents name exists.
-        await SeedManifestAsync("m");
+        await SeedManifestAsync("m").ConfigureAwait(false);
 
         var scheduler = Substitute.For<ITraxScheduler>();
         scheduler
             .RequeueDeadLetterAsync(Arg.Any<long>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
-            .Returns(new DeadLetterOperationResult(true, 1, "ok"));
+            .Returns(new DeadLetterOperationResult(Success: true, 1, "ok"));
         scheduler
             .RequeueDeadLettersAsync(
                 Arg.Any<long[]>(),
@@ -523,7 +540,15 @@ public class AskAfreshMutationsTests
             .Returns(new BatchDeadLetterResult(1, "ok"));
         scheduler
             .TriggerAsync(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
-            .Returns(new ManifestTriggerResult(1, true, null, false, null));
+            .Returns(
+                new ManifestTriggerResult(
+                    1,
+                    Created: true,
+                    ScheduledAt: null,
+                    AlreadyDispatched: false,
+                    ReplayDecisionsOf: null
+                )
+            );
         scheduler
             .TriggerAsync(
                 Arg.Any<string>(),
@@ -531,11 +556,19 @@ public class AskAfreshMutationsTests
                 Arg.Any<bool>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(new ManifestTriggerResult(1, true, null, false, null));
+            .Returns(
+                new ManifestTriggerResult(
+                    1,
+                    Created: true,
+                    ScheduledAt: null,
+                    AlreadyDispatched: false,
+                    ReplayDecisionsOf: null
+                )
+            );
         var operations = Substitute.For<IOperationsService>();
         operations
             .RequeueExecutionAsync(Arg.Any<long>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
-            .Returns(new OperationResult(true, Count: 1));
+            .Returns(new OperationResult(Success: true, Count: 1));
         operations
             .TriggerManifestAsync(
                 Arg.Any<string>(),
@@ -545,9 +578,15 @@ public class AskAfreshMutationsTests
             )
             .Returns(
                 new TriggerManifestResult(
-                    true,
+                    Success: true,
                     "triggered",
-                    new ManifestTriggerResult(1, true, null, false, null)
+                    new ManifestTriggerResult(
+                        1,
+                        Created: true,
+                        ScheduledAt: null,
+                        AlreadyDispatched: false,
+                        ReplayDecisionsOf: null
+                    )
                 )
             );
         operations
@@ -556,7 +595,7 @@ public class AskAfreshMutationsTests
                 Arg.Any<bool>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(new OperationResult(true, Count: 1));
+            .Returns(new OperationResult(Success: true, Count: 1));
 
         var host = new HostBuilder()
             .ConfigureWebHost(web =>
@@ -599,7 +638,7 @@ public class AskAfreshMutationsTests
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return (host, scheduler, operations);
     }
 
@@ -613,8 +652,8 @@ public class AskAfreshMutationsTests
         if (apiKey is not null)
             request.Headers.Add("X-Api-Key", apiKey);
 
-        var response = await client.SendAsync(request);
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var response = await client.SendAsync(request).ConfigureAwait(false);
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
     }
 
     #endregion
@@ -663,7 +702,7 @@ public class AskAfreshMutationsTests
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         while (jobs.Get(id)?.Status == DeadLetterRequeueJobStatus.Running)
             // determinism: the poll interval of a wait bounded by the timeout above.
-            await Task.Delay(10, timeout.Token);
+            await Task.Delay(10, timeout.Token).ConfigureAwait(false);
     }
 
     /// <summary>Waits for a background requeue-all to call the scheduler.</summary>
@@ -674,140 +713,159 @@ public class AskAfreshMutationsTests
             !scheduler
                 .ReceivedCalls()
                 .Any(c =>
-                    c.GetMethodInfo().Name == nameof(ITraxScheduler.RequeueAllDeadLettersAsync)
+                    string.Equals(
+                        c.GetMethodInfo().Name,
+                        nameof(ITraxScheduler.RequeueAllDeadLettersAsync),
+                        StringComparison.Ordinal
+                    )
                 )
         )
             // determinism: the poll interval of a wait bounded by the timeout above.
-            await Task.Delay(10, timeout.Token);
+            await Task.Delay(10, timeout.Token).ConfigureAwait(false);
     }
 
     /// <summary>A manifest with this external id, so a trigger for it is not refused as unknown.</summary>
     private async Task SeedManifestAsync(string externalId)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var group = new ManifestGroup
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
-            Name = $"group-{Guid.NewGuid():N}",
-            IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
-        };
-        await db.Track(group);
-        await db.SaveChanges(default);
+            var group = new ManifestGroup
+            {
+                Name = $"group-{Guid.NewGuid():N}",
+                IsEnabled = true,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            await db.Track(group).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
 
-        var manifest = Manifest.Create(new CreateManifest { Name = typeof(IAskAfreshTrain) });
-        manifest.ManifestGroupId = group.Id;
-        manifest.ExternalId = externalId;
-        await db.Track(manifest);
-        await db.SaveChanges(default);
+            var manifest = Manifest.Create(new CreateManifest { Name = typeof(IAskAfreshTrain) });
+            manifest.ManifestGroupId = group.Id;
+            manifest.ExternalId = externalId;
+            await db.Track(manifest).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+        }
     }
 
     private async Task<(Manifest Manifest, long FailedRun)> SeedFailedManifestAsync()
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-
-        var group = new ManifestGroup
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
-            Name = $"group-{Guid.NewGuid():N}",
-            IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
-        };
-        await db.Track(group);
-        await db.SaveChanges(default);
-
-        var manifest = Manifest.Create(new CreateManifest { Name = typeof(IAskAfreshTrain) });
-        manifest.ManifestGroupId = group.Id;
-        manifest.PropertyTypeName = "Trax.X.AskAfreshInput";
-        manifest.Properties = "{\"v\":1}";
-        await db.Track(manifest);
-        await db.SaveChanges(default);
-
-        var run = Metadata.Create(
-            new CreateMetadata
+            var group = new ManifestGroup
             {
-                Name = manifest.Name,
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = null,
-            }
-        );
-        run.ManifestId = manifest.Id;
-        run.TrainState = TrainState.Failed;
-        run.DecisionsRecorded = true;
-        run.StartTime = DateTime.UtcNow.AddMinutes(-5);
-        await db.Track(run);
-        await db.SaveChanges(default);
+                Name = $"group-{Guid.NewGuid():N}",
+                IsEnabled = true,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            await db.Track(group).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
 
-        var ranFrom = WorkQueue.Create(
-            new CreateWorkQueue
-            {
-                TrainName = manifest.Name,
-                Input = manifest.Properties,
-                InputTypeName = manifest.PropertyTypeName,
-                ManifestId = manifest.Id,
-            }
-        );
-        ranFrom.Status = WorkQueueStatus.Dispatched;
-        ranFrom.MetadataId = run.Id;
-        await db.Track(ranFrom);
+            var manifest = Manifest.Create(new CreateManifest { Name = typeof(IAskAfreshTrain) });
+            manifest.ManifestGroupId = group.Id;
+            manifest.PropertyTypeName = "Trax.X.AskAfreshInput";
+            manifest.Properties = "{\"v\":1}";
+            await db.Track(manifest).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
 
-        db.RecordedDecisions.Add(
-            new RecordedDecision
-            {
-                MetadataId = run.Id,
-                QuestionKey = "AskAfreshLane",
-                Occurrence = 0,
-                Kind = "choice",
-                Question = """{"text":"Which lane?"}""",
-                Answer = """{"choice":"Fast"}""",
-                Fingerprint = "fingerprint",
-                DecidedAt = DateTime.UtcNow.AddMinutes(-5),
-            }
-        );
-        await db.SaveChanges(default);
-        return (manifest, run.Id);
+            var run = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = manifest.Name,
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                }
+            );
+            run.ManifestId = manifest.Id;
+            run.TrainState = TrainState.Failed;
+            run.DecisionsRecorded = true;
+            run.StartTime = DateTime.UtcNow.AddMinutes(-5);
+            await db.Track(run).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+
+            var ranFrom = WorkQueue.Create(
+                new CreateWorkQueue
+                {
+                    TrainName = manifest.Name,
+                    Input = manifest.Properties,
+                    InputTypeName = manifest.PropertyTypeName,
+                    ManifestId = manifest.Id,
+                }
+            );
+            ranFrom.Status = WorkQueueStatus.Dispatched;
+            ranFrom.MetadataId = run.Id;
+            await db.Track(ranFrom).ConfigureAwait(false);
+
+            db.RecordedDecisions.Add(
+                new RecordedDecision
+                {
+                    MetadataId = run.Id,
+                    QuestionKey = "AskAfreshLane",
+                    Occurrence = 0,
+                    Kind = "choice",
+                    Question = """{"text":"Which lane?"}""",
+                    Answer = """{"choice":"Fast"}""",
+                    Fingerprint = "fingerprint",
+                    DecidedAt = DateTime.UtcNow.AddMinutes(-5),
+                }
+            );
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return (manifest, run.Id);
+        }
     }
 
     private async Task<long> SeedDeadLetterAsync(Manifest manifest)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var deadLetter = DeadLetter.Create(
-            new CreateDeadLetter
-            {
-                Manifest = manifest,
-                Reason = "failed",
-                RetryCount = 0,
-            }
-        );
-        await db.Track(deadLetter);
-        await db.SaveChanges(default);
-        return deadLetter.Id;
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var deadLetter = DeadLetter.Create(
+                new CreateDeadLetter
+                {
+                    Manifest = manifest,
+                    Reason = "failed",
+                    RetryCount = 0,
+                }
+            );
+            await db.Track(deadLetter).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return deadLetter.Id;
+        }
     }
 
     private async Task SeedQueuedRetryAsync(Manifest manifest, long failedRun)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var retry = WorkQueue.Create(
-            new CreateWorkQueue
-            {
-                TrainName = manifest.Name,
-                Input = manifest.Properties,
-                InputTypeName = manifest.PropertyTypeName,
-                ManifestId = manifest.Id,
-                ScheduledAt = DateTime.UtcNow.AddHours(1),
-            }
-        );
-        retry.ReplayDecisionsOf = failedRun;
-        await db.Track(retry);
-        await db.SaveChanges(default);
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var retry = WorkQueue.Create(
+                new CreateWorkQueue
+                {
+                    TrainName = manifest.Name,
+                    Input = manifest.Properties,
+                    InputTypeName = manifest.PropertyTypeName,
+                    ManifestId = manifest.Id,
+                    ScheduledAt = DateTime.UtcNow.AddHours(1),
+                }
+            );
+            retry.ReplayDecisionsOf = failedRun;
+            await db.Track(retry).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+        }
     }
 
     private async Task<WorkQueue> QueuedEntryAsync(long manifestId)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        return await db
-            .WorkQueues.AsNoTracking()
-            .SingleAsync(w => w.ManifestId == manifestId && w.Status == WorkQueueStatus.Queued);
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            return await db
+                .WorkQueues.AsNoTracking()
+                .SingleAsync(w => w.ManifestId == manifestId && w.Status == WorkQueueStatus.Queued)
+                .ConfigureAwait(false);
+        }
     }
 
     public interface IAskAfreshTrain;

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using AwesomeAssertions;
 using HotChocolate;
@@ -119,7 +120,7 @@ public class AuditRefusedRequestTests
                 System.Text.Json.JsonSerializer.Serialize(new { type = "connection_init", payload })
             ),
             System.Net.WebSockets.WebSocketMessageType.Text,
-            true,
+            endOfMessage: true,
             default
         );
 
@@ -191,7 +192,12 @@ public class AuditRefusedRequestTests
         CapturingSink.Entries.Clear();
 
         // Two events, each selecting the same failing field under 200 aliases.
-        var aliases = string.Join(" ", Enumerable.Range(0, 200).Select(i => $"f{i}: bad"));
+        var aliases = string.Join(
+            ' ',
+            Enumerable
+                .Range(0, 200)
+                .Select(i => string.Create(CultureInfo.InvariantCulture, $"f{i}: bad"))
+        );
         using var request = Post($"subscription Probes {{ auditProbe {{ {aliases} }} }}");
         request.Headers.Add("X-Api-Key", ApiKey);
         request.Headers.Accept.ParseAdd("text/event-stream");
@@ -227,7 +233,7 @@ public class AuditRefusedRequestTests
         {
             if (CapturingSink.Entries.Count >= count)
                 return true;
-            await Task.Delay(10); // determinism: poll interval of a condition wait, bounded above
+            await Task.Delay(10).ConfigureAwait(false); // determinism: poll interval of a condition wait, bounded above
         }
         return CapturingSink.Entries.Count >= count;
     }
@@ -297,7 +303,9 @@ public class AuditRefusedRequestTests
         [TraxAuthorize]
         [Subscribe(With = nameof(Ticks))]
         public string AuditTick([EventMessage] string tick) =>
-            tick == "boom" ? throw new InvalidOperationException("secret-detail") : tick;
+            string.Equals(tick, "boom", StringComparison.Ordinal)
+                ? throw new InvalidOperationException("secret-detail")
+                : tick;
 
         public async IAsyncEnumerable<string> Ticks()
         {

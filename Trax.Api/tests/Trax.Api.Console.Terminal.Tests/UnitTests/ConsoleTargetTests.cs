@@ -23,7 +23,13 @@ public class ConsoleTargetTests
 
     [Test]
     public void The_host_may_come_from_the_environment() =>
-        Resolve(null, env: new() { [ConsoleTarget.HostVariable] = "https://ops.example.com" })
+        Resolve(
+            host: null,
+            env: new(StringComparer.Ordinal)
+            {
+                [ConsoleTarget.HostVariable] = "https://ops.example.com",
+            }
+        )
             .Endpoint.Host.Should()
             .Be("ops.example.com");
 
@@ -31,7 +37,7 @@ public class ConsoleTargetTests
     public void An_api_key_from_the_environment_is_its_first_line_trimmed() =>
         Resolve(
             "https://ops.example.com",
-            env: new() { [ConsoleTarget.ApiKeyVariable] = " sk_live_1 \n" }
+            env: new(StringComparer.Ordinal) { [ConsoleTarget.ApiKeyVariable] = " sk_live_1 \n" }
         )
             .Credential.Should()
             .Be(new Credential.ApiKey("sk_live_1"));
@@ -50,7 +56,10 @@ public class ConsoleTargetTests
                 apiKeyFile: null,
                 tokenFile: file,
                 sendText: false,
-                n => n == ConsoleTarget.ApiKeyVariable ? "sk_live_1" : null
+                n =>
+                    string.Equals(n, ConsoleTarget.ApiKeyVariable, StringComparison.Ordinal)
+                        ? "sk_live_1"
+                        : null
             );
 
             target.Credential.Should().Be(new Credential.Bearer("eyJ.token"));
@@ -125,7 +134,7 @@ public class ConsoleTargetTests
             .Invoking(() =>
                 Resolve(
                     "https://ops.example.com",
-                    env: new()
+                    env: new(StringComparer.Ordinal)
                     {
                         [ConsoleTarget.ApiKeyVariable] = "k",
                         [ConsoleTarget.TokenVariable] = "t",
@@ -142,7 +151,7 @@ public class ConsoleTargetTests
             .Invoking(() =>
                 Resolve(
                     "http://ops.example.com",
-                    env: new() { [ConsoleTarget.ApiKeyVariable] = "k" }
+                    env: new(StringComparer.Ordinal) { [ConsoleTarget.ApiKeyVariable] = "k" }
                 )
             )
             .Should()
@@ -152,7 +161,7 @@ public class ConsoleTargetTests
     [TestCase("http://localhost:5000")]
     [TestCase("http://127.0.0.1:5000")]
     public void Plain_HTTP_to_this_machine_is_allowed(string host) =>
-        Resolve(host, env: new() { [ConsoleTarget.ApiKeyVariable] = "k" })
+        Resolve(host, env: new(StringComparer.Ordinal) { [ConsoleTarget.ApiKeyVariable] = "k" })
             .Socket.Scheme.Should()
             .Be("ws");
 
@@ -177,7 +186,10 @@ public class ConsoleTargetTests
                     apiKeyFile: null,
                     tokenFile: null,
                     sendText: false,
-                    n => n == ConsoleTarget.ApiKeyVariable ? "k" : null
+                    n =>
+                        string.Equals(n, ConsoleTarget.ApiKeyVariable, StringComparison.Ordinal)
+                            ? "k"
+                            : null
                 )
             )
             .Should()

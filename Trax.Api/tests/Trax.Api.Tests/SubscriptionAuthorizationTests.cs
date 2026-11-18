@@ -318,9 +318,10 @@ public class SubscriptionAuthorizationTests
     {
         var act = async () =>
             await BuildAsync(
-                g => g.AllowOutputForBroadcastSubscribers<IPublicTrain>(),
-                Broadcast<IAdminOnlyTrain>(roles: "Admin")
-            );
+                    g => g.AllowOutputForBroadcastSubscribers<IPublicTrain>(),
+                    Broadcast<IAdminOnlyTrain>(roles: "Admin")
+                )
+                .ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -360,7 +361,8 @@ public class SubscriptionAuthorizationTests
     [Test]
     public async Task BroadcastTrainWithoutPosture_OnAnOpenEndpoint_FailsAtStartup()
     {
-        var act = async () => await BuildAsync(g => g, Undeclared<IUndeclaredTrain>());
+        var act = async () =>
+            await BuildAsync(g => g, Undeclared<IUndeclaredTrain>()).ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -380,11 +382,11 @@ public class SubscriptionAuthorizationTests
                     | System.Reflection.BindingFlags.Instance
                     | System.Reflection.BindingFlags.DeclaredOnly
             )
-            .Where(m => m.IsDefined(typeof(HotChocolate.Types.SubscribeAttribute), false))
             .Where(m =>
-                !m.IsDefined(typeof(AuthorizedPerSubscriberAttribute), false)
-                && !m.IsDefined(typeof(TraxAuthorizeAttribute), false)
-                && !m.IsDefined(typeof(TraxAllowAnonymousAttribute), false)
+                m.IsDefined(typeof(HotChocolate.Types.SubscribeAttribute), inherit: false)
+                && !m.IsDefined(typeof(AuthorizedPerSubscriberAttribute), inherit: false)
+                && !m.IsDefined(typeof(TraxAuthorizeAttribute), inherit: false)
+                && !m.IsDefined(typeof(TraxAllowAnonymousAttribute), inherit: false)
             )
             .Select(m => m.Name)
             .ToList();
@@ -421,8 +423,14 @@ public class SubscriptionAuthorizationTests
             foreach (
                 var hosted in _provider.GetServices<Microsoft.Extensions.Hosting.IHostedService>()
             )
-                if (hosted.GetType().Name == "TypeExtensionExposureValidator")
-                    await hosted.StartAsync(default);
+                if (
+                    string.Equals(
+                        hosted.GetType().Name,
+                        "TypeExtensionExposureValidator",
+                        StringComparison.Ordinal
+                    )
+                )
+                    await hosted.StartAsync(default).ConfigureAwait(false);
         };
 
         await act.Should().NotThrowAsync();
@@ -436,7 +444,7 @@ public class SubscriptionAuthorizationTests
         new(
             new ClaimsIdentity(
                 [
-                    new Claim(ClaimTypes.Name, string.Join("+", roles)),
+                    new Claim(ClaimTypes.Name, string.Join('+', roles)),
                     .. roles.Select(role => new Claim(ClaimTypes.Role, role)),
                 ],
                 "Test"
@@ -548,7 +556,8 @@ public class SubscriptionAuthorizationTests
         _provider = services.BuildServiceProvider();
         return await _provider
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
     }
 
     private static async Task<Subscription> SubscribeAsync(
@@ -557,15 +566,19 @@ public class SubscriptionAuthorizationTests
         ClaimsPrincipal user
     )
     {
-        var result = await executor.ExecuteAsync(
-            OperationRequestBuilder
-                .New()
-                .SetDocument(query)
-                .SetGlobalState("ClaimsPrincipal", user)
-                .Build()
-        );
+        var result = await executor
+            .ExecuteAsync(
+                OperationRequestBuilder
+                    .New()
+                    .SetDocument(query)
+                    .SetGlobalState("ClaimsPrincipal", user)
+                    .Build()
+            )
+            .ConfigureAwait(false);
 
-        return result is IResponseStream stream ? new Subscription(stream) : new Subscription(null);
+        return result is IResponseStream stream
+            ? new Subscription(stream)
+            : new Subscription(stream: null);
     }
 
     private sealed class Subscription(IResponseStream? stream) : IAsyncDisposable
@@ -584,7 +597,7 @@ public class SubscriptionAuthorizationTests
             );
             var reader = Task.Run(async () =>
             {
-                await foreach (var item in stream!.ReadResultsAsync())
+                await foreach (var item in stream!.ReadResultsAsync().ConfigureAwait(false))
                 {
                     received.TrySetResult(item);
                     break;
@@ -599,20 +612,20 @@ public class SubscriptionAuthorizationTests
                 publish();
                 // allowed-delay: re-publish interval, bounded by the 10s deadline; WhenAny wakes
                 // the instant the subscriber receives.
-                await Task.WhenAny(received.Task, Task.Delay(100));
+                await Task.WhenAny(received.Task, Task.Delay(100)).ConfigureAwait(false);
             }
 
             received.Task.IsCompleted.Should().BeTrue("an event should reach the subscriber");
-            var payload = await received.Task;
+            var payload = await received.Task.ConfigureAwait(false);
             payload.Errors.Should().BeNullOrEmpty();
-            await reader;
+            await reader.ConfigureAwait(false);
             return (IReadOnlyDictionary<string, object?>)payload.DataMap()["onTrainCompleted"]!;
         }
 
         public async ValueTask DisposeAsync()
         {
             if (stream is not null)
-                await stream.DisposeAsync();
+                await stream.DisposeAsync().ConfigureAwait(false);
         }
     }
 

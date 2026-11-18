@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using HotChocolate;
@@ -34,7 +35,10 @@ public class LogQueriesTests
     // contention. Pool Size=8 across the four test fixtures in this assembly
     // stays well under Postgres's default max_connections=100.
     private static readonly string ConnectionString =
-        $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_logs;Username=trax;Password=trax123;"
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_logs;Username=trax;Password=trax123;"
+        )
         + "Maximum Pool Size=8;Minimum Pool Size=0;Connection Idle Lifetime=30;"
         + "Timeout=30;Tcp Keepalive=true";
 
@@ -78,18 +82,21 @@ public class LogQueriesTests
 
     private async Task<long> SeedMetadata()
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var meta = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = "Trax.Tests.IFakeTrain",
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = null,
-            }
-        );
-        await db.Track(meta);
-        await db.SaveChanges(default);
-        return meta.Id;
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var meta = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = "Trax.Tests.IFakeTrain",
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                }
+            );
+            await db.Track(meta).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return meta.Id;
+        }
     }
 
     private async Task SeedLogs(
@@ -102,15 +109,23 @@ public class LogQueriesTests
         // MetadataId on Log has a private setter, so we insert via raw SQL. This matches
         // how production code populates the table (the framework writes logs through a
         // logger provider that sets metadata_id directly).
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var ctx = (DbContext)db;
-        // Postgres has a custom enum type for log_level; cast the string explicitly.
-        var levelName = level.ToString().ToLowerInvariant();
-        for (var i = 0; i < count; i++)
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        // MetadataId on Log has a private setter, so we insert via raw SQL. This matches
+        // how production code populates the table (the framework writes logs through a
+        // logger provider that sets metadata_id directly).
+        await using (db.ConfigureAwait(false))
         {
-            await ctx.Database.ExecuteSqlInterpolatedAsync(
-                $"INSERT INTO trax.log (metadata_id, event_id, level, message, category) VALUES ({metadataId}, {i}, {levelName}::trax.log_level, {$"msg-{i}"}, {category})"
-            );
+            var ctx = (DbContext)db;
+            // Postgres has a custom enum type for log_level; cast the string explicitly.
+            var levelName = level.ToString().ToLowerInvariant();
+            for (var i = 0; i < count; i++)
+            {
+                await ctx
+                    .Database.ExecuteSqlInterpolatedAsync(
+                        $"INSERT INTO trax.log (metadata_id, event_id, level, message, category) VALUES ({metadataId}, {i}, {levelName}::trax.log_level, {string.Create(CultureInfo.InvariantCulture, $"msg-{i}")}, {category})"
+                    )
+                    .ConfigureAwait(false);
+            }
         }
     }
 
@@ -280,13 +295,18 @@ public class LogQueriesTests
 
     private async Task SeedLargeAnalyzedLogTable(long metadataId)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var ctx = (DbContext)db;
-        await ctx.Database.ExecuteSqlInterpolatedAsync(
-            $"INSERT INTO trax.log (metadata_id, event_id, level, message, category) SELECT {metadataId}, g, 'information'::trax.log_level, 'msg', 'Test' FROM generate_series(1, {LargeTableRows}) g"
-        );
-        // reltuples is what ANALYZE (or autovacuum) last measured.
-        await ctx.Database.ExecuteSqlRawAsync("ANALYZE trax.log");
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var ctx = (DbContext)db;
+            await ctx
+                .Database.ExecuteSqlInterpolatedAsync(
+                    $"INSERT INTO trax.log (metadata_id, event_id, level, message, category) SELECT {metadataId}, g, 'information'::trax.log_level, 'msg', 'Test' FROM generate_series(1, {LargeTableRows}) g"
+                )
+                .ConfigureAwait(false);
+            // reltuples is what ANALYZE (or autovacuum) last measured.
+            await ctx.Database.ExecuteSqlRawAsync("ANALYZE trax.log").ConfigureAwait(false);
+        }
     }
 
     [Test]

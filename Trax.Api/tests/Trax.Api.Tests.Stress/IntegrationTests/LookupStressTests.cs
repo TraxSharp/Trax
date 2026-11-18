@@ -39,8 +39,10 @@ public class LookupStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                term ??= await text(sp, ct);
-                var matches = await new OperationsQueries().GetLookup(term, Operations(sp), ct);
+                term ??= await text(sp, ct).ConfigureAwait(false);
+                var matches = await new OperationsQueries()
+                    .GetLookup(term, Operations(sp), ct)
+                    .ConfigureAwait(false);
                 check(matches);
             }
         );
@@ -52,13 +54,14 @@ public class LookupStressTests : StressTestSetup
             "operations.lookup (run external id)",
             async (sp, ct) =>
             {
-                using var db = await Factory(sp).CreateDbContextAsync(ct);
+                using var db = await Factory(sp).CreateDbContextAsync(ct).ConfigureAwait(false);
                 var id = Profile.Metadata / 2;
                 return (
                     await db
                         .Metadatas.Where(m => m.Id == id)
                         .Select(m => m.ExternalId)
                         .FirstAsync(ct)
+                        .ConfigureAwait(false)
                 ).Trim();
             },
             matches => matches.Should().Contain(m => m.Kind == LookupKind.Run)
@@ -68,7 +71,12 @@ public class LookupStressTests : StressTestSetup
     public Task Lookup_ANumber_WithinBudget() =>
         MeasureLookup(
             "operations.lookup (number: run, manifest, entry, dead letter ids)",
-            (_, _) => Task.FromResult((Profile.Manifests / 2).ToString()),
+            (_, _) =>
+                Task.FromResult(
+                    (Profile.Manifests / 2).ToString(
+                        System.Globalization.CultureInfo.InvariantCulture
+                    )
+                ),
             matches =>
                 matches.Select(m => m.Kind).Should().Contain([LookupKind.Run, LookupKind.Manifest])
         );
@@ -79,7 +87,7 @@ public class LookupStressTests : StressTestSetup
             "operations.lookup (subject key)",
             async (sp, ct) =>
             {
-                await ReadFieldStressTests.EnsureSubjectRowsAsync(sp, ct);
+                await ReadFieldStressTests.EnsureSubjectRowsAsync(sp, ct).ConfigureAwait(false);
                 return "subject-7";
             },
             matches =>
@@ -95,8 +103,8 @@ public class LookupStressTests : StressTestSetup
             "operations.lookup (instance GUID)",
             async (sp, ct) =>
             {
-                using var db = await Factory(sp).CreateDbContextAsync(ct);
-                var count = await db.SnapshotDrafts.CountAsync(ct);
+                using var db = await Factory(sp).CreateDbContextAsync(ct).ConfigureAwait(false);
+                var count = await db.SnapshotDrafts.CountAsync(ct).ConfigureAwait(false);
                 count.Should().BePositive("the seed holds state-machine instances");
                 return (
                     await db
@@ -104,6 +112,7 @@ public class LookupStressTests : StressTestSetup
                         .Skip(count / 2)
                         .Select(x => x.Id)
                         .FirstAsync(ct)
+                        .ConfigureAwait(false)
                 ).ToString();
             },
             matches => matches.Should().Contain(m => m.Kind == LookupKind.MachineInstance)

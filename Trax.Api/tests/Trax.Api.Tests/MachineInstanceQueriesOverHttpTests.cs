@@ -36,7 +36,20 @@ public class MachineInstanceQueriesOverHttpTests
     private const string UserKey = "machines-user-key-0123456789abcdefghijkl";
     private const string Machine = "Acme.Fulfilment";
 
-    private static readonly Guid InstanceId = Guid.Parse("6f9619ff-8b86-d011-b42d-00c04fc964ff");
+    private static readonly Guid InstanceId = new Guid(
+        0x6f9619ff,
+        0x8b86,
+        0xd011,
+        0xb4,
+        0x2d,
+        0x0,
+        0xc0,
+        0x4f,
+        0xc9,
+        0x64,
+        0xff
+    ) /* 6f9619ff-8b86-d011-b42d-00c04fc964ff */
+    ;
     private static readonly DateTimeOffset Created = new(2026, 10, 1, 9, 0, 0, TimeSpan.Zero);
 
     private static readonly MachineInstanceRecord UserDraft = new(
@@ -76,7 +89,7 @@ public class MachineInstanceQueriesOverHttpTests
         "Acme.IShipTrain",
         Trax.Effect.Enums.TrainState.InProgress,
         new DateTime(2026, 10, 1, 9, 1, 0, DateTimeKind.Utc),
-        null,
+        EndTime: null,
         Trax.Core.Exceptions.FailureClass.Unclassified,
         CancellationRequested: false,
         IsLive: true
@@ -361,7 +374,9 @@ public class MachineInstanceQueriesOverHttpTests
             .Services.GetRequiredService<IRequestExecutorProvider>()
             .GetExecutorAsync("trax");
 
-        var type = executor.Schema.Types.OfType<ObjectType>().Single(t => t.Name == typeName);
+        var type = executor
+            .Schema.Types.OfType<ObjectType>()
+            .Single(t => string.Equals(t.Name, typeName, StringComparison.Ordinal));
 
         type.Fields.Select(f => f.Name)
             .Should()
@@ -389,7 +404,9 @@ public class MachineInstanceQueriesOverHttpTests
         var subscriptions = executor.Schema.SubscriptionType;
         subscriptions.Should().NotBeNull();
 
-        var feed = subscriptions!.Fields.FirstOrDefault(f => f.Name == "onMachineInstanceChanged");
+        var feed = subscriptions!.Fields.FirstOrDefault(f =>
+            string.Equals(f.Name, "onMachineInstanceChanged", StringComparison.Ordinal)
+        );
         feed.Should()
             .NotBeNull(
                 "operators watch instances live through the feed, per "
@@ -432,7 +449,7 @@ public class MachineInstanceQueriesOverHttpTests
         };
         if (apiKey is not null)
             request.Headers.Add("X-Api-Key", apiKey);
-        var response = await client.SendAsync(request);
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var response = await client.SendAsync(request).ConfigureAwait(false);
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
     }
 }

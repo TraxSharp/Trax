@@ -45,7 +45,7 @@ public class RunProgressStreamTests
                 new[] { 1, 2, 4, 8, 16, 30, 30 }.Select(s => TimeSpan.FromSeconds(s)),
                 "a stream waiting for a retry looks once a second at first, then less often"
             );
-        events.Last().RetriedAs.Should().Be("retry");
+        events[^1].RetriedAs.Should().Be("retry");
     }
 
     [Test]
@@ -220,12 +220,12 @@ public class RunProgressStreamTests
         new(
             new string('a', 32),
             "Train",
-            null,
+            Field: null,
             1,
             state,
-            null,
+            Failure: null,
             "starter",
-            new LifecycleVisibility(false, new HashSet<string>(StringComparer.Ordinal))
+            new LifecycleVisibility(All: false, new HashSet<string>(StringComparer.Ordinal))
         )
         {
             ManifestId = 1,
@@ -273,7 +273,7 @@ public class RunProgressStreamTests
         )
         {
             // allowed-delay: waits for the stream to be cancelled, not for a duration.
-            await Task.Delay(Timeout.Infinite, ct);
+            await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false);
             yield break;
         }
 

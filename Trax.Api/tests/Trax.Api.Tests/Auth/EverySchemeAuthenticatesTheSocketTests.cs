@@ -66,7 +66,8 @@ public class EverySchemeAuthenticatesTheSocketTests
     {
         var (session, _) = NewSession();
 
-        var status = await NamedSchemesOnly().OnConnectAsync(session, Payload(new { }));
+        var status = await NamedSchemesOnly()
+            .OnConnectAsync(session, Payload(new { }), cancellationToken: CancellationToken.None);
 
         status
             .Accepted.Should()
@@ -81,7 +82,8 @@ public class EverySchemeAuthenticatesTheSocketTests
         var status = await NamedSchemesOnly()
             .OnConnectAsync(
                 session,
-                Payload(new { authToken = Sign(CustomerIssuer, CustomerKey) })
+                Payload(new { authToken = Sign(CustomerIssuer, CustomerKey) }),
+                cancellationToken: CancellationToken.None
             );
 
         status.Accepted.Should().BeTrue();
@@ -94,7 +96,11 @@ public class EverySchemeAuthenticatesTheSocketTests
         var (session, http) = NewSession();
 
         var status = await NamedSchemesOnly()
-            .OnConnectAsync(session, Payload(new { bearer = Sign(StaffIssuer, StaffKey) }));
+            .OnConnectAsync(
+                session,
+                Payload(new { bearer = Sign(StaffIssuer, StaffKey) }),
+                cancellationToken: CancellationToken.None
+            );
 
         status.Accepted.Should().BeTrue();
         http.User.Identity!.AuthenticationType.Should().Be("Staff");
@@ -106,7 +112,11 @@ public class EverySchemeAuthenticatesTheSocketTests
         var (session, _) = NewSession();
 
         var status = await NamedSchemesOnly()
-            .OnConnectAsync(session, Payload(new { authToken = Sign(CustomerIssuer, StaffKey) }));
+            .OnConnectAsync(
+                session,
+                Payload(new { authToken = Sign(CustomerIssuer, StaffKey) }),
+                cancellationToken: CancellationToken.None
+            );
 
         status.Accepted.Should().BeFalse();
     }

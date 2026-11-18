@@ -28,7 +28,7 @@ public class Owner
     [Column("name")]
     public string Name { get; set; } = "";
 
-    public List<OwnedBook> Books { get; set; } = new();
+    public IList<OwnedBook> Books { get; set; } = [];
 
     /// <summary>
     /// Navigation to anonymous-readable bulletin entries owned by this Owner.
@@ -36,7 +36,7 @@ public class Owner
     /// navigation must succeed for anonymous callers because both sides allow
     /// anonymous access.
     /// </summary>
-    public List<PublicBook> PublicBooks { get; set; } = new();
+    public IList<PublicBook> PublicBooks { get; set; } = [];
 }
 
 /// <summary>

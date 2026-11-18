@@ -59,7 +59,7 @@ public partial class TraxGraphQLBuilder
         // ConfigureFiltering(...) modules attach to HotChocolate's filtering convention,
         // which Trax only adds when at least one entity has filtering enabled. Without
         // that, the modules would be silently dropped, so fail loud at build time.
-        if (FilterModules.Count > 0 && !modelRegistrations.Any(r => r.Attribute.Filtering))
+        if (FilterModules.Count > 0 && !modelRegistrations.Exists(r => r.Attribute.Filtering))
             throw new InvalidOperationException(
                 "ConfigureFiltering(...) registered custom filter operations, but no "
                     + "[TraxQueryModel] entity has filtering enabled. The filtering "
@@ -242,19 +242,19 @@ public partial class TraxGraphQLBuilder
     }
 
     /// <summary>
-    /// Returns <c>true</c> when the entity carries <see cref="TraxAllowAnonymousAttribute"/>
+    /// Returns <see langword="true"/> when the entity carries <see cref="TraxAllowAnonymousAttribute"/>
     /// directly, via a base class, or via any implemented interface. Mirrors the
     /// walk in <see cref="DiscoverAuthorizeAttributes"/> so the two attributes
     /// have symmetric discovery semantics.
     /// </summary>
     internal static bool DiscoverAllowAnonymous(Type entityType)
     {
-        if (entityType.GetCustomAttribute<TraxAllowAnonymousAttribute>(inherit: true) is not null)
+        if (Attribute.IsDefined(entityType, typeof(TraxAllowAnonymousAttribute), inherit: true))
             return true;
 
         foreach (var iface in entityType.GetInterfaces())
         {
-            if (iface.GetCustomAttribute<TraxAllowAnonymousAttribute>(inherit: true) is not null)
+            if (Attribute.IsDefined(iface, typeof(TraxAllowAnonymousAttribute), inherit: true))
                 return true;
         }
 

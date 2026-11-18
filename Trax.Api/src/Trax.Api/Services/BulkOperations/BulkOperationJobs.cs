@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -57,7 +58,7 @@ internal sealed class BulkOperationJobs
     private readonly TimeProvider _time;
     private readonly CancellationToken _stopping;
     private readonly IReadOnlyList<IBulkOperationObserver> _observers;
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly Dictionary<Guid, BulkOperationRun> _runs = [];
     private Guid? _running;
 
@@ -107,7 +108,12 @@ internal sealed class BulkOperationJobs
     )
     {
         if (Refusal(request) is { } refusal)
-            return new StartBulkOperationResponse(false, refusal, null, null);
+            return new StartBulkOperationResponse(
+                Success: false,
+                refusal,
+                Matched: null,
+                Operation: null
+            );
         if (Reserve() is { } busy)
             return busy;
 
@@ -117,33 +123,38 @@ internal sealed class BulkOperationJobs
         try
         {
             if (BeforeSnapshot is { } seam)
-                await seam(ct);
+                await seam(ct).ConfigureAwait(false);
 
             BulkOperationSnapshot snapshot;
-            await using (var scope = _scopes.CreateAsyncScope())
-                snapshot = await BulkOperationTargets.SnapshotAsync(
-                    scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>(),
-                    request.Kind,
-                    request.Filter,
-                    ct
-                );
+            var scope = _scopes.CreateAsyncScope();
+            await using (scope.ConfigureAwait(false))
+                snapshot = await BulkOperationTargets
+                    .SnapshotAsync(
+                        scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>(),
+                        request.Kind,
+                        request.Filter,
+                        ct
+                    )
+                    .ConfigureAwait(false);
 
             var ids = snapshot.Ids;
             var noun = BulkOperationRun.Noun(request.Kind);
             if (ids.Length != request.ExpectedCount)
                 return new StartBulkOperationResponse(
-                    false,
-                    $"The filter matches {ids.Length} {noun} now, not the {request.ExpectedCount} "
-                        + "confirmed, so nothing was started. Confirm the new count and start again.",
+                    Success: false,
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"The filter matches {ids.Length} {noun} now, not the {request.ExpectedCount} "
+                    ) + "confirmed, so nothing was started. Confirm the new count and start again.",
                     ids.Length,
-                    null
+                    Operation: null
                 );
             if (ids.Length == 0)
                 return new StartBulkOperationResponse(
-                    false,
+                    Success: false,
                     $"The filter matches no {noun}, so nothing was started.",
                     0,
-                    null
+                    Operation: null
                 );
 
             lock (_gate)
@@ -162,10 +173,10 @@ internal sealed class BulkOperationJobs
                 started = true;
 
                 // Task.Run, not the caller's context: the batches must not share the caller's lifetime.
-                Current = Task.Run(() => RunAsync(run));
+                Current = Task.Run(() => RunAsync(run), cancellationToken: ct);
                 return new StartBulkOperationResponse(
-                    true,
-                    $"Started: {run.Total} {noun}.",
+                    Success: true,
+                    string.Create(CultureInfo.InvariantCulture, $"Started: {run.Total} {noun}."),
                     run.Total,
                     run.Read()
                 );
@@ -179,7 +190,7 @@ internal sealed class BulkOperationJobs
         }
     }
 
-    /// <summary>The operation with this id, or <c>null</c> when this node does not know it.</summary>
+    /// <summary>The operation with this id, or <see langword="null"/> when this node does not know it.</summary>
     public BulkOperation? Get(Guid id)
     {
         lock (_gate)
@@ -239,7 +250,7 @@ internal sealed class BulkOperationJobs
             if (_running is { } runningId)
                 return Busy(_runs[runningId].Read());
             if (_starting)
-                return Busy(null);
+                return Busy(running: null);
             _starting = true;
             return null;
         }
@@ -247,10 +258,10 @@ internal sealed class BulkOperationJobs
 
     private static StartBulkOperationResponse Busy(BulkOperation? running) =>
         new(
-            false,
+            Success: false,
             "A bulk operation is already running on this node, so this one was not started. Read "
                 + "bulkOperation(id) until it finishes, then start again.",
-            null,
+            Matched: null,
             running
         );
 
@@ -261,7 +272,7 @@ internal sealed class BulkOperationJobs
         try
         {
             if (BeforeFirstBatch is { } seam)
-                await seam(_stopping);
+                await seam(_stopping).ConfigureAwait(false);
 
             var (ids, ends) = run.Plan;
             status = BulkOperationStatus.Finished;
@@ -273,24 +284,24 @@ internal sealed class BulkOperationJobs
                 offset = end;
 
                 var took = Stopwatch.StartNew();
-                await using var scope = _scopes.CreateAsyncScope();
-                var (failures, refusal) = await BulkOperationTargets.RunAsync(
-                    run,
-                    batch,
-                    scope.ServiceProvider,
-                    _stopping
-                );
-                took.Stop();
-
-                if (refusal is not null)
+                var scope = _scopes.CreateAsyncScope();
+                await using (scope.ConfigureAwait(false))
                 {
-                    status = BulkOperationStatus.Failed;
-                    message =
-                        $"The server refused a batch, so the operation stopped: {refusal} The "
-                        + "batches before it stay applied; the ids it had not reached were not attempted.";
-                    break;
+                    var (failures, refusal) = await BulkOperationTargets
+                        .RunAsync(run, batch, scope.ServiceProvider, _stopping)
+                        .ConfigureAwait(false);
+                    took.Stop();
+
+                    if (refusal is not null)
+                    {
+                        status = BulkOperationStatus.Failed;
+                        message =
+                            $"The server refused a batch, so the operation stopped: {refusal} The "
+                            + "batches before it stay applied; the ids it had not reached were not attempted.";
+                        break;
+                    }
+                    run.Record(batch.Length, failures, took.Elapsed);
                 }
-                run.Record(batch.Length, failures, took.Elapsed);
             }
         }
         catch (OperationCanceledException) when (_stopping.IsCancellationRequested)

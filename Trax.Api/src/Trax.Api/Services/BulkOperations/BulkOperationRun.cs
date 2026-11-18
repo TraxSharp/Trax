@@ -1,3 +1,4 @@
+using System.Globalization;
 using Trax.Api.DTOs;
 using Trax.Scheduler.Services.Operations;
 
@@ -50,7 +51,7 @@ internal sealed class BulkOperationRun
     /// </summary>
     public const int MaxFailureDetail = 10_000;
 
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly List<BulkOperationFailure> _failures = [];
     private readonly Dictionary<string, int> _reasons = new(StringComparer.Ordinal);
     private BulkOperationStatus _status = BulkOperationStatus.Running;
@@ -77,7 +78,10 @@ internal sealed class BulkOperationRun
         StartedAt = startedAt;
         Total = snapshot.Ids.Length;
         _snapshot = snapshot;
-        _message = $"{Describe(Kind)} {Total} {Noun(Kind)}.";
+        _message = string.Create(
+            CultureInfo.InvariantCulture,
+            $"{Describe(Kind)} {Total} {Noun(Kind)}."
+        );
     }
 
     public Guid Id { get; }
@@ -161,8 +165,10 @@ internal sealed class BulkOperationRun
             Batches++;
             if (took > LongestBatch)
                 LongestBatch = took;
-            _message =
-                $"{Describe(Kind)} {Total} {Noun(Kind)}: {_done} done and {_failed} failed so far.";
+            _message = string.Create(
+                CultureInfo.InvariantCulture,
+                $"{Describe(Kind)} {Total} {Noun(Kind)}: {_done} done and {_failed} failed so far."
+            );
         }
     }
 
@@ -182,7 +188,7 @@ internal sealed class BulkOperationRun
         return lo;
     }
 
-    /// <summary>Stops the operation; a message of <c>null</c> describes how it finished.</summary>
+    /// <summary>Stops the operation; a message of <see langword="null"/> describes how it finished.</summary>
     public BulkOperationOutcome Finish(BulkOperationStatus status, string? message, DateTime at)
     {
         lock (_gate)
@@ -190,7 +196,11 @@ internal sealed class BulkOperationRun
             _status = status;
             _finishedAt = at;
             _message =
-                message ?? $"{Past(Kind)} {_done} of {Total} {Noun(Kind)}; {_failed} did not take.";
+                message
+                ?? string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{Past(Kind)} {_done} of {Total} {Noun(Kind)}; {_failed} did not take."
+                );
             _snapshot = null;
             return new BulkOperationOutcome(
                 Id,

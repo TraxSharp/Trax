@@ -55,7 +55,12 @@ public class GenericOptInE2ETests
             "dispatch"
         );
 
-        (dispatch is null || !dispatch.Fields.Any(f => f.Name == "stateMachine"))
+        (
+            dispatch is null
+            || !dispatch.Fields.Any(f =>
+                string.Equals(f.Name, "stateMachine", StringComparison.Ordinal)
+            )
+        )
             .Should()
             .BeTrue(
                 "the generic mutations are opt-in; a host that does not opt in serves none of them, per "
@@ -155,14 +160,16 @@ public class GenericOptInE2ETests
     {
         var start = async () =>
         {
-            using var host = await E2EHost.StartAsync(
-                Database,
-                new CountingCharge(),
-                new E2EHostOptions
-                {
-                    Machines = o => o.ExposeGenericStateMachineMutations(_ => { }),
-                }
-            );
+            using var host = await E2EHost
+                .StartAsync(
+                    Database,
+                    new CountingCharge(),
+                    new E2EHostOptions
+                    {
+                        Machines = o => o.ExposeGenericStateMachineMutations(_ => { }),
+                    }
+                )
+                .ConfigureAwait(false);
         };
 
         (

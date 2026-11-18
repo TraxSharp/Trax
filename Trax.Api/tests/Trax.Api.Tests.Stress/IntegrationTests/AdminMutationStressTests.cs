@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -85,7 +86,7 @@ public class AdminMutationStressTests : StressTestSetup
 
     private static int Count(JsonElement payload) => payload.GetProperty("count").GetInt32();
 
-    private static string Ids(long[] ids) => "[" + string.Join(",", ids) + "]";
+    private static string Ids(long[] ids) => "[" + string.Join(',', ids) + "]";
 
     private static Task RestoreDeadLetters(long[] ids) =>
         ExecSqlAsync(
@@ -120,17 +121,19 @@ public class AdminMutationStressTests : StressTestSetup
             {
                 Success(
                         await Mutate(
-                            $"setEffectEnabled(fullName: \"{toggleable}\", enabled: false) {{ success }}",
-                            ct
-                        )
+                                $"setEffectEnabled(fullName: \"{toggleable}\", enabled: false) {{ success }}",
+                                ct
+                            )
+                            .ConfigureAwait(false)
                     )
                     .Should()
                     .BeTrue();
                 Success(
                         await Mutate(
-                            $"setEffectEnabled(fullName: \"{toggleable}\", enabled: true) {{ success }}",
-                            ct
-                        )
+                                $"setEffectEnabled(fullName: \"{toggleable}\", enabled: true) {{ success }}",
+                                ct
+                            )
+                            .ConfigureAwait(false)
                     )
                     .Should()
                     .BeTrue();
@@ -152,12 +155,13 @@ public class AdminMutationStressTests : StressTestSetup
             async (_, ct) =>
             {
                 var response = await ExecuteGraphQLAsync(
-                    "mutation { operations { triggerManifest(externalId: \""
-                        + ManifestExternalId
-                        + "\") { success } } }",
-                    ct,
-                    Caller("Viewer")
-                );
+                        "mutation { operations { triggerManifest(externalId: \""
+                            + ManifestExternalId
+                            + "\") { success } } }",
+                        ct,
+                        Caller("Viewer")
+                    )
+                    .ConfigureAwait(false);
                 response
                     .GetProperty("errors")[0]
                     .GetProperty("extensions")
@@ -183,9 +187,10 @@ public class AdminMutationStressTests : StressTestSetup
             async (_, ct) =>
                 Success(
                         await Mutate(
-                            $"triggerManifest(externalId: \"{ManifestExternalId}\") {{ success }}",
-                            ct
-                        )
+                                $"triggerManifest(externalId: \"{ManifestExternalId}\") {{ success }}",
+                                ct
+                            )
+                            .ConfigureAwait(false)
                     )
                     .Should()
                     .BeTrue()
@@ -202,10 +207,11 @@ public class AdminMutationStressTests : StressTestSetup
             async (_, ct) =>
                 Success(
                         await Mutate(
-                            $"triggerManifestDelayed(externalId: \"{ManifestExternalId}\", "
-                                + "delay: \"PT5M\") { success }",
-                            ct
-                        )
+                                $"triggerManifestDelayed(externalId: \"{ManifestExternalId}\", "
+                                    + "delay: \"PT5M\") { success }",
+                                ct
+                            )
+                            .ConfigureAwait(false)
                     )
                     .Should()
                     .BeTrue()
@@ -223,9 +229,10 @@ public class AdminMutationStressTests : StressTestSetup
             async (_, ct) =>
                 Success(
                         await Mutate(
-                            $"disableManifest(externalId: \"{ManifestExternalId}\") {{ success }}",
-                            ct
-                        )
+                                $"disableManifest(externalId: \"{ManifestExternalId}\") {{ success }}",
+                                ct
+                            )
+                            .ConfigureAwait(false)
                     )
                     .Should()
                     .BeTrue()
@@ -245,9 +252,10 @@ public class AdminMutationStressTests : StressTestSetup
             async (_, ct) =>
                 Success(
                         await Mutate(
-                            $"enableManifest(externalId: \"{ManifestExternalId}\") {{ success }}",
-                            ct
-                        )
+                                $"enableManifest(externalId: \"{ManifestExternalId}\") {{ success }}",
+                                ct
+                            )
+                            .ConfigureAwait(false)
                     )
                     .Should()
                     .BeTrue(),
@@ -272,9 +280,10 @@ public class AdminMutationStressTests : StressTestSetup
             async (_, ct) =>
                 Count(
                         await Mutate(
-                            $"cancelManifest(externalId: \"{ManifestExternalId}\") {{ count }}",
-                            ct
-                        )
+                                $"cancelManifest(externalId: \"{ManifestExternalId}\") {{ count }}",
+                                ct
+                            )
+                            .ConfigureAwait(false)
                     )
                     .Should()
                     .BeGreaterThan(0)
@@ -293,15 +302,21 @@ public class AdminMutationStressTests : StressTestSetup
             ListBudget,
             () =>
                 ExecSqlAsync(
-                    $"UPDATE trax.manifest SET priority = {original} WHERE id = {ManifestId}"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"UPDATE trax.manifest SET priority = {original} WHERE id = {ManifestId}"
+                    )
                 ),
             async (_, ct) =>
             {
                 var payload = await Mutate(
-                    $"updateManifest(id: {ManifestId}, input: {{ priority: {original + 7}, "
-                        + "maxRetries: 4 }) { success message }",
-                    ct
-                );
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"updateManifest(id: {ManifestId}, input: {{ priority: {original + 7}, "
+                        ) + "maxRetries: 4 }) { success message }",
+                        ct
+                    )
+                    .ConfigureAwait(false);
                 Success(payload).Should().BeTrue(Message(payload));
             }
         );
@@ -319,7 +334,10 @@ public class AdminMutationStressTests : StressTestSetup
             ListBudget,
             () => DeleteQueuedEntriesForManifestsOf($"manifest_group_id = {GroupId}"),
             async (_, ct) =>
-                Count(await Mutate($"triggerGroup(groupId: {GroupId}) {{ count }}", ct))
+                Count(
+                        await Mutate($"triggerGroup(groupId: {GroupId}) {{ count }}", ct)
+                            .ConfigureAwait(false)
+                    )
                     .Should()
                     .BeGreaterThan(0)
         );
@@ -339,7 +357,10 @@ public class AdminMutationStressTests : StressTestSetup
                         + $"WHERE manifest_group_id = {GroupId})"
                 ),
             async (_, ct) =>
-                Count(await Mutate($"cancelGroup(groupId: {GroupId}) {{ count }}", ct))
+                Count(
+                        await Mutate($"cancelGroup(groupId: {GroupId}) {{ count }}", ct)
+                            .ConfigureAwait(false)
+                    )
                     .Should()
                     .BeGreaterThan(0)
         );
@@ -357,16 +378,22 @@ public class AdminMutationStressTests : StressTestSetup
             ListBudget,
             () =>
                 ExecSqlAsync(
-                    $"UPDATE trax.manifest_group SET priority = {original} WHERE id = {GroupId}"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"UPDATE trax.manifest_group SET priority = {original} WHERE id = {GroupId}"
+                    )
                 ),
             async (_, ct) =>
             {
                 var payload = await Mutate(
-                    $"updateManifestGroup(id: {GroupId}, input: {{ priority: {original + 5} }}) "
-                        + "{ success message }",
-                    ct,
-                    "manifestGroups"
-                );
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"updateManifestGroup(id: {GroupId}, input: {{ priority: {original + 5} }}) "
+                        ) + "{ success message }",
+                        ct,
+                        "manifestGroups"
+                    )
+                    .ConfigureAwait(false);
                 Success(payload).Should().BeTrue(Message(payload));
             }
         );
@@ -383,7 +410,10 @@ public class AdminMutationStressTests : StressTestSetup
         // pointed at the probe train with an input for the duration of the test.
         var executionId = Profile.Metadata / 3;
         var seededName = await ScalarAsync<string>(
-            $"SELECT name FROM trax.metadata WHERE id = {executionId}"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"SELECT name FROM trax.metadata WHERE id = {executionId}"
+            )
         );
 
         await MeasureWriteAsync(
@@ -394,14 +424,21 @@ public class AdminMutationStressTests : StressTestSetup
                     "DELETE FROM trax.work_queue WHERE status = 'queued' "
                         + $"AND train_name = '{ProbeTrainName}'; "
                         + $"UPDATE trax.metadata SET name = '{ProbeTrainName}', "
-                        + $"input = '{{\"Value\":\"stress\"}}' WHERE id = {executionId}"
+                        + string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"input = '{{\"Value\":\"stress\"}}' WHERE id = {executionId}"
+                        )
                 ),
             async (_, ct) =>
             {
                 var payload = await Mutate(
-                    $"requeueExecution(id: {executionId}) {{ success message }}",
-                    ct
-                );
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"requeueExecution(id: {executionId}) {{ success message }}"
+                        ),
+                        ct
+                    )
+                    .ConfigureAwait(false);
                 Success(payload).Should().BeTrue(Message(payload));
             },
             restore: () =>
@@ -409,7 +446,7 @@ public class AdminMutationStressTests : StressTestSetup
                     "DELETE FROM trax.work_queue WHERE status = 'queued' "
                         + $"AND train_name = '{ProbeTrainName}'; "
                         + $"UPDATE trax.metadata SET name = '{seededName}', input = NULL "
-                        + $"WHERE id = {executionId}"
+                        + string.Create(CultureInfo.InvariantCulture, $"WHERE id = {executionId}")
                 )
         );
     }
@@ -431,11 +468,12 @@ public class AdminMutationStressTests : StressTestSetup
             async (_, ct) =>
             {
                 var payload = await Mutate(
-                    $"queueTrain(input: {{ trainName: {Literal(ProbeTrainName)}, "
-                        + $"inputJson: {Literal("{\"Value\":\"stress\"}")} }}) {{ success message }}",
-                    ct,
-                    "workQueue"
-                );
+                        $"queueTrain(input: {{ trainName: {Literal(ProbeTrainName)}, "
+                            + $"inputJson: {Literal("{\"Value\":\"stress\"}")} }}) {{ success message }}",
+                        ct,
+                        "workQueue"
+                    )
+                    .ConfigureAwait(false);
                 Success(payload).Should().BeTrue(Message(payload));
             }
         );
@@ -461,11 +499,12 @@ public class AdminMutationStressTests : StressTestSetup
             async (_, ct) =>
             {
                 var payload = await Mutate(
-                    $"runTrain(input: {{ trainName: {Literal(ProbeTrainName)}, "
-                        + $"inputJson: {Literal("{\"Value\":\"stress\"}")} }}) {{ success message id }}",
-                    ct,
-                    "workQueue"
-                );
+                        $"runTrain(input: {{ trainName: {Literal(ProbeTrainName)}, "
+                            + $"inputJson: {Literal("{\"Value\":\"stress\"}")} }}) {{ success message id }}",
+                        ct,
+                        "workQueue"
+                    )
+                    .ConfigureAwait(false);
                 Success(payload).Should().BeTrue(Message(payload));
                 payload
                     .GetProperty("id")
@@ -489,10 +528,11 @@ public class AdminMutationStressTests : StressTestSetup
             async (_, ct) =>
             {
                 var payload = await Mutate(
-                    $"cancelWorkQueueEntry(id: {QueuedWorkQueueId}) {{ success message }}",
-                    ct,
-                    "workQueue"
-                );
+                        $"cancelWorkQueueEntry(id: {QueuedWorkQueueId}) {{ success message }}",
+                        ct,
+                        "workQueue"
+                    )
+                    .ConfigureAwait(false);
                 Success(payload).Should().BeTrue(Message(payload));
             }
         );
@@ -524,9 +564,10 @@ public class AdminMutationStressTests : StressTestSetup
             async (_, ct) =>
             {
                 var payload = await Mutate(
-                    $"cancelExecutions(ids: {Ids(ids)}) {{ success message count }}",
-                    ct
-                );
+                        $"cancelExecutions(ids: {Ids(ids)}) {{ success message count }}",
+                        ct
+                    )
+                    .ConfigureAwait(false);
                 Success(payload).Should().BeTrue(Message(payload));
                 Count(payload).Should().BeGreaterThan(0);
             }
@@ -549,10 +590,11 @@ public class AdminMutationStressTests : StressTestSetup
             async (_, ct) =>
             {
                 var payload = await Mutate(
-                    $"cancelWorkQueueEntries(ids: {Ids(ids)}) {{ success message count }}",
-                    ct,
-                    "workQueue"
-                );
+                        $"cancelWorkQueueEntries(ids: {Ids(ids)}) {{ success message count }}",
+                        ct,
+                        "workQueue"
+                    )
+                    .ConfigureAwait(false);
                 Success(payload).Should().BeTrue(Message(payload));
                 Count(payload).Should().BeGreaterThan(0);
             }
@@ -573,9 +615,10 @@ public class AdminMutationStressTests : StressTestSetup
             async (_, ct) =>
             {
                 var payload = await Mutate(
-                    $"setManifestsEnabled(ids: {Ids(ids)}, enabled: false) {{ message count }}",
-                    ct
-                );
+                        $"setManifestsEnabled(ids: {Ids(ids)}, enabled: false) {{ message count }}",
+                        ct
+                    )
+                    .ConfigureAwait(false);
                 Count(payload).Should().Be(ids.Length, Message(payload));
             }
         );
@@ -595,12 +638,9 @@ public class AdminMutationStressTests : StressTestSetup
             async (sp, ct) =>
             {
                 // Off also clears the queued entries' replay links, the costlier direction.
-                var response = await new OperationsMutations().SetManifestsReplayDecisionsOnRetry(
-                    ids,
-                    false,
-                    Operations(sp),
-                    ct
-                );
+                var response = await new OperationsMutations()
+                    .SetManifestsReplayDecisionsOnRetry(ids, replay: false, Operations(sp), ct)
+                    .ConfigureAwait(false);
                 response.Count.Should().Be(ids.Length, response.Message);
             }
         );
@@ -623,10 +663,11 @@ public class AdminMutationStressTests : StressTestSetup
             async (_, ct) =>
             {
                 var payload = await Mutate(
-                    $"setManifestGroupsEnabled(ids: {Ids(ids)}, enabled: false) {{ message count }}",
-                    ct,
-                    "manifestGroups"
-                );
+                        $"setManifestGroupsEnabled(ids: {Ids(ids)}, enabled: false) {{ message count }}",
+                        ct,
+                        "manifestGroups"
+                    )
+                    .ConfigureAwait(false);
                 Count(payload).Should().Be(ids.Length, Message(payload));
             }
         );
@@ -642,10 +683,11 @@ public class AdminMutationStressTests : StressTestSetup
             async (_, ct) =>
             {
                 var payload = await Mutate(
-                    "setAllManifestGroupsEnabled(enabled: false) { message count }",
-                    ct,
-                    "manifestGroups"
-                );
+                        "setAllManifestGroupsEnabled(enabled: false) { message count }",
+                        ct,
+                        "manifestGroups"
+                    )
+                    .ConfigureAwait(false);
                 Count(payload).Should().Be(Profile.Groups, Message(payload));
             }
         );
@@ -666,10 +708,11 @@ public class AdminMutationStressTests : StressTestSetup
             async (_, ct) =>
             {
                 var payload = await Mutate(
-                    $"requeueDeadLetter(id: {DeadLetterId}) {{ success message }}",
-                    ct,
-                    "deadLetters"
-                );
+                        $"requeueDeadLetter(id: {DeadLetterId}) {{ success message }}",
+                        ct,
+                        "deadLetters"
+                    )
+                    .ConfigureAwait(false);
                 Success(payload).Should().BeTrue(Message(payload));
             }
         );
@@ -686,10 +729,11 @@ public class AdminMutationStressTests : StressTestSetup
             async (_, ct) =>
             {
                 var payload = await Mutate(
-                    $"acknowledgeDeadLetter(id: {DeadLetterId}, note: \"stress\") {{ success message }}",
-                    ct,
-                    "deadLetters"
-                );
+                        $"acknowledgeDeadLetter(id: {DeadLetterId}, note: \"stress\") {{ success message }}",
+                        ct,
+                        "deadLetters"
+                    )
+                    .ConfigureAwait(false);
                 Success(payload).Should().BeTrue(Message(payload));
             }
         );
@@ -707,10 +751,11 @@ public class AdminMutationStressTests : StressTestSetup
             async (_, ct) =>
             {
                 var payload = await Mutate(
-                    $"requeueDeadLetters(ids: {Ids(ids)}) {{ count message }}",
-                    ct,
-                    "deadLetters"
-                );
+                        $"requeueDeadLetters(ids: {Ids(ids)}) {{ count message }}",
+                        ct,
+                        "deadLetters"
+                    )
+                    .ConfigureAwait(false);
                 Count(payload).Should().Be(ids.Length, Message(payload));
             }
         );
@@ -727,10 +772,11 @@ public class AdminMutationStressTests : StressTestSetup
             async (_, ct) =>
             {
                 var payload = await Mutate(
-                    $"acknowledgeDeadLetters(ids: {Ids(ids)}, note: \"stress\") {{ count message }}",
-                    ct,
-                    "deadLetters"
-                );
+                        $"acknowledgeDeadLetters(ids: {Ids(ids)}, note: \"stress\") {{ count message }}",
+                        ct,
+                        "deadLetters"
+                    )
+                    .ConfigureAwait(false);
                 Count(payload).Should().Be(ids.Length, Message(payload));
             }
         );
@@ -755,16 +801,20 @@ public class AdminMutationStressTests : StressTestSetup
                     .UpdateSchedulerConfigAsync(
                         new UpdateSchedulerConfigInput(DefaultMaxRetries: original),
                         CancellationToken.None
-                    );
+                    )
+                    .ConfigureAwait(false);
             },
             async (_, ct) =>
             {
                 var payload = await Mutate(
-                    $"updateScheduler(input: {{ defaultMaxRetries: {original + 1} }}) "
-                        + "{ success message }",
-                    ct,
-                    "config"
-                );
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"updateScheduler(input: {{ defaultMaxRetries: {original + 1} }}) "
+                        ) + "{ success message }",
+                        ct,
+                        "config"
+                    )
+                    .ConfigureAwait(false);
                 Success(payload).Should().BeTrue(Message(payload));
             }
         );

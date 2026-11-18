@@ -6,7 +6,7 @@ namespace Trax.Api.GraphQL.Audit;
 /// <summary>
 /// Rewrites a GraphQL document so that every string, integer and float literal is replaced by a
 /// placeholder: <c>""</c> for a string, <c>0</c> for a number. Field names, aliases, arguments,
-/// input-object field names, variable references, booleans, enum values and <c>null</c> are kept,
+/// input-object field names, variable references, booleans, enum values and <see langword="null"/> are kept,
 /// so the record still shows what was called and which inputs were set, but not their values.
 /// </summary>
 /// <remarks>
@@ -34,7 +34,7 @@ internal sealed class AuditLiteralStripper : SyntaxRewriter<object?>
     /// listener counts the entry as dropped.
     /// </summary>
     public static DocumentNode Strip(DocumentNode document) =>
-        Instance.RewriteDocument(document, null)
+        Instance.RewriteDocument(document, context: null)
         ?? throw new InvalidOperationException("The audit literal stripper produced no document.");
 
     /// <summary>

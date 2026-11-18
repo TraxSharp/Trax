@@ -67,7 +67,7 @@ public class HotChocolateCacheInvalidationTests
     public async Task Upsert_AfterFirstExecute_ServesNewDocument_OnNextExecute()
     {
         const string id = "hotfix_via_store_v1";
-        await _store.UpsertAsync(id, DocHello, null, CancellationToken.None);
+        await _store.UpsertAsync(id, DocHello, options: null, CancellationToken.None);
         (await ExecuteByIdAsync(id)).Should().Contain("\"hello\"");
 
         await _store.UpsertAsync(
@@ -91,7 +91,7 @@ public class HotChocolateCacheInvalidationTests
     public async Task Upsert_ViaGraphQLMutation_AlsoInvalidatesHCCache()
     {
         const string id = "hotfix_via_mutation_v1";
-        await _store.UpsertAsync(id, DocHello, null, CancellationToken.None);
+        await _store.UpsertAsync(id, DocHello, options: null, CancellationToken.None);
         (await ExecuteByIdAsync(id)).Should().Contain("\"hello\"");
 
         await ExecuteUploadMutationAsync(id, DocVersion, bypassShapeDiff: true);
@@ -105,7 +105,7 @@ public class HotChocolateCacheInvalidationTests
     public async Task Upsert_EmptiesBothCaches()
     {
         const string id = "cache_empty_on_upsert_v1";
-        await _store.UpsertAsync(id, DocHello, null, CancellationToken.None);
+        await _store.UpsertAsync(id, DocHello, options: null, CancellationToken.None);
         await ExecuteByIdAsync(id);
 
         var (documents, operations) = await CachesAsync();
@@ -127,10 +127,10 @@ public class HotChocolateCacheInvalidationTests
     public async Task Deactivate_InvalidatesCache_SoStaleDocumentIsNotServed()
     {
         const string id = "deact_cache_v1";
-        await _store.UpsertAsync(id, DocHello, null, CancellationToken.None);
+        await _store.UpsertAsync(id, DocHello, options: null, CancellationToken.None);
         (await ExecuteByIdAsync(id)).Should().Contain("\"hello\"");
 
-        await _store.DeactivateAsync(id, null, "test", CancellationToken.None);
+        await _store.DeactivateAsync(id, tenantKey: null, "test", CancellationToken.None);
 
         // After deactivation the storage returns null. If the HC caches
         // weren't cleared the prior compiled operation would still serve.
@@ -148,15 +148,15 @@ public class HotChocolateCacheInvalidationTests
     public async Task Restore_InvalidatesCache_AndRestoredDocumentRuns()
     {
         const string id = "restore_cache_v1";
-        await _store.UpsertAsync(id, DocHello, null, CancellationToken.None);
-        await _store.DeactivateAsync(id, null, "test", CancellationToken.None);
+        await _store.UpsertAsync(id, DocHello, options: null, CancellationToken.None);
+        await _store.DeactivateAsync(id, tenantKey: null, "test", CancellationToken.None);
 
         // Confirm the executor cannot serve while deactivated.
         (await ExecuteByIdAsync(id))
             .Should()
             .NotContain("\"hello\"");
 
-        await _store.RestoreAsync(id, null, CancellationToken.None);
+        await _store.RestoreAsync(id, tenantKey: null, CancellationToken.None);
 
         (await ExecuteByIdAsync(id)).Should().Contain("\"hello\"");
     }
@@ -172,12 +172,12 @@ public class HotChocolateCacheInvalidationTests
         const string original = "query Greet { hello }";
         const string rewrite = "query Greet { hello # rewritten\n}";
 
-        await _store.UpsertAsync(id, original, null, CancellationToken.None);
+        await _store.UpsertAsync(id, original, options: null, CancellationToken.None);
         (await ExecuteByIdAsync(id)).Should().Contain("\"hello\"");
 
-        await _store.UpsertAsync(id, rewrite, null, CancellationToken.None);
+        await _store.UpsertAsync(id, rewrite, options: null, CancellationToken.None);
 
-        var stored = await _store.GetAsync(id, null, CancellationToken.None);
+        var stored = await _store.GetAsync(id, tenantKey: null, CancellationToken.None);
         stored!.Document.Should().Be(rewrite, "the rewritten document must be persisted");
 
         // The response shape is unchanged, so the observable consequence is that the
@@ -194,7 +194,7 @@ public class HotChocolateCacheInvalidationTests
         // Direct exercise of the invalidator from root services. Pins the contract that
         // both cache layers are reachable from it, not just one of them.
         const string id = "invalidator_v1";
-        await _store.UpsertAsync(id, DocHello, null, CancellationToken.None);
+        await _store.UpsertAsync(id, DocHello, options: null, CancellationToken.None);
         await ExecuteByIdAsync(id);
 
         var (documents, operations) = await CachesAsync();
@@ -215,7 +215,9 @@ public class HotChocolateCacheInvalidationTests
     /// </summary>
     private async Task<(IDocumentCache Documents, IPreparedOperationCache Operations)> CachesAsync()
     {
-        var services = (await GraphQLFixture.GetExecutorAsync(_sp)).Schema.Services;
+        var services = (await GraphQLFixture.GetExecutorAsync(_sp).ConfigureAwait(false))
+            .Schema
+            .Services;
 
         var documents = services.GetRequiredService<IDocumentCache>();
         var operations = services.GetRequiredService<IPreparedOperationCache>();
@@ -293,12 +295,12 @@ public class HotChocolateCacheInvalidationTests
 
     private async Task<string> ExecuteByIdAsync(string id)
     {
-        var executor = await GraphQLFixture.GetExecutorAsync(_sp);
+        var executor = await GraphQLFixture.GetExecutorAsync(_sp).ConfigureAwait(false);
         var request = OperationRequestBuilder
             .New()
             .SetDocumentId(new OperationDocumentId(id))
             .Build();
-        var result = await executor.ExecuteAsync(request);
+        var result = await executor.ExecuteAsync(request).ConfigureAwait(false);
         var op = result as OperationResult;
         op.Should().NotBeNull();
         return op!.ToJson();
@@ -316,20 +318,22 @@ public class HotChocolateCacheInvalidationTests
               }
             }
             """;
-        var input = new Dictionary<string, object?>
+        var input = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["id"] = id,
             ["document"] = document,
             ["bypassShapeDiff"] = bypassShapeDiff,
         };
-        var executor = await GraphQLFixture.GetExecutorAsync(_sp);
+        var executor = await GraphQLFixture.GetExecutorAsync(_sp).ConfigureAwait(false);
         var request = OperationRequestBuilder
             .New()
             .SetDocument(mutation)
-            .SetVariableValues(new Dictionary<string, object?> { ["input"] = input })
+            .SetVariableValues(
+                new Dictionary<string, object?>(StringComparer.Ordinal) { ["input"] = input }
+            )
             .AsManager()
             .Build();
-        var result = await executor.ExecuteAsync(request);
+        var result = await executor.ExecuteAsync(request).ConfigureAwait(false);
         var op = (OperationResult)result;
         op.Errors.Should().BeNullOrEmpty();
         op.ToJson().Should().Contain("\"success\": true");

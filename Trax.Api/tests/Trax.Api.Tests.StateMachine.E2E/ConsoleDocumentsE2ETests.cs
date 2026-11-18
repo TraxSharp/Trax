@@ -294,7 +294,9 @@ public partial class ConsoleDocumentsE2ETests
         return file
             .RootElement.GetProperty("documents")
             .EnumerateArray()
-            .Single(d => d.GetProperty("name").GetString() == name)
+            .Single(d =>
+                string.Equals(d.GetProperty("name").GetString(), name, StringComparison.Ordinal)
+            )
             .GetProperty("text")
             .GetString()!;
     }
@@ -303,18 +305,24 @@ public partial class ConsoleDocumentsE2ETests
     private static async Task<Dictionary<string, string>> DocumentIdsAsync(IHost host)
     {
         var client = host.GetTestServer().CreateClient();
-        var response = await client.GetAsync("/trax/dashboard/");
+        var response = await client.GetAsync("/trax/dashboard/").ConfigureAwait(false);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var html = await response.Content.ReadAsStringAsync();
-        var content = ConfigMeta().Match(html).Groups["content"].Value;
+        var html = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+        var content = ConfigMeta.Match(html).Groups["content"].Value;
         using var config = JsonDocument.Parse(WebUtility.HtmlDecode(content));
         return config.RootElement.TryGetProperty("documents", out var documents)
-            ? documents.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetString()!)
+            ? documents
+                .EnumerateObject()
+                .ToDictionary(p => p.Name, p => p.Value.GetString()!, StringComparer.Ordinal)
             : [];
     }
 
-    [GeneratedRegex("<meta name=\"trax-dashboard-config\" content=\"(?<content>[^\"]*)\"")]
-    private static partial Regex ConfigMeta();
+    [GeneratedRegex(
+        "<meta name=\"trax-dashboard-config\" content=\"(?<content>[^\"]*)\"",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ConfigMeta { get; }
 
     private static E2EHostOptions Options(bool persisted) =>
         new()
@@ -323,7 +331,9 @@ public partial class ConsoleDocumentsE2ETests
             ExposeOperations = true,
             GraphQL = persisted
                 ? graphql =>
-                    graphql.UsePersistedOperations(po => po.SingleNode().RequirePersisted(true))
+                    graphql.UsePersistedOperations(po =>
+                        po.SingleNode().RequirePersisted(require: true)
+                    )
                 : null,
             Endpoints = endpoints => endpoints.UseTraxApiDashboard(d => d.AllowAnonymousShell()),
         };
@@ -348,15 +358,17 @@ public partial class ConsoleDocumentsE2ETests
 
     private static async Task<HostedDatabase> HostAsync(string database, E2EHostOptions options)
     {
-        await E2EHost.RecreateDatabaseAsync(database);
+        await E2EHost.RecreateDatabaseAsync(database).ConfigureAwait(false);
         try
         {
-            var host = await E2EHost.StartAsync(database, new CountingCharge(), options);
+            var host = await E2EHost
+                .StartAsync(database, new CountingCharge(), options)
+                .ConfigureAwait(false);
             return new HostedDatabase(database, host);
         }
         catch
         {
-            await E2EHost.DropDatabaseAsync(database);
+            await E2EHost.DropDatabaseAsync(database).ConfigureAwait(false);
             throw;
         }
     }
@@ -366,7 +378,7 @@ public partial class ConsoleDocumentsE2ETests
         public async ValueTask DisposeAsync()
         {
             Host.Dispose();
-            await E2EHost.DropDatabaseAsync(Database);
+            await E2EHost.DropDatabaseAsync(Database).ConfigureAwait(false);
         }
     }
 }

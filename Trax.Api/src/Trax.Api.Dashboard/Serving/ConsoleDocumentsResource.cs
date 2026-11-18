@@ -38,7 +38,11 @@ internal static class ConsoleDocumentsResource
         return [.. file.Documents.Select(d => new ConsoleDocumentText(d.Name, d.Text))];
     }
 
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+    {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
+    };
 
     private sealed record DocumentsFile(int Format, List<DocumentEntry>? Documents);
 

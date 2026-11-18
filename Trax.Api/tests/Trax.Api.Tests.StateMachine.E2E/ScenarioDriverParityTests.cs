@@ -309,7 +309,11 @@ public class ScenarioDriverParityTests
         _glossary = Trax.StateMachine.Features.Glossary.Read(Glossary);
         var derived = await FeatureDerivation.DeriveAsync(_glossary, Features);
         derived.Problems.Should().BeEmpty();
-        _irs = derived.Irs.ToDictionary(kv => kv.Key, kv => JsonNode.Parse(kv.Value)!.AsObject());
+        _irs = derived.Irs.ToDictionary(
+            kv => kv.Key,
+            kv => JsonNode.Parse(kv.Value)!.AsObject(),
+            StringComparer.Ordinal
+        );
         _hostFile = HostFile.Read(derived.Host!);
         _hostFile
             .Policies.Select(p => $"{p.Shape} {p.Id}")
@@ -430,7 +434,9 @@ public class ScenarioDriverParityTests
             // throws, and never reads the refusal as the machine's.
             await FluentActions
                 .Awaiting(async () =>
-                    await HostDriver("inline", host).Start(Payer("Ada"), "p-order")
+                    await HostDriver("inline", host)
+                        .Start(Payer("Ada"), "p-order")
+                        .ConfigureAwait(false)
                 )
                 .Should()
                 .ThrowAsync<InvalidOperationException>()
@@ -449,7 +455,7 @@ public class ScenarioDriverParityTests
             // A trigger no one is served has no document, so it is not served by id either.
             var rush = HostDriver("rush-persisted", host, manifest);
             (await rush.Start(Payer("Ada"), "p-order")).Should().BeOfType<Answer.Moved>();
-            (await rush.Fire(Payer("Ada"), Adas, "Rush", null))
+            (await rush.Fire(Payer("Ada"), Adas, "Rush", input: null))
                 .Should()
                 .BeOfType<Answer.NotServed>();
         }
@@ -475,7 +481,7 @@ public class ScenarioDriverParityTests
         foreach (var driver in drivers)
         {
             await driver.Start(ada, "p-order");
-            answers.Add(await driver.Fire(ada, key, "Place", null));
+            answers.Add(await driver.Fire(ada, key, "Place", input: null));
         }
 
         answers[0]
@@ -496,7 +502,7 @@ public class ScenarioDriverParityTests
         var driver = HostDriver("rush");
         await driver.Start(ada, "p-order");
 
-        (await driver.Fire(ada, new InstanceKey("p-order", "Ada"), "Rush", null))
+        (await driver.Fire(ada, new InstanceKey("p-order", "Ada"), "Rush", input: null))
             .Should()
             .BeOfType<Answer.NotServed>();
     }
@@ -506,7 +512,8 @@ public class ScenarioDriverParityTests
     {
         var answers = await BothAnswer(
             Payer("Ada"),
-            async driver => await driver.Fire(Payer("Bo"), Adas, "Order", Loaves(2))
+            async driver =>
+                await driver.Fire(Payer("Bo"), Adas, "Order", Loaves(2)).ConfigureAwait(false)
         );
 
         answers[0]
@@ -520,7 +527,8 @@ public class ScenarioDriverParityTests
     {
         var answers = await BothAnswer(
             Payer("Ada"),
-            async driver => await driver.Fire(Baker("Kit"), Adas, "Order", Loaves(2))
+            async driver =>
+                await driver.Fire(Baker("Kit"), Adas, "Order", Loaves(2)).ConfigureAwait(false)
         );
 
         answers[0].Should().BeOfType<Answer.Refused>();
@@ -531,8 +539,8 @@ public class ScenarioDriverParityTests
     public async Task A_start_the_rule_does_not_admit_is_forbidden_on_both()
     {
         var answers = await BothAnswer(
-            null,
-            async driver => await driver.Start(Baker("Kit"), "p-order")
+            owner: null,
+            async driver => await driver.Start(Baker("Kit"), "p-order").ConfigureAwait(false)
         );
 
         answers[0]
@@ -560,7 +568,7 @@ public class ScenarioDriverParityTests
         var driver = HostDriver("forever");
 
         await FluentActions
-            .Awaiting(async () => await driver.Pass(TimeSpan.FromDays(999)))
+            .Awaiting(async () => await driver.Pass(TimeSpan.FromDays(999)).ConfigureAwait(false))
             .Should()
             .ThrowAsync<InvalidOperationException>()
             .WithMessage("*at most 00:10:00*");
@@ -587,8 +595,10 @@ public class ScenarioDriverParityTests
         foreach (var driver in Drivers(TestContext.CurrentContext.Test.Name))
         {
             if (owner is not null)
-                (await driver.Start(owner, "p-order")).Should().BeOfType<Answer.Moved>();
-            answers.Add(await act(driver));
+                (await driver.Start(owner, "p-order").ConfigureAwait(false))
+                    .Should()
+                    .BeOfType<Answer.Moved>();
+            answers.Add(await act(driver).ConfigureAwait(false));
         }
         return answers;
     }
@@ -607,7 +617,7 @@ public class ScenarioDriverParityTests
                 Glossary = FeatureGlossary.Read(Glossary),
                 Credential = (actor, person, _) =>
                     new FeatureCredential(
-                        new Dictionary<string, string>
+                        new Dictionary<string, string>(StringComparer.Ordinal)
                         {
                             ["X-Api-Key"] = Keys[(person, actor.Name)],
                         }

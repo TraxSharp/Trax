@@ -13,7 +13,7 @@ namespace Trax.Api.GraphQL.Configuration;
 /// including discovered query model registrations.
 /// </summary>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/add-trax-graphql">SDK reference</seealso>
-public class GraphQLConfiguration
+public sealed class GraphQLConfiguration
 {
     /// <summary>
     /// Every entity discovered through <c>AddDbContext&lt;T&gt;()</c> that carries
@@ -74,7 +74,7 @@ public class GraphQLConfiguration
     /// then sends each document by its id.
     /// </summary>
     internal IReadOnlyDictionary<string, string> ConsoleDocumentIds { get; set; } =
-        new Dictionary<string, string>();
+        new Dictionary<string, string>(StringComparer.Ordinal);
 
     /// <summary>
     /// Max GraphQL execution depth (default 15). Queries deeper than this are rejected
@@ -89,7 +89,7 @@ public class GraphQLConfiguration
 
     /// <summary>
     /// Predicate that gates introspection per request. Null → default
-    /// (Development-only). Returns <c>true</c> to allow, <c>false</c> to deny.
+    /// (Development-only). Returns <see langword="true"/> to allow, <see langword="false"/> to deny.
     /// </summary>
     internal Predicate<HttpContext>? IntrospectionPredicate { get; }
 
@@ -125,7 +125,7 @@ public class GraphQLConfiguration
 
     /// <summary>
     /// Authorization policy applied by the execution interceptor when
-    /// <see cref="AuthorizationRequired"/> is true. <c>null</c> means
+    /// <see cref="AuthorizationRequired"/> is true. <see langword="null"/> means
     /// "use the combined Trax auth policy" — every <c>AddTrax*Auth</c>
     /// registers its scheme into that policy.
     /// </summary>
@@ -179,7 +179,8 @@ public class GraphQLConfiguration
     /// The fields a feature package adds to both root types, the persisted-operation management
     /// fields. The root types are built for them, and the census reserves their names.
     /// </summary>
-    internal IReadOnlySet<string> FeatureRootFields { get; init; } = new HashSet<string>();
+    internal IReadOnlySet<string> FeatureRootFields { get; init; } =
+        new HashSet<string>(StringComparer.Ordinal);
 
     /// <summary>Whether a feature package adds fields of its own to both root types.</summary>
     internal bool FeatureRootFieldsAdded => FeatureRootFields.Count > 0;
@@ -243,7 +244,7 @@ public class GraphQLConfiguration
 
     /// <summary>
     /// Origins set through <c>TraxGraphQLBuilder.AllowSocketOrigins()</c>, normalized, or
-    /// <c>null</c> when the host's CORS default policy decides which origins may open a socket.
+    /// <see langword="null"/> when the host's CORS default policy decides which origins may open a socket.
     /// </summary>
     internal IReadOnlyList<string>? SocketAllowedOrigins { get; init; }
 
@@ -263,14 +264,14 @@ public class GraphQLConfiguration
     /// <param name="additionalTypeExtensions">Type extension types added with <c>AddTypeExtension&lt;T&gt;()</c> or <c>AddTypeExtensions(assembly)</c>.</param>
     /// <param name="maxExecutionDepth">The deepest query accepted; deeper queries fail validation.</param>
     /// <param name="costOverride">An optional cost-analysis override, applied after the Trax defaults.</param>
-    /// <param name="introspectionPredicate">Decides per request whether introspection is allowed; <c>null</c> allows it in Development only.</param>
+    /// <param name="introspectionPredicate">Decides per request whether introspection is allowed; <see langword="null"/> allows it in Development only.</param>
     /// <param name="maxOperationsPerRequest">The most top-level selections one request may carry.</param>
     /// <param name="authorizationRequired">Whether <c>RequireAuthorization()</c> was called, so every execution needs an authorized caller.</param>
-    /// <param name="authorizationPolicy">The policy that gate applies, or <c>null</c> for the combined Trax auth policy.</param>
+    /// <param name="authorizationPolicy">The policy that gate applies, or <see langword="null"/> for the combined Trax auth policy.</param>
     /// <param name="operationQueriesExposed">Whether the <c>operations</c> query namespace is in the schema.</param>
     /// <param name="operationMutationsExposed">Whether the <c>operations</c> mutation namespace is in the schema.</param>
-    /// <param name="filterModules">Filter convention modules added with <c>ConfigureFiltering()</c>; <c>null</c> for none.</param>
-    /// <param name="operationsAuthorizeAttributes">The authorization shapes that gate the <c>operations</c> namespace; <c>null</c> for no namespace gate of its own.</param>
+    /// <param name="filterModules">Filter convention modules added with <c>ConfigureFiltering()</c>; <see langword="null"/> for none.</param>
+    /// <param name="operationsAuthorizeAttributes">The authorization shapes that gate the <c>operations</c> namespace; <see langword="null"/> for no namespace gate of its own.</param>
     internal GraphQLConfiguration(
         IReadOnlyList<QueryModelRegistration> modelRegistrations,
         IReadOnlyList<Type> additionalTypeModules,

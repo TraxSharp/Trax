@@ -96,7 +96,9 @@ public class TraxCompositeSocketInterceptorTests
     )
     {
         var (session, http) = NewSession();
-        var status = await interceptor.OnConnectAsync(session, Payload(payload));
+        var status = await interceptor
+            .OnConnectAsync(session, Payload(payload), cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
         return (
             new Status(status.Accepted),
             http.User.Identity?.IsAuthenticated == true ? http.User.Identity.Name : null

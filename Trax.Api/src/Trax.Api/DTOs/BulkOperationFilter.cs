@@ -91,7 +91,7 @@ public sealed record BulkDeadLetterFilter
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/mutations/bulk-operations">SDK reference</seealso>
 public sealed record BulkManifestFilter
 {
-    /// <summary>Only enabled (<c>true</c>) or disabled (<c>false</c>) manifests.</summary>
+    /// <summary>Only enabled (<see langword="true"/>) or disabled (<see langword="false"/>) manifests.</summary>
     public bool? IsEnabled { get; init; }
 
     /// <summary>Only manifests with this schedule type.</summary>

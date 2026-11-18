@@ -62,7 +62,7 @@ public sealed class TraxAuditWriter(
         {
             try
             {
-                if (!await DrainBatchAsync(batch, ct))
+                if (!await DrainBatchAsync(batch, ct).ConfigureAwait(false))
                     return;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -181,12 +181,12 @@ public sealed class TraxAuditWriter(
     }
 
     /// <summary>
-    /// Fills one batch and hands it to the sink. Returns <c>false</c> once the channel is
+    /// Fills one batch and hands it to the sink. Returns <see langword="false"/> once the channel is
     /// completed and empty, which ends the loop.
     /// </summary>
     private async Task<bool> DrainBatchAsync(List<TraxAuditEntry> batch, CancellationToken ct)
     {
-        if (!await channel.Reader.WaitToReadAsync(ct))
+        if (!await channel.Reader.WaitToReadAsync(ct).ConfigureAwait(false))
             return false;
 
         using var flushCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -199,13 +199,13 @@ public sealed class TraxAuditWriter(
 
             // The wait above said an entry was ready and this loop is the channel's only reader,
             // so an empty batch here means shutdown abandoned the drain.
-            if (batch.Count == 0 || !await WaitForMoreAsync(flushCts, ct))
+            if (batch.Count == 0 || !await WaitForMoreAsync(flushCts, ct).ConfigureAwait(false))
                 break;
         }
 
         if (batch.Count > 0)
         {
-            var written = await FlushAsync(batch, ct);
+            var written = await FlushAsync(batch, ct).ConfigureAwait(false);
             Resolve(batch, dropped: !written, "Trax audit sink refused a batch after every retry.");
         }
 
@@ -232,7 +232,7 @@ public sealed class TraxAuditWriter(
     }
 
     /// <summary>
-    /// Waits for another entry while a partial batch is held. <c>false</c> when the flush
+    /// Waits for another entry while a partial batch is held. <see langword="false"/> when the flush
     /// interval ran out or the channel completed, either of which sends the batch as it is.
     /// </summary>
     private async Task<bool> WaitForMoreAsync(
@@ -242,7 +242,7 @@ public sealed class TraxAuditWriter(
     {
         try
         {
-            return await channel.Reader.WaitToReadAsync(flushCts.Token);
+            return await channel.Reader.WaitToReadAsync(flushCts.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
             when (flushCts.IsCancellationRequested && !ct.IsCancellationRequested)
@@ -251,7 +251,7 @@ public sealed class TraxAuditWriter(
         }
     }
 
-    /// <summary>Returns <c>true</c> when the sink accepted the batch, <c>false</c> after the last retry.</summary>
+    /// <summary>Returns <see langword="true"/> when the sink accepted the batch, <see langword="false"/> after the last retry.</summary>
     private async Task<bool> FlushAsync(IReadOnlyList<TraxAuditEntry> batch, CancellationToken ct)
     {
         for (var attempt = 0; ; attempt++)
@@ -260,7 +260,7 @@ public sealed class TraxAuditWriter(
             {
                 using var scope = serviceProvider.CreateScope();
                 var sink = scope.ServiceProvider.GetRequiredService<ITraxAuditSink>();
-                await sink.WriteAsync(batch, ct);
+                await sink.WriteAsync(batch, ct).ConfigureAwait(false);
                 return true;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -276,7 +276,7 @@ public sealed class TraxAuditWriter(
                     _options.MaxRetries
                 );
                 var delay = RetryDelay(attempt, _options.RetryBackoff, _options.MaxRetryBackoff);
-                await Task.Delay(delay, timeProvider, ct);
+                await Task.Delay(delay, timeProvider, ct).ConfigureAwait(false);
             }
             catch (Exception ex)
             {

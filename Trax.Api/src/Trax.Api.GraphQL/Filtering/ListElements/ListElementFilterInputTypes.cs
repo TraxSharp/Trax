@@ -24,7 +24,7 @@ namespace Trax.Api.GraphQL.Filtering.ListElements;
 /// scalar fields, where it translates perfectly well. So the element position gets its
 /// own set of types instead, bound by property runtime type (see
 /// <see cref="ListElementFilterBinding"/>). Every other operation is untouched:
-/// <c>eq</c>, <c>in</c>, <c>nin</c> and the comparable operators all translate.
+/// <c>eq</c>, <see langword="in"/>, <c>nin</c> and the comparable operators all translate.
 /// </para>
 /// <para>
 /// The one filter this costs is <c>all: { neq: X }</c>, which did translate.
@@ -39,7 +39,7 @@ internal static class ListElementFilterNaming
     /// <remarks>
     /// It has to be injective over the element types that get bound, because each one
     /// produces its own closed generic filter type and two types cannot share a GraphQL
-    /// name. That is why <c>double</c> and <c>DateTimeOffset</c> do not reuse the
+    /// name. That is why <see langword="double"/> and <c>DateTimeOffset</c> do not reuse the
     /// <c>Float</c> / <c>DateTime</c> names HotChocolate gives them by default: stock
     /// HotChocolate can share one input type between <c>float[]</c> and <c>double[]</c>,
     /// but the restricted element types are distinct CLR types and would collide.

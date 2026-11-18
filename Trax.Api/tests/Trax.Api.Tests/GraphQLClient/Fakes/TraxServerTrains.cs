@@ -44,7 +44,7 @@ internal sealed class LookupCustomerJunction : Junction<LookupCustomerInput, Loo
         Task.FromResult(
             new LookupCustomerOutput
             {
-                Id = "cust-" + input.Email.GetHashCode().ToString("x"),
+                Id = "cust-" + input.Email.GetHashCode(StringComparison.Ordinal).ToString("x"),
                 Email = input.Email,
                 CreditLimit = 50_000,
             }

@@ -169,7 +169,7 @@ internal static class SourceText
     )
     {
         var hits = new List<(int, string)>();
-        var lines = source.Replace("\r\n", "\n").Split('\n');
+        var lines = source.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
         for (var i = 0; i < lines.Length; i++)
         {
             if (pattern.IsMatch(lines[i]))

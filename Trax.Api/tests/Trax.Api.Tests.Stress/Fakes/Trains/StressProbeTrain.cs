@@ -19,4 +19,4 @@ public record StressProbeInput : IManifestProperties
     public string Value { get; set; } = string.Empty;
 }
 
-public interface IStressProbeTrain : IServiceTrain<StressProbeInput, Unit> { }
+public interface IStressProbeTrain : IServiceTrain<StressProbeInput, Unit>;

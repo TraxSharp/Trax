@@ -228,7 +228,14 @@ internal sealed class RunProgressTypeModule(ITrainDiscoveryService discovery) : 
             .FindAsync(runId, ctx.Services, ctx.RequestAborted)
             .ConfigureAwait(false);
         if (run is null)
-            return new RunProgressAnswer(runId, null, null, [], null, NotFound());
+            return new RunProgressAnswer(
+                runId,
+                Train: null,
+                State: null,
+                [],
+                Failure: null,
+                NotFound()
+            );
 
         var steps = new List<JunctionStep>();
         if (run.MetadataId is { } metadataId)
@@ -253,7 +260,7 @@ internal sealed class RunProgressTypeModule(ITrainDiscoveryService discovery) : 
             run.State,
             steps,
             run.Failure,
-            null,
+            Problem: null,
             run.RetriedAs
         );
     }
@@ -270,7 +277,9 @@ internal sealed class RunProgressTypeModule(ITrainDiscoveryService discovery) : 
         var starters = RunProgressAccess.Starters(services);
         var run = await access.FindAsync(runId, starters, ctx.RequestAborted).ConfigureAwait(false);
         if (run is null)
-            return Once(new RunProgressEvent(runId, 1, null, null, null, NotFound()));
+            return Once(
+                new RunProgressEvent(runId, 1, State: null, Step: null, Failure: null, NotFound())
+            );
 
         var lease = services.GetRequiredService<RunProgressLimits>().TryAcquire(run.Starter, runId);
         if (lease is null)
@@ -278,9 +287,9 @@ internal sealed class RunProgressTypeModule(ITrainDiscoveryService discovery) : 
                 new RunProgressEvent(
                     runId,
                     1,
-                    null,
-                    null,
-                    null,
+                    State: null,
+                    Step: null,
+                    Failure: null,
                     new SnapshotProblem
                     {
                         Code = RefusalCode.TooManySubscriptions,
@@ -447,7 +456,8 @@ internal sealed class RunProgressAccess(
                         fields.TryGetValue(t, out var field)
                             ? TrainTypeModule.CamelCase(field)
                             : (string?)null
-                    )
+                    ),
+                StringComparer.Ordinal
             );
     });
 
@@ -532,9 +542,9 @@ internal sealed class RunProgressAccess(
             : Run(
                 runId,
                 queued.TrainName,
-                null,
+                metadataId: null,
                 RunProgressState.Queued,
-                null,
+                failure: null,
                 queued.StarterHash!
             );
     }
@@ -648,7 +658,7 @@ internal sealed class RunProgressAccess(
     {
         var (train, field) = _trains.Value[trainName];
         var visibility = new LifecycleVisibility(
-            false,
+            All: false,
             new HashSet<string>(StringComparer.Ordinal) { trainName }
         )
         {
@@ -835,9 +845,9 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
     /// </summary>
     public SubscriptionRecheck? Recheck { get; init; }
 
-    public IAsyncEnumerable<RunProgressEvent> ReadEventsAsync() => Read<RunProgressEvent>();
+    public IAsyncEnumerable<RunProgressEvent> ReadEventsAsync() => Read<RunProgressEvent>(CancellationToken.None);
 
-    IAsyncEnumerable<object?> ISourceStream.ReadEventsAsync() => Read<object?>();
+    IAsyncEnumerable<object?> ISourceStream.ReadEventsAsync() => Read<object?>(CancellationToken.None);
 
     public async ValueTask DisposeAsync()
     {
@@ -873,9 +883,9 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
                             new RunProgressEvent(
                                 _run!.RunId,
                                 sequence + 1,
-                                null,
-                                null,
-                                null,
+                                State: null,
+                                Step: null,
+                                Failure: null,
                                 RunProgressTypeModule.NotFound()
                             ),
                         ct
@@ -941,9 +951,9 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
                 run.RunId,
                 sequence,
                 run.State,
-                null,
+                Step: null,
                 run.Failure,
-                null
+                Problem: null
             );
             if (IsEnd(run.State))
             {
@@ -951,10 +961,10 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
                     yield return new RunProgressEvent(
                         run.RunId,
                         ++sequence,
-                        null,
-                        null,
-                        null,
-                        null,
+                        State: null,
+                        Step: null,
+                        Failure: null,
+                        Problem: null,
                         known
                     );
                 else
@@ -962,10 +972,10 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
                         yield return new RunProgressEvent(
                             run.RunId,
                             ++sequence,
-                            null,
-                            null,
-                            null,
-                            null,
+                            State: null,
+                            Step: null,
+                            Failure: null,
+                            Problem: null,
                             retry
                         );
                 yield break;
@@ -1021,10 +1031,10 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
                 yield return new RunProgressEvent(
                     run.RunId,
                     ++sequence,
-                    null,
-                    null,
-                    null,
-                    null,
+                    State: null,
+                    Step: null,
+                    Failure: null,
+                    Problem: null,
                     retry
                 );
         }
@@ -1121,7 +1131,14 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
                             failures
                         );
                         await writer.WriteAsync((null, null, false), ct).ConfigureAwait(false);
-                        return new RunProgressEvent(run.RunId, 0, null, null, null, Unreadable());
+                        return new RunProgressEvent(
+                            run.RunId,
+                            0,
+                            State: null,
+                            Step: null,
+                            Failure: null,
+                            Unreadable()
+                        );
                     }
                     Logger?.LogWarning(
                         e,
@@ -1143,16 +1160,16 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
                             run.RunId,
                             0,
                             RunProgressState.Cancelled,
-                            null,
-                            null,
-                            null
+                            Step: null,
+                            Failure: null,
+                            Problem: null
                         )
                         : new RunProgressEvent(
                             run.RunId,
                             0,
-                            null,
-                            null,
-                            null,
+                            State: null,
+                            Step: null,
+                            Failure: null,
                             RunProgressTypeModule.NotFound()
                         );
                 await writer.WriteAsync((null, null, false), ct).ConfigureAwait(false);
@@ -1211,10 +1228,10 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
             return new RunProgressEvent(
                 run.RunId,
                 ++sequence,
-                null,
+                State: null,
                 shownStep.Junction,
-                null,
-                null
+                Failure: null,
+                Problem: null
             );
         }
         if (
@@ -1224,11 +1241,14 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
         )
             return null;
         var now = RunProgressAccess.StateOf(shown.TrainState);
-        var failure =
-            shown.FailureReason == LifecycleSubscriptionAccess.MaskedFailureReason
-                ? null
-                : shown.FailureReason;
-        var answer = new RunProgressEvent(run.RunId, 0, now, null, failure, null);
+        var failure = string.Equals(
+            shown.FailureReason,
+            LifecycleSubscriptionAccess.MaskedFailureReason,
+            StringComparison.Ordinal
+        )
+            ? null
+            : shown.FailureReason;
+        var answer = new RunProgressEvent(run.RunId, 0, now, Step: null, failure, Problem: null);
         if (IsEnd(now))
         {
             end = answer;

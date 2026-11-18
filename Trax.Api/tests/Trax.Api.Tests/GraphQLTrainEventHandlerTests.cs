@@ -560,7 +560,7 @@ public class GraphQLTrainEventHandlerTests
     /// <summary>
     /// Minimal Type subclass that returns a controlled FullName for testing the HashSet lookup.
     /// </summary>
-    private class FakeType : Type
+    private sealed class FakeType : Type
     {
         private readonly string _fullName;
 
@@ -665,7 +665,7 @@ public class GraphQLTrainEventHandlerTests
         protected override bool IsPrimitiveImpl() => false;
     }
 
-    private class StubDiscoveryService : ITrainDiscoveryService
+    private sealed class StubDiscoveryService : ITrainDiscoveryService
     {
         private readonly IReadOnlyList<TrainRegistration> _registrations;
 
@@ -679,7 +679,7 @@ public class GraphQLTrainEventHandlerTests
 
     public record RecordedEvent(string Topic, object Message);
 
-    private class RecordingTopicEventSender : ITopicEventSender
+    private sealed class RecordingTopicEventSender : ITopicEventSender
     {
         public List<RecordedEvent> Events { get; } = [];
 

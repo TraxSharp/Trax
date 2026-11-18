@@ -73,25 +73,26 @@ public class IrMachineViewSchemaTests
             Convert.ToHexStringLower(
                 SHA256.HashData(Encoding.UTF8.GetBytes(CanonicalJson.Serialize(ir)))
             ),
-            null,
+            SystemKey: null,
             AccessRule.AnyAuthenticated,
             AccessRule.AnyAuthenticated,
-            new Dictionary<string, TriggerAccess>
+            new Dictionary<string, TriggerAccess>(StringComparer.Ordinal)
             {
                 ["Coin"] = new(AccessRule.AnyAuthenticated),
                 ["Push"] = new(AccessRule.AnyAuthenticated),
             },
-            new Dictionary<string, HostInvoke>()
+            new Dictionary<string, HostInvoke>(StringComparer.Ordinal)
         );
         var machines = IrMachines.Create([new IrMachines.Source(ir, host)], []);
         var views = names.ToDictionary(
             name => name,
             name => new HostView(
                 name,
-                [new ViewRead("ir-turnstile", null)],
-                [new ViewField(field, "ir-turnstile", ViewField.State, null)],
+                [new ViewRead("ir-turnstile", Key: null)],
+                [new ViewField(field, "ir-turnstile", ViewField.State, Labels: null)],
                 AccessRule.AnyAuthenticated
-            )
+            ),
+            StringComparer.Ordinal
         );
         return MachineSchemaHost.RefusalAsync(
             [],

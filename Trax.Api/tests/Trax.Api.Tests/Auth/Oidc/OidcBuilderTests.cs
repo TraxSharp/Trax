@@ -19,7 +19,7 @@ public class OidcBuilderTests
                     System.Reflection.BindingFlags.Instance
                         | System.Reflection.BindingFlags.NonPublic
                 )!
-                .Invoke(builder, null);
+                .Invoke(builder, parameters: null);
 
         act.Should()
             .Throw<System.Reflection.TargetInvocationException>()
@@ -85,7 +85,7 @@ public class OidcBuilderTests
                     )!
                     .GetValue(builder)!;
 
-        scopes.Count(s => s == "custom").Should().Be(1);
+        scopes.Count(s => string.Equals(s, "custom", StringComparison.Ordinal)).Should().Be(1);
     }
 
     [Test]
@@ -261,7 +261,7 @@ public class OidcBuilderTests
                     System.Reflection.BindingFlags.Instance
                         | System.Reflection.BindingFlags.NonPublic
                 )!
-                .Invoke(builder, null);
+                .Invoke(builder, parameters: null);
 
         act.Should().NotThrow();
     }

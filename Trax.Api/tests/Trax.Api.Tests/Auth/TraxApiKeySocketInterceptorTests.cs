@@ -26,7 +26,7 @@ public class TraxApiKeySocketInterceptorTests
     [Test]
     public async Task EmptyPayload_Rejects()
     {
-        var interceptor = NewInterceptor(ResolverReturning(null));
+        var interceptor = NewInterceptor(ResolverReturning(principal: null));
         var (session, _) = NewSession();
 
         var result = await interceptor.OnConnectAsync(
@@ -42,10 +42,12 @@ public class TraxApiKeySocketInterceptorTests
     [Test]
     public async Task BothKeysNull_Rejects()
     {
-        var interceptor = NewInterceptor(ResolverReturning(null));
+        var interceptor = NewInterceptor(ResolverReturning(principal: null));
         var (session, _) = NewSession();
 
-        var payload = Payload(new TraxApiKeySocketInterceptor.ConnectionInitPayload(null, null));
+        var payload = Payload(
+            new TraxApiKeySocketInterceptor.ConnectionInitPayload(AuthToken: null, ApiKey: null)
+        );
         var result = await interceptor.OnConnectAsync(session, payload, CancellationToken.None);
 
         result.Accepted.Should().BeFalse();
@@ -55,10 +57,12 @@ public class TraxApiKeySocketInterceptorTests
     [Test]
     public async Task WhitespaceKey_Rejects()
     {
-        var interceptor = NewInterceptor(ResolverReturning(null));
+        var interceptor = NewInterceptor(ResolverReturning(principal: null));
         var (session, _) = NewSession();
 
-        var payload = Payload(new TraxApiKeySocketInterceptor.ConnectionInitPayload("   ", null));
+        var payload = Payload(
+            new TraxApiKeySocketInterceptor.ConnectionInitPayload("   ", ApiKey: null)
+        );
         var result = await interceptor.OnConnectAsync(session, payload, CancellationToken.None);
 
         result.Accepted.Should().BeFalse();
@@ -67,11 +71,11 @@ public class TraxApiKeySocketInterceptorTests
     [Test]
     public async Task ResolverReturnsNull_Rejects()
     {
-        var interceptor = NewInterceptor(ResolverReturning(null));
+        var interceptor = NewInterceptor(ResolverReturning(principal: null));
         var (session, _) = NewSession();
 
         var payload = Payload(
-            new TraxApiKeySocketInterceptor.ConnectionInitPayload("bogus-key", null)
+            new TraxApiKeySocketInterceptor.ConnectionInitPayload("bogus-key", ApiKey: null)
         );
         var result = await interceptor.OnConnectAsync(session, payload, CancellationToken.None);
 
@@ -92,7 +96,9 @@ public class TraxApiKeySocketInterceptorTests
         var interceptor = NewInterceptor(resolver);
         var (session, _) = NewSession();
 
-        var payload = Payload(new TraxApiKeySocketInterceptor.ConnectionInitPayload("k", null));
+        var payload = Payload(
+            new TraxApiKeySocketInterceptor.ConnectionInitPayload("k", ApiKey: null)
+        );
         var result = await interceptor.OnConnectAsync(session, payload, CancellationToken.None);
 
         result.Accepted.Should().BeFalse();
@@ -109,7 +115,7 @@ public class TraxApiKeySocketInterceptorTests
         var (session, http) = NewSession();
 
         var payload = Payload(
-            new TraxApiKeySocketInterceptor.ConnectionInitPayload("player-key", null)
+            new TraxApiKeySocketInterceptor.ConnectionInitPayload("player-key", ApiKey: null)
         );
         var result = await interceptor.OnConnectAsync(session, payload, CancellationToken.None);
 
@@ -180,7 +186,9 @@ public class TraxApiKeySocketInterceptorTests
         var (session, _) = NewSession();
 
         using var cts = new CancellationTokenSource();
-        var payload = Payload(new TraxApiKeySocketInterceptor.ConnectionInitPayload("k", null));
+        var payload = Payload(
+            new TraxApiKeySocketInterceptor.ConnectionInitPayload("k", ApiKey: null)
+        );
         await interceptor.OnConnectAsync(session, payload, cts.Token);
 
         await resolver.Received(1).ResolveAsync("k", cts.Token);

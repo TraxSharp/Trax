@@ -9,4 +9,4 @@ namespace Trax.Api.GraphQL.Queries;
 /// </list>
 /// </summary>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/queries">SDK reference</seealso>
-public class RootQuery { }
+public class RootQuery;

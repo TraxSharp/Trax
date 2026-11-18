@@ -50,7 +50,7 @@ public class SubscriberSourceStreamTests
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct
     )
     {
-        await foreach (var e in topic.ReadEventsAsync().WithCancellation(ct))
+        await foreach (var e in topic.ReadEventsAsync().WithCancellation(ct).ConfigureAwait(false))
             yield return e * 2;
     }
 
@@ -59,9 +59,14 @@ public class SubscriberSourceStreamTests
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct
     )
     {
-        await using (topic)
+        await using (topic.ConfigureAwait(false))
         {
-            await foreach (var e in ((ISourceStream)topic).ReadEventsAsync().WithCancellation(ct))
+            await foreach (
+                var e in ((ISourceStream)topic)
+                    .ReadEventsAsync()
+                    .WithCancellation(ct)
+                    .ConfigureAwait(false)
+            )
                 yield return (int)e!;
         }
     }
@@ -73,7 +78,7 @@ public class SubscriberSourceStreamTests
         public IAsyncEnumerable<int> ReadEventsAsync() => events.ToAsyncEnumerable();
 
         IAsyncEnumerable<object?> ISourceStream.ReadEventsAsync() =>
-            events.Select(e => (object?)e).ToAsyncEnumerable();
+            events.Cast<object?>().ToAsyncEnumerable();
 
         public ValueTask DisposeAsync()
         {

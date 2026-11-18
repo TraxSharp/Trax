@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using Terminal.Gui.App;
 using Trax.Api.Console.Terminal.Code;
 using Trax.Api.Console.Terminal.Connection;
@@ -72,7 +73,8 @@ internal static class ConsoleApp
                             verticalGraphs = context.VerticalGraphs;
                             app.RequestStop(window);
                         },
-                        _ => search = false
+                        _ => search = false,
+                        cancellationToken
                     );
                 };
                 app.Run(window);
@@ -95,7 +97,10 @@ internal static class ConsoleApp
                 banner = $"Could not start {editor} ({ex.Message}). Set VISUAL or EDITOR.";
                 continue;
             }
-            banner = $"Back from {Path.GetFileName(open.Path)}:{open.Line}.";
+            banner = string.Create(
+                CultureInfo.InvariantCulture,
+                $"Back from {Path.GetFileName(open.Path)}:{open.Line}."
+            );
         }
     }
 }

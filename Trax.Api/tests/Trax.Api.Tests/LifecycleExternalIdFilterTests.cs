@@ -202,7 +202,8 @@ public class LifecycleExternalIdFilterTests
         _provider = services.BuildServiceProvider();
         return await _provider
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
     }
 
     private static async Task<Subscription> SubscribeAsync(
@@ -211,15 +212,19 @@ public class LifecycleExternalIdFilterTests
         ClaimsPrincipal user
     )
     {
-        var result = await executor.ExecuteAsync(
-            OperationRequestBuilder
-                .New()
-                .SetDocument(query)
-                .SetGlobalState("ClaimsPrincipal", user)
-                .Build()
-        );
+        var result = await executor
+            .ExecuteAsync(
+                OperationRequestBuilder
+                    .New()
+                    .SetDocument(query)
+                    .SetGlobalState("ClaimsPrincipal", user)
+                    .Build()
+            )
+            .ConfigureAwait(false);
 
-        return result is IResponseStream stream ? new Subscription(stream) : new Subscription(null);
+        return result is IResponseStream stream
+            ? new Subscription(stream)
+            : new Subscription(stream: null);
     }
 
     private sealed class Subscription(IResponseStream? stream) : IAsyncDisposable
@@ -241,7 +246,7 @@ public class LifecycleExternalIdFilterTests
             );
             var reader = Task.Run(async () =>
             {
-                await foreach (var item in stream!.ReadResultsAsync())
+                await foreach (var item in stream!.ReadResultsAsync().ConfigureAwait(false))
                 {
                     received.TrySetResult(item);
                     break;
@@ -256,20 +261,20 @@ public class LifecycleExternalIdFilterTests
                 publish();
                 // allowed-delay: re-publish interval, bounded by the 10s deadline; WhenAny wakes
                 // the instant the subscriber receives.
-                await Task.WhenAny(received.Task, Task.Delay(100));
+                await Task.WhenAny(received.Task, Task.Delay(100)).ConfigureAwait(false);
             }
 
             received.Task.IsCompleted.Should().BeTrue("an event should reach the subscriber");
-            var payload = await received.Task;
+            var payload = await received.Task.ConfigureAwait(false);
             payload.Errors.Should().BeNullOrEmpty();
-            await reader;
+            await reader.ConfigureAwait(false);
             return (IReadOnlyDictionary<string, object?>)payload.DataMap()[field]!;
         }
 
         public async ValueTask DisposeAsync()
         {
             if (stream is not null)
-                await stream.DisposeAsync();
+                await stream.DisposeAsync().ConfigureAwait(false);
         }
     }
 

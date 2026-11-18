@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -107,7 +108,7 @@ internal sealed class ResumeHost : IAsyncDisposable
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return new ResumeHost(host);
     }
 
@@ -125,14 +126,14 @@ internal sealed class ResumeHost : IAsyncDisposable
             var train = scope.ServiceProvider.GetRequiredService<TTrain>();
             try
             {
-                await train.Run(new ResumableInput { Topic = topic });
+                await train.Run(new ResumableInput { Topic = topic }).ConfigureAwait(false);
             }
             catch (TimeoutException) when (failIn is not null)
             {
                 // The run fails where it was told to.
             }
 
-            await FlushJunctionEventsAsync();
+            await FlushJunctionEventsAsync().ConfigureAwait(false);
             return ((ServiceTrain<ResumableInput, string>)(object)train).Metadata!.Id;
         }
         finally
@@ -164,7 +165,9 @@ internal sealed class ResumeHost : IAsyncDisposable
                             | System.Reflection.BindingFlags.NonPublic
                     )!
                     .Invoke(writer, [CancellationToken.None])!
-        ).WaitAsync(TimeSpan.FromSeconds(30));
+        )
+            .WaitAsync(TimeSpan.FromSeconds(30))
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -174,7 +177,8 @@ internal sealed class ResumeHost : IAsyncDisposable
     public async Task<long> RunResumeAsync<TTrain>(long entryId)
         where TTrain : IServiceTrain<ResumableInput, string>
     {
-        var entry = await With(d => d.WorkQueues.AsNoTracking().SingleAsync(q => q.Id == entryId));
+        var entry = await With(d => d.WorkQueues.AsNoTracking().SingleAsync(q => q.Id == entryId))
+            .ConfigureAwait(false);
         using var scope = Services.CreateScope();
         var train =
             (ServiceTrain<ResumableInput, string>)
@@ -192,10 +196,17 @@ internal sealed class ResumeHost : IAsyncDisposable
         // Read as the dispatcher reads a queued input: its members are camelCase.
         var input = JsonSerializer.Deserialize<ResumableInput>(
             entry.Input!,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+            new JsonSerializerOptions
+            {
+                RespectNullableAnnotations = false,
+                RespectRequiredConstructorParameters = false,
+                PropertyNameCaseInsensitive = true,
+            }
         )!;
-        await train.Run(input, metadata);
-        await FlushJunctionEventsAsync();
+        await train
+            .Run(input, metadata, cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
+        await FlushJunctionEventsAsync().ConfigureAwait(false);
         return train.Metadata!.Id;
     }
 
@@ -210,8 +221,8 @@ internal sealed class ResumeHost : IAsyncDisposable
         if (apiKey is not null)
             request.Headers.Add("X-Api-Key", apiKey);
 
-        var response = await client.SendAsync(request);
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var response = await client.SendAsync(request).ConfigureAwait(false);
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
     }
 
     /// <summary><c>operations.resumeExecution</c> over HTTP, as a GraphQL caller sends it.</summary>
@@ -221,7 +232,9 @@ internal sealed class ResumeHost : IAsyncDisposable
         string? apiKey = OperatorKey
     ) =>
         GraphQLAsync(
-            $$"""
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $$"""
             mutation {
               operations {
                 resumeExecution(id: {{id}}{{(
@@ -234,7 +247,8 @@ internal sealed class ResumeHost : IAsyncDisposable
                 }
               }
             }
-            """,
+            """
+            ),
             apiKey
         );
 
@@ -246,7 +260,8 @@ internal sealed class ResumeHost : IAsyncDisposable
         using (trusted.BeginTrusted("dashboard"))
             return await scope
                 .ServiceProvider.GetRequiredService<IOperationsService>()
-                .ResumeExecutionAsync(id, from, CancellationToken.None);
+                .ResumeExecutionAsync(id, from, CancellationToken.None)
+                .ConfigureAwait(false);
     }
 
     /// <summary>The queued entries that resume <paramref name="runId"/>.</summary>
@@ -259,15 +274,19 @@ internal sealed class ResumeHost : IAsyncDisposable
 
     public async Task<T> With<T>(Func<IDataContext, Task<T>> read)
     {
-        await using var context = await Services
+        var context = await Services
             .GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(CancellationToken.None);
-        return await read(context);
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using (context.ConfigureAwait(false))
+        {
+            return await read(context).ConfigureAwait(false);
+        }
     }
 
     public async ValueTask DisposeAsync()
     {
-        await _host.StopAsync();
+        await _host.StopAsync().ConfigureAwait(false);
         _host.Dispose();
         Npgsql.NpgsqlConnection.ClearAllPools();
     }

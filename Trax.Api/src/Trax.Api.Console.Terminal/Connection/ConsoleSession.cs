@@ -140,7 +140,7 @@ internal sealed partial class ConsoleSession : IAsyncDisposable
     /// </summary>
     public async Task<VersionCheck> CheckVersionAsync(CancellationToken cancellationToken = default)
     {
-        var answer = await Client.ServerVersionAsync(cancellationToken);
+        var answer = await Client.ServerVersionAsync(cancellationToken).ConfigureAwait(false);
         if (!answer.Succeeded)
             return new VersionCheck.Failed(
                 answer.Code,
@@ -149,17 +149,19 @@ internal sealed partial class ConsoleSession : IAsyncDisposable
         var host = answer.Data!.Operations?.Config.Version;
         if (host is null)
             return new VersionCheck.Failed(
-                null,
+                Code: null,
                 "The host answered no operations: the credential may not reach the operations surface."
             );
         // It is printed, and put in an install line the operator may paste into a shell.
         if (!IsRelease(host))
             return new VersionCheck.Failed(
-                null,
+                Code: null,
                 "The host answered a version that is not a Trax release number."
             );
         _transport.HostVersion = host;
-        return host == ToolVersion ? new VersionCheck.Same(host) : new VersionCheck.Other(host);
+        return string.Equals(host, ToolVersion, StringComparison.Ordinal)
+            ? new VersionCheck.Same(host)
+            : new VersionCheck.Other(host);
     }
 
     /// <summary>The install line for the trax-console that matches a host.</summary>
@@ -174,19 +176,20 @@ internal sealed partial class ConsoleSession : IAsyncDisposable
 
     /// <summary>Whether <paramref name="version"/> is a release number: SemVer, without build metadata.</summary>
     public static bool IsRelease(string version) =>
-        version.Length <= 64 && ReleaseNumber().IsMatch(version);
+        version.Length <= 64 && ReleaseNumber.IsMatch(version);
 
     [GeneratedRegex(
         @"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?\z",
-        RegexOptions.CultureInvariant
+        RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
     )]
-    private static partial Regex ReleaseNumber();
+    private static partial Regex ReleaseNumber { get; }
 
     /// <summary>Closes the socket and the HTTP client.</summary>
     public async ValueTask DisposeAsync()
     {
         if (_socket is not null)
-            await _socket.DisposeAsync();
+            await _socket.DisposeAsync().ConfigureAwait(false);
         _http?.Dispose();
     }
 }
@@ -199,7 +202,7 @@ internal sealed class NoRedirects : DelegatingHandler
         CancellationToken cancellationToken
     )
     {
-        var response = await base.SendAsync(request, cancellationToken);
+        var response = await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
         if ((int)response.StatusCode is < 300 or >= 400)
             return response;
         var location = response.Headers.Location;

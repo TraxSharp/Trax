@@ -75,21 +75,21 @@ public class ParityOperationsOverHttpTests
                 "Fetch",
                 "Order",
                 "Order",
-                false,
+                Opaque: false,
                 []
             ),
             new ChainGraphNode(
                 "Switch<Lane>#0",
                 ChainStepKind.Switch,
-                null,
+                Junction: null,
                 "Order",
                 "Taken<Lane>",
-                false,
+                Opaque: false,
                 [
                     new ChainGraphTrack(
                         "Fast",
                         "Ship today",
-                        false,
+                        IsFallback: false,
                         [
                             new ChainGraphNode(
                                 "Switch<Lane>#0/Fast/Ship#0",
@@ -97,12 +97,12 @@ public class ParityOperationsOverHttpTests
                                 "Ship",
                                 "Order",
                                 "Order",
-                                false,
+                                Opaque: false,
                                 []
                             ),
                         ]
                     ),
-                    new ChainGraphTrack("Otherwise", null, true, []),
+                    new ChainGraphTrack("Otherwise", Description: null, IsFallback: true, []),
                 ]
             ),
             new ChainGraphNode(
@@ -111,7 +111,7 @@ public class ParityOperationsOverHttpTests
                 "IPay",
                 "Order",
                 "Receipt",
-                true,
+                Opaque: true,
                 []
             ),
         ],
@@ -135,7 +135,7 @@ public class ParityOperationsOverHttpTests
             )
             .Returns(
                 new BatchTriggerResult(
-                    true,
+                    Success: true,
                     1,
                     1,
                     0,
@@ -150,13 +150,13 @@ public class ParityOperationsOverHttpTests
                 Arg.Any<IReadOnlyCollection<long>>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(new BatchTriggerResult(true, 1, 4, 0, 0, 0, "4 queued", []));
+            .Returns(new BatchTriggerResult(Success: true, 1, 4, 0, 0, 0, "4 queued", []));
         _operations
             .CancelManifestGroupsAsync(
                 Arg.Any<IReadOnlyCollection<long>>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(new OperationResult(true, Count: 5, Message: "5 flagged"));
+            .Returns(new OperationResult(Success: true, Count: 5, Message: "5 flagged"));
         _operations
             .GetRecordedDecisionsAsync(
                 Arg.Any<long>(),
@@ -175,18 +175,18 @@ public class ParityOperationsOverHttpTests
                             "choice",
                             "{}",
                             """{"value": "Express", "replay_refused": "state changed"}""",
-                            null,
-                            false,
+                            Refused: null,
+                            IsRefused: false,
                             "f",
-                            null,
-                            null,
-                            false,
-                            null,
-                            null,
-                            null,
+                            Model: null,
+                            Decider: null,
+                            Replayed: false,
+                            Shadows: null,
+                            Routes: null,
+                            StateHash: null,
                             DateTime.UtcNow,
-                            false,
-                            false
+                            AnswerWithheld: false,
+                            TrackWithheld: false
                         ),
                     ],
                     10,
@@ -201,9 +201,9 @@ public class ParityOperationsOverHttpTests
                 new EffectSettings(
                     "Sink",
                     "Sink",
-                    true,
-                    true,
-                    true,
+                    Enabled: true,
+                    Toggleable: true,
+                    IsConfigurable: true,
                     "SinkSettings",
                     "{}",
                     [
@@ -211,10 +211,10 @@ public class ParityOperationsOverHttpTests
                             "ApiKey",
                             "String",
                             EffectFieldKind.Text,
-                            false,
-                            null,
-                            true,
-                            true,
+                            Nullable: false,
+                            EnumValues: null,
+                            Sensitive: true,
+                            HasValue: true,
                             // A service that slipped would still not leak it.
                             "sk-live-123",
                             "text"
@@ -226,20 +226,30 @@ public class ParityOperationsOverHttpTests
             .ConfigureEffect(Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string?>>())
             .Returns(
                 new EffectConfigurationResult(
-                    false,
+                    Success: false,
                     0,
                     "not saved",
-                    new Dictionary<string, string> { ["BatchSize"] = "too big" }
+                    new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["BatchSize"] = "too big",
+                    }
                 )
             );
 
         _logLevels = Substitute.For<ILogLevelService>();
         _logLevels
             .GetLogLevels()
-            .Returns([new CategoryLogLevel("Default", LogLevel.Information, "Information", false)]);
+            .Returns([
+                new CategoryLogLevel(
+                    "Default",
+                    LogLevel.Information,
+                    "Information",
+                    Overridden: false
+                ),
+            ]);
         _logLevels
             .SetLogLevels(Arg.Any<IReadOnlyList<LogLevelChange>>())
-            .Returns(new LogLevelUpdateResult(true, 1, [], "1 set"));
+            .Returns(new LogLevelUpdateResult(Success: true, 1, [], "1 set"));
 
         _host = new HostBuilder()
             .ConfigureWebHost(web =>
@@ -348,7 +358,7 @@ public class ParityOperationsOverHttpTests
                 Arg.Is<IReadOnlyCollection<long>>(ids =>
                     ids != null && ids.SequenceEqual(new long[] { 1, 2 })
                 ),
-                true,
+                askAfresh: true,
                 Arg.Any<CancellationToken>()
             );
     }
@@ -436,7 +446,7 @@ public class ParityOperationsOverHttpTests
         };
         if (apiKey is not null)
             request.Headers.Add("X-Api-Key", apiKey);
-        var response = await client.SendAsync(request);
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var response = await client.SendAsync(request).ConfigureAwait(false);
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
     }
 }

@@ -49,7 +49,9 @@ public class ClientManifestQueryModelsE2ETests
     [Test]
     public void The_manifest_lists_each_query_model_with_its_arguments_and_answer()
     {
-        var books = _manifest.QueryModels.Single(q => q.Field == "bookRecords");
+        var books = _manifest.QueryModels.Single(q =>
+            string.Equals(q.Field, "bookRecords", StringComparison.Ordinal)
+        );
 
         books.Namespace.Should().Be("library");
         books.Answer.Should().EndWith("Connection", "the model is paged");
@@ -58,7 +60,7 @@ public class ClientManifestQueryModelsE2ETests
             .Should()
             .Contain(["first", "after", "where", "order"], "per " + Adr);
         _manifest
-            .QueryModels.Single(q => q.Field == "ownedBooks")
+            .QueryModels.Single(q => string.Equals(q.Field, "ownedBooks", StringComparison.Ordinal))
             .Requires!.RoleSets.Should()
             .ContainSingle()
             .Which.Should()
@@ -69,8 +71,10 @@ public class ClientManifestQueryModelsE2ETests
     public void The_manifest_lists_the_types_a_query_model_reaches_and_marks_its_filter_inputs()
     {
         var where = _manifest
-            .QueryModels.Single(q => q.Field == "bookRecords")
-            .Arguments.Single(a => a.Name == "where")
+            .QueryModels.Single(q =>
+                string.Equals(q.Field, "bookRecords", StringComparison.Ordinal)
+            )
+            .Arguments.Single(a => string.Equals(a.Name, "where", StringComparison.Ordinal))
             .Type;
 
         _manifest.Types.Should().Contain($"input {where}").And.NotContain("type DiscoverQueries");

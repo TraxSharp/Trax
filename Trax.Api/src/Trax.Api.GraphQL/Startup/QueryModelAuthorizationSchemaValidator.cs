@@ -57,7 +57,9 @@ internal sealed class QueryModelAuthorizationSchemaValidator(
         // (b) lets us walk the resolved types.
         using var scope = serviceProvider.CreateScope();
         var resolver = scope.ServiceProvider.GetRequiredService<IRequestExecutorProvider>();
-        var executor = await resolver.GetExecutorAsync(TraxSchemaName, cancellationToken);
+        var executor = await resolver
+            .GetExecutorAsync(TraxSchemaName, cancellationToken)
+            .ConfigureAwait(false);
         var schema = executor.Schema;
 
         var queryType = schema.QueryType;
@@ -123,7 +125,9 @@ internal sealed class QueryModelAuthorizationSchemaValidator(
     )
     {
         // Path: RootQuery.discover -> (DiscoverQueries[.namespace]).<fieldName>
-        var discoverField = rootQuery.Fields.FirstOrDefault(f => f.Name == "discover");
+        var discoverField = rootQuery.Fields.FirstOrDefault(f =>
+            string.Equals(f.Name, "discover", StringComparison.Ordinal)
+        );
         if (discoverField is null)
             throw new InvalidOperationException(
                 $"[TraxAuthorize] invariant violated: the `discover` field is not "
@@ -138,7 +142,9 @@ internal sealed class QueryModelAuthorizationSchemaValidator(
         if (reg.Attribute.Namespace is not null)
         {
             var nsFieldName = TrainTypeModule.CamelCase(reg.Attribute.Namespace);
-            var nsField = discoverType.Fields.FirstOrDefault(f => f.Name == nsFieldName);
+            var nsField = discoverType.Fields.FirstOrDefault(f =>
+                string.Equals(f.Name, nsFieldName, StringComparison.Ordinal)
+            );
             if (nsField is null)
                 throw new InvalidOperationException(
                     $"[TraxAuthorize] invariant violated: namespace field "
@@ -154,7 +160,9 @@ internal sealed class QueryModelAuthorizationSchemaValidator(
 
         var fieldName =
             reg.Attribute.Name ?? QueryModelTypeModule.DeriveModelName(reg.EntityType.Name);
-        var entryField = container.Fields.FirstOrDefault(f => f.Name == fieldName);
+        var entryField = container.Fields.FirstOrDefault(f =>
+            string.Equals(f.Name, fieldName, StringComparison.Ordinal)
+        );
         if (entryField is null)
             throw new InvalidOperationException(
                 $"[TraxAuthorize] invariant violated: entry field '{fieldName}' is "
@@ -226,7 +234,9 @@ internal sealed class QueryModelAuthorizationSchemaValidator(
         QueryModelRegistration reg
     )
     {
-        var discoverField = rootQuery.Fields.FirstOrDefault(f => f.Name == "discover");
+        var discoverField = rootQuery.Fields.FirstOrDefault(f =>
+            string.Equals(f.Name, "discover", StringComparison.Ordinal)
+        );
         if (discoverField is null)
             return; // Nothing to verify when the discover surface is absent.
 
@@ -236,7 +246,9 @@ internal sealed class QueryModelAuthorizationSchemaValidator(
         if (reg.Attribute.Namespace is not null)
         {
             var nsFieldName = TrainTypeModule.CamelCase(reg.Attribute.Namespace);
-            var nsField = discoverType.Fields.FirstOrDefault(f => f.Name == nsFieldName);
+            var nsField = discoverType.Fields.FirstOrDefault(f =>
+                string.Equals(f.Name, nsFieldName, StringComparison.Ordinal)
+            );
             if (nsField is null)
                 return;
             container = (IObjectTypeDefinition)nsField.Type.NamedType();
@@ -244,7 +256,9 @@ internal sealed class QueryModelAuthorizationSchemaValidator(
 
         var fieldName =
             reg.Attribute.Name ?? QueryModelTypeModule.DeriveModelName(reg.EntityType.Name);
-        var entryField = container.Fields.FirstOrDefault(f => f.Name == fieldName);
+        var entryField = container.Fields.FirstOrDefault(f =>
+            string.Equals(f.Name, fieldName, StringComparison.Ordinal)
+        );
         if (entryField is null)
             return;
 
@@ -261,5 +275,7 @@ internal sealed class QueryModelAuthorizationSchemaValidator(
     }
 
     private static bool HasAuthorizeDirective(IEnumerable<IDirective> directives) =>
-        directives.Any(d => d.Definition.Name == "authorize");
+        directives.Any(d =>
+            string.Equals(d.Definition.Name, "authorize", StringComparison.Ordinal)
+        );
 }

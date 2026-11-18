@@ -226,7 +226,9 @@ public class OperationsIsAdminOnlyTests
                 var name = operation.Name?.Value ?? "(anonymous)";
                 foreach (var selection in Fields(operation.SelectionSet, fragments, missing, name))
                 {
-                    if (selection.Name.Value != "operations")
+                    if (
+                        !string.Equals(selection.Name.Value, "operations", StringComparison.Ordinal)
+                    )
                         continue;
                     if (root is null || !root.Fields.TryGetField("operations", out var operations))
                     {
@@ -401,11 +403,15 @@ public class OperationsIsAdminOnlyTests
                 .GateOperations(roles: "Operator")
                 .UsePersistedOperations(po => po.SingleNode().GateManagement(roles: "Operator"))
         );
-        await using var provider = services.BuildServiceProvider();
-        var executor = await provider
-            .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
-        return executor.Schema;
+        var provider = services.BuildServiceProvider();
+        await using (provider.ConfigureAwait(false))
+        {
+            var executor = await provider
+                .GetRequiredService<IRequestExecutorProvider>()
+                .GetExecutorAsync("trax")
+                .ConfigureAwait(false);
+            return executor.Schema;
+        }
     }
 
     private static string RepoFolder(string name)

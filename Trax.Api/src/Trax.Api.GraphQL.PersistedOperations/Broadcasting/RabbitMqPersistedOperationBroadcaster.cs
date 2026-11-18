@@ -79,7 +79,7 @@ internal sealed class RabbitMqPersistedOperationBroadcaster
             DeliveryMode = DeliveryModes.Transient,
         };
         if (_options.RabbitMqInvalidation.SigningKey is { } key)
-            properties.Headers = new Dictionary<string, object?>
+            properties.Headers = new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 [InvalidationMessageSignature.Header] = InvalidationMessageSignature.Create(
                     key,
@@ -165,14 +165,18 @@ internal sealed class RabbitMqPersistedOperationBroadcaster
         if (_channel is not null)
         {
             if (_channel.IsOpen)
-                await _channel.CloseAsync().ConfigureAwait(false);
+                await _channel
+                    .CloseAsync(cancellationToken: CancellationToken.None)
+                    .ConfigureAwait(false);
             _channel.Dispose();
         }
 
         if (_connection is not null)
         {
             if (_connection.IsOpen)
-                await _connection.CloseAsync().ConfigureAwait(false);
+                await _connection
+                    .CloseAsync(cancellationToken: CancellationToken.None)
+                    .ConfigureAwait(false);
             _connection.Dispose();
         }
 

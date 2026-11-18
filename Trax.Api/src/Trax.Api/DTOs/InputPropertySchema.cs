@@ -8,10 +8,10 @@ namespace Trax.Api.DTOs;
 /// policy, or its <c>[JsonPropertyName]</c> when it has one.
 /// </param>
 /// <param name="TypeName">A readable name for the property's CLR type.</param>
-/// <param name="IsNullable">Whether the property accepts <c>null</c>.</param>
+/// <param name="IsNullable">Whether the property accepts <see langword="null"/>.</param>
 /// <param name="EnumValues">
 /// The values the property accepts when its type is an enum (or a nullable enum), spelled the way
-/// the input reader expects them; <c>null</c> for any other type.
+/// the input reader expects them; <see langword="null"/> for any other type.
 /// </param>
 public record InputPropertySchema(
     string Name,

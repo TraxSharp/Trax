@@ -286,8 +286,9 @@ public partial class TrainTypeModule(
         Action<IObjectTypeDescriptor, TrainRegistration, string> addField
     )
     {
-        var byNamespace = fields.GroupBy(f =>
-            f.Registration.GraphQLNamespace is { } ns ? CamelCase(ns) : null
+        var byNamespace = fields.GroupBy(
+            f => f.Registration.GraphQLNamespace is { } ns ? CamelCase(ns) : null,
+            StringComparer.Ordinal
         );
 
         foreach (var group in byNamespace)
@@ -331,7 +332,7 @@ public partial class TrainTypeModule(
     }
 
     private bool NamespaceOwnedByQueryModels(string parentTypeName, string namespaceField) =>
-        parentTypeName == "DiscoverQueries"
+        string.Equals(parentTypeName, "DiscoverQueries", StringComparison.Ordinal)
         && graphQLConfiguration is not null
         && graphQLConfiguration.ModelRegistrations.Any(m =>
             m.Attribute.Namespace is { } ns

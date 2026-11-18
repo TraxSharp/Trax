@@ -185,7 +185,7 @@ public class JwtTokenValidatedCallbackTests
         var http = new DefaultHttpContext { RequestServices = sp };
         var scheme = new AuthenticationScheme(
             JwtDefaults.SchemeName,
-            null,
+            displayName: null,
             typeof(JwtBearerHandler)
         );
         var ctx = new TokenValidatedContext(http, scheme, opts)

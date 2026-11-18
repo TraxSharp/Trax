@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.DTOs;
@@ -117,13 +118,23 @@ public class BulkOperationStressTests : StressTestSetup
 
         var answer = Stopwatch.StartNew();
         var started = await OperationsFieldAsync(
-            $"mutation {{ operations {{ startBulkOperation(kind: {kind}, filter: {filter}, "
-                + $"expectedCount: {matching}) {{ success message matched operation {{ id total }} }} }} }}"
-        );
+                $"mutation {{ operations {{ startBulkOperation(kind: {kind}, filter: {filter}, "
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"expectedCount: {matching}) {{ success message matched operation {{ id total }} }} }} }}"
+                    )
+            )
+            .ConfigureAwait(false);
         answer.Stop();
         TestContext.Out.WriteLine(
-            $"startBulkOperation({kind}) over {matching:N0} answered in "
-                + $"{answer.Elapsed.TotalMilliseconds:F0}ms"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"startBulkOperation({kind}) over {matching:N0} answered in "
+            )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{answer.Elapsed.TotalMilliseconds:F0}ms"
+                )
         );
 
         started
@@ -142,8 +153,9 @@ public class BulkOperationStressTests : StressTestSetup
         {
             var read = Stopwatch.StartNew();
             await OperationsFieldAsync(
-                "{ operations { executions(take: 500) { totalCount items { id } } } }"
-            );
+                    "{ operations { executions(take: 500) { totalCount items { id } } } }"
+                )
+                .ConfigureAwait(false);
             read.Stop();
             reads.Add(read.Elapsed);
             finish
@@ -155,10 +167,22 @@ public class BulkOperationStressTests : StressTestSetup
         var operation = jobs.Get(id)!;
         var run = jobs.Run(id)!;
         TestContext.Out.WriteLine(
-            $"{kind}: {operation.Done:N0} done, {operation.Failed:N0} failed in "
-                + $"{finish.Elapsed.TotalSeconds:F1}s over {run.Batches} batches; longest batch "
-                + $"{run.LongestBatch.TotalMilliseconds:F0}ms; {reads.Count} reads meanwhile, "
-                + $"slowest {(reads.Count == 0 ? 0 : reads.Max().TotalMilliseconds):F0}ms"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"{kind}: {operation.Done:N0} done, {operation.Failed:N0} failed in "
+            )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{finish.Elapsed.TotalSeconds:F1}s over {run.Batches} batches; longest batch "
+                )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{run.LongestBatch.TotalMilliseconds:F0}ms; {reads.Count} reads meanwhile, "
+                )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"slowest {(reads.Count == 0 ? 0 : reads.Max().TotalMilliseconds):F0}ms"
+                )
         );
 
         operation.Status.Should().Be(BulkOperationStatus.Finished, operation.Message);

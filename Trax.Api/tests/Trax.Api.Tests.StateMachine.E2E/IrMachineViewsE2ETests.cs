@@ -135,9 +135,10 @@ public class IrMachineViewsE2ETests
     private async Task<string> Start(string key, string machine = "vOrder") =>
         (
             await Post(
-                key,
-                $$"""mutation { machines { {{machine}} { start(requestId: "s-{{Guid.NewGuid():N}}") { id } } } }"""
-            )
+                    key,
+                    $$"""mutation { machines { {{machine}} { start(requestId: "s-{{Guid.NewGuid():N}}") { id } } } }"""
+                )
+                .ConfigureAwait(false)
         )
             .GetProperty("data")
             .GetProperty("machines")
@@ -148,7 +149,7 @@ public class IrMachineViewsE2ETests
 
     private async Task<JsonElement> Post(string key, string query)
     {
-        using var doc = await _host.PostAsync(query, apiKey: key);
+        using var doc = await _host.PostAsync(query, apiKey: key).ConfigureAwait(false);
         return doc.RootElement.Clone();
     }
 
@@ -335,7 +336,7 @@ public class IrMachineViewsE2ETests
                 },
             },
         };
-        var irs = new Dictionary<string, JsonObject>
+        var irs = new Dictionary<string, JsonObject>(StringComparer.Ordinal)
         {
             ["v-order"] = order,
             ["v-receipt"] = receipt,
@@ -426,10 +427,12 @@ public class IrMachineViewRowLimitE2ETests
 
     private async Task<string> Start()
     {
-        using var doc = await _host.PostAsync(
-            $$"""mutation { machines { vOrder { start(requestId: "s-{{Guid.NewGuid():N}}") { id } } } }""",
-            apiKey: E2EHost.AliceKey
-        );
+        using var doc = await _host
+            .PostAsync(
+                $$"""mutation { machines { vOrder { start(requestId: "s-{{Guid.NewGuid():N}}") { id } } } }""",
+                apiKey: E2EHost.AliceKey
+            )
+            .ConfigureAwait(false);
         return doc
             .RootElement.GetProperty("data")
             .GetProperty("machines")

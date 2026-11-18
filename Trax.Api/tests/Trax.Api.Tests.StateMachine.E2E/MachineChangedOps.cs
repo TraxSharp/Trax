@@ -52,7 +52,7 @@ public static class MachineChangedOps
         this GraphQLWs ws,
         string operation,
         TimeSpan? timeout = null
-    ) => new(Only(await ws.NextDataAsync(operation, timeout)));
+    ) => new(Only(await ws.NextDataAsync(operation, timeout).ConfigureAwait(false)));
 
     /// <summary>The one field a push's data holds.</summary>
     public static JsonElement Only(JsonElement data) =>
@@ -73,7 +73,7 @@ public static class MachineChangedOps
         var events = new List<MachineChange>();
         while (true)
         {
-            var change = await ws.NextChangeAsync(operation, timeout);
+            var change = await ws.NextChangeAsync(operation, timeout).ConfigureAwait(false);
             events.Add(change);
             if (change.Revision >= revision || change.Gone || change.ProblemCode is not null)
                 return events;
@@ -90,7 +90,7 @@ public static class MachineChangedOps
         var events = new List<MachineChange>();
         while (true)
         {
-            var change = await ws.NextChangeAsync(operation, timeout);
+            var change = await ws.NextChangeAsync(operation, timeout).ConfigureAwait(false);
             events.Add(change);
             if (change.Gone || change.ProblemCode is not null)
                 return events;
@@ -103,7 +103,7 @@ public static class MachineChangedOps
     /// </summary>
     public static async Task<string> FirstAnswerAsync(this GraphQLWs ws, string operation)
     {
-        var message = await ws.NextAsync(operation);
+        var message = await ws.NextAsync(operation).ConfigureAwait(false);
         var type = message.GetProperty("type").GetString();
         var payload = message.TryGetProperty("payload", out var p) ? p.GetRawText() : "";
         return $"{type}:{payload}";
@@ -118,11 +118,11 @@ public static class MachineChangedOps
         string operation
     )
     {
-        var message = await ws.NextAsync(operation);
+        var message = await ws.NextAsync(operation).ConfigureAwait(false);
         var raw = message.GetRawText();
         var type = message.GetProperty("type").GetString();
         var codes = new List<string>();
-        if (type == "error")
+        if (string.Equals(type, "error", StringComparison.Ordinal))
         {
             foreach (var error in message.GetProperty("payload").EnumerateArray())
                 if (
@@ -133,8 +133,8 @@ public static class MachineChangedOps
                     codes.Add(text);
             return (true, codes, raw);
         }
-        if (type != "next")
-            return (type == "complete", codes, raw);
+        if (!string.Equals(type, "next", StringComparison.Ordinal))
+            return (string.Equals(type, "complete", StringComparison.Ordinal), codes, raw);
 
         using var doc = JsonDocument.Parse(message.GetProperty("payload").GetRawText());
         codes.AddRange(MachineDocumentOps.Codes(doc));
@@ -158,7 +158,10 @@ public sealed record MachineChange(JsonElement Raw)
             ? revision.ValueKind switch
             {
                 JsonValueKind.Number => revision.GetInt64(),
-                JsonValueKind.String => long.Parse(revision.GetString()!),
+                JsonValueKind.String => long.Parse(
+                    revision.GetString()!,
+                    System.Globalization.CultureInfo.InvariantCulture
+                ),
                 _ => 0,
             }
             : 0;

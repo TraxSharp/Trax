@@ -81,14 +81,17 @@ internal sealed record SubscriptionRecheck(
         if (configuration?.AuthorizationRequired != true)
             return true;
 
-        await using var scope = scopes.CreateAsyncScope();
-        return await EndpointPolicy
-            .IsSatisfiedAsync(
-                scope.ServiceProvider.GetRequiredService<IAuthorizationService>(),
-                configuration,
-                user
-            )
-            .ConfigureAwait(false);
+        var scope = scopes.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            return await EndpointPolicy
+                .IsSatisfiedAsync(
+                    scope.ServiceProvider.GetRequiredService<IAuthorizationService>(),
+                    configuration,
+                    user
+                )
+                .ConfigureAwait(false);
+        }
     }
 
     /// <summary>

@@ -457,7 +457,8 @@ public class TrainTypeModuleTests
         var discovery = new StubDiscoveryService([reg1, reg2]);
         var module = new TrainTypeModule(discovery);
 
-        var act = async () => await module.CreateTypesAsync(null!, CancellationToken.None);
+        var act = async () =>
+            await module.CreateTypesAsync(null!, CancellationToken.None).ConfigureAwait(false);
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
             .WithMessage("*both map to the field 'dupe' under dispatch*Set Name*");
@@ -488,7 +489,9 @@ public class TrainTypeModuleTests
         ]);
 
         var act = async () =>
-            await new TrainTypeModule(discovery).CreateTypesAsync(null!, CancellationToken.None);
+            await new TrainTypeModule(discovery)
+                .CreateTypesAsync(null!, CancellationToken.None)
+                .ConfigureAwait(false);
 
         await act.Should().NotThrowAsync();
     }
@@ -516,7 +519,9 @@ public class TrainTypeModuleTests
         ]);
 
         var act = async () =>
-            await new TrainTypeModule(discovery).CreateTypesAsync(null!, CancellationToken.None);
+            await new TrainTypeModule(discovery)
+                .CreateTypesAsync(null!, CancellationToken.None)
+                .ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -826,7 +831,9 @@ public class TrainTypeModuleTests
                     "addressValidation"
                 ]!;
         field["externalId"].Should().Be("ext-7");
-        ((IReadOnlyDictionary<string, object?>)field["output"]!)["isValid"].Should().Be(true);
+        ((IReadOnlyDictionary<string, object?>)field["output"]!)["isValid"]
+            .Should()
+            .Be(expected: true);
     }
 
     private static async Task<IRequestExecutor> BuildExecutorWithDiscoveryAsync(
@@ -854,7 +861,8 @@ public class TrainTypeModuleTests
         return await services
             .BuildServiceProvider()
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
     }
 
     private static async Task<ISchemaDefinition> BuildSchemaWithDiscoveryAsync(
@@ -890,7 +898,7 @@ public class TrainTypeModuleTests
 
         var sp = services.BuildServiceProvider();
         var resolver = sp.GetRequiredService<IRequestExecutorProvider>();
-        var executor = await resolver.GetExecutorAsync("trax");
+        var executor = await resolver.GetExecutorAsync("trax").ConfigureAwait(false);
         return executor.Schema;
     }
 
@@ -1620,7 +1628,7 @@ public class TrainTypeModuleTests
     #region Unit Input — hard error at startup
 
     [Test]
-    public void CreateTypesAsync_UnitInputMutationTrain_ThrowsInvalidOperationException()
+    public async Task CreateTypesAsync_UnitInputMutationTrain_ThrowsInvalidOperationException()
     {
         var discovery = new StubDiscoveryService([
             CreateRegistration<Unit>(
@@ -1632,15 +1640,16 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var act = async () => await module.CreateTypesAsync(null!, CancellationToken.None);
+        var act = async () =>
+            await module.CreateTypesAsync(null!, CancellationToken.None).ConfigureAwait(false);
 
-        act.Should()
+        await act.Should()
             .ThrowAsync<InvalidOperationException>()
             .WithMessage("*Unit input*[TraxMutation]*");
     }
 
     [Test]
-    public void CreateTypesAsync_UnitInputQueryTrain_ThrowsInvalidOperationException()
+    public async Task CreateTypesAsync_UnitInputQueryTrain_ThrowsInvalidOperationException()
     {
         var discovery = new StubDiscoveryService([
             CreateRegistration<Unit>(
@@ -1653,15 +1662,16 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var act = async () => await module.CreateTypesAsync(null!, CancellationToken.None);
+        var act = async () =>
+            await module.CreateTypesAsync(null!, CancellationToken.None).ConfigureAwait(false);
 
-        act.Should()
+        await act.Should()
             .ThrowAsync<InvalidOperationException>()
             .WithMessage("*Unit input*[TraxQuery]*");
     }
 
     [Test]
-    public void CreateTypesAsync_UnitInputTrain_ErrorMessageContainsTrainName()
+    public async Task CreateTypesAsync_UnitInputTrain_ErrorMessageContainsTrainName()
     {
         var discovery = new StubDiscoveryService([
             CreateRegistration<Unit>(
@@ -1673,15 +1683,16 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var act = async () => await module.CreateTypesAsync(null!, CancellationToken.None);
+        var act = async () =>
+            await module.CreateTypesAsync(null!, CancellationToken.None).ConfigureAwait(false);
 
-        act.Should()
+        await act.Should()
             .ThrowAsync<InvalidOperationException>()
             .WithMessage("*dedicated input record*");
     }
 
     [Test]
-    public void CreateTypesAsync_UnitInputAmongTypedTrains_StillThrows()
+    public async Task CreateTypesAsync_UnitInputAmongTypedTrains_StillThrows()
     {
         var discovery = new StubDiscoveryService([
             CreateRegistration<TypedInput>(
@@ -1701,9 +1712,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var act = async () => await module.CreateTypesAsync(null!, CancellationToken.None);
+        var act = async () =>
+            await module.CreateTypesAsync(null!, CancellationToken.None).ConfigureAwait(false);
 
-        act.Should().ThrowAsync<InvalidOperationException>();
+        await act.Should().ThrowAsync<InvalidOperationException>();
     }
 
     #endregion
@@ -1906,7 +1918,7 @@ public class TrainTypeModuleTests
 
     #region Stubs
 
-    private class StubDiscoveryService(IReadOnlyList<TrainRegistration> registrations)
+    private sealed class StubDiscoveryService(IReadOnlyList<TrainRegistration> registrations)
         : ITrainDiscoveryService
     {
         public IReadOnlyList<TrainRegistration> DiscoverTrains() => registrations;
@@ -1914,11 +1926,11 @@ public class TrainTypeModuleTests
 
     private interface IStubTrain;
 
-    private class StubTrain;
+    private static class StubTrain;
 
     private interface IDisabled;
 
-    private class Disabled;
+    private static class Disabled;
 
     public record UnitInput
     {

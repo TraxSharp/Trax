@@ -182,10 +182,10 @@ public class QueryModelAllowAnonymousDiscoveryTests
 
     [TraxQueryModel(Name = "inheritedAnonRows")]
     [Table("inherited_anon_rows", Schema = "test_anon_disc")]
-    public class InheritedAnonRow : AnonBase { }
+    public class InheritedAnonRow : AnonBase;
 
     [TraxAllowAnonymous]
-    public interface IAnonInterface { }
+    public interface IAnonInterface;
 
     [TraxQueryModel(Name = "implementsAnonInterfaceRows")]
     [Table("implements_anon_iface_rows", Schema = "test_anon_disc")]
@@ -225,7 +225,7 @@ public class QueryModelAllowAnonymousDiscoveryTests
     }
 
     [TraxAllowAnonymous]
-    public interface IPubliclyVisible { }
+    public interface IPubliclyVisible;
 
     [TraxQueryModel(Name = "mixedSourceRows")]
     [TraxAuthorize(Roles = "Admin")]
@@ -252,7 +252,7 @@ public class QueryModelAllowAnonymousDiscoveryTests
     [TraxQueryModel(Name = "mixedInheritanceRows")]
     [TraxAuthorize(Roles = "Admin")]
     [Table("mixed_inheritance_rows", Schema = "test_anon_disc")]
-    public class MixedInheritanceRow : PubliclyVisibleBase { }
+    public class MixedInheritanceRow : PubliclyVisibleBase;
 
     public class MixedInheritanceContext(DbContextOptions<MixedInheritanceContext> options)
         : DbContext(options)

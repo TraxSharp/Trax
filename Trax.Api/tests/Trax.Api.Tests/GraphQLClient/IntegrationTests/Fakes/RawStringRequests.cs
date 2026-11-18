@@ -138,7 +138,7 @@ public sealed class GetPlayerNameOnlyRequest : IGraphQLClientRequest<PlayerNameO
 /// Raw-string request with a nullable response type, used to exercise the default
 /// <see cref="IGraphQLClientRequest{T}"/>.Extract's JSON-null short-circuit. Queries the
 /// schema's nullable <c>player</c> field with an id that misses, so the server returns
-/// <c>{ "player": null }</c> and the default extractor must return <c>null</c>
+/// <c>{ "player": null }</c> and the default extractor must return <see langword="null"/>
 /// rather than throwing.
 /// </summary>
 public sealed class GetPlayerOrNullRequest : IGraphQLClientRequest<PlayerProfile?>

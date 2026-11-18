@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Net.Http.Json;
 using System.Net.WebSockets;
 using System.Text;
@@ -116,7 +117,13 @@ public class MachineChangedE2ETests
     public async Task The_push_document_is_registered_under_the_reserved_prefix()
     {
         (await MachineDocumentOps.MachineDocumentsAsync(Database, WizardMachine.MachineId))
-            .Where(d => d.Operation(WizardMachine.MachineId) == MachineDocumentOps.MachineChanged)
+            .Where(d =>
+                string.Equals(
+                    d.Operation(WizardMachine.MachineId),
+                    MachineDocumentOps.MachineChanged,
+                    StringComparison.Ordinal
+                )
+            )
             .Should()
             .ContainSingle("the subscription is a persisted document like the others, per " + Adr)
             .Which.IsActive.Should()
@@ -263,7 +270,7 @@ public class MachineChangedE2ETests
         };
 
         answers
-            .Distinct()
+            .Distinct(StringComparer.Ordinal)
             .Should()
             .ContainSingle(
                 "a caller learns nothing about which ids exist, whose they are or that a system instance has one, "
@@ -402,7 +409,14 @@ public class MachineChangedE2ETests
                 "a re-created row is a new incarnation, whose revisions start again, per " + Adr
             );
         var old = await ws.TryNextAsync("old", TimeSpan.FromMilliseconds(200));
-        (old is null || old.Value.GetProperty("type").GetString() == "complete")
+        (
+            old is null
+            || string.Equals(
+                old.Value.GetProperty("type").GetString(),
+                "complete",
+                StringComparison.Ordinal
+            )
+        )
             .Should()
             .BeTrue("the old incarnation's stream ended at gone and hears nothing of the new row");
     }
@@ -457,7 +471,9 @@ public class MachineChangedE2ETests
         var executor = await A.ExecutorAsync();
         var subscriptions = executor.Schema.SubscriptionType;
         subscriptions.Should().NotBeNull("the host serves subscriptions");
-        var field = subscriptions!.Fields.FirstOrDefault(f => f.Name == "wizardChanged");
+        var field = subscriptions!.Fields.FirstOrDefault(f =>
+            string.Equals(f.Name, "wizardChanged", StringComparison.Ordinal)
+        );
         field.Should().NotBeNull("each machine's push is a subscription, per " + Adr);
         field!
             .Arguments.Select(a => a.Name)
@@ -580,7 +596,7 @@ public class MachineChangedE2ETests
                 if (attempt % 50 == 0)
                     sockets.Add(await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey));
                 var socket = sockets[^1];
-                var operation = $"cap-{attempt}";
+                var operation = string.Create(CultureInfo.InvariantCulture, $"cap-{attempt}");
                 await socket.SubscribeAsync(operation, MachineChangedOps.Subscribe(started.Id));
                 if (attempt == 0)
                 {
@@ -612,9 +628,14 @@ public class MachineChangedE2ETests
             (
                 await E2EWait.UntilAsync(async () =>
                 {
-                    var retry = $"after-free-{tries++}";
-                    await freed.SubscribeAsync(retry, MachineChangedOps.Subscribe(started.Id));
-                    var (refused, _, _) = await freed.RefusalAsync(retry);
+                    var retry = string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"after-free-{tries++}"
+                    );
+                    await freed
+                        .SubscribeAsync(retry, MachineChangedOps.Subscribe(started.Id))
+                        .ConfigureAwait(false);
+                    var (refused, _, _) = await freed.RefusalAsync(retry).ConfigureAwait(false);
                     return !refused;
                 })
             ).Should().BeTrue("a completed stream frees its place");
@@ -640,8 +661,11 @@ public class MachineChangedE2ETests
 
         for (var i = 0; i < 100; i++)
         {
-            await ws.SubscribeAsync($"s{i}", MachineChangedOps.Subscribe(instances[i]));
-            await ws.NextChangeAsync($"s{i}");
+            await ws.SubscribeAsync(
+                string.Create(CultureInfo.InvariantCulture, $"s{i}"),
+                MachineChangedOps.Subscribe(instances[i])
+            );
+            await ws.NextChangeAsync(string.Create(CultureInfo.InvariantCulture, $"s{i}"));
         }
         await ws.SubscribeAsync("s100", MachineChangedOps.Subscribe(instances[100]));
         var past = await ws.NextAsync("s100");
@@ -664,10 +688,9 @@ public class MachineChangedE2ETests
 
         var upgrade = async () =>
         {
-            using var socket = await client.ConnectAsync(
-                new Uri("ws://localhost/trax/graphql"),
-                CancellationToken.None
-            );
+            using var socket = await client
+                .ConnectAsync(new Uri("ws://localhost/trax/graphql"), CancellationToken.None)
+                .ConfigureAwait(false);
         };
 
         (await upgrade.Should().ThrowAsync<InvalidOperationException>())
@@ -696,9 +719,9 @@ public class MachineChangedE2ETests
         var released = await E2EWait.UntilAsync(async () =>
         {
             var before = reads.Count;
-            await WriteManyAsync(B, watched.Id, 1);
-            var final = await WriteManyAsync(B, sentinel.Id, 1);
-            await ws.ReadUntilRevisionAsync("sentinel", final);
+            await WriteManyAsync(B, watched.Id, 1).ConfigureAwait(false);
+            var final = await WriteManyAsync(B, sentinel.Id, 1).ConfigureAwait(false);
+            await ws.ReadUntilRevisionAsync("sentinel", final).ConfigureAwait(false);
             return reads.Count - before == 1;
         });
 
@@ -717,7 +740,7 @@ public class MachineChangedE2ETests
         GraphQLWs ws;
         try
         {
-            ws = await GraphQLWs.ConnectAsync(A, null);
+            ws = await GraphQLWs.ConnectAsync(A, apiKey: null);
         }
         catch (Exception ex) when (ex is InvalidOperationException or WebSocketException)
         {
@@ -780,8 +803,11 @@ public class MachineChangedE2ETests
         await using var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
         for (var i = 0; i < 3; i++)
         {
-            await ws.SubscribeAsync($"n{i}", MachineChangedOps.Subscribe(watched.Id));
-            await ws.NextChangeAsync($"n{i}");
+            await ws.SubscribeAsync(
+                string.Create(CultureInfo.InvariantCulture, $"n{i}"),
+                MachineChangedOps.Subscribe(watched.Id)
+            );
+            await ws.NextChangeAsync(string.Create(CultureInfo.InvariantCulture, $"n{i}"));
         }
         await ws.SubscribeAsync("sentinel", MachineChangedOps.Subscribe(sentinel.Id));
         await ws.NextChangeAsync("sentinel");
@@ -847,43 +873,57 @@ public class MachineChangedE2ETests
         long revision = 0;
         for (var i = 0; i < count; i++)
         {
-            var row = await E2ESql.DraftAsync(Database, WizardMachine.MachineId, id);
-            var result =
-                row?.State == nameof(WizardState.Paying)
-                    ? await node.AdvanceWizardAsync(E2EHost.AliceKey, "back", id)
-                    : await node.AdvanceWizardAsync(
+            var row = await E2ESql
+                .DraftAsync(Database, WizardMachine.MachineId, id)
+                .ConfigureAwait(false);
+            var result = string.Equals(
+                row?.State,
+                nameof(WizardState.Paying),
+                StringComparison.Ordinal
+            )
+                ? await node.AdvanceWizardAsync(E2EHost.AliceKey, "back", id).ConfigureAwait(false)
+                : await node.AdvanceWizardAsync(
                         E2EHost.AliceKey,
                         "describe",
                         id,
                         WizardOps.DetailsInput()
-                    );
+                    )
+                    .ConfigureAwait(false);
             revision = result.Revision ?? 0;
         }
         return revision;
     }
 
     private static async Task<long> RowIdAsync(Guid id) =>
-        await E2ESql.ScalarAsync<long>(
-            Database,
-            "SELECT row_id FROM trax.snapshot_draft WHERE machine = @machine AND id = @id",
-            ("machine", WizardMachine.MachineId),
-            ("id", id)
-        );
+        await E2ESql
+            .ScalarAsync<long>(
+                Database,
+                "SELECT row_id FROM trax.snapshot_draft WHERE machine = @machine AND id = @id",
+                ("machine", WizardMachine.MachineId),
+                ("id", id)
+            )
+            .ConfigureAwait(false);
 
     // Sends notices by hand, each in its own statement, as a forger with database access could.
     private static async Task NotifyAsync(long rowId, int times)
     {
-        await using var connection = new NpgsqlConnection(E2EHost.ConnectionString(Database));
-        await connection.OpenAsync();
-        for (var i = 0; i < times; i++)
+        var connection = new NpgsqlConnection(E2EHost.ConnectionString(Database));
+        await using (connection.ConfigureAwait(false))
         {
-            await using var notify = new NpgsqlCommand(
-                "SELECT pg_notify(@channel, @payload)",
-                connection
-            );
-            notify.Parameters.AddWithValue("channel", Channel);
-            notify.Parameters.AddWithValue("payload", rowId.ToString());
-            await notify.ExecuteNonQueryAsync();
+            await connection.OpenAsync().ConfigureAwait(false);
+            for (var i = 0; i < times; i++)
+            {
+                var notify = new NpgsqlCommand("SELECT pg_notify(@channel, @payload)", connection);
+                await using (notify.ConfigureAwait(false))
+                {
+                    notify.Parameters.AddWithValue("channel", Channel);
+                    notify.Parameters.AddWithValue(
+                        "payload",
+                        rowId.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    );
+                    await notify.ExecuteNonQueryAsync().ConfigureAwait(false);
+                }
+            }
         }
     }
 
@@ -891,16 +931,18 @@ public class MachineChangedE2ETests
     private static async Task<Guid> InsertUserInstanceAsync(string userKey)
     {
         var id = Guid.NewGuid();
-        await E2ESql.ExecuteAsync(
-            Database,
-            "INSERT INTO trax.snapshot_draft (id, user_key, machine, version, state, context, "
-                + "concurrency_token, updated_at, created_at, owner_kind) "
-                + "VALUES (@id, @user, @machine, 1, 'Naming', '{\"title\":\"Atlas\"}'::jsonb, "
-                + "gen_random_uuid(), now(), now(), 'user')",
-            ("id", id),
-            ("user", userKey),
-            ("machine", WizardMachine.MachineId)
-        );
+        await E2ESql
+            .ExecuteAsync(
+                Database,
+                "INSERT INTO trax.snapshot_draft (id, user_key, machine, version, state, context, "
+                    + "concurrency_token, updated_at, created_at, owner_kind) "
+                    + "VALUES (@id, @user, @machine, 1, 'Naming', '{\"title\":\"Atlas\"}'::jsonb, "
+                    + "gen_random_uuid(), now(), now(), 'user')",
+                ("id", id),
+                ("user", userKey),
+                ("machine", WizardMachine.MachineId)
+            )
+            .ConfigureAwait(false);
         return id;
     }
 
@@ -908,15 +950,17 @@ public class MachineChangedE2ETests
     private static async Task<Guid> InsertSystemInstanceAsync()
     {
         var id = Guid.NewGuid();
-        await E2ESql.ExecuteAsync(
-            Database,
-            "INSERT INTO trax.snapshot_draft (id, user_key, machine, version, state, context, "
-                + "concurrency_token, updated_at, created_at, owner_kind) "
-                + "VALUES (@id, NULL, @machine, 1, 'Naming', '{}'::jsonb, gen_random_uuid(), now(), now(), "
-                + "'system')",
-            ("id", id),
-            ("machine", WizardMachine.MachineId)
-        );
+        await E2ESql
+            .ExecuteAsync(
+                Database,
+                "INSERT INTO trax.snapshot_draft (id, user_key, machine, version, state, context, "
+                    + "concurrency_token, updated_at, created_at, owner_kind) "
+                    + "VALUES (@id, NULL, @machine, 1, 'Naming', '{}'::jsonb, gen_random_uuid(), now(), now(), "
+                    + "'system')",
+                ("id", id),
+                ("machine", WizardMachine.MachineId)
+            )
+            .ConfigureAwait(false);
         return id;
     }
 
@@ -934,8 +978,10 @@ public class MachineChangedE2ETests
             "Bearer",
             Tokens.Mint(b => b.WithSubject(subject))
         );
-        var response = await client.SendAsync(request);
-        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var response = await client.SendAsync(request).ConfigureAwait(false);
+        using var doc = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync().ConfigureAwait(false)
+        );
         return WizardOps.Result(doc, "start").Id;
     }
 
@@ -948,7 +994,8 @@ public class MachineChangedE2ETests
         var queued = await db
             .WorkQueues.AsNoTracking()
             .Where(w => w.InvokingInstanceId == instance && w.Status == WorkQueueStatus.Queued)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
         foreach (var entry in queued)
         {
             var run = Metadata.Create(
@@ -965,18 +1012,20 @@ public class MachineChangedE2ETests
                 }
             );
             run.TrainState = TrainState.InProgress;
-            await db.Track(run);
-            await db.SaveChanges(CancellationToken.None);
+            await db.Track(run).ConfigureAwait(false);
+            await db.SaveChanges(CancellationToken.None).ConfigureAwait(false);
             await db
                 .WorkQueues.Where(w => w.Id == entry.Id)
                 .ExecuteUpdateAsync(s =>
                     s.SetProperty(w => w.Status, WorkQueueStatus.Dispatched)
                         .SetProperty(w => w.MetadataId, run.Id)
-                );
+                )
+                .ConfigureAwait(false);
         }
         await db
             .Metadatas.Where(m => m.InvokingInstanceId == instance)
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.TrainState, TrainState.Failed));
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.TrainState, TrainState.Failed))
+            .ConfigureAwait(false);
     }
 }
 

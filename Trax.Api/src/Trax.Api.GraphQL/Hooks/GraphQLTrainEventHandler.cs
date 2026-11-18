@@ -56,7 +56,13 @@ public class GraphQLTrainEventHandler : ITrainEventHandler
     public async Task HandleAsync(TrainLifecycleEventMessage message, CancellationToken ct)
     {
         // Data-change signals ride the same transport but are handled by GraphQLDataChangeHandler.
-        if (message.EventType == TrainLifecycleEventMessage.DataChangedEventType)
+        if (
+            string.Equals(
+                message.EventType,
+                TrainLifecycleEventMessage.DataChangedEventType,
+                StringComparison.Ordinal
+            )
+        )
             return;
 
         if (!ShouldForward(message.TrainName))
@@ -102,7 +108,7 @@ public class GraphQLTrainEventHandler : ITrainEventHandler
             FailureException = message.FailureException,
         };
 
-        await _publisher.PublishAsync(topicName, lifecycleEvent, ct);
+        await _publisher.PublishAsync(topicName, lifecycleEvent, ct).ConfigureAwait(false);
 
         _logger?.LogDebug(
             "Forwarded remote {EventType} event for train {TrainName} ({ExternalId}) to GraphQL subscriptions.",

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.StateMachine.E2E.Fakes;
@@ -80,7 +81,10 @@ public static class WizardOps
         string? secret = null
     )
     {
-        var fields = $"title: {Literal(title)}, pages: {pages}";
+        var fields = string.Create(
+            CultureInfo.InvariantCulture,
+            $"title: {Literal(title)}, pages: {pages}"
+        );
         if (note is not null)
             fields += $", note_text: {Literal(note)}";
         if (secret is not null)
@@ -183,9 +187,10 @@ public static class WizardOps
     )
     {
         using var doc = await host.PostAsync(
-            Start(title, requestId ?? NewRequestId()),
-            apiKey: apiKey
-        );
+                Start(title, requestId ?? NewRequestId()),
+                apiKey: apiKey
+            )
+            .ConfigureAwait(false);
         var result = Result(doc, "start");
         if (result.ProblemCode is { } code)
             Assert.Fail($"start was refused: {code} {result.ProblemMessage}");
@@ -204,9 +209,10 @@ public static class WizardOps
     )
     {
         using var doc = await host.PostAsync(
-            Event(field, id, requestId ?? NewRequestId(), input, clientResult),
-            apiKey: apiKey
-        );
+                Event(field, id, requestId ?? NewRequestId(), input, clientResult),
+                apiKey: apiKey
+            )
+            .ConfigureAwait(false);
         return Result(doc, field);
     }
 
@@ -220,7 +226,8 @@ public static class WizardOps
         string? requestId = null
     )
     {
-        var result = await host.SendWizardEventAsync(apiKey, field, id, input, requestId);
+        var result = await host.SendWizardEventAsync(apiKey, field, id, input, requestId)
+            .ConfigureAwait(false);
         if (result.ProblemCode is { } code)
             Assert.Fail($"{field} was refused: {code} {result.ProblemMessage}");
         return result;
@@ -229,21 +236,22 @@ public static class WizardOps
     /// <summary>Starts a wizard and describes it, so it waits in <see cref="WizardState.Paying"/>.</summary>
     public static async Task<MachineResult> WizardInPayingAsync(this IHost host, string apiKey)
     {
-        var started = await host.StartWizardAsync(apiKey);
-        return await host.AdvanceWizardAsync(apiKey, "describe", started.Id, DetailsInput());
+        var started = await host.StartWizardAsync(apiKey).ConfigureAwait(false);
+        return await host.AdvanceWizardAsync(apiKey, "describe", started.Id, DetailsInput())
+            .ConfigureAwait(false);
     }
 
     /// <summary>Starts a wizard, describes it and pays, so it waits in <see cref="WizardState.Approving"/>.</summary>
     public static async Task<MachineResult> WizardInApprovingAsync(this IHost host, string apiKey)
     {
-        var paying = await host.WizardInPayingAsync(apiKey);
-        return await host.AdvanceWizardAsync(apiKey, "pay", paying.Id);
+        var paying = await host.WizardInPayingAsync(apiKey).ConfigureAwait(false);
+        return await host.AdvanceWizardAsync(apiKey, "pay", paying.Id).ConfigureAwait(false);
     }
 
     /// <summary>The answer of <c>get</c> for <paramref name="apiKey"/>'s caller.</summary>
     public static async Task<JsonElement> GetWizardAsync(this IHost host, string? apiKey, Guid id)
     {
-        using var doc = await host.PostAsync(Get(id), apiKey: apiKey);
+        using var doc = await host.PostAsync(Get(id), apiKey: apiKey).ConfigureAwait(false);
         return ReadGet(doc);
     }
 }
@@ -263,7 +271,10 @@ public sealed record MachineResult(JsonElement Raw)
             ? revision.ValueKind switch
             {
                 JsonValueKind.Number => revision.GetInt64(),
-                JsonValueKind.String => long.Parse(revision.GetString()!),
+                JsonValueKind.String => long.Parse(
+                    revision.GetString()!,
+                    System.Globalization.CultureInfo.InvariantCulture
+                ),
                 _ => null,
             }
             : null;

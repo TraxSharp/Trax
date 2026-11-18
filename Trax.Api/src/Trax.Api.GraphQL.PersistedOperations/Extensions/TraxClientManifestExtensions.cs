@@ -33,7 +33,9 @@ public static class TraxClientManifestExtensions
         if (path is null)
         {
             // Serves, or migrates and exits when started with --trax-migrate (TraxDeployExtensions).
-            await TraxDeployExtensions.RunTraxAsync(app, args).ConfigureAwait(false);
+            await TraxDeployExtensions
+                .RunTraxAsync(app, args, cancellationToken: CancellationToken.None)
+                .ConfigureAwait(false);
             return;
         }
 

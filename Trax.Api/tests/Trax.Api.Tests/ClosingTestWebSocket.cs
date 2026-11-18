@@ -28,7 +28,9 @@ public static class ClosingTestWebSocketExtensions
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(ConnectDeadline);
-        return new ClosingTestWebSocket(await client.ConnectAsync(uri, deadline.Token));
+        return new ClosingTestWebSocket(
+            await client.ConnectAsync(uri, deadline.Token).ConfigureAwait(false)
+        );
     }
 
     private sealed class ClosingTestWebSocket(WebSocket inner) : WebSocket
@@ -72,7 +74,11 @@ public static class ClosingTestWebSocketExtensions
                 {
                     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
                     inner
-                        .CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, cts.Token)
+                        .CloseOutputAsync(
+                            WebSocketCloseStatus.NormalClosure,
+                            statusDescription: null,
+                            cts.Token
+                        )
                         .GetAwaiter()
                         .GetResult();
                 }

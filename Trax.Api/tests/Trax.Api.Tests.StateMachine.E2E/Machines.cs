@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Trax.StateMachine;
@@ -92,7 +93,7 @@ public sealed class TurnstileMachine : Machine<TurnstileState, TurnstileTrigger>
 }
 
 /// <summary>The order machine's irreversible effect port (bound inline via <c>RunsOnce&lt;IOrderCharge&gt;</c>).</summary>
-public interface IOrderCharge : ISnapshotEffect { }
+public interface IOrderCharge : ISnapshotEffect;
 
 /// <summary>
 /// Counts deliveries and returns a distinct receipt each time, so the E2E can prove exactly-once from the
@@ -108,7 +109,7 @@ public sealed class CountingCharge : IOrderCharge
     public Task<string> Run(Snapshot snapshot, CancellationToken cancellationToken = default)
     {
         var n = Interlocked.Increment(ref _calls);
-        return Task.FromResult($"receipt-{n}");
+        return Task.FromResult(string.Create(CultureInfo.InvariantCulture, $"receipt-{n}"));
     }
 }
 

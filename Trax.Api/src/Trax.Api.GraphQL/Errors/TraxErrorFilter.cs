@@ -70,7 +70,7 @@ namespace Trax.Api.GraphQL.Errors;
 /// left with HotChocolate's default masked message. Use the typed exceptions above
 /// when you want a message to reach the client.
 /// </remarks>
-internal class TraxErrorFilter(ILogger<TraxErrorFilter>? logger = null) : IErrorFilter
+internal sealed class TraxErrorFilter(ILogger<TraxErrorFilter>? logger = null) : IErrorFilter
 {
     private readonly ILogger _logger = logger ?? NullLogger<TraxErrorFilter>.Instance;
 

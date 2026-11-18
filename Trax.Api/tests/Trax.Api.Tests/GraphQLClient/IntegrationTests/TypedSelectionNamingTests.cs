@@ -145,7 +145,11 @@ public class TypedSelectionNamingTests
                 response.RootElement,
                 typeof(AssetView),
                 ResponseStrictness.ThrowOnDrift,
-                new System.Text.Json.JsonSerializerOptions(),
+                new System.Text.Json.JsonSerializerOptions()
+                {
+                    RespectNullableAnnotations = false,
+                    RespectRequiredConstructorParameters = false,
+                },
                 logger: null
             );
 

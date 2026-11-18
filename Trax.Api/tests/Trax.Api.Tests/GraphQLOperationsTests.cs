@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
@@ -193,23 +194,26 @@ public class GraphQLOperationsTests
                         id,
                         "Daily at 02:00 UTC",
                         times,
-                        null,
-                        null
+                        RunsAfterManifestId: null,
+                        RunsAfterManifestExternalId: null
                     ))
                     .ToList()
             );
 
         var result = await executor.ExecuteAsync(
-            $$"""
-            {
-                operations {
-                    manifests(manifestGroupId: {{groupId}}) {
-                        items { id scheduleText nextRuns(count: 2) many: nextRuns(count: 500) }
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $$"""
+                {
+                    operations {
+                        manifests(manifestGroupId: {{groupId}}) {
+                            items { id scheduleText nextRuns(count: 2) many: nextRuns(count: 500) }
+                        }
+                        manifestDetail(id: {{manifestId}}) { scheduleText nextRuns }
                     }
-                    manifestDetail(id: {{manifestId}}) { scheduleText nextRuns }
                 }
-            }
-            """
+                """
+            )
         );
 
         var operationResult = (OperationResult)result;
@@ -250,12 +254,23 @@ public class GraphQLOperationsTests
     {
         // Arrange
         _operations
-            .TriggerManifestAsync("test-job", null, false, Arg.Any<CancellationToken>())
+            .TriggerManifestAsync(
+                "test-job",
+                delay: null,
+                askAfresh: false,
+                Arg.Any<CancellationToken>()
+            )
             .Returns(
                 new Trax.Scheduler.Services.Operations.TriggerManifestResult(
-                    true,
+                    Success: true,
                     "Manifest 'test-job' triggered: queued a new run (work queue entry 1), due now.",
-                    new ManifestTriggerResult(1, true, null, false, null)
+                    new ManifestTriggerResult(
+                        1,
+                        Created: true,
+                        ScheduledAt: null,
+                        AlreadyDispatched: false,
+                        ReplayDecisionsOf: null
+                    )
                 )
             );
         var executor = await BuildExecutor();
@@ -283,7 +298,12 @@ public class GraphQLOperationsTests
         json.Should().Contain("queued a new run");
         await _operations
             .Received(1)
-            .TriggerManifestAsync("test-job", null, false, Arg.Any<CancellationToken>());
+            .TriggerManifestAsync(
+                "test-job",
+                delay: null,
+                askAfresh: false,
+                Arg.Any<CancellationToken>()
+            );
     }
 
     [Test]
@@ -382,7 +402,7 @@ public class GraphQLOperationsTests
             )
             .Returns(
                 new Trax.Scheduler.Services.Operations.BatchTriggerResult(
-                    true,
+                    Success: true,
                     1,
                     3,
                     0,
@@ -449,14 +469,15 @@ public class GraphQLOperationsTests
             new Trax.Effect.Data.InMemory.Services.InMemoryContextFactory.InMemoryContextProviderFactory(
                 new Microsoft.EntityFrameworkCore.Storage.InMemoryDatabaseRoot()
             );
-        await using (var db = await factory.CreateDbContextAsync(default))
+        var db = await factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
             var manifest = Trax.Effect.Models.Manifest.Manifest.Create(
                 new Trax.Effect.Models.Manifest.DTOs.CreateManifest { Name = typeof(object) }
             );
             manifest.ExternalId = "test-job";
-            await db.Track(manifest);
-            await db.SaveChanges(default);
+            await db.Track(manifest).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
         }
         services.AddSingleton<Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory>(
             factory
@@ -483,7 +504,8 @@ public class GraphQLOperationsTests
 
         return await _serviceProvider
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -492,11 +514,11 @@ public class GraphQLOperationsTests
 
     private interface IFakeQueryTrain;
 
-    private class FakeQueryTrain;
+    private static class FakeQueryTrain;
 
     private interface IFakeMutationTrain;
 
-    private class FakeMutationTrain;
+    private static class FakeMutationTrain;
 
     public record FakeGraphQLInput
     {

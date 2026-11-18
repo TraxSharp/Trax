@@ -136,7 +136,9 @@ public class TraxJwtSocketInterceptorTests
         var interceptor = NewInterceptor();
         var (session, _) = NewSession();
 
-        var payload = Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload("   ", null));
+        var payload = Payload(
+            new TraxJwtSocketInterceptor.ConnectionInitPayload("   ", Bearer: null)
+        );
         var result = await interceptor.OnConnectAsync(session, payload, CancellationToken.None);
 
         result.Accepted.Should().BeFalse();
@@ -150,7 +152,7 @@ public class TraxJwtSocketInterceptorTests
         var (session, _) = NewSession();
 
         var payload = Payload(
-            new TraxJwtSocketInterceptor.ConnectionInitPayload("not.a.jwt", null)
+            new TraxJwtSocketInterceptor.ConnectionInitPayload("not.a.jwt", Bearer: null)
         );
         var result = await interceptor.OnConnectAsync(session, payload, CancellationToken.None);
 
@@ -168,7 +170,9 @@ public class TraxJwtSocketInterceptorTests
             [new Claim("sub", "alice")],
             keyBytes: Encoding.UTF8.GetBytes(new string('z', 32))
         );
-        var payload = Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, null));
+        var payload = Payload(
+            new TraxJwtSocketInterceptor.ConnectionInitPayload(token, Bearer: null)
+        );
         var result = await interceptor.OnConnectAsync(session, payload, CancellationToken.None);
 
         result.Accepted.Should().BeFalse();
@@ -182,7 +186,9 @@ public class TraxJwtSocketInterceptorTests
         var (session, _) = NewSession();
 
         var token = SignToken([new Claim("sub", "alice")], expires: DateTime.UtcNow.AddMinutes(-5));
-        var payload = Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, null));
+        var payload = Payload(
+            new TraxJwtSocketInterceptor.ConnectionInitPayload(token, Bearer: null)
+        );
         var result = await interceptor.OnConnectAsync(session, payload, CancellationToken.None);
 
         result.Accepted.Should().BeFalse();
@@ -196,7 +202,9 @@ public class TraxJwtSocketInterceptorTests
         var (session, _) = NewSession();
 
         var token = SignToken([new Claim("sub", "alice")], issuer: "https://rogue");
-        var payload = Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, null));
+        var payload = Payload(
+            new TraxJwtSocketInterceptor.ConnectionInitPayload(token, Bearer: null)
+        );
         var result = await interceptor.OnConnectAsync(session, payload, CancellationToken.None);
 
         result.Accepted.Should().BeFalse();
@@ -210,7 +218,9 @@ public class TraxJwtSocketInterceptorTests
         var (session, _) = NewSession();
 
         var token = SignToken([new Claim("sub", "alice")], audience: "wrong-aud");
-        var payload = Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, null));
+        var payload = Payload(
+            new TraxJwtSocketInterceptor.ConnectionInitPayload(token, Bearer: null)
+        );
         var result = await interceptor.OnConnectAsync(session, payload, CancellationToken.None);
 
         result.Accepted.Should().BeFalse();
@@ -229,7 +239,9 @@ public class TraxJwtSocketInterceptorTests
         var (session, _) = NewSession();
 
         var token = SignToken([new Claim("sub", "alice"), new Claim("name", "Alice")]);
-        var payload = Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, null));
+        var payload = Payload(
+            new TraxJwtSocketInterceptor.ConnectionInitPayload(token, Bearer: null)
+        );
         var result = await interceptor.OnConnectAsync(session, payload, CancellationToken.None);
 
         result.Accepted.Should().BeFalse();
@@ -248,7 +260,9 @@ public class TraxJwtSocketInterceptorTests
         var (session, _) = NewSession();
 
         var token = SignToken([new Claim("sub", "alice"), new Claim("name", "Alice")]);
-        var payload = Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, null));
+        var payload = Payload(
+            new TraxJwtSocketInterceptor.ConnectionInitPayload(token, Bearer: null)
+        );
         var result = await interceptor.OnConnectAsync(session, payload, CancellationToken.None);
 
         result.Accepted.Should().BeFalse();
@@ -266,7 +280,9 @@ public class TraxJwtSocketInterceptorTests
             new Claim("name", "Alice"),
             new Claim(ClaimTypes.Role, "Player"),
         ]);
-        var payload = Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, null));
+        var payload = Payload(
+            new TraxJwtSocketInterceptor.ConnectionInitPayload(token, Bearer: null)
+        );
         var result = await interceptor.OnConnectAsync(session, payload, CancellationToken.None);
 
         result.Accepted.Should().BeTrue();
@@ -302,7 +318,9 @@ public class TraxJwtSocketInterceptorTests
         var (session, http) = NewSession();
 
         var token = SignToken([new Claim("sub", "alice"), new Claim("name", "Alice")]);
-        var payload = Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, null));
+        var payload = Payload(
+            new TraxJwtSocketInterceptor.ConnectionInitPayload(token, Bearer: null)
+        );
         await interceptor.OnConnectAsync(session, payload, CancellationToken.None);
 
         http.User.FindFirst(TraxAuthClaimTypes.PrincipalType)!
@@ -331,7 +349,9 @@ public class TraxJwtSocketInterceptorTests
         var (session, http) = NewSession();
 
         var token = SignToken([new Claim("sub", "alice"), new Claim("name", "Alice")]);
-        var payload = Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, null));
+        var payload = Payload(
+            new TraxJwtSocketInterceptor.ConnectionInitPayload(token, Bearer: null)
+        );
         await interceptor.OnConnectAsync(session, payload, CancellationToken.None);
 
         http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)!
@@ -361,7 +381,9 @@ public class TraxJwtSocketInterceptorTests
         var (session, _) = NewSession();
 
         var token = SignToken([new Claim("sub", "alice"), new Claim("name", "Alice")]);
-        var payload = Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, null));
+        var payload = Payload(
+            new TraxJwtSocketInterceptor.ConnectionInitPayload(token, Bearer: null)
+        );
         await interceptor.OnConnectAsync(session, payload, CancellationToken.None);
 
         await resolver
@@ -390,7 +412,9 @@ public class TraxJwtSocketInterceptorTests
             [new Claim("sub", "alice"), new Claim("name", "Alice")],
             expires: DateTime.UtcNow.AddSeconds(-10)
         );
-        var payload = Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, null));
+        var payload = Payload(
+            new TraxJwtSocketInterceptor.ConnectionInitPayload(token, Bearer: null)
+        );
         var result = await interceptor.OnConnectAsync(session, payload, CancellationToken.None);
 
         result.Accepted.Should().BeFalse();

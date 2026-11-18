@@ -140,7 +140,7 @@ public class AddTraxJwtAuthTests
         using var sp = services.BuildServiceProvider();
 
         var hostedServices = sp.GetServices<IHostedService>()
-            .Where(s => s.GetType().Name.Contains("Disclaimer"))
+            .Where(s => s.GetType().Name.Contains("Disclaimer", StringComparison.Ordinal))
             .ToList();
 
         hostedServices.Should().HaveCount(1);
@@ -157,7 +157,7 @@ public class AddTraxJwtAuthTests
 
         var hostedCount = services.Count(sd =>
             sd.ServiceType == typeof(IHostedService)
-            && sd.ImplementationType?.Name.Contains("Disclaimer") == true
+            && sd.ImplementationType?.Name.Contains("Disclaimer", StringComparison.Ordinal) == true
         );
 
         hostedCount.Should().Be(1);

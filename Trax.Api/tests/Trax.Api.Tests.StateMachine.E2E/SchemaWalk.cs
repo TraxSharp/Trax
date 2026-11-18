@@ -20,7 +20,9 @@ public static class SchemaWalk
 
     /// <summary>The object type named <paramref name="name"/>, or null.</summary>
     public static ObjectType? ObjectTypeNamed(IRequestExecutor executor, string name) =>
-        executor.Schema.Types.OfType<ObjectType>().SingleOrDefault(t => t.Name == name);
+        executor
+            .Schema.Types.OfType<ObjectType>()
+            .SingleOrDefault(t => string.Equals(t.Name, name, StringComparison.Ordinal));
 
     /// <summary>The object type <paramref name="field"/> of <paramref name="type"/> resolves to, or null.</summary>
     public static ObjectType? FieldType(ObjectType? type, string field) =>

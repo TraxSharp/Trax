@@ -58,7 +58,7 @@ public class LifecycleSubscriptionAccessTests
     {
         var access = Access(b => b.ExposeOperationQueries().GateOperations(roles: "Admin"));
 
-        (await access.DataChangesFor(null)).Should().BeFalse();
+        (await access.DataChangesFor(user: null)).Should().BeFalse();
         (await access.DataChangesFor(new ClaimsPrincipal())).Should().BeFalse();
         (await access.DataChangesFor(new ClaimsPrincipal(new ClaimsIdentity())))
             .Should()
@@ -70,8 +70,8 @@ public class LifecycleSubscriptionAccessTests
     {
         var access = Access(b => b.ExposeOperationQueries().AllowAnonymousOperations());
 
-        (await access.LifecycleFor(null)).All.Should().BeTrue();
-        (await access.OperationsFor(null)).Should().BeTrue();
+        (await access.LifecycleFor(user: null)).All.Should().BeTrue();
+        (await access.OperationsFor(user: null)).Should().BeTrue();
     }
 
     [Test]
@@ -120,7 +120,7 @@ public class LifecycleSubscriptionAccessTests
         var access = Access(trains: Train<IPolicyTrain>());
 
         (await access.LifecycleFor(User())).Trains.Should().Contain(typeof(IPolicyTrain).FullName!);
-        (await access.LifecycleFor(null)).IsEmpty.Should().BeTrue();
+        (await access.LifecycleFor(user: null)).IsEmpty.Should().BeTrue();
     }
 
     [Test]

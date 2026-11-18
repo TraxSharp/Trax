@@ -42,7 +42,7 @@ internal static class RunGraphs
         ITrainChainGraphs graphs,
         long metadataId,
         CancellationToken cancellationToken
-    ) => ReadAsync(context, graphs, null, metadataId, cancellationToken);
+    ) => ReadAsync(context, graphs, resumes: null, metadataId, cancellationToken);
 
     /// <summary>
     /// Reads run <paramref name="metadataId"/> and its first <see cref="MaxSteps"/> steps, matches
@@ -77,7 +77,8 @@ internal static class RunGraphs
                 m.ResumeFrom,
                 m.ChainHash,
             })
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
 
         if (run is null)
             return null;
@@ -87,7 +88,8 @@ internal static class RunGraphs
             .JunctionRuns.AsNoTracking()
             .ForRun(metadataId)
             .Take(MaxSteps + 1)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
 
         var more = rows.Count > MaxSteps;
         var steps = rows.Take(MaxSteps).Select(JunctionStep.From).ToList();
@@ -95,13 +97,14 @@ internal static class RunGraphs
 
         var checks = ReadsResumes(run.TrainState, run.ResumeFrom)
             ? await ReadResumesAsync(
-                resumes,
-                graphs,
-                metadataId,
-                run.Name,
-                graph,
-                cancellationToken
-            )
+                    resumes,
+                    graphs,
+                    metadataId,
+                    run.Name,
+                    graph,
+                    cancellationToken
+                )
+                .ConfigureAwait(false)
             : null;
 
         var drawn = Match(
@@ -246,15 +249,17 @@ internal static class RunGraphs
         var ids = new HashSet<string>(StringComparer.Ordinal);
         CollectIds(graph.Nodes, ids);
 
-        return await resumes.CheckMany(
-            declared.Train,
-            declared.Chain,
-            declared.Input,
-            declared.Output,
-            metadataId,
-            ids,
-            cancellationToken
-        );
+        return await resumes
+            .CheckMany(
+                declared.Train,
+                declared.Chain,
+                declared.Input,
+                declared.Output,
+                metadataId,
+                ids,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -271,7 +276,17 @@ internal static class RunGraphs
         ChainGraph? graph,
         IReadOnlyList<JunctionStep> steps,
         bool moreSteps = false
-    ) => Match(metadataId, train, graph, steps, moreSteps, null, false, false);
+    ) =>
+        Match(
+            metadataId,
+            train,
+            graph,
+            steps,
+            moreSteps,
+            resumes: null,
+            resumable: false,
+            ended: false
+        );
 
     /// <summary>
     /// Matches a run's steps to its train's graph, and places what <paramref name="resumes"/>
@@ -308,7 +323,15 @@ internal static class RunGraphs
         ArgumentNullException.ThrowIfNull(steps);
 
         if (graph is null)
-            return new RunGraph(metadataId, train, false, null, [], steps.ToList(), moreSteps);
+            return new RunGraph(
+                metadataId,
+                train,
+                HasGraph: false,
+                Hash: null,
+                [],
+                steps.ToList(),
+                moreSteps
+            );
 
         var ids = new HashSet<string>(StringComparer.Ordinal);
         CollectIds(graph.Nodes, ids);
@@ -332,7 +355,7 @@ internal static class RunGraphs
         return new RunGraph(
             metadataId,
             train,
-            true,
+            HasGraph: true,
             graph.Hash,
             Place(
                 Overlay(
@@ -341,8 +364,8 @@ internal static class RunGraphs
                     new Walk { Resume = resume, Ended = ended },
                     skipped: false
                 ),
-                null,
-                null,
+                parentId: null,
+                track: null,
                 0
             ),
             unmatched,
@@ -416,7 +439,8 @@ internal static class RunGraphs
         var tracks = node
             .Tracks.Select(track =>
             {
-                var isTaken = taken is not null && track.Name == taken;
+                var isTaken =
+                    taken is not null && string.Equals(track.Name, taken, StringComparison.Ordinal);
                 // Once the track taken is known, every other track was passed over. Until then a
                 // track's nodes stand as recorded, which is not reached for a track nothing ran on.
                 var passedOver = skipped || (taken is not null && !isTaken);
@@ -511,7 +535,7 @@ internal static class RunGraphs
             node.Opaque,
             state,
             steps.Any(s => s.Replayed),
-            null,
+            TrackTaken: null,
             steps,
             branches
                 .Select(b => new RunGraphTrack(
@@ -547,7 +571,7 @@ internal static class RunGraphs
             .Concat(steps.Count > 0 ? [StateOf(steps, ended)] : [])
             .ToList();
 
-        if (!states.Any(Started))
+        if (!states.Exists(Started))
             return withheldBefore ? RunNodeState.Withheld : RunNodeState.NotReached;
 
         if (states.Contains(RunNodeState.Failed))
@@ -641,7 +665,7 @@ internal static class RunGraphs
     /// <param name="offers">True when the run may be resumed, so a node's verdict is shown.</param>
     private sealed class ResumeView(ResumeChecks? checks, bool offers)
     {
-        public static readonly ResumeView None = new(null, false);
+        public static readonly ResumeView None = new(checks: null, offers: false);
 
         private readonly HashSet<string> _restored = new(
             checks?.Restored ?? [],
@@ -699,7 +723,10 @@ internal static class RunGraphs
         var routed = steps.LastOrDefault(s =>
             s.Kind == JunctionRunKind.Route && s.Answer is not null
         );
-        if (routed?.Answer is { } answer && node.Tracks.Any(t => t.Name == answer))
+        if (
+            routed?.Answer is { } answer
+            && node.Tracks.Any(t => string.Equals(t.Name, answer, StringComparison.Ordinal))
+        )
             return answer;
 
         var ran = node.Tracks.Where(t => AnyRecorded(t.Nodes, byNode)).Take(2).ToList();

@@ -24,7 +24,7 @@ internal static class GraphQLExecutionResultExtensions
     /// The result's <c>data</c> as a plain nested map: objects become
     /// <see cref="IReadOnlyDictionary{TKey,TValue}"/>, lists become
     /// <see cref="IReadOnlyList{T}"/>, and scalars become <c>string</c>, <c>long</c>,
-    /// <c>double</c>, <c>bool</c> or <c>null</c>.
+    /// <c>double</c>, <c>bool</c> or <see langword="null"/>.
     /// </summary>
     /// <remarks>
     /// HotChocolate 16 materialises results into an internal result document rather than

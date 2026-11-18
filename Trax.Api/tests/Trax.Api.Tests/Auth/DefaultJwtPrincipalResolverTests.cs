@@ -199,7 +199,8 @@ public class DefaultJwtPrincipalResolverTests
     {
         var resolver = new DefaultJwtPrincipalResolver();
 
-        var act = async () => await resolver.ResolveAsync(null!, CancellationToken.None);
+        var act = async () =>
+            await resolver.ResolveAsync(null!, CancellationToken.None).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<ArgumentNullException>();
     }

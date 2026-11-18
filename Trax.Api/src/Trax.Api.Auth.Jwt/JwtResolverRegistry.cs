@@ -58,7 +58,7 @@ internal sealed class JwtResolverRegistry
     }
 
     /// <summary>
-    /// Returns the resolver for <paramref name="schemeName"/>, or <c>null</c>
+    /// Returns the resolver for <paramref name="schemeName"/>, or <see langword="null"/>
     /// if none is registered. Used by adapters that want to no-op when a
     /// scheme is not Trax-managed (e.g. third-party JWT schemes registered
     /// alongside Trax ones).
@@ -72,7 +72,7 @@ internal sealed class JwtResolverRegistry
 
     /// <summary>
     /// Returns the registered resolver for the default Trax JWT scheme, or
-    /// <c>null</c> if the default scheme has not been registered. Used by
+    /// <see langword="null"/> if the default scheme has not been registered. Used by
     /// the GraphQL subscription interceptor for back-compat with the
     /// single-scheme setup.
     /// </summary>

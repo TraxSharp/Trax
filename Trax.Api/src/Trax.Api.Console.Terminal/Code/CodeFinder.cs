@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Trax.Api.Console.Terminal.Connection;
 
@@ -63,7 +64,7 @@ internal static partial class CodeFinder
     )
     {
         var simple = name.Split('.', '+')[^1].Split('`')[0];
-        if (!Identifier().IsMatch(simple))
+        if (!Identifier.IsMatch(simple))
             return null;
         var candidates = new List<string>();
         // A train is named by its interface; its class is what an operator wants to read.
@@ -75,7 +76,8 @@ internal static partial class CodeFinder
         {
             var declaration = new Regex(
                 $@"\b(class|record|interface|struct)\s+{Regex.Escape(candidate)}\b",
-                RegexOptions.CultureInvariant
+                RegexOptions.CultureInvariant,
+                TimeSpan.FromSeconds(1)
             );
             foreach (var file in files)
             {
@@ -160,7 +162,9 @@ internal static partial class CodeFinder
         {
             case "code" or "code-insiders" or "cursor" or "codium":
                 info.ArgumentList.Add("--goto");
-                info.ArgumentList.Add($"{location.Path}:{location.Line}");
+                info.ArgumentList.Add(
+                    string.Create(CultureInfo.InvariantCulture, $"{location.Path}:{location.Line}")
+                );
                 break;
             case "vi"
             or "vim"
@@ -172,7 +176,9 @@ internal static partial class CodeFinder
             or "kak"
             or "joe"
             or "mg":
-                info.ArgumentList.Add($"+{location.Line}");
+                info.ArgumentList.Add(
+                    string.Create(CultureInfo.InvariantCulture, $"+{location.Line}")
+                );
                 info.ArgumentList.Add(location.Path);
                 break;
             default:
@@ -272,7 +278,10 @@ internal static partial class CodeFinder
         runnable ??= path => Runnable(path, onWindows);
         if (FullyQualified(command, onWindows))
             return command;
-        if (command.Contains('/') || (onWindows && command.IndexOfAny(['\\', ':']) >= 0))
+        if (
+            command.Contains('/', StringComparison.Ordinal)
+            || (onWindows && command.IndexOfAny(['\\', ':']) >= 0)
+        )
             throw new InvalidOperationException(
                 $"The editor '{command}' is a relative path, which runs whatever the current directory holds. "
                     + "Set VISUAL or EDITOR to its full path or to a name on PATH."
@@ -328,9 +337,9 @@ internal static partial class CodeFinder
             return true;
         const UnixFileMode anyExecute =
             UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute;
-        return (File.GetUnixFileMode(path) & anyExecute) != 0;
+        return (File.GetUnixFileMode(path) & anyExecute) != UnixFileMode.None;
     }
 
-    [GeneratedRegex(@"^[A-Za-z_][A-Za-z0-9_]*$")]
-    private static partial Regex Identifier();
+    [GeneratedRegex(@"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Identifier { get; }
 }

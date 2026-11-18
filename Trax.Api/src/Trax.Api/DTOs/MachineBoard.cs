@@ -37,7 +37,7 @@ public record MachineBoard(
 }
 
 /// <summary>
-/// One sticky: its flow role (<c>actor</c>, <c>command</c>, <c>event</c>, <c>policy</c>, <c>aggregate</c> or
+/// One sticky: its flow role (<c>actor</c>, <c>command</c>, <see langword="event"/>, <c>policy</c>, <c>aggregate</c> or
 /// <c>view</c>), its lane, its label, and the scenarios that produced it, none when the host file has no provenance.
 /// </summary>
 public record MachineSticky(

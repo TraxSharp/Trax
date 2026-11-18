@@ -93,7 +93,7 @@ internal sealed class SocketConnectionLifetime
 
     /// <summary>
     /// Runs <paramref name="stillValid"/> every <paramref name="interval"/>, and closes the
-    /// connection when it returns <c>false</c> or throws.
+    /// connection when it returns <see langword="false"/> or throws.
     /// </summary>
     public void RecheckEvery(TimeSpan interval, Func<CancellationToken, ValueTask<bool>> stillValid)
     {

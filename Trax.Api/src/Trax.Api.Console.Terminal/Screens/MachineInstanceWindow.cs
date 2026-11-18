@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using Terminal.Gui.Input;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
@@ -121,27 +122,31 @@ internal sealed class MachineInstanceWindow : Window
             _context.App,
             async () =>
             {
-                var detail = await _context.Client.MachineInstanceAsync(
-                    new MachineInstanceVariables
-                    {
-                        Machine = _instance.Machine,
-                        OwnerKind = _instance.OwnerKind,
-                        Id = _instance.Id,
-                        RowId = _instance.RowId,
-                    },
-                    open
-                );
-                var history = await _context.Client.MachineInstanceTransitionsAsync(
-                    new MachineInstanceTransitionsVariables
-                    {
-                        Machine = _instance.Machine,
-                        OwnerKind = _instance.OwnerKind,
-                        Id = _instance.Id,
-                        RowId = _instance.RowId,
-                        First = TransitionsShown,
-                    },
-                    open
-                );
+                var detail = await _context
+                    .Client.MachineInstanceAsync(
+                        new MachineInstanceVariables
+                        {
+                            Machine = _instance.Machine,
+                            OwnerKind = _instance.OwnerKind,
+                            Id = _instance.Id,
+                            RowId = _instance.RowId,
+                        },
+                        open
+                    )
+                    .ConfigureAwait(false);
+                var history = await _context
+                    .Client.MachineInstanceTransitionsAsync(
+                        new MachineInstanceTransitionsVariables
+                        {
+                            Machine = _instance.Machine,
+                            OwnerKind = _instance.OwnerKind,
+                            Id = _instance.Id,
+                            RowId = _instance.RowId,
+                            First = TransitionsShown,
+                        },
+                        open
+                    )
+                    .ConfigureAwait(false);
                 // Drawn here, off the UI thread; Show finds it drawn.
                 if (detail.Data?.Operations?.MachineInstance is { } now)
                     MachineGraph.Lines(_machine, now.State, vertical);
@@ -181,7 +186,10 @@ internal sealed class MachineInstanceWindow : Window
             return;
         }
         _header.Text = TerminalText.Line(
-            $"{now.State}  ·  version {now.Version}  ·  since {Wire.Time(now.InStateSince)}"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"{now.State}  ·  version {now.Version}  ·  since {Wire.Time(now.InStateSince)}"
+            )
                 + (now.DueAt is { } due ? $"  ·  timer due {Wire.Time(due)}" : "")
                 + (
                     now.Stuck ? "  ·  STUCK"
@@ -205,8 +213,14 @@ internal sealed class MachineInstanceWindow : Window
             Line("");
             Line(
                 waiting.ExecutionId is { } run
-                    ? $"Waits on run {run} ({(waiting.TrainState is { } s ? Wire.Name(s) : "?")})"
-                    : $"Waits on queued entry {waiting.WorkQueueEntryId}",
+                    ? string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Waits on run {run} ({(waiting.TrainState is { } s ? Wire.Name(s) : "?")})"
+                    )
+                    : string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Waits on queued entry {waiting.WorkQueueEntryId}"
+                    ),
                 waiting.ExecutionId
             );
         }
@@ -214,8 +228,10 @@ internal sealed class MachineInstanceWindow : Window
         Line($"Runs it invoked{(now.IsInvokedRunsCapped ? " (the latest 50)" : "")}:");
         foreach (var run in now.InvokedRuns)
             Line(
-                $"  {run.Id, 8}  {run.Name}  {Wire.Name(run.TrainState)}  {Wire.Time(run.StartTime)}"
-                    + (run.IsLive ? "  live" : ""),
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"  {run.Id, 8}  {run.Name}  {Wire.Name(run.TrainState)}  {Wire.Time(run.StartTime)}"
+                ) + (run.IsLive ? "  live" : ""),
                 run.Id
             );
         Line("");
@@ -226,13 +242,19 @@ internal sealed class MachineInstanceWindow : Window
         else
             foreach (var t in transitions)
                 Line(
-                    $"  {Wire.Time(t.At)}  r{t.Revision}  {t.FromState ?? "(start)"} ──▶ {t.ToState}  "
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"  {Wire.Time(t.At)}  r{t.Revision}  {t.FromState ?? "(start)"} ──▶ {t.ToState}  "
+                    )
                         + $"{Wire.Name(t.Kind).ToLowerInvariant()}"
                         + (t.Trigger is { } trigger ? $" {trigger}" : "")
                         + $" by {Wire.Name(t.Actor).ToLowerInvariant()}"
                         + (
                             t.StartedRun?.ExecutionId is { } started
-                                ? $"  started run {started}"
+                                ? string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"  started run {started}"
+                                )
                                 : ""
                         ),
                     t.StartedRun?.ExecutionId
@@ -242,30 +264,35 @@ internal sealed class MachineInstanceWindow : Window
 
     private bool OnKey(Key key)
     {
-        if (Ui.Typed(key) == "q")
+        if (string.Equals(Ui.Typed(key), "q", StringComparison.Ordinal))
         {
             RequestStop();
             return true;
         }
-        if (Ui.Typed(key) == "r" && _last is { } last)
+        if (string.Equals(Ui.Typed(key), "r", StringComparison.Ordinal) && _last is { } last)
         {
             var vertical = _context.VerticalGraphs = !_context.VerticalGraphs;
             var state = last.Detail.Data?.Operations?.MachineInstance?.State;
             // Drawn off the UI thread, then shown with the latest answer, which may be newer than this one.
             Ui.Start(
                 _context.App,
-                () => Task.Run(() => MachineGraph.Lines(_machine, state, vertical)),
+                () =>
+                    Task.Run(
+                        () => MachineGraph.Lines(_machine, state, vertical),
+                        cancellationToken: CancellationToken.None
+                    ),
                 _ =>
                 {
                     if (_last is { } shown)
                         Show(shown.Detail, shown.History);
                 },
-                message => _header.Text = TerminalText.Line(message)
+                message => _header.Text = TerminalText.Line(message),
+                cancellation: CancellationToken.None
             );
             return true;
         }
         if (
-            Ui.Typed(key) != "v"
+            !string.Equals(Ui.Typed(key), "v", StringComparison.Ordinal)
             || _list.SelectedItem is not { } index
             || index >= _runs.Count
             || _runs[index] is not { } run

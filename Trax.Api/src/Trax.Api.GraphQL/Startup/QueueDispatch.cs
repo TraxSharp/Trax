@@ -37,7 +37,7 @@ internal static class QueueDispatch
             return false;
         if (services.GetService<IDataContextProviderFactory>() is not { } factory)
             return false;
-        using var db = await factory.CreateDbContextAsync(ct);
+        using var db = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
         return db is DbContext context && !context.Database.IsRelational();
     }
 
@@ -63,15 +63,22 @@ internal sealed class QueueDispatchReporter(
         if (queueCapableMutations.Count == 0)
             return;
 
-        await using var scope = services.CreateAsyncScope();
-        if (await QueueDispatch.NothingDispatchesAsync(scope.ServiceProvider, cancellationToken))
-            logger.LogWarning(
-                "This host's store is in memory, so nothing dispatches its work queue, and "
-                    + "mode: QUEUE on these train mutations is refused: {Trains}. Expose them as "
-                    + "[TraxMutation(GraphQLOperation.Run)] to drop the mode argument, or use a "
-                    + "database provider such as UsePostgres().",
-                string.Join(", ", queueCapableMutations)
-            );
+        var scope = services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            if (
+                await QueueDispatch
+                    .NothingDispatchesAsync(scope.ServiceProvider, cancellationToken)
+                    .ConfigureAwait(false)
+            )
+                logger.LogWarning(
+                    "This host's store is in memory, so nothing dispatches its work queue, and "
+                        + "mode: QUEUE on these train mutations is refused: {Trains}. Expose them as "
+                        + "[TraxMutation(GraphQLOperation.Run)] to drop the mode argument, or use a "
+                        + "database provider such as UsePostgres().",
+                    string.Join(", ", queueCapableMutations)
+                );
+        }
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

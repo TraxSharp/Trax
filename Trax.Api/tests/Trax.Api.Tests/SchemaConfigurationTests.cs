@@ -175,7 +175,7 @@ public class SchemaConfigurationTests
 
     #region Stubs
 
-    private class StubTypeModuleForSchema : HotChocolate.Execution.Configuration.TypeModule
+    private sealed class StubTypeModuleForSchema : HotChocolate.Execution.Configuration.TypeModule
     {
         public override ValueTask<
             IReadOnlyCollection<HotChocolate.Types.ITypeSystemMember>
@@ -186,7 +186,7 @@ public class SchemaConfigurationTests
     }
 
     [HotChocolate.Types.ExtendObjectType(typeof(object))]
-    private class StubTypeExtensionForSchema;
+    private sealed class StubTypeExtensionForSchema;
 
     #endregion
 }

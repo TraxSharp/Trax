@@ -195,20 +195,24 @@ public class DispatchQueueModeTests
         ClaimsPrincipal user
     ) =>
         (
-            await executor.ExecuteAsync(
-                OperationRequestBuilder
-                    .New()
-                    .SetDocument(mutation)
-                    .SetGlobalState("ClaimsPrincipal", user)
-                    .Build()
-            )
+            await executor
+                .ExecuteAsync(
+                    OperationRequestBuilder
+                        .New()
+                        .SetDocument(mutation)
+                        .SetGlobalState("ClaimsPrincipal", user)
+                        .Build()
+                )
+                .ConfigureAwait(false)
         )
             .ExpectOperationResult()
             .ToJson();
 
     private static async Task<JsonElement> RunAsync(IRequestExecutor executor, string mutation)
     {
-        var body = (await executor.ExecuteAsync(mutation)).ExpectOperationResult().ToJson();
+        var body = (await executor.ExecuteAsync(mutation).ConfigureAwait(false))
+            .ExpectOperationResult()
+            .ToJson();
         using var json = JsonDocument.Parse(body);
         json.RootElement.TryGetProperty("errors", out _).Should().BeFalse(body);
         return json
@@ -245,7 +249,8 @@ public class DispatchQueueModeTests
         _services = services.BuildServiceProvider();
         return await _services
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
     }
 
     private static TrainRegistration Registration(GraphQLOperation operations) =>
@@ -273,7 +278,7 @@ public class DispatchQueueModeTests
 
     private interface IReportTrain;
 
-    private sealed class ReportTrain;
+    private static class ReportTrain;
 
     public sealed record ReportInput
     {

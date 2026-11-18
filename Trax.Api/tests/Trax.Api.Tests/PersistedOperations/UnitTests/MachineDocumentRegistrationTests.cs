@@ -18,8 +18,8 @@ public class MachineDocumentRegistrationTests
 
         var stop = async () =>
         {
-            await registration.StoppingAsync(CancellationToken.None);
-            await registration.StopAsync(CancellationToken.None);
+            await registration.StoppingAsync(CancellationToken.None).ConfigureAwait(false);
+            await registration.StopAsync(CancellationToken.None).ConfigureAwait(false);
         };
 
         await stop.Should().NotThrowAsync();

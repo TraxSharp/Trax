@@ -67,8 +67,10 @@ public class ClientManifestExportTests
 
     private async Task<ClientManifest> ExportAsync()
     {
-        await ClientManifestExport.WriteAsync(_host.Services, _path, CancellationToken.None);
-        return ClientManifest.Read(await File.ReadAllTextAsync(_path));
+        await ClientManifestExport
+            .WriteAsync(_host.Services, _path, CancellationToken.None)
+            .ConfigureAwait(false);
+        return ClientManifest.Read(await File.ReadAllTextAsync(_path).ConfigureAwait(false));
     }
 
     [Test]
@@ -94,7 +96,9 @@ public class ClientManifestExportTests
             .Should()
             .Equal(TicketMachine.MachineId, WizardMachine.MachineId);
         manifest
-            .Machines.Single(m => m.Id == WizardMachine.MachineId)
+            .Machines.Single(m =>
+                string.Equals(m.Id, WizardMachine.MachineId, StringComparison.Ordinal)
+            )
             .Documents.Select(d => d.Operation)
             .Should()
             .Contain(["start", "get", "discard", "changed", "describe"]);
@@ -104,7 +108,9 @@ public class ClientManifestExportTests
     public async Task Each_machine_carries_its_IR_and_hash()
     {
         var manifest = await ExportAsync();
-        var wizard = manifest.Machines.Single(m => m.Id == WizardMachine.MachineId);
+        var wizard = manifest.Machines.Single(m =>
+            string.Equals(m.Id, WizardMachine.MachineId, StringComparison.Ordinal)
+        );
 
         wizard.Ir["id"]!.GetValue<string>().Should().Be(WizardMachine.MachineId);
         Convert

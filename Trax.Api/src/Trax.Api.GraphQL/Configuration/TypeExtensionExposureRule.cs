@@ -110,6 +110,6 @@ internal static class TypeExtensionExposureRule
                     + "[TraxAllowAnonymous]. The two are mutually exclusive: [TraxAllowAnonymous] "
                     + "opens the field to anonymous callers, while [TraxAuthorize] gates it. "
                     + "Pick one.",
-            _ => throw new ArgumentOutOfRangeException(nameof(violation), violation, null),
+            _ => throw new ArgumentOutOfRangeException(nameof(violation), violation, message: null),
         };
 }

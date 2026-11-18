@@ -176,15 +176,17 @@ public class RunProgressRecheckE2ETests
                 e => e.GetProperty("problem").ValueKind != JsonValueKind.Null,
                 "a caller the endpoint policy still admits keeps receiving"
             );
-        events.Last().GetProperty("state").GetString().Should().Be("COMPLETED");
+        events[^1].GetProperty("state").GetString().Should().Be("COMPLETED");
     }
 
     private async Task RunAsync()
     {
-        using var response = await _host.PostGraphQLAsync(
-            """mutation { dispatch { progressMarker(input: { note: "recheck", fail: false }, mode: RUN) { externalId } } }""",
-            r => r.Headers.Add("X-Api-Key", AliceKey)
-        );
+        using var response = await _host
+            .PostGraphQLAsync(
+                """mutation { dispatch { progressMarker(input: { note: "recheck", fail: false }, mode: RUN) { externalId } } }""",
+                r => r.Headers.Add("X-Api-Key", AliceKey)
+            )
+            .ConfigureAwait(false);
         response
             .RootElement.GetProperty("data")
             .ValueKind.Should()
@@ -194,10 +196,13 @@ public class RunProgressRecheckE2ETests
     // The external id of the run waiting at the gate, read from its row.
     private async Task<string> RunningIdAsync()
     {
-        await ProgressMarkerTrain.Waiting.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await ProgressMarkerTrain
+            .Waiting.Task.WaitAsync(TimeSpan.FromSeconds(30))
+            .ConfigureAwait(false);
         using var db = await _host
             .Services.GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(CancellationToken.None);
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
         return await db
             .Metadatas.AsNoTracking()
             .Where(m =>
@@ -206,7 +211,8 @@ public class RunProgressRecheckE2ETests
             )
             .OrderByDescending(m => m.Id)
             .Select(m => m.ExternalId)
-            .FirstAsync();
+            .FirstAsync()
+            .ConfigureAwait(false);
     }
 
     private sealed class OnlyTrains(ITrainDiscoveryService all) : ITrainDiscoveryService

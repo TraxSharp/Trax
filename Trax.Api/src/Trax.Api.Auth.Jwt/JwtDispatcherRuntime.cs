@@ -40,7 +40,7 @@ public sealed class JwtDispatcherRuntime
     /// <summary>
     /// Selects the JWT scheme that should validate <paramref name="token"/> based
     /// on its (unvalidated) <c>iss</c> claim. Returns the configured fallback
-    /// scheme for unmapped issuers, or <c>null</c> when there is no fallback and
+    /// scheme for unmapped issuers, or <see langword="null"/> when there is no fallback and
     /// the connection must be rejected.
     /// </summary>
     public string? ResolveSchemeForToken(string token)
@@ -53,7 +53,7 @@ public sealed class JwtDispatcherRuntime
 
     /// <summary>
     /// Resolves the <see cref="ITraxPrincipalResolver{JwtTokenInput}"/> registered
-    /// for <paramref name="schemeName"/>, or <c>null</c> when the scheme has no
+    /// for <paramref name="schemeName"/>, or <see langword="null"/> when the scheme has no
     /// resolver. Pass a scoped <paramref name="services"/> so scoped resolvers
     /// resolve correctly.
     /// </summary>

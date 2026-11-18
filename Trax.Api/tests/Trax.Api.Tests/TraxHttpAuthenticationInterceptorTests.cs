@@ -275,7 +275,10 @@ public class TraxHttpAuthenticationInterceptorTests
             .AuthenticateAsync(ctx, Arg.Any<string>())
             .Returns(callInfo =>
             {
-                if (successPrincipalForScheme is { } m && callInfo.ArgAt<string>(1) == m.Scheme)
+                if (
+                    successPrincipalForScheme is { } m
+                    && string.Equals(callInfo.ArgAt<string>(1), m.Scheme, StringComparison.Ordinal)
+                )
                     return Task.FromResult(
                         AuthenticateResult.Success(new AuthenticationTicket(m.Principal, m.Scheme))
                     );
@@ -310,7 +313,7 @@ public class TraxHttpAuthenticationInterceptorTests
             Task.CompletedTask;
     }
 
-    private sealed class SuccessAuthenticationHandler : NoResultAuthenticationHandler { }
+    private sealed class SuccessAuthenticationHandler : NoResultAuthenticationHandler;
 
-    private sealed class ThrowingAuthenticationHandler : NoResultAuthenticationHandler { }
+    private sealed class ThrowingAuthenticationHandler : NoResultAuthenticationHandler;
 }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -40,7 +41,10 @@ public class OperationsPageBoundsTests
     private const int Rows = OperationsPageBounds.MaxPageSize + 1;
 
     private static readonly string ConnectionString =
-        $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_operations;Username=trax;Password=trax123;"
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_operations;Username=trax;Password=trax123;"
+        )
         + "Maximum Pool Size=8;Minimum Pool Size=0;Connection Idle Lifetime=30;"
         + "Timeout=30;Tcp Keepalive=true";
 
@@ -90,81 +94,102 @@ public class OperationsPageBoundsTests
     private async Task Seed()
     {
         Manifest manifest;
-        await using (var db = await _factory.CreateDbContextAsync(default))
         {
-            var groups = new List<ManifestGroup>();
-            for (var i = 0; i < Rows; i++)
+            var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+            await using (db.ConfigureAwait(false))
             {
-                var grp = new ManifestGroup
+                var groups = new List<ManifestGroup>();
+                for (var i = 0; i < Rows; i++)
                 {
-                    Name = $"group-{i}",
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow,
-                };
-                groups.Add(grp);
-                await db.Track(grp);
-            }
-            await db.SaveChanges(default);
+                    var grp = new ManifestGroup
+                    {
+                        Name = string.Create(CultureInfo.InvariantCulture, $"group-{i}"),
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow,
+                    };
+                    groups.Add(grp);
+                    await db.Track(grp).ConfigureAwait(false);
+                }
+                await db.SaveChanges(default).ConfigureAwait(false);
 
-            manifest = Manifest.Create(new CreateManifest { Name = typeof(PagedFakeTrain) });
-            manifest.ManifestGroupId = groups[0].Id;
-            await db.Track(manifest);
-            for (var i = 1; i < Rows; i++)
-            {
-                var m = Manifest.Create(new CreateManifest { Name = typeof(PagedFakeTrain) });
-                m.ManifestGroupId = groups[0].Id;
-                await db.Track(m);
+                manifest = Manifest.Create(new CreateManifest { Name = typeof(PagedFakeTrain) });
+                manifest.ManifestGroupId = groups[0].Id;
+                await db.Track(manifest).ConfigureAwait(false);
+                for (var i = 1; i < Rows; i++)
+                {
+                    var m = Manifest.Create(new CreateManifest { Name = typeof(PagedFakeTrain) });
+                    m.ManifestGroupId = groups[0].Id;
+                    await db.Track(m).ConfigureAwait(false);
+                }
+                await db.SaveChanges(default).ConfigureAwait(false);
             }
-            await db.SaveChanges(default);
         }
 
-        await using (var db = await _factory.CreateDbContextAsync(default))
         {
-            var parent = Metadata.Create(
-                new CreateMetadata
-                {
-                    Name = "Trax.X.Parent",
-                    ExternalId = Guid.NewGuid().ToString("N"),
-                    Input = null,
-                }
-            );
-            await db.Track(parent);
-            await db.SaveChanges(default);
-            _parentId = parent.Id;
-
-            for (var i = 0; i < Rows; i++)
+            var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+            await using (db.ConfigureAwait(false))
             {
-                var child = Metadata.Create(
+                var parent = Metadata.Create(
                     new CreateMetadata
                     {
-                        Name = "Trax.X.Child",
+                        Name = "Trax.X.Parent",
                         ExternalId = Guid.NewGuid().ToString("N"),
                         Input = null,
                     }
                 );
-                child.ParentId = _parentId;
-                await db.Track(child);
+                await db.Track(parent).ConfigureAwait(false);
+                await db.SaveChanges(default).ConfigureAwait(false);
+                _parentId = parent.Id;
 
-                await db.Track(
-                    DeadLetter.Create(
-                        new CreateDeadLetter
+                for (var i = 0; i < Rows; i++)
+                {
+                    var child = Metadata.Create(
+                        new CreateMetadata
                         {
-                            Manifest = manifest,
-                            Reason = $"failure-{i}",
-                            RetryCount = 3,
+                            Name = "Trax.X.Child",
+                            ExternalId = Guid.NewGuid().ToString("N"),
+                            Input = null,
                         }
+                    );
+                    child.ParentId = _parentId;
+                    await db.Track(child).ConfigureAwait(false);
+
+                    await db.Track(
+                            DeadLetter.Create(
+                                new CreateDeadLetter
+                                {
+                                    Manifest = manifest,
+                                    Reason = string.Create(
+                                        CultureInfo.InvariantCulture,
+                                        $"failure-{i}"
+                                    ),
+                                    RetryCount = 3,
+                                }
+                            )
+                        )
+                        .ConfigureAwait(false);
+
+                    await db.Track(
+                            WorkQueue.Create(
+                                new CreateWorkQueue
+                                {
+                                    TrainName = string.Create(
+                                        CultureInfo.InvariantCulture,
+                                        $"Trax.Tests.IFake{i}"
+                                    ),
+                                }
+                            )
+                        )
+                        .ConfigureAwait(false);
+                }
+                await db.SaveChanges(default).ConfigureAwait(false);
+
+                await ((DbContext)db)
+                    .Database.ExecuteSqlInterpolatedAsync(
+                        $"INSERT INTO trax.log (metadata_id, event_id, level, message, category) SELECT {_parentId}, g, 'information'::trax.log_level, 'msg', 'Test' FROM generate_series(1, {Rows}) g"
                     )
-                );
-
-                await db.Track(
-                    WorkQueue.Create(new CreateWorkQueue { TrainName = $"Trax.Tests.IFake{i}" })
-                );
+                    .ConfigureAwait(false);
             }
-            await db.SaveChanges(default);
-
-            await ((DbContext)db).Database.ExecuteSqlInterpolatedAsync(
-                $"INSERT INTO trax.log (metadata_id, event_id, level, message, category) SELECT {_parentId}, g, 'information'::trax.log_level, 'msg', 'Test' FROM generate_series(1, {Rows}) g"
-            );
         }
     }
 
@@ -210,7 +235,7 @@ public class OperationsPageBoundsTests
             new Func<IDataContextProviderFactory, int, int, Task<(int Count, int Skip, int Take)>>(
                 async (f, skip, take) =>
                 {
-                    var page = await query(f, skip, take);
+                    var page = await query(f, skip, take).ConfigureAwait(false);
                     return (page.Items.Count, page.Skip, page.Take);
                 }
             )
@@ -317,5 +342,5 @@ public class OperationsPageBoundsTests
         page.Take.Should().Be(1);
     }
 
-    private class PagedFakeTrain { }
+    private static class PagedFakeTrain;
 }

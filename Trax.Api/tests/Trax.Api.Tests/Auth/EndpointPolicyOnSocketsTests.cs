@@ -164,16 +164,22 @@ public class EndpointPolicyOnSocketsTests
     {
         var executor = await host
             .Services.GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
-        await using var scope = host.Services.CreateAsyncScope();
-        return await executor.ExecuteAsync(
-            OperationRequestBuilder
-                .New()
-                .SetDocument(TriggerMutation)
-                .SetGlobalState("ClaimsPrincipal", user)
-                .SetServices(scope.ServiceProvider)
-                .Build()
-        );
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
+        var scope = host.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            return await executor
+                .ExecuteAsync(
+                    OperationRequestBuilder
+                        .New()
+                        .SetDocument(TriggerMutation)
+                        .SetGlobalState("ClaimsPrincipal", user)
+                        .SetServices(scope.ServiceProvider)
+                        .Build()
+                )
+                .ConfigureAwait(false);
+        }
     }
 
     private static IReadOnlyList<string?> ErrorCodes(IExecutionResult result) =>
@@ -210,7 +216,7 @@ public class EndpointPolicyOnSocketsTests
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
     }
 
@@ -238,7 +244,7 @@ public class EndpointPolicyOnSocketsTests
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
     }
 
@@ -277,14 +283,16 @@ public class EndpointPolicyOnSocketsTests
     {
         var client = host.GetTestServer().CreateWebSocketClient();
         client.SubProtocols.Add("graphql-transport-ws");
-        return await client.ConnectClosingAsync(new Uri("ws://localhost/trax/graphql"), default);
+        return await client
+            .ConnectClosingAsync(new Uri("ws://localhost/trax/graphql"), default)
+            .ConfigureAwait(false);
     }
 
     private static Task SendAsync(WebSocket ws, object message) =>
         ws.SendAsync(
             Encoding.UTF8.GetBytes(JsonSerializer.Serialize(message)),
             WebSocketMessageType.Text,
-            true,
+            endOfMessage: true,
             default
         );
 
@@ -297,7 +305,7 @@ public class EndpointPolicyOnSocketsTests
         {
             while (true)
             {
-                var received = await ws.ReceiveAsync(buffer, cts.Token);
+                var received = await ws.ReceiveAsync(buffer, cts.Token).ConfigureAwait(false);
                 if (received.MessageType == WebSocketMessageType.Close)
                     return "(closed)";
                 if (received.Count == 0)

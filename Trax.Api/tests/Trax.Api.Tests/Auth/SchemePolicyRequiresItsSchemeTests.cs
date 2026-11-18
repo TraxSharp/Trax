@@ -61,7 +61,7 @@ public class SchemePolicyRequiresItsSchemeTests
     }
 
     private static ClaimsPrincipal AuthenticatedBy(string scheme) =>
-        new TraxPrincipal("u-1", "User", [], null).ToClaimsPrincipal(scheme);
+        new TraxPrincipal("u-1", "User", [], Claims: null).ToClaimsPrincipal(scheme);
 
     [TestCase(ApiKeyDefaults.PolicyName, ApiKeyDefaults.SchemeName, true)]
     [TestCase(ApiKeyDefaults.PolicyName, JwtDefaults.SchemeName, false)]
@@ -250,7 +250,7 @@ public class SchemePolicyRequiresItsSchemeTests
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
     }
 
@@ -271,8 +271,8 @@ public class SchemePolicyRequiresItsSchemeTests
         if (bearer is not null)
             request.Headers.Authorization = new("Bearer", bearer);
 
-        using var response = await client.SendAsync(request);
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        using var response = await client.SendAsync(request).ConfigureAwait(false);
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
     }
 
     private static IReadOnlyList<string?> Errors(JsonDocument doc) =>

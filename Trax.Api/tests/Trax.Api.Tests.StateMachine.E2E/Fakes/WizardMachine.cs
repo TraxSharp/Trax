@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Trax.Core.Functional;
@@ -138,7 +139,15 @@ public class BuildWizardTrain : ServiceTrain<BuildWizardInput, WizardArtifact>, 
 public sealed class BuildWizardStep : EffectJunction<BuildWizardInput, WizardArtifact>
 {
     public override Task<WizardArtifact> Run(BuildWizardInput input) =>
-        Task.FromResult(new WizardArtifact { Artifact = $"artifact:{input.Title}:{input.Pages}" });
+        Task.FromResult(
+            new WizardArtifact
+            {
+                Artifact = string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"artifact:{input.Title}:{input.Pages}"
+                ),
+            }
+        );
 }
 
 /// <summary>

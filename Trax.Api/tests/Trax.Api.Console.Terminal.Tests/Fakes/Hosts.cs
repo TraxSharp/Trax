@@ -54,7 +54,8 @@ internal static class Hosts
         var exit = await ConsoleCommandLine
             .Create(_ => null, target => ConsoleSession.Over(target, host), output, error)
             .Parse(["--host", Url, .. args])
-            .InvokeAsync(cancellationToken: cancellationToken);
+            .InvokeAsync(cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
         return (exit, output.ToString(), error.ToString());
     }
 
@@ -72,7 +73,12 @@ internal sealed class RefusingHost(ITraxTransport inner) : ITraxTransport
     public RefusingHost Refuse(string operation, string message, string? code = null)
     {
         lock (_refusals)
-            _refusals[operation] = new TraxGraphQLError(message, code, null, null);
+            _refusals[operation] = new TraxGraphQLError(
+                message,
+                code,
+                Path: null,
+                Extensions: null
+            );
         return this;
     }
 
@@ -132,14 +138,22 @@ internal sealed class StreamingHost(ITraxTransport inner) : ITraxTransport
         {
             lock (_streams)
                 if (
-                    _streams.FirstOrDefault(s => s.Request.Document.Name == operation).Sink is
+                    _streams
+                        .FirstOrDefault(s =>
+                            string.Equals(
+                                s.Request.Document.Name,
+                                operation,
+                                StringComparison.Ordinal
+                            )
+                        )
+                        .Sink is
                     { } sink
                 )
                     return sink;
             if (DateTime.UtcNow > deadline)
                 throw new TimeoutException($"Nothing follows {operation}.");
             // allowed-delay: the polling interval of a wait with a deadline.
-            await Task.Delay(10);
+            await Task.Delay(10).ConfigureAwait(false);
         }
     }
 
@@ -158,7 +172,7 @@ internal sealed class SilentHost : ITraxTransport
     )
     {
         // allowed-delay: answers only by being cancelled.
-        await Task.Delay(Timeout.Infinite, cancellationToken);
+        await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
         return new TraxAnswer();
     }
 

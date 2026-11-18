@@ -274,7 +274,9 @@ public class QueryModelAllowAnonymousE2ETests
             .EnumerateArray()
             .ToList();
         owners.Should().HaveCount(2);
-        var alice = owners.Single(o => o.GetProperty("name").GetString() == "Alice");
+        var alice = owners.Single(o =>
+            string.Equals(o.GetProperty("name").GetString(), "Alice", StringComparison.Ordinal)
+        );
         alice.GetProperty("publicBooks").GetArrayLength().Should().Be(2);
     }
 

@@ -157,17 +157,19 @@ public class MachineChangedRecheckE2ETests
     private async Task<Guid> IssueAsync(string state, Guid? id = null)
     {
         var instance = id ?? Guid.NewGuid();
-        await _host.SeedDraftAsync(
-            "TraxApiKey:alice",
-            instance,
-            new JsonObject
-            {
-                ["machine"] = BadgeMachine.MachineId,
-                ["version"] = 1,
-                ["state"] = state,
-                ["context"] = new JsonObject(),
-            }.ToJsonString()
-        );
+        await _host
+            .SeedDraftAsync(
+                "TraxApiKey:alice",
+                instance,
+                new JsonObject
+                {
+                    ["machine"] = BadgeMachine.MachineId,
+                    ["version"] = 1,
+                    ["state"] = state,
+                    ["context"] = new JsonObject(),
+                }.ToJsonString()
+            )
+            .ConfigureAwait(false);
         return instance;
     }
 }

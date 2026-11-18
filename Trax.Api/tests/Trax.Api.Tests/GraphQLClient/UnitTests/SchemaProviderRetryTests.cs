@@ -113,14 +113,19 @@ public class SchemaProviderRetryTests
 
         using var cts = new CancellationTokenSource();
         var cancelled = provider.GetSchemaAsync(cts.Token);
-        var patient = provider.GetSchemaAsync();
+        var patient = provider.GetSchemaAsync(cancellationToken: CancellationToken.None);
         await cts.CancelAsync();
 
         try
         {
             // Bounded so a provider that ignores the token fails here instead of hanging.
             await FluentActions
-                .Awaiting(() => cancelled.WaitAsync(TimeSpan.FromSeconds(10)))
+                .Awaiting(() =>
+                    cancelled.WaitAsync(
+                        TimeSpan.FromSeconds(10),
+                        cancellationToken: CancellationToken.None
+                    )
+                )
                 .Should()
                 .ThrowAsync<OperationCanceledException>();
         }
@@ -129,7 +134,10 @@ public class SchemaProviderRetryTests
             release.TrySetResult();
         }
 
-        var schema = await patient.WaitAsync(TimeSpan.FromSeconds(10));
+        var schema = await patient.WaitAsync(
+            TimeSpan.FromSeconds(10),
+            cancellationToken: CancellationToken.None
+        );
 
         schema.Query.Should().NotBeNull();
         handler.Calls.Should().Be(1);

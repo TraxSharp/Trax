@@ -130,8 +130,12 @@ public class TestTokenIssuerTests
         var raw = issuer.Mint(b => b.WithSubject("a").WithSubject("b"));
 
         var jwt = new JwtSecurityTokenHandler().ReadJwtToken(raw);
-        jwt.Claims.Count(c => c.Type == "sub").Should().Be(1);
-        jwt.Claims.Single(c => c.Type == "sub").Value.Should().Be("b");
+        jwt.Claims.Count(c => string.Equals(c.Type, "sub", StringComparison.Ordinal))
+            .Should()
+            .Be(1);
+        jwt.Claims.Single(c => string.Equals(c.Type, "sub", StringComparison.Ordinal))
+            .Value.Should()
+            .Be("b");
     }
 
     [Test]
@@ -143,7 +147,7 @@ public class TestTokenIssuerTests
         );
 
         var jwt = new JwtSecurityTokenHandler().ReadJwtToken(raw);
-        jwt.Claims.Where(c => c.Type == "scope")
+        jwt.Claims.Where(c => string.Equals(c.Type, "scope", StringComparison.Ordinal))
             .Select(c => c.Value)
             .Should()
             .BeEquivalentTo("read", "write");

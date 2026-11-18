@@ -22,7 +22,7 @@ namespace Trax.Api.DTOs;
 /// <param name="Id">The instance or draft id.</param>
 /// <param name="State">The state it is in.</param>
 /// <param name="Version">The machine definition version it was last written under.</param>
-/// <param name="CreatedAt">When it was created, or <c>null</c> for one written before Trax recorded it.</param>
+/// <param name="CreatedAt">When it was created, or <see langword="null"/> for one written before Trax recorded it.</param>
 /// <param name="UpdatedAt">When it was last written.</param>
 /// <param name="HasLiveInvokedRun">True while its state waits on the outcome of a train run it invoked.</param>
 public record MachineInstance(
@@ -40,13 +40,13 @@ public record MachineInstance(
     /// <summary>The instance's revision: 1 when it was created, one more for every write since.</summary>
     public long? Revision { get; init; }
 
-    /// <summary>When the timer of its state fires, or <c>null</c> when that state has no timer.</summary>
+    /// <summary>When the timer of its state fires, or <see langword="null"/> when that state has no timer.</summary>
     public DateTimeOffset? DueAt { get; init; }
 
     /// <summary>True when <see cref="DueAt"/> is past by more than the host's timer poll: the timer has not fired.</summary>
     public bool Overdue { get; init; }
 
-    /// <summary>The run its state waits on and where that run is, or <c>null</c> when it waits on none.</summary>
+    /// <summary>The run its state waits on and where that run is, or <see langword="null"/> when it waits on none.</summary>
     public MachineInstanceWaitingRun? WaitingOn { get; init; }
 
     /// <summary>
@@ -85,12 +85,12 @@ public record MachineInstance(
 /// The train run a state-machine instance's state waits on: which run, and where it is. Never the
 /// instance's invoke token.
 /// </summary>
-/// <param name="ExecutionId">The run's id, or <c>null</c> while it is queued and has no run yet.</param>
+/// <param name="ExecutionId">The run's id, or <see langword="null"/> while it is queued and has no run yet.</param>
 /// <param name="TrainState">
 /// Where the run is: its state once dispatched, <c>PENDING</c> while its entry is queued,
-/// <c>CANCELLED</c> when the entry was cancelled before it started; <c>null</c> when neither is found.
+/// <c>CANCELLED</c> when the entry was cancelled before it started; <see langword="null"/> when neither is found.
 /// </param>
-/// <param name="WorkQueueEntryId">The run's work queue entry, or <c>null</c> when none is found.</param>
+/// <param name="WorkQueueEntryId">The run's work queue entry, or <see langword="null"/> when none is found.</param>
 public record MachineInstanceWaitingRun(
     long? ExecutionId,
     TrainState? TrainState,
@@ -118,7 +118,7 @@ public record MachineInstanceWaitingRun(
 /// <param name="Id">The instance or draft id.</param>
 /// <param name="State">The state it is in.</param>
 /// <param name="Version">The machine definition version it was last written under.</param>
-/// <param name="CreatedAt">When it was created, or <c>null</c> where that is not known.</param>
+/// <param name="CreatedAt">When it was created, or <see langword="null"/> where that is not known.</param>
 /// <param name="UpdatedAt">When it was last written.</param>
 /// <param name="HasLiveInvokedRun">True while its state waits on the outcome of a train run it invoked.</param>
 /// <param name="Revision">Its revision: 1 when it was created, one more for every write since.</param>
@@ -180,7 +180,7 @@ public record MachineInstanceChange(
 /// <param name="Id">The instance or draft id.</param>
 /// <param name="State">The state it is in.</param>
 /// <param name="Version">The machine definition version it was last written under.</param>
-/// <param name="CreatedAt">When it was created, or <c>null</c> for one written before Trax recorded it.</param>
+/// <param name="CreatedAt">When it was created, or <see langword="null"/> for one written before Trax recorded it.</param>
 /// <param name="UpdatedAt">When it was last written.</param>
 /// <param name="HasLiveInvokedRun">True while its state waits on the outcome of a train run it invoked.</param>
 public record MachineInstanceDetail(
@@ -209,17 +209,17 @@ public record MachineInstanceDetail(
 
     /// <summary>
     /// The work queue entry of the run the state waits on while it is still queued, and so not
-    /// yet in <see cref="InvokedRuns"/>; <c>null</c> otherwise.
+    /// yet in <see cref="InvokedRuns"/>; <see langword="null"/> otherwise.
     /// </summary>
     public long? QueuedInvokedRunEntryId { get; init; }
 
-    /// <summary>When the timer of its state fires, or <c>null</c> when that state has no timer.</summary>
+    /// <summary>When the timer of its state fires, or <see langword="null"/> when that state has no timer.</summary>
     public DateTimeOffset? DueAt { get; init; }
 
     /// <summary>True when <see cref="DueAt"/> is past by more than the host's timer poll: the timer has not fired.</summary>
     public bool Overdue { get; init; }
 
-    /// <summary>The run its state waits on and where that run is, or <c>null</c> when it waits on none.</summary>
+    /// <summary>The run its state waits on and where that run is, or <see langword="null"/> when it waits on none.</summary>
     public MachineInstanceWaitingRun? WaitingOn { get; init; }
 
     /// <summary>
@@ -269,7 +269,7 @@ public record MachineInstanceDetail(
 /// <param name="Name">The train that ran (the train interface's full name).</param>
 /// <param name="TrainState">Where the run is.</param>
 /// <param name="StartTime">When it started (UTC).</param>
-/// <param name="EndTime">When it ended (UTC), or <c>null</c> while it has not.</param>
+/// <param name="EndTime">When it ended (UTC), or <see langword="null"/> while it has not.</param>
 /// <param name="FailureClass">How its failure was classified, or <c>Unclassified</c>.</param>
 /// <param name="CancellationRequested">Whether a cancel has been requested for it.</param>
 /// <param name="IsLive">True for the run the instance's current state waits on.</param>
@@ -306,7 +306,7 @@ public record MachineInstanceInvokedRun(
 /// <param name="Success">True when the run was cancelled or its cancel requested.</param>
 /// <param name="Outcome">What happened, or the typed reason nothing did.</param>
 /// <param name="Message">The outcome in words.</param>
-/// <param name="State">The state the instance moved into, when this call moved it; <c>null</c> otherwise.</param>
+/// <param name="State">The state the instance moved into, when this call moved it; <see langword="null"/> otherwise.</param>
 public record MachineInstanceCancelResponse(
     bool Success,
     MachineInstanceCancelOutcome Outcome,
@@ -339,7 +339,7 @@ public record MachineInstanceCount(
 /// Pass <see cref="NextCursor"/> as the next request's <c>after</c> to read older transitions.
 /// </summary>
 /// <param name="Items">The transitions on this page, newest first.</param>
-/// <param name="NextCursor">The revision to pass as <c>after</c> for the next page, or <c>null</c> on the last page.</param>
+/// <param name="NextCursor">The revision to pass as <c>after</c> for the next page, or <see langword="null"/> on the last page.</param>
 public record MachineInstanceTransitions(
     IReadOnlyList<MachineInstanceTransition> Items,
     long? NextCursor
@@ -347,7 +347,7 @@ public record MachineInstanceTransitions(
 {
     internal static MachineInstanceTransitions From(MachineInstanceTransitionPage? page) =>
         page is null
-            ? new([], null)
+            ? new([], NextCursor: null)
             : new(page.Items.Select(MachineInstanceTransition.From).ToList(), page.NextCursor);
 }
 
@@ -363,11 +363,11 @@ public record MachineInstanceTransitions(
 /// <param name="Kind">What wrote it: a start, a command, a save, a timer or a run's outcome.</param>
 /// <param name="Trigger">
 /// The command that moved it (an event, a timer's event, or <c>State.done</c>, <c>State.failed</c> or
-/// <c>State.cancelled</c> for a run's outcome), or <c>null</c> for a creation, a save, or an outcome that could not
+/// <c>State.cancelled</c> for a run's outcome), or <see langword="null"/> for a creation, a save, or an outcome that could not
 /// be applied.
 /// </param>
 /// <param name="Actor">Who made it: the owner, host code, or the machine itself.</param>
-/// <param name="FromState">The state it left, or <c>null</c> for the instance's creation.</param>
+/// <param name="FromState">The state it left, or <see langword="null"/> for the instance's creation.</param>
 /// <param name="ToState">The state it entered.</param>
 /// <param name="At">When it was written.</param>
 public record MachineInstanceTransition(
@@ -382,14 +382,14 @@ public record MachineInstanceTransition(
 {
     /// <summary>
     /// When the transition before it was written: <see cref="At"/> minus this is how long the instance stayed in
-    /// <see cref="FromState"/> since its previous write. <c>null</c> for the oldest recorded one.
+    /// <see cref="FromState"/> since its previous write. <see langword="null"/> for the oldest recorded one.
     /// </summary>
     public DateTimeOffset? PreviousAt { get; init; }
 
-    /// <summary>The train run entering <see cref="ToState"/> queued, or <c>null</c>.</summary>
+    /// <summary>The train run entering <see cref="ToState"/> queued, or <see langword="null"/>.</summary>
     public MachineInstanceTransitionRun? StartedRun { get; init; }
 
-    /// <summary>The child machine instance entering <see cref="ToState"/> spawned, or <c>null</c>.</summary>
+    /// <summary>The child machine instance entering <see cref="ToState"/> spawned, or <see langword="null"/>.</summary>
     public MachineInstanceTransitionChild? StartedChild { get; init; }
 
     internal static MachineInstanceTransition From(MachineInstanceTransitionRecord record) =>
@@ -423,12 +423,12 @@ public record MachineInstanceTransition(
 }
 
 /// <summary>The train run a transition queued: which run, and where it is now. Never its token.</summary>
-/// <param name="ExecutionId">The run's id, or <c>null</c> while it is queued and has no run yet.</param>
+/// <param name="ExecutionId">The run's id, or <see langword="null"/> while it is queued and has no run yet.</param>
 /// <param name="TrainState">
 /// Where the run is: its state once dispatched, <c>PENDING</c> while its entry is queued, <c>CANCELLED</c> when the
-/// entry was cancelled before it started; <c>null</c> when neither is found any more.
+/// entry was cancelled before it started; <see langword="null"/> when neither is found any more.
 /// </param>
-/// <param name="WorkQueueEntryId">The run's work queue entry, or <c>null</c> when none is found.</param>
+/// <param name="WorkQueueEntryId">The run's work queue entry, or <see langword="null"/> when none is found.</param>
 public record MachineInstanceTransitionRun(
     long? ExecutionId,
     TrainState? TrainState,

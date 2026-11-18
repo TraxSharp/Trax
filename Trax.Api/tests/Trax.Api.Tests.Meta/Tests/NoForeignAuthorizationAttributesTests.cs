@@ -1,3 +1,4 @@
+using System.Globalization;
 using Trax.Effect.Attributes;
 
 namespace Trax.Api.Tests.Meta.Tests;
@@ -21,7 +22,7 @@ namespace Trax.Api.Tests.Meta.Tests;
 /// </remarks>
 [Property("adr", "Trax.Docs/adr/0013-trax-owns-the-vocabulary-for-its-own-concepts.md")]
 [TestFixture]
-public class NoForeignAuthorizationAttributesTests
+public partial class NoForeignAuthorizationAttributesTests
 {
     private const string Adr =
         "Trax.Docs/adr/0013-trax-owns-the-vocabulary-for-its-own-concepts.md";
@@ -30,11 +31,6 @@ public class NoForeignAuthorizationAttributesTests
     /// An <c>[Authorize]</c> or <c>[AllowAnonymous]</c> attribute in attribute position, with or
     /// without arguments, alone or combined with others.
     /// </summary>
-    private static readonly Regex ForeignAttribute = new(
-        @"(?:\[|,)\s*(?:HotChocolate\.Authorization\.)?(Authorize|AllowAnonymous)\s*(?:\(|\])",
-        RegexOptions.Compiled
-    );
-
     /// <summary>
     /// Files that name the banned attributes for a reason, each of which has to justify itself.
     /// </summary>
@@ -85,7 +81,12 @@ public class NoForeignAuthorizationAttributesTests
             foreach (Match match in ForeignAttribute.Matches(text))
             {
                 var line = text.Take(match.Index).Count(c => c == '\n') + 1;
-                offenders.Add($"{relative}:{line} ({match.Value.Trim()})");
+                offenders.Add(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{relative}:{line} ({match.Value.Trim()})"
+                    )
+                );
             }
         }
 
@@ -116,4 +117,11 @@ public class NoForeignAuthorizationAttributesTests
                 .BeTrue($"'{relative}' is allowlisted ({reason}) but does not exist. See {Adr}.");
         }
     }
+
+    [GeneratedRegex(
+        @"(?:\[|,)\s*(?:HotChocolate\.Authorization\.)?(Authorize|AllowAnonymous)\s*(?:\(|\])",
+        RegexOptions.Compiled | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ForeignAttribute { get; }
 }

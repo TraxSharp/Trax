@@ -131,7 +131,7 @@ public class QueryModelFilterSortFieldSetTests
     }
 
     private static async Task<string> RunAsync(IRequestExecutor executor, string query) =>
-        (await executor.ExecuteAsync(query)).ExpectOperationResult().ToJson();
+        (await executor.ExecuteAsync(query).ConfigureAwait(false)).ExpectOperationResult().ToJson();
 
     private static async Task<(ServiceProvider, IRequestExecutor)> StartAsync()
     {
@@ -151,7 +151,7 @@ public class QueryModelFilterSortFieldSetTests
         var provider = services.BuildServiceProvider();
 
         foreach (var hosted in provider.GetServices<IHostedService>())
-            await hosted.StartAsync(default);
+            await hosted.StartAsync(default).ConfigureAwait(false);
 
         using (var scope = provider.CreateScope())
         {
@@ -181,12 +181,13 @@ public class QueryModelFilterSortFieldSetTests
                     Assignee = assignee,
                 }
             );
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync().ConfigureAwait(false);
         }
 
         var executor = await provider
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
         return (provider, executor);
     }
 

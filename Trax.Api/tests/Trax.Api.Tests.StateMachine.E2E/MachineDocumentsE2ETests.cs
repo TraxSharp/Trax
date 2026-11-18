@@ -81,7 +81,13 @@ public class MachineDocumentsE2ETests
     public async Task Every_machine_document_is_registered_at_startup_under_the_reserved_prefix()
     {
         var documents = (await MachineDocumentOps.MachineDocumentsAsync(Database))
-            .Where(d => d.Operation(WizardMachine.MachineId) != MachineDocumentOps.MachineChanged)
+            .Where(d =>
+                !string.Equals(
+                    d.Operation(WizardMachine.MachineId),
+                    MachineDocumentOps.MachineChanged,
+                    StringComparison.Ordinal
+                )
+            )
             .ToList();
 
         documents
@@ -538,13 +544,15 @@ public class MachineDocumentsE2ETests
     // Writes a body nobody generated over a stored document, returning the original.
     private static async Task<string> TamperAsync(string id)
     {
-        var original = await StoredBodyAsync(id);
-        await E2ESql.ExecuteAsync(
-            Database,
-            "UPDATE trax.persisted_operation SET document = @body WHERE tenant_key = '' AND id = @id",
-            ("body", TamperedBody),
-            ("id", id)
-        );
+        var original = await StoredBodyAsync(id).ConfigureAwait(false);
+        await E2ESql
+            .ExecuteAsync(
+                Database,
+                "UPDATE trax.persisted_operation SET document = @body WHERE tenant_key = '' AND id = @id",
+                ("body", TamperedBody),
+                ("id", id)
+            )
+            .ConfigureAwait(false);
         return original;
     }
 
@@ -558,11 +566,13 @@ public class MachineDocumentsE2ETests
 
     private static async Task<string> StoredBodyAsync(string id) =>
         (
-            await E2ESql.ScalarAsync<string>(
-                Database,
-                "SELECT document FROM trax.persisted_operation WHERE tenant_key = '' AND id = @id",
-                ("id", id)
-            )
+            await E2ESql
+                .ScalarAsync<string>(
+                    Database,
+                    "SELECT document FROM trax.persisted_operation WHERE tenant_key = '' AND id = @id",
+                    ("id", id)
+                )
+                .ConfigureAwait(false)
         )!;
 
     /// <summary>Records every persisted-operation change a node broadcasts.</summary>
@@ -604,11 +614,14 @@ public class MachineDocumentsE2ETests
                 return;
             var executor = await Services
                 .GetRequiredService<IRequestExecutorProvider>()
-                .GetExecutorAsync("trax", cancellationToken);
-            await executor.ExecuteAsync(
-                OperationRequestBuilder.New().SetDocumentId(documentId).Build(),
-                cancellationToken
-            );
+                .GetExecutorAsync("trax", cancellationToken)
+                .ConfigureAwait(false);
+            await executor
+                .ExecuteAsync(
+                    OperationRequestBuilder.New().SetDocumentId(documentId).Build(),
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
         }
 
         public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

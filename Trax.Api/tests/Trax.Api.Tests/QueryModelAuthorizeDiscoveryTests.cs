@@ -184,7 +184,7 @@ public class QueryModelAuthorizeDiscoveryTests
 
     [TraxQueryModel(Name = "inheritedGatedRows")]
     [Table("inherited_gated_rows", Schema = "test_disc")]
-    public class InheritedGatedRow : GatedBase { }
+    public class InheritedGatedRow : GatedBase;
 
     [TraxQueryModel(Name = "bareGatedRows")]
     [TraxAuthorize]

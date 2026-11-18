@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.DTOs;
@@ -32,7 +33,11 @@ public class JunctionRunStressTests : StressTestSetup
     private const int Page = 500;
 
     private static readonly long JunctionRuns =
-        long.TryParse(Environment.GetEnvironmentVariable("TRAX_STRESS_JUNCTION_RUNS"), out var n)
+        long.TryParse(
+            Environment.GetEnvironmentVariable("TRAX_STRESS_JUNCTION_RUNS"),
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var n
+        )
         && n > 0
             ? n
             : 2_000_000;
@@ -63,45 +68,60 @@ public class JunctionRunStressTests : StressTestSetup
     {
         var bulkRuns = Math.Min(JunctionRuns / StepsPerRun, Profile.Metadata - 2);
         var target = bulkRuns * StepsPerRun + LongRunSteps;
-        if (await ScalarAsync<long>("SELECT count(*) FROM trax.junction_run") >= target)
+        if (
+            await ScalarAsync<long>("SELECT count(*) FROM trax.junction_run").ConfigureAwait(false)
+            >= target
+        )
             return;
 
         TestContext.Progress.WriteLine(
-            $"[seed] junction_run: {bulkRuns:N0} runs x {StepsPerRun} steps + one run of {LongRunSteps:N0}"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"[seed] junction_run: {bulkRuns:N0} runs x {StepsPerRun} steps + one run of {LongRunSteps:N0}"
+            )
         );
-        await ExecSqlAsync("TRUNCATE trax.junction_run RESTART IDENTITY");
+        await ExecSqlAsync("TRUNCATE trax.junction_run RESTART IDENTITY").ConfigureAwait(false);
         // Each run's steps: a junction, a question, its route, and two junctions on the track, the
         // shape a routed run records.
         await ExecSqlAsync(
-            $"""
-            INSERT INTO trax.junction_run
-                (metadata_id, position, kind, name, state, started_at, ended_at, question_key,
-                 answer, confidence, track_position)
-            SELECT m, p,
-                   (CASE p WHEN 1 THEN 'choice' WHEN 2 THEN 'route' ELSE 'junction' END)::trax.junction_run_kind,
-                   'Step' || p,
-                   'completed'::trax.junction_run_state,
-                   now() - (m % 20160) * interval '1 minute',
-                   now() - (m % 20160) * interval '1 minute' + interval '5 milliseconds',
-                   CASE WHEN p IN (1, 2) THEN 'Lane' END,
-                   CASE WHEN p IN (1, 2) THEN 'Fast' END,
-                   CASE WHEN p = 1 THEN 0.8 END,
-                   CASE WHEN p > 2 THEN 2 END
-            FROM generate_series(1, {bulkRuns}) AS m, generate_series(0, {StepsPerRun - 1}) AS p
-            """
-        );
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"""
+                    INSERT INTO trax.junction_run
+                        (metadata_id, position, kind, name, state, started_at, ended_at, question_key,
+                         answer, confidence, track_position)
+                    SELECT m, p,
+                           (CASE p WHEN 1 THEN 'choice' WHEN 2 THEN 'route' ELSE 'junction' END)::trax.junction_run_kind,
+                           'Step' || p,
+                           'completed'::trax.junction_run_state,
+                           now() - (m % 20160) * interval '1 minute',
+                           now() - (m % 20160) * interval '1 minute' + interval '5 milliseconds',
+                           CASE WHEN p IN (1, 2) THEN 'Lane' END,
+                           CASE WHEN p IN (1, 2) THEN 'Fast' END,
+                           CASE WHEN p = 1 THEN 0.8 END,
+                           CASE WHEN p > 2 THEN 2 END
+                    FROM generate_series(1, {bulkRuns}) AS m, generate_series(0, {StepsPerRun
+                        - 1}) AS p
+                    """
+                )
+            )
+            .ConfigureAwait(false);
         await ExecSqlAsync(
-            $"""
-            INSERT INTO trax.junction_run
-                (metadata_id, position, kind, name, state, started_at, ended_at)
-            SELECT {LongRun}, p, 'junction'::trax.junction_run_kind, 'Step' || p,
-                   'completed'::trax.junction_run_state,
-                   now() - interval '1 hour' + p * interval '1 second',
-                   now() - interval '1 hour' + p * interval '1 second' + interval '5 milliseconds'
-            FROM generate_series(0, {LongRunSteps - 1}) AS p
-            """
-        );
-        await ExecSqlAsync("ANALYZE trax.junction_run");
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"""
+                    INSERT INTO trax.junction_run
+                        (metadata_id, position, kind, name, state, started_at, ended_at)
+                    SELECT {LongRun}, p, 'junction'::trax.junction_run_kind, 'Step' || p,
+                           'completed'::trax.junction_run_state,
+                           now() - interval '1 hour' + p * interval '1 second',
+                           now() - interval '1 hour' + p * interval '1 second' + interval '5 milliseconds'
+                    FROM generate_series(0, {LongRunSteps - 1}) AS p
+                    """
+                )
+            )
+            .ConfigureAwait(false);
+        await ExecSqlAsync("ANALYZE trax.junction_run").ConfigureAwait(false);
     }
 
     // The branches' steps interleave, as branches running side by side record them: position p is
@@ -109,34 +129,48 @@ public class JunctionRunStressTests : StressTestSetup
     private async Task SeedParallelRun()
     {
         var placed = await ScalarAsync<long>(
-            $"SELECT count(*) FROM trax.junction_run WHERE metadata_id = {ParallelRun} AND node_id IS NOT NULL"
-        );
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"SELECT count(*) FROM trax.junction_run WHERE metadata_id = {ParallelRun} AND node_id IS NOT NULL"
+                )
+            )
+            .ConfigureAwait(false);
         if (placed == ParallelSteps)
             return;
 
         TestContext.Progress.WriteLine(
             $"[seed] junction_run: one Parallel run of {Branches} branches, {ParallelSteps} steps"
         );
-        await ExecSqlAsync($"DELETE FROM trax.junction_run WHERE metadata_id = {ParallelRun}");
         await ExecSqlAsync(
-            $"""
-            INSERT INTO trax.junction_run
-                (metadata_id, position, kind, name, state, started_at, ended_at, node_id)
-            SELECT {ParallelRun}, p, 'junction'::trax.junction_run_kind, 'Step' || p,
-                   'completed'::trax.junction_run_state,
-                   now() - interval '1 hour' + p * interval '1 second',
-                   now() - interval '1 hour' + p * interval '1 second' + interval '5 milliseconds',
-                   'Parallel#0/b' || (p % {Branches}) || '/' ||
-                   CASE WHEN p / {Branches} < {StepsPerBranch}
-                        THEN 'Step' || (p / {Branches}) || '#0'
-                        ELSE 'Parallel#0/'
-                             || CASE WHEN p / {Branches} - {StepsPerBranch} < {StepsPerNestedBranch} THEN 'x' ELSE 'y' END
-                             || '/Step' || ((p / {Branches} - {StepsPerBranch}) % {StepsPerNestedBranch}) || '#0'
-                   END
-            FROM generate_series(0, {ParallelSteps - 1}) AS p
-            """
-        );
-        await ExecSqlAsync("ANALYZE trax.junction_run");
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"DELETE FROM trax.junction_run WHERE metadata_id = {ParallelRun}"
+                )
+            )
+            .ConfigureAwait(false);
+        await ExecSqlAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"""
+                    INSERT INTO trax.junction_run
+                        (metadata_id, position, kind, name, state, started_at, ended_at, node_id)
+                    SELECT {ParallelRun}, p, 'junction'::trax.junction_run_kind, 'Step' || p,
+                           'completed'::trax.junction_run_state,
+                           now() - interval '1 hour' + p * interval '1 second',
+                           now() - interval '1 hour' + p * interval '1 second' + interval '5 milliseconds',
+                           'Parallel#0/b' || (p % {Branches}) || '/' ||
+                           CASE WHEN p / {Branches} < {StepsPerBranch}
+                                THEN 'Step' || (p / {Branches}) || '#0'
+                                ELSE 'Parallel#0/'
+                                     || CASE WHEN p / {Branches} - {StepsPerBranch} < {StepsPerNestedBranch} THEN 'x' ELSE 'y' END
+                                     || '/Step' || ((p / {Branches} - {StepsPerBranch}) % {StepsPerNestedBranch}) || '#0'
+                           END
+                    FROM generate_series(0, {ParallelSteps - 1}) AS p
+                    """
+                )
+            )
+            .ConfigureAwait(false);
+        await ExecSqlAsync("ANALYZE trax.junction_run").ConfigureAwait(false);
     }
 
     [Test]
@@ -147,12 +181,14 @@ public class JunctionRunStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var steps = await new OperationsQueries().GetJunctionRuns(
-                    LongRun,
-                    sp.GetRequiredService<IDataContextProviderFactory>(),
-                    ct,
-                    take: Page
-                );
+                var steps = await new OperationsQueries()
+                    .GetJunctionRuns(
+                        LongRun,
+                        sp.GetRequiredService<IDataContextProviderFactory>(),
+                        ct,
+                        take: Page
+                    )
+                    .ConfigureAwait(false);
                 steps.Should().HaveCount(Page);
                 steps[0].Position.Should().Be(0);
                 steps[^1].Position.Should().Be(Page - 1);
@@ -168,13 +204,15 @@ public class JunctionRunStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var steps = await new OperationsQueries().GetJunctionRuns(
-                    LongRun,
-                    sp.GetRequiredService<IDataContextProviderFactory>(),
-                    ct,
-                    afterPosition: Page - 1,
-                    take: Page
-                );
+                var steps = await new OperationsQueries()
+                    .GetJunctionRuns(
+                        LongRun,
+                        sp.GetRequiredService<IDataContextProviderFactory>(),
+                        ct,
+                        afterPosition: Page - 1,
+                        take: Page
+                    )
+                    .ConfigureAwait(false);
                 steps.Should().HaveCount(Page);
                 steps[0].Position.Should().Be(Page);
             }
@@ -189,12 +227,14 @@ public class JunctionRunStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var graph = await new OperationsQueries().GetRunGraph(
-                    LongRun,
-                    sp.GetRequiredService<IDataContextProviderFactory>(),
-                    new EveryTrainHasOneGraph(),
-                    ct
-                );
+                var graph = await new OperationsQueries()
+                    .GetRunGraph(
+                        LongRun,
+                        sp.GetRequiredService<IDataContextProviderFactory>(),
+                        new EveryTrainHasOneGraph(),
+                        ct
+                    )
+                    .ConfigureAwait(false);
                 graph!.HasGraph.Should().BeTrue();
                 graph.MoreSteps.Should().BeTrue();
                 (graph.Nodes.Sum(n => n.Steps.Count) + graph.UnmatchedSteps.Count)
@@ -212,12 +252,14 @@ public class JunctionRunStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var graph = await new OperationsQueries().GetRunGraph(
-                    1,
-                    sp.GetRequiredService<IDataContextProviderFactory>(),
-                    new EveryTrainHasOneGraph(),
-                    ct
-                );
+                var graph = await new OperationsQueries()
+                    .GetRunGraph(
+                        1,
+                        sp.GetRequiredService<IDataContextProviderFactory>(),
+                        new EveryTrainHasOneGraph(),
+                        ct
+                    )
+                    .ConfigureAwait(false);
                 graph!.MoreSteps.Should().BeFalse();
                 (graph.Nodes.Sum(n => n.Steps.Count) + graph.UnmatchedSteps.Count)
                     .Should()
@@ -234,12 +276,14 @@ public class JunctionRunStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var graph = await new OperationsQueries().GetRunGraph(
-                    ParallelRun,
-                    sp.GetRequiredService<IDataContextProviderFactory>(),
-                    new EveryTrainRunsInParallel(),
-                    ct
-                );
+                var graph = await new OperationsQueries()
+                    .GetRunGraph(
+                        ParallelRun,
+                        sp.GetRequiredService<IDataContextProviderFactory>(),
+                        new EveryTrainRunsInParallel(),
+                        ct
+                    )
+                    .ConfigureAwait(false);
                 graph!.UnmatchedSteps.Should().BeEmpty();
                 var fork = graph.Nodes.Should().ContainSingle().Subject;
                 fork.State.Should().Be(RunNodeState.Completed);
@@ -267,11 +311,11 @@ public class JunctionRunStressTests : StressTestSetup
                     "Parallel#0",
                     Enumerable
                         .Range(0, Branches)
-                        .Select(k => $"b{k}")
+                        .Select(k => string.Create(CultureInfo.InvariantCulture, $"b{k}"))
                         .Select(name => new ChainGraphTrack(
                             name,
-                            null,
-                            false,
+                            Description: null,
+                            IsFallback: false,
                             [
                                 .. Steps($"Parallel#0/{name}/", StepsPerBranch),
                                 Fork(
@@ -288,13 +332,26 @@ public class JunctionRunStressTests : StressTestSetup
         );
 
         private static ChainGraphNode Fork(string id, IReadOnlyList<ChainGraphTrack> branches) =>
-            new(id, ChainStepKind.Parallel, null, null, null, false, branches);
+            new(
+                id,
+                ChainStepKind.Parallel,
+                Junction: null,
+                In: null,
+                Out: null,
+                Opaque: false,
+                branches
+            );
 
         private static ChainGraphNode Fork(string id, string[] names, int steps) =>
             Fork(
                 id,
                 names
-                    .Select(n => new ChainGraphTrack(n, null, false, Steps($"{id}/{n}/", steps)))
+                    .Select(n => new ChainGraphTrack(
+                        n,
+                        Description: null,
+                        IsFallback: false,
+                        Steps($"{id}/{n}/", steps)
+                    ))
                     .ToList()
             );
 
@@ -302,12 +359,12 @@ public class JunctionRunStressTests : StressTestSetup
             Enumerable
                 .Range(0, count)
                 .Select(j => new ChainGraphNode(
-                    $"{prefix}Step{j}#0",
+                    string.Create(CultureInfo.InvariantCulture, $"{prefix}Step{j}#0"),
                     ChainStepKind.Chain,
-                    $"Step{j}",
+                    string.Create(CultureInfo.InvariantCulture, $"Step{j}"),
                     "In",
                     "In",
-                    false,
+                    Opaque: false,
                     []
                 ))
                 .ToList();
@@ -323,17 +380,25 @@ public class JunctionRunStressTests : StressTestSetup
             "In",
             "Out",
             [
-                new ChainGraphNode("Step0#0", ChainStepKind.Chain, "Step0", "In", "In", false, []),
+                new ChainGraphNode(
+                    "Step0#0",
+                    ChainStepKind.Chain,
+                    "Step0",
+                    "In",
+                    "In",
+                    Opaque: false,
+                    []
+                ),
                 new ChainGraphNode(
                     "Switch<Lane>#0",
                     ChainStepKind.Switch,
-                    null,
+                    Junction: null,
                     "In",
                     "Taken<Lane>",
-                    false,
+                    Opaque: false,
                     [
-                        new ChainGraphTrack("Fast", null, false, []),
-                        new ChainGraphTrack("Slow", null, false, []),
+                        new ChainGraphTrack("Fast", Description: null, IsFallback: false, []),
+                        new ChainGraphTrack("Slow", Description: null, IsFallback: false, []),
                     ]
                 ),
             ],
@@ -351,11 +416,9 @@ public class JunctionRunStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var steps = await new OperationsQueries().GetJunctionRuns(
-                    1,
-                    sp.GetRequiredService<IDataContextProviderFactory>(),
-                    ct
-                );
+                var steps = await new OperationsQueries()
+                    .GetJunctionRuns(1, sp.GetRequiredService<IDataContextProviderFactory>(), ct)
+                    .ConfigureAwait(false);
                 steps.Should().HaveCount(StepsPerRun);
             }
         );

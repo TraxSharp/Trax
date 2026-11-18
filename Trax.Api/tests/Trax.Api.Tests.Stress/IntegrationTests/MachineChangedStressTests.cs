@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Globalization;
 using System.Reflection;
 using System.Security.Claims;
 using System.Text.Json;
@@ -71,8 +72,10 @@ public class MachineChangedStressTests
 
     private static string ConnectionString =>
         Environment.GetEnvironmentVariable("TRAX_STRESS_CONNECTION")
-        ?? $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_stress;Username=trax;Password=trax123;"
-            + "Maximum Pool Size=32;Timeout=30;Command Timeout=1200;Include Error Detail=true";
+        ?? string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_stress;Username=trax;Password=trax123;"
+        ) + "Maximum Pool Size=32;Timeout=30;Command Timeout=1200;Include Error Detail=true";
 
     private IHost _writer = null!;
     private IHost _subscriber = null!;
@@ -133,7 +136,7 @@ public class MachineChangedStressTests
         var notices = 0;
         listener.Notification += (_, e) =>
         {
-            if (e.Channel == Channel)
+            if (string.Equals(e.Channel, Channel, StringComparison.Ordinal))
                 Interlocked.Increment(ref notices);
         };
         await using (var listen = new NpgsqlCommand($"LISTEN {Channel}", listener))
@@ -150,22 +153,28 @@ public class MachineChangedStressTests
             var stream = await SubscribeAsync(id);
             streams.Add(stream);
             readers.Add(
-                Task.Run(async () =>
-                {
-                    await foreach (
-                        var result in stream.ReadResultsAsync().WithCancellation(stop.Token)
-                    )
+                Task.Run(
+                    async () =>
                     {
-                        var revision = JsonDocument
-                            .Parse(result.ToJson())
-                            .RootElement.GetProperty("data")
-                            .GetProperty("stressToggleChanged")
-                            .GetProperty("revision")
-                            .GetInt64();
-                        latest[id] = revision;
-                        arrived.TryAdd((id, revision), Stopwatch.GetTimestamp());
-                    }
-                })
+                        await foreach (
+                            var result in stream
+                                .ReadResultsAsync()
+                                .WithCancellation(stop.Token)
+                                .ConfigureAwait(false)
+                        )
+                        {
+                            var revision = JsonDocument
+                                .Parse(result.ToJson())
+                                .RootElement.GetProperty("data")
+                                .GetProperty("stressToggleChanged")
+                                .GetProperty("revision")
+                                .GetInt64();
+                            latest[id] = revision;
+                            arrived.TryAdd((id, revision), Stopwatch.GetTimestamp());
+                        }
+                    },
+                    cancellationToken: CancellationToken.None
+                )
             );
         }
 
@@ -188,7 +197,7 @@ public class MachineChangedStressTests
                 {
                     var write = EventAsync(id, i % 2 == 0 ? "close" : "open");
                     inFlight[(id, i)] = (Stopwatch.GetTimestamp(), write);
-                    var revision = await write;
+                    var revision = await write.ConfigureAwait(false);
                     inFlight.TryRemove((id, i), out _);
                     written[(id, revision)] = Stopwatch.GetTimestamp();
                     finalRevision[id] = revision;
@@ -205,9 +214,18 @@ public class MachineChangedStressTests
                         inFlight
                             .Take(20)
                             .Select(w =>
-                                $"{w.Key.Id} write {w.Key.Write} "
-                                + $"({Stopwatch.GetElapsedTime(w.Value.Sent).TotalSeconds:F0} s ago, "
-                                + $"stored revision {stuck.GetValueOrDefault(w.Key.Id, -1)})"
+                                string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"{w.Key.Id} write {w.Key.Write} "
+                                )
+                                + string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"({Stopwatch.GetElapsedTime(w.Value.Sent).TotalSeconds:F0} s ago, "
+                                )
+                                + string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"stored revision {stuck.GetValueOrDefault(w.Key.Id, -1)})"
+                                )
                             )
                     )
             );
@@ -218,7 +236,7 @@ public class MachineChangedStressTests
         if (
             !await UntilAsync(() =>
                 Task.FromResult(
-                    instances.All(id =>
+                    instances.TrueForAll(id =>
                         latest.TryGetValue(id, out var seen) && seen == finalRevision[id]
                     )
                 )
@@ -238,8 +256,14 @@ public class MachineChangedStressTests
                         behind
                             .Take(20)
                             .Select(id =>
-                                $"{id} saw {(latest.TryGetValue(id, out var seen) ? seen : -1)}, "
-                                + $"last written {finalRevision[id]}, stored {stored.GetValueOrDefault(id, -1)}"
+                                string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"{id} saw {(latest.TryGetValue(id, out var seen) ? seen : -1)}, "
+                                )
+                                + string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"last written {finalRevision[id]}, stored {stored.GetValueOrDefault(id, -1)}"
+                                )
                             )
                     )
             );
@@ -252,24 +276,40 @@ public class MachineChangedStressTests
         (
             await UntilAsync(async () =>
             {
-                while (await listener.WaitAsync(TimeSpan.FromMilliseconds(50))) { }
+                while (
+                    await listener
+                        .WaitAsync(
+                            TimeSpan.FromMilliseconds(50),
+                            cancellationToken: CancellationToken.None
+                        )
+                        .ConfigureAwait(false)
+                ) { }
                 return Volatile.Read(ref notices) >= expectedNotices;
             })
-        ).Should().BeTrue($"each write sends a notice on {Channel}; {Volatile.Read(ref notices)} arrived");
+        ).Should().BeTrue(string.Create(CultureInfo.InvariantCulture, $"each write sends a notice on {Channel}; {Volatile.Read(ref notices)} arrived"));
 
         var reads = _reads.Count - readsBefore;
         var latencies = written
             .Where(w => arrived.ContainsKey(w.Key))
             .Select(w => Stopwatch.GetElapsedTime(w.Value, arrived[w.Key]))
-            .OrderBy(t => t)
+            .Order()
             .ToList();
         var p99 = latencies[(int)(latencies.Count * 0.99)];
         GC.Collect();
         var memoryGrowth = GC.GetTotalMemory(forceFullCollection: true) - memoryBefore;
         TestContext.Out.WriteLine(
-            $"{Subscribers} subscribers, {expectedNotices} writes: notices {Volatile.Read(ref notices)}, "
-                + $"subscriber reads {reads}, p99 {p99.TotalMilliseconds:F0} ms over {latencies.Count} events, "
-                + $"heap growth {memoryGrowth / 1024 / 1024} MiB"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"{Subscribers} subscribers, {expectedNotices} writes: notices {Volatile.Read(ref notices)}, "
+            )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"subscriber reads {reads}, p99 {p99.TotalMilliseconds:F0} ms over {latencies.Count} events, "
+                )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"heap growth {memoryGrowth / 1024 / 1024} MiB"
+                )
         );
 
         reads
@@ -292,7 +332,9 @@ public class MachineChangedStressTests
                     $"A subscription stream did not end within {EndBudget} of its disposal."
                 );
         }
-        var ended = Task.WhenAll(readers.Select(r => r.ContinueWith(_ => { })));
+        var ended = Task.WhenAll(
+            readers.Select(r => r.ContinueWith(_ => { }, cancellationToken: CancellationToken.None))
+        );
         if (!await FinishesWithinAsync(ended, EndBudget))
             Assert.Fail(
                 $"{readers.Count(r => !r.IsCompleted)} subscriber readers did not end within {EndBudget} of "
@@ -303,23 +345,32 @@ public class MachineChangedStressTests
     /// <summary>Whether <paramref name="task"/> completes within <paramref name="budget"/>; it is not awaited.</summary>
     // allowed-delay: the budget bounds a wait on the task; it is never awaited on its own.
     private static async Task<bool> FinishesWithinAsync(Task task, TimeSpan budget) =>
-        await Task.WhenAny(task, Task.Delay(budget)) == task;
+        await Task.WhenAny(task, Task.Delay(budget)).ConfigureAwait(false) == task;
 
     /// <summary>The revision the database holds for each of <paramref name="ids"/>.</summary>
     private static async Task<Dictionary<Guid, long>> StoredRevisionsAsync(IEnumerable<Guid> ids)
     {
-        await using var connection = new NpgsqlConnection(ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(
-            "SELECT id, revision FROM trax.snapshot_draft WHERE id = ANY(@ids)",
-            connection
-        );
-        command.Parameters.AddWithValue("ids", ids.ToArray());
-        await using var reader = await command.ExecuteReaderAsync();
-        var revisions = new Dictionary<Guid, long>();
-        while (await reader.ReadAsync())
-            revisions[reader.GetGuid(0)] = reader.GetInt64(1);
-        return revisions;
+        var connection = new NpgsqlConnection(ConnectionString);
+        await using (connection.ConfigureAwait(false))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            var command = new NpgsqlCommand(
+                "SELECT id, revision FROM trax.snapshot_draft WHERE id = ANY(@ids)",
+                connection
+            );
+            await using (command.ConfigureAwait(false))
+            {
+                command.Parameters.AddWithValue("ids", ids.ToArray());
+                var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+                await using (reader.ConfigureAwait(false))
+                {
+                    var revisions = new Dictionary<Guid, long>();
+                    while (await reader.ReadAsync().ConfigureAwait(false))
+                        revisions[reader.GetGuid(0)] = reader.GetInt64(1);
+                    return revisions;
+                }
+            }
+        }
     }
 
     private static async Task<IHost> StartAsync(ReadCounter? counter)
@@ -359,15 +410,15 @@ public class MachineChangedStressTests
                         .UsePersistedOperations(persisted =>
                             persisted
                                 .SingleNode()
-                                .RequirePersisted(false)
-                                .LogNonPersistedRequests(true)
+                                .RequirePersisted(require: false)
+                                .LogNonPersistedRequests(log: true)
                         )
                 );
                 if (counter is not null)
                     counter.Install(services);
             })
             .Build();
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
     }
 
@@ -380,9 +431,10 @@ public class MachineChangedStressTests
     private async Task<Guid> StartAsync()
     {
         var data = await ExecuteAsync(
-            _writes,
-            $"mutation {{ machines {{ stressToggle {{ start(input: {{ label: \"stress\" }}, requestId: \"{Guid.NewGuid():N}\") {{ id problem {{ code message }} }} }} }} }}"
-        );
+                _writes,
+                $"mutation {{ machines {{ stressToggle {{ start(input: {{ label: \"stress\" }}, requestId: \"{Guid.NewGuid():N}\") {{ id problem {{ code message }} }} }} }} }}"
+            )
+            .ConfigureAwait(false);
         var start = data.GetProperty("machines").GetProperty("stressToggle").GetProperty("start");
         if (start.GetProperty("problem").ValueKind == JsonValueKind.Object)
             Assert.Fail($"start was refused: {start.GetProperty("problem").GetRawText()}");
@@ -392,9 +444,10 @@ public class MachineChangedStressTests
     private async Task<long> EventAsync(Guid id, string field)
     {
         var data = await ExecuteAsync(
-            _writes,
-            $"mutation {{ machines {{ stressToggle {{ {field}(id: \"{id}\", requestId: \"{Guid.NewGuid():N}\") {{ revision }} }} }} }}"
-        );
+                _writes,
+                $"mutation {{ machines {{ stressToggle {{ {field}(id: \"{id}\", requestId: \"{Guid.NewGuid():N}\") {{ revision }} }} }} }}"
+            )
+            .ConfigureAwait(false);
         return data.GetProperty("machines")
             .GetProperty("stressToggle")
             .GetProperty(field)
@@ -404,11 +457,13 @@ public class MachineChangedStressTests
 
     private async Task<IResponseStream> SubscribeAsync(Guid id)
     {
-        var result = await _subscriptions.ExecuteAsync(
-            Request(
-                $"subscription {{ stressToggleChanged(id: \"{id}\") {{ revision state gone }} }}"
+        var result = await _subscriptions
+            .ExecuteAsync(
+                Request(
+                    $"subscription {{ stressToggleChanged(id: \"{id}\") {{ revision state gone }} }}"
+                )
             )
-        );
+            .ConfigureAwait(false);
         if (result is OperationResult refused)
             Assert.Fail($"The subscription was refused: {refused.ToJson()}");
         return (IResponseStream)result;
@@ -416,7 +471,7 @@ public class MachineChangedStressTests
 
     private static async Task<JsonElement> ExecuteAsync(IRequestExecutor executor, string document)
     {
-        var result = await executor.ExecuteAsync(Request(document));
+        var result = await executor.ExecuteAsync(Request(document)).ConfigureAwait(false);
         var response = JsonDocument.Parse(((OperationResult)result).ToJson()).RootElement.Clone();
         if (response.TryGetProperty("errors", out var errors))
             Assert.Fail($"The request failed: {errors[0].GetProperty("message").GetString()}");
@@ -440,9 +495,9 @@ public class MachineChangedStressTests
         using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(2));
         try
         {
-            while (!await condition())
+            while (!await condition().ConfigureAwait(false))
                 // determinism: the poll interval of a wait bounded by the timeout above.
-                await Task.Delay(25, deadline.Token);
+                await Task.Delay(25, deadline.Token).ConfigureAwait(false);
             return true;
         }
         catch (OperationCanceledException)

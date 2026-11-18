@@ -148,9 +148,13 @@ public class IntrospectionPerRequestTests
         );
         request.Headers.Add("GraphQL-Preflight", "1");
 
-        var response = await client.SendAsync(request);
+        var response = await client.SendAsync(request, cancellationToken: CancellationToken.None);
 
-        Classify(await response.Content.ReadAsStringAsync()).Should().Be("refused");
+        Classify(
+                await response.Content.ReadAsStringAsync(cancellationToken: CancellationToken.None)
+            )
+            .Should()
+            .Be("refused");
     }
 
     #endregion
@@ -198,7 +202,8 @@ public class IntrospectionPerRequestTests
     {
         await using var app = await StartAsync(Environments.Production);
 
-        var response = await app.GetTestClient().GetAsync(path);
+        var response = await app.GetTestClient()
+            .GetAsync(path, cancellationToken: CancellationToken.None);
 
         response
             .StatusCode.Should()
@@ -214,9 +219,14 @@ public class IntrospectionPerRequestTests
         await using var app = await StartAsync(Environments.Production);
 
         var response = await app.GetTestClient()
-            .GetAsync("/trax/graphql?sdl&query=" + Uri.EscapeDataString("{ __typename }"));
+            .GetAsync(
+                "/trax/graphql?sdl&query=" + Uri.EscapeDataString("{ __typename }"),
+                cancellationToken: CancellationToken.None
+            );
 
-        (await response.Content.ReadAsStringAsync()).Should().NotContain("type RootQuery");
+        (await response.Content.ReadAsStringAsync(cancellationToken: CancellationToken.None))
+            .Should()
+            .NotContain("type RootQuery");
     }
 
     [TestCase("/trax/graphql?sdl")]
@@ -225,10 +235,13 @@ public class IntrospectionPerRequestTests
     {
         await using var app = await StartAsync(Environments.Development);
 
-        var response = await app.GetTestClient().GetAsync(path);
+        var response = await app.GetTestClient()
+            .GetAsync(path, cancellationToken: CancellationToken.None);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        (await response.Content.ReadAsStringAsync()).Should().Contain("type RootQuery");
+        (await response.Content.ReadAsStringAsync(cancellationToken: CancellationToken.None))
+            .Should()
+            .Contain("type RootQuery");
     }
 
     [Test]
@@ -239,7 +252,8 @@ public class IntrospectionPerRequestTests
             g => g.AllowIntrospection(_ => true)
         );
 
-        var response = await app.GetTestClient().GetAsync("/trax/graphql?sdl");
+        var response = await app.GetTestClient()
+            .GetAsync("/trax/graphql?sdl", cancellationToken: CancellationToken.None);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         response.Headers.CacheControl.Should().NotBeNull();
@@ -257,7 +271,8 @@ public class IntrospectionPerRequestTests
             g => g.AllowIntrospection(_ => false)
         );
 
-        var response = await app.GetTestClient().GetAsync("/trax/graphql?sdl");
+        var response = await app.GetTestClient()
+            .GetAsync("/trax/graphql?sdl", cancellationToken: CancellationToken.None);
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -291,8 +306,11 @@ public class IntrospectionPerRequestTests
         // turn both off as well.
         await using var app = await StartAsync(Environments.Production, selfMapped: true);
 
-        var sdl = await app.GetTestClient().GetAsync("/trax/graphql?sdl");
-        (await sdl.Content.ReadAsStringAsync()).Should().NotContain("type RootQuery");
+        var sdl = await app.GetTestClient()
+            .GetAsync("/trax/graphql?sdl", cancellationToken: CancellationToken.None);
+        (await sdl.Content.ReadAsStringAsync(cancellationToken: CancellationToken.None))
+            .Should()
+            .NotContain("type RootQuery");
         (await GetHtmlAsync(app, "/trax/graphql/")).StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
@@ -310,7 +328,9 @@ public class IntrospectionPerRequestTests
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, path);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/html"));
-        return await app.GetTestClient().SendAsync(request);
+        return await app.GetTestClient()
+            .SendAsync(request, cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
     }
 
     private static async Task<WebApplication> StartAsync(
@@ -350,7 +370,7 @@ public class IntrospectionPerRequestTests
             app.MapGraphQL("/trax/graphql", "trax");
         else
             app.UseTraxGraphQL();
-        await app.StartAsync();
+        await app.StartAsync(cancellationToken: CancellationToken.None).ConfigureAwait(false);
         return app;
     }
 
@@ -369,8 +389,14 @@ public class IntrospectionPerRequestTests
             ),
         };
         configure?.Invoke(request);
-        var response = await app.GetTestClient().SendAsync(request);
-        return Classify(await response.Content.ReadAsStringAsync());
+        var response = await app.GetTestClient()
+            .SendAsync(request, cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
+        return Classify(
+            await response
+                .Content.ReadAsStringAsync(cancellationToken: CancellationToken.None)
+                .ConfigureAwait(false)
+        );
     }
 
     /// <summary>
@@ -387,7 +413,7 @@ public class IntrospectionPerRequestTests
                 if (
                     error.TryGetProperty("extensions", out var ext)
                     && ext.TryGetProperty("code", out var code)
-                    && code.GetString() == "HC0046"
+                    && string.Equals(code.GetString(), "HC0046", StringComparison.Ordinal)
                 )
                     return "refused";
             return body;
@@ -406,29 +432,30 @@ public class IntrospectionPerRequestTests
     {
         var client = app.GetTestServer().CreateWebSocketClient();
         client.SubProtocols.Add("graphql-transport-ws");
-        using var ws = await client.ConnectClosingAsync(
-            new Uri("ws://localhost/trax/graphql"),
-            default
-        );
+        using var ws = await client
+            .ConnectClosingAsync(new Uri("ws://localhost/trax/graphql"), default)
+            .ConfigureAwait(false);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
-        await SendAsync(ws, """{"type":"connection_init","payload":{}}""", cts.Token);
-        var ack = await ReceiveAsync(ws, cts.Token);
+        await SendAsync(ws, """{"type":"connection_init","payload":{}}""", cts.Token)
+            .ConfigureAwait(false);
+        var ack = await ReceiveAsync(ws, cts.Token).ConfigureAwait(false);
         ack.GetProperty("type").GetString().Should().Be("connection_ack");
 
         await SendAsync(
-            ws,
-            JsonSerializer.Serialize(
-                new
-                {
-                    id = "1",
-                    type = "subscribe",
-                    payload = new { query },
-                }
-            ),
-            cts.Token
-        );
-        var reply = await ReceiveAsync(ws, cts.Token);
+                ws,
+                JsonSerializer.Serialize(
+                    new
+                    {
+                        id = "1",
+                        type = "subscribe",
+                        payload = new { query },
+                    }
+                ),
+                cts.Token
+            )
+            .ConfigureAwait(false);
+        var reply = await ReceiveAsync(ws, cts.Token).ConfigureAwait(false);
         var type = reply.GetProperty("type").GetString();
         return type switch
         {
@@ -441,12 +468,17 @@ public class IntrospectionPerRequestTests
     }
 
     private static Task SendAsync(WebSocket ws, string message, CancellationToken ct) =>
-        ws.SendAsync(Encoding.UTF8.GetBytes(message), WebSocketMessageType.Text, true, ct);
+        ws.SendAsync(
+            Encoding.UTF8.GetBytes(message),
+            WebSocketMessageType.Text,
+            endOfMessage: true,
+            ct
+        );
 
     private static async Task<JsonElement> ReceiveAsync(WebSocket ws, CancellationToken ct)
     {
         var buffer = new byte[64 * 1024];
-        var received = await ws.ReceiveAsync(buffer, ct);
+        var received = await ws.ReceiveAsync(buffer, ct).ConfigureAwait(false);
         using var doc = JsonDocument.Parse(Encoding.UTF8.GetString(buffer, 0, received.Count));
         return doc.RootElement.Clone();
     }

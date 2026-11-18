@@ -227,10 +227,12 @@ public class MachinePushE2ETests
 
     private async Task<Guid> StartTicketAsync()
     {
-        using var doc = await _host.PostAsync(
-            $"mutation {{ machines {{ ticket {{ start(input: {{ title: \"Leak\" }}, requestId: {WizardOps.Literal(WizardOps.NewRequestId())}) {{ id problem {{ code }} }} }} }} }}",
-            apiKey: E2EHost.AliceKey
-        );
+        using var doc = await _host
+            .PostAsync(
+                $"mutation {{ machines {{ ticket {{ start(input: {{ title: \"Leak\" }}, requestId: {WizardOps.Literal(WizardOps.NewRequestId())}) {{ id problem {{ code }} }} }} }} }}",
+                apiKey: E2EHost.AliceKey
+            )
+            .ConfigureAwait(false);
         return Ticket(doc, "start").GetProperty("id").GetGuid();
     }
 
@@ -251,5 +253,7 @@ public class MachinePushE2ETests
     }
 
     private static async Task<string> StoredContextAsync(Guid id) =>
-        (await E2ESql.DraftAsync(Database, TicketMachine.MachineId, id))!.Context;
+        (
+            await E2ESql.DraftAsync(Database, TicketMachine.MachineId, id).ConfigureAwait(false)
+        )!.Context;
 }

@@ -83,7 +83,11 @@ public class CodeFinderTests
     public async Task A_search_that_is_cancelled_stops() =>
         await FluentActions
             .Awaiting(() =>
-                CodeFinder.FindAsync(_root.FullName, "Missing", new CancellationToken(true))
+                CodeFinder.FindAsync(
+                    _root.FullName,
+                    "Missing",
+                    new CancellationToken(canceled: true)
+                )
             )
             .Should()
             .ThrowAsync<OperationCanceledException>();
@@ -146,8 +150,14 @@ public class CodeFinderTests
     [Test]
     public void The_editor_is_VISUAL_then_EDITOR_then_vi()
     {
-        CodeFinder.Editor(n => n == "VISUAL" ? "code" : "nano").Should().Be("code");
-        CodeFinder.Editor(n => n == "EDITOR" ? "nano" : null).Should().Be("nano");
+        CodeFinder
+            .Editor(n => string.Equals(n, "VISUAL", StringComparison.Ordinal) ? "code" : "nano")
+            .Should()
+            .Be("code");
+        CodeFinder
+            .Editor(n => string.Equals(n, "EDITOR", StringComparison.Ordinal) ? "nano" : null)
+            .Should()
+            .Be("nano");
         CodeFinder.Editor(_ => null).Should().Be("vi");
     }
 
@@ -156,7 +166,10 @@ public class CodeFinderTests
     [TestCase("\t\n")]
     public void A_blank_editor_is_not_set(string blank)
     {
-        CodeFinder.Editor(n => n == "VISUAL" ? blank : "nano").Should().Be("nano");
+        CodeFinder
+            .Editor(n => string.Equals(n, "VISUAL", StringComparison.Ordinal) ? blank : "nano")
+            .Should()
+            .Be("nano");
         CodeFinder.Editor(_ => blank).Should().Be("vi");
     }
 
@@ -164,7 +177,10 @@ public class CodeFinderTests
     public void A_bare_name_is_found_in_an_absolute_PATH_entry_only()
     {
         var tried = new List<string>();
-        var env = new Dictionary<string, string> { ["PATH"] = ":.:bin:/opt/a:/opt/b/" };
+        var env = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["PATH"] = ":.:bin:/opt/a:/opt/b/",
+        };
 
         CodeFinder
             .Command(
@@ -174,7 +190,7 @@ public class CodeFinderTests
                 runnable: p =>
                 {
                     tried.Add(p);
-                    return p == "/opt/b/vim";
+                    return string.Equals(p, "/opt/b/vim", StringComparison.Ordinal);
                 }
             )
             .Should()
@@ -200,7 +216,11 @@ public class CodeFinderTests
 
             FluentActions
                 .Invoking(() =>
-                    CodeFinder.Command("vim", n => n == "PATH" ? ":." : null, windows: false)
+                    CodeFinder.Command(
+                        "vim",
+                        n => string.Equals(n, "PATH", StringComparison.Ordinal) ? ":." : null,
+                        windows: false
+                    )
                 )
                 .Should()
                 .Throw<InvalidOperationException>()
@@ -227,13 +247,24 @@ public class CodeFinderTests
 
         FluentActions
             .Invoking(() =>
-                CodeFinder.Command("vim", n => n == "PATH" ? bin : null, windows: false)
+                CodeFinder.Command(
+                    "vim",
+                    n => string.Equals(n, "PATH", StringComparison.Ordinal) ? bin : null,
+                    windows: false
+                )
             )
             .Should()
             .Throw<InvalidOperationException>();
 
         File.SetUnixFileMode(file, UnixFileMode.UserRead | UnixFileMode.UserExecute);
-        CodeFinder.Command("vim", n => n == "PATH" ? bin : null, windows: false).Should().Be(file);
+        CodeFinder
+            .Command(
+                "vim",
+                n => string.Equals(n, "PATH", StringComparison.Ordinal) ? bin : null,
+                windows: false
+            )
+            .Should()
+            .Be(file);
     }
 
     [TestCase("./vim")]
@@ -268,7 +299,7 @@ public class CodeFinderTests
     [Test]
     public void On_Windows_a_bare_name_is_found_on_the_path_with_its_extension()
     {
-        var env = new Dictionary<string, string>
+        var env = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["PATH"] =
                 @"bin;C:\Windows;""C:\Users\op\AppData\Local\Programs\Microsoft VS Code\bin""",
@@ -285,7 +316,7 @@ public class CodeFinderTests
                 runnable: p =>
                 {
                     tried.Add(p);
-                    return p == there;
+                    return string.Equals(p, there, StringComparison.Ordinal);
                 }
             )
             .Should()
@@ -320,7 +351,8 @@ public class CodeFinderTests
             .WithMessage("*relative path*");
     }
 
-    private static string? UnixPath(string name) => name == "PATH" ? "/usr/bin" : null;
+    private static string? UnixPath(string name) =>
+        string.Equals(name, "PATH", StringComparison.Ordinal) ? "/usr/bin" : null;
 
     private static bool AnyFile(string path) => true;
 

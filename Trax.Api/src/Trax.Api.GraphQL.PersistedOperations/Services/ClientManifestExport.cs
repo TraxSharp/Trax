@@ -116,7 +116,7 @@ internal static class ClientManifestExport
                 IrHash = machine.SchemaHash!,
                 Ir = (JsonObject)JsonNode.Parse(machine.ExportIr())!,
                 Documents = documents
-                    .Where(d => d.Machine == machine.Name)
+                    .Where(d => string.Equals(d.Machine, machine.Name, StringComparison.Ordinal))
                     .OrderBy(d => d.Operation, StringComparer.Ordinal)
                     .Select(d => new ClientManifestDocument
                     {

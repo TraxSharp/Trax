@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.Builder;
@@ -52,7 +53,7 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
         AuthE2EHost.EnsureDatabaseExists(Database);
         var connectionString = AuthE2EHost
             .ConnectionString(Database)
-            .Replace("Maximum Pool Size=8", "Maximum Pool Size=20");
+            .Replace("Maximum Pool Size=8", "Maximum Pool Size=20", StringComparison.Ordinal);
 
         _host = new HostBuilder()
             .ConfigureWebHost(web =>
@@ -129,7 +130,10 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
         var run = await CustomerFailedOrderAsync();
 
         using var doc = await PostAsync(
-            $$"""mutation { operations { requeueExecution(id: {{run}}) { success message } } }""",
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $$"""mutation { operations { requeueExecution(id: {{run}}) { success message } } }"""
+            ),
             _staff
         );
 
@@ -138,7 +142,10 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
 
         // A caller in both the gate's role and the train's may.
         using var allowed = await PostAsync(
-            $$"""mutation { operations { requeueExecution(id: {{run}}) { success message } } }""",
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $$"""mutation { operations { requeueExecution(id: {{run}}) { success message } } }"""
+            ),
             _staffCustomer
         );
         ErrorCodes(allowed).Should().BeEmpty(allowed.RootElement.GetRawText());
@@ -180,7 +187,10 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
         var run = await CustomerFailedOrderAsync();
 
         using var doc = await PostAsync(
-            $$"""mutation { operations { resumeExecution(id: {{run}}) { success message } } }""",
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $$"""mutation { operations { resumeExecution(id: {{run}}) { success message } } }"""
+            ),
             _staff
         );
 
@@ -202,44 +212,58 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
     {
         var sku = Guid.NewGuid().ToString("N");
         using var doc = await PostAsync(
-            $$"""mutation { dispatch { shop { placeOrder(input: { sku: "{{sku}}" }) { externalId } } } }""",
-            _customer
-        );
+                $$"""mutation { dispatch { shop { placeOrder(input: { sku: "{{sku}}" }) { externalId } } } }""",
+                _customer
+            )
+            .ConfigureAwait(false);
         ErrorCodes(doc).Should().NotContain("TRAX_AUTHORIZATION", doc.RootElement.GetRawText());
 
-        await using var db = await _host
+        var db = await _host
             .Services.GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(CancellationToken.None);
-        // Found by its input: a requeued run the scheduler dispatched may be newer.
-        var id = await ((DbContext)db)
-            .Database.SqlQuery<long>(
-                $"SELECT id AS \"Value\" FROM trax.metadata WHERE input::text LIKE {"%" + sku + "%"}"
-            )
-            .SingleAsync();
-        var run = await db
-            .Metadatas.AsNoTracking()
-            .Where(m => m.Id == id)
-            .Select(m => new { m.Id, m.TrainState })
-            .SingleAsync();
-        run.TrainState.Should().Be(TrainState.Failed);
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            // Found by its input: a requeued run the scheduler dispatched may be newer.
+            var id = await ((DbContext)db)
+                .Database.SqlQuery<long>(
+                    $"SELECT id AS \"Value\" FROM trax.metadata WHERE input::text LIKE {"%" + sku + "%"}"
+                )
+                .SingleAsync()
+                .ConfigureAwait(false);
+            var run = await db
+                .Metadatas.AsNoTracking()
+                .Where(m => m.Id == id)
+                .Select(m => new { m.Id, m.TrainState })
+                .SingleAsync()
+                .ConfigureAwait(false);
+            run.TrainState.Should().Be(TrainState.Failed);
 
-        // The run records its starter, so a requeue keeps it and enqueues through the mediator's
-        // options overload, as the reported requeue did.
-        var starter = await ((DbContext)db)
-            .Database.SqlQuery<string?>(
-                $"SELECT starter_hash AS \"Value\" FROM trax.metadata WHERE id = {run.Id}"
-            )
-            .SingleAsync();
-        starter.Should().NotBeNull("a GraphQL run records its caller as the starter");
-        return run.Id;
+            // The run records its starter, so a requeue keeps it and enqueues through the mediator's
+            // options overload, as the reported requeue did.
+            var starter = await ((DbContext)db)
+                .Database.SqlQuery<string?>(
+                    $"SELECT starter_hash AS \"Value\" FROM trax.metadata WHERE id = {run.Id}"
+                )
+                .SingleAsync()
+                .ConfigureAwait(false);
+            starter.Should().NotBeNull("a GraphQL run records its caller as the starter");
+            return run.Id;
+        }
     }
 
     private async Task<int> QueuedEntriesAsync()
     {
-        await using var db = await _host
+        var db = await _host
             .Services.GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(CancellationToken.None);
-        return await db.WorkQueues.CountAsync(q => q.TrainName == TrainName);
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            return await db
+                .WorkQueues.CountAsync(q => q.TrainName == TrainName)
+                .ConfigureAwait(false);
+        }
     }
 
     private Task<JsonDocument> PostAsync(string query, string token) =>

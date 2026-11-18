@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -67,7 +68,9 @@ internal static class ClientDocuments
         if (!IsReserved(id) || !MachineDocuments.IsWellFormed(id))
             return null;
         var name = id[ReservedIdPrefix.Length..id.LastIndexOf('_')];
-        return name.Length == 0 || name.Contains('_') ? null : id[..id.LastIndexOf('_')];
+        return name.Length == 0 || name.Contains('_', StringComparison.Ordinal)
+            ? null
+            : id[..id.LastIndexOf('_')];
     }
 
     /// <summary>
@@ -128,7 +131,7 @@ internal static class ClientDocuments
             var owner =
                 $"client document '{entry.Name}'"
                 + (string.IsNullOrEmpty(entry.Source) ? "" : $" ({entry.Source})");
-            if (documents.Any(d => d.Name == entry.Name))
+            if (documents.Exists(d => string.Equals(d.Name, entry.Name, StringComparison.Ordinal)))
                 throw new InvalidOperationException(
                     $"The client documents file '{path}' names the {owner} twice. Operation names are unique."
                 );
@@ -160,7 +163,7 @@ internal static class ClientDocuments
                 refusals.Add($"The {document.Owner} {reason}");
         if (refusals.Count > 0)
             throw new InvalidOperationException(
-                string.Join("\n", refusals)
+                string.Join('\n', refusals)
                     + "\nA client document holds one named query or mutation of the host's trains and query models "
                     + "under dispatch or discover."
             );
@@ -194,7 +197,7 @@ internal static class ClientDocuments
         )
             return "holds a definition that is neither an operation nor a fragment.";
         var operation = operations[0];
-        if (operation.Name?.Value != name)
+        if (!string.Equals(operation.Name?.Value, name, StringComparison.Ordinal))
             return $"is registered as '{name}' but its operation is named '{operation.Name?.Value}'.";
         if (operation.Operation is not (OperationType.Query or OperationType.Mutation))
             return $"is a {operation.Operation.ToString().ToLowerInvariant()}; a client document is a query or a mutation.";
@@ -222,7 +225,7 @@ internal static class ClientDocuments
 
         if (
             operation.SelectionSet.Selections is not [FieldNode { Alias: null } top]
-            || top.Name.Value != rootName
+            || !string.Equals(top.Name.Value, rootName, StringComparison.Ordinal)
         )
             return $"selects something other than '{rootName}' at its root.";
 
@@ -239,7 +242,7 @@ internal static class ClientDocuments
                 return $"selects '{rootName}.{field.Name.Value}', which this host does not serve.";
             if (!NamespaceField.IsNamespace(definition))
             {
-                if (Reached(reach, rootKind, null, field.Name.Value, ref trains) is { } refusal)
+                if (Reached(reach, rootKind, ns: null, field.Name.Value, ref trains) is { } refusal)
                     return $"selects '{rootName}.{field.Name.Value}', {refusal}";
                 reached++;
                 continue;
@@ -268,7 +271,10 @@ internal static class ClientDocuments
         if (reached == 0)
             return "selects no train or query model.";
         if (mutation && trains != 1)
-            return $"runs {trains} trains in one mutation; a mutation runs one.";
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"runs {trains} trains in one mutation; a mutation runs one."
+            );
         return null;
     }
 
@@ -287,9 +293,11 @@ internal static class ClientDocuments
             trains++;
             return null;
         }
-        if (root == "query" && reach.IsQueryModel(ns, field))
+        if (string.Equals(root, "query", StringComparison.Ordinal) && reach.IsQueryModel(ns, field))
             return null;
-        return root == "mutation" && reach.IsQueryModel(ns, field)
+        return
+            string.Equals(root, "mutation", StringComparison.Ordinal)
+            && reach.IsQueryModel(ns, field)
             ? "a query model, which a mutation cannot hold."
             : "which is neither a train nor a query model this host exposes.";
     }
@@ -310,6 +318,8 @@ internal static class ClientDocuments
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
         PropertyNameCaseInsensitive = false,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };

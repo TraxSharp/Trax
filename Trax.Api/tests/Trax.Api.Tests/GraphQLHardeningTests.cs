@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
@@ -252,7 +253,12 @@ public class GraphQLHardeningTests
     [Test]
     public void OperationCountValidator_FragmentOfNAliases_CountsN()
     {
-        var aliases = string.Join(" ", Enumerable.Range(0, 40).Select(i => $"a{i}: foo"));
+        var aliases = string.Join(
+            ' ',
+            Enumerable
+                .Range(0, 40)
+                .Select(i => string.Create(CultureInfo.InvariantCulture, $"a{i}: foo"))
+        );
         var doc = Utf8GraphQLParser.Parse($"{{ ...F }} fragment F on Query {{ {aliases} }}");
 
         var atCap = NewValidatorContext(doc);
@@ -285,10 +291,15 @@ public class GraphQLHardeningTests
     {
         // Each fragment spreads the next one twice: expanding naively visits 2^30 spreads.
         var fragments = string.Join(
-            " ",
+            ' ',
             Enumerable
                 .Range(0, 30)
-                .Select(i => $"fragment F{i} on Query {{ ...F{i + 1} ...F{i + 1} }}")
+                .Select(i =>
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"fragment F{i} on Query {{ ...F{i + 1} ...F{i + 1} }}"
+                    )
+                )
         );
         var doc = Utf8GraphQLParser.Parse(
             $"{{ ...F0 }} {fragments} fragment F30 on Query {{ a: foo b: foo c: foo }}"

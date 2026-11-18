@@ -145,7 +145,7 @@ public class TypedRequestTests
 
     // Helper types for the failure tests.
     public sealed class UnannotatedTypedRequest
-        : Trax.Api.GraphQL.Client.Typed.TypedRequest<TypedItemSummary> { }
+        : Trax.Api.GraphQL.Client.Typed.TypedRequest<TypedItemSummary>;
 
     public sealed record PocoWithoutGraphQLType(string Id, string Name);
 

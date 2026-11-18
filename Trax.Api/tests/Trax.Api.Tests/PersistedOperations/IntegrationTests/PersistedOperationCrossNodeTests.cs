@@ -68,12 +68,19 @@ public class PersistedOperationCrossNodeTests
     public async Task ADeactivationOnOneNode_IsRefusedOnTheOther()
     {
         var id = $"cross_node_deactivate_{Guid.NewGuid():N}";
-        await Store(_nodeA).UpsertAsync(id, "query Greet { hello }", null, CancellationToken.None);
+        await Store(_nodeA)
+            .UpsertAsync(id, "query Greet { hello }", options: null, CancellationToken.None);
         (await ExecuteByIdAsync(_nodeB, id)).Should().Contain("\"hello\"", "B warms its caches");
 
-        await Store(_nodeA).DeactivateAsync(id, null, "retired", CancellationToken.None);
+        await Store(_nodeA).DeactivateAsync(id, tenantKey: null, "retired", CancellationToken.None);
 
-        (await EventuallyAsync(_nodeB, id, json => !json.Contains("\"hello\"")))
+        (
+            await EventuallyAsync(
+                _nodeB,
+                id,
+                json => !json.Contains("\"hello\"", StringComparison.Ordinal)
+            )
+        )
             .Should()
             .NotContain("\"hello\"", AdrHint);
     }
@@ -82,7 +89,8 @@ public class PersistedOperationCrossNodeTests
     public async Task AReuploadOnOneNode_IsServedOnTheOther()
     {
         var id = $"cross_node_reupload_{Guid.NewGuid():N}";
-        await Store(_nodeA).UpsertAsync(id, "query Greet { hello }", null, CancellationToken.None);
+        await Store(_nodeA)
+            .UpsertAsync(id, "query Greet { hello }", options: null, CancellationToken.None);
         (await ExecuteByIdAsync(_nodeB, id)).Should().Contain("\"hello\"");
 
         await Store(_nodeA)
@@ -93,7 +101,13 @@ public class PersistedOperationCrossNodeTests
                 CancellationToken.None
             );
 
-        (await EventuallyAsync(_nodeB, id, json => json.Contains("\"version\"")))
+        (
+            await EventuallyAsync(
+                _nodeB,
+                id,
+                json => json.Contains("\"version\"", StringComparison.Ordinal)
+            )
+        )
             .Should()
             .Contain("\"version\"", AdrHint);
     }
@@ -104,13 +118,18 @@ public class PersistedOperationCrossNodeTests
         var id = $"cross_node_held_{Guid.NewGuid():N}";
         var held = GraphQLFixture.Hold(id);
         await Store(_nodeA)
-            .UpsertAsync(id, GraphQLFixture.HeldDocument(id), null, CancellationToken.None);
+            .UpsertAsync(
+                id,
+                GraphQLFixture.HeldDocument(id),
+                options: null,
+                CancellationToken.None
+            );
         var generationOnB = _nodeB.GetRequiredService<PersistedOperationCacheGeneration>();
 
         var running = ExecuteByIdAsync(_nodeB, id);
         await held.Entered;
         var before = generationOnB.Current;
-        await Store(_nodeA).DeactivateAsync(id, null, "retired", CancellationToken.None);
+        await Store(_nodeA).DeactivateAsync(id, tenantKey: null, "retired", CancellationToken.None);
         await WaitUntilAsync(() => generationOnB.Current > before);
         held.Release();
         await running;
@@ -122,7 +141,8 @@ public class PersistedOperationCrossNodeTests
     public async Task ANodeThatMayHaveMissedABroadcast_EmptiesItsCaches()
     {
         var id = $"cross_node_missed_{Guid.NewGuid():N}";
-        await Store(_nodeB).UpsertAsync(id, "query Greet { hello }", null, CancellationToken.None);
+        await Store(_nodeB)
+            .UpsertAsync(id, "query Greet { hello }", options: null, CancellationToken.None);
         await ExecuteByIdAsync(_nodeB, id);
         var executor = await GraphQLFixture.GetExecutorAsync(_nodeB);
         executor
@@ -144,14 +164,15 @@ public class PersistedOperationCrossNodeTests
 
     private async Task<ServiceProvider> StartNodeAsync()
     {
-        var node = await GraphQLFixture.BuildAsync(po =>
-            po.UseRabbitMqInvalidation(AmqpUri, TestInvalidationKey.Sign)
-        );
+        var node = await GraphQLFixture
+            .BuildAsync(po => po.UseRabbitMqInvalidation(AmqpUri, TestInvalidationKey.Sign))
+            .ConfigureAwait(false);
         node.GetRequiredService<PersistedOperationsOptions>().RabbitMqExchange = _exchange;
         await node.GetRequiredService<PersistedOperationReceiverService>()
-            .StartAsync(CancellationToken.None);
+            .StartAsync(CancellationToken.None)
+            .ConfigureAwait(false);
         // Build the executor now, so the invalidator knows the schema before any broadcast.
-        await GraphQLFixture.GetExecutorAsync(node);
+        await GraphQLFixture.GetExecutorAsync(node).ConfigureAwait(false);
         return node;
     }
 
@@ -160,7 +181,7 @@ public class PersistedOperationCrossNodeTests
         var deadline = DateTime.UtcNow.AddSeconds(10);
         while (!condition() && DateTime.UtcNow < deadline)
             // determinism: polling for a broker-delivered broadcast, bounded by the deadline above.
-            await Task.Delay(20);
+            await Task.Delay(20).ConfigureAwait(false);
         condition().Should().BeTrue("the broadcast should arrive within the deadline");
     }
 
@@ -177,21 +198,23 @@ public class PersistedOperationCrossNodeTests
         string json;
         do
         {
-            json = await ExecuteByIdAsync(node, id);
+            json = await ExecuteByIdAsync(node, id).ConfigureAwait(false);
             if (done(json))
                 return json;
             // determinism: polling for a broker-delivered broadcast, bounded by the deadline above.
-            await Task.Delay(50);
+            await Task.Delay(50).ConfigureAwait(false);
         } while (DateTime.UtcNow < deadline);
         return json;
     }
 
     private static async Task<string> ExecuteByIdAsync(IServiceProvider node, string id)
     {
-        var executor = await GraphQLFixture.GetExecutorAsync(node);
-        var result = await executor.ExecuteAsync(
-            OperationRequestBuilder.New().SetDocumentId(new OperationDocumentId(id)).Build()
-        );
+        var executor = await GraphQLFixture.GetExecutorAsync(node).ConfigureAwait(false);
+        var result = await executor
+            .ExecuteAsync(
+                OperationRequestBuilder.New().SetDocumentId(new OperationDocumentId(id)).Build()
+            )
+            .ConfigureAwait(false);
         return ((OperationResult)result).ToJson();
     }
 

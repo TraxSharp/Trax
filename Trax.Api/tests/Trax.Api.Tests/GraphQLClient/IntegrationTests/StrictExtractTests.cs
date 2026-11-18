@@ -61,7 +61,10 @@ public class StrictExtractTests
     {
         var executor = BuildExecutor(ResponseStrictness.ThrowOnDrift);
 
-        var act = async () => await executor.Run(new GetPlayerNameOnlyRequest { Id = "player-1" });
+        var act = async () =>
+            await executor
+                .Run(new GetPlayerNameOnlyRequest { Id = "player-1" })
+                .ConfigureAwait(false);
 
         var ex = await act.Should().ThrowAsync<GraphQLResponseShapeException>();
         ex.Which.ExtraJsonFields.Should().Contain("level");

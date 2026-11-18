@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Security.Claims;
 using System.Text.Json;
 using AwesomeAssertions;
@@ -74,8 +75,10 @@ public abstract class StressTestSetup
     /// </summary>
     protected static string ConnectionString =>
         Environment.GetEnvironmentVariable("TRAX_STRESS_CONNECTION")
-        ?? $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_stress;Username=trax;Password=trax123;"
-            + "Maximum Pool Size=16;Timeout=30;Command Timeout=1200;Include Error Detail=true";
+        ?? string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_stress;Username=trax;Password=trax123;"
+        ) + "Maximum Pool Size=16;Timeout=30;Command Timeout=1200;Include Error Detail=true";
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -166,16 +169,19 @@ public abstract class StressTestSetup
     {
         _executor ??= await _serviceProvider
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax", ct);
+            .GetExecutorAsync("trax", ct)
+            .ConfigureAwait(false);
 
-        var result = await _executor.ExecuteAsync(
-            OperationRequestBuilder
-                .New()
-                .SetDocument(document)
-                .SetGlobalState(nameof(ClaimsPrincipal), caller ?? Caller(AdminRole))
-                .Build(),
-            ct
-        );
+        var result = await _executor
+            .ExecuteAsync(
+                OperationRequestBuilder
+                    .New()
+                    .SetDocument(document)
+                    .SetGlobalState(nameof(ClaimsPrincipal), caller ?? Caller(AdminRole))
+                    .Build(),
+                ct
+            )
+            .ConfigureAwait(false);
 
         return JsonDocument.Parse(((OperationResult)result).ToJson()).RootElement.Clone();
     }
@@ -191,7 +197,7 @@ public abstract class StressTestSetup
         params string[] path
     )
     {
-        var response = await ExecuteGraphQLAsync(document, ct);
+        var response = await ExecuteGraphQLAsync(document, ct).ConfigureAwait(false);
         response
             .TryGetProperty("errors", out _)
             .Should()
@@ -206,23 +212,40 @@ public abstract class StressTestSetup
     /// <summary>Runs one SQL statement against the stress database.</summary>
     protected static async Task ExecSqlAsync(string sql)
     {
-        await using var connection = new NpgsqlConnection(ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
-        command.CommandText = sql;
-        command.CommandTimeout = 1200;
-        await command.ExecuteNonQueryAsync();
+        var connection = new NpgsqlConnection(ConnectionString);
+        await using (connection.ConfigureAwait(false))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            var command = connection.CreateCommand();
+            await using (command.ConfigureAwait(false))
+            {
+                command.CommandText = sql;
+                command.CommandTimeout = 1200;
+                await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+            }
+        }
     }
 
     /// <summary>Reads one scalar from the stress database.</summary>
     protected static async Task<T> ScalarAsync<T>(string sql)
     {
-        await using var connection = new NpgsqlConnection(ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
-        command.CommandText = sql;
-        command.CommandTimeout = 1200;
-        return (T)Convert.ChangeType((await command.ExecuteScalarAsync())!, typeof(T));
+        var connection = new NpgsqlConnection(ConnectionString);
+        await using (connection.ConfigureAwait(false))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            var command = connection.CreateCommand();
+            await using (command.ConfigureAwait(false))
+            {
+                command.CommandText = sql;
+                command.CommandTimeout = 1200;
+                return (T)
+                    Convert.ChangeType(
+                        (await command.ExecuteScalarAsync().ConfigureAwait(false))!,
+                        typeof(T),
+                        System.Globalization.CultureInfo.InvariantCulture
+                    );
+            }
+        }
     }
 
     /// <summary>
@@ -240,35 +263,50 @@ public abstract class StressTestSetup
         Func<Task>? restore = null
     )
     {
-        await prepare();
+        await prepare().ConfigureAwait(false);
         try
         {
             using (var warm = _serviceProvider.CreateScope())
-                await action(warm.ServiceProvider, CancellationToken.None);
-            await prepare();
+                await action(warm.ServiceProvider, CancellationToken.None).ConfigureAwait(false);
+            await prepare().ConfigureAwait(false);
 
             using var scope = _serviceProvider.CreateScope();
             var sw = Stopwatch.StartNew();
-            await action(scope.ServiceProvider, CancellationToken.None);
+            await action(scope.ServiceProvider, CancellationToken.None).ConfigureAwait(false);
             sw.Stop();
 
             TestContext.Out.WriteLine(
-                $"{label}: {sw.Elapsed.TotalMilliseconds:F0}ms "
-                    + $"(budget {budget.TotalMilliseconds:F0}ms, {Profile.Metadata:N0} metadata rows)"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{label}: {sw.Elapsed.TotalMilliseconds:F0}ms "
+                )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"(budget {budget.TotalMilliseconds:F0}ms, {Profile.Metadata:N0} metadata rows)"
+                    )
             );
 
             sw.Elapsed.Should()
                 .BeLessThan(
                     budget,
-                    $"{label} must stay within {budget.TotalMilliseconds:F0}ms at "
-                        + $"{Profile.Metadata:N0} metadata / {Profile.WorkQueue:N0} work queue / "
-                        + $"{Profile.DeadLetter:N0} dead letter rows"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{label} must stay within {budget.TotalMilliseconds:F0}ms at "
+                    )
+                        + string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{Profile.Metadata:N0} metadata / {Profile.WorkQueue:N0} work queue / "
+                        )
+                        + string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{Profile.DeadLetter:N0} dead letter rows"
+                        )
                 );
             return sw.Elapsed;
         }
         finally
         {
-            await (restore ?? prepare)();
+            await (restore ?? prepare)().ConfigureAwait(false);
         }
     }
 
@@ -286,23 +324,35 @@ public abstract class StressTestSetup
     {
         // Warm-up (untimed).
         using (var warm = _serviceProvider.CreateScope())
-            await action(warm.ServiceProvider, CancellationToken.None);
+            await action(warm.ServiceProvider, CancellationToken.None).ConfigureAwait(false);
 
         using var scope = _serviceProvider.CreateScope();
         var sw = Stopwatch.StartNew();
-        await action(scope.ServiceProvider, CancellationToken.None);
+        await action(scope.ServiceProvider, CancellationToken.None).ConfigureAwait(false);
         sw.Stop();
 
         TestContext.Out.WriteLine(
-            $"{label}: {sw.Elapsed.TotalMilliseconds:F0}ms "
-                + $"(budget {budget.TotalMilliseconds:F0}ms, {Profile.Metadata:N0} metadata rows)"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"{label}: {sw.Elapsed.TotalMilliseconds:F0}ms "
+            )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"(budget {budget.TotalMilliseconds:F0}ms, {Profile.Metadata:N0} metadata rows)"
+                )
         );
 
         sw.Elapsed.Should()
             .BeLessThan(
                 budget,
-                $"{label} must stay within {budget.TotalMilliseconds:F0}ms at "
-                    + $"{Profile.Metadata:N0} metadata / {Profile.Log:N0} log rows"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{label} must stay within {budget.TotalMilliseconds:F0}ms at "
+                )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{Profile.Metadata:N0} metadata / {Profile.Log:N0} log rows"
+                    )
             );
 
         return sw.Elapsed;
@@ -312,11 +362,11 @@ public abstract class StressTestSetup
     protected async Task<TimeSpan> TimeAsync(Func<IServiceProvider, CancellationToken, Task> action)
     {
         using (var warm = _serviceProvider.CreateScope())
-            await action(warm.ServiceProvider, CancellationToken.None);
+            await action(warm.ServiceProvider, CancellationToken.None).ConfigureAwait(false);
 
         using var scope = _serviceProvider.CreateScope();
         var sw = Stopwatch.StartNew();
-        await action(scope.ServiceProvider, CancellationToken.None);
+        await action(scope.ServiceProvider, CancellationToken.None).ConfigureAwait(false);
         sw.Stop();
         return sw.Elapsed;
     }

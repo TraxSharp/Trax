@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.Hosting;
@@ -126,7 +127,12 @@ public class MachineEventsE2ETests
         while (true)
         {
             var completed = (await ws.NextDataAsync("feed")).GetProperty("onTrainCompleted");
-            if (completed.GetProperty("output").GetRawText().Contains(sentinel))
+            if (
+                completed
+                    .GetProperty("output")
+                    .GetRawText()
+                    .Contains(sentinel, StringComparison.Ordinal)
+            )
                 break;
             CompletedPing(completed, "warm-up")
                 .Should()
@@ -146,8 +152,17 @@ public class MachineEventsE2ETests
         var completed = message.TryGetProperty("payload", out var payload)
             ? payload.GetProperty("data").GetProperty("onTrainCompleted")
             : message;
-        return completed.GetProperty("trainName").GetString()?.Contains(nameof(IPing)) == true
-            && (value is null || completed.GetProperty("output").GetRawText().Contains(value));
+        return completed
+                .GetProperty("trainName")
+                .GetString()
+                ?.Contains(nameof(IPing), StringComparison.Ordinal) == true
+            && (
+                value is null
+                || completed
+                    .GetProperty("output")
+                    .GetRawText()
+                    .Contains(value, StringComparison.Ordinal)
+            );
     }
 
     private static IEnumerable<TestCaseData> InvalidInputs()
@@ -300,7 +315,10 @@ public class MachineEventsE2ETests
                 .ErrorCodes(doc)
                 .Should()
                 .BeEmpty(
-                    $"two gets in one request must not use the scoped data context at once (run {i}), per "
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"two gets in one request must not use the scoped data context at once (run {i}), per "
+                    )
                         + Adr
                         + ": "
                         + doc.RootElement.GetRawText()
@@ -315,27 +333,33 @@ public class MachineEventsE2ETests
     }
 
     private async Task<long> RunsOf<TTrain>() =>
-        await E2ESql.ScalarAsync<long>(
-            Database,
-            "SELECT count(*) FROM trax.metadata WHERE name = @name",
-            ("name", typeof(TTrain).FullName!)
-        );
+        await E2ESql
+            .ScalarAsync<long>(
+                Database,
+                "SELECT count(*) FROM trax.metadata WHERE name = @name",
+                ("name", typeof(TTrain).FullName!)
+            )
+            .ConfigureAwait(false);
 
     private async Task RunSentinelAsync(string value)
     {
-        using var doc = await _host.PostAsync(
-            $"{{ discover {{ ping(input: {{ value: {WizardOps.Literal(value)} }}) {{ value }} }} }}",
-            apiKey: E2EHost.AliceKey
-        );
+        using var doc = await _host
+            .PostAsync(
+                $"{{ discover {{ ping(input: {{ value: {WizardOps.Literal(value)} }}) {{ value }} }} }}",
+                apiKey: E2EHost.AliceKey
+            )
+            .ConfigureAwait(false);
         WizardOps.ErrorCodes(doc).Should().BeEmpty(doc.RootElement.GetRawText());
     }
 
     private async Task<Guid> StartMemoAsync()
     {
-        using var doc = await _host.PostAsync(
-            $"mutation {{ machines {{ memo {{ start(input: {{ text: \"note\" }}, requestId: {WizardOps.Literal(WizardOps.NewRequestId())}) {{ id problem {{ code }} }} }} }} }}",
-            apiKey: E2EHost.AliceKey
-        );
+        using var doc = await _host
+            .PostAsync(
+                $"mutation {{ machines {{ memo {{ start(input: {{ text: \"note\" }}, requestId: {WizardOps.Literal(WizardOps.NewRequestId())}) {{ id problem {{ code }} }} }} }} }}",
+                apiKey: E2EHost.AliceKey
+            )
+            .ConfigureAwait(false);
         WizardOps.FailOnErrors(doc, "memo.start");
         return Guid.Parse(
             doc.RootElement.GetProperty("data")

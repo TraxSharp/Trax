@@ -29,13 +29,14 @@ public class QueryModelAuthorizeSchemaValidatorTests
 {
     [TraxQueryModel]
     [TraxAuthorize(Roles = "Admin")]
-    private class GatedThing
+    private sealed class GatedThing
     {
         public int Id { get; set; }
         public string Name { get; set; } = "";
     }
 
-    private class GatedDbContext(DbContextOptions<GatedDbContext> options) : DbContext(options)
+    private sealed class GatedDbContext(DbContextOptions<GatedDbContext> options)
+        : DbContext(options)
     {
         public DbSet<GatedThing> Things { get; set; } = null!;
     }
@@ -49,7 +50,8 @@ public class QueryModelAuthorizeSchemaValidatorTests
         );
         var validator = new QueryModelAuthorizationSchemaValidator(config, services);
 
-        var act = async () => await validator.StartAsync(CancellationToken.None);
+        var act = async () =>
+            await validator.StartAsync(CancellationToken.None).ConfigureAwait(false);
 
         (
             await act.Should()
@@ -75,7 +77,8 @@ public class QueryModelAuthorizeSchemaValidatorTests
         );
         var validator = new QueryModelAuthorizationSchemaValidator(config, services);
 
-        var act = async () => await validator.StartAsync(CancellationToken.None);
+        var act = async () =>
+            await validator.StartAsync(CancellationToken.None).ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>())
             .WithMessage("*[TraxAuthorize] invariant violated*")
@@ -94,7 +97,8 @@ public class QueryModelAuthorizeSchemaValidatorTests
         );
         var validator = new QueryModelAuthorizationSchemaValidator(config, services);
 
-        var act = async () => await validator.StartAsync(CancellationToken.None);
+        var act = async () =>
+            await validator.StartAsync(CancellationToken.None).ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>())
             .WithMessage("*[TraxAuthorize] invariant violated*")
@@ -136,7 +140,8 @@ public class QueryModelAuthorizeSchemaValidatorTests
         var (config, services) = await BuildSchemaAsync(includeDiscoverField: false);
         var validator = new QueryModelAuthorizationSchemaValidator(config, services);
 
-        var act = async () => await validator.StartAsync(CancellationToken.None);
+        var act = async () =>
+            await validator.StartAsync(CancellationToken.None).ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>())
             .WithMessage("*`discover` field is not present*")
@@ -156,7 +161,8 @@ public class QueryModelAuthorizeSchemaValidatorTests
         var (config, services) = await BuildSchemaAsync(includeEntryField: false);
         var validator = new QueryModelAuthorizationSchemaValidator(config, services);
 
-        var act = async () => await validator.StartAsync(CancellationToken.None);
+        var act = async () =>
+            await validator.StartAsync(CancellationToken.None).ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>())
             .WithMessage("*entry field*missing*")
@@ -202,7 +208,8 @@ public class QueryModelAuthorizeSchemaValidatorTests
         );
         var validator = new QueryModelAuthorizationSchemaValidator(config, services);
 
-        var act = async () => await validator.StartAsync(CancellationToken.None);
+        var act = async () =>
+            await validator.StartAsync(CancellationToken.None).ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>())
             .WithMessage("*namespace field*")
@@ -223,7 +230,8 @@ public class QueryModelAuthorizeSchemaValidatorTests
         var (config, services) = await BuildSchemaWithoutGatedObjectTypeAsync();
         var validator = new QueryModelAuthorizationSchemaValidator(config, services);
 
-        var act = async () => await validator.StartAsync(CancellationToken.None);
+        var act = async () =>
+            await validator.StartAsync(CancellationToken.None).ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>())
             .WithMessage("*no ObjectType*")
@@ -288,12 +296,13 @@ public class QueryModelAuthorizeSchemaValidatorTests
     }
 
     [TraxQueryModel]
-    private class UngatedThing
+    private sealed class UngatedThing
     {
         public int Id { get; set; }
     }
 
-    private class UngatedDbContext(DbContextOptions<UngatedDbContext> options) : DbContext(options)
+    private sealed class UngatedDbContext(DbContextOptions<UngatedDbContext> options)
+        : DbContext(options)
     {
         public DbSet<UngatedThing> Things { get; set; } = null!;
     }
@@ -389,7 +398,7 @@ public class QueryModelAuthorizeSchemaValidatorTests
 
         var sp = services.BuildServiceProvider();
         var resolver = sp.GetRequiredService<IRequestExecutorProvider>();
-        _ = await resolver.GetExecutorAsync("trax");
+        _ = await resolver.GetExecutorAsync("trax").ConfigureAwait(false);
 
         return (config, sp);
     }
@@ -471,7 +480,7 @@ public class QueryModelAuthorizeSchemaValidatorTests
 
         var sp = services.BuildServiceProvider();
         var resolver = sp.GetRequiredService<IRequestExecutorProvider>();
-        _ = await resolver.GetExecutorAsync("trax");
+        _ = await resolver.GetExecutorAsync("trax").ConfigureAwait(false);
 
         return (config, sp);
     }
@@ -517,20 +526,21 @@ public class QueryModelAuthorizeSchemaValidatorTests
 
         var sp = services.BuildServiceProvider();
         var resolver = sp.GetRequiredService<IRequestExecutorProvider>();
-        _ = await resolver.GetExecutorAsync("trax");
+        _ = await resolver.GetExecutorAsync("trax").ConfigureAwait(false);
 
         return (config, sp);
     }
 
     [TraxQueryModel(Namespace = "testns")]
     [TraxAuthorize(Roles = "Admin")]
-    private class NamespacedGatedThing
+    private sealed class NamespacedGatedThing
     {
         public int Id { get; set; }
     }
 
-    private class NamespacedGatedDbContext(DbContextOptions<NamespacedGatedDbContext> options)
-        : DbContext(options)
+    private sealed class NamespacedGatedDbContext(
+        DbContextOptions<NamespacedGatedDbContext> options
+    ) : DbContext(options)
     {
         public DbSet<NamespacedGatedThing> Things { get; set; } = null!;
     }

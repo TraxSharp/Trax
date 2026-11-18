@@ -154,7 +154,10 @@ public class ApplicationServiceBridgeTests
     private static async Task<IRequestExecutor> BuildAsync(IServiceCollection services)
     {
         var provider = services.BuildServiceProvider();
-        return await provider.GetRequiredService<IRequestExecutorProvider>().GetExecutorAsync();
+        return await provider
+            .GetRequiredService<IRequestExecutorProvider>()
+            .GetExecutorAsync()
+            .ConfigureAwait(false);
     }
 
     public interface IProbe
@@ -167,7 +170,7 @@ public class ApplicationServiceBridgeTests
         public string Marker { get; set; } = "";
     }
 
-    public sealed class ProbeOptions;
+    public static class ProbeOptions;
 
     #endregion
 }

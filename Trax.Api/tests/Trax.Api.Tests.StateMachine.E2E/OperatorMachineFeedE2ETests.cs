@@ -123,7 +123,7 @@ public class OperatorMachineFeedE2ETests
             // Every event the feed sends until the described draft shows up.
             while (true)
             {
-                var data = await operatorWs.NextDataAsync("feed");
+                var data = await operatorWs.NextDataAsync("feed").ConfigureAwait(false);
                 raw.Add(data.GetRawText());
                 if (
                     MachineResult.SameName(
@@ -171,10 +171,18 @@ public class OperatorMachineFeedE2ETests
         var dashboardReading = dashboard.MoveNextAsync().AsTask();
 
         var started = await _host.StartWizardAsync(E2EHost.AliceKey);
-        await using var userWs = await GraphQLWs.ConnectAsync(_host, E2EHost.AliceKey);
+        await using var userWs = await GraphQLWs.ConnectAsync(
+            _host,
+            E2EHost.AliceKey,
+            cancellationToken: CancellationToken.None
+        );
         await userWs.SubscribeAsync("mine", MachineChangedOps.Subscribe(started.Id));
         await userWs.NextChangeAsync("mine");
-        await using var operatorWs = await GraphQLWs.ConnectAsync(_host, E2EHost.OperatorKey);
+        await using var operatorWs = await GraphQLWs.ConnectAsync(
+            _host,
+            E2EHost.OperatorKey,
+            cancellationToken: CancellationToken.None
+        );
         await operatorWs.SubscribeAsync("feed", MachineChangedOps.SubscribeOperator());
         await WaitUntilListeningAsync(operatorWs);
         await _host.AdvanceWizardAsync(
@@ -184,7 +192,12 @@ public class OperatorMachineFeedE2ETests
             WizardOps.DetailsInput()
         );
         await NextForAsync(operatorWs, started.Id);
-        (await dashboardReading.WaitAsync(GraphQLWs.DefaultTimeout))
+        (
+            await dashboardReading.WaitAsync(
+                GraphQLWs.DefaultTimeout,
+                cancellationToken: CancellationToken.None
+            )
+        )
             .Should()
             .BeTrue("the dashboard's feed heard the write too");
 
@@ -275,7 +288,13 @@ public class OperatorMachineFeedE2ETests
                 .GetProperty("machineInstances")
                 .GetProperty("items")
                 .EnumerateArray()
-                .Single(i => i.GetProperty("id").GetString() == approving.Id.ToString());
+                .Single(i =>
+                    string.Equals(
+                        i.GetProperty("id").GetString(),
+                        approving.Id.ToString(),
+                        StringComparison.Ordinal
+                    )
+                );
             item.GetProperty("state").GetString().Should().Be(nameof(WizardState.Approving));
             item.GetProperty("dueAt").ValueKind.Should().Be(JsonValueKind.String);
             item.GetProperty("overdue")
@@ -293,8 +312,16 @@ public class OperatorMachineFeedE2ETests
                 .GetProperty("machineInstanceCounts")
                 .EnumerateArray()
                 .Single(c =>
-                    c.GetProperty("state").GetString() == nameof(WizardState.Approving)
-                    && c.GetProperty("ownerKind").GetString() == "USER"
+                    string.Equals(
+                        c.GetProperty("state").GetString(),
+                        nameof(WizardState.Approving),
+                        StringComparison.Ordinal
+                    )
+                    && string.Equals(
+                        c.GetProperty("ownerKind").GetString(),
+                        "USER",
+                        StringComparison.Ordinal
+                    )
                 )
                 .GetProperty("stuck")
                 .GetInt64()
@@ -323,16 +350,21 @@ public class OperatorMachineFeedE2ETests
         {
             deadline.IsCancellationRequested.Should().BeFalse("a written draft reaches the feed");
             var probe = Guid.NewGuid();
-            await E2ESql.ExecuteAsync(
-                Database,
-                "INSERT INTO trax.snapshot_draft (id, user_key, machine, version, state, context, "
-                    + "concurrency_token, updated_at, created_at, owner_kind) "
-                    + "VALUES (@id, NULL, @machine, 1, 'Naming', '{}'::jsonb, gen_random_uuid(), now(), now(), "
-                    + "'system')",
-                ("id", probe),
-                ("machine", WizardMachine.MachineId)
-            );
-            if (await SeenWithinAsync(ws, probe, TimeSpan.FromSeconds(1)) is { } seen)
+            await E2ESql
+                .ExecuteAsync(
+                    Database,
+                    "INSERT INTO trax.snapshot_draft (id, user_key, machine, version, state, context, "
+                        + "concurrency_token, updated_at, created_at, owner_kind) "
+                        + "VALUES (@id, NULL, @machine, 1, 'Naming', '{}'::jsonb, gen_random_uuid(), now(), now(), "
+                        + "'system')",
+                    ("id", probe),
+                    ("machine", WizardMachine.MachineId)
+                )
+                .ConfigureAwait(false);
+            if (
+                await SeenWithinAsync(ws, probe, TimeSpan.FromSeconds(1)).ConfigureAwait(false) is
+                { } seen
+            )
                 return seen;
         }
     }
@@ -343,14 +375,21 @@ public class OperatorMachineFeedE2ETests
         var clock = System.Diagnostics.Stopwatch.StartNew();
         while (clock.Elapsed < window)
         {
-            var message = await ws.TryNextAsync("feed", window - clock.Elapsed);
+            var message = await ws.TryNextAsync("feed", window - clock.Elapsed)
+                .ConfigureAwait(false);
             if (message is null)
                 return null;
             var change = message
                 .Value.GetProperty("payload")
                 .GetProperty("data")
                 .GetProperty("onMachineInstanceChanged");
-            if (change.GetProperty("id").GetString() == id.ToString())
+            if (
+                string.Equals(
+                    change.GetProperty("id").GetString(),
+                    id.ToString(),
+                    StringComparison.Ordinal
+                )
+            )
                 return change;
         }
         return null;
@@ -361,8 +400,16 @@ public class OperatorMachineFeedE2ETests
     {
         while (true)
         {
-            var change = (await ws.NextDataAsync("feed")).GetProperty("onMachineInstanceChanged");
-            if (change.GetProperty("id").GetString() == id.ToString())
+            var change = (await ws.NextDataAsync("feed").ConfigureAwait(false)).GetProperty(
+                "onMachineInstanceChanged"
+            );
+            if (
+                string.Equals(
+                    change.GetProperty("id").GetString(),
+                    id.ToString(),
+                    StringComparison.Ordinal
+                )
+            )
                 return change;
         }
     }

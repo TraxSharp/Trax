@@ -1,3 +1,4 @@
+using System.Globalization;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Attributes;
@@ -20,7 +21,7 @@ public record PingOutput
     public string? Value { get; init; }
 }
 
-public interface IPing : IServiceTrain<PingInput, PingOutput> { }
+public interface IPing : IServiceTrain<PingInput, PingOutput>;
 
 [TraxAllowAnonymous]
 [TraxQuery(Description = "Liveness echo; keeps the root Query type non-empty.")]
@@ -48,7 +49,7 @@ public record RecordNoteOutput
     public string Text { get; init; } = "";
 }
 
-public interface IRecordNote : IServiceTrain<RecordNoteInput, RecordNoteOutput> { }
+public interface IRecordNote : IServiceTrain<RecordNoteInput, RecordNoteOutput>;
 
 [TraxAuthorize(Roles = "Approver")]
 [TraxMutation(Description = "Echoes a note; only an approver may run it.")]
@@ -84,7 +85,7 @@ public record CustomerOutput
     public OrderOutput[] Orders { get; init; } = [];
 }
 
-public interface IFindOrder : IServiceTrain<FindOrderInput, OrderOutput> { }
+public interface IFindOrder : IServiceTrain<FindOrderInput, OrderOutput>;
 
 [TraxAllowAnonymous]
 [TraxQuery(Description = "An order and its customer, whose orders lead back to the order.")]
@@ -98,7 +99,10 @@ public class FindOrderJunction : Junction<FindOrderInput, OrderOutput>
 {
     public override Task<OrderOutput> Run(FindOrderInput input)
     {
-        var order = new OrderOutput { Title = $"Order {input.Id}" };
+        var order = new OrderOutput
+        {
+            Title = string.Create(CultureInfo.InvariantCulture, $"Order {input.Id}"),
+        };
         var customer = new CustomerOutput { Name = "Ada", Orders = [order] };
         return Task.FromResult(order with { Customer = customer });
     }
@@ -190,7 +194,7 @@ public record Mesh6Output
     public Mesh5Output[] Mesh5s { get; init; } = [];
 }
 
-public interface IReadMesh : IServiceTrain<ReadMeshInput, Mesh0Output> { }
+public interface IReadMesh : IServiceTrain<ReadMeshInput, Mesh0Output>;
 
 [TraxAllowAnonymous]
 [TraxQuery(Description = "Seven types that each list the six others.")]

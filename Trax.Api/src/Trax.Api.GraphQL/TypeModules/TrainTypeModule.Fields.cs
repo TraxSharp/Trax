@@ -45,7 +45,7 @@ public partial class TrainTypeModule
                 .Type(NonNullObjectType(registration.OutputType))
                 .Resolve(async ctx =>
                 {
-                    var result = await RunTrainAsync(ctx, registration);
+                    var result = await RunTrainAsync(ctx, registration).ConfigureAwait(false);
                     return result.Output;
                 });
         }
@@ -55,7 +55,7 @@ public partial class TrainTypeModule
                 .Type<NonNullType<ObjectType<RunTrainResponse>>>()
                 .Resolve(async ctx =>
                 {
-                    var result = await RunTrainAsync(ctx, registration);
+                    var result = await RunTrainAsync(ctx, registration).ConfigureAwait(false);
                     return new RunTrainResponse(result.MetadataId);
                 });
         }
@@ -110,18 +110,22 @@ public partial class TrainTypeModule
             field.Resolve(async ctx =>
             {
                 var mode = ctx.ArgumentValue<string>("mode");
-                if (mode == "QUEUE")
-                    return await QueueTrainAsync(ctx, registration);
-                return (object)await RunTrainAsync(ctx, registration);
+                if (string.Equals(mode, "QUEUE", StringComparison.Ordinal))
+                    return await QueueTrainAsync(ctx, registration).ConfigureAwait(false);
+                return (object)await RunTrainAsync(ctx, registration).ConfigureAwait(false);
             });
         }
         else if (hasQueue)
         {
-            field.Resolve(async ctx => await QueueTrainAsync(ctx, registration));
+            field.Resolve(async ctx =>
+                await QueueTrainAsync(ctx, registration).ConfigureAwait(false)
+            );
         }
         else
         {
-            field.Resolve(async ctx => await RunTrainAsync(ctx, registration));
+            field.Resolve(async ctx =>
+                await RunTrainAsync(ctx, registration).ConfigureAwait(false)
+            );
         }
     }
 
@@ -142,12 +146,14 @@ public partial class TrainTypeModule
         var executionService = ctx.Service<ITrainExecutionService>();
         // The canonical train name is the interface FullName; the short name is not unique. The caller is recorded
         // as the run's starter, so only they may follow its progress (Trax.Docs/adr/0051-only-the-caller-who-started-a-run-may-follow-its-progress.md).
-        return await executionService.RunAsync(
-            registration.ServiceType.FullName!,
-            inputJson,
-            new RunTrainOptions { RecordCaller = true },
-            ctx.RequestAborted
-        );
+        return await executionService
+            .RunAsync(
+                registration.ServiceType.FullName!,
+                inputJson,
+                new RunTrainOptions { RecordCaller = true },
+                ctx.RequestAborted
+            )
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -178,22 +184,26 @@ public partial class TrainTypeModule
         // mutation is refused and nothing is queued (docs/adr/0038). The train's authorization
         // comes first, exactly as the enqueue applies it and still writing nothing, so a caller
         // the train refuses is told it is not authorized rather than how the host is configured.
-        if (await QueueDispatch.NothingDispatchesAsync(ctx.Services, ctx.RequestAborted))
+        if (
+            await QueueDispatch
+                .NothingDispatchesAsync(ctx.Services, ctx.RequestAborted)
+                .ConfigureAwait(false)
+        )
         {
-            await executionService.PrepareAsync(
-                registration.ServiceType.FullName!,
-                inputJson,
-                ctx.RequestAborted
-            );
+            await executionService
+                .PrepareAsync(registration.ServiceType.FullName!, inputJson, ctx.RequestAborted)
+                .ConfigureAwait(false);
             throw QueueDispatch.Unavailable();
         }
 
-        return await executionService.QueueAsync(
-            registration.ServiceType.FullName!,
-            inputJson,
-            new QueueTrainOptions { Priority = priority, RecordCaller = true },
-            ctx.RequestAborted
-        );
+        return await executionService
+            .QueueAsync(
+                registration.ServiceType.FullName!,
+                inputJson,
+                new QueueTrainOptions { Priority = priority, RecordCaller = true },
+                ctx.RequestAborted
+            )
+            .ConfigureAwait(false);
     }
 
     /// <summary>

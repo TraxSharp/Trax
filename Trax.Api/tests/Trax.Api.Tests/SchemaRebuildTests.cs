@@ -36,7 +36,10 @@ public class SchemaRebuildTests
 
         await using var second = services.BuildServiceProvider();
         var act = async () =>
-            await second.GetRequiredService<IRequestExecutorProvider>().GetExecutorAsync("trax");
+            await second
+                .GetRequiredService<IRequestExecutorProvider>()
+                .GetExecutorAsync("trax")
+                .ConfigureAwait(false);
         var b = (await act.Should().NotThrowAsync()).Subject;
         b.Schema.ToString().Should().Be(a.Schema.ToString());
     }

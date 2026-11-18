@@ -191,7 +191,7 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
             // cover it.
             return Task.CompletedTask;
 
-        _ = Task.Run(SubscribeAgainAsync);
+        _ = Task.Run(SubscribeAgainAsync, cancellationToken: CancellationToken.None);
         return EmptyEveryCacheAsync("the broker closed the receiver's channel");
     }
 
@@ -343,14 +343,18 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
         if (_channel is not null)
         {
             if (_channel.IsOpen)
-                await _channel.CloseAsync().ConfigureAwait(false);
+                await _channel
+                    .CloseAsync(cancellationToken: CancellationToken.None)
+                    .ConfigureAwait(false);
             _channel.Dispose();
         }
 
         if (_connection is not null)
         {
             if (_connection.IsOpen)
-                await _connection.CloseAsync().ConfigureAwait(false);
+                await _connection
+                    .CloseAsync(cancellationToken: CancellationToken.None)
+                    .ConfigureAwait(false);
             _connection.Dispose();
         }
 

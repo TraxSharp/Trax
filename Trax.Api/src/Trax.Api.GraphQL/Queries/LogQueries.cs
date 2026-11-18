@@ -69,7 +69,7 @@ public class LogQueries
             Order = order == SortOrder.Oldest ? LogOrder.OldestFirst : LogOrder.NewestFirst,
         };
 
-        var page = await operationsService.GetLogsAsync(query, ct);
+        var page = await operationsService.GetLogsAsync(query, ct).ConfigureAwait(false);
 
         var hasFilter =
             metadataId.HasValue
@@ -87,19 +87,23 @@ public class LogQueries
         bool isCapped = false;
         if (hasFilter)
         {
-            var count = await operationsService.CountLogsCappedAsync(query, ct);
+            var count = await operationsService
+                .CountLogsCappedAsync(query, ct)
+                .ConfigureAwait(false);
             (totalCount, isCapped) = (count.Count, count.Capped);
         }
         else
         {
-            using var db = await dataContextFactory.CreateDbContextAsync(ct);
-            (totalCount, isEstimate) = await CountEstimator.EstimateOrCountAsync(
-                db,
-                sqlDialect,
-                "log",
-                () => operationsService.CountLogsAsync(query, ct),
-                ct
-            );
+            using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            (totalCount, isEstimate) = await CountEstimator
+                .EstimateOrCountAsync(
+                    db,
+                    sqlDialect,
+                    "log",
+                    () => operationsService.CountLogsAsync(query, ct),
+                    ct
+                )
+                .ConfigureAwait(false);
         }
 
         return new PagedResult<LogEntry>(

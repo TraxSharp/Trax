@@ -76,9 +76,7 @@ internal static class ListFilters
         if (HasFailureText(filter))
         {
             var pattern = LikePattern.Contains(filter.FailureReasonContains!);
-            runs = runs.Where(m =>
-                EF.Functions.Like(m.FailureReason!.ToLower(), pattern, LikePattern.Escape)
-            );
+            runs = WhereLoweredLike(runs, m => m.FailureReason, pattern);
         }
         if (filter.ManifestGroupId.HasValue)
         {
@@ -134,5 +132,43 @@ internal static class ListFilters
         if (filter.HideAdminTrains == true)
             manifests = manifests.Where(m => !AdminTrains.FullNames.Contains(m.Name));
         return manifests;
+    }
+
+    // string.ToLower(), which every provider translates to SQL's LOWER(). It is put into the
+    // query as a node rather than written: written, it reads as a lowering in this process's
+    // culture, which it never is, since only the database evaluates it.
+    private static readonly System.Reflection.MethodInfo SqlLower =
+        typeof(string).GetMethod("ToLower", Type.EmptyTypes)
+        ?? throw new InvalidOperationException("string.ToLower() was not found.");
+
+    /// <summary>
+    /// The runs whose <paramref name="column"/>, lowered by the database, is LIKE
+    /// <paramref name="pattern"/>. The pattern stays a query parameter.
+    /// </summary>
+    private static IQueryable<Metadata> WhereLoweredLike(
+        IQueryable<Metadata> runs,
+        System.Linq.Expressions.Expression<Func<Metadata, string?>> column,
+        string pattern
+    )
+    {
+        System.Linq.Expressions.Expression<Func<string?, bool>> like = lowered =>
+            EF.Functions.Like(lowered, pattern, LikePattern.Escape);
+        var body = new ReplaceParameter(
+            like.Parameters[0],
+            System.Linq.Expressions.Expression.Call(column.Body, SqlLower)
+        ).Visit(like.Body);
+        return runs.Where(
+            System.Linq.Expressions.Expression.Lambda<Func<Metadata, bool>>(body, column.Parameters)
+        );
+    }
+
+    private sealed class ReplaceParameter(
+        System.Linq.Expressions.ParameterExpression parameter,
+        System.Linq.Expressions.Expression replacement
+    ) : System.Linq.Expressions.ExpressionVisitor
+    {
+        protected override System.Linq.Expressions.Expression VisitParameter(
+            System.Linq.Expressions.ParameterExpression node
+        ) => node == parameter ? replacement : base.VisitParameter(node);
     }
 }

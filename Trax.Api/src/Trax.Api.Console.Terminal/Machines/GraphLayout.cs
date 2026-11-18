@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Trax.Api.Console.Terminal.Machines;
@@ -27,6 +28,7 @@ internal sealed record GraphEdge(string From, string To, string Label);
 /// How much routing one drawing took: the search steps of all its lines together, out of the budget they share, and
 /// the cells their search windows covered.
 /// </summary>
+[StructLayout(LayoutKind.Auto)]
 internal readonly record struct LayoutWork(long Steps, long CellsSearched, long Budget);
 
 internal static class GraphLayout
@@ -96,27 +98,27 @@ internal static class GraphLayout
         // A transition every state takes the same way (StartOver from anywhere) is said once under the graph, not
         // drawn from each.
         var everywhere = known
-            .Where(e => e.From != e.To)
+            .Where(e => !string.Equals(e.From, e.To, StringComparison.Ordinal))
             .GroupBy(e => (e.Label, e.To))
-            .Where(g => g.Count() >= FanIn)
+            .Where(g => g.Skip(2).Any())
             .ToList();
         var said = everywhere.SelectMany(g => g).ToHashSet();
         // Several transitions between the same two states are one line with their labels joined.
         var lines = known
-            .Where(e => e.From != e.To && !said.Contains(e))
+            .Where(e => !string.Equals(e.From, e.To, StringComparison.Ordinal) && !said.Contains(e))
             .GroupBy(e => (e.From, e.To))
             .Select(g => new GraphEdge(
                 g.Key.From,
                 g.Key.To,
-                Join(g.Select(e => e.Label).Distinct().ToList())
+                Join(g.Select(e => e.Label).Distinct(StringComparer.Ordinal).ToList())
             ))
             .ToList();
         var loops = known
-            .Where(e => e.From == e.To)
-            .GroupBy(e => e.From)
+            .Where(e => string.Equals(e.From, e.To, StringComparison.Ordinal))
+            .GroupBy(e => e.From, StringComparer.Ordinal)
             .ToDictionary(
                 g => g.Key,
-                g => g.Select(e => e.Label).Distinct().ToList(),
+                g => g.Select(e => e.Label).Distinct(StringComparer.Ordinal).ToList(),
                 StringComparer.Ordinal
             );
 
@@ -132,7 +134,11 @@ internal static class GraphLayout
 
         var canvas = new Canvas(width, height, vertical);
         foreach (var box in boxes)
-            canvas.Box(box, box.State.Name == current, loops.GetValueOrDefault(box.State.Name));
+            canvas.Box(
+                box,
+                string.Equals(box.State.Name, current, StringComparison.Ordinal),
+                loops.GetValueOrDefault(box.State.Name)
+            );
         var initial = boxes.FirstOrDefault(b => b.State.Initial);
         if (initial is not null && (vertical ? initial.Y >= 2 : initial.X >= 3))
             canvas.Entry(initial);
@@ -207,7 +213,7 @@ internal static class GraphLayout
         foreach (var state in states)
         {
             output.Add(
-                (state.Name == current ? "▶ " : "  ")
+                (string.Equals(state.Name, current, StringComparison.Ordinal) ? "▶ " : "  ")
                     + state.Name
                     + (state.Initial ? "  (initial)" : "")
                     + (state.Final ? "  (final)" : "")

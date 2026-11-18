@@ -1,3 +1,4 @@
+using System.Globalization;
 using HotChocolate;
 
 namespace Trax.Api.GraphQL.Validation;
@@ -24,7 +25,12 @@ internal static class RunIdArgument
         throw new GraphQLException(
             ErrorBuilder
                 .New()
-                .SetMessage($"metadataId must be a positive execution id; {metadataId} was given.")
+                .SetMessage(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"metadataId must be a positive execution id; {metadataId} was given."
+                    )
+                )
                 .SetCode(ErrorCode)
                 .Build()
         );

@@ -253,15 +253,17 @@ public class GenericStartDiscardE2ETests
         string selection
     )
     {
-        using var response = await _host.PostAsync(
-            $$"""
-            mutation M($input: {{inputType}}!) {
-              dispatch { stateMachine { {{field}}(input: $input) { output { {{selection}} } } } }
-            }
-            """,
-            new { input },
-            key
-        );
+        using var response = await _host
+            .PostAsync(
+                $$"""
+                mutation M($input: {{inputType}}!) {
+                  dispatch { stateMachine { {{field}}(input: $input) { output { {{selection}} } } } }
+                }
+                """,
+                new { input },
+                key
+            )
+            .ConfigureAwait(false);
         response
             .RootElement.TryGetProperty("errors", out _)
             .Should()

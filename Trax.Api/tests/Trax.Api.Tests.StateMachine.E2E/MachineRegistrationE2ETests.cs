@@ -44,16 +44,18 @@ public class MachineRegistrationE2ETests
     public async Task A_base_machine_registered_beside_its_marked_subclass_refuses_the_host_naming_both()
     {
         var act = async () =>
-            _host = await E2EHost.StartAsync(
-                Database,
-                new CountingCharge(),
-                new E2EHostOptions
-                {
-                    Served = [typeof(ShelfMachine), typeof(WizardMachine)],
-                    // The library's own registration of the machine the host serves through a marked subclass.
-                    Services = s => s.AddSingleton(typeof(IMachine), typeof(ShelfMachine)),
-                }
-            );
+            _host = await E2EHost
+                .StartAsync(
+                    Database,
+                    new CountingCharge(),
+                    new E2EHostOptions
+                    {
+                        Served = [typeof(ShelfMachine), typeof(WizardMachine)],
+                        // The library's own registration of the machine the host serves through a marked subclass.
+                        Services = s => s.AddSingleton(typeof(IMachine), typeof(ShelfMachine)),
+                    }
+                )
+                .ConfigureAwait(false);
 
         (
             await act.Should()

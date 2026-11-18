@@ -77,7 +77,9 @@ public class TraxJwtDispatcherSocketInterceptorTests
 
         var result = await interceptor.OnConnectAsync(
             session,
-            Payload(new TraxJwtDispatcherSocketInterceptor.ConnectionInitPayload(token, null)),
+            Payload(
+                new TraxJwtDispatcherSocketInterceptor.ConnectionInitPayload(token, Bearer: null)
+            ),
             CancellationToken.None
         );
 
@@ -98,7 +100,9 @@ public class TraxJwtDispatcherSocketInterceptorTests
 
         var result = await interceptor.OnConnectAsync(
             session,
-            Payload(new TraxJwtDispatcherSocketInterceptor.ConnectionInitPayload(token, null)),
+            Payload(
+                new TraxJwtDispatcherSocketInterceptor.ConnectionInitPayload(token, Bearer: null)
+            ),
             CancellationToken.None
         );
 
@@ -122,7 +126,9 @@ public class TraxJwtDispatcherSocketInterceptorTests
 
         var result = await interceptor.OnConnectAsync(
             session,
-            Payload(new TraxJwtDispatcherSocketInterceptor.ConnectionInitPayload(token, null)),
+            Payload(
+                new TraxJwtDispatcherSocketInterceptor.ConnectionInitPayload(token, Bearer: null)
+            ),
             CancellationToken.None
         );
 
@@ -147,7 +153,9 @@ public class TraxJwtDispatcherSocketInterceptorTests
 
         var result = await interceptor.OnConnectAsync(
             session,
-            Payload(new TraxJwtDispatcherSocketInterceptor.ConnectionInitPayload(token, null)),
+            Payload(
+                new TraxJwtDispatcherSocketInterceptor.ConnectionInitPayload(token, Bearer: null)
+            ),
             CancellationToken.None
         );
 

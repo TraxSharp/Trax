@@ -8,7 +8,7 @@ namespace Trax.Api.Services.HealthCheck;
 /// Registered by <see cref="Trax.Api.Extensions.HealthCheckExtensions.AddTraxHealthCheck"/>;
 /// infrastructure not intended to be used directly.
 /// </summary>
-internal class TraxHealthCheck(ITraxHealthService healthService) : IHealthCheck
+internal sealed class TraxHealthCheck(ITraxHealthService healthService) : IHealthCheck
 {
     /// <summary>
     /// Reports <c>Healthy</c> when <see cref="Trax.Api.DTOs.HealthStatus.Status"/> is <c>Healthy</c>
@@ -23,9 +23,9 @@ internal class TraxHealthCheck(ITraxHealthService healthService) : IHealthCheck
         CancellationToken ct = default
     )
     {
-        var status = await healthService.GetHealthAsync(ct);
+        var status = await healthService.GetHealthAsync(ct).ConfigureAwait(false);
 
-        var data = new Dictionary<string, object>
+        var data = new Dictionary<string, object>(StringComparer.Ordinal)
         {
             ["queueDepth"] = status.QueueDepth,
             ["inProgress"] = status.InProgress,
@@ -33,7 +33,7 @@ internal class TraxHealthCheck(ITraxHealthService healthService) : IHealthCheck
             ["deadLetters"] = status.DeadLetters,
         };
 
-        return status.Status == "Healthy"
+        return string.Equals(status.Status, "Healthy", StringComparison.Ordinal)
             ? HealthCheckResult.Healthy(status.Description, data: data)
             : HealthCheckResult.Degraded(status.Description, data: data);
     }

@@ -8,6 +8,6 @@ namespace Trax.Api.GraphQL.PersistedOperations;
 /// state. Presence implies the HotChocolate validator, capability marker, and
 /// management GraphQL mutations/queries are all wired in.
 /// </summary>
-public interface IPersistedOperationsCapability { }
+public interface IPersistedOperationsCapability;
 
-internal sealed class PersistedOperationsCapability : IPersistedOperationsCapability { }
+internal sealed class PersistedOperationsCapability : IPersistedOperationsCapability;

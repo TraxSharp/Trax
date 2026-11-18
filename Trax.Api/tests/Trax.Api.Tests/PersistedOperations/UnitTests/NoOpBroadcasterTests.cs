@@ -17,7 +17,7 @@ public class NoOpBroadcasterTests
         var b = new NoOpPersistedOperationBroadcaster();
         var task = b.PublishAsync(
             new PersistedOperationChangedMessage(
-                null,
+                TenantKey: null,
                 "id1",
                 PersistedOperationChangeType.Upsert,
                 DateTime.UtcNow
@@ -54,7 +54,7 @@ public class NoOpBroadcasterTests
         var b = new NoOpPersistedOperationBroadcaster();
         var task = b.PublishAsync(
             new PersistedOperationChangedMessage(
-                null,
+                TenantKey: null,
                 "id",
                 PersistedOperationChangeType.Upsert,
                 DateTime.UtcNow

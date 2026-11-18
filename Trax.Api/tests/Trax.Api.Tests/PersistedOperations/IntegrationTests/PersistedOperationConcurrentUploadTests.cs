@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.PersistedOperations.GraphQL.Models;
@@ -47,19 +48,28 @@ public class PersistedOperationConcurrentUploadTests
     {
         for (var round = 0; round < Rounds; round++)
         {
-            var id = $"race_first_{round}_{Guid.NewGuid():N}";
+            var id = string.Create(
+                CultureInfo.InvariantCulture,
+                $"race_first_{round}_{Guid.NewGuid():N}"
+            );
 
             var results = await Task.WhenAll(
                 UploadAsync(id, "query Greet { hello }"),
                 UploadAsync(id, "query Greet { version }")
             );
 
-            results.Count(r => r.Success).Should().Be(1, $"round {round}");
+            results
+                .Count(r => r.Success)
+                .Should()
+                .Be(1, string.Create(CultureInfo.InvariantCulture, $"round {round}"));
             results
                 .Single(r => !r.Success)
                 .Errors.Single()
                 .Code.Should()
-                .Be(ShapeDiffViolationException.CodeValue, $"round {round}");
+                .Be(
+                    ShapeDiffViolationException.CodeValue,
+                    string.Create(CultureInfo.InvariantCulture, $"round {round}")
+                );
         }
     }
 
@@ -68,8 +78,16 @@ public class PersistedOperationConcurrentUploadTests
     {
         for (var round = 0; round < Rounds; round++)
         {
-            var id = $"race_bypass_{round}_{Guid.NewGuid():N}";
-            await _store.UpsertAsync(id, "query Greet { hello }", null, CancellationToken.None);
+            var id = string.Create(
+                CultureInfo.InvariantCulture,
+                $"race_bypass_{round}_{Guid.NewGuid():N}"
+            );
+            await _store.UpsertAsync(
+                id,
+                "query Greet { hello }",
+                options: null,
+                CancellationToken.None
+            );
 
             await Task.WhenAll(
                 UploadAsync(id, "query Greet { version }", bypassShapeDiff: true),
@@ -78,9 +96,12 @@ public class PersistedOperationConcurrentUploadTests
 
             // Either the edit landed first and the bypass replaced it, or the bypass landed first
             // and the edit, a shape change against it, was refused. Never the edit last.
-            (await _store.GetAsync(id, null, CancellationToken.None))!
+            (await _store.GetAsync(id, tenantKey: null, CancellationToken.None))!
                 .Document.Should()
-                .Be("query Greet { version }", $"round {round}");
+                .Be(
+                    "query Greet { version }",
+                    string.Create(CultureInfo.InvariantCulture, $"round {round}")
+                );
         }
     }
 

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Globalization;
 using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
@@ -57,7 +58,11 @@ public class SubscriptionStressTests
     private static readonly int SubscriberCount = (int)
         Math.Max(
             1,
-            long.TryParse(Environment.GetEnvironmentVariable("TRAX_STRESS_SUBSCRIBERS"), out var n)
+            long.TryParse(
+                Environment.GetEnvironmentVariable("TRAX_STRESS_SUBSCRIBERS"),
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var n
+            )
                 ? n
                 : 1_000
         );
@@ -81,8 +86,10 @@ public class SubscriptionStressTests
                             .SetEffectLogLevel(LogLevel.Warning)
                             // Nothing here reaches the database: the connection is never opened.
                             .UsePostgres(
-                                $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_stress;"
-                                    + "Username=trax;Password=trax123"
+                                string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_stress;"
+                                ) + "Username=trax;Password=trax123"
                             )
                             .AddJson()
                     )
@@ -166,11 +173,26 @@ public class SubscriptionStressTests
 
         var events = subscribers.EventCounts();
         TestContext.Out.WriteLine(
-            $"onDataChanged: {Writers * SignalsPerWriter:N0} signals notified in "
-                + $"{notified.TotalMilliseconds:F0}ms, every one of {SubscriberCount:N0} subscribers had "
-                + $"all {domains.Length} domains after {sw.Elapsed.TotalMilliseconds:F0}ms; events "
-                + $"per subscriber min {events.Min()} max {events.Max()}; "
-                + $"{_provider.GetRequiredService<TraxChangeSignal>().TotalDropped:N0} signals "
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"onDataChanged: {Writers * SignalsPerWriter:N0} signals notified in "
+            )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{notified.TotalMilliseconds:F0}ms, every one of {SubscriberCount:N0} subscribers had "
+                )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"all {domains.Length} domains after {sw.Elapsed.TotalMilliseconds:F0}ms; events "
+                )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"per subscriber min {events.Min()} max {events.Max()}; "
+                )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{_provider.GetRequiredService<TraxChangeSignal>().TotalDropped:N0} signals "
+                )
                 + "dropped at the full channel"
         );
 
@@ -187,8 +209,10 @@ public class SubscriptionStressTests
             .Should()
             .BeLessThanOrEqualTo(
                 domains.Length * 8,
-                $"{Writers * SignalsPerWriter:N0} signals coalesce into a few events per domain, "
-                    + "not one per write"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{Writers * SignalsPerWriter:N0} signals coalesce into a few events per domain, "
+                ) + "not one per write"
             );
     }
 
@@ -228,12 +252,30 @@ public class SubscriptionStressTests
         var complete = outcomes.Count(o => o.Received == Events);
         var gapped = outcomes.Count(o => o.Gap);
         TestContext.Out.WriteLine(
-            $"onTrainStateChanged (sustained): {Events:N0} events over "
-                + $"{published.TotalMilliseconds:F0}ms ({Events / published.TotalSeconds:F0}/s "
-                + $"against a ceiling of {TargetPerSecond}/s) reached all {SubscriberCount:N0} subscribers "
-                + $"{drained.TotalMilliseconds:F0}ms after the last publish; {complete:N0} received "
-                + $"all of them, {gapped:N0} saw a gap in sequence; events per subscriber min "
-                + $"{outcomes.Min(o => o.Received)} max {outcomes.Max(o => o.Received)}"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"onTrainStateChanged (sustained): {Events:N0} events over "
+            )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{published.TotalMilliseconds:F0}ms ({Events / published.TotalSeconds:F0}/s "
+                )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"against a ceiling of {TargetPerSecond}/s) reached all {SubscriberCount:N0} subscribers "
+                )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{drained.TotalMilliseconds:F0}ms after the last publish; {complete:N0} received "
+                )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"all of them, {gapped:N0} saw a gap in sequence; events per subscriber min "
+                )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{outcomes.Min(o => o.Received)} max {outcomes.Max(o => o.Received)}"
+                )
         );
 
         delivered.Should().BeTrue("the last run's state change should reach every subscriber");
@@ -276,13 +318,26 @@ public class SubscriptionStressTests
                     await Subscribers<RunChange>.AttachAsync(
                         _executor,
                         "subscription { onTrainStateChanged(externalId: \""
-                            + metadataId.ToString("D32")
+                            + metadataId.ToString(
+                                "D32",
+                                System.Globalization.CultureInfo.InvariantCulture
+                            )
                             + "\") { sequence metadataId trainState } }",
                         Math.Max(1, SubscriberCount / Runs),
                         json => new RunChange(
-                            long.Parse(NumberField(json, "metadataId")),
-                            long.Parse(NumberField(json, "sequence")),
-                            StringField(json, "trainState") == "COMPLETED"
+                            long.Parse(
+                                NumberField(json, "metadataId"),
+                                System.Globalization.CultureInfo.InvariantCulture
+                            ),
+                            long.Parse(
+                                NumberField(json, "sequence"),
+                                System.Globalization.CultureInfo.InvariantCulture
+                            ),
+                            string.Equals(
+                                StringField(json, "trainState"),
+                                "COMPLETED",
+                                StringComparison.Ordinal
+                            )
                         ),
                         prime: () => Publish(metadataId, TrainState.InProgress)
                     )
@@ -327,13 +382,34 @@ public class SubscriptionStressTests
                 })
                 .ToArray();
             TestContext.Out.WriteLine(
-                $"onTrainStateChanged(externalId): {Runs * ChangesPerRun:N0} changes of {Runs} runs "
-                    + $"over {published.TotalMilliseconds:F0}ms "
-                    + $"({Runs * ChangesPerRun / published.TotalSeconds:F0}/s against a ceiling of "
-                    + $"{TargetPerSecond}/s) to {outcomes.Length:N0} subscribers "
-                    + $"({outcomes.Length / Runs} per run); drained {drained.TotalMilliseconds:F0}ms "
-                    + $"after the last publish; {outcomes.Count(o => o.Received == ChangesPerRun):N0} "
-                    + $"received their run in full, {outcomes.Count(o => o.Gap):N0} saw a gap"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"onTrainStateChanged(externalId): {Runs * ChangesPerRun:N0} changes of {Runs} runs "
+                )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"over {published.TotalMilliseconds:F0}ms "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"({Runs * ChangesPerRun / published.TotalSeconds:F0}/s against a ceiling of "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{TargetPerSecond}/s) to {outcomes.Length:N0} subscribers "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"({outcomes.Length / Runs} per run); drained {drained.TotalMilliseconds:F0}ms "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"after the last publish; {outcomes.Count(o => o.Received == ChangesPerRun):N0} "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"received their run in full, {outcomes.Count(o => o.Gap):N0} saw a gap"
+                    )
             );
 
             delivered.Should().BeTrue("each run's last state change should reach its followers");
@@ -371,7 +447,7 @@ public class SubscriptionStressTests
         if (ahead > TimeSpan.Zero)
             // allowed-delay: paces the publisher to a ceiling rate; this is the load shape under
             // test, not a wait for a condition.
-            await Task.Delay(ahead);
+            await Task.Delay(ahead).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -411,10 +487,22 @@ public class SubscriptionStressTests
 
         var events = subscribers.EventCounts();
         TestContext.Out.WriteLine(
-            $"onTrainStateChanged (burst): {Events:N0} events published in "
-                + $"{published.TotalMilliseconds:F0}ms, the last one reached all {SubscriberCount:N0} "
-                + $"subscribers after {sw.Elapsed.TotalMilliseconds:F0}ms; events kept per "
-                + $"subscriber min {events.Min()} max {events.Max()}"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"onTrainStateChanged (burst): {Events:N0} events published in "
+            )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{published.TotalMilliseconds:F0}ms, the last one reached all {SubscriberCount:N0} "
+                )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"subscribers after {sw.Elapsed.TotalMilliseconds:F0}ms; events kept per "
+                )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"subscriber min {events.Min()} max {events.Max()}"
+                )
         );
 
         delivered.Should().BeTrue("the last run's state change should reach every subscriber");
@@ -445,12 +533,20 @@ public class SubscriptionStressTests
                 subscribers.Add(
                     await Subscribers<Step>.AttachAsync(
                         _executor,
-                        $"subscription {{ onJunctionEvent(metadataId: {metadataId}) "
-                            + "{ sequence metadataId junction { position } } }",
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"subscription {{ onJunctionEvent(metadataId: {metadataId}) "
+                        ) + "{ sequence metadataId junction { position } } }",
                         Math.Max(1, SubscriberCount / Runs),
                         json => new Step(
-                            long.Parse(NumberField(json, "position")),
-                            long.Parse(NumberField(json, "sequence"))
+                            long.Parse(
+                                NumberField(json, "position"),
+                                System.Globalization.CultureInfo.InvariantCulture
+                            ),
+                            long.Parse(
+                                NumberField(json, "sequence"),
+                                System.Globalization.CultureInfo.InvariantCulture
+                            )
                         ),
                         prime: () => HandleStep(handler, metadataId, position: 0)
                     )
@@ -492,14 +588,38 @@ public class SubscriptionStressTests
                 })
                 .ToArray();
             TestContext.Out.WriteLine(
-                $"onJunctionEvent: {Runs * StepsPerRun:N0} steps of {Runs} runs over "
-                    + $"{published.TotalMilliseconds:F0}ms "
-                    + $"({Runs * StepsPerRun / published.TotalSeconds:F0}/s against a ceiling of "
-                    + $"{TargetPerSecond}/s) to {outcomes.Length:N0} subscribers "
-                    + $"({outcomes.Length / Runs} per run); slowest publish on the run's path "
-                    + $"{slowest.TotalMilliseconds:F0}ms; drained {drained.TotalMilliseconds:F0}ms "
-                    + $"after the last publish; {outcomes.Count(o => o.Received == StepsPerRun):N0} "
-                    + $"received their run in full, {outcomes.Count(o => o.Gap):N0} saw a gap"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"onJunctionEvent: {Runs * StepsPerRun:N0} steps of {Runs} runs over "
+                )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{published.TotalMilliseconds:F0}ms "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"({Runs * StepsPerRun / published.TotalSeconds:F0}/s against a ceiling of "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{TargetPerSecond}/s) to {outcomes.Length:N0} subscribers "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"({outcomes.Length / Runs} per run); slowest publish on the run's path "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{slowest.TotalMilliseconds:F0}ms; drained {drained.TotalMilliseconds:F0}ms "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"after the last publish; {outcomes.Count(o => o.Received == StepsPerRun):N0} "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"received their run in full, {outcomes.Count(o => o.Gap):N0} saw a gap"
+                    )
             );
 
             delivered.Should().BeTrue("each run's last step should reach its subscribers");
@@ -532,7 +652,10 @@ public class SubscriptionStressTests
         handler.HandleAsync(
             new TrainLifecycleEventMessage(
                 MetadataId: metadataId,
-                ExternalId: metadataId.ToString("D32"),
+                ExternalId: metadataId.ToString(
+                    "D32",
+                    System.Globalization.CultureInfo.InvariantCulture
+                ),
                 TrainName: typeof(IStressProbeTrain).FullName!,
                 TrainState: nameof(TrainState.InProgress),
                 Timestamp: DateTime.UtcNow,
@@ -546,7 +669,7 @@ public class SubscriptionStressTests
                 Junction = new JunctionEventPayload(
                     position,
                     JunctionRunKind.Junction,
-                    "Step" + position,
+                    "Step" + position.ToString(CultureInfo.InvariantCulture),
                     JunctionRunState.InProgress,
                     DateTime.UtcNow
                 ),
@@ -563,8 +686,14 @@ public class SubscriptionStressTests
             "subscription { onTrainStateChanged { sequence metadataId trainName trainState } }",
             SubscriberCount,
             json => new Lifecycle(
-                long.Parse(NumberField(json, "metadataId")),
-                long.Parse(NumberField(json, "sequence"))
+                long.Parse(
+                    NumberField(json, "metadataId"),
+                    System.Globalization.CultureInfo.InvariantCulture
+                ),
+                long.Parse(
+                    NumberField(json, "sequence"),
+                    System.Globalization.CultureInfo.InvariantCulture
+                )
             ),
             prime: () => Publish(0)
         );
@@ -577,7 +706,7 @@ public class SubscriptionStressTests
                 nameof(LifecycleSubscriptions.OnTrainStateChanged),
                 new TrainLifecycleEvent(
                     metadataId,
-                    metadataId.ToString("D32"),
+                    metadataId.ToString("D32", System.Globalization.CultureInfo.InvariantCulture),
                     typeof(IStressProbeTrain).FullName!,
                     state,
                     DateTime.UtcNow,
@@ -644,28 +773,37 @@ public class SubscriptionStressTests
             var stop = subscribers._stop.Token;
             for (var i = 0; i < count; i++)
             {
-                var result = await executor.ExecuteAsync(subscription);
+                var result = await executor
+                    .ExecuteAsync(subscription, cancellationToken: CancellationToken.None)
+                    .ConfigureAwait(false);
                 var stream = result.ExpectResponseStream();
                 var index = i;
                 subscribers._received[index] = new ConcurrentQueue<T>();
                 subscribers._streams.Add(stream);
                 subscribers._readers.Add(
-                    Task.Run(async () =>
-                    {
-                        try
+                    Task.Run(
+                        async () =>
                         {
-                            await foreach (
-                                var item in stream.ReadResultsAsync().WithCancellation(stop)
-                            )
+                            try
                             {
-                                // Serializing each event per subscriber is the work a socket
-                                // does too; the field is then read without a second parse, so
-                                // the readers are not the bottleneck being measured.
-                                subscribers._received[index].Enqueue(read(item.ToJson()));
+                                await foreach (
+                                    var item in stream
+                                        .ReadResultsAsync()
+                                        .WithCancellation(stop)
+                                        .ConfigureAwait(false)
+                                )
+                                {
+                                    // Serializing each event per subscriber is the work a socket
+                                    // does too; the field is then read without a second parse, so
+                                    // the readers are not the bottleneck being measured.
+                                    subscribers._received[index].Enqueue(read(item.ToJson()));
+                                }
                             }
-                        }
-                        catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
-                    })
+                            catch (OperationCanceledException) when (stop.IsCancellationRequested)
+                            { }
+                        },
+                        cancellationToken: CancellationToken.None
+                    )
                 );
             }
 
@@ -673,9 +811,10 @@ public class SubscriptionStressTests
             var deadline = Stopwatch.StartNew();
             while (subscribers._received.Values.Any(q => q.IsEmpty) && deadline.Elapsed < Deadline)
             {
-                await prime();
+                await prime().ConfigureAwait(false);
                 // allowed-delay: poll interval while subscriptions register, bounded by Deadline.
-                await Task.Delay(50);
+                await Task.Delay(50, cancellationToken: CancellationToken.None)
+                    .ConfigureAwait(false);
             }
             subscribers
                 ._received.Values.Should()
@@ -723,17 +862,18 @@ public class SubscriptionStressTests
                 if (_received.Values.All(q => done(q)))
                     return true;
                 // allowed-delay: completion poll, bounded by the caller's timeout.
-                await Task.Delay(10);
+                await Task.Delay(10, cancellationToken: CancellationToken.None)
+                    .ConfigureAwait(false);
             }
             return false;
         }
 
         public async ValueTask DisposeAsync()
         {
-            await _stop.CancelAsync();
+            await _stop.CancelAsync().ConfigureAwait(false);
             foreach (var stream in _streams)
-                await stream.DisposeAsync();
-            await Task.WhenAll(_readers);
+                await stream.DisposeAsync().ConfigureAwait(false);
+            await Task.WhenAll(_readers).ConfigureAwait(false);
             _stop.Dispose();
         }
     }

@@ -43,7 +43,9 @@ public class OutboundQueryDiscoveryTests
     {
         var entries = OutboundQueryDiscovery.Discover(typeof(TaggedPlayerQuery).Assembly);
 
-        var byEndpoint = entries.GroupBy(e => e.Endpoint).ToDictionary(g => g.Key, g => g.ToList());
+        var byEndpoint = entries
+            .GroupBy(e => e.Endpoint, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
 
         byEndpoint["PlayerService"].Should().HaveCount(2);
         byEndpoint["BillingService"].Should().HaveCount(1);

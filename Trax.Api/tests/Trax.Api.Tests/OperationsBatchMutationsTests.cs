@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Claims;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -43,7 +44,10 @@ namespace Trax.Api.Tests;
 public class OperationsBatchMutationsTests
 {
     private static readonly string ConnectionString =
-        $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_operations;Username=trax;Password=trax123;"
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_operations;Username=trax;Password=trax123;"
+        )
         + "Maximum Pool Size=8;Minimum Pool Size=0;Connection Idle Lifetime=30;"
         + "Timeout=30;Tcp Keepalive=true";
 
@@ -96,45 +100,54 @@ public class OperationsBatchMutationsTests
 
     private async Task<long> SeedRun(TrainState state)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var meta = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = "Trax.X.Batch",
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = null,
-            }
-        );
-        meta.TrainState = state;
-        await db.Track(meta);
-        await db.SaveChanges(default);
-        return meta.Id;
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var meta = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = "Trax.X.Batch",
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                }
+            );
+            meta.TrainState = state;
+            await db.Track(meta).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return meta.Id;
+        }
     }
 
     private async Task<long> SeedGroup(bool enabled)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var group = new ManifestGroup
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
-            Name = $"group-{Guid.NewGuid():N}",
-            IsEnabled = enabled,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
-        };
-        await db.Track(group);
-        await db.SaveChanges(default);
-        return group.Id;
+            var group = new ManifestGroup
+            {
+                Name = $"group-{Guid.NewGuid():N}",
+                IsEnabled = enabled,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            await db.Track(group).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return group.Id;
+        }
     }
 
     private async Task<long> SeedManifest(long groupId, bool enabled)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var manifest = Manifest.Create(new CreateManifest { Name = typeof(BatchFakeTrain) });
-        manifest.ManifestGroupId = groupId;
-        manifest.IsEnabled = enabled;
-        await db.Track(manifest);
-        await db.SaveChanges(default);
-        return manifest.Id;
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var manifest = Manifest.Create(new CreateManifest { Name = typeof(BatchFakeTrain) });
+            manifest.ManifestGroupId = groupId;
+            manifest.IsEnabled = enabled;
+            await db.Track(manifest).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return manifest.Id;
+        }
     }
 
     [Test]
@@ -222,7 +235,7 @@ public class OperationsBatchMutationsTests
 
         var response = await new OperationsMutations().SetManifestsEnabled(
             [on, off],
-            false,
+            enabled: false,
             Operations,
             default
         );
@@ -241,7 +254,7 @@ public class OperationsBatchMutationsTests
 
         var response = await new OperationsMutations().SetManifestsEnabled(
             [],
-            false,
+            enabled: false,
             Operations,
             default
         );
@@ -269,7 +282,7 @@ public class OperationsBatchMutationsTests
 
         var response = await new OperationsMutations().SetManifestsEnabled(
             ids,
-            false,
+            enabled: false,
             Operations,
             default
         );
@@ -288,7 +301,7 @@ public class OperationsBatchMutationsTests
 
         var response = await new ManifestGroupMutations().SetManifestGroupsEnabled(
             [listed],
-            false,
+            enabled: false,
             Operations,
             default
         );
@@ -307,7 +320,7 @@ public class OperationsBatchMutationsTests
 
         var response = await new ManifestGroupMutations().SetManifestGroupsEnabled(
             [],
-            false,
+            enabled: false,
             Operations,
             default
         );
@@ -325,7 +338,7 @@ public class OperationsBatchMutationsTests
         await SeedGroup(enabled: false);
 
         var response = await new ManifestGroupMutations().SetAllManifestGroupsEnabled(
-            false,
+            enabled: false,
             Operations,
             default
         );
@@ -521,24 +534,27 @@ public class OperationsBatchMutationsTests
 
     private async Task<long[]> SeedRuns(int count, TrainState state)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var runs = new List<Metadata>();
-        for (var i = 0; i < count; i++)
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
-            var meta = Metadata.Create(
-                new CreateMetadata
-                {
-                    Name = BulkTrain,
-                    ExternalId = Guid.NewGuid().ToString("N"),
-                    Input = null,
-                }
-            );
-            meta.TrainState = state;
-            await db.Track(meta);
-            runs.Add(meta);
+            var runs = new List<Metadata>();
+            for (var i = 0; i < count; i++)
+            {
+                var meta = Metadata.Create(
+                    new CreateMetadata
+                    {
+                        Name = BulkTrain,
+                        ExternalId = Guid.NewGuid().ToString("N"),
+                        Input = null,
+                    }
+                );
+                meta.TrainState = state;
+                await db.Track(meta).ConfigureAwait(false);
+                runs.Add(meta);
+            }
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return runs.Select(r => r.Id).ToArray();
         }
-        await db.SaveChanges(default);
-        return runs.Select(r => r.Id).ToArray();
     }
 
     private static ClaimsPrincipal Operator() =>
@@ -565,14 +581,18 @@ public class OperationsBatchMutationsTests
         // The three end between the snapshot and their batch, as a run finishing on its own does.
         jobs.BeforeFirstBatch = async ct =>
         {
-            await using var db = await _factory.CreateDbContextAsync(ct);
-            await ((DbContext)db)
-                .Set<Metadata>()
-                .Where(m => finishedFirst.Contains(m.Id))
-                .ExecuteUpdateAsync(
-                    s => s.SetProperty(m => m.TrainState, TrainState.Completed),
-                    ct
-                );
+            var db = await _factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            await using (db.ConfigureAwait(false))
+            {
+                await ((DbContext)db)
+                    .Set<Metadata>()
+                    .Where(m => finishedFirst.Contains(m.Id))
+                    .ExecuteUpdateAsync(
+                        s => s.SetProperty(m => m.TrainState, TrainState.Completed),
+                        ct
+                    )
+                    .ConfigureAwait(false);
+            }
         };
 
         var started = await new OperationsMutations().StartBulkOperation(
@@ -663,7 +683,7 @@ public class OperationsBatchMutationsTests
         {
             jobs.BeforeSnapshot = null;
             inSnapshot.SetResult();
-            await release.Task;
+            await release.Task.ConfigureAwait(false);
         };
 
         var first = Start(host, expectedCount: 3);
@@ -691,7 +711,7 @@ public class OperationsBatchMutationsTests
         (await Start(host, expectedCount: 5)).Success.Should().BeFalse();
 
         jobs.BeforeSnapshot = _ => throw new InvalidOperationException("snapshot failed");
-        var failed = async () => await Start(host, expectedCount: 2);
+        var failed = async () => await Start(host, expectedCount: 2).ConfigureAwait(false);
         await failed.Should().ThrowAsync<InvalidOperationException>();
         jobs.BeforeSnapshot = null;
 
@@ -751,7 +771,7 @@ public class OperationsBatchMutationsTests
             },
             expectedCount: 2,
             new TraxApplicationServices(host),
-            null,
+            user: null,
             default
         );
         started.Success.Should().BeTrue(started.Message);
@@ -790,21 +810,24 @@ public class OperationsBatchMutationsTests
 
     private async Task<long> SeedRunOf(long manifestId, TrainState state)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var meta = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = "Trax.X.Batch",
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = null,
-                ManifestId = manifestId,
-            }
-        );
-        meta.TrainState = state;
-        await db.Track(meta);
-        await db.SaveChanges(default);
-        return meta.Id;
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var meta = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = "Trax.X.Batch",
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                    ManifestId = manifestId,
+                }
+            );
+            meta.TrainState = state;
+            await db.Track(meta).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return meta.Id;
+        }
     }
 
-    private class BatchFakeTrain { }
+    private static class BatchFakeTrain;
 }

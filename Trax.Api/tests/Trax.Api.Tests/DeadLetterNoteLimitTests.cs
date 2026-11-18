@@ -101,7 +101,9 @@ public class DeadLetterNoteLimitTests
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(new DeadLetterOperationResult(true, null, "acknowledged"));
+            .Returns(
+                new DeadLetterOperationResult(Success: true, WorkQueueId: null, "acknowledged")
+            );
         scheduler
             .AcknowledgeDeadLettersAsync(
                 Arg.Any<long[]>(),

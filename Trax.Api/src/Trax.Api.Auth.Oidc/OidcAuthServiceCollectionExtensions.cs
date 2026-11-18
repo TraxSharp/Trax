@@ -203,7 +203,7 @@ public static class OidcAuthServiceCollectionExtensions
         options.Events.OnTokenValidated = async context =>
         {
             if (existingValidated is not null)
-                await existingValidated(context);
+                await existingValidated(context).ConfigureAwait(false);
 
             if (context.Result is not null)
                 return;
@@ -234,10 +234,9 @@ public static class OidcAuthServiceCollectionExtensions
                     context.ProtocolMessage?.IdToken,
                     context.ProtocolMessage?.AccessToken
                 );
-                traxPrincipal = await resolver.ResolveAsync(
-                    input,
-                    context.HttpContext.RequestAborted
-                );
+                traxPrincipal = await resolver
+                    .ResolveAsync(input, context.HttpContext.RequestAborted)
+                    .ConfigureAwait(false);
             }
             catch (Exception ex)
             {

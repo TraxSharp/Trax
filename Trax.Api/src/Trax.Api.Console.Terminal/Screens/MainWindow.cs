@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using Terminal.Gui.Input;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
@@ -108,7 +109,7 @@ internal sealed class MainWindow : Window
             _tabs.Value is ListScreen screen ? _lists.IndexOf(screen)
                 : _tabs.Value == _machines ? _lists.Count
                 : 0,
-            _lists.ToDictionary(l => l.List.Name, l => l.State)
+            _lists.ToDictionary(l => l.List.Name, l => l.State, StringComparer.Ordinal)
         );
 
     /// <summary>The list screens, in tab order.</summary>
@@ -241,7 +242,10 @@ internal sealed class MainWindow : Window
                         return;
                     _feed.Add(
                         TerminalText.Line(
-                            $"{Wire.Time(change.Timestamp)}  {change.MetadataId, 8}  {change.TrainName}  "
+                            string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"{Wire.Time(change.Timestamp)}  {change.MetadataId, 8}  {change.TrainName}  "
+                            )
                                 + $"{Wire.Name(change.TrainState)}"
                                 + (
                                     change.FailureReason is { } reason

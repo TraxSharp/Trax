@@ -92,7 +92,10 @@ public class ExposeAsTests
         // IDiamondLeaf inherits from two paths that both transitively reach IBookReference
         var names = QueryModelTypeModule.GetExposedPropertyNames(typeof(IDiamondLeaf));
 
-        names.Where(n => n == "Id").Should().HaveCount(1, "HashSet should deduplicate");
+        names
+            .Where(n => string.Equals(n, "Id", StringComparison.Ordinal))
+            .Should()
+            .HaveCount(1, "HashSet should deduplicate");
         names.Should().Contain("LeafProp");
         names.Should().Contain("Id");
     }
@@ -281,7 +284,7 @@ public class ExposeAsTests
         var fieldNames = bookType
             .Fields.Where(f => !f.IsIntrospectionField)
             .Select(f => f.Name)
-            .ToHashSet();
+            .ToHashSet(StringComparer.Ordinal);
 
         fieldNames.Should().BeEquivalentTo("id", "title", "author", "rating");
     }
@@ -309,7 +312,7 @@ public class ExposeAsTests
         var fieldNames = bookType
             .Fields.Where(f => !f.IsIntrospectionField)
             .Select(f => f.Name)
-            .ToHashSet();
+            .ToHashSet(StringComparer.Ordinal);
 
         // Without ExposeAs, HC binds every public property — including
         // navs and internal columns. This is the "default lies" baseline
@@ -327,7 +330,7 @@ public class ExposeAsTests
         var fieldNames = bookType
             .Fields.Where(f => !f.IsIntrospectionField)
             .Select(f => f.Name)
-            .ToHashSet();
+            .ToHashSet(StringComparer.Ordinal);
 
         // Fields from both the leaf and the inherited IAuditReference must appear.
         fieldNames.Should().Contain("id");
@@ -348,10 +351,15 @@ public class ExposeAsTests
 
         var filterType = schema.Types.GetType<InputObjectType>("BookRefFilterInput");
 
-        var fieldNames = filterType.Fields.Select(f => f.Name).ToHashSet();
+        var fieldNames = filterType.Fields.Select(f => f.Name).ToHashSet(StringComparer.Ordinal);
 
         // HC includes "and"/"or" automatically — strip those and check the rest.
-        var dataFields = fieldNames.Where(n => n != "and" && n != "or").ToHashSet();
+        var dataFields = fieldNames
+            .Where(n =>
+                !string.Equals(n, "and", StringComparison.Ordinal)
+                && !string.Equals(n, "or", StringComparison.Ordinal)
+            )
+            .ToHashSet(StringComparer.Ordinal);
 
         dataFields.Should().BeEquivalentTo("id", "title", "author", "rating");
         dataFields.Should().NotContain("internalNotes");
@@ -366,8 +374,13 @@ public class ExposeAsTests
 
         var filterType = schema.Types.GetType<InputObjectType>("BookRefIdOnlyFilter");
 
-        var fieldNames = filterType.Fields.Select(f => f.Name).ToHashSet();
-        var dataFields = fieldNames.Where(n => n != "and" && n != "or").ToHashSet();
+        var fieldNames = filterType.Fields.Select(f => f.Name).ToHashSet(StringComparer.Ordinal);
+        var dataFields = fieldNames
+            .Where(n =>
+                !string.Equals(n, "and", StringComparison.Ordinal)
+                && !string.Equals(n, "or", StringComparison.Ordinal)
+            )
+            .ToHashSet(StringComparer.Ordinal);
 
         // The override declares only `id`, so the schema should reflect that
         // even though ExposeAs would otherwise expose four fields.
@@ -381,7 +394,7 @@ public class ExposeAsTests
 
         var filterType = schema.Types.GetType<InputObjectType>("UnrestrictedBookRefFilterInput");
 
-        var fieldNames = filterType.Fields.Select(f => f.Name).ToHashSet();
+        var fieldNames = filterType.Fields.Select(f => f.Name).ToHashSet(StringComparer.Ordinal);
 
         // Baseline: without ExposeAs, the hidden column is filterable.
         fieldNames.Should().Contain("internalNotes");
@@ -398,7 +411,7 @@ public class ExposeAsTests
 
         var sortType = schema.Types.GetType<InputObjectType>("BookRefSortInput");
 
-        var fieldNames = sortType.Fields.Select(f => f.Name).ToHashSet();
+        var fieldNames = sortType.Fields.Select(f => f.Name).ToHashSet(StringComparer.Ordinal);
 
         fieldNames.Should().BeEquivalentTo("id", "title", "author", "rating");
         fieldNames.Should().NotContain("internalNotes");
@@ -412,7 +425,7 @@ public class ExposeAsTests
         );
 
         var sortType = schema.Types.GetType<InputObjectType>("BookRefTitleOnlySort");
-        var fieldNames = sortType.Fields.Select(f => f.Name).ToHashSet();
+        var fieldNames = sortType.Fields.Select(f => f.Name).ToHashSet(StringComparer.Ordinal);
 
         fieldNames.Should().BeEquivalentTo("title");
     }
@@ -512,7 +525,8 @@ public class ExposeAsTests
     )
         where TContext : DbContext
     {
-        var executor = await BuildExecutorAsync<TContext>(customize, seedData: false);
+        var executor = await BuildExecutorAsync<TContext>(customize, seedData: false)
+            .ConfigureAwait(false);
         return executor.Schema;
     }
 
@@ -571,10 +585,13 @@ public class ExposeAsTests
                     InternalNotes = "n2",
                 }
             );
-            await ctx.SaveChangesAsync();
+            await ctx.SaveChangesAsync().ConfigureAwait(false);
         }
 
-        return await provider.GetRequiredService<IRequestExecutorProvider>().GetExecutorAsync();
+        return await provider
+            .GetRequiredService<IRequestExecutorProvider>()
+            .GetExecutorAsync()
+            .ConfigureAwait(false);
     }
 
     #endregion

@@ -62,43 +62,46 @@ internal sealed class PersistedOperationsService : IPersistedOperationsService
     {
         (skip, take) = ClampPage(skip, take);
 
-        await using var ctx = await ContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
-        IQueryable<Trax.Effect.Models.PersistedOperation.PersistedOperation> q =
-            ctx.PersistedOperations.AsNoTracking();
-
-        if (filter is not null)
+        var ctx = await ContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using (ctx.ConfigureAwait(false))
         {
-            if (filter.IsActive.HasValue)
-                q = q.Where(p => p.IsActive == filter.IsActive.Value);
-            if (!string.IsNullOrWhiteSpace(filter.TenantKey))
-                q = q.Where(p => p.TenantKey == filter.TenantKey);
-            else if (filter.TenantKey == "")
-                q = q.Where(p => p.TenantKey == "");
-            if (!string.IsNullOrWhiteSpace(filter.IdStartsWith))
-                q = q.Where(p => p.Id.StartsWith(filter.IdStartsWith));
+            IQueryable<Trax.Effect.Models.PersistedOperation.PersistedOperation> q =
+                ctx.PersistedOperations.AsNoTracking();
+
+            if (filter is not null)
+            {
+                if (filter.IsActive.HasValue)
+                    q = q.Where(p => p.IsActive == filter.IsActive.Value);
+                if (!string.IsNullOrWhiteSpace(filter.TenantKey))
+                    q = q.Where(p => p.TenantKey == filter.TenantKey);
+                else if (filter.TenantKey == "")
+                    q = q.Where(p => p.TenantKey == "");
+                if (!string.IsNullOrWhiteSpace(filter.IdStartsWith))
+                    q = q.Where(p => p.Id.StartsWith(filter.IdStartsWith));
+            }
+
+            var total = await q.CountAsync(ct).ConfigureAwait(false);
+            var items = await q.OrderByDescending(p => p.UpdatedAt)
+                .Skip(skip)
+                .Take(take)
+                .Select(p => new PersistedOperationDto(
+                    p.Id,
+                    p.TenantKey == "" ? null : p.TenantKey,
+                    p.OperationName,
+                    p.Version,
+                    p.Document,
+                    p.ShapeFingerprint,
+                    p.IsActive,
+                    p.DeprecationReason,
+                    p.Description,
+                    p.CreatedAt,
+                    p.UpdatedAt
+                ))
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+
+            return new PersistedOperationsPage(items, total);
         }
-
-        var total = await q.CountAsync(ct).ConfigureAwait(false);
-        var items = await q.OrderByDescending(p => p.UpdatedAt)
-            .Skip(skip)
-            .Take(take)
-            .Select(p => new PersistedOperationDto(
-                p.Id,
-                p.TenantKey == "" ? null : p.TenantKey,
-                p.OperationName,
-                p.Version,
-                p.Document,
-                p.ShapeFingerprint,
-                p.IsActive,
-                p.DeprecationReason,
-                p.Description,
-                p.CreatedAt,
-                p.UpdatedAt
-            ))
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
-
-        return new PersistedOperationsPage(items, total);
     }
 
     public async Task<PersistedOperationDto?> GetAsync(
@@ -124,25 +127,28 @@ internal sealed class PersistedOperationsService : IPersistedOperationsService
         (skip, take) = ClampPage(skip, take);
         var sentinel = tenantKey ?? string.Empty;
 
-        await using var ctx = await ContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
-        return await ctx
-            .PersistedOperationHistories.AsNoTracking()
-            .Where(h => h.TenantKey == sentinel && h.Id == id)
-            .OrderByDescending(h => h.HistoryId)
-            .Skip(skip)
-            .Take(take)
-            .Select(h => new PersistedOperationHistoryDto(
-                h.HistoryId,
-                h.Id,
-                h.TenantKey == "" ? null : h.TenantKey,
-                h.Document,
-                h.ShapeFingerprint,
-                h.ChangeType,
-                h.ChangedAt,
-                h.ChangedReason
-            ))
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
+        var ctx = await ContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using (ctx.ConfigureAwait(false))
+        {
+            return await ctx
+                .PersistedOperationHistories.AsNoTracking()
+                .Where(h => h.TenantKey == sentinel && h.Id == id)
+                .OrderByDescending(h => h.HistoryId)
+                .Skip(skip)
+                .Take(take)
+                .Select(h => new PersistedOperationHistoryDto(
+                    h.HistoryId,
+                    h.Id,
+                    h.TenantKey == "" ? null : h.TenantKey,
+                    h.Document,
+                    h.ShapeFingerprint,
+                    h.ChangeType,
+                    h.ChangedAt,
+                    h.ChangedReason
+                ))
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+        }
     }
 
     public async Task<UploadPersistedOperationPayload> UploadAsync(
@@ -204,7 +210,14 @@ internal sealed class PersistedOperationsService : IPersistedOperationsService
         catch (PersistedOperationInputException ex)
         {
             return UploadPersistedOperationPayload.Fail(
-                new PersistedOperationError(ex.Code, ex.Message, null, null, null, null)
+                new PersistedOperationError(
+                    ex.Code,
+                    ex.Message,
+                    Locations: null,
+                    Path: null,
+                    OldFingerprint: null,
+                    NewFingerprint: null
+                )
             );
         }
     }
@@ -216,14 +229,17 @@ internal sealed class PersistedOperationsService : IPersistedOperationsService
     {
         ArgumentNullException.ThrowIfNull(input);
         if (string.IsNullOrWhiteSpace(input.Id))
-            return new DeactivatePersistedOperationPayload(null, [InvalidInput("id is required.")]);
+            return new DeactivatePersistedOperationPayload(
+                Operation: null,
+                [InvalidInput("id is required.")]
+            );
         if (string.IsNullOrWhiteSpace(input.Reason))
             return new DeactivatePersistedOperationPayload(
-                null,
+                Operation: null,
                 [InvalidInput("reason is required.")]
             );
         if (GeneratedDocuments.IsReserved(input.Id))
-            return new DeactivatePersistedOperationPayload(null, [Reserved(input.Id)]);
+            return new DeactivatePersistedOperationPayload(Operation: null, [Reserved(input.Id)]);
 
         // Any row, active or not: deactivating an inactive operation is not an error, and doing it
         // again sends the change to every node again.
@@ -234,7 +250,7 @@ internal sealed class PersistedOperationsService : IPersistedOperationsService
             : await FindAnyAsync(input.Id, input.TenantKey, ct).ConfigureAwait(false);
         if (existing is null)
             return new DeactivatePersistedOperationPayload(
-                null,
+                Operation: null,
                 [PersistedOperationError.NotFound(input.Id)]
             );
 
@@ -257,15 +273,18 @@ internal sealed class PersistedOperationsService : IPersistedOperationsService
     {
         ArgumentNullException.ThrowIfNull(input);
         if (string.IsNullOrWhiteSpace(input.Id))
-            return new RestorePersistedOperationPayload(null, [InvalidInput("id is required.")]);
+            return new RestorePersistedOperationPayload(
+                Operation: null,
+                [InvalidInput("id is required.")]
+            );
         if (GeneratedDocuments.IsReserved(input.Id))
-            return new RestorePersistedOperationPayload(null, [Reserved(input.Id)]);
+            return new RestorePersistedOperationPayload(Operation: null, [Reserved(input.Id)]);
 
         // Restore applies to a deactivated row, which the store's GetAsync does not return.
         var raw = await FindAnyAsync(input.Id, input.TenantKey, ct).ConfigureAwait(false);
         if (raw is null)
             return new RestorePersistedOperationPayload(
-                null,
+                Operation: null,
                 [PersistedOperationError.NotFound(input.Id)]
             );
 
@@ -304,18 +323,28 @@ internal sealed class PersistedOperationsService : IPersistedOperationsService
     )
     {
         var sentinel = tenantKey ?? string.Empty;
-        await using var ctx = await ContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
-        return await ctx
-            .PersistedOperations.AsNoTracking()
-            .FirstOrDefaultAsync(p => p.TenantKey == sentinel && p.Id == id, ct)
-            .ConfigureAwait(false);
+        var ctx = await ContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using (ctx.ConfigureAwait(false))
+        {
+            return await ctx
+                .PersistedOperations.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.TenantKey == sentinel && p.Id == id, ct)
+                .ConfigureAwait(false);
+        }
     }
 
     private static (int Skip, int Take) ClampPage(int skip, int take) =>
         (skip < 0 ? 0 : skip, take is <= 0 or > MaxTake ? DefaultTake : take);
 
     private static PersistedOperationError InvalidInput(string message) =>
-        new(PersistedOperationInputException.CodeValue, message, null, null, null, null);
+        new(
+            PersistedOperationInputException.CodeValue,
+            message,
+            Locations: null,
+            Path: null,
+            OldFingerprint: null,
+            NewFingerprint: null
+        );
 
     /// <summary>The code an upload, deactivation or restore of a generated document's id is refused with.</summary>
     internal const string ReservedIdCode = "RESERVED_ID";
@@ -327,9 +356,9 @@ internal sealed class PersistedOperationsService : IPersistedOperationsService
             ReservedIdCode,
             $"The id '{id}' is under '{GeneratedDocuments.PrefixOf(id)}', which is reserved for the documents the host "
                 + "registers itself when it starts. Choose another id.",
-            null,
-            null,
-            null,
-            null
+            Locations: null,
+            Path: null,
+            OldFingerprint: null,
+            NewFingerprint: null
         );
 }

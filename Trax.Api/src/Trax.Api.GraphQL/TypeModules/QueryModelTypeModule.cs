@@ -63,8 +63,9 @@ internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) :
         // Group model registrations by namespace. A namespace that holds any query model is
         // owned by this module: it declares the namespace type and its field on DiscoverQueries,
         // and TrainTypeModule only extends the type with its train fields.
-        var byNamespace = registrations.GroupBy(r =>
-            r.Attribute.Namespace is { } ns ? TrainTypeModule.CamelCase(ns) : null
+        var byNamespace = registrations.GroupBy(
+            r => r.Attribute.Namespace is { } ns ? TrainTypeModule.CamelCase(ns) : null,
+            StringComparer.Ordinal
         );
 
         foreach (var group in byNamespace)
@@ -269,7 +270,7 @@ internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) :
                 )
             )
             {
-                if (prop.GetCustomAttribute<ColumnAttribute>() is not null)
+                if (Attribute.IsDefined(prop, typeof(ColumnAttribute)))
                     descriptor.Field(prop);
             }
 
@@ -321,19 +322,19 @@ internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) :
     internal static string Pluralize(string name)
     {
         if (
-            name.EndsWith("s", StringComparison.Ordinal)
-            || name.EndsWith("x", StringComparison.Ordinal)
-            || name.EndsWith("z", StringComparison.Ordinal)
+            name.EndsWith('s')
+            || name.EndsWith('x')
+            || name.EndsWith('z')
             || name.EndsWith("ch", StringComparison.Ordinal)
             || name.EndsWith("sh", StringComparison.Ordinal)
         )
             return name + "es";
 
-        if (name.EndsWith("y", StringComparison.Ordinal) && name.Length > 1 && !IsVowel(name[^2]))
+        if (name.EndsWith('y') && name.Length > 1 && !IsVowel(name[^2]))
             return name[..^1] + "ies";
 
         return name + "s";
     }
 
-    private static bool IsVowel(char c) => "aeiouAEIOU".Contains(c);
+    private static bool IsVowel(char c) => "aeiouAEIOU".Contains(c, StringComparison.Ordinal);
 }

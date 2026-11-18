@@ -81,8 +81,9 @@ public class ApiKeyAuthHandlerTests
                                 async (HttpContext ctx) =>
                                 {
                                     var result = await ctx.AuthenticateAsync(
-                                        ApiKeyDefaults.SchemeName
-                                    );
+                                            ApiKeyDefaults.SchemeName
+                                        )
+                                        .ConfigureAwait(false);
                                     return Results.Ok(
                                         new AuthResultResponse
                                         {
@@ -98,7 +99,7 @@ public class ApiKeyAuthHandlerTests
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
     }
 
@@ -172,7 +173,7 @@ public class ApiKeyAuthHandlerTests
     {
         using var host = await CreateHost(
             (key, _) =>
-                key == "super"
+                string.Equals(key, "super", StringComparison.Ordinal)
                     ? ValueTask.FromResult<TraxPrincipal?>(new TraxPrincipal("alice", "Alice", []))
                     : ValueTask.FromResult<TraxPrincipal?>(null),
             opts => opts.HeaderName = "X-My-Key"
@@ -250,7 +251,10 @@ public class ApiKeyAuthHandlerTests
                         "alice",
                         "Alice",
                         ["User"],
-                        Claims: new Dictionary<string, string> { ["tenant"] = "acme" }
+                        Claims: new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["tenant"] = "acme",
+                        }
                     )
                 )
         );
@@ -303,7 +307,7 @@ public class ApiKeyAuthHandlerTests
     [Test]
     public async Task ConcurrentRequests_EachResolvesIndependently()
     {
-        var principals = new Dictionary<string, TraxPrincipal>
+        var principals = new Dictionary<string, TraxPrincipal>(StringComparer.Ordinal)
         {
             ["alice-key"] = new("alice", "Alice", ["User"]),
             ["bob-key"] = new("bob", "Bob", ["User"]),
@@ -336,7 +340,9 @@ public class ApiKeyAuthHandlerTests
 
                 var client = host.GetTestClient();
                 client.DefaultRequestHeaders.Add("X-Api-Key", key);
-                var response = await client.GetFromJsonAsync<ProtectedResponse>("/protected");
+                var response = await client
+                    .GetFromJsonAsync<ProtectedResponse>("/protected")
+                    .ConfigureAwait(false);
                 return (expected: expectedId, actual: response?.PrincipalId);
             });
 
@@ -431,7 +437,7 @@ public class ApiKeyAuthHandlerTests
         // reject a single legitimate header value.
         using var host = await CreateHost(
             (key, _) =>
-                key == "good"
+                string.Equals(key, "good", StringComparison.Ordinal)
                     ? ValueTask.FromResult<TraxPrincipal?>(new TraxPrincipal("alice", "Alice", []))
                     : ValueTask.FromResult<TraxPrincipal?>(null)
         );
@@ -505,7 +511,7 @@ public class ApiKeyAuthHandlerTests
 
         public void Dispose() { }
 
-        public record LogEntry(
+        public sealed record LogEntry(
             string Category,
             LogLevel Level,
             string Message,

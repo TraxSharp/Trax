@@ -41,15 +41,15 @@ public class IrMachineE2ETests
             Convert.ToHexStringLower(
                 SHA256.HashData(Encoding.UTF8.GetBytes(CanonicalJson.Serialize(ir)))
             ),
-            null,
+            SystemKey: null,
             approvers,
             approvers,
-            new Dictionary<string, TriggerAccess>
+            new Dictionary<string, TriggerAccess>(StringComparer.Ordinal)
             {
                 ["Coin"] = new(approvers),
                 ["Push"] = new(AccessRule.AnyAuthenticated),
             },
-            new Dictionary<string, HostInvoke>()
+            new Dictionary<string, HostInvoke>(StringComparer.Ordinal)
         );
         var machines = IrMachines.Create([new IrMachines.Source(ir, entry)], []);
 
@@ -122,10 +122,12 @@ public class IrMachineE2ETests
 
     private async Task<JsonElement> Start(string requestId, string key)
     {
-        using var doc = await _host.PostAsync(
-            $$"""mutation { machines { irTurnstile { start(requestId: "{{requestId}}") { id problem { code } } } } }""",
-            apiKey: key
-        );
+        using var doc = await _host
+            .PostAsync(
+                $$"""mutation { machines { irTurnstile { start(requestId: "{{requestId}}") { id problem { code } } } } }""",
+                apiKey: key
+            )
+            .ConfigureAwait(false);
         return Data(doc, "start");
     }
 
@@ -137,10 +139,12 @@ public class IrMachineE2ETests
         string input
     )
     {
-        using var doc = await _host.PostAsync(
-            $$"""mutation { machines { irTurnstile { {{field}}(id: "{{id}}", {{input}}requestId: "{{requestId}}") { state problem { code } } } } }""",
-            apiKey: key
-        );
+        using var doc = await _host
+            .PostAsync(
+                $$"""mutation { machines { irTurnstile { {{field}}(id: "{{id}}", {{input}}requestId: "{{requestId}}") { state problem { code } } } } }""",
+                apiKey: key
+            )
+            .ConfigureAwait(false);
         return Data(doc, field);
     }
 

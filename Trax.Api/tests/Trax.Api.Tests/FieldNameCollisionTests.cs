@@ -115,7 +115,7 @@ public class FieldNameCollisionTests
         executor.Schema.Types.Select(t => t.Name).Should().Contain("BarMutationResponse");
         executor
             .Schema.Types.OfType<ObjectType>()
-            .Single(t => t.Name == "BarResponse")
+            .Single(t => string.Equals(t.Name, "BarResponse", StringComparison.Ordinal))
             .RuntimeType.Should()
             .Be<BarResult>();
     }

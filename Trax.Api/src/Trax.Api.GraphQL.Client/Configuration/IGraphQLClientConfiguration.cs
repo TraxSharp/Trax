@@ -34,7 +34,7 @@ public interface IGraphQLClientConfiguration
     /// <summary>The GraphQL.Client options the HTTP client was built with.</summary>
     GraphQLHttpClientOptions GraphQLClientOptions { get; }
 
-    /// <summary>Whether disposing the configuration also disposes <see cref="HttpClient"/>. <c>false</c> by default: the caller owns the client.</summary>
+    /// <summary>Whether disposing the configuration also disposes <see cref="HttpClient"/>. <see langword="false"/> by default: the caller owns the client.</summary>
     bool DisposeHttpClient { get; }
 
     /// <summary>

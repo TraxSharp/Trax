@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Trax.Api.GraphQL.Types;
@@ -115,7 +116,7 @@ public class JsonElementConverterTests
     {
         var result = JsonElementConverter.ToObject("true");
         result.Should().BeOfType<bool>();
-        result.Should().Be(true);
+        result.Should().Be(expected: true);
     }
 
     [Test]
@@ -123,7 +124,7 @@ public class JsonElementConverterTests
     {
         var result = JsonElementConverter.ToObject("false");
         result.Should().BeOfType<bool>();
-        result.Should().Be(false);
+        result.Should().Be(expected: false);
     }
 
     [Test]
@@ -147,7 +148,7 @@ public class JsonElementConverterTests
         var dict = (Dictionary<string, object?>)result!;
         dict["name"].Should().Be("Alice");
         dict["age"].Should().Be(30L);
-        dict["active"].Should().Be(true);
+        dict["active"].Should().Be(expected: true);
     }
 
     [Test]
@@ -171,7 +172,7 @@ public class JsonElementConverterTests
         dict["str"].Should().BeOfType<string>().And.Be("hello");
         dict["int"].Should().BeOfType<long>().And.Be(1L);
         dict["float"].Should().BeOfType<double>().And.Be(1.5);
-        dict["bool"].Should().BeOfType<bool>().And.Be(false);
+        dict["bool"].Should().BeOfType<bool>().And.Be(expected: false);
         dict["nil"].Should().BeNull();
     }
 
@@ -212,7 +213,7 @@ public class JsonElementConverterTests
         list[0].Should().Be("text");
         list[1].Should().Be(42L);
         list[2].Should().Be(3.14);
-        list[3].Should().Be(true);
+        list[3].Should().Be(expected: true);
         list[4].Should().BeNull();
     }
 
@@ -370,10 +371,10 @@ public class JsonElementConverterTests
         var round1 = (Dictionary<string, object?>)rounds[0]!;
         round1["round"].Should().Be(1L);
         round1["damage"].Should().Be(45L);
-        round1["critical"].Should().Be(false);
+        round1["critical"].Should().Be(expected: false);
 
         var round2 = (Dictionary<string, object?>)rounds[1]!;
-        round2["critical"].Should().Be(true);
+        round2["critical"].Should().Be(expected: true);
 
         var loot = (Dictionary<string, object?>)combat["loot"]!;
         loot["gold"].Should().Be(500L);
@@ -411,8 +412,10 @@ public class JsonElementConverterTests
     public void ToObject_VeryLargeObject_HandlesWithoutError()
     {
         // Build an object with 1000 keys
-        var entries = Enumerable.Range(0, 1000).Select(i => $"\"key{i}\":{i}");
-        var json = "{" + string.Join(",", entries) + "}";
+        var entries = Enumerable
+            .Range(0, 1000)
+            .Select(i => string.Create(CultureInfo.InvariantCulture, $"\"key{i}\":{i}"));
+        var json = "{" + string.Join(',', entries) + "}";
 
         var result = JsonElementConverter.ToObject(json);
 

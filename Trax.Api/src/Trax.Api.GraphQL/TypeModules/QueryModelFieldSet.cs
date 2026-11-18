@@ -19,7 +19,7 @@ namespace Trax.Api.GraphQL.TypeModules;
 internal static class QueryModelFieldSet
 {
     /// <summary>
-    /// The exposed properties of <paramref name="entityType"/>, or <c>null</c> when the model
+    /// The exposed properties of <paramref name="entityType"/>, or <see langword="null"/> when the model
     /// does not narrow its field set.
     /// </summary>
     public static IReadOnlyList<PropertyInfo>? Restricted(Type entityType)
@@ -37,9 +37,7 @@ internal static class QueryModelFieldSet
         }
 
         if (attr.BindFields == FieldBindingBehavior.Explicit)
-            return properties
-                .Where(p => p.GetCustomAttribute<ColumnAttribute>() is not null)
-                .ToList();
+            return properties.Where(p => Attribute.IsDefined(p, typeof(ColumnAttribute))).ToList();
 
         return null;
     }

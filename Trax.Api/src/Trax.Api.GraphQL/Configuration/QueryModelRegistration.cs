@@ -50,15 +50,15 @@ public record QueryModelRegistration
     /// <summary>The <c>[TraxQueryModel]</c> attribute on the entity.</summary>
     public TraxQueryModelAttribute Attribute { get; internal init; }
 
-    /// <summary>The filter input type registered with <c>AddFilterType</c>, or <c>null</c> for the inferred one.</summary>
+    /// <summary>The filter input type registered with <c>AddFilterType</c>, or <see langword="null"/> for the inferred one.</summary>
     public Type? FilterInputType { get; internal init; }
 
-    /// <summary>The sort input type registered with <c>AddSortType</c>, or <c>null</c> for the inferred one.</summary>
+    /// <summary>The sort input type registered with <c>AddSortType</c>, or <see langword="null"/> for the inferred one.</summary>
     public Type? SortInputType { get; internal init; }
 
     /// <summary>
     /// Every <c>[TraxAuthorize]</c> on the entity, including those inherited from base classes and
-    /// interfaces. Never <c>null</c>: empty when the entity carries none.
+    /// interfaces. Never <see langword="null"/>: empty when the entity carries none.
     /// </summary>
     public IReadOnlyList<TraxAuthorizeAttribute> AuthorizeAttributes { get; internal init; }
 

@@ -58,7 +58,9 @@ public class MachineDueAtE2ETests
     public async Task Every_answer_carries_the_rows_due_time_and_null_outside_a_timed_state()
     {
         var started = await Wizard(
-            WizardOps.Start("Atlas", WizardOps.NewRequestId()).Replace(Old, WizardFields),
+            WizardOps
+                .Start("Atlas", WizardOps.NewRequestId())
+                .Replace(Old, WizardFields, StringComparison.Ordinal),
             "start"
         );
         DueAt(started).Should().BeNull("Naming has no timer");
@@ -66,14 +68,16 @@ public class MachineDueAtE2ETests
         var described = await Wizard(
             WizardOps
                 .Describe(started.GetProperty("id").GetGuid(), WizardOps.NewRequestId())
-                .Replace(Old, WizardFields),
+                .Replace(Old, WizardFields, StringComparison.Ordinal),
             "describe"
         );
         DueAt(described).Should().BeNull("Paying has no timer");
 
         var id = started.GetProperty("id").GetGuid();
         var paid = await Wizard(
-            WizardOps.Event("pay", id, WizardOps.NewRequestId()).Replace(Old, WizardFields),
+            WizardOps
+                .Event("pay", id, WizardOps.NewRequestId())
+                .Replace(Old, WizardFields, StringComparison.Ordinal),
             "pay"
         );
         var row = await RowDueAt(WizardMachine.MachineId, id);
@@ -88,7 +92,9 @@ public class MachineDueAtE2ETests
         SameInstant(DueAt(read), row, "get answers the row's due time");
 
         var approved = await Wizard(
-            WizardOps.Event("approve", id, WizardOps.NewRequestId()).Replace(Old, WizardFields),
+            WizardOps
+                .Event("approve", id, WizardOps.NewRequestId())
+                .Replace(Old, WizardFields, StringComparison.Ordinal),
             "approve"
         );
         DueAt(approved).Should().BeNull("Building has no timer");
@@ -125,22 +131,30 @@ public class MachineDueAtE2ETests
         var paying = await _host.WizardInPayingAsync(E2EHost.AliceKey);
         var id = paying.Id;
         var pay = WizardOps.NewRequestId();
-        var paid = await Wizard(WizardOps.Event("pay", id, pay).Replace(Old, WizardFields), "pay");
+        var paid = await Wizard(
+            WizardOps.Event("pay", id, pay).Replace(Old, WizardFields, StringComparison.Ordinal),
+            "pay"
+        );
         DueAt(paid).Should().NotBeNull("Approving has a timer");
         Known(paid).Should().BeTrue("the send knows the due time it armed");
 
         // A retry while the row is still at the recorded revision knows the row's due time.
-        var again = await Wizard(WizardOps.Event("pay", id, pay).Replace(Old, WizardFields), "pay");
+        var again = await Wizard(
+            WizardOps.Event("pay", id, pay).Replace(Old, WizardFields, StringComparison.Ordinal),
+            "pay"
+        );
         Known(again).Should().BeTrue("the row is still at the revision the send recorded");
         SameInstant(DueAt(again), DueAt(paid), "the replay at the recorded revision carries it");
 
         await Wizard(
-            WizardOps.Event("approve", id, WizardOps.NewRequestId()).Replace(Old, WizardFields),
+            WizardOps
+                .Event("approve", id, WizardOps.NewRequestId())
+                .Replace(Old, WizardFields, StringComparison.Ordinal),
             "approve"
         );
 
         var replayed = await Wizard(
-            WizardOps.Event("pay", id, pay).Replace(Old, WizardFields),
+            WizardOps.Event("pay", id, pay).Replace(Old, WizardFields, StringComparison.Ordinal),
             "pay"
         );
         replayed
@@ -243,7 +257,9 @@ public class MachineDueAtE2ETests
 
     private async Task<JsonElement> Answer(string document, string machine, string field)
     {
-        using var doc = await _host.PostAsync(document, apiKey: E2EHost.AliceKey);
+        using var doc = await _host
+            .PostAsync(document, apiKey: E2EHost.AliceKey)
+            .ConfigureAwait(false);
         WizardOps.FailOnErrors(doc, field);
         var answer = doc
             .RootElement.GetProperty("data")
@@ -251,17 +267,22 @@ public class MachineDueAtE2ETests
             .GetProperty(machine)
             .GetProperty(field)
             .Clone();
-        if (machine == "wizard" && Problem(answer) is { } code)
+        if (
+            string.Equals(machine, "wizard", StringComparison.Ordinal)
+            && Problem(answer) is { } code
+        )
             Assert.Fail($"{field} was refused: {code}");
         return answer;
     }
 
     private async Task<JsonElement> Get(string machine, string field, Guid id, string fields)
     {
-        using var doc = await _host.PostAsync(
-            $"{{ machines {{ {field} {{ get(id: {WizardOps.Literal(id.ToString())}) {{ {fields} }} }} }} }}",
-            apiKey: E2EHost.AliceKey
-        );
+        using var doc = await _host
+            .PostAsync(
+                $"{{ machines {{ {field} {{ get(id: {WizardOps.Literal(id.ToString())}) {{ {fields} }} }} }} }}",
+                apiKey: E2EHost.AliceKey
+            )
+            .ConfigureAwait(false);
         WizardOps.FailOnErrors(doc, "get");
         return doc
             .RootElement.GetProperty("data")
@@ -275,7 +296,9 @@ public class MachineDueAtE2ETests
     {
         while (true)
         {
-            var change = (await ws.NextDataAsync("1")).GetProperty("wizardChanged").Clone();
+            var change = (await ws.NextDataAsync("1").ConfigureAwait(false))
+                .GetProperty("wizardChanged")
+                .Clone();
             if (change.GetProperty("revision").GetInt64() >= revision)
                 return change;
         }
@@ -304,12 +327,14 @@ public class MachineDueAtE2ETests
 
     private static async Task<DateTimeOffset?> RowDueAt(string machine, Guid id)
     {
-        var due = await E2ESql.ScalarAsync<DateTime?>(
-            Database,
-            "SELECT due_at FROM trax.snapshot_draft WHERE machine = @machine AND id = @id",
-            ("machine", machine),
-            ("id", id)
-        );
+        var due = await E2ESql
+            .ScalarAsync<DateTime?>(
+                Database,
+                "SELECT due_at FROM trax.snapshot_draft WHERE machine = @machine AND id = @id",
+                ("machine", machine),
+                ("id", id)
+            )
+            .ConfigureAwait(false);
         return due is { } value
             ? new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc))
             : null;

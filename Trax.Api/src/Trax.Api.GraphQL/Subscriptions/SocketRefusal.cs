@@ -8,7 +8,7 @@ namespace Trax.Api.GraphQL.Subscriptions;
 /// </summary>
 /// <param name="Scheme">The token scheme that judged the connection: <c>ApiKey</c>, <c>Jwt</c>, or <c>None</c> when none did (no credential a scheme of a two-scheme host reads, or a host with no token scheme refused by its endpoint policy).</param>
 /// <param name="Reason">Why it was refused, one of the <c>Reason*</c> constants.</param>
-/// <param name="Principal">The connection's principal when its credential was accepted and the endpoint policy refused it; otherwise <c>null</c>.</param>
+/// <param name="Principal">The connection's principal when its credential was accepted and the endpoint policy refused it; otherwise <see langword="null"/>.</param>
 internal sealed record SocketRefusal(string Scheme, string Reason, ClaimsPrincipal? Principal)
 {
     /// <summary>No credential either registered scheme reads was in the payload.</summary>

@@ -47,14 +47,14 @@ public class RunGraphParallelTests
                             [
                                 new ChainGraphTrack(
                                     "Fast",
-                                    null,
-                                    false,
+                                    Description: null,
+                                    IsFallback: false,
                                     [Node(FastShip, ChainStepKind.Chain)]
                                 ),
                                 new ChainGraphTrack(
                                     "Slow",
-                                    null,
-                                    false,
+                                    Description: null,
+                                    IsFallback: false,
                                     [Node(SlowShip, ChainStepKind.Chain)]
                                 ),
                             ]
@@ -366,7 +366,7 @@ public class RunGraphParallelTests
 
     private static Dictionary<string, RunGraphNode> Flatten(IEnumerable<RunGraphNode> nodes)
     {
-        var all = new Dictionary<string, RunGraphNode>();
+        var all = new Dictionary<string, RunGraphNode>(StringComparer.Ordinal);
         Walk(nodes);
         return all;
 
@@ -382,13 +382,13 @@ public class RunGraphParallelTests
     }
 
     private static ChainGraphTrack Branch(string name, params ChainGraphNode[] nodes) =>
-        new(name, null, false, nodes);
+        new(name, Description: null, IsFallback: false, nodes);
 
     private static ChainGraphNode Node(
         string id,
         ChainStepKind kind,
         IReadOnlyList<ChainGraphTrack>? tracks = null
-    ) => new(id, kind, id, "Paper", "Paper", false, tracks ?? []);
+    ) => new(id, kind, id, "Paper", "Paper", Opaque: false, tracks ?? []);
 
     private static JunctionStep Step(
         int position,
@@ -403,17 +403,17 @@ public class RunGraphParallelTests
             nodeId ?? "Old",
             state,
             DateTime.UtcNow,
-            null,
-            null,
-            null,
-            null,
+            EndedAt: null,
+            DurationMs: null,
+            FailureClass: null,
+            FailureException: null,
             kind == JunctionRunKind.Junction ? null : "Lane",
             answer,
-            null,
-            false,
-            null,
-            false,
-            null
+            Confidence: null,
+            Replayed: false,
+            Decider: null,
+            AnswerWithheld: false,
+            Attempt: null
         )
         {
             NodeId = nodeId,

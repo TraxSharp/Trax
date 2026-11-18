@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using HotChocolate;
 using HotChocolate.Authorization;
 using HotChocolate.Execution.Configuration;
@@ -26,7 +27,7 @@ namespace Trax.Api.GraphQL.TypeModules;
 /// as a String, its label when the view gives one; a context field has the type its machine's record gives it.
 /// </summary>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/views">SDK reference</seealso>
-internal sealed class MachineViewTypeModule(
+internal sealed partial class MachineViewTypeModule(
     IEnumerable<IMachine> machines,
     MachineViewCatalog catalog
 ) : TypeModule
@@ -75,12 +76,9 @@ internal sealed class MachineViewTypeModule(
             // A field is a field of the row type beside the instance's id: it cannot be the id, and GraphQL has to name it.
             foreach (var field in view.Fields)
                 if (
-                    field.Name == "id"
+                    string.Equals(field.Name, "id", StringComparison.Ordinal)
                     || field.Name.StartsWith("__", StringComparison.Ordinal)
-                    || !System.Text.RegularExpressions.Regex.IsMatch(
-                        field.Name,
-                        @"\A[_A-Za-z][_0-9A-Za-z]*\z"
-                    )
+                    || !GraphQLFieldName.IsMatch(field.Name)
                 )
                     throw new InvalidOperationException(
                         $"The view '{view.Name}' has a field '{field.Name}' it cannot serve: a view's field is a GraphQL "
@@ -159,7 +157,11 @@ internal sealed class MachineViewTypeModule(
             d.Field("id")
                 .Type<NonNullType<UuidType>>()
                 .Resolve(ctx => Guid.Parse(ctx.Parent<JsonObject>()["id"]!.GetValue<string>()));
-            foreach (var field in view.Fields.Where(f => f.Machine == read.Machine))
+            foreach (
+                var field in view.Fields.Where(f =>
+                    string.Equals(f.Machine, read.Machine, StringComparison.Ordinal)
+                )
+            )
             {
                 if (field.IsState || !context.TryGetValue(field.Source, out var typed))
                     d.Field(field.Name)
@@ -213,19 +215,28 @@ internal sealed class MachineViewTypeModule(
                             .Build()
                     );
         }
-        return await MachineViewReader.Read(
-            ctx.Services.GetRequiredService<IDataContext>(),
-            view,
-            CallerRules.Client(userKey, caller),
-            byName,
-            ctx.Services.GetService<StateMachineOptions>()?.ViewRowLimit
-                ?? StateMachineOptions.DefaultViewRowLimit,
-            ctx.RequestAborted
-        );
+        return await MachineViewReader
+            .Read(
+                ctx.Services.GetRequiredService<IDataContext>(),
+                view,
+                CallerRules.Client(userKey, caller),
+                byName,
+                ctx.Services.GetService<StateMachineOptions>()?.ViewRowLimit
+                    ?? StateMachineOptions.DefaultViewRowLimit,
+                ctx.RequestAborted
+            )
+            .ConfigureAwait(false);
     }
 
     private static string RowTypeName(string view, string machine) =>
         Views.RowTypeName(view, machine);
 
     private static string Camel(string pascal) => char.ToLowerInvariant(pascal[0]) + pascal[1..];
+
+    [GeneratedRegex(
+        @"\A[_A-Za-z][_0-9A-Za-z]*\z",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex GraphQLFieldName { get; }
 }

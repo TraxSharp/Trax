@@ -141,9 +141,9 @@ public sealed class CognitoTokenIssuer
     public string MintAccessToken(CognitoAccessTokenRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.ClientId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.ClientId, nameof(request));
         if (request.Email is not null)
-            ArgumentException.ThrowIfNullOrWhiteSpace(request.Email);
+            ArgumentException.ThrowIfNullOrWhiteSpace(request.Email, nameof(request));
         if (request.Lifetime <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(request), "Lifetime must be positive.");
 
@@ -154,7 +154,12 @@ public sealed class CognitoTokenIssuer
             new("sub", request.Sub.ToString()),
             new(CognitoDefaults.TokenUse, CognitoDefaults.TokenUseAccess),
             new(CognitoDefaults.ClientId, request.ClientId),
-            new("auth_time", ToEpochSeconds(authTime).ToString(), ClaimValueTypes.Integer64),
+            new(
+                "auth_time",
+                ToEpochSeconds(authTime)
+                    .ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ClaimValueTypes.Integer64
+            ),
             new("jti", Guid.NewGuid().ToString()),
             new(
                 "username",
@@ -199,8 +204,8 @@ public sealed class CognitoTokenIssuer
     public string MintIdToken(CognitoIdTokenRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.ClientId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.Email);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.ClientId, nameof(request));
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.Email, nameof(request));
         if (request.Lifetime <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(request), "Lifetime must be positive.");
 
@@ -210,7 +215,12 @@ public sealed class CognitoTokenIssuer
         {
             new("sub", request.Sub.ToString()),
             new(CognitoDefaults.TokenUse, CognitoDefaults.TokenUseId),
-            new("auth_time", ToEpochSeconds(authTime).ToString(), ClaimValueTypes.Integer64),
+            new(
+                "auth_time",
+                ToEpochSeconds(authTime)
+                    .ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ClaimValueTypes.Integer64
+            ),
             new("jti", Guid.NewGuid().ToString()),
             new(CognitoDefaults.Email, request.Email),
             new(
@@ -315,7 +325,9 @@ public sealed class CognitoTokenIssuer
                 writer.WriteBoolean("primary", identity.Primary);
                 writer.WriteString(
                     "dateCreated",
-                    identity.DateCreated.ToUnixTimeMilliseconds().ToString()
+                    identity
+                        .DateCreated.ToUnixTimeMilliseconds()
+                        .ToString(System.Globalization.CultureInfo.InvariantCulture)
                 );
                 writer.WriteEndObject();
             }

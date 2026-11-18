@@ -32,7 +32,7 @@ public sealed class GraphQLTestServerFixture : IDisposable
                     .AddGraphQLServer()
                     .AddQueryType<TestQuery>()
                     .AddMutationType<TestMutation>()
-                    .DisableIntrospection(false)
+                    .DisableIntrospection(disable: false)
                     .ModifyRequestOptions(o => o.IncludeExceptionDetails = true);
                 services.AddRouting();
             });

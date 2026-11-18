@@ -181,7 +181,7 @@ internal sealed class LifecycleSubscriptionAccess(
 internal sealed record LifecycleVisibility(bool All, IReadOnlySet<string> Trains)
 {
     public static readonly LifecycleVisibility Operations = new(
-        true,
+        All: true,
         new HashSet<string>(StringComparer.Ordinal)
     );
 
@@ -209,7 +209,7 @@ internal sealed record LifecycleVisibility(bool All, IReadOnlySet<string> Trains
         new HashSet<string>(StringComparer.Ordinal);
 
     /// <summary>
-    /// The event as this subscriber should see it, or <c>null</c> when it should not see it.
+    /// The event as this subscriber should see it, or <see langword="null"/> when it should not see it.
     /// </summary>
     public TrainLifecycleEvent? Present(TrainLifecycleEvent e)
     {
@@ -233,7 +233,7 @@ internal sealed record LifecycleVisibility(bool All, IReadOnlySet<string> Trains
     }
 
     /// <summary>
-    /// The junction event as this subscriber should see it, or <c>null</c> when it should not see
+    /// The junction event as this subscriber should see it, or <see langword="null"/> when it should not see
     /// it: exactly when it would not see the train's own events.
     /// </summary>
     /// <remarks>

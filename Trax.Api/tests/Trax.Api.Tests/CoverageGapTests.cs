@@ -268,7 +268,9 @@ public class CoverageGapTests
         var provider = services.BuildServiceProvider();
         var registry =
             provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<HealthCheckServiceOptions>>();
-        var reg = registry.Value.Registrations.SingleOrDefault(r => r.Name == "custom-name");
+        var reg = registry.Value.Registrations.SingleOrDefault(r =>
+            string.Equals(r.Name, "custom-name", StringComparison.Ordinal)
+        );
         reg.Should().NotBeNull();
         reg!.Tags.Should().Contain("tag1");
     }
@@ -382,7 +384,7 @@ public class CoverageGapTests
     {
         var scheduler = Substitute.For<Trax.Scheduler.Services.TraxScheduler.ITraxScheduler>();
         var single = new Trax.Scheduler.Services.TraxScheduler.DeadLetterOperationResult(
-            true,
+            Success: true,
             42L,
             "ok"
         );

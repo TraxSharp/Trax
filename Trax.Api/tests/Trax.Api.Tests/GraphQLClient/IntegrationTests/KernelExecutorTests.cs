@@ -160,7 +160,9 @@ public class KernelExecutorTests
     {
         // player-999 doesn't exist -> rename mutation throws GraphQLException server-side
         var act = async () =>
-            await _executor.Run(new RenamePlayerRequest { Id = "player-999", NewName = "Ghost" });
+            await _executor
+                .Run(new RenamePlayerRequest { Id = "player-999", NewName = "Ghost" })
+                .ConfigureAwait(false);
 
         var ex = await act.Should().ThrowAsync<GraphQLExecutionException>();
         ex.Which.Errors.Should().NotBeEmpty();
@@ -171,7 +173,9 @@ public class KernelExecutorTests
     public async Task RawString_DriftedQuery_FailsValidationBeforeHttpCall()
     {
         var act = async () =>
-            await _executor.Run(new GetPlayerByDriftedQueryRequest { Id = "player-1" });
+            await _executor
+                .Run(new GetPlayerByDriftedQueryRequest { Id = "player-1" })
+                .ConfigureAwait(false);
 
         var ex = await act.Should().ThrowAsync<GraphQLValidationException>();
         ex.Which.Errors.Should().NotBeEmpty();
@@ -182,7 +186,7 @@ public class KernelExecutorTests
     public async Task Run_NullRequest_ThrowsArgumentNull()
     {
         var act = async () =>
-            await _executor.Run<PlayerProfile>((IGraphQLClientRequest<PlayerProfile>)null!);
+            await _executor.Run((IGraphQLClientRequest<PlayerProfile>)null!).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<ArgumentNullException>();
     }
@@ -193,7 +197,8 @@ public class KernelExecutorTests
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        var act = async () => await _executor.Run(new AllItemsRequest(), cts.Token);
+        var act = async () =>
+            await _executor.Run(new AllItemsRequest(), cts.Token).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }

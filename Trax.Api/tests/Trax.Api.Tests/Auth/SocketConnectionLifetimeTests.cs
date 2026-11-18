@@ -55,7 +55,7 @@ public class SocketConnectionLifetimeTests
         "alice",
         "Alice",
         ["Player"],
-        new Dictionary<string, string> { ["tenant"] = "north" }
+        new Dictionary<string, string>(StringComparer.Ordinal) { ["tenant"] = "north" }
     );
 
     #region API-key sockets
@@ -117,7 +117,10 @@ public class SocketConnectionLifetimeTests
                 new ValueTask<TraxPrincipal?>(
                     Alice with
                     {
-                        Claims = new Dictionary<string, string> { ["tenant"] = "south" },
+                        Claims = new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["tenant"] = "south",
+                        },
                     }
                 )
             );
@@ -139,7 +142,7 @@ public class SocketConnectionLifetimeTests
             .SamePrincipal(bare with { DisplayName = "A." }, bare)
             .Should()
             .BeTrue();
-        TraxApiKeySocketInterceptor.SamePrincipal(null, bare).Should().BeFalse();
+        TraxApiKeySocketInterceptor.SamePrincipal(current: null, bare).Should().BeFalse();
         TraxApiKeySocketInterceptor
             .SamePrincipal(bare with { Id = "bob" }, bare)
             .Should()
@@ -231,7 +234,15 @@ public class SocketConnectionLifetimeTests
                 .Instance
         );
         var (session, _) = NewSession();
-        (await interceptor.OnConnectAsync(session, KeyPayload())).Accepted.Should().BeTrue();
+        (
+            await interceptor.OnConnectAsync(
+                session,
+                KeyPayload(),
+                cancellationToken: CancellationToken.None
+            )
+        )
+            .Accepted.Should()
+            .BeTrue();
 
         resolver
             .ResolveAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -270,9 +281,10 @@ public class SocketConnectionLifetimeTests
                             b.WithSubject("alice")
                                 .WithExpires(time.GetUtcNow().AddHours(8).UtcDateTime)
                         ),
-                        null
+                        Bearer: null
                     )
-                )
+                ),
+                cancellationToken: CancellationToken.None
             );
         status.Accepted.Should().BeTrue();
 
@@ -299,7 +311,15 @@ public class SocketConnectionLifetimeTests
         var time = new ManualTimeProvider(DateTimeOffset.UtcNow);
         var interceptor = Composite(Services(time));
         var (session, _) = NewSession();
-        (await interceptor.OnConnectAsync(session, EmptyPayload())).Accepted.Should().BeTrue();
+        (
+            await interceptor.OnConnectAsync(
+                session,
+                EmptyPayload(),
+                cancellationToken: CancellationToken.None
+            )
+        )
+            .Accepted.Should()
+            .BeTrue();
 
         time.Advance(Lifetime - TimeSpan.FromSeconds(1));
         Closes(session).Should().BeEmpty();
@@ -321,7 +341,15 @@ public class SocketConnectionLifetimeTests
         var interceptor = Composite(Services(time));
         var (session, http) = NewSession();
         http.Features.Set<IAuthenticateResultFeature>(new SignIn(time.GetUtcNow().AddMinutes(10)));
-        (await interceptor.OnConnectAsync(session, EmptyPayload())).Accepted.Should().BeTrue();
+        (
+            await interceptor.OnConnectAsync(
+                session,
+                EmptyPayload(),
+                cancellationToken: CancellationToken.None
+            )
+        )
+            .Accepted.Should()
+            .BeTrue();
 
         time.Advance(TimeSpan.FromMinutes(9));
         Closes(session).Should().BeEmpty();
@@ -341,7 +369,15 @@ public class SocketConnectionLifetimeTests
         var interceptor = Composite(Services(time));
         var (session, http) = NewSession();
         http.Features.Set<IAuthenticateResultFeature>(new SignIn(time.GetUtcNow().AddDays(14)));
-        (await interceptor.OnConnectAsync(session, EmptyPayload())).Accepted.Should().BeTrue();
+        (
+            await interceptor.OnConnectAsync(
+                session,
+                EmptyPayload(),
+                cancellationToken: CancellationToken.None
+            )
+        )
+            .Accepted.Should()
+            .BeTrue();
 
         time.Advance(Lifetime);
 
@@ -356,9 +392,17 @@ public class SocketConnectionLifetimeTests
     public async Task RejectedConnection_IsNeverClosedLater()
     {
         var time = new ManualTimeProvider(DateTimeOffset.UtcNow);
-        var interceptor = Composite(Services(time, ResolverReturning(null)));
+        var interceptor = Composite(Services(time, ResolverReturning(principal: null)));
         var (session, _) = NewSession();
-        (await interceptor.OnConnectAsync(session, KeyPayload())).Accepted.Should().BeFalse();
+        (
+            await interceptor.OnConnectAsync(
+                session,
+                KeyPayload(),
+                cancellationToken: CancellationToken.None
+            )
+        )
+            .Accepted.Should()
+            .BeFalse();
 
         time.Advance(Lifetime * 2);
 
@@ -493,7 +537,7 @@ public class SocketConnectionLifetimeTests
         await using var app = builder.Build();
         app.UseRouting();
         app.UseTraxGraphQL();
-        await app.StartAsync();
+        await app.StartAsync(cancellationToken: CancellationToken.None);
 
         var client = app.GetTestServer().CreateWebSocketClient();
         client.SubProtocols.Add("graphql-transport-ws");
@@ -502,7 +546,7 @@ public class SocketConnectionLifetimeTests
         await ws.SendAsync(
             Encoding.UTF8.GetBytes("""{"type":"connection_init","payload":{}}"""),
             WebSocketMessageType.Text,
-            true,
+            endOfMessage: true,
             cts.Token
         );
 
@@ -628,7 +672,7 @@ public class SocketConnectionLifetimeTests
         new(new TraxApplicationServices(services), 100, Lifetime, Recheck);
 
     private static HotChocolate.AspNetCore.Subscriptions.Protocols.IOperationMessagePayload KeyPayload() =>
-        Payload(new TraxApiKeySocketInterceptor.ConnectionInitPayload("key-1", null));
+        Payload(new TraxApiKeySocketInterceptor.ConnectionInitPayload("key-1", ApiKey: null));
 
     private static async Task<ISocketSession> ConnectWithKeyAsync(
         ITraxPrincipalResolver<string> resolver,
@@ -637,14 +681,26 @@ public class SocketConnectionLifetimeTests
     {
         var interceptor = Composite(Services(time, resolver));
         var (session, _) = NewSession();
-        (await interceptor.OnConnectAsync(session, KeyPayload())).Accepted.Should().BeTrue();
+        (
+            await interceptor
+                .OnConnectAsync(session, KeyPayload(), cancellationToken: CancellationToken.None)
+                .ConfigureAwait(false)
+        )
+            .Accepted.Should()
+            .BeTrue();
         return session;
     }
 
     private static IEnumerable<ConnectionCloseReason> Closes(ISocketSession session) =>
         session
             .Connection.ReceivedCalls()
-            .Where(call => call.GetMethodInfo().Name == nameof(ISocketConnection.CloseAsync))
+            .Where(call =>
+                string.Equals(
+                    call.GetMethodInfo().Name,
+                    nameof(ISocketConnection.CloseAsync),
+                    StringComparison.Ordinal
+                )
+            )
             .Select(call => call.GetArguments()[1])
             .OfType<ConnectionCloseReason>();
 

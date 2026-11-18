@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Terminal.Gui.Input;
@@ -59,10 +60,10 @@ public class ListScreenTests
             "Executions",
             HostData.Runs(
                 3,
-                null,
+                next: null,
                 HostData.Run(4900, "ShipOrder"),
                 HostData.Run(4812, "SendInvoice"),
-                HostData.Run(4807, "SyncCustomers", "COMPLETED", null)
+                HostData.Run(4807, "SyncCustomers", "COMPLETED", reason: null)
             )
         );
         await _terminal.OnUi(() => _window.Lists[0].Refresh());
@@ -87,7 +88,7 @@ public class ListScreenTests
     {
         await _terminal.Press(Key.Space);
         await _terminal.Press(Key.Space);
-        _prompts.Choices.Enqueue(null);
+        _prompts.Choices.Enqueue(item: null);
 
         await _terminal.Press(Key.C);
         await _terminal.OnUi(() => { });
@@ -117,7 +118,7 @@ public class ListScreenTests
         await _terminal.Press(Key.D4);
         await _terminal.UntilShown("NightlyBilling");
 
-        _prompts.Choices.Enqueue(null);
+        _prompts.Choices.Enqueue(item: null);
         await _terminal.Press(Key.E);
         await _terminal.OnUi(() => { });
 
@@ -137,13 +138,15 @@ public class ListScreenTests
             _ =>
                 Interlocked.Increment(ref reads) == 1
                     ? held.Task
-                    : Task.FromResult(Parse(HostData.Runs(1, null, HostData.Run(4799, "Archive"))))
+                    : Task.FromResult(
+                        Parse(HostData.Runs(1, next: null, HostData.Run(4799, "Archive")))
+                    )
         );
 
         await _terminal.OnUi(() => _window.Lists[0].Refresh());
         await _terminal.OnUi(() => _window.Lists[0].Refresh());
         await _terminal.UntilShown("Archive");
-        held.SetResult(Parse(HostData.Runs(1, null, HostData.Run(4700, "Stale"))));
+        held.SetResult(Parse(HostData.Runs(1, next: null, HostData.Run(4700, "Stale"))));
         await _terminal.Until(() => _host.Sent("Executions").Count >= 3, "both reads were sent");
         await _terminal.OnUi(() => { });
 
@@ -165,9 +168,12 @@ public class ListScreenTests
         await _terminal.Until(() => _host.Sent("Executions").Count > reads, "the read is sent");
         _context.Close();
 
-        await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(15));
+        await cancelled.Task.WaitAsync(
+            TimeSpan.FromSeconds(15),
+            cancellationToken: CancellationToken.None
+        );
         // negative-wait: a report of the cancelled read, were one made, would be drawn within this window.
-        await Task.Delay(200);
+        await Task.Delay(200, cancellationToken: CancellationToken.None);
         await _terminal.OnUi(() => { });
         (await _terminal.Screen()).Should().NotContain("canceled");
     }
@@ -200,7 +206,7 @@ public class ListScreenTests
             .BeEmpty("the count shown is the one read without the filter");
         _prompts.Asked.Should().Contain(a => a.StartsWith("All matching: The list is being read"));
 
-        held.SetResult(Parse(HostData.Runs(1, null, HostData.Run(4812, "SendInvoice"))));
+        held.SetResult(Parse(HostData.Runs(1, next: null, HostData.Run(4812, "SendInvoice"))));
         await _terminal.UntilShown("1 in all");
         await _terminal.Press(Key.B);
         await _terminal.Until(
@@ -215,14 +221,17 @@ public class ListScreenTests
     private static JsonObject Parse(string data) => JsonNode.Parse(data)!.AsObject();
 
     private static string Manifest(long id, string name) =>
-        $$"""
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $$"""
             {"id":{{id}},"externalId":"m-{{id}}","name":"{{name}}","isEnabled":false,"scheduleType":"CRON",
              "cronExpression":"0 2 * * *","maxRetries":3,"lastSuccessfulRun":null,"manifestGroupId":1,"priority":0,
              "replayDecisionsOnRetry":true}
-            """;
+            """
+        );
 
     private static string Manifests(params string[] rows) =>
         """{"operations":{"manifests":{"items":["""
-        + string.Join(",", rows)
+        + string.Join(',', rows)
         + $"],\"totalCount\":{rows.Length},\"isEstimatedCount\":false,\"nextCursor\":null}}}}}}";
 }

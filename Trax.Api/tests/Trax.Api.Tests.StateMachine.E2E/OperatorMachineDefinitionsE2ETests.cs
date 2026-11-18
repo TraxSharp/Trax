@@ -74,8 +74,12 @@ public class OperatorMachineDefinitionsE2ETests
 
         foreach (var name in new[] { ShelfMachine.MachineId, WizardMachine.MachineId })
         {
-            var served = machines.Single(m => m.GetProperty("name").GetString() == name);
-            var registered = _host.Services.GetServices<IMachine>().Single(m => m.Name == name);
+            var served = machines.Single(m =>
+                string.Equals(m.GetProperty("name").GetString(), name, StringComparison.Ordinal)
+            );
+            var registered = _host
+                .Services.GetServices<IMachine>()
+                .Single(m => string.Equals(m.Name, name, StringComparison.Ordinal));
             var drawn = MachineGraph.Parse(registered.ExportIr());
 
             served.GetProperty("initialState").GetString().Should().Be(drawn.Initial);
@@ -102,14 +106,18 @@ public class OperatorMachineDefinitionsE2ETests
         }
 
         var wizard = machines.Single(m =>
-            m.GetProperty("name").GetString() == WizardMachine.MachineId
+            string.Equals(
+                m.GetProperty("name").GetString(),
+                WizardMachine.MachineId,
+                StringComparison.Ordinal
+            )
         );
         wizard.GetProperty("version").GetInt32().Should().Be(1);
         wizard.GetProperty("systemOwned").GetBoolean().Should().BeFalse();
         var states = wizard
             .GetProperty("states")
             .EnumerateArray()
-            .ToDictionary(s => s.GetProperty("name").GetString()!);
+            .ToDictionary(s => s.GetProperty("name").GetString()!, StringComparer.Ordinal);
         states[nameof(WizardState.Naming)].GetProperty("isInitial").GetBoolean().Should().BeTrue();
         states[nameof(WizardState.Building)]
             .GetProperty("invokesTrain")

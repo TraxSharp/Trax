@@ -27,20 +27,32 @@ internal sealed class OutdatedTransport(ITraxTransport inner) : ITraxTransport
         CancellationToken cancellationToken = default
     )
     {
-        var answer = await inner.ExecuteAsync(request, cancellationToken);
+        var answer = await inner.ExecuteAsync(request, cancellationToken).ConfigureAwait(false);
         if (
-            request.Document.Name == TraxOperations.ServerVersion.Name
-            || !answer.Errors.Any(e => e.Code == Code)
+            string.Equals(
+                request.Document.Name,
+                TraxOperations.ServerVersion.Name,
+                StringComparison.Ordinal
+            ) || !answer.Errors.Any(e => string.Equals(e.Code, Code, StringComparison.Ordinal))
         )
             return answer;
         // The host may have moved on since it was last asked.
-        var version = await new TraxClient(inner).ServerVersionAsync(cancellationToken);
+        var version = await new TraxClient(inner)
+            .ServerVersionAsync(cancellationToken)
+            .ConfigureAwait(false);
         if (version.Data?.Operations?.Config.Version is { } host && ConsoleSession.IsRelease(host))
             HostVersion = host;
         return answer with
         {
             Errors = answer
-                .Errors.Select(e => e.Code == Code ? e with { Message = Explained(e.Message) } : e)
+                .Errors.Select(e =>
+                    string.Equals(e.Code, Code, StringComparison.Ordinal)
+                        ? e with
+                        {
+                            Message = Explained(e.Message),
+                        }
+                        : e
+                )
                 .ToList(),
         };
     }
@@ -50,7 +62,8 @@ internal sealed class OutdatedTransport(ITraxTransport inner) : ITraxTransport
 
     /// <summary>A <c>CLIENT_OUTDATED</c> refusal's message, with the code and what to install.</summary>
     public string Explained(string message) =>
-        HostVersion is { } host && host != ConsoleSession.ToolVersion
+        HostVersion is { } host
+        && !string.Equals(host, ConsoleSession.ToolVersion, StringComparison.Ordinal)
             ? $"{Code}: {message} {new VersionCheck.Other(host).Message}"
             : $"{Code}: {message} The host serves the documents of another Trax release than trax-console "
                 + $"{ConsoleSession.ToolVersion}: trax-console check names the one to install.";
@@ -92,7 +105,7 @@ internal sealed class OutdatedTransport(ITraxTransport inner) : ITraxTransport
                 if (
                     error["extensions"]?["code"] is JsonValue code
                     && code.TryGetValue<string>(out var text)
-                    && text == Code
+                    && string.Equals(text, Code, StringComparison.Ordinal)
                 )
                 {
                     var message =

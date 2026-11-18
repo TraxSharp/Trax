@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -43,7 +44,7 @@ public class TraxJwtDispatcherSocketE2ETests
     {
         AuthE2EHost.EnsureDatabaseExists(Database);
         var cs = AuthE2EHost.ConnectionString(Database);
-        var jwks = await TestJwksServer.StartAsync();
+        var jwks = await TestJwksServer.StartAsync().ConfigureAwait(false);
 
         var host = new HostBuilder()
             .ConfigureWebHost(web =>
@@ -99,8 +100,8 @@ public class TraxJwtDispatcherSocketE2ETests
             )
             .Build();
 
-        await host.StartAsync();
-        await WarmJwksMetadataAsync(host, jwks);
+        await host.StartAsync().ConfigureAwait(false);
+        await WarmJwksMetadataAsync(host, jwks).ConfigureAwait(false);
         return (host, jwks);
     }
 
@@ -132,16 +133,21 @@ public class TraxJwtDispatcherSocketE2ETests
             // Prove the endpoint answers on a client we control before the
             // bearer handler's backchannel spends its attempt on it.
             using var probe = new HttpClient { Timeout = WarmupBudget };
-            (await probe.GetAsync(discovery)).EnsureSuccessStatusCode();
+            (await probe.GetAsync(discovery).ConfigureAwait(false)).EnsureSuccessStatusCode();
 
             using var cts = new CancellationTokenSource(WarmupBudget);
-            await options.ConfigurationManager!.GetConfigurationAsync(cts.Token);
+            await options
+                .ConfigurationManager!.GetConfigurationAsync(cts.Token)
+                .ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             throw new InvalidOperationException(
                 $"The cognito scheme's discovery document at {discovery} did not load within "
-                    + $"{WarmupBudget.TotalSeconds}s of host start.",
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{WarmupBudget.TotalSeconds}s of host start."
+                    ),
                 ex
             );
         }
@@ -205,14 +211,22 @@ public class TraxJwtDispatcherSocketE2ETests
     {
         var client = host.GetTestServer().CreateWebSocketClient();
         client.SubProtocols.Add("graphql-transport-ws");
-        return await client.ConnectClosingAsync(new Uri(WsUri), CancellationToken.None);
+        return await client
+            .ConnectClosingAsync(new Uri(WsUri), CancellationToken.None)
+            .ConfigureAwait(false);
     }
 
     private static async Task SendInitAsync(WebSocket ws, object payload)
     {
         var msg = JsonSerializer.Serialize(new { type = "connection_init", payload });
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await ws.SendAsync(Encoding.UTF8.GetBytes(msg), WebSocketMessageType.Text, true, cts.Token);
+        await ws.SendAsync(
+                Encoding.UTF8.GetBytes(msg),
+                WebSocketMessageType.Text,
+                endOfMessage: true,
+                cts.Token
+            )
+            .ConfigureAwait(false);
     }
 
     private static async Task<JsonElement> ReceiveAsync(WebSocket ws)
@@ -226,13 +240,15 @@ public class TraxJwtDispatcherSocketE2ETests
             WebSocketReceiveResult result;
             try
             {
-                result = await ws.ReceiveAsync(buffer, cts.Token);
+                result = await ws.ReceiveAsync(buffer, cts.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException ex)
             {
                 throw new TimeoutException(
-                    $"No frame arrived within {budget.TotalSeconds}s. Every timeout under "
-                        + "this wait must be shorter than it (ADR 0014).",
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"No frame arrived within {budget.TotalSeconds}s. Every timeout under "
+                    ) + "this wait must be shorter than it (ADR 0014).",
                     ex
                 );
             }
@@ -259,7 +275,7 @@ public class TraxJwtDispatcherSocketE2ETests
                 using var ms = new MemoryStream();
                 while (!cts.IsCancellationRequested)
                 {
-                    var result = await ws.ReceiveAsync(buffer, cts.Token);
+                    var result = await ws.ReceiveAsync(buffer, cts.Token).ConfigureAwait(false);
                     if (result.MessageType == WebSocketMessageType.Close)
                         return true;
                     if (result.Count > 0)
@@ -273,9 +289,9 @@ public class TraxJwtDispatcherSocketE2ETests
                     .Parse(Encoding.UTF8.GetString(ms.ToArray()))
                     .RootElement.GetProperty("type")
                     .GetString();
-                if (type == "connection_error")
+                if (string.Equals(type, "connection_error", StringComparison.Ordinal))
                     return true;
-                if (type == "connection_ack")
+                if (string.Equals(type, "connection_ack", StringComparison.Ordinal))
                     return false;
             }
         }

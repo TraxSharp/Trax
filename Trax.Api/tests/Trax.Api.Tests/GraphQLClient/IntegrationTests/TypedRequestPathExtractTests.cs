@@ -16,7 +16,11 @@ namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 [TestFixture]
 public class TypedRequestPathExtractTests
 {
-    private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web)
+    {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
+    };
 
     [Test]
     public void Extract_NoPath_DescendsIntoRootField()

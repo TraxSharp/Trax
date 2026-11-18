@@ -64,13 +64,15 @@ public partial class ApiDashboardPackageTests
 
         var resources = ManifestResources(assembly);
         resources.Should().Contain("TraxApiDashboard/index.html");
-        var assets = resources.Where(r => r.StartsWith("TraxApiDashboard/assets/")).ToList();
+        var assets = resources
+            .Where(r => r.StartsWith("TraxApiDashboard/assets/", StringComparison.Ordinal))
+            .ToList();
         assets
             .Should()
-            .Contain(a => HashedScript().IsMatch(a), "the app's script is named by its content");
+            .Contain(a => HashedScript.IsMatch(a), "the app's script is named by its content");
         assets
             .Should()
-            .Contain(a => HashedStyle().IsMatch(a), "the app's styles are named by their content");
+            .Contain(a => HashedStyle.IsMatch(a), "the app's styles are named by their content");
         resources
             .Should()
             .NotContain(
@@ -79,11 +81,19 @@ public partial class ApiDashboardPackageTests
             );
     }
 
-    [GeneratedRegex(@"^TraxApiDashboard/assets/index-[A-Za-z0-9_-]{6,}\.js$")]
-    private static partial Regex HashedScript();
+    [GeneratedRegex(
+        @"^TraxApiDashboard/assets/index-[A-Za-z0-9_-]{6,}\.js$",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex HashedScript { get; }
 
-    [GeneratedRegex(@"^TraxApiDashboard/assets/index-[A-Za-z0-9_-]{6,}\.css$")]
-    private static partial Regex HashedStyle();
+    [GeneratedRegex(
+        @"^TraxApiDashboard/assets/index-[A-Za-z0-9_-]{6,}\.css$",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex HashedStyle { get; }
 
     private static List<string> ManifestResources(string assemblyPath)
     {
@@ -160,6 +170,7 @@ public partial class ApiDashboardPackageTests
         var psi = new ProcessStartInfo(fileName)
         {
             WorkingDirectory = workingDirectory,
+            UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };

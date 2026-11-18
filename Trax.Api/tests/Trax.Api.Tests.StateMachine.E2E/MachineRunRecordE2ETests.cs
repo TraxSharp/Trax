@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.Hosting;
@@ -176,7 +177,8 @@ public class MachineRunRecordE2ETests
         var snapshot =
             """{"machine":"turnstile","version":1,"state":"Unlocked","context":{"paidWith":"MARKER"}}""".Replace(
                 "MARKER",
-                marker
+                marker,
+                StringComparison.Ordinal
             );
 
         using var saved = await _host.PostAsync(
@@ -237,7 +239,10 @@ public class MachineRunRecordE2ETests
         );
 
         using var detail = await _host.PostAsync(
-            $$"""{ operations { executionDetail(id: {{run}}) { id name input output } } }""",
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $$"""{ operations { executionDetail(id: {{run}}) { id name input output } } }"""
+            ),
             apiKey: E2EHost.OperatorKey
         );
 

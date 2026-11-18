@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -232,11 +233,11 @@ public class PersistedOperationsDbContextTests
                     {
                         TenantKey = "",
                         Id = "ordered_v1",
-                        Document = $"v{i}",
+                        Document = string.Create(CultureInfo.InvariantCulture, $"v{i}"),
                         ShapeFingerprint = "fp",
                         ChangeType = "Upsert",
                         ChangedAt = DateTime.UtcNow.AddMinutes(i),
-                        ChangedReason = $"step{i}",
+                        ChangedReason = string.Create(CultureInfo.InvariantCulture, $"step{i}"),
                     }
                 );
             }

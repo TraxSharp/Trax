@@ -79,8 +79,9 @@ public class TypeExtensionTargetTests
         var act = async () =>
         {
             using var host = await StartAsync(g =>
-                g.AddTypeExtension<OnRootQuery>().AddTypeExtension<OnLifecycleSubscriptions>()
-            );
+                    g.AddTypeExtension<OnRootQuery>().AddTypeExtension<OnLifecycleSubscriptions>()
+                )
+                .ConfigureAwait(false);
         };
 
         await act.Should().NotThrowAsync();
@@ -126,7 +127,7 @@ public class TypeExtensionTargetTests
 
         public async IAsyncEnumerable<string> SubscribeAsync()
         {
-            await Task.CompletedTask;
+            await Task.CompletedTask.ConfigureAwait(false);
             yield break;
         }
     }
@@ -173,7 +174,7 @@ public class TypeExtensionTargetTests
 
         public async IAsyncEnumerable<string> SubscribeAsync()
         {
-            await Task.CompletedTask;
+            await Task.CompletedTask.ConfigureAwait(false);
             yield break;
         }
     }

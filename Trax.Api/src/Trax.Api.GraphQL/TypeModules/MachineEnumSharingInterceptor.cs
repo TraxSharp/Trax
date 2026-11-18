@@ -109,7 +109,11 @@ internal sealed class MachineEnumSharingInterceptor(IReadOnlySet<Type> accepted)
                     }
                     if (type is InterfaceType)
                         foreach (var implementation in _objects)
-                            if (implementation.Implements.Any(i => i.Name == type.Name))
+                            if (
+                                implementation.Implements.Any(i =>
+                                    string.Equals(i.Name, type.Name, StringComparison.Ordinal)
+                                )
+                            )
                                 queue.Enqueue((implementation, from));
                     break;
                 case UnionType union:

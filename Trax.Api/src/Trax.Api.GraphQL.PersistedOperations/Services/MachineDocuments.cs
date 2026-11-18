@@ -88,7 +88,7 @@ internal static class MachineDocuments
         // The machine segment ends at the first `_` after the prefix, and an operation may hold `_` itself, so a
         // machine id with one would read back as a shorter machine's. A machine built with the fluent Id(...) is
         // kebab-case and never has one.
-        if (string.IsNullOrEmpty(machine) || machine.Contains('_'))
+        if (string.IsNullOrEmpty(machine) || machine.Contains('_', StringComparison.Ordinal))
             throw new ArgumentException(
                 $"The machine id '{machine}' cannot name persisted documents: a machine document's id separates "
                     + "the machine from the operation with '_', so the machine id must be non-empty and hold no '_'. "
@@ -168,7 +168,7 @@ internal static class MachineDocuments
             var operations = MachineType(root, field);
             if (operations is null)
             {
-                if (keyword == "query")
+                if (string.Equals(keyword, "query", StringComparison.Ordinal))
                     throw NotServed(machine);
                 continue;
             }
@@ -202,7 +202,9 @@ internal static class MachineDocuments
             && subscriptions.Fields.TryGetField(pushField, out var changed)
         )
         {
-            var id = changed.Arguments.First(a => a.Name == "id");
+            var id = changed.Arguments.First(a =>
+                string.Equals(a.Name, "id", StringComparison.Ordinal)
+            );
             var text =
                 $"subscription {pascal}MachineChanged($id: {Print(id.Type)}) {{ "
                 + $"{pushField}(id: $id)"
@@ -306,7 +308,7 @@ internal static class MachineDocuments
                 ancestors.RemoveAt(ancestors.Count - 1);
                 return fields.Count == 0
                     ? " { __typename }"
-                    : " { " + string.Join(" ", fields) + " }";
+                    : " { " + string.Join(' ', fields) + " }";
             case IInterfaceTypeDefinition or IUnionTypeDefinition:
                 return " { __typename }";
             default:

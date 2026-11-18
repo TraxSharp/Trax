@@ -100,7 +100,7 @@ public class TraxConsoleE2ETests
                 new TraxDocument<TraxNoVariables, JsonObject>(
                     "Executions",
                     TraxOperationKind.Query,
-                    null,
+                    Id: null,
                     "query Executions { operations { executions(take: 1) { totalCount } } }"
                 ),
                 new JsonObject()
@@ -164,7 +164,10 @@ public class TraxConsoleE2ETests
         var exit = await HeadlessCommands.ListAsync(
             session,
             "dead-letters",
-            new Dictionary<string, string> { ["status"] = "awaiting_intervention" },
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["status"] = "awaiting_intervention",
+            },
             take: 10,
             after: null,
             output,
@@ -183,35 +186,37 @@ public class TraxConsoleE2ETests
 
     private static async Task<ConsoleHost> HostAsync(string database, bool page = true)
     {
-        await E2EHost.RecreateDatabaseAsync(database);
+        await E2EHost.RecreateDatabaseAsync(database).ConfigureAwait(false);
         var scheduler = DispatchProxy.Create<ITraxScheduler, RecordingScheduler>();
         try
         {
-            var host = await E2EHost.StartAsync(
-                database,
-                new CountingCharge(),
-                new E2EHostOptions
-                {
-                    ExposeOperations = true,
-                    GraphQL = graphql =>
-                        graphql.UsePersistedOperations(po =>
-                            po.SingleNode().RequirePersisted(true)
-                        ),
-                    Endpoints = endpoints =>
+            var host = await E2EHost
+                .StartAsync(
+                    database,
+                    new CountingCharge(),
+                    new E2EHostOptions
                     {
-                        if (page)
-                            endpoints.UseTraxApiDashboard(d => d.AllowAnonymousShell());
-                        else
-                            endpoints.UseTraxOperatorConsoleDocuments();
-                    },
-                    Services = services => services.AddScoped(_ => scheduler),
-                }
-            );
+                        ExposeOperations = true,
+                        GraphQL = graphql =>
+                            graphql.UsePersistedOperations(po =>
+                                po.SingleNode().RequirePersisted(require: true)
+                            ),
+                        Endpoints = endpoints =>
+                        {
+                            if (page)
+                                endpoints.UseTraxApiDashboard(d => d.AllowAnonymousShell());
+                            else
+                                endpoints.UseTraxOperatorConsoleDocuments();
+                        },
+                        Services = services => services.AddScoped(_ => scheduler),
+                    }
+                )
+                .ConfigureAwait(false);
             return new ConsoleHost(database, host, (RecordingScheduler)(object)scheduler);
         }
         catch
         {
-            await E2EHost.DropDatabaseAsync(database);
+            await E2EHost.DropDatabaseAsync(database).ConfigureAwait(false);
             throw;
         }
     }
@@ -226,7 +231,13 @@ public class TraxConsoleE2ETests
         /// <summary>Every body the console sent, in order, but the version check.</summary>
         public IReadOnlyList<JsonObject> Sent =>
             _recording
-                .Bodies.Where(b => b["operationName"]?.GetValue<string>() != "ServerVersion")
+                .Bodies.Where(b =>
+                    !string.Equals(
+                        b["operationName"]?.GetValue<string>(),
+                        "ServerVersion",
+                        StringComparison.Ordinal
+                    )
+                )
                 .ToList();
 
         public ConsoleSession Session(string apiKey) =>
@@ -237,7 +248,10 @@ public class TraxConsoleE2ETests
                     apiKeyFile: null,
                     tokenFile: null,
                     sendText: false,
-                    name => name == ConsoleTarget.ApiKeyVariable ? apiKey : null
+                    name =>
+                        string.Equals(name, ConsoleTarget.ApiKeyVariable, StringComparison.Ordinal)
+                            ? apiKey
+                            : null
                 ),
                 _recording
             );
@@ -246,7 +260,7 @@ public class TraxConsoleE2ETests
         {
             host.Dispose();
             _recording.Dispose();
-            await E2EHost.DropDatabaseAsync(database);
+            await E2EHost.DropDatabaseAsync(database).ConfigureAwait(false);
         }
     }
 
@@ -269,10 +283,12 @@ public class TraxConsoleE2ETests
             CancellationToken cancellationToken
         )
         {
-            var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(cancellationToken));
+            var body = JsonNode.Parse(
+                await request.Content!.ReadAsStringAsync(cancellationToken).ConfigureAwait(false)
+            );
             lock (_bodies)
                 _bodies.Add((JsonObject)body!);
-            return await base.SendAsync(request, cancellationToken);
+            return await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -292,7 +308,13 @@ public class TraxConsoleE2ETests
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
-            if (targetMethod?.Name == nameof(ITraxScheduler.RequeueDeadLettersAsync))
+            if (
+                string.Equals(
+                    targetMethod?.Name,
+                    nameof(ITraxScheduler.RequeueDeadLettersAsync),
+                    StringComparison.Ordinal
+                )
+            )
             {
                 var ids = (long[])args![0]!;
                 lock (_requeued)

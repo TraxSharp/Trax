@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Json;
 using System.Reflection;
 using System.Text.Json;
@@ -60,10 +61,13 @@ public static class E2EHost
     public const string OperatorRole = "Operator";
 
     // The always-present `postgres` maintenance database (local docker-compose and CI differ on app dbs).
-    private static readonly string Maintenance =
-        $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database=postgres;Include Error Detail=true";
+    private static readonly string Maintenance = string.Create(
+        CultureInfo.InvariantCulture,
+        $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database=postgres;Include Error Detail=true"
+    );
 
-    public static string ConnectionString(string database) => ConnectionString(database, null);
+    public static string ConnectionString(string database) =>
+        ConnectionString(database, applicationName: null);
 
     /// <summary>
     /// The connection string of <paramref name="database"/>, naming its sessions
@@ -71,7 +75,10 @@ public static class E2EHost
     /// <c>pg_stat_activity</c>.
     /// </summary>
     public static string ConnectionString(string database, string? applicationName) =>
-        $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database={database};"
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database={database};"
+        )
         + "Include Error Detail=true;Maximum Pool Size=20"
         + (applicationName is null ? "" : $";Application Name={applicationName}");
 
@@ -81,18 +88,26 @@ public static class E2EHost
     /// </summary>
     public static async Task RecreateDatabaseAsync(string database)
     {
-        await using var admin = new NpgsqlConnection(Maintenance);
-        await admin.OpenAsync();
-        await Exec(admin, $"DROP DATABASE IF EXISTS {database} WITH (FORCE)");
-        await Exec(admin, $"CREATE DATABASE {database}");
+        var admin = new NpgsqlConnection(Maintenance);
+        await using (admin.ConfigureAwait(false))
+        {
+            await admin.OpenAsync().ConfigureAwait(false);
+            await Exec(admin, $"DROP DATABASE IF EXISTS {database} WITH (FORCE)")
+                .ConfigureAwait(false);
+            await Exec(admin, $"CREATE DATABASE {database}").ConfigureAwait(false);
+        }
     }
 
     public static async Task DropDatabaseAsync(string database)
     {
         NpgsqlConnection.ClearAllPools();
-        await using var admin = new NpgsqlConnection(Maintenance);
-        await admin.OpenAsync();
-        await Exec(admin, $"DROP DATABASE IF EXISTS {database} WITH (FORCE)");
+        var admin = new NpgsqlConnection(Maintenance);
+        await using (admin.ConfigureAwait(false))
+        {
+            await admin.OpenAsync().ConfigureAwait(false);
+            await Exec(admin, $"DROP DATABASE IF EXISTS {database} WITH (FORCE)")
+                .ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -219,7 +234,7 @@ public static class E2EHost
 
         try
         {
-            await host.StartAsync();
+            await host.StartAsync().ConfigureAwait(false);
         }
         catch
         {
@@ -255,7 +270,8 @@ public static class E2EHost
                     State = wire["state"]!.GetValue<string>(),
                     Context = wire["context"]!.AsObject().DeepClone().AsObject(),
                 }
-            );
+            )
+            .ConfigureAwait(false);
         if (!stored)
             throw new InvalidOperationException($"The draft {id} could not be seeded.");
     }
@@ -281,8 +297,8 @@ public static class E2EHost
         if (apiKey is not null)
             req.Headers.Add("X-Api-Key", apiKey);
 
-        var res = await client.SendAsync(req);
-        var body = await res.Content.ReadAsStringAsync();
+        var res = await client.SendAsync(req).ConfigureAwait(false);
+        var body = await res.Content.ReadAsStringAsync().ConfigureAwait(false);
         return JsonDocument.Parse(body);
     }
 
@@ -303,9 +319,12 @@ public static class E2EHost
 
     private static async Task Exec(NpgsqlConnection connection, string sql)
     {
-        await using var command = connection.CreateCommand();
-        command.CommandText = sql;
-        await command.ExecuteNonQueryAsync();
+        var command = connection.CreateCommand();
+        await using (command.ConfigureAwait(false))
+        {
+            command.CommandText = sql;
+            await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+        }
     }
 
     private sealed class NoJobSubmitter : IJobSubmitter

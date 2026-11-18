@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.StateMachine.E2E.Fakes;
@@ -77,7 +78,10 @@ public class MachineErrorMappingE2ETests
             .And.NotContainEquivalentOf("relation")
             .And.NotContainEquivalentOf("localhost", "no host")
             .And.NotMatchRegex(
-                $@"(?<![0-9A-Za-z-]){TestPostgres.Port}(?![0-9A-Za-z-])",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $@"(?<![0-9A-Za-z-]){TestPostgres.Port}(?![0-9A-Za-z-])"
+                ),
                 "no port; the error reference and ids are random hex and may contain the digits"
             )
             .And.NotContainEquivalentOf("select ", "no SQL")

@@ -260,7 +260,7 @@ public sealed class TraxGraphQLAuditListener(
                 Timestamp: timeProvider.GetUtcNow(),
                 Success: false,
                 ErrorText: Truncate(errorText, _options.MaxErrorTextLength),
-                Metadata: new Dictionary<string, string>
+                Metadata: new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     [SubscriptionEventKey] = "error",
                     [SubscriptionEventErrorCountKey] = errorCount.ToString(

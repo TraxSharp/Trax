@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -29,8 +30,10 @@ namespace Trax.Api.Tests.Stress.IntegrationTests;
 public class SeederTimeZoneTests
 {
     private static readonly string ConnectionString =
-        $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_stress_tz;Username=trax;"
-        + "Password=trax123;Timezone=Pacific/Kiritimati;Include Error Detail=true";
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_stress_tz;Username=trax;"
+        ) + "Password=trax123;Timezone=Pacific/Kiritimati;Include Error Detail=true";
 
     [Test]
     public async Task SeedAsync_InANonUtcSession_StampsTheNewestRowsAtNow()

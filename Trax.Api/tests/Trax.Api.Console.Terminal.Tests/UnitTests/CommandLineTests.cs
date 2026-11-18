@@ -90,7 +90,12 @@ public class CommandLineTests
         var error = new StringWriter();
 
         var exit = await ConsoleCommandLine
-            .Create(_ => null, _ => throw new AssertionException("nothing to open"), null, error)
+            .Create(
+                _ => null,
+                _ => throw new AssertionException("nothing to open"),
+                output: null,
+                error
+            )
             .Parse(["list", "runs"])
             .InvokeAsync();
 
@@ -105,7 +110,7 @@ public class CommandLineTests
 
         var (exit, _, _) = await Hosts
             .RunAsync(new SilentHost(), interrupt.Token, "list", "runs")
-            .WaitAsync(TimeSpan.FromSeconds(10));
+            .WaitAsync(TimeSpan.FromSeconds(10), cancellationToken: CancellationToken.None);
 
         exit.Should().Be(ConsoleCommandLine.Interrupted);
     }

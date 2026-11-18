@@ -106,7 +106,8 @@ public class QueryModelScalarCollectionIndexValidatorTests
         )!;
         var validator = (IHostedService)ActivatorUtilities.CreateInstance(provider, validatorType);
 
-        var act = async () => await validator.StartAsync(CancellationToken.None);
+        var act = async () =>
+            await validator.StartAsync(CancellationToken.None).ConfigureAwait(false);
 
         await act.Should().NotThrowAsync();
         recorder.Messages.Should().BeEmpty();
@@ -170,11 +171,17 @@ public class QueryModelScalarCollectionIndexValidatorTests
         await using var provider = services.BuildServiceProvider();
         var validator = provider
             .GetServices<IHostedService>()
-            .Single(h => h.GetType().Name == "QueryModelScalarCollectionIndexValidator");
+            .Single(h =>
+                string.Equals(
+                    h.GetType().Name,
+                    "QueryModelScalarCollectionIndexValidator",
+                    StringComparison.Ordinal
+                )
+            );
         await validator.StartAsync(CancellationToken.None);
 
         recorder
-            .Messages.Any(w => w.Contains("Loose"))
+            .Messages.Exists(w => w.Contains("Loose", StringComparison.Ordinal))
             .Should()
             .Be(
                 reported,
@@ -217,12 +224,14 @@ public class QueryModelScalarCollectionIndexValidatorTests
 
         services.AddHostedService<QueryModelScalarCollectionIndexValidatorAccessor<TContext>>();
 
-        await using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        await using (provider.ConfigureAwait(false))
+        {
+            foreach (var hosted in provider.GetServices<IHostedService>())
+                await hosted.StartAsync(CancellationToken.None).ConfigureAwait(false);
 
-        foreach (var hosted in provider.GetServices<IHostedService>())
-            await hosted.StartAsync(CancellationToken.None);
-
-        return recorder.Messages;
+            return recorder.Messages;
+        }
     }
 
     /// <summary>
@@ -302,7 +311,7 @@ public class IndexedRow
     public string Title { get; set; } = "";
     public string[] Tight { get; set; } = [];
     public string[] Btree { get; set; } = [];
-    public List<ChapterRow> Chapters { get; set; } = [];
+    public IList<ChapterRow> Chapters { get; set; } = [];
 }
 
 [TraxAllowAnonymous]

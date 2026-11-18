@@ -237,7 +237,10 @@ public class SocketUpgradeOriginTests
         };
         request.Headers.Add("Origin", "https://unlisted.example");
 
-        using var response = await client.SendAsync(request);
+        using var response = await client.SendAsync(
+            request,
+            cancellationToken: CancellationToken.None
+        );
 
         ((int)response.StatusCode).Should().Be(200);
     }
@@ -312,7 +315,7 @@ public class SocketUpgradeOriginTests
                         d.Name("Query")
                             .Field("ok")
                             .Type<HotChocolate.Types.BooleanType>()
-                            .Resolve(_ => new ValueTask<object?>(true))
+                            .Resolve(_ => new ValueTask<object?>(result: true))
                     ),
             mapOther: true
         );
@@ -397,7 +400,7 @@ public class SocketUpgradeOriginTests
             app.UseTraxGraphQL();
         if (mapOther)
             app.MapGraphQL("/other/graphql", "other");
-        await app.StartAsync();
+        await app.StartAsync(cancellationToken: CancellationToken.None).ConfigureAwait(false);
         return app;
     }
 
@@ -405,7 +408,9 @@ public class SocketUpgradeOriginTests
     private static async Task<string> SignInAsync(WebApplication app)
     {
         using var client = app.GetTestServer().CreateClient();
-        using var response = await client.PostAsync("/sign-in", content: null);
+        using var response = await client
+            .PostAsync("/sign-in", content: null, cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
         return response.Headers.GetValues("Set-Cookie").Single().Split(';')[0];
     }
@@ -435,9 +440,12 @@ public class SocketUpgradeOriginTests
         WebSocket ws;
         try
         {
-            ws = await client.ConnectClosingAsync(new Uri("ws://localhost" + path), default);
+            ws = await client
+                .ConnectClosingAsync(new Uri("ws://localhost" + path), default)
+                .ConfigureAwait(false);
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("status code"))
+        catch (InvalidOperationException ex)
+            when (ex.Message.Contains("status code", StringComparison.Ordinal))
         {
             return ex.Message[(ex.Message.LastIndexOf(' ') + 1)..];
         }
@@ -446,13 +454,14 @@ public class SocketUpgradeOriginTests
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             await ws.SendAsync(
-                Encoding.UTF8.GetBytes("""{"type":"connection_init","payload":{}}"""),
-                WebSocketMessageType.Text,
-                true,
-                cts.Token
-            );
+                    Encoding.UTF8.GetBytes("""{"type":"connection_init","payload":{}}"""),
+                    WebSocketMessageType.Text,
+                    endOfMessage: true,
+                    cts.Token
+                )
+                .ConfigureAwait(false);
             var buffer = new byte[4096];
-            var received = await ws.ReceiveAsync(buffer, cts.Token);
+            var received = await ws.ReceiveAsync(buffer, cts.Token).ConfigureAwait(false);
             if (received.MessageType == WebSocketMessageType.Close)
                 return "(closed)";
             return JsonDocument

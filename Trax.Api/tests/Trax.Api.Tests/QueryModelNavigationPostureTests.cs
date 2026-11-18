@@ -144,7 +144,9 @@ public class QueryModelNavigationPostureTests
                 .SetDocument(
                     "query($p: String) { discover { gatedPosts(where: { owner: { apiToken: { startsWith: $p } } }) { nodes { title } } } }"
                 )
-                .SetVariableValues(new Dictionary<string, object?> { ["p"] = "tok_live" })
+                .SetVariableValues(
+                    new Dictionary<string, object?>(StringComparer.Ordinal) { ["p"] = "tok_live" }
+                )
                 .SetUser(Anonymous())
                 .Build()
         );
@@ -323,7 +325,7 @@ public class QueryModelNavigationPostureTests
     }
 
     private static async Task<string> RunAsync(IRequestExecutor executor, string query) =>
-        (await executor.ExecuteAsync(query)).ExpectOperationResult().ToJson();
+        (await executor.ExecuteAsync(query).ConfigureAwait(false)).ExpectOperationResult().ToJson();
 
     private static async Task<string> RunAsync(
         IRequestExecutor executor,
@@ -331,9 +333,11 @@ public class QueryModelNavigationPostureTests
         ClaimsPrincipal user
     ) =>
         (
-            await executor.ExecuteAsync(
-                OperationRequestBuilder.New().SetDocument(query).SetUser(user).Build()
-            )
+            await executor
+                .ExecuteAsync(
+                    OperationRequestBuilder.New().SetDocument(query).SetUser(user).Build()
+                )
+                .ConfigureAwait(false)
         )
             .ExpectOperationResult()
             .ToJson();
@@ -394,20 +398,24 @@ public class QueryModelNavigationPostureTests
         try
         {
             foreach (var hosted in provider.GetServices<IHostedService>())
-                await hosted.StartAsync(default);
+                await hosted.StartAsync(default).ConfigureAwait(false);
         }
         catch
         {
-            await provider.DisposeAsync();
+            await provider.DisposeAsync().ConfigureAwait(false);
             throw;
         }
 
         using (var scope = provider.CreateScope())
-            await scope.ServiceProvider.GetRequiredService<TContext>().SeedAsync();
+            await scope
+                .ServiceProvider.GetRequiredService<TContext>()
+                .SeedAsync()
+                .ConfigureAwait(false);
 
         var executor = await provider
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
         return (provider, executor);
     }
 
@@ -610,7 +618,7 @@ public class QueryModelNavigationPostureTests
         public override async Task SeedAsync()
         {
             Posts.Add(new MethodGatedPost { Id = 1, Title = "hello" });
-            await SaveChangesAsync();
+            await SaveChangesAsync().ConfigureAwait(false);
         }
     }
 
@@ -656,7 +664,7 @@ public class QueryModelNavigationPostureTests
                     Author = author,
                 }
             );
-            await SaveChangesAsync();
+            await SaveChangesAsync().ConfigureAwait(false);
         }
     }
 
@@ -679,7 +687,7 @@ public class QueryModelNavigationPostureTests
                     Owner = owner,
                 }
             );
-            await SaveChangesAsync();
+            await SaveChangesAsync().ConfigureAwait(false);
         }
     }
 
@@ -701,7 +709,7 @@ public class QueryModelNavigationPostureTests
         public override async Task SeedAsync()
         {
             Posts.Add(new HiddenNavPost { Id = 1, Title = "hello" });
-            await SaveChangesAsync();
+            await SaveChangesAsync().ConfigureAwait(false);
         }
     }
 
@@ -723,7 +731,7 @@ public class QueryModelNavigationPostureTests
                     Place = new Place { City = "Lyon" },
                 }
             );
-            await SaveChangesAsync();
+            await SaveChangesAsync().ConfigureAwait(false);
         }
     }
 }

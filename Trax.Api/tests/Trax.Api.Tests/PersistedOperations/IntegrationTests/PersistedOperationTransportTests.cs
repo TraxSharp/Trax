@@ -104,7 +104,10 @@ public class PersistedOperationTransportTests
     {
         var executor = await ExecutorAsync(_app);
 
-        var result = await executor.ExecuteAsync(InlineQuery);
+        var result = await executor.ExecuteAsync(
+            InlineQuery,
+            cancellationToken: CancellationToken.None
+        );
 
         Classify(result.ExpectOperationResult().ToJson()).Should().Be(Required);
     }
@@ -120,7 +123,8 @@ public class PersistedOperationTransportTests
                 .New()
                 .SetDocument(InlineQuery)
                 .AllowNonPersistedOperation()
-                .Build()
+                .Build(),
+            cancellationToken: CancellationToken.None
         );
 
         Classify(result.ExpectOperationResult().ToJson()).Should().Be("data");
@@ -152,7 +156,16 @@ public class PersistedOperationTransportTests
             .Should()
             .Be(Required, Because);
         var executor = await ExecutorAsync(_app);
-        Classify((await executor.ExecuteAsync(MachineMutation)).ExpectOperationResult().ToJson())
+        Classify(
+                (
+                    await executor.ExecuteAsync(
+                        MachineMutation,
+                        cancellationToken: CancellationToken.None
+                    )
+                )
+                    .ExpectOperationResult()
+                    .ToJson()
+            )
             .Should()
             .Be(Required, Because);
     }
@@ -207,7 +220,7 @@ public class PersistedOperationTransportTests
     public async Task PersistedId_ExecutesOnEveryTransport()
     {
         var store = _app.Services.GetRequiredService<IPersistedOperationStore>();
-        await store.UpsertAsync("greet_v1", GraphQLFixture.ValidDocument, null, default);
+        await store.UpsertAsync("greet_v1", GraphQLFixture.ValidDocument, options: null, default);
 
         (await PostJsonAsync(_app, new { id = "greet_v1" })).Should().Be("data");
         (await GetAsync(_app, "id=greet_v1")).Should().Be("data");
@@ -229,7 +242,7 @@ public class PersistedOperationTransportTests
     public async Task EnforcementOff_InlineDocumentExecutesOverGet()
     {
         await using var app = await StartAsync(po =>
-            po.RequirePersisted(false).LogNonPersistedRequests(true)
+            po.RequirePersisted(require: false).LogNonPersistedRequests(log: true)
         );
 
         (await GetAsync(app, "query=" + Uri.EscapeDataString(InlineQuery))).Should().Be("data");
@@ -282,14 +295,14 @@ public class PersistedOperationTransportTests
         // above never pass through it.
         app.UsePersistedOperationsEnforcement();
         app.UseTraxGraphQL();
-        await app.StartAsync();
+        await app.StartAsync(cancellationToken: CancellationToken.None).ConfigureAwait(false);
         return app;
     }
 
     private static Task<IRequestExecutor> ExecutorAsync(WebApplication app) =>
         app
             .Services.GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax")
+            .GetExecutorAsync("trax", cancellationToken: CancellationToken.None)
             .AsTask();
 
     private static async Task<string> PostJsonAsync(WebApplication app, object body)
@@ -302,16 +315,28 @@ public class PersistedOperationTransportTests
                 "application/json"
             ),
         };
-        var response = await app.GetTestClient().SendAsync(request);
-        return Classify(await response.Content.ReadAsStringAsync());
+        var response = await app.GetTestClient()
+            .SendAsync(request, cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
+        return Classify(
+            await response
+                .Content.ReadAsStringAsync(cancellationToken: CancellationToken.None)
+                .ConfigureAwait(false)
+        );
     }
 
     private static async Task<string> GetAsync(WebApplication app, string queryString)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, "/trax/graphql?" + queryString);
         request.Headers.Add("GraphQL-Preflight", "1");
-        var response = await app.GetTestClient().SendAsync(request);
-        return Classify(await response.Content.ReadAsStringAsync());
+        var response = await app.GetTestClient()
+            .SendAsync(request, cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
+        return Classify(
+            await response
+                .Content.ReadAsStringAsync(cancellationToken: CancellationToken.None)
+                .ConfigureAwait(false)
+        );
     }
 
     private static async Task<string> PostMultipartAsync(WebApplication app, object operations)
@@ -326,8 +351,14 @@ public class PersistedOperationTransportTests
             Content = form,
         };
         request.Headers.Add("GraphQL-Preflight", "1");
-        var response = await app.GetTestClient().SendAsync(request);
-        return Classify(await response.Content.ReadAsStringAsync());
+        var response = await app.GetTestClient()
+            .SendAsync(request, cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
+        return Classify(
+            await response
+                .Content.ReadAsStringAsync(cancellationToken: CancellationToken.None)
+                .ConfigureAwait(false)
+        );
     }
 
     /// <summary>
@@ -337,32 +368,33 @@ public class PersistedOperationTransportTests
     {
         var client = app.GetTestServer().CreateWebSocketClient();
         client.SubProtocols.Add("graphql-transport-ws");
-        using var ws = await client.ConnectClosingAsync(
-            new Uri("ws://localhost/trax/graphql"),
-            default
-        );
+        using var ws = await client
+            .ConnectClosingAsync(new Uri("ws://localhost/trax/graphql"), default)
+            .ConfigureAwait(false);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
-        await SendAsync(ws, """{"type":"connection_init","payload":{}}""", cts.Token);
-        (await ReceiveAsync(ws, cts.Token))
+        await SendAsync(ws, """{"type":"connection_init","payload":{}}""", cts.Token)
+            .ConfigureAwait(false);
+        (await ReceiveAsync(ws, cts.Token).ConfigureAwait(false))
             .GetProperty("type")
             .GetString()
             .Should()
             .Be("connection_ack");
 
         await SendAsync(
-            ws,
-            JsonSerializer.Serialize(
-                new
-                {
-                    id = "1",
-                    type = "subscribe",
-                    payload,
-                }
-            ),
-            cts.Token
-        );
-        var reply = await ReceiveAsync(ws, cts.Token);
+                ws,
+                JsonSerializer.Serialize(
+                    new
+                    {
+                        id = "1",
+                        type = "subscribe",
+                        payload,
+                    }
+                ),
+                cts.Token
+            )
+            .ConfigureAwait(false);
+        var reply = await ReceiveAsync(ws, cts.Token).ConfigureAwait(false);
         return reply.GetProperty("type").GetString() switch
         {
             "next" => Classify(reply.GetProperty("payload").GetRawText()),
@@ -400,12 +432,17 @@ public class PersistedOperationTransportTests
     }
 
     private static Task SendAsync(WebSocket ws, string message, CancellationToken ct) =>
-        ws.SendAsync(Encoding.UTF8.GetBytes(message), WebSocketMessageType.Text, true, ct);
+        ws.SendAsync(
+            Encoding.UTF8.GetBytes(message),
+            WebSocketMessageType.Text,
+            endOfMessage: true,
+            ct
+        );
 
     private static async Task<JsonElement> ReceiveAsync(WebSocket ws, CancellationToken ct)
     {
         var buffer = new byte[64 * 1024];
-        var received = await ws.ReceiveAsync(buffer, ct);
+        var received = await ws.ReceiveAsync(buffer, ct).ConfigureAwait(false);
         using var doc = JsonDocument.Parse(Encoding.UTF8.GetString(buffer, 0, received.Count));
         return doc.RootElement.Clone();
     }

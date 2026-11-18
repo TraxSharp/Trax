@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,7 +22,10 @@ public class TraxHealthServiceTests
     // contention. Pool Size=8 across the four test fixtures in this assembly
     // stays well under Postgres's default max_connections=100.
     private static readonly string ConnectionString =
-        $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_health;Username=trax;Password=trax123;"
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_health;Username=trax;Password=trax123;"
+        )
         + "Maximum Pool Size=8;Minimum Pool Size=0;Connection Idle Lifetime=30;"
         + "Timeout=30;Tcp Keepalive=true";
 
@@ -107,19 +111,22 @@ public class TraxHealthServiceTests
 
     private async Task SeedMetadata(TrainState state, DateTime? endTime)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var meta = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = "Trax.X.SomeTrain",
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = null,
-            }
-        );
-        meta.TrainState = state;
-        if (endTime.HasValue)
-            meta.EndTime = endTime;
-        await db.Track(meta);
-        await db.SaveChanges(default);
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var meta = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = "Trax.X.SomeTrain",
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                }
+            );
+            meta.TrainState = state;
+            if (endTime.HasValue)
+                meta.EndTime = endTime;
+            await db.Track(meta).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+        }
     }
 }

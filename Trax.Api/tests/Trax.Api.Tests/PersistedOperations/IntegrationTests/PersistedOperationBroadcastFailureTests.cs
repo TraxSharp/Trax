@@ -71,13 +71,17 @@ public class PersistedOperationBroadcastFailureTests
         var id = $"unconfirmed_{Guid.NewGuid():N}";
         await _otherNode
             .GetRequiredService<IPersistedOperationStore>()
-            .UpsertAsync(id, "query Greet { hello }", null, CancellationToken.None);
+            .UpsertAsync(id, "query Greet { hello }", options: null, CancellationToken.None);
         (await ExecuteByIdAsync(_otherNode, id)).Should().Contain("\"hello\"");
 
         var payload = await MutateAsync(
             "deactivatePersistedOperation",
             "DeactivatePersistedOperationInput",
-            new Dictionary<string, object?> { ["id"] = id, ["reason"] = "retired" }
+            new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["id"] = id,
+                ["reason"] = "retired",
+            }
         );
 
         payload.GetProperty("success").GetBoolean().Should().BeFalse(AdrHint);
@@ -105,7 +109,11 @@ public class PersistedOperationBroadcastFailureTests
         var payload = await MutateAsync(
             "uploadPersistedOperation",
             "UploadPersistedOperationInput",
-            new Dictionary<string, object?> { ["id"] = id, ["document"] = "query Greet { hello }" }
+            new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["id"] = id,
+                ["document"] = "query Greet { hello }",
+            }
         );
 
         payload.GetProperty("success").GetBoolean().Should().BeFalse(AdrHint);
@@ -123,13 +131,13 @@ public class PersistedOperationBroadcastFailureTests
     {
         var id = $"unconfirmed_restore_{Guid.NewGuid():N}";
         var store = _otherNode.GetRequiredService<IPersistedOperationStore>();
-        await store.UpsertAsync(id, "query Greet { hello }", null, CancellationToken.None);
-        await store.DeactivateAsync(id, null, "retired", CancellationToken.None);
+        await store.UpsertAsync(id, "query Greet { hello }", options: null, CancellationToken.None);
+        await store.DeactivateAsync(id, tenantKey: null, "retired", CancellationToken.None);
 
         var payload = await MutateAsync(
             "restorePersistedOperation",
             "RestorePersistedOperationInput",
-            new Dictionary<string, object?> { ["id"] = id }
+            new Dictionary<string, object?>(StringComparer.Ordinal) { ["id"] = id }
         );
 
         payload.GetProperty("success").GetBoolean().Should().BeFalse(AdrHint);
@@ -148,27 +156,34 @@ public class PersistedOperationBroadcastFailureTests
         Dictionary<string, object?> input
     )
     {
-        var executor = await GraphQLFixture.GetExecutorAsync(_changingNode);
-        var result = await executor.ExecuteAsync(
-            OperationRequestBuilder
-                .New()
-                .SetDocument(
-                    $$"""
-                    mutation Change($input: {{inputType}}!) {
-                      persistedOperations {
-                        {{field}}(input: $input) {
-                          success
-                          operation { id isActive }
-                          errors { code message }
+        var executor = await GraphQLFixture.GetExecutorAsync(_changingNode).ConfigureAwait(false);
+        var result = await executor
+            .ExecuteAsync(
+                OperationRequestBuilder
+                    .New()
+                    .SetDocument(
+                        $$"""
+                        mutation Change($input: {{inputType}}!) {
+                          persistedOperations {
+                            {{field}}(input: $input) {
+                              success
+                              operation { id isActive }
+                              errors { code message }
+                            }
+                          }
                         }
-                      }
-                    }
-                    """
-                )
-                .SetVariableValues(new Dictionary<string, object?> { ["input"] = input })
-                .AsManager()
-                .Build()
-        );
+                        """
+                    )
+                    .SetVariableValues(
+                        new Dictionary<string, object?>(StringComparer.Ordinal)
+                        {
+                            ["input"] = input,
+                        }
+                    )
+                    .AsManager()
+                    .Build()
+            )
+            .ConfigureAwait(false);
         var json = JsonDocument.Parse(((OperationResult)result).ToJson());
         return json
             .RootElement.GetProperty("data")
@@ -178,10 +193,12 @@ public class PersistedOperationBroadcastFailureTests
 
     private static async Task<string> ExecuteByIdAsync(IServiceProvider node, string id)
     {
-        var executor = await GraphQLFixture.GetExecutorAsync(node);
-        var result = await executor.ExecuteAsync(
-            OperationRequestBuilder.New().SetDocumentId(new OperationDocumentId(id)).Build()
-        );
+        var executor = await GraphQLFixture.GetExecutorAsync(node).ConfigureAwait(false);
+        var result = await executor
+            .ExecuteAsync(
+                OperationRequestBuilder.New().SetDocumentId(new OperationDocumentId(id)).Build()
+            )
+            .ConfigureAwait(false);
         return ((OperationResult)result).ToJson();
     }
 

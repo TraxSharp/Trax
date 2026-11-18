@@ -244,7 +244,9 @@ public class MachineTypeModuleTests
                 if (field.IsIntrospectionField)
                     continue;
                 field
-                    .Directives.Any(d => d.Type.Name == "authorize")
+                    .Directives.Any(d =>
+                        string.Equals(d.Type.Name, "authorize", StringComparison.Ordinal)
+                    )
                     .Should()
                     .BeTrue(
                         $"{root}.machines.shop.{field.Name} declares its rule as a directive, per "
@@ -261,7 +263,13 @@ public class MachineTypeModuleTests
         var entries = MachineCensus.Describe([new ShopMachine()]);
 
         entries
-            .Where(e => e.Kind == nameof(Trax.StateMachine.TriggerKind.Client))
+            .Where(e =>
+                string.Equals(
+                    e.Kind,
+                    nameof(Trax.StateMachine.TriggerKind.Client),
+                    StringComparison.Ordinal
+                )
+            )
             .Select(e => e.Name)
             .Should()
             .BeEquivalentTo(
@@ -269,12 +277,14 @@ public class MachineTypeModuleTests
                 "every client event is listed, per " + Adr
             );
         entries
-            .Where(e => e.Kind == "Read")
+            .Where(e => string.Equals(e.Kind, "Read", StringComparison.Ordinal))
             .Select(e => e.Name)
             .Should()
             .BeEquivalentTo(["start", "get", "changed"], "every read is listed with its rule");
 
-        var approve = entries.Single(e => e.Name == "Approve");
+        var approve = entries.Single(e =>
+            string.Equals(e.Name, "Approve", StringComparison.Ordinal)
+        );
         approve.Rule.Should().Contain("Approver");
         approve
             .Surfaces.Should()

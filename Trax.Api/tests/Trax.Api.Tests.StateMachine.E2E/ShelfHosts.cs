@@ -29,16 +29,18 @@ public static class ShelfHosts
         ShelfMachine.Shape = shape;
         try
         {
-            var host = await E2EHost.StartAsync(
-                database,
-                new CountingCharge(),
-                options with
-                {
-                    ApplicationName = applicationName,
-                    Served = options.Served.Count > 0 ? options.Served : Served,
-                    GraphQL = options.GraphQL ?? MachineDocumentOps.Persisted(),
-                }
-            );
+            var host = await E2EHost
+                .StartAsync(
+                    database,
+                    new CountingCharge(),
+                    options with
+                    {
+                        ApplicationName = applicationName,
+                        Served = options.Served.Count > 0 ? options.Served : Served,
+                        GraphQL = options.GraphQL ?? MachineDocumentOps.Persisted(),
+                    }
+                )
+                .ConfigureAwait(false);
             // The machines are singletons the container builds on first use; build them under this shape.
             _ = host.Services.GetServices<IMachine>().ToList();
             return host;
@@ -65,9 +67,10 @@ public static class ShelfHosts
     public static async Task<Guid> StartShelfAsync(this IHost host, string apiKey)
     {
         using var doc = await host.PostAsync(
-            Start("Atlas", WizardOps.NewRequestId()),
-            apiKey: apiKey
-        );
+                Start("Atlas", WizardOps.NewRequestId()),
+                apiKey: apiKey
+            )
+            .ConfigureAwait(false);
         return ReadId(doc, "start");
     }
 
@@ -102,7 +105,7 @@ public static class ShelfHosts
         try
         {
             using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-            await host.StopAsync(stop.Token);
+            await host.StopAsync(stop.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) { }
         host.Dispose();

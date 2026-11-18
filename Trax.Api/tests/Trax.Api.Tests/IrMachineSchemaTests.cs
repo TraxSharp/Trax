@@ -35,15 +35,15 @@ public class IrMachineSchemaTests
             Convert.ToHexStringLower(
                 SHA256.HashData(Encoding.UTF8.GetBytes(CanonicalJson.Serialize(ir)))
             ),
-            null,
+            SystemKey: null,
             approvers,
             approvers,
-            new Dictionary<string, TriggerAccess>
+            new Dictionary<string, TriggerAccess>(StringComparer.Ordinal)
             {
                 ["Coin"] = new(approvers),
                 ["Push"] = new(AccessRule.AnyAuthenticated),
             },
-            new Dictionary<string, HostInvoke>()
+            new Dictionary<string, HostInvoke>(StringComparer.Ordinal)
         );
         var machines = IrMachines.Create([new IrMachines.Source(ir, host)], []);
         _host = await MachineSchemaHost.StartAsync([], services: s => s.AddIrMachines(machines));

@@ -64,7 +64,7 @@ public static class GraphQLServiceExtensions
         typeof(SchemaRequestExecutorBuilderExtensions)
             .GetMethods(BindingFlags.Public | BindingFlags.Static)
             .Single(m =>
-                m.Name == "AddTypeModule"
+                string.Equals(m.Name, "AddTypeModule", StringComparison.Ordinal)
                 && m.IsGenericMethodDefinition
                 && m.GetParameters().Length == 1
                 && m.GetParameters()[0].ParameterType == typeof(IRequestExecutorBuilder)
@@ -78,7 +78,7 @@ public static class GraphQLServiceExtensions
         typeof(SchemaRequestExecutorBuilderExtensions)
             .GetMethods(BindingFlags.Public | BindingFlags.Static)
             .Single(m =>
-                m.Name == "AddTypeExtension"
+                string.Equals(m.Name, "AddTypeExtension", StringComparison.Ordinal)
                 && m.IsGenericMethodDefinition
                 && m.GetGenericArguments().Length == 1
                 && m.GetParameters().Length == 1
@@ -206,7 +206,7 @@ public static class GraphQLServiceExtensions
         var queueCapableMutations = trainRegistrations
             .Where(r => r.IsMutation && r.GraphQLOperations.HasFlag(GraphQLOperation.Queue))
             .Select(r => r.ServiceType.FullName ?? r.ServiceType.Name)
-            .Distinct()
+            .Distinct(StringComparer.Ordinal)
             .ToList();
         services.AddHostedService(sp => new QueueDispatchReporter(
             queueCapableMutations,
@@ -811,7 +811,7 @@ public static class GraphQLServiceExtensions
             config.IntrospectionPredicate,
             sp.GetService<IHostEnvironment>()
         ));
-        graphqlBuilder.DisableIntrospection(true);
+        graphqlBuilder.DisableIntrospection(disable: true);
         // With no predicate the answer outside Development is always no, so the schema download
         // and the IDE are switched off in the schema's own server options too. That covers a host
         // that maps the endpoint itself instead of calling UseTraxGraphQL, whose per-request gate

@@ -102,7 +102,8 @@ public class PersistedOperationIdBindingTests
                         app.UseEndpoints(e => e.MapGraphQL("/trax/graphql", "trax"));
                     })
             )
-            .StartAsync();
+            .StartAsync()
+            .ConfigureAwait(false);
 
         return (
             host,
@@ -150,10 +151,15 @@ public class PersistedOperationIdBindingTests
         await _store.UpsertAsync(
             "RetiredGreeting",
             GraphQLFixture.ValidDocument,
-            null,
+            options: null,
             CancellationToken.None
         );
-        await _store.DeactivateAsync("RetiredGreeting", null, "retired", CancellationToken.None);
+        await _store.DeactivateAsync(
+            "RetiredGreeting",
+            tenantKey: null,
+            "retired",
+            CancellationToken.None
+        );
 
         await PostAsync(new { id = "RetiredGreeting", query = "query Retired { version }" });
         var reply = await PostAsync(new { id = "RetiredGreeting" });
@@ -225,7 +231,7 @@ public class PersistedOperationIdBindingTests
         await _store.UpsertAsync(
             "HeldGreeting",
             GraphQLFixture.ValidDocument,
-            null,
+            options: null,
             CancellationToken.None
         );
 
@@ -253,14 +259,16 @@ public class PersistedOperationIdBindingTests
         async Task<string> RunAsync(string id) =>
             (
                 (HotChocolate.Execution.OperationResult)
-                    await executor.ExecuteAsync(
-                        OperationRequestBuilder
-                            .New()
-                            .SetDocumentId(new OperationDocumentId(id))
-                            .SetDocument(document)
-                            .AllowNonPersistedOperation()
-                            .Build()
-                    )
+                    await executor
+                        .ExecuteAsync(
+                            OperationRequestBuilder
+                                .New()
+                                .SetDocumentId(new OperationDocumentId(id))
+                                .SetDocument(document)
+                                .AllowNonPersistedOperation()
+                                .Build()
+                        )
+                        .ConfigureAwait(false)
             ).ToJson();
 
         (await RunAsync(ownHash)).Should().Contain("\"hello\"");
@@ -290,8 +298,8 @@ public class PersistedOperationIdBindingTests
 
     private static async Task<JsonElement> PostAsync(HttpClient client, object body)
     {
-        var response = await client.PostAsJsonAsync("/trax/graphql", body);
-        var text = await response.Content.ReadAsStringAsync();
+        var response = await client.PostAsJsonAsync("/trax/graphql", body).ConfigureAwait(false);
+        var text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
         return JsonDocument.Parse(text).RootElement.Clone();
     }
 }

@@ -59,7 +59,7 @@ public class RunProgressInvokedRunE2ETests
         // The scheduler's workers and the machines' listeners need more than the AuthE2E pool of 8.
         var connectionString = AuthE2EHost
             .ConnectionString(Database)
-            .Replace("Maximum Pool Size=8", "Maximum Pool Size=20");
+            .Replace("Maximum Pool Size=8", "Maximum Pool Size=20", StringComparison.Ordinal);
 
         _host = new HostBuilder()
             .ConfigureWebHost(web =>
@@ -97,8 +97,8 @@ public class RunProgressInvokedRunE2ETests
                         services.AddTraxGraphQL(graphql =>
                             graphql.UsePersistedOperations(po =>
                                 po.SingleNode()
-                                    .RequirePersisted(false)
-                                    .LogNonPersistedRequests(true)
+                                    .RequirePersisted(require: false)
+                                    .LogNonPersistedRequests(log: true)
                             )
                         );
                     })
@@ -176,10 +176,12 @@ public class RunProgressInvokedRunE2ETests
 
     private async Task<Guid> StartAsync(string apiKey)
     {
-        using var doc = await _host.PostGraphQLAsync(
-            $$"""mutation { machines { errand { start(input: { note: "{{RunProgressE2ETests.Marker}}" }, requestId: "{{Guid.NewGuid():N}}") { id problem { code message } } } } }""",
-            r => r.Headers.Add("X-Api-Key", apiKey)
-        );
+        using var doc = await _host
+            .PostGraphQLAsync(
+                $$"""mutation { machines { errand { start(input: { note: "{{RunProgressE2ETests.Marker}}" }, requestId: "{{Guid.NewGuid():N}}") { id problem { code message } } } } }""",
+                r => r.Headers.Add("X-Api-Key", apiKey)
+            )
+            .ConfigureAwait(false);
         var start = Answer(doc, "start");
         start.GetProperty("problem").ValueKind.Should().Be(JsonValueKind.Null, start.GetRawText());
         return Guid.Parse(start.GetProperty("id").GetString()!);
@@ -188,10 +190,12 @@ public class RunProgressInvokedRunE2ETests
     // Enters the invoking state and answers the run it queued, as its owner reads it from the event's answer.
     private async Task<string> GoAsync(string apiKey, Guid id)
     {
-        using var doc = await _host.PostGraphQLAsync(
-            $$"""mutation { machines { errand { go(id: "{{id}}", requestId: "{{Guid.NewGuid():N}}") { state invokedRun { runId } problem { code message } } } } }""",
-            r => r.Headers.Add("X-Api-Key", apiKey)
-        );
+        using var doc = await _host
+            .PostGraphQLAsync(
+                $$"""mutation { machines { errand { go(id: "{{id}}", requestId: "{{Guid.NewGuid():N}}") { state invokedRun { runId } problem { code message } } } } }""",
+                r => r.Headers.Add("X-Api-Key", apiKey)
+            )
+            .ConfigureAwait(false);
         var go = Answer(doc, "go");
         go.GetProperty("state").GetString().Should().Be("Running", go.GetRawText());
         return go.GetProperty("invokedRun").GetProperty("runId").GetString()!;
@@ -212,10 +216,12 @@ public class RunProgressInvokedRunE2ETests
 
     private async Task<JsonElement> ReadAsync(string runId, string apiKey)
     {
-        using var doc = await _host.PostGraphQLAsync(
-            $$"""{ runProgress(runId: "{{runId}}") { runId state problem { code } } }""",
-            r => r.Headers.Add("X-Api-Key", apiKey)
-        );
+        using var doc = await _host
+            .PostGraphQLAsync(
+                $$"""{ runProgress(runId: "{{runId}}") { runId state problem { code } } }""",
+                r => r.Headers.Add("X-Api-Key", apiKey)
+            )
+            .ConfigureAwait(false);
         doc.RootElement.TryGetProperty("errors", out var errors)
             .Should()
             .BeFalse(errors.ToString());
@@ -226,24 +232,34 @@ public class RunProgressInvokedRunE2ETests
     private async Task ExpireAsync(Guid id)
     {
         var past = DateTimeOffset.UtcNow.AddHours(-1);
-        await using var db = await _host
+        var db = await _host
             .Services.GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(CancellationToken.None);
-        await db
-            .SnapshotDrafts.Where(x => x.Id == id && x.Machine == ErrandMachine.MachineId)
-            .ExecuteUpdateAsync(s =>
-                s.SetProperty(x => x.CreatedAt, past).SetProperty(x => x.UpdatedAt, past)
-            );
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            await db
+                .SnapshotDrafts.Where(x => x.Id == id && x.Machine == ErrandMachine.MachineId)
+                .ExecuteUpdateAsync(s =>
+                    s.SetProperty(x => x.CreatedAt, past).SetProperty(x => x.UpdatedAt, past)
+                )
+                .ConfigureAwait(false);
+        }
     }
 
     private async Task<bool> DraftExistsAsync(Guid id)
     {
-        await using var db = await _host
+        var db = await _host
             .Services.GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(CancellationToken.None);
-        return await db
-            .SnapshotDrafts.AsNoTracking()
-            .AnyAsync(x => x.Id == id && x.Machine == ErrandMachine.MachineId);
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            return await db
+                .SnapshotDrafts.AsNoTracking()
+                .AnyAsync(x => x.Id == id && x.Machine == ErrandMachine.MachineId)
+                .ConfigureAwait(false);
+        }
     }
 
     /// <summary>The snapshot user key is the authenticated caller's principal id.</summary>

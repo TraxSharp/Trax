@@ -59,7 +59,7 @@ public class TraxJwtSocketInterceptorJwksTests
 
         var result = await interceptor.OnConnectAsync(
             session,
-            Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, null)),
+            Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, Bearer: null)),
             CancellationToken.None
         );
 
@@ -88,7 +88,7 @@ public class TraxJwtSocketInterceptorJwksTests
 
         var result = await interceptor.OnConnectAsync(
             session,
-            Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, null)),
+            Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, Bearer: null)),
             CancellationToken.None
         );
 
@@ -116,7 +116,7 @@ public class TraxJwtSocketInterceptorJwksTests
 
         var result = await interceptor.OnConnectAsync(
             session,
-            Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, null)),
+            Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, Bearer: null)),
             CancellationToken.None
         );
 
@@ -140,7 +140,7 @@ public class TraxJwtSocketInterceptorJwksTests
 
         var result = await interceptor.OnConnectAsync(
             session,
-            Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, null)),
+            Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, Bearer: null)),
             CancellationToken.None
         );
 
@@ -165,7 +165,7 @@ public class TraxJwtSocketInterceptorJwksTests
 
         var result = await interceptor.OnConnectAsync(
             session,
-            Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, null)),
+            Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, Bearer: null)),
             CancellationToken.None
         );
 
@@ -194,7 +194,7 @@ public class TraxJwtSocketInterceptorJwksTests
 
         var result = await interceptor.OnConnectAsync(
             session,
-            Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, null)),
+            Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, Bearer: null)),
             CancellationToken.None
         );
 

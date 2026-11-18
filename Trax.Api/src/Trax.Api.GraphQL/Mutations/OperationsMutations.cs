@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Validation;
@@ -63,7 +64,9 @@ public partial class OperationsMutations
         bool askAfresh = false
     ) =>
         Triggered(
-            await operationsService.TriggerManifestAsync(externalId, delay: null, askAfresh, ct)
+            await operationsService
+                .TriggerManifestAsync(externalId, delay: null, askAfresh, ct)
+                .ConfigureAwait(false)
         );
 
     /// <summary>
@@ -84,7 +87,12 @@ public partial class OperationsMutations
         [Service] IOperationsService operationsService,
         CancellationToken ct,
         bool askAfresh = false
-    ) => Triggered(await operationsService.TriggerManifestAsync(externalId, delay, askAfresh, ct));
+    ) =>
+        Triggered(
+            await operationsService
+                .TriggerManifestAsync(externalId, delay, askAfresh, ct)
+                .ConfigureAwait(false)
+        );
 
     /// <summary>
     /// The response to a manifest trigger: the operations service's own words for what it did
@@ -106,11 +114,11 @@ public partial class OperationsMutations
         CancellationToken ct
     )
     {
-        if (await NotFound(externalId, dataContextFactory, ct) is { } refusal)
+        if (await NotFound(externalId, dataContextFactory, ct).ConfigureAwait(false) is { } refusal)
             return refusal;
 
-        await scheduler.DisableAsync(externalId, ct);
-        return new OperationResponse(true, Message: "Manifest disabled");
+        await scheduler.DisableAsync(externalId, ct).ConfigureAwait(false);
+        return new OperationResponse(Success: true, Message: "Manifest disabled");
     }
 
     /// <summary>
@@ -124,11 +132,11 @@ public partial class OperationsMutations
         CancellationToken ct
     )
     {
-        if (await NotFound(externalId, dataContextFactory, ct) is { } refusal)
+        if (await NotFound(externalId, dataContextFactory, ct).ConfigureAwait(false) is { } refusal)
             return refusal;
 
-        await scheduler.EnableAsync(externalId, ct);
-        return new OperationResponse(true, Message: "Manifest enabled");
+        await scheduler.EnableAsync(externalId, ct).ConfigureAwait(false);
+        return new OperationResponse(Success: true, Message: "Manifest enabled");
     }
 
     /// <summary>
@@ -144,15 +152,19 @@ public partial class OperationsMutations
         CancellationToken ct
     )
     {
-        if (await NotFound(externalId, dataContextFactory, ct) is { } refusal)
+        if (await NotFound(externalId, dataContextFactory, ct).ConfigureAwait(false) is { } refusal)
             return refusal;
 
-        var count = await scheduler.CancelAsync(externalId, ct);
-        return new OperationResponse(true, Count: count, Message: "Cancellation requested");
+        var count = await scheduler.CancelAsync(externalId, ct).ConfigureAwait(false);
+        return new OperationResponse(
+            Success: true,
+            Count: count,
+            Message: "Cancellation requested"
+        );
     }
 
     /// <summary>
-    /// The refusal for an external id no manifest has, or <c>null</c> when one has it. The
+    /// The refusal for an external id no manifest has, or <see langword="null"/> when one has it. The
     /// scheduler throws for an unknown id, which would reach the caller as a masked server error
     /// (Api ADR 0028). A manifest removed between this read and the scheduler's still does.
     /// </summary>
@@ -162,13 +174,14 @@ public partial class OperationsMutations
         CancellationToken ct
     )
     {
-        using var db = await dataContextFactory.CreateDbContextAsync(ct);
+        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
         var exists = await db
             .Manifests.AsNoTracking()
-            .AnyAsync(m => m.ExternalId == externalId, ct);
+            .AnyAsync(m => m.ExternalId == externalId, ct)
+            .ConfigureAwait(false);
         return exists
             ? null
-            : new OperationResponse(false, Message: $"Manifest '{externalId}' not found.");
+            : new OperationResponse(Success: false, Message: $"Manifest '{externalId}' not found.");
     }
 
     /// <summary>
@@ -185,7 +198,9 @@ public partial class OperationsMutations
         CancellationToken ct
     )
     {
-        var result = await operationsService.TriggerManifestGroupsAsync([groupId], ct);
+        var result = await operationsService
+            .TriggerManifestGroupsAsync([groupId], ct)
+            .ConfigureAwait(false);
         return new OperationResponse(result.Success, Count: result.Queued, Message: result.Message);
     }
 
@@ -199,11 +214,14 @@ public partial class OperationsMutations
         CancellationToken ct
     )
     {
-        var count = await scheduler.CancelGroupAsync(groupId, ct);
+        var count = await scheduler.CancelGroupAsync(groupId, ct).ConfigureAwait(false);
         return new OperationResponse(
-            true,
+            Success: true,
             Count: count,
-            Message: $"Cancellation requested for {count} execution(s)"
+            Message: string.Create(
+                CultureInfo.InvariantCulture,
+                $"Cancellation requested for {count} execution(s)"
+            )
         );
     }
 
@@ -222,7 +240,10 @@ public partial class OperationsMutations
         [Service] IOperationsService operationsService,
         CancellationToken ct,
         bool askAfresh = false
-    ) => ToResponse(await operationsService.TriggerManifestsAsync(ids, askAfresh, ct));
+    ) =>
+        ToResponse(
+            await operationsService.TriggerManifestsAsync(ids, askAfresh, ct).ConfigureAwait(false)
+        );
 
     /// <summary>
     /// Triggers every listed manifest group by id, each as <c>triggerGroup</c> triggers one: every
@@ -236,7 +257,10 @@ public partial class OperationsMutations
         long[] ids,
         [Service] IOperationsService operationsService,
         CancellationToken ct
-    ) => ToResponse(await operationsService.TriggerManifestGroupsAsync(ids, ct));
+    ) =>
+        ToResponse(
+            await operationsService.TriggerManifestGroupsAsync(ids, ct).ConfigureAwait(false)
+        );
 
     /// <summary>
     /// Requests cancellation of every pending and running execution of every manifest in the
@@ -249,7 +273,10 @@ public partial class OperationsMutations
         long[] ids,
         [Service] IOperationsService operationsService,
         CancellationToken ct
-    ) => ToResponse(await operationsService.CancelManifestGroupsAsync(ids, ct));
+    ) =>
+        ToResponse(
+            await operationsService.CancelManifestGroupsAsync(ids, ct).ConfigureAwait(false)
+        );
 
     /// <summary>
     /// Requests cancellation of a single execution by id, when it is still pending or in
@@ -266,16 +293,23 @@ public partial class OperationsMutations
         CancellationToken ct
     )
     {
-        var result = await operationsService.CancelExecutionsAsync([id], ct);
+        var result = await operationsService.CancelExecutionsAsync([id], ct).ConfigureAwait(false);
         if (!result.Success)
             return ToResponse(result);
 
         return result.Count > 0
-            ? new OperationResponse(true, Count: result.Count, Message: "Cancellation requested")
+            ? new OperationResponse(
+                Success: true,
+                Count: result.Count,
+                Message: "Cancellation requested"
+            )
             : new OperationResponse(
-                false,
+                Success: false,
                 Count: 0,
-                Message: $"Execution {id} is not cancellable (missing or already terminal)."
+                Message: string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Execution {id} is not cancellable (missing or already terminal)."
+                )
             );
     }
 
@@ -290,7 +324,7 @@ public partial class OperationsMutations
         long[] ids,
         [Service] IOperationsService operationsService,
         CancellationToken ct
-    ) => ToResponse(await operationsService.CancelExecutionsAsync(ids, ct));
+    ) => ToResponse(await operationsService.CancelExecutionsAsync(ids, ct).ConfigureAwait(false));
 
     /// <summary>
     /// Enables or disables the listed manifests by id. Only manifests whose flag differs are
@@ -302,7 +336,10 @@ public partial class OperationsMutations
         bool enabled,
         [Service] IOperationsService operationsService,
         CancellationToken ct
-    ) => ToResponse(await operationsService.SetManifestsEnabledAsync(ids, enabled, ct));
+    ) =>
+        ToResponse(
+            await operationsService.SetManifestsEnabledAsync(ids, enabled, ct).ConfigureAwait(false)
+        );
 
     /// <summary>
     /// Sets whether retries of the listed manifests replay the decisions of the run they retry
@@ -318,7 +355,9 @@ public partial class OperationsMutations
         CancellationToken ct
     ) =>
         ToResponse(
-            await operationsService.SetManifestsReplayDecisionsOnRetryAsync(ids, replay, ct)
+            await operationsService
+                .SetManifestsReplayDecisionsOnRetryAsync(ids, replay, ct)
+                .ConfigureAwait(false)
         );
 
     /// <summary>
@@ -340,8 +379,10 @@ public partial class OperationsMutations
     ) =>
         ToResponse(
             askAfresh
-                ? await operationsService.RequeueExecutionAsync(id, askAfresh: true, ct)
-                : await operationsService.RequeueExecutionAsync(id, ct)
+                ? await operationsService
+                    .RequeueExecutionAsync(id, askAfresh: true, ct)
+                    .ConfigureAwait(false)
+                : await operationsService.RequeueExecutionAsync(id, ct).ConfigureAwait(false)
         );
 
     /// <summary>
@@ -366,11 +407,14 @@ public partial class OperationsMutations
         [Service] IOperationsService operationsService,
         CancellationToken ct,
         string? from = null
-    ) => ToResponse(await operationsService.ResumeExecutionAsync(id, from, ct));
+    ) =>
+        ToResponse(
+            await operationsService.ResumeExecutionAsync(id, from, ct).ConfigureAwait(false)
+        );
 
     /// <summary>
     /// Patches mutable settings on a single manifest (enabled, retries, priority, timeout,
-    /// schedule). Each field on <paramref name="input"/> is independent; <c>null</c> leaves it
+    /// schedule). Each field on <paramref name="input"/> is independent; <see langword="null"/> leaves it
     /// unchanged. See <see cref="UpdateManifestInput"/> for the clear-timeout semantics.
     /// A value the scheduler could not use returns <c>success: false</c> with the reason and saves
     /// nothing: a timeout or interval that is not positive, a negative retry count, a priority
@@ -387,20 +431,22 @@ public partial class OperationsMutations
         CancellationToken ct
     ) =>
         ToResponse(
-            await operationsService.UpdateManifestAsync(
-                id,
-                new ManifestUpdate(
-                    input.IsEnabled,
-                    input.MaxRetries,
-                    input.Priority,
-                    input.TimeoutSeconds,
-                    input.ClearTimeout,
-                    input.ScheduleType,
-                    input.CronExpression,
-                    input.IntervalSeconds
-                ),
-                ct
-            )
+            await operationsService
+                .UpdateManifestAsync(
+                    id,
+                    new ManifestUpdate(
+                        input.IsEnabled,
+                        input.MaxRetries,
+                        input.Priority,
+                        input.TimeoutSeconds,
+                        input.ClearTimeout,
+                        input.ScheduleType,
+                        input.CronExpression,
+                        input.IntervalSeconds
+                    ),
+                    ct
+                )
+                .ConfigureAwait(false)
         );
 
     /// <summary>
@@ -441,7 +487,7 @@ public partial class OperationsMutations
     {
         if (values.Count > OperationsService.MaxBatchSize)
             return new ConfigureEffectResponse(
-                false,
+                Success: false,
                 0,
                 $"At most {OperationsService.MaxBatchSize} settings can be written at once.",
                 []
@@ -449,15 +495,15 @@ public partial class OperationsMutations
 
         var repeated = values
             .GroupBy(v => v.Name, StringComparer.Ordinal)
-            .Where(g => g.Count() > 1)
+            .Where(g => g.Skip(1).Any())
             .Select(g => new EffectSettingError(g.Key, "Given more than once."))
             .ToList();
         if (repeated.Count > 0)
             return new ConfigureEffectResponse(
-                false,
+                Success: false,
                 0,
                 "The configuration was not saved: "
-                    + string.Join(" ", repeated.Select(e => $"{e.Field}: {e.Message}")),
+                    + string.Join(' ', repeated.Select(e => $"{e.Field}: {e.Message}")),
                 repeated
             );
 

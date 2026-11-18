@@ -166,7 +166,7 @@ public class MachineRequestIdE2ETests
             .Be(1, "twenty retries of one request run the irreversible effect once, per " + Adr);
         answers
             .Select(a => a.Raw.GetRawText())
-            .Distinct()
+            .Distinct(StringComparer.Ordinal)
             .Should()
             .ContainSingle("every retry is answered with the one recorded snapshot");
         answers[0].StateIs(WizardState.Approving).Should().BeTrue(answers[0].Raw.GetRawText());
@@ -200,7 +200,7 @@ public class MachineRequestIdE2ETests
             );
         answers
             .Select(a => a.Raw.GetRawText())
-            .Distinct()
+            .Distinct(StringComparer.Ordinal)
             .Should()
             .ContainSingle("every retry is answered with the one recorded snapshot");
         answers[0].StateIs(WizardState.Building).Should().BeTrue(answers[0].Raw.GetRawText());
@@ -257,8 +257,15 @@ public class MachineRequestIdE2ETests
         await FailQueuedRunsAsync(_nodes.B, approving.Id);
         (
             await E2EWait.UntilAsync(async () =>
-                (await E2ESql.DraftAsync(Database, WizardMachine.MachineId, approving.Id))?.State
-                == nameof(WizardState.BuildFailed)
+                string.Equals(
+                    (
+                        await E2ESql
+                            .DraftAsync(Database, WizardMachine.MachineId, approving.Id)
+                            .ConfigureAwait(false)
+                    )?.State,
+                    nameof(WizardState.BuildFailed),
+                    StringComparison.Ordinal
+                )
             )
         )
             .Should()
@@ -312,8 +319,15 @@ public class MachineRequestIdE2ETests
         await FailQueuedRunsAsync(_nodes.B, approving.Id);
         (
             await E2EWait.UntilAsync(async () =>
-                (await E2ESql.DraftAsync(Database, WizardMachine.MachineId, approving.Id))?.State
-                == nameof(WizardState.BuildFailed)
+                string.Equals(
+                    (
+                        await E2ESql
+                            .DraftAsync(Database, WizardMachine.MachineId, approving.Id)
+                            .ConfigureAwait(false)
+                    )?.State,
+                    nameof(WizardState.BuildFailed),
+                    StringComparison.Ordinal
+                )
             )
         )
             .Should()
@@ -326,9 +340,10 @@ public class MachineRequestIdE2ETests
     private async Task<string?> InvokedRunAsync(string apiKey, Guid id)
     {
         using var doc = await A.PostAsync(
-            $$"""{ machines { wizard { get(id: "{{id}}") { state invokedRun { runId } } } } }""",
-            apiKey: apiKey
-        );
+                $$"""{ machines { wizard { get(id: "{{id}}") { state invokedRun { runId } } } } }""",
+                apiKey: apiKey
+            )
+            .ConfigureAwait(false);
         doc.RootElement.TryGetProperty("errors", out var errors)
             .Should()
             .BeFalse(errors.ToString());
@@ -407,7 +422,8 @@ public class MachineRequestIdE2ETests
         var queued = await db
             .WorkQueues.AsNoTracking()
             .Where(w => w.InvokingInstanceId == instance && w.Status == WorkQueueStatus.Queued)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
         foreach (var entry in queued)
         {
             var run = Metadata.Create(
@@ -424,17 +440,19 @@ public class MachineRequestIdE2ETests
                 }
             );
             run.TrainState = TrainState.InProgress;
-            await db.Track(run);
-            await db.SaveChanges(CancellationToken.None);
+            await db.Track(run).ConfigureAwait(false);
+            await db.SaveChanges(CancellationToken.None).ConfigureAwait(false);
             await db
                 .WorkQueues.Where(w => w.Id == entry.Id)
                 .ExecuteUpdateAsync(s =>
                     s.SetProperty(w => w.Status, WorkQueueStatus.Dispatched)
                         .SetProperty(w => w.MetadataId, run.Id)
-                );
+                )
+                .ConfigureAwait(false);
         }
         await db
             .Metadatas.Where(m => m.InvokingInstanceId == instance)
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.TrainState, TrainState.Failed));
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.TrainState, TrainState.Failed))
+            .ConfigureAwait(false);
     }
 }

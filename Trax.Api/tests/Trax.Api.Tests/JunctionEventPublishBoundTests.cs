@@ -120,12 +120,14 @@ public class JunctionEventPublishBoundTests
     {
         var delivered = new List<long>();
         await foreach (
-            var e in LifecycleSubscriptions.ReadJunctionEvents(
-                new ListStream(events),
-                metadataId: 7,
-                LifecycleVisibility.Operations,
-                baseline: 0
-            )
+            var e in LifecycleSubscriptions
+                .ReadJunctionEvents(
+                    new ListStream(events),
+                    metadataId: 7,
+                    LifecycleVisibility.Operations,
+                    baseline: 0
+                )
+                .ConfigureAwait(false)
         )
             delivered.Add(e.Sequence);
         return delivered;
@@ -210,7 +212,7 @@ public class JunctionEventPublishBoundTests
 
         async IAsyncEnumerable<object?> ISourceStream.ReadEventsAsync()
         {
-            await foreach (var e in ReadEventsAsync())
+            await foreach (var e in ReadEventsAsync().ConfigureAwait(false))
                 yield return e;
         }
 

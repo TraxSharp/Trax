@@ -20,7 +20,7 @@ public class GraphQLClientConfigurationBuilder
 
     /// <summary>Creates a builder with the default options for the given endpoint.</summary>
     /// <param name="baseAddress">The GraphQL endpoint.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="baseAddress"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="baseAddress"/> is <see langword="null"/>.</exception>
     public GraphQLClientConfigurationBuilder(Uri baseAddress)
     {
         ArgumentNullException.ThrowIfNull(baseAddress);
@@ -83,6 +83,8 @@ public class GraphQLClientConfigurationBuilder
     public JsonSerializerOptions JsonSerializerOptions { get; set; } =
         new()
         {
+            RespectNullableAnnotations = false,
+            RespectRequiredConstructorParameters = false,
             PropertyNameCaseInsensitive = true,
             Converters =
             {
@@ -95,7 +97,7 @@ public class GraphQLClientConfigurationBuilder
     public GraphQLHttpClientOptions GraphQLClientOptions { get; set; } = new();
 
     /// <summary>
-    /// An HTTP client to send requests through instead of the default, or <c>null</c> (the
+    /// An HTTP client to send requests through instead of the default, or <see langword="null"/> (the
     /// default) for the one <c>IHttpClientFactory</c> creates under this client's name. A
     /// supplied client is not changed: requests are sent to the client's address whatever its
     /// <c>BaseAddress</c>, so one client can serve several GraphQL clients. Prefer adding handlers
@@ -103,12 +105,12 @@ public class GraphQLClientConfigurationBuilder
     /// </summary>
     public HttpClient? HttpClient { get; set; }
 
-    /// <summary>Whether disposing the configuration also disposes a supplied <see cref="HttpClient"/>. <c>false</c> by default.</summary>
+    /// <summary>Whether disposing the configuration also disposes a supplied <see cref="HttpClient"/>. <see langword="false"/> by default.</summary>
     public bool DisposeHttpClient { get; set; } = false;
 
     /// <summary>
     /// Whether the schema's subscription type is dropped before queries are validated against it,
-    /// by every schema provider the client builder registers. <c>true</c> by default: the executor
+    /// by every schema provider the client builder registers. <see langword="true"/> by default: the executor
     /// sends queries and mutations only.
     /// </summary>
     public bool RemoveSubscriptionsFromSchema { get; set; } = true;

@@ -129,7 +129,7 @@ internal static class InvalidationMessageSignature
         var parts = signature.Split(',');
         if (
             parts.Length != 4
-            || parts[0] != Version
+            || !string.Equals(parts[0], Version, StringComparison.Ordinal)
             || !parts[1].StartsWith("t=", StringComparison.Ordinal)
             || !parts[2].StartsWith("n=", StringComparison.Ordinal)
             || !parts[3].StartsWith("s=", StringComparison.Ordinal)

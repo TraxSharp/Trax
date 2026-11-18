@@ -70,7 +70,9 @@ internal static class ConsoleDocuments
         if (!IsReserved(id) || !MachineDocuments.IsWellFormed(id))
             return null;
         var name = id[ReservedIdPrefix.Length..id.LastIndexOf('_')];
-        return name.Length == 0 || name.Contains('_') ? null : id[..id.LastIndexOf('_')];
+        return name.Length == 0 || name.Contains('_', StringComparison.Ordinal)
+            ? null
+            : id[..id.LastIndexOf('_')];
     }
 
     /// <summary>The operation name a console id is registered under, or null when the id is not one.</summary>
@@ -103,7 +105,7 @@ internal static class ConsoleDocuments
             if (errors.Count > 0)
             {
                 skipped.Add(
-                    $"'{document.Name}' is refused by this host: {string.Join(" ", errors)}"
+                    $"'{document.Name}' is refused by this host: {string.Join(' ', errors)}"
                 );
                 continue;
             }
@@ -135,7 +137,7 @@ internal static class ConsoleDocuments
         )
             return "holds a definition that is neither an operation nor a fragment.";
         var operation = operations[0];
-        if (operation.Name?.Value != name)
+        if (!string.Equals(operation.Name?.Value, name, StringComparison.Ordinal))
             return $"is registered as '{name}' but its operation is named '{operation.Name?.Value}'.";
         if (HasDirective(parsed))
             return "uses a directive; a console document uses none.";
@@ -160,7 +162,11 @@ internal static class ConsoleDocuments
 
         var root =
             operation.Operation == OperationType.Mutation ? schema.MutationType : schema.QueryType;
-        if (roots.Any(f => f.Name.Value != OperationsField))
+        if (
+            roots.Exists(f =>
+                !string.Equals(f.Name.Value, OperationsField, StringComparison.Ordinal)
+            )
+        )
             return $"selects something other than '{OperationsField}' at its root.";
         return root?.Fields.TryGetField(OperationsField, out _) == true
             ? null

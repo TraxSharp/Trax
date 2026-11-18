@@ -151,15 +151,19 @@ public class CognitoTokenIssuerTests
         jwt.Claims.Should().ContainSingle(c => c.Type == "username" && c.Value == "alice");
         jwt.Claims.Should()
             .ContainSingle(c => c.Type == "scope" && c.Value == "openid profile email");
-        jwt.Claims.Where(c => c.Type == "cognito:groups")
+        jwt.Claims.Where(c => string.Equals(c.Type, "cognito:groups", StringComparison.Ordinal))
             .Select(c => c.Value)
             .Should()
             .BeEquivalentTo(new[] { "admin", "user" });
 
         jwt.Claims.Should().ContainSingle(c => c.Type == "jti");
-        jwt.Claims.Single(c => c.Type == "iat").Value.Should().Be("1700000000");
-        jwt.Claims.Single(c => c.Type == "auth_time").Value.Should().Be("1700000000");
-        jwt.Claims.Single(c => c.Type == "exp")
+        jwt.Claims.Single(c => string.Equals(c.Type, "iat", StringComparison.Ordinal))
+            .Value.Should()
+            .Be("1700000000");
+        jwt.Claims.Single(c => string.Equals(c.Type, "auth_time", StringComparison.Ordinal))
+            .Value.Should()
+            .Be("1700000000");
+        jwt.Claims.Single(c => string.Equals(c.Type, "exp", StringComparison.Ordinal))
             .Value.Should()
             .Be((1_700_000_000 + 3600).ToString());
     }
@@ -180,7 +184,9 @@ public class CognitoTokenIssuerTests
         );
 
         var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token);
-        jwt.Claims.Single(c => c.Type == "username").Value.Should().Be(sub.ToString());
+        jwt.Claims.Single(c => string.Equals(c.Type, "username", StringComparison.Ordinal))
+            .Value.Should()
+            .Be(sub.ToString());
     }
 
     [Test]
@@ -201,8 +207,12 @@ public class CognitoTokenIssuerTests
         );
 
         var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token);
-        jwt.Claims.Single(c => c.Type == "auth_time").Value.Should().Be("1699990000");
-        jwt.Claims.Single(c => c.Type == "iat").Value.Should().Be("1700000000");
+        jwt.Claims.Single(c => string.Equals(c.Type, "auth_time", StringComparison.Ordinal))
+            .Value.Should()
+            .Be("1699990000");
+        jwt.Claims.Single(c => string.Equals(c.Type, "iat", StringComparison.Ordinal))
+            .Value.Should()
+            .Be("1700000000");
     }
 
     [Test]
@@ -249,7 +259,7 @@ public class CognitoTokenIssuerTests
                 Sub = Guid.NewGuid(),
                 ClientId = ClientId,
                 Lifetime = TimeSpan.FromMinutes(5),
-                AdditionalClaims = new Dictionary<string, string>
+                AdditionalClaims = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     { "custom:tenant", "acme" },
                     { "device_id", "device-42" },
@@ -258,8 +268,12 @@ public class CognitoTokenIssuerTests
         );
 
         var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token);
-        jwt.Claims.Single(c => c.Type == "custom:tenant").Value.Should().Be("acme");
-        jwt.Claims.Single(c => c.Type == "device_id").Value.Should().Be("device-42");
+        jwt.Claims.Single(c => string.Equals(c.Type, "custom:tenant", StringComparison.Ordinal))
+            .Value.Should()
+            .Be("acme");
+        jwt.Claims.Single(c => string.Equals(c.Type, "device_id", StringComparison.Ordinal))
+            .Value.Should()
+            .Be("device-42");
     }
 
     [Test]
@@ -392,7 +406,10 @@ public class CognitoTokenIssuerTests
                     Sub = Guid.NewGuid(),
                     ClientId = ClientId,
                     Lifetime = TimeSpan.FromMinutes(5),
-                    AdditionalClaims = new Dictionary<string, string> { { name, "injected" } },
+                    AdditionalClaims = new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        { name, "injected" },
+                    },
                 }
             );
 
@@ -412,7 +429,10 @@ public class CognitoTokenIssuerTests
                     Lifetime = TimeSpan.FromMinutes(5),
                     Email = "a@example.com",
                     EmailVerified = true,
-                    AdditionalClaims = new Dictionary<string, string> { { name, "injected" } },
+                    AdditionalClaims = new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        { name, "injected" },
+                    },
                 }
             );
 
@@ -429,7 +449,10 @@ public class CognitoTokenIssuerTests
                 Sub = Guid.NewGuid(),
                 ClientId = ClientId,
                 Lifetime = TimeSpan.FromMinutes(5),
-                AdditionalClaims = new Dictionary<string, string> { { "  ", "ignored" } },
+                AdditionalClaims = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    { "  ", "ignored" },
+                },
             }
         );
 
@@ -453,11 +476,11 @@ public class CognitoTokenIssuerTests
 
         var jti1 = new JwtSecurityTokenHandler()
             .ReadJwtToken(t1)
-            .Claims.Single(c => c.Type == "jti")
+            .Claims.Single(c => string.Equals(c.Type, "jti", StringComparison.Ordinal))
             .Value;
         var jti2 = new JwtSecurityTokenHandler()
             .ReadJwtToken(t2)
-            .Claims.Single(c => c.Type == "jti")
+            .Claims.Single(c => string.Equals(c.Type, "jti", StringComparison.Ordinal))
             .Value;
         jti1.Should().NotBe(jti2);
     }
@@ -571,7 +594,9 @@ public class CognitoTokenIssuerTests
         );
 
         var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token);
-        jwt.Claims.Single(c => c.Type == "email_verified").Value.Should().Be("false");
+        jwt.Claims.Single(c => string.Equals(c.Type, "email_verified", StringComparison.Ordinal))
+            .Value.Should()
+            .Be("false");
     }
 
     [Test]
@@ -611,7 +636,9 @@ public class CognitoTokenIssuerTests
         );
 
         var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token);
-        jwt.Claims.Single(c => c.Type == "cognito:username").Value.Should().Be(sub.ToString());
+        jwt.Claims.Single(c => string.Equals(c.Type, "cognito:username", StringComparison.Ordinal))
+            .Value.Should()
+            .Be(sub.ToString());
     }
 
     [Test]
@@ -641,7 +668,9 @@ public class CognitoTokenIssuerTests
         );
 
         var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token);
-        var identitiesClaim = jwt.Claims.Single(c => c.Type == "identities");
+        var identitiesClaim = jwt.Claims.Single(c =>
+            string.Equals(c.Type, "identities", StringComparison.Ordinal)
+        );
         identitiesClaim.Value.Should().StartWith("[").And.EndWith("]");
 
         using var doc = JsonDocument.Parse(identitiesClaim.Value);
@@ -656,7 +685,11 @@ public class CognitoTokenIssuerTests
             .GetProperty("dateCreated")
             .GetString()
             .Should()
-            .Be((created.ToUnixTimeMilliseconds()).ToString());
+            .Be(
+                (created.ToUnixTimeMilliseconds()).ToString(
+                    System.Globalization.CultureInfo.InvariantCulture
+                )
+            );
     }
 
     [Test]
@@ -698,7 +731,9 @@ public class CognitoTokenIssuerTests
         );
 
         var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token);
-        jwt.Claims.Single(c => c.Type == "auth_time").Value.Should().Be("1699990000");
+        jwt.Claims.Single(c => string.Equals(c.Type, "auth_time", StringComparison.Ordinal))
+            .Value.Should()
+            .Be("1699990000");
     }
 
     #endregion
@@ -779,7 +814,12 @@ public class CognitoTokenIssuerTests
         var parts = token.Split('.');
         parts[2] =
             parts[2].Length > 4
-                ? parts[2][..^4] + (parts[2][^4..] == "AAAA" ? "BBBB" : "AAAA")
+                ? parts[2][..^4]
+                    + (
+                        string.Equals(parts[2][^4..], "AAAA", StringComparison.Ordinal)
+                            ? "BBBB"
+                            : "AAAA"
+                    )
                 : "AAAA";
         var tampered = string.Join('.', parts);
 

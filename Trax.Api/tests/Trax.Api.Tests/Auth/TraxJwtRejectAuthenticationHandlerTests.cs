@@ -77,8 +77,9 @@ public class TraxJwtRejectAuthenticationHandlerTests
                                 async (HttpContext http) =>
                                 {
                                     var result = await http.AuthenticateAsync(
-                                        JwtDefaults.RejectSchemeName
-                                    );
+                                            JwtDefaults.RejectSchemeName
+                                        )
+                                        .ConfigureAwait(false);
                                     return Results.Ok(
                                         new
                                         {
@@ -92,21 +93,23 @@ public class TraxJwtRejectAuthenticationHandlerTests
                                 "/challenge",
                                 async (HttpContext http) =>
                                 {
-                                    await http.ChallengeAsync(JwtDefaults.RejectSchemeName);
+                                    await http.ChallengeAsync(JwtDefaults.RejectSchemeName)
+                                        .ConfigureAwait(false);
                                 }
                             );
                             endpoints.MapGet(
                                 "/forbid",
                                 async (HttpContext http) =>
                                 {
-                                    await http.ForbidAsync(JwtDefaults.RejectSchemeName);
+                                    await http.ForbidAsync(JwtDefaults.RejectSchemeName)
+                                        .ConfigureAwait(false);
                                 }
                             );
                         });
                     })
             )
             .Build();
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
     }
 }

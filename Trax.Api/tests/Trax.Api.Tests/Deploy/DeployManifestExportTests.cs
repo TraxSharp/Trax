@@ -58,9 +58,14 @@ public class DeployManifestExportTests
     {
         await using var app = Build();
 
-        await app.RunTraxAsync(["--trax-export-deploy", _path]);
+        await app.RunTraxAsync(
+            ["--trax-export-deploy", _path],
+            cancellationToken: CancellationToken.None
+        );
 
-        var manifest = DeployManifest.Read(await File.ReadAllTextAsync(_path));
+        var manifest = DeployManifest.Read(
+            await File.ReadAllTextAsync(_path, cancellationToken: CancellationToken.None)
+        );
         manifest.Version.Should().Be(DeployManifest.CurrentVersion);
         manifest.Roles.Should().Equal("api");
         manifest.Endpoints.GraphQL.Should().Be("/trax/graphql");
@@ -78,7 +83,10 @@ public class DeployManifestExportTests
         await using var app = Build();
         var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
 
-        await app.RunTraxAsync(["--trax-export-deploy", _path]);
+        await app.RunTraxAsync(
+            ["--trax-export-deploy", _path],
+            cancellationToken: CancellationToken.None
+        );
 
         lifetime.ApplicationStarted.IsCancellationRequested.Should().BeFalse();
     }
@@ -88,7 +96,12 @@ public class DeployManifestExportTests
     {
         await using var app = Build(s => s.AddSingleton<IHostedService, RefusingCheck>());
 
-        var act = async () => await app.RunTraxAsync(["--trax-export-deploy", _path]);
+        var act = async () =>
+            await app.RunTraxAsync(
+                    ["--trax-export-deploy", _path],
+                    cancellationToken: CancellationToken.None
+                )
+                .ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -107,7 +120,7 @@ public class DeployManifestExportTests
         var services = builder.Services;
         services.AddSingleton(
             new DashboardAssets(
-                new Dictionary<string, byte[]>
+                new Dictionary<string, byte[]>(StringComparer.Ordinal)
                 {
                     ["index.html"] = Encoding.UTF8.GetBytes(
                         "<!doctype html><html><head></head><body></body></html>"
@@ -130,7 +143,10 @@ public class DeployManifestExportTests
         );
         services
             .AddAuthentication(TestUserHandler.Name)
-            .AddScheme<AuthenticationSchemeOptions, TestUserHandler>(TestUserHandler.Name, null);
+            .AddScheme<AuthenticationSchemeOptions, TestUserHandler>(
+                TestUserHandler.Name,
+                configureOptions: null
+            );
         services.AddAuthorization(o => o.AddPolicy("Operator", p => p.RequireRole("Operator")));
         services.AddHealthChecks();
         more?.Invoke(services);

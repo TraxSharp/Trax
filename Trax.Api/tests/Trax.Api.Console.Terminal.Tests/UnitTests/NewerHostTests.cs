@@ -19,7 +19,7 @@ public class NewerHostTests
                 "Executions",
                 HostData.Runs(
                     2,
-                    null,
+                    next: null,
                     HostData.Run(4812, "SendInvoice", state: "PAUSED_FOR_REVIEW"),
                     HostData.Run(4813, "ShipOrder")
                 )

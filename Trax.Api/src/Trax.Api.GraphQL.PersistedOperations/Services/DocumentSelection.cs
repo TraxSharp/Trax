@@ -90,7 +90,7 @@ internal static class DocumentSelection
             walk.Return();
         }
         walk.Exit();
-        return fields.Count == 0 ? "__typename" : string.Join(" ", fields);
+        return fields.Count == 0 ? "__typename" : string.Join(' ', fields);
     }
 
     // The type a field holds, a connection's being its node type, so a paged back-reference is left out whole rather
@@ -106,7 +106,11 @@ internal static class DocumentSelection
     ) =>
         schema
             .Types.OfType<IObjectTypeDefinition>()
-            .Where(t => t.Implements.Any(i => i.Name == @interface.Name))
+            .Where(t =>
+                t.Implements.Any(i =>
+                    string.Equals(i.Name, @interface.Name, StringComparison.Ordinal)
+                )
+            )
             .OrderBy(t => t.Name, StringComparer.Ordinal);
 
     // The field's signature, then the definition of every type the document reaches but the root and namespace types,

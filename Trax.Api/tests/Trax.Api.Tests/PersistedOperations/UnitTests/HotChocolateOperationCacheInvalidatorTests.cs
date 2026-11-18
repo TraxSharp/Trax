@@ -90,7 +90,7 @@ public class HotChocolateOperationCacheInvalidatorTests
             .AddQueryType(d => d.Name("Query").Field("ping").Type<StringType>().Resolve("pong"));
         var provider = services.BuildServiceProvider();
         var invalidator = Build(provider);
-        invalidator.SetSchemaName(null);
+        invalidator.SetSchemaName(schemaName: null);
 
         var act = () => invalidator.InvalidateAsync(CancellationToken.None);
 

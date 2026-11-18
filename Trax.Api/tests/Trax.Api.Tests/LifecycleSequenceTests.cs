@@ -159,11 +159,9 @@ public class LifecycleSequenceTests
     {
         var delivered = new List<long>();
         await foreach (
-            var e in LifecycleSubscriptions.ReadLifecycle(
-                new ListStream(events),
-                visibility,
-                baseline
-            )
+            var e in LifecycleSubscriptions
+                .ReadLifecycle(new ListStream(events), visibility, baseline)
+                .ConfigureAwait(false)
         )
             delivered.Add(e.Sequence);
         return delivered;
@@ -205,7 +203,7 @@ public class LifecycleSequenceTests
 
         async IAsyncEnumerable<object?> ISourceStream.ReadEventsAsync()
         {
-            await foreach (var e in ReadEventsAsync())
+            await foreach (var e in ReadEventsAsync().ConfigureAwait(false))
                 yield return e;
         }
 

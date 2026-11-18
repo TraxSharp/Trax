@@ -43,7 +43,7 @@ namespace Trax.Api.Tests.Fakes.Machines
         }
     }
 
-    /// <summary>A member C# spells <c>@null</c>, which the server stores as <c>null</c>, a name GraphQL reserves.</summary>
+    /// <summary>A member C# spells <c>@null</c>, which the server stores as <see langword="null"/>, a name GraphQL reserves.</summary>
     public enum NullMember
     {
         Open,
@@ -175,7 +175,8 @@ namespace Trax.Api.Tests.Fakes.Machines
 
     public sealed record FrameworkGenerics
     {
-        public Dictionary<string, PairedPriority> Pairs { get; init; } = [];
+        public IDictionary<string, PairedPriority> Pairs { get; init; } =
+            new Dictionary<string, PairedPriority>(StringComparer.Ordinal);
         public Tuple<string, TupledPriority>? Tuple { get; init; }
         public (int, ValueTupledPriority) ValueTuple { get; init; }
     }

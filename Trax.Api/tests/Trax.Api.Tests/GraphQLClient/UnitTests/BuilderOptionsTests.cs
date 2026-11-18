@@ -68,7 +68,7 @@ public class BuilderOptionsTests
         var services = new ServiceCollection();
         var builder = services
             .AddTraxGraphQLClient(new Uri("http://stub/graphql"))
-            .DisposeHttpClient(true);
+            .DisposeHttpClient(dispose: true);
 
         var config = BuildConfiguration(builder);
 
@@ -93,7 +93,12 @@ public class BuilderOptionsTests
     [Test]
     public void ConfigureJson_ReplacesSerializerOptions()
     {
-        var custom = new JsonSerializerOptions { WriteIndented = true };
+        var custom = new JsonSerializerOptions
+        {
+            RespectNullableAnnotations = false,
+            RespectRequiredConstructorParameters = false,
+            WriteIndented = true,
+        };
         var services = new ServiceCollection();
         var builder = services
             .AddTraxGraphQLClient(new Uri("http://stub/graphql"))
@@ -147,7 +152,7 @@ public class BuilderOptionsTests
         var services = new ServiceCollection();
         var b1 = services.AddTraxGraphQLClient(new Uri("http://stub/graphql"));
         var b2 = b1.WithStrictness(ResponseStrictness.WarnOnDrift)
-            .DisposeHttpClient(true)
+            .DisposeHttpClient(dispose: true)
             .Configure(_ => { });
 
         b2.Should().BeSameAs(b1);

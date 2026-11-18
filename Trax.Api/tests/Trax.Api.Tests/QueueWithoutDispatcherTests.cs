@@ -179,7 +179,8 @@ public class QueueWithoutDispatcherTests
         _services = services.BuildServiceProvider();
         return await _services
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
     }
 
     private static TrainRegistration Registration() =>
@@ -207,7 +208,7 @@ public class QueueWithoutDispatcherTests
 
     private interface IReportTrain;
 
-    private sealed class ReportTrain;
+    private static class ReportTrain;
 
     public sealed record ReportInput
     {

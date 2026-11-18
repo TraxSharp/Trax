@@ -55,7 +55,7 @@ public class PersistedOperationsServiceTests
             CancellationToken.None
         );
         deactivated.Success.Should().BeTrue();
-        (await _service.GetAsync("svc_v1", null, CancellationToken.None))!
+        (await _service.GetAsync("svc_v1", tenantKey: null, CancellationToken.None))!
             .IsActive.Should()
             .BeFalse("a deactivated operation is still readable");
 
@@ -65,10 +65,16 @@ public class PersistedOperationsServiceTests
         );
         restored.Success.Should().BeTrue();
 
-        var history = await _service.GetHistoryAsync("svc_v1", null, 0, 50, CancellationToken.None);
+        var history = await _service.GetHistoryAsync(
+            "svc_v1",
+            tenantKey: null,
+            0,
+            50,
+            CancellationToken.None
+        );
         history.Select(h => h.ChangeType).Should().Equal("Restore", "Deactivate", "Upsert");
 
-        var page = await _service.ListAsync(null, 0, 50, CancellationToken.None);
+        var page = await _service.ListAsync(filter: null, 0, 50, CancellationToken.None);
         page.TotalCount.Should().Be(1);
     }
 
@@ -121,7 +127,11 @@ public class PersistedOperationsServiceTests
             factory,
             CancellationToken.None
         );
-        var viaService = await _service.GetAsync("svc_read", null, CancellationToken.None);
+        var viaService = await _service.GetAsync(
+            "svc_read",
+            tenantKey: null,
+            CancellationToken.None
+        );
 
         viaResolver.Should().BeEquivalentTo(viaService);
     }
@@ -163,11 +173,17 @@ public class PersistedOperationsServiceTests
 
         (await queries.PersistedOperations(factory, CancellationToken.None))
             .Should()
-            .BeEquivalentTo(await _service.ListAsync(null, 0, 50, CancellationToken.None));
+            .BeEquivalentTo(await _service.ListAsync(filter: null, 0, 50, CancellationToken.None));
         (await queries.PersistedOperationHistory("svc_list", factory, CancellationToken.None))
             .Should()
             .BeEquivalentTo(
-                await _service.GetHistoryAsync("svc_list", null, 0, 50, CancellationToken.None)
+                await _service.GetHistoryAsync(
+                    "svc_list",
+                    tenantKey: null,
+                    0,
+                    50,
+                    CancellationToken.None
+                )
             );
     }
 
@@ -179,7 +195,7 @@ public class PersistedOperationsServiceTests
         await store.UpsertAsync(
             "svc_kept",
             GraphQLFixture.ValidDocument,
-            null,
+            options: null,
             CancellationToken.None
         );
         var mutations = new PersistedOperationMutations();
@@ -198,7 +214,9 @@ public class PersistedOperationsServiceTests
 
         deactivated.Success.Should().BeTrue();
         restored.Success.Should().BeTrue();
-        (await store.GetAsync("svc_kept", null, CancellationToken.None)).Should().NotBeNull();
+        (await store.GetAsync("svc_kept", tenantKey: null, CancellationToken.None))
+            .Should()
+            .NotBeNull();
     }
 
     [Test]
@@ -243,7 +261,7 @@ public class PersistedOperationsServiceTests
         var readWithAStoreOnly = () =>
             PersistedOperationsService
                 .ForStore(store)
-                .ListAsync(null, 0, 10, CancellationToken.None);
+                .ListAsync(filter: null, 0, 10, CancellationToken.None);
         var writeWithReadsOnly = () =>
             PersistedOperationsService
                 .ForReads(factory)

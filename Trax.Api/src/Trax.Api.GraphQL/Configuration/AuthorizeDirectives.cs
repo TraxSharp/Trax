@@ -115,7 +115,10 @@ internal static class AuthorizeDirectives
         foreach (var attribute in attributes)
         {
             var roles = ParseRoles(attribute.Roles);
-            if (roles.Length == 0 || sets.Any(s => s.SequenceEqual(roles, StringComparer.Ordinal)))
+            if (
+                roles.Length == 0
+                || sets.Exists(s => s.SequenceEqual(roles, StringComparer.Ordinal))
+            )
                 continue;
             sets.Add(roles);
         }
@@ -131,7 +134,7 @@ internal static class AuthorizeDirectives
 
     /// <summary>
     /// The roles a comma-separated list names, trimmed, distinct and in a stable order, or none
-    /// when the list is <c>null</c> or holds only separators and whitespace.
+    /// when the list is <see langword="null"/> or holds only separators and whitespace.
     /// </summary>
     public static string[] ParseRoles(string? roles) =>
         roles is null

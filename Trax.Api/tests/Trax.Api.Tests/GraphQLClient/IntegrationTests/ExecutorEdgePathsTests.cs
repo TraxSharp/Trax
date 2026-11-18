@@ -62,7 +62,7 @@ public class ExecutorEdgePathsTests
         var subscriptionConfig = _services.GetRequiredService<IGraphQLClientConfiguration>();
         var executor = new GraphQLClientExecutor(stubValidator, subscriptionConfig);
 
-        var act = async () => await executor.Run(new AllItemsRequest());
+        var act = async () => await executor.Run(new AllItemsRequest()).ConfigureAwait(false);
 
         var ex = await act.Should().ThrowAsync<NotSupportedException>();
         ex.Which.Message.Should().Contain("Subscription");

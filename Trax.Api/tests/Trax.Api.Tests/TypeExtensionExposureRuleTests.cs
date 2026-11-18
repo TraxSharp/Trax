@@ -22,88 +22,88 @@ public class TypeExtensionExposureRuleTests
         // Endpoint open. Only a field whose parent gives it nothing has to declare.
         yield return Case(
             TypeExtensionParentPosture.Anonymous,
-            false,
-            false,
-            false,
+            authorize: false,
+            anonymous: false,
+            gated: false,
             ExposureViolation.MissingMarker
         );
         yield return Case(
             TypeExtensionParentPosture.Anonymous,
-            true,
-            false,
-            false,
+            authorize: true,
+            anonymous: false,
+            gated: false,
             ExposureViolation.None
         );
         yield return Case(
             TypeExtensionParentPosture.Anonymous,
-            false,
-            true,
-            false,
+            authorize: false,
+            anonymous: true,
+            gated: false,
             ExposureViolation.None
         );
         yield return Case(
             TypeExtensionParentPosture.Anonymous,
-            true,
-            true,
-            false,
+            authorize: true,
+            anonymous: true,
+            gated: false,
             ExposureViolation.Conflict
         );
 
         yield return Case(
             TypeExtensionParentPosture.Gated,
-            false,
-            false,
-            false,
+            authorize: false,
+            anonymous: false,
+            gated: false,
             ExposureViolation.None
         );
         yield return Case(
             TypeExtensionParentPosture.Gated,
-            true,
-            false,
-            false,
+            authorize: true,
+            anonymous: false,
+            gated: false,
             ExposureViolation.None
         );
         yield return Case(
             TypeExtensionParentPosture.Gated,
-            false,
-            true,
-            false,
+            authorize: false,
+            anonymous: true,
+            gated: false,
             ExposureViolation.None
         );
         yield return Case(
             TypeExtensionParentPosture.Gated,
-            true,
-            true,
-            false,
+            authorize: true,
+            anonymous: true,
+            gated: false,
             ExposureViolation.Conflict
         );
 
         yield return Case(
             TypeExtensionParentPosture.NotExposed,
-            false,
-            false,
-            false,
+            authorize: false,
+            anonymous: false,
+            gated: false,
             ExposureViolation.None
         );
         yield return Case(
             TypeExtensionParentPosture.NotExposed,
-            true,
-            false,
-            false,
+            authorize: true,
+            anonymous: false,
+            gated: false,
             ExposureViolation.None
         );
         yield return Case(
             TypeExtensionParentPosture.NotExposed,
-            false,
-            true,
-            false,
+            authorize: false,
+            anonymous: true,
+            gated: false,
             ExposureViolation.None
         );
         yield return Case(
             TypeExtensionParentPosture.NotExposed,
-            true,
-            true,
-            false,
+            authorize: true,
+            anonymous: true,
+            gated: false,
             ExposureViolation.Conflict
         );
 
@@ -111,88 +111,88 @@ public class TypeExtensionExposureRuleTests
         // anonymous caller, but declaring two contradictory things is still incoherent.
         yield return Case(
             TypeExtensionParentPosture.Anonymous,
-            false,
-            false,
-            true,
+            authorize: false,
+            anonymous: false,
+            gated: true,
             ExposureViolation.None
         );
         yield return Case(
             TypeExtensionParentPosture.Anonymous,
-            true,
-            false,
-            true,
+            authorize: true,
+            anonymous: false,
+            gated: true,
             ExposureViolation.None
         );
         yield return Case(
             TypeExtensionParentPosture.Anonymous,
-            false,
-            true,
-            true,
+            authorize: false,
+            anonymous: true,
+            gated: true,
             ExposureViolation.None
         );
         yield return Case(
             TypeExtensionParentPosture.Anonymous,
-            true,
-            true,
-            true,
+            authorize: true,
+            anonymous: true,
+            gated: true,
             ExposureViolation.Conflict
         );
 
         yield return Case(
             TypeExtensionParentPosture.Gated,
-            false,
-            false,
-            true,
+            authorize: false,
+            anonymous: false,
+            gated: true,
             ExposureViolation.None
         );
         yield return Case(
             TypeExtensionParentPosture.Gated,
-            true,
-            false,
-            true,
+            authorize: true,
+            anonymous: false,
+            gated: true,
             ExposureViolation.None
         );
         yield return Case(
             TypeExtensionParentPosture.Gated,
-            false,
-            true,
-            true,
+            authorize: false,
+            anonymous: true,
+            gated: true,
             ExposureViolation.None
         );
         yield return Case(
             TypeExtensionParentPosture.Gated,
-            true,
-            true,
-            true,
+            authorize: true,
+            anonymous: true,
+            gated: true,
             ExposureViolation.Conflict
         );
 
         yield return Case(
             TypeExtensionParentPosture.NotExposed,
-            false,
-            false,
-            true,
+            authorize: false,
+            anonymous: false,
+            gated: true,
             ExposureViolation.None
         );
         yield return Case(
             TypeExtensionParentPosture.NotExposed,
-            true,
-            false,
-            true,
+            authorize: true,
+            anonymous: false,
+            gated: true,
             ExposureViolation.None
         );
         yield return Case(
             TypeExtensionParentPosture.NotExposed,
-            false,
-            true,
-            true,
+            authorize: false,
+            anonymous: true,
+            gated: true,
             ExposureViolation.None
         );
         yield return Case(
             TypeExtensionParentPosture.NotExposed,
-            true,
-            true,
-            true,
+            authorize: true,
+            anonymous: true,
+            gated: true,
             ExposureViolation.Conflict
         );
 

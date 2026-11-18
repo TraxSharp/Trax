@@ -165,7 +165,7 @@ public class LookupOperationsTests
             Content = JsonContent.Create(new { query }),
         };
         request.Headers.Add("X-Api-Key", key);
-        var response = await client.SendAsync(request);
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var response = await client.SendAsync(request).ConfigureAwait(false);
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
     }
 }

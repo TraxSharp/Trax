@@ -38,8 +38,8 @@ public enum DeadLetterRequeueJobStatus
 /// <param name="Status">Where the job is.</param>
 /// <param name="AwaitingAtStart">How many dead letters were awaiting intervention when it started.</param>
 /// <param name="StartedAt">When it started (UTC).</param>
-/// <param name="FinishedAt">When it stopped (UTC), or <c>null</c> while running.</param>
-/// <param name="Count">How many dead letters it requeued, once it has succeeded; <c>null</c> before.</param>
+/// <param name="FinishedAt">When it stopped (UTC), or <see langword="null"/> while running.</param>
+/// <param name="Count">How many dead letters it requeued, once it has succeeded; <see langword="null"/> before.</param>
 /// <param name="Message">A human-readable description of where it is or how it ended.</param>
 public record DeadLetterRequeueJob(
     Guid Id,
@@ -52,7 +52,7 @@ public record DeadLetterRequeueJob(
 )
 {
     /// <summary>
-    /// <c>false</c> when a requeue-all was already running on this node, so no second one was
+    /// <see langword="false"/> when a requeue-all was already running on this node, so no second one was
     /// started and this is the one already running.
     /// </summary>
     public bool Started { get; init; } = true;
@@ -74,7 +74,7 @@ public record DeadLetterRequeueJob(
                 SchedulerJobStatus.Succeeded => DeadLetterRequeueJobStatus.Succeeded,
                 SchedulerJobStatus.Failed => DeadLetterRequeueJobStatus.Failed,
                 SchedulerJobStatus.Canceled => DeadLetterRequeueJobStatus.Canceled,
-                _ => throw new ArgumentOutOfRangeException(nameof(job), job.Status, null),
+                _ => throw new ArgumentOutOfRangeException(nameof(job), job.Status, message: null),
             },
             job.AwaitingAtStart,
             job.StartedAt,

@@ -366,12 +366,12 @@ public class TypeExtensionRegistrationTests
     [ExtendObjectType(typeof(object))]
     public class StubTypeExtensionB;
 
-    public class NotATypeExtension;
+    public static class NotATypeExtension;
 
     [ExtendObjectType(typeof(object))]
     public abstract class AbstractTypeExtension;
 
-    private class StubTypeModuleForExtTest : HotChocolate.Execution.Configuration.TypeModule
+    private sealed class StubTypeModuleForExtTest : HotChocolate.Execution.Configuration.TypeModule
     {
         public override ValueTask<IReadOnlyCollection<ITypeSystemMember>> CreateTypesAsync(
             HotChocolate.Types.Descriptors.IDescriptorContext context,
@@ -389,9 +389,9 @@ public class TypeExtensionRegistrationTests
 
     private interface IFakeTrainForExtTest;
 
-    private class FakeTrainForExtTest;
+    private static class FakeTrainForExtTest;
 
-    private record FakeExtTestInput;
+    private sealed record FakeExtTestInput;
 
     #endregion
 }

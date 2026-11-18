@@ -43,12 +43,13 @@ internal static class CountEstimator
         {
             var estimates = await ((DbContext)db)
                 .Database.SqlQueryRaw<long>(sql, tableName)
-                .ToListAsync(ct);
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
 
             if (estimates is [var estimate] && estimate >= EstimateThreshold)
                 return ((int)Math.Min(estimate, int.MaxValue), true);
         }
 
-        return (await exactCountAsync(), false);
+        return (await exactCountAsync().ConfigureAwait(false), false);
     }
 }

@@ -43,7 +43,7 @@ public class StartupValidatorTests
             t => t == typeof(AllItemsRequest)
         );
 
-        var act = async () => await v.StartAsync(CancellationToken.None);
+        var act = async () => await v.StartAsync(CancellationToken.None).ConfigureAwait(false);
         await act.Should().NotThrowAsync();
     }
 
@@ -62,14 +62,14 @@ public class StartupValidatorTests
             t => t == typeof(GetPlayerByDriftedQueryRequest)
         );
 
-        var act = async () => await v.StartAsync(CancellationToken.None);
+        var act = async () => await v.StartAsync(CancellationToken.None).ConfigureAwait(false);
         await act.Should().ThrowAsync<GraphQLValidationException>();
     }
 
     [Test]
     public async Task StopAsync_Always_Completes()
     {
-        var v = new GraphQLClientStartupValidator(null!, Array.Empty<Assembly>(), null);
+        var v = new GraphQLClientStartupValidator(null!, Array.Empty<Assembly>(), typeFilter: null);
 
         await v.StopAsync(CancellationToken.None);
     }

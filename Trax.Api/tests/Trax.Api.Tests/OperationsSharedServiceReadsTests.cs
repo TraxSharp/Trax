@@ -47,11 +47,11 @@ public class OperationsSharedServiceReadsTests
                 Arg.Any<CancellationToken>()
             )
             .Returns([
-                new ManifestGroupExecutionStats(2, 3, 9, 5, 2, 2, null)
+                new ManifestGroupExecutionStats(2, 3, 9, 5, 2, 2, LastRun: null)
                 {
                     LastEndedRunFailed = true,
                 },
-                new ManifestGroupExecutionStats(1, 0, 0, 0, 0, 0, null),
+                new ManifestGroupExecutionStats(1, 0, 0, 0, 0, 0, LastRun: null),
             ]);
 
         var stats = await new ManifestGroupQueries().GetStats([2, 1, 2], service, default);
@@ -82,7 +82,16 @@ public class OperationsSharedServiceReadsTests
     public async Task Logs_AreTheServicesPage_CountedByTheServiceWhenFiltered()
     {
         var service = Substitute.For<IOperationsService>();
-        var record = new LogRecord(41, 3, 0, LogLevel.Warning, "Cat", "msg", null, null);
+        var record = new LogRecord(
+            41,
+            3,
+            0,
+            LogLevel.Warning,
+            "Cat",
+            "msg",
+            Exception: null,
+            StackTrace: null
+        );
         service
             .GetLogsAsync(
                 Arg.Is<LogQuery>(q =>

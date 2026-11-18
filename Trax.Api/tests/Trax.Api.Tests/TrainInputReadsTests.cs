@@ -77,7 +77,7 @@ public class TrainInputReadsTests
     private IEnumerable<string> FieldsOf(string typeName) =>
         _executor
             .Schema.Types.OfType<ObjectType>()
-            .Single(t => t.Name == typeName)
+            .Single(t => string.Equals(t.Name, typeName, StringComparison.Ordinal))
             .Fields.Select(f => f.Name);
 
     /// <summary>

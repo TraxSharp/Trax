@@ -1,3 +1,4 @@
+using System.Globalization;
 using Trax.Api.Console.Terminal.Operations;
 using Trax.Client;
 
@@ -26,7 +27,7 @@ internal static class Catalog
             Title = "Runs",
             Columns =
             [
-                new("Id", r => r.Id.ToString()),
+                new("Id", r => r.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)),
                 new("Train", r => r.Name),
                 new("State", r => Wire.Name(r.TrainState)),
                 new("Started", r => Wire.Time(r.StartTime)),
@@ -52,22 +53,24 @@ internal static class Catalog
             Load = async (client, query, ct) =>
             {
                 var f = query.Filters;
-                var answer = await client.ExecutionsAsync(
-                    new ExecutionsVariables
-                    {
-                        Take = query.Take,
-                        AfterId = query.After,
-                        TrainState = Enum<TrainState>(f, "state"),
-                        TrainName = Text(f, "train"),
-                        FailureClass = Enum<FailureClass>(f, "failure-class"),
-                        ManifestId = Long(f, "manifest"),
-                        ParentId = Long(f, "parent"),
-                        HostName = Text(f, "host"),
-                        ExternalId = Text(f, "external-id"),
-                        HideAdminTrains = HideAdmin(f),
-                    },
-                    ct
-                );
+                var answer = await client
+                    .ExecutionsAsync(
+                        new ExecutionsVariables
+                        {
+                            Take = query.Take,
+                            AfterId = query.After,
+                            TrainState = Enum<TrainState>(f, "state"),
+                            TrainName = Text(f, "train"),
+                            FailureClass = Enum<FailureClass>(f, "failure-class"),
+                            ManifestId = Long(f, "manifest"),
+                            ParentId = Long(f, "parent"),
+                            HostName = Text(f, "host"),
+                            ExternalId = Text(f, "external-id"),
+                            HideAdminTrains = HideAdmin(f),
+                        },
+                        ct
+                    )
+                    .ConfigureAwait(false);
                 return Page(
                     answer,
                     d =>
@@ -78,7 +81,9 @@ internal static class Catalog
             },
             Detail = async (client, id, ct) =>
                 Detail(
-                    await client.ExecutionDetailAsync(new ExecutionDetailVariables { Id = id }, ct),
+                    await client
+                        .ExecutionDetailAsync(new ExecutionDetailVariables { Id = id }, ct)
+                        .ConfigureAwait(false),
                     d => d.Operations?.ExecutionDetail
                 ),
             Actions =
@@ -91,10 +96,12 @@ internal static class Catalog
                     Confirm: true,
                     async (client, ids, _, ct) =>
                         ActionOutcome.Of(
-                            await client.CancelExecutionsAsync(
-                                new CancelExecutionsVariables { Ids = ids },
-                                ct
-                            ),
+                            await client
+                                .CancelExecutionsAsync(
+                                    new CancelExecutionsVariables { Ids = ids },
+                                    ct
+                                )
+                                .ConfigureAwait(false),
                             d =>
                                 Said(
                                     d.Operations?.CancelExecutions is { } r
@@ -135,11 +142,17 @@ internal static class Catalog
             Title = "Dead letters",
             Columns =
             [
-                new("Id", r => r.Id.ToString()),
+                new("Id", r => r.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)),
                 new("Manifest", r => r.ManifestName),
                 new("Status", r => Wire.Name(r.Status)),
                 new("At", r => Wire.Time(r.DeadLetteredAt)),
-                new("Retries", r => r.RetryCountAtDeadLetter.ToString()),
+                new(
+                    "Retries",
+                    r =>
+                        r.RetryCountAtDeadLetter.ToString(
+                            System.Globalization.CultureInfo.InvariantCulture
+                        )
+                ),
                 new("Reason", r => r.Reason),
             ],
             IdOf = r => r.Id,
@@ -152,16 +165,18 @@ internal static class Catalog
             Load = async (client, query, ct) =>
             {
                 var f = query.Filters;
-                var answer = await client.DeadLettersAsync(
-                    new DeadLettersVariables
-                    {
-                        Take = query.Take,
-                        AfterId = query.After,
-                        Status = Enum<DeadLetterStatus>(f, "status"),
-                        ManifestId = Long(f, "manifest"),
-                    },
-                    ct
-                );
+                var answer = await client
+                    .DeadLettersAsync(
+                        new DeadLettersVariables
+                        {
+                            Take = query.Take,
+                            AfterId = query.After,
+                            Status = Enum<DeadLetterStatus>(f, "status"),
+                            ManifestId = Long(f, "manifest"),
+                        },
+                        ct
+                    )
+                    .ConfigureAwait(false);
                 return Page(
                     answer,
                     d =>
@@ -172,10 +187,9 @@ internal static class Catalog
             },
             Detail = async (client, id, ct) =>
                 Detail(
-                    await client.DeadLetterDetailAsync(
-                        new DeadLetterDetailVariables { Id = id },
-                        ct
-                    ),
+                    await client
+                        .DeadLetterDetailAsync(new DeadLetterDetailVariables { Id = id }, ct)
+                        .ConfigureAwait(false),
                     d => d.Operations?.DeadLetters.DeadLetter
                 ),
             Actions =
@@ -188,14 +202,16 @@ internal static class Catalog
                     Confirm: true,
                     async (client, ids, options, ct) =>
                         ActionOutcome.Of(
-                            await client.RequeueDeadLettersAsync(
-                                new RequeueDeadLettersVariables
-                                {
-                                    Ids = ids,
-                                    AskAfresh = options.AskAfresh,
-                                },
-                                ct
-                            ),
+                            await client
+                                .RequeueDeadLettersAsync(
+                                    new RequeueDeadLettersVariables
+                                    {
+                                        Ids = ids,
+                                        AskAfresh = options.AskAfresh,
+                                    },
+                                    ct
+                                )
+                                .ConfigureAwait(false),
                             d =>
                                 Said(
                                     d.Operations?.DeadLetters.RequeueDeadLetters is { } r
@@ -213,14 +229,16 @@ internal static class Catalog
                     Confirm: false,
                     async (client, ids, options, ct) =>
                         ActionOutcome.Of(
-                            await client.AcknowledgeDeadLettersAsync(
-                                new AcknowledgeDeadLettersVariables
-                                {
-                                    Ids = ids,
-                                    Note = options.Note ?? "",
-                                },
-                                ct
-                            ),
+                            await client
+                                .AcknowledgeDeadLettersAsync(
+                                    new AcknowledgeDeadLettersVariables
+                                    {
+                                        Ids = ids,
+                                        Note = options.Note ?? "",
+                                    },
+                                    ct
+                                )
+                                .ConfigureAwait(false),
                             d =>
                                 Said(
                                     d.Operations?.DeadLetters.AcknowledgeDeadLetters is { } r
@@ -255,12 +273,15 @@ internal static class Catalog
             Title = "Work queue",
             Columns =
             [
-                new("Id", r => r.Id.ToString()),
+                new("Id", r => r.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)),
                 new("Train", r => r.TrainName),
                 new("Status", r => Wire.Name(r.Status)),
                 new("Created", r => Wire.Time(r.CreatedAt)),
                 new("Dispatched", r => Wire.Time(r.DispatchedAt)),
-                new("Priority", r => r.Priority.ToString()),
+                new(
+                    "Priority",
+                    r => r.Priority.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                ),
                 new("Subject", r => r.SubjectKey ?? ""),
             ],
             IdOf = r => r.Id,
@@ -277,18 +298,20 @@ internal static class Catalog
             Load = async (client, query, ct) =>
             {
                 var f = query.Filters;
-                var answer = await client.WorkQueueAsync(
-                    new WorkQueueVariables
-                    {
-                        Take = query.Take,
-                        AfterId = query.After,
-                        Status = Enum<WorkQueueStatus>(f, "status"),
-                        TrainName = Text(f, "train"),
-                        SubjectKey = Text(f, "subject"),
-                        ManifestId = Long(f, "manifest"),
-                    },
-                    ct
-                );
+                var answer = await client
+                    .WorkQueueAsync(
+                        new WorkQueueVariables
+                        {
+                            Take = query.Take,
+                            AfterId = query.After,
+                            Status = Enum<WorkQueueStatus>(f, "status"),
+                            TrainName = Text(f, "train"),
+                            SubjectKey = Text(f, "subject"),
+                            ManifestId = Long(f, "manifest"),
+                        },
+                        ct
+                    )
+                    .ConfigureAwait(false);
                 return Page(
                     answer,
                     d =>
@@ -299,7 +322,9 @@ internal static class Catalog
             },
             Detail = async (client, id, ct) =>
                 Detail(
-                    await client.WorkQueueDetailAsync(new WorkQueueDetailVariables { Id = id }, ct),
+                    await client
+                        .WorkQueueDetailAsync(new WorkQueueDetailVariables { Id = id }, ct)
+                        .ConfigureAwait(false),
                     d => d.Operations?.WorkQueue.Detail
                 ),
             Actions =
@@ -312,10 +337,12 @@ internal static class Catalog
                     Confirm: true,
                     async (client, ids, _, ct) =>
                         ActionOutcome.Of(
-                            await client.CancelWorkQueueEntriesAsync(
-                                new CancelWorkQueueEntriesVariables { Ids = ids },
-                                ct
-                            ),
+                            await client
+                                .CancelWorkQueueEntriesAsync(
+                                    new CancelWorkQueueEntriesVariables { Ids = ids },
+                                    ct
+                                )
+                                .ConfigureAwait(false),
                             d =>
                                 Said(
                                     d.Operations?.WorkQueue.CancelWorkQueueEntries is { } r
@@ -334,17 +361,24 @@ internal static class Catalog
             Title = "Manifests",
             Columns =
             [
-                new("Id", r => r.Id.ToString()),
+                new("Id", r => r.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)),
                 new("Name", r => r.Name),
                 new("Enabled", r => r.IsEnabled ? "yes" : "no"),
                 new(
                     "Schedule",
                     r =>
                         r.CronExpression
-                        ?? (r.IntervalSeconds is { } s ? $"every {s}s" : Wire.Name(r.ScheduleType))
+                        ?? (
+                            r.IntervalSeconds is { } s
+                                ? string.Create(CultureInfo.InvariantCulture, $"every {s}s")
+                                : Wire.Name(r.ScheduleType)
+                        )
                 ),
                 new("Last success", r => Wire.Time(r.LastSuccessfulRun)),
-                new("Retries", r => r.MaxRetries.ToString()),
+                new(
+                    "Retries",
+                    r => r.MaxRetries.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                ),
             ],
             IdOf = r => r.Id,
             RefreshOn = ChangeDomain.Manifest,
@@ -359,19 +393,21 @@ internal static class Catalog
             Load = async (client, query, ct) =>
             {
                 var f = query.Filters;
-                var answer = await client.ManifestsAsync(
-                    new ManifestsVariables
-                    {
-                        Take = query.Take,
-                        AfterId = query.After,
-                        IsEnabled = Bool(f, "enabled"),
-                        ScheduleType = Enum<ScheduleType>(f, "schedule"),
-                        NameContains = Text(f, "name"),
-                        ManifestGroupId = Long(f, "group"),
-                        HideAdminTrains = HideAdmin(f),
-                    },
-                    ct
-                );
+                var answer = await client
+                    .ManifestsAsync(
+                        new ManifestsVariables
+                        {
+                            Take = query.Take,
+                            AfterId = query.After,
+                            IsEnabled = Bool(f, "enabled"),
+                            ScheduleType = Enum<ScheduleType>(f, "schedule"),
+                            NameContains = Text(f, "name"),
+                            ManifestGroupId = Long(f, "group"),
+                            HideAdminTrains = HideAdmin(f),
+                        },
+                        ct
+                    )
+                    .ConfigureAwait(false);
                 return Page(
                     answer,
                     d =>
@@ -382,7 +418,9 @@ internal static class Catalog
             },
             Detail = async (client, id, ct) =>
                 Detail(
-                    await client.ManifestDetailAsync(new ManifestDetailVariables { Id = id }, ct),
+                    await client
+                        .ManifestDetailAsync(new ManifestDetailVariables { Id = id }, ct)
+                        .ConfigureAwait(false),
                     d => d.Operations?.ManifestDetail
                 ),
             Actions =
@@ -395,14 +433,16 @@ internal static class Catalog
                     Confirm: true,
                     async (client, ids, options, ct) =>
                         ActionOutcome.Of(
-                            await client.TriggerManifestsAsync(
-                                new TriggerManifestsVariables
-                                {
-                                    Ids = ids,
-                                    AskAfresh = options.AskAfresh,
-                                },
-                                ct
-                            ),
+                            await client
+                                .TriggerManifestsAsync(
+                                    new TriggerManifestsVariables
+                                    {
+                                        Ids = ids,
+                                        AskAfresh = options.AskAfresh,
+                                    },
+                                    ct
+                                )
+                                .ConfigureAwait(false),
                             d =>
                                 Said(
                                     d.Operations?.TriggerManifests is { } r
@@ -418,7 +458,7 @@ internal static class Catalog
                     "Let the selected manifests schedule runs.",
                     NeedsNote: false,
                     Confirm: false,
-                    (client, ids, _, ct) => SetEnabled(client, ids, true, ct)
+                    (client, ids, _, ct) => SetEnabled(client, ids, enabled: true, ct)
                 ),
                 new(
                     "disable",
@@ -426,7 +466,7 @@ internal static class Catalog
                     "Stop the selected manifests scheduling runs.",
                     NeedsNote: false,
                     Confirm: true,
-                    (client, ids, _, ct) => SetEnabled(client, ids, false, ct)
+                    (client, ids, _, ct) => SetEnabled(client, ids, enabled: false, ct)
                 ),
             ],
             BulkActions =
@@ -450,7 +490,7 @@ internal static class Catalog
     /// <summary>The list named <paramref name="name"/>.</summary>
     /// <exception cref="InvalidOperationException">No list is named so.</exception>
     public static IConsoleList Named(string name) =>
-        All.FirstOrDefault(l => l.Name == name)
+        All.FirstOrDefault(l => string.Equals(l.Name, name, StringComparison.Ordinal))
         ?? throw new InvalidOperationException(
             $"'{name}' is not a list. Use one of {string.Join(", ", All.Select(l => l.Name))}."
         );
@@ -468,17 +508,19 @@ internal static class Catalog
         CancellationToken ct
     )
     {
-        var answer = await client.StartBulkOperationAsync(
-            new StartBulkOperationVariables
-            {
-                Kind = action.Kind,
-                Filter = action.Filter(filters),
-                ExpectedCount = expectedCount,
-                AskAfresh = options.AskAfresh,
-                Note = options.Note,
-            },
-            ct
-        );
+        var answer = await client
+            .StartBulkOperationAsync(
+                new StartBulkOperationVariables
+                {
+                    Kind = action.Kind,
+                    Filter = action.Filter(filters),
+                    ExpectedCount = expectedCount,
+                    AskAfresh = options.AskAfresh,
+                    Note = options.Note,
+                },
+                ct
+            )
+            .ConfigureAwait(false);
         var outcome = ActionOutcome.Of(
             answer,
             d => Said(d.Operations?.StartBulkOperation is { } r ? (r.Success, r.Message) : null)
@@ -518,10 +560,12 @@ internal static class Catalog
         CancellationToken ct
     ) =>
         ActionOutcome.Of(
-            await client.SetManifestsEnabledAsync(
-                new SetManifestsEnabledVariables { Ids = ids, Enabled = enabled },
-                ct
-            ),
+            await client
+                .SetManifestsEnabledAsync(
+                    new SetManifestsEnabledVariables { Ids = ids, Enabled = enabled },
+                    ct
+                )
+                .ConfigureAwait(false),
             d => Said(d.Operations?.SetManifestsEnabled is { } r ? (r.Success, r.Message) : null)
         );
 

@@ -53,7 +53,7 @@ internal static class ManifestScheduleFields
                     0,
                     OperationsService.MaxUpcomingRuns
                 );
-                var upcoming = await LoadAsync(ctx, id(ctx.Parent<T>()));
+                var upcoming = await LoadAsync(ctx, id(ctx.Parent<T>())).ConfigureAwait(false);
                 return (upcoming?.NextRuns ?? []).Take(count).ToList();
             });
 
@@ -65,7 +65,8 @@ internal static class ManifestScheduleFields
             )
             .Type<NonNullType<StringType>>()
             .Resolve(async ctx =>
-                (await LoadAsync(ctx, id(ctx.Parent<T>())))?.ScheduleText ?? string.Empty
+                (await LoadAsync(ctx, id(ctx.Parent<T>())).ConfigureAwait(false))?.ScheduleText
+                ?? string.Empty
             );
     }
 
@@ -94,11 +95,9 @@ internal sealed class ManifestUpcomingRunsLoader(
         var result = new Dictionary<long, ManifestUpcomingRuns>(keys.Count);
         foreach (var chunk in keys.Chunk(OperationsService.MaxBatchSize))
         {
-            var rows = await operations.GetUpcomingRunsAsync(
-                chunk,
-                OperationsService.MaxUpcomingRuns,
-                cancellationToken
-            );
+            var rows = await operations
+                .GetUpcomingRunsAsync(chunk, OperationsService.MaxUpcomingRuns, cancellationToken)
+                .ConfigureAwait(false);
             foreach (var row in rows)
                 result[row.ManifestId] = row;
         }

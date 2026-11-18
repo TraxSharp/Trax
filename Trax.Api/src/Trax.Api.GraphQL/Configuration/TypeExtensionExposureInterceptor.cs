@@ -55,7 +55,7 @@ internal sealed class TypeExtensionExposureInterceptor : TypeInterceptor
     /// <summary>
     /// The namespaces Trax hangs off a root type through an ungated field (<c>discover</c>,
     /// <c>dispatch</c>). A field grafted onto one is as reachable as a field on the root itself.
-    /// The per-namespace types Trax builds under them have runtime type <c>object</c>, so those
+    /// The per-namespace types Trax builds under them have runtime type <see langword="object"/>, so those
     /// are recognised by the marker <see cref="NamespaceTypes.Base"/> sets on each one.
     /// </summary>
     private static readonly HashSet<Type> RootNamespaceTypes =
@@ -255,7 +255,7 @@ internal sealed class TypeExtensionExposureInterceptor : TypeInterceptor
         {
             var found = extendsType is null
                 ? _typeNames.Contains(name)
-                : _runtimeTypes.Any(extendsType.IsAssignableFrom);
+                : _runtimeTypes.Exists(extendsType.IsAssignableFrom);
             if (found)
                 continue;
 
@@ -439,7 +439,7 @@ internal sealed class TypeExtensionExposureInterceptor : TypeInterceptor
     {
         var own = member is MethodInfo method
             ? TraxAuthorization.Read(method)
-            : new TraxAuthorizationDeclaration([], false, []);
+            : new TraxAuthorizationDeclaration([], AllowAnonymous: false, []);
 
         if (member.DeclaringType is not { } declaring || declaring == runtimeType)
             return own;
@@ -469,7 +469,7 @@ internal sealed class TypeExtensionExposureInterceptor : TypeInterceptor
         field.ResolverMember ?? field.Member;
 
     /// <summary>
-    /// The CLR member behind a field that a type extension contributed, or <c>null</c> when the
+    /// The CLR member behind a field that a type extension contributed, or <see langword="null"/> when the
     /// field is not one.
     /// </summary>
     /// <remarks>

@@ -180,7 +180,7 @@ public class CustomScalarSchemaTests
         ).GetSchemaAsync();
 
         var field = schema.Subscription!.Fields.Find("ticked")!;
-        var act = async () => await field.StreamResolver!.ResolveAsync(null!);
+        var act = async () => await field.StreamResolver!.ResolveAsync(null!).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<NotSupportedException>();
     }
@@ -274,12 +274,18 @@ public class CustomScalarSchemaTests
     {
         var services = new ServiceCollection();
         ConfigureServer(services.AddGraphQL());
-        await using var provider = services.BuildServiceProvider();
-        var executor = await provider
-            .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync();
-        var result = await executor.ExecuteAsync(IntrospectingSchemaProvider.IntrospectionQuery);
-        return result.ToJson();
+        var provider = services.BuildServiceProvider();
+        await using (provider.ConfigureAwait(false))
+        {
+            var executor = await provider
+                .GetRequiredService<IRequestExecutorProvider>()
+                .GetExecutorAsync()
+                .ConfigureAwait(false);
+            var result = await executor
+                .ExecuteAsync(IntrospectingSchemaProvider.IntrospectionQuery)
+                .ConfigureAwait(false);
+            return result.ToJson();
+        }
     }
 
     public sealed class ScalarQueryType

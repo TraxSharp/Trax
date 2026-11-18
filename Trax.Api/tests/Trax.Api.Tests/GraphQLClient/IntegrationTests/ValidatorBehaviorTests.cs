@@ -64,7 +64,10 @@ public class ValidatorBehaviorTests
         // Second call resolves from cache - we can't directly observe that but we can
         // confirm the cache wasn't double-written.
         await _validator.ValidateAsync(query);
-        _validator.CachedQueries.Count(kv => kv.Key == query).Should().Be(1);
+        _validator
+            .CachedQueries.Count(kv => string.Equals(kv.Key, query, StringComparison.Ordinal))
+            .Should()
+            .Be(1);
     }
 
     [Test]
@@ -72,7 +75,7 @@ public class ValidatorBehaviorTests
     {
         const string query = "query { player(id: \"x\") { nope } }";
 
-        var act = async () => await _validator.ValidateAsync(query);
+        var act = async () => await _validator.ValidateAsync(query).ConfigureAwait(false);
 
         var ex = await act.Should().ThrowAsync<GraphQLValidationException>();
         ex.Which.Query.Should().Be(query);
@@ -84,7 +87,7 @@ public class ValidatorBehaviorTests
     {
         const string fragmentOnly = "fragment Foo on Player { id }";
 
-        var act = async () => await _validator.ValidateAsync(fragmentOnly);
+        var act = async () => await _validator.ValidateAsync(fragmentOnly).ConfigureAwait(false);
 
         var ex = await act.Should().ThrowAsync<GraphQLValidationException>();
         ex.Which.Message.Should().Contain("No operation definition");
@@ -117,17 +120,17 @@ public class ValidatorBehaviorTests
             query Second { allItems { name } }
             """;
 
-        var act = async () => await _validator.ValidateAsync(twoOps);
+        var act = async () => await _validator.ValidateAsync(twoOps).ConfigureAwait(false);
 
         var ex = await act.Should().ThrowAsync<GraphQLValidationException>();
         ex.Which.Message.Should().Contain("exactly one operation").And.Contain("2");
     }
 
     [Test]
-    public void ValidateAsync_NullQuery_ThrowsArgumentNull()
+    public async Task ValidateAsync_NullQuery_ThrowsArgumentNull()
     {
-        var act = async () => await _validator.ValidateAsync(null!);
-        act.Should().ThrowAsync<ArgumentNullException>();
+        var act = async () => await _validator.ValidateAsync(null!).ConfigureAwait(false);
+        await act.Should().ThrowAsync<ArgumentNullException>();
     }
 
     [Test]
@@ -138,19 +141,23 @@ public class ValidatorBehaviorTests
         await _validator.ValidateAssembliesAsync(
             new[] { typeof(GetPlayerByRawStringRequest).Assembly },
             t =>
-                t.Namespace == typeof(GetPlayerByRawStringRequest).Namespace
+                string.Equals(
+                    t.Namespace,
+                    typeof(GetPlayerByRawStringRequest).Namespace,
+                    StringComparison.Ordinal
+                )
                 && t != typeof(GetPlayerByDriftedQueryRequest)
                 && t != typeof(MissingResourceRequest)
-                && t.Name != "PlayerNameOnly"
+                && !string.Equals(t.Name, "PlayerNameOnly", StringComparison.Ordinal)
         );
 
         // After ValidateAssembliesAsync, every queried type's Query is in the cache.
         _validator
-            .CachedQueries.Keys.Any(k => k.Contains("PlayersByLevel"))
+            .CachedQueries.Keys.Any(k => k.Contains("PlayersByLevel", StringComparison.Ordinal))
             .Should()
             .BeTrue("PlayersByLevelRequest should have been validated");
         _validator
-            .CachedQueries.Keys.Any(k => k.Contains("AllItems"))
+            .CachedQueries.Keys.Any(k => k.Contains("AllItems", StringComparison.Ordinal))
             .Should()
             .BeTrue("AllItemsRequest should have been validated");
     }
@@ -159,10 +166,12 @@ public class ValidatorBehaviorTests
     public async Task ValidateAssembliesAsync_IncludesDriftedQuery_Throws()
     {
         var act = async () =>
-            await _validator.ValidateAssembliesAsync(
-                new[] { typeof(GetPlayerByDriftedQueryRequest).Assembly },
-                t => t == typeof(GetPlayerByDriftedQueryRequest)
-            );
+            await _validator
+                .ValidateAssembliesAsync(
+                    new[] { typeof(GetPlayerByDriftedQueryRequest).Assembly },
+                    t => t == typeof(GetPlayerByDriftedQueryRequest)
+                )
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<GraphQLValidationException>();
     }
@@ -171,7 +180,9 @@ public class ValidatorBehaviorTests
     public async Task ValidateAssembliesAsync_NullAssemblies_Throws()
     {
         var act = async () =>
-            await _validator.ValidateAssembliesAsync((IEnumerable<Assembly>)null!);
+            await _validator
+                .ValidateAssembliesAsync((IEnumerable<Assembly>)null!)
+                .ConfigureAwait(false);
         await act.Should().ThrowAsync<ArgumentNullException>();
     }
 }

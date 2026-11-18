@@ -156,7 +156,7 @@ public class CaseInsensitiveFilterTests
         var schema = await BuildSchemaAsync<PeopleDbContext>(caseInsensitive: true);
 
         var stringFilter = schema.Types.GetType<InputObjectType>("StringOperationFilterInput");
-        var fieldNames = stringFilter.Fields.Select(f => f.Name).ToHashSet();
+        var fieldNames = stringFilter.Fields.Select(f => f.Name).ToHashSet(StringComparer.Ordinal);
 
         fieldNames.Should().Contain("icontains");
         fieldNames.Should().Contain("ieq");
@@ -171,7 +171,7 @@ public class CaseInsensitiveFilterTests
         var schema = await BuildSchemaAsync<PeopleDbContext>(caseInsensitive: false);
 
         var stringFilter = schema.Types.GetType<InputObjectType>("StringOperationFilterInput");
-        var fieldNames = stringFilter.Fields.Select(f => f.Name).ToHashSet();
+        var fieldNames = stringFilter.Fields.Select(f => f.Name).ToHashSet(StringComparer.Ordinal);
 
         // Default behavior is untouched: stock ops present, custom ops absent.
         fieldNames.Should().Contain("contains");
@@ -381,9 +381,9 @@ public class CaseInsensitiveFilterTests
 
     private static async Task<List<int>> QueryIdsAsync(IRequestExecutor executor, string where)
     {
-        var result = await executor.ExecuteAsync(
-            $"{{ discover {{ people(where: {{ {where} }}) {{ nodes {{ id }} }} }} }}"
-        );
+        var result = await executor
+            .ExecuteAsync($"{{ discover {{ people(where: {{ {where} }}) {{ nodes {{ id }} }} }} }}")
+            .ConfigureAwait(false);
 
         var op = result.ExpectOperationResult();
         op.Errors.Should().BeNullOrEmpty();
@@ -393,8 +393,13 @@ public class CaseInsensitiveFilterTests
         var nodes = (IReadOnlyList<object?>)people["nodes"]!;
 
         return nodes
-            .Select(n => Convert.ToInt32(((IReadOnlyDictionary<string, object?>)n!)["id"]))
-            .OrderBy(id => id)
+            .Select(n =>
+                Convert.ToInt32(
+                    ((IReadOnlyDictionary<string, object?>)n!)["id"],
+                    System.Globalization.CultureInfo.InvariantCulture
+                )
+            )
+            .Order()
             .ToList();
     }
 
@@ -402,7 +407,10 @@ public class CaseInsensitiveFilterTests
     {
         var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"]!;
         var connection = (IReadOnlyDictionary<string, object?>)discover[field]!;
-        return Convert.ToInt32(connection["totalCount"]);
+        return Convert.ToInt32(
+            connection["totalCount"],
+            System.Globalization.CultureInfo.InvariantCulture
+        );
     }
 
     private static GraphQLConfiguration BuildConfig<TContext>(Action<TraxGraphQLBuilder> customize)
@@ -422,7 +430,8 @@ public class CaseInsensitiveFilterTests
     private static async Task<ISchemaDefinition> BuildSchemaAsync<TContext>(bool caseInsensitive)
         where TContext : DbContext
     {
-        var executor = await BuildExecutorAsync<TContext>(caseInsensitive: caseInsensitive);
+        var executor = await BuildExecutorAsync<TContext>(caseInsensitive: caseInsensitive)
+            .ConfigureAwait(false);
         return executor.Schema;
     }
 
@@ -474,9 +483,12 @@ public class CaseInsensitiveFilterTests
         var provider = services.BuildServiceProvider();
 
         if (seedData)
-            await SeedAsync<TContext>(provider);
+            await SeedAsync<TContext>(provider).ConfigureAwait(false);
 
-        return await provider.GetRequiredService<IRequestExecutorProvider>().GetExecutorAsync();
+        return await provider
+            .GetRequiredService<IRequestExecutorProvider>()
+            .GetExecutorAsync()
+            .ConfigureAwait(false);
     }
 
     private static async Task SeedAsync<TContext>(IServiceProvider provider)
@@ -505,7 +517,7 @@ public class CaseInsensitiveFilterTests
                         Nickname = "WALL-E",
                     }
                 );
-                await people.SaveChangesAsync();
+                await people.SaveChangesAsync().ConfigureAwait(false);
                 break;
             case MemberRefDbContext members:
                 members.Members.AddRange(
@@ -528,7 +540,7 @@ public class CaseInsensitiveFilterTests
                         Secret = "s3",
                     }
                 );
-                await members.SaveChangesAsync();
+                await members.SaveChangesAsync().ConfigureAwait(false);
                 break;
         }
     }

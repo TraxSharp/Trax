@@ -44,7 +44,8 @@ internal sealed class QueryModelReachValidator(
         using var scope = serviceProvider.CreateScope();
         var executor = await scope
             .ServiceProvider.GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync(TraxSchemaName, cancellationToken);
+            .GetExecutorAsync(TraxSchemaName, cancellationToken)
+            .ConfigureAwait(false);
         var schema = executor.Schema;
 
         var models = configuration.ModelRegistrations.Select(r => r.EntityType).ToHashSet();
@@ -64,7 +65,12 @@ internal sealed class QueryModelReachValidator(
         WalkInputTypes(schema, models, entities, Reach);
 
         var messages = new List<string>();
-        foreach (var (entity, coordinates) in reached.OrderBy(r => r.Key.FullName))
+        foreach (
+            var (entity, coordinates) in reached.OrderBy(
+                r => r.Key.FullName,
+                StringComparer.Ordinal
+            )
+        )
         {
             var posture = NavigationTargetPosture.Read(entity);
             var violation = ExposureAuthorizationRule.Evaluate(
@@ -187,7 +193,11 @@ internal sealed class QueryModelReachValidator(
                 when filter.GetType().IsGenericType
                     && filter.GetType().GetGenericTypeDefinition() == typeof(ListFilterInputType<>):
                 return
-                    filter.Fields.FirstOrDefault(f => f.Name == "some")?.Type.NamedType()
+                    filter
+                        .Fields.FirstOrDefault(f =>
+                            string.Equals(f.Name, "some", StringComparison.Ordinal)
+                        )
+                        ?.Type.NamedType()
                         is IFilterInputType element
                     ? element.EntityType.Source
                     : null;

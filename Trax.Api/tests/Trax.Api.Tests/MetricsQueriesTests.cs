@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using NSubstitute;
 using NUnit.Framework;
@@ -27,7 +28,11 @@ public class MetricsQueriesTests
             Array.Empty<TrainAverageDuration>(),
             Array.Empty<ThroughputSeries>()
         );
-        ops.GetDashboardMetricsAsync(MetricsRange.Last60Minutes, true, Arg.Any<CancellationToken>())
+        ops.GetDashboardMetricsAsync(
+                MetricsRange.Last60Minutes,
+                hideAdminTrains: true,
+                Arg.Any<CancellationToken>()
+            )
             .Returns(result);
         var queries = new MetricsQueries();
 
@@ -42,7 +47,7 @@ public class MetricsQueriesTests
         await ops.Received(1)
             .GetDashboardMetricsAsync(
                 MetricsRange.Last60Minutes,
-                true,
+                hideAdminTrains: true,
                 Arg.Any<CancellationToken>()
             );
     }
@@ -72,7 +77,7 @@ public class MetricsQueriesTests
         await ops.Received(1)
             .GetDashboardMetricsAsync(
                 MetricsRange.Last24Hours,
-                false,
+                hideAdminTrains: false,
                 Arg.Any<CancellationToken>()
             );
     }
@@ -153,8 +158,12 @@ public class MetricsQueriesTests
         {
             var bucketStart = t0.AddMinutes(15 * b);
             var bucket = series.Buckets.Single(x => x.Start == bucketStart);
-            bucket.Completed.Should().Be(completed[b], $"bucket {b}");
-            bucket.Failed.Should().Be(b == 2 ? 1 : 0, $"bucket {b}");
+            bucket
+                .Completed.Should()
+                .Be(completed[b], string.Create(CultureInfo.InvariantCulture, $"bucket {b}"));
+            bucket
+                .Failed.Should()
+                .Be(b == 2 ? 1 : 0, string.Create(CultureInfo.InvariantCulture, $"bucket {b}"));
             var recorded = durations
                 .Where(d => d.Start >= bucketStart && d.Start < bucketStart.AddMinutes(15))
                 .Select(d => d.Ms)
@@ -196,12 +205,13 @@ public class MetricsQueriesTests
 
         var read = () => new MetricsQueries().GetSeries(ops, default, scope, range, id, name);
 
-        (await read.Should().ThrowAsync<HotChocolate.GraphQLException>())
+        (await read.Should().ThrowAsync<HotChocolate.GraphQLException>().ConfigureAwait(false))
             .Which.Errors.Single()
             .Code.Should()
             .Be(MetricsQueries.SeriesArgumentCode);
         await ops.DidNotReceiveWithAnyArgs()
-            .GetMetricSeriesAsync(default, default, default, default, default);
+            .GetMetricSeriesAsync(default, default, default, default, default)
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -219,7 +229,7 @@ public class MetricsQueriesTests
         ops.GetMetricSeriesAsync(
                 MetricSeriesScope.Group,
                 5,
-                null,
+                name: null,
                 MetricSeriesRange.Last7Days,
                 Arg.Any<CancellationToken>()
             )

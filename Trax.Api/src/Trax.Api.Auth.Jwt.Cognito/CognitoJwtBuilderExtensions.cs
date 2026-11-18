@@ -59,13 +59,21 @@ public static class CognitoJwtBuilderExtensions
                 var acceptAccess =
                     tokenUse == CognitoTokenUse.Access || tokenUse == CognitoTokenUse.IdAndAccess;
 
-                if (acceptId && audiences.Any(a => a == clientId))
+                if (
+                    acceptId
+                    && audiences.Any(a => string.Equals(a, clientId, StringComparison.Ordinal))
+                )
                     return true;
 
                 if (acceptAccess && token is JsonWebToken jwt)
                 {
-                    var claim = jwt.Claims.FirstOrDefault(c => c.Type == CognitoDefaults.ClientId);
-                    if (claim is not null && claim.Value == clientId)
+                    var claim = jwt.Claims.FirstOrDefault(c =>
+                        string.Equals(c.Type, CognitoDefaults.ClientId, StringComparison.Ordinal)
+                    );
+                    if (
+                        claim is not null
+                        && string.Equals(claim.Value, clientId, StringComparison.Ordinal)
+                    )
                         return true;
                 }
 
@@ -87,20 +95,30 @@ public static class CognitoJwtBuilderExtensions
                 if (token is JsonWebToken jwt)
                 {
                     var use = jwt
-                        .Claims.FirstOrDefault(c => c.Type == CognitoDefaults.TokenUse)
+                        .Claims.FirstOrDefault(c =>
+                            string.Equals(
+                                c.Type,
+                                CognitoDefaults.TokenUse,
+                                StringComparison.Ordinal
+                            )
+                        )
                         ?.Value;
 
                     if (
                         tokenUse == CognitoTokenUse.Id
                         && use is not null
-                        && use != CognitoDefaults.TokenUseId
+                        && !string.Equals(use, CognitoDefaults.TokenUseId, StringComparison.Ordinal)
                     )
                         return false;
 
                     if (
                         tokenUse == CognitoTokenUse.Access
                         && use is not null
-                        && use != CognitoDefaults.TokenUseAccess
+                        && !string.Equals(
+                            use,
+                            CognitoDefaults.TokenUseAccess,
+                            StringComparison.Ordinal
+                        )
                     )
                         return false;
 
@@ -121,7 +139,13 @@ public static class CognitoJwtBuilderExtensions
                     if (
                         acceptsAccessShape
                         && use is null
-                        && jwt.Claims.Any(c => c.Type == CognitoDefaults.ClientId)
+                        && jwt.Claims.Any(c =>
+                            string.Equals(
+                                c.Type,
+                                CognitoDefaults.ClientId,
+                                StringComparison.Ordinal
+                            )
+                        )
                     )
                         return false;
                 }

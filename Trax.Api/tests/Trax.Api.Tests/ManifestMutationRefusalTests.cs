@@ -141,11 +141,13 @@ public class ManifestMutationRefusalTests
         string externalId
     )
     {
-        var result = await _executor.ExecuteAsync(
-            "mutation { operations { "
-                + string.Format(field, externalId)
-                + " { success message count } } }"
-        );
+        var result = await _executor
+            .ExecuteAsync(
+                "mutation { operations { "
+                    + string.Format(field, externalId)
+                    + " { success message count } } }"
+            )
+            .ConfigureAwait(false);
         var operation = (OperationResult)result;
         var json = operation.ToJson();
         operation
@@ -206,7 +208,7 @@ public class ManifestMutationRefusalTests
 
     private interface IRefusalTrain;
 
-    private class RefusalTrain;
+    private static class RefusalTrain;
 
     public record RefusalInput
     {

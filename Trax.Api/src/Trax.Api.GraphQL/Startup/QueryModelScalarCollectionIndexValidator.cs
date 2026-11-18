@@ -83,7 +83,13 @@ internal sealed class QueryModelScalarCollectionIndexValidator(
 
             // The operator choice is an Npgsql behaviour; other providers translate
             // membership their own way and have no GIN to miss.
-            if (dbContext.Database.ProviderName != NpgsqlProviderName)
+            if (
+                !string.Equals(
+                    dbContext.Database.ProviderName,
+                    NpgsqlProviderName,
+                    StringComparison.Ordinal
+                )
+            )
                 continue;
 
             targets.Add((dbContext, group.ToList()));
@@ -92,7 +98,8 @@ internal sealed class QueryModelScalarCollectionIndexValidator(
         if (targets.Count == 0)
             return;
 
-        var schema = await ResolveSchemaAsync(scope.ServiceProvider, cancellationToken);
+        var schema = await ResolveSchemaAsync(scope.ServiceProvider, cancellationToken)
+            .ConfigureAwait(false);
         if (schema is null)
             return;
 
@@ -119,10 +126,9 @@ internal sealed class QueryModelScalarCollectionIndexValidator(
             if (scopedProvider.GetService<IRequestExecutorProvider>() is not { } executorProvider)
                 return null;
 
-            var executor = await executorProvider.GetExecutorAsync(
-                TraxSchemaName,
-                cancellationToken
-            );
+            var executor = await executorProvider
+                .GetExecutorAsync(TraxSchemaName, cancellationToken)
+                .ConfigureAwait(false);
             return executor.Schema;
         }
         catch
@@ -181,7 +187,9 @@ internal sealed class QueryModelScalarCollectionIndexValidator(
         QueryModelRegistration registration
     )
     {
-        var discoverField = schema.QueryType.Fields.FirstOrDefault(f => f.Name == "discover");
+        var discoverField = schema.QueryType.Fields.FirstOrDefault(f =>
+            string.Equals(f.Name, "discover", StringComparison.Ordinal)
+        );
         if (discoverField is null)
             return null;
 
@@ -190,7 +198,7 @@ internal sealed class QueryModelScalarCollectionIndexValidator(
         if (registration.Attribute.Namespace is { } ns)
         {
             var nsField = container.Fields.FirstOrDefault(f =>
-                f.Name == TrainTypeModule.CamelCase(ns)
+                string.Equals(f.Name, TrainTypeModule.CamelCase(ns), StringComparison.Ordinal)
             );
             if (nsField is null)
                 return null;
@@ -198,12 +206,18 @@ internal sealed class QueryModelScalarCollectionIndexValidator(
         }
 
         var entryField = container.Fields.FirstOrDefault(f =>
-            f.Name == QueryModelTypeModule.FieldName(registration)
+            string.Equals(
+                f.Name,
+                QueryModelTypeModule.FieldName(registration),
+                StringComparison.Ordinal
+            )
         );
         if (entryField is null)
             return null;
 
-        var filterArg = entryField.Arguments.FirstOrDefault(a => a.Name == FilterArgumentName);
+        var filterArg = entryField.Arguments.FirstOrDefault(a =>
+            string.Equals(a.Name, FilterArgumentName, StringComparison.Ordinal)
+        );
         if (filterArg is null)
             return null;
 
@@ -224,7 +238,10 @@ internal sealed class QueryModelScalarCollectionIndexValidator(
 
         return filterInput
             .Fields.OfType<FilterField>()
-            .Any(field => field.Member is { Name: var name } && name == propertyName);
+            .Any(field =>
+                field.Member is { Name: var name }
+                && string.Equals(name, propertyName, StringComparison.Ordinal)
+            );
     }
 
     private static bool HasGinIndex(IEntityType entityType, IProperty property) =>

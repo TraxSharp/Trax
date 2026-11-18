@@ -84,7 +84,7 @@ public partial class OperationsQueries
         CancellationToken ct
     )
     {
-        return await healthService.GetHealthAsync(ct);
+        return await healthService.GetHealthAsync(ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -111,7 +111,7 @@ public partial class OperationsQueries
         // naming rules). Compare against ServiceType.FullName for an exact match.
         if (hideAdminTrains)
         {
-            var adminNames = AdminTrains.FullNames.ToHashSet();
+            var adminNames = AdminTrains.FullNames.ToHashSet(StringComparer.Ordinal);
             registrations = registrations.Where(r => !adminNames.Contains(r.ServiceType.FullName!));
         }
 
@@ -212,12 +212,9 @@ public partial class OperationsQueries
     {
         RunIdArgument.Require(metadataId);
 
-        var page = await operationsService.GetRecordedDecisionsAsync(
-            metadataId,
-            afterId,
-            OperationsPageBounds.Take(take),
-            ct
-        );
+        var page = await operationsService
+            .GetRecordedDecisionsAsync(metadataId, afterId, OperationsPageBounds.Take(take), ct)
+            .ConfigureAwait(false);
 
         return new DecisionPage(
             page.Items.Select(d => new DecisionRecord(
@@ -251,7 +248,7 @@ public partial class OperationsQueries
     }
 
     /// <summary>
-    /// The <c>replay_refused</c> member of a recorded answer, or <c>null</c> when it has none or
+    /// The <c>replay_refused</c> member of a recorded answer, or <see langword="null"/> when it has none or
     /// is not a JSON object.
     /// </summary>
     private static string? ReplayRefusedOf(string? answer)
@@ -285,10 +282,11 @@ public partial class OperationsQueries
         CancellationToken ct
     )
     {
-        using var db = await dataContextFactory.CreateDbContextAsync(ct);
+        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
         var manifest = await db
             .Manifests.AsNoTracking()
-            .FirstOrDefaultAsync(m => m.Id == manifestId, ct);
+            .FirstOrDefaultAsync(m => m.Id == manifestId, ct)
+            .ConfigureAwait(false);
         if (manifest is null)
             return Array.Empty<ManifestExclusion>();
 
@@ -316,7 +314,7 @@ public partial class OperationsQueries
     /// <param name="ct">Cancels the read.</param>
     /// <param name="skip">How many manifests to skip (negative is treated as 0; above 10,000 is refused with <c>TRAX_SKIP_TOO_DEEP</c>, so page deeper with <c>afterId</c>).</param>
     /// <param name="take">The page size, clamped to 1 through 500.</param>
-    /// <param name="isEnabled">Only enabled (<c>true</c>) or disabled (<c>false</c>) manifests.</param>
+    /// <param name="isEnabled">Only enabled (<see langword="true"/>) or disabled (<see langword="false"/>) manifests.</param>
     /// <param name="scheduleType">Only manifests with this schedule type.</param>
     /// <param name="nameContains">Only manifests whose train name contains this text.</param>
     /// <param name="afterId">Only manifests older than this id (a keyset cursor).</param>
@@ -339,7 +337,7 @@ public partial class OperationsQueries
         take = OperationsPageBounds.Take(take);
         skip = OperationsPageBounds.Skip(skip);
 
-        using var db = await dataContextFactory.CreateDbContextAsync(ct);
+        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
 
         IQueryable<Effect.Models.Manifest.Manifest> baseQuery = db
             .Manifests.AsNoTracking()
@@ -361,14 +359,16 @@ public partial class OperationsQueries
         // A filtered total is exact; an unfiltered one may be estimated. The cursor never
         // changes it: totalCount is the size of the whole list, whichever page this is.
         var (totalCount, isEstimate) = hasFilter
-            ? (await baseQuery.CountAsync(ct), false)
-            : await CountEstimator.EstimateOrCountAsync(
-                db,
-                sqlDialect,
-                "manifest",
-                () => baseQuery.CountAsync(ct),
-                ct
-            );
+            ? (await baseQuery.CountAsync(ct).ConfigureAwait(false), false)
+            : await CountEstimator
+                .EstimateOrCountAsync(
+                    db,
+                    sqlDialect,
+                    "manifest",
+                    () => baseQuery.CountAsync(ct),
+                    ct
+                )
+                .ConfigureAwait(false);
 
         // Keyset cursor: skip to items after the cursor instead of using OFFSET
         var query = afterId.HasValue ? baseQuery.Where(m => m.Id < afterId.Value) : baseQuery;
@@ -397,7 +397,8 @@ public partial class OperationsQueries
             {
                 ReplayDecisionsOnRetry = m.ReplayDecisionsOnRetry,
             })
-            .ToListAsync(ct);
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
 
         var nextCursor = items.Count > 0 ? items[^1].Id : (long?)null;
 
@@ -416,7 +417,7 @@ public partial class OperationsQueries
     /// single-row read only, never on the <c>manifests</c> list, the way an execution's input is on
     /// <c>executionDetail</c> alone. The manifest keeps it unmasked because its runs start from it;
     /// here each <c>[TraxSensitive]</c> member reads <c>{"_redacted": true}</c>, and an input this
-    /// host cannot read as its type is masked whole. Returns <c>null</c> when the manifest does
+    /// host cannot read as its type is masked whole. Returns <see langword="null"/> when the manifest does
     /// not exist.
     /// </summary>
     public async Task<ManifestDetail?> GetManifestDetail(
@@ -426,7 +427,7 @@ public partial class OperationsQueries
         CancellationToken ct
     )
     {
-        using var db = await dataContextFactory.CreateDbContextAsync(ct);
+        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
 
         var detail = await db
             .Manifests.AsNoTracking()
@@ -457,7 +458,8 @@ public partial class OperationsQueries
             {
                 ReplayDecisionsOnRetry = m.ReplayDecisionsOnRetry,
             })
-            .FirstOrDefaultAsync(ct);
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
 
         return detail is null
             ? null
@@ -483,7 +485,9 @@ public partial class OperationsQueries
         CancellationToken ct
     )
     {
-        var stats = await operationsService.GetManifestExecutionStatsAsync(manifestId, ct);
+        var stats = await operationsService
+            .GetManifestExecutionStatsAsync(manifestId, ct)
+            .ConfigureAwait(false);
 
         return new ManifestExecutionStats(
             stats.ManifestId,
@@ -508,24 +512,28 @@ public partial class OperationsQueries
         CancellationToken ct
     )
     {
-        using var db = await dataContextFactory.CreateDbContextAsync(ct);
+        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
         var scoped = db.Metadatas.AsNoTracking().Where(m => m.Name == trainName);
 
         var byState = await scoped
             .GroupBy(m => m.TrainState)
             .Select(g => new { State = g.Key, Count = (long)g.Count() })
-            .ToListAsync(ct);
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
 
         long CountOf(TrainState state) => byState.FirstOrDefault(x => x.State == state)?.Count ?? 0;
 
-        var lastRun = await scoped.MaxAsync(m => (DateTime?)m.StartTime, ct);
+        var lastRun = await scoped.MaxAsync(m => (DateTime?)m.StartTime, ct).ConfigureAwait(false);
         var completed = scoped.Where(m =>
             m.TrainState == TrainState.Completed && m.EndTime != null
         );
-        var lastSuccessfulRun = await completed.MaxAsync(m => (DateTime?)m.EndTime, ct);
+        var lastSuccessfulRun = await completed
+            .MaxAsync(m => (DateTime?)m.EndTime, ct)
+            .ConfigureAwait(false);
         var avgMs = await completed
             .Select(m => (double?)(m.EndTime!.Value - m.StartTime).TotalMilliseconds)
-            .AverageAsync(ct);
+            .AverageAsync(ct)
+            .ConfigureAwait(false);
 
         return new TrainExecutionStats(
             trainName,
@@ -558,10 +566,10 @@ public partial class OperationsQueries
     )
     {
         var now = (timeProvider ?? TimeProvider.System).GetUtcNow();
-        using var db = await dataContextFactory.CreateDbContextAsync(ct);
+        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
 
         // One row per process seen in the last day, pruned by every beat, so the table is small.
-        var beats = await db.HostHeartbeats.AsNoTracking().ToListAsync(ct);
+        var beats = await db.HostHeartbeats.AsNoTracking().ToListAsync(ct).ConfigureAwait(false);
         if (beats.Count == 0)
             return [];
 
@@ -577,7 +585,8 @@ public partial class OperationsQueries
             )
             .GroupBy(m => m.HostInstanceId!)
             .Select(g => new { InstanceId = g.Key, Count = g.Count() })
-            .ToDictionaryAsync(r => r.InstanceId, r => r.Count, ct);
+            .ToDictionaryAsync(r => r.InstanceId, r => r.Count, StringComparer.Ordinal, ct)
+            .ConfigureAwait(false);
 
         return beats
             .Select(b => new HostInfo(
@@ -659,7 +668,7 @@ public partial class OperationsQueries
         take = OperationsPageBounds.Take(take);
         skip = OperationsPageBounds.Skip(skip);
 
-        using var db = await dataContextFactory.CreateDbContextAsync(ct);
+        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
 
         var filter = new BulkExecutionFilter
         {
@@ -694,26 +703,27 @@ public partial class OperationsQueries
         {
             // One match past the cap tells a capped count from an exact one, and the database
             // stops reading once it has found that many.
-            var count = await filtered.Take(FailureTextCountCap + 1).CountAsync(ct);
+            var count = await filtered
+                .Take(FailureTextCountCap + 1)
+                .CountAsync(ct)
+                .ConfigureAwait(false);
             (totalCount, isCapped) =
                 count > FailureTextCountCap ? (FailureTextCountCap, true) : (count, false);
         }
         else if (hasFilter)
-            totalCount = await filtered.CountAsync(ct);
+            totalCount = await filtered.CountAsync(ct).ConfigureAwait(false);
         else
-            (totalCount, isEstimate) = await CountEstimator.EstimateOrCountAsync(
-                db,
-                sqlDialect,
-                "metadata",
-                () => filtered.CountAsync(ct),
-                ct
-            );
+            (totalCount, isEstimate) = await CountEstimator
+                .EstimateOrCountAsync(db, sqlDialect, "metadata", () => filtered.CountAsync(ct), ct)
+                .ConfigureAwait(false);
 
         var oldest = order == SortOrder.Oldest;
         var items =
             textFilter && (afterId.HasValue || skip == 0)
                 ? await ReadTextFilteredExecutionsAsync(db, filtered, afterId, oldest, take, ct)
-                : await ReadExecutionsInOrderAsync(filtered, afterId, oldest, skip, take, ct);
+                    .ConfigureAwait(false)
+                : await ReadExecutionsInOrderAsync(filtered, afterId, oldest, skip, take, ct)
+                    .ConfigureAwait(false);
 
         var nextCursor = items.Count > 0 ? items[^1].Id : (long?)null;
 
@@ -771,7 +781,11 @@ public partial class OperationsQueries
         if (!afterId.HasValue && skip > 0)
             query = query.Skip(skip);
 
-        return await query.Take(take).Select(ToExecutionSummary).ToListAsync(ct);
+        return await query
+            .Take(take)
+            .Select(ToExecutionSummary)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -792,8 +806,8 @@ public partial class OperationsQueries
             afterId
             ?? (
                 oldest
-                    ? await db.Metadatas.MinAsync(m => (long?)m.Id, ct) - 1
-                    : await db.Metadatas.MaxAsync(m => (long?)m.Id, ct) + 1
+                    ? await db.Metadatas.MinAsync(m => (long?)m.Id, ct).ConfigureAwait(false) - 1
+                    : await db.Metadatas.MaxAsync(m => (long?)m.Id, ct).ConfigureAwait(false) + 1
             );
         if (start is not { } origin)
             return [];
@@ -802,7 +816,10 @@ public partial class OperationsQueries
         var near = oldest
             ? filtered.Where(m => m.Id > origin && m.Id <= edge).OrderBy(m => m.Id)
             : filtered.Where(m => m.Id < origin && m.Id >= edge).OrderByDescending(m => m.Id);
-        var page = await near.Take(take).Select(ToExecutionSummary).ToListAsync(ct);
+        var page = await near.Take(take)
+            .Select(ToExecutionSummary)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
         if (page.Count == take)
             return page;
 
@@ -810,7 +827,12 @@ public partial class OperationsQueries
         var far = oldest
             ? filtered.Where(m => m.Id > edge).OrderBy(m => m.Id + 0)
             : filtered.Where(m => m.Id < edge).OrderByDescending(m => m.Id + 0);
-        page.AddRange(await far.Take(take - page.Count).Select(ToExecutionSummary).ToListAsync(ct));
+        page.AddRange(
+            await far.Take(take - page.Count)
+                .Select(ToExecutionSummary)
+                .ToListAsync(ct)
+                .ConfigureAwait(false)
+        );
         return page;
     }
 
@@ -840,7 +862,7 @@ public partial class OperationsQueries
     /// <summary>
     /// Full detail for one execution, including its input, output, stack trace and the number of
     /// executions it started, what it is linked to (the state-machine instance that invoked it,
-    /// the work queue entry it ran from, the dead letter it retries), or <c>null</c> when none has
+    /// the work queue entry it ran from, the dead letter it retries), or <see langword="null"/> when none has
     /// that id.
     /// </summary>
     /// <remarks>
@@ -855,7 +877,7 @@ public partial class OperationsQueries
         CancellationToken ct
     )
     {
-        using var db = await dataContextFactory.CreateDbContextAsync(ct);
+        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
 
         var row = await db
             .Metadatas.AsNoTracking()
@@ -901,21 +923,26 @@ public partial class OperationsQueries
                 m.InvokingInstanceId,
                 m.InvokingOwnerKind,
             })
-            .FirstOrDefaultAsync(ct);
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
 
         if (row is null)
             return null;
 
         // parent_id is covered by the partial index ix_metadata_parent_id, so counting
         // children stays cheap even on the huge metadata table.
-        var childCount = await db.Metadatas.AsNoTracking().CountAsync(c => c.ParentId == id, ct);
+        var childCount = await db
+            .Metadatas.AsNoTracking()
+            .CountAsync(c => c.ParentId == id, ct)
+            .ConfigureAwait(false);
 
         var entry = await db
             .WorkQueues.AsNoTracking()
             .Where(w => w.MetadataId == id)
             .OrderBy(w => w.Id)
             .Select(w => new { w.Id, w.DeadLetterId })
-            .FirstOrDefaultAsync(ct);
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
 
         var deadLetterId =
             entry?.DeadLetterId
@@ -924,7 +951,8 @@ public partial class OperationsQueries
                 .Where(d => d.RetryMetadataId == id)
                 .OrderBy(d => d.Id)
                 .Select(d => (long?)d.Id)
-                .FirstOrDefaultAsync(ct);
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
 
         RunInvoker? invokedBy = null;
         if (
@@ -945,7 +973,8 @@ public partial class OperationsQueries
                     && x.OwnerKind == ownerKind
                 )
                 .Select(x => (long?)x.RowId)
-                .FirstOrDefaultAsync(ct);
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
             invokedBy = new RunInvoker(machine, instanceId, ownerKind, rowId);
         }
 
@@ -972,10 +1001,10 @@ public partial class OperationsQueries
     {
         take = OperationsPageBounds.Take(take);
 
-        using var db = await dataContextFactory.CreateDbContextAsync(ct);
+        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
 
         var baseQuery = db.Metadatas.AsNoTracking().Where(m => m.ParentId == parentId);
-        var totalCount = await baseQuery.CountAsync(ct);
+        var totalCount = await baseQuery.CountAsync(ct).ConfigureAwait(false);
 
         var query = afterId.HasValue ? baseQuery.Where(m => m.Id < afterId.Value) : baseQuery;
 
@@ -1002,10 +1031,18 @@ public partial class OperationsQueries
                 ParentId = m.ParentId,
                 CurrentlyRunningJunction = m.CurrentlyRunningJunction,
             })
-            .ToListAsync(ct);
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
 
         var nextCursor = items.Count > 0 ? items[^1].Id : (long?)null;
-        return new PagedResult<ExecutionSummary>(items, totalCount, 0, take, false, nextCursor);
+        return new PagedResult<ExecutionSummary>(
+            items,
+            totalCount,
+            0,
+            take,
+            IsEstimatedCount: false,
+            nextCursor
+        );
     }
 
     /// <summary>
@@ -1038,13 +1075,13 @@ public partial class OperationsQueries
         RunIdArgument.Require(metadataId);
         take = OperationsPageBounds.Take(take);
 
-        using var db = await dataContextFactory.CreateDbContextAsync(ct);
+        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
 
         IQueryable<JunctionRun> rows = db.JunctionRuns.AsNoTracking().ForRun(metadataId);
         if (afterPosition is { } after)
             rows = rows.Where(r => r.Position > after);
 
-        var page = await rows.Take(take).ToListAsync(ct);
+        var page = await rows.Take(take).ToListAsync(ct).ConfigureAwait(false);
         return page.Select(JunctionStep.From).ToList();
     }
 
@@ -1082,14 +1119,10 @@ public partial class OperationsQueries
     {
         RunIdArgument.Require(metadataId);
 
-        using var db = await dataContextFactory.CreateDbContextAsync(ct);
-        return await RunGraphs.ReadAsync(
-            db,
-            chainGraphs,
-            services?.GetService<IRunResumes>(),
-            metadataId,
-            ct
-        );
+        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        return await RunGraphs
+            .ReadAsync(db, chainGraphs, services?.GetService<IRunResumes>(), metadataId, ct)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1160,7 +1193,7 @@ public partial class OperationsQueries
         if (!type.IsGenericType)
             return type.Name;
 
-        var name = type.Name[..type.Name.IndexOf('`')];
+        var name = type.Name[..type.Name.IndexOf('`', StringComparison.Ordinal)];
         var args = string.Join(", ", type.GetGenericArguments().Select(GetFriendlyTypeName));
         return $"{name}<{args}>";
     }

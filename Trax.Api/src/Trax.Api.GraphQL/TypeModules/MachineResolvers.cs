@@ -38,11 +38,17 @@ internal sealed record MachineAnswer(
 
     /// <summary>A refusal of the operation on <paramref name="id"/>.</summary>
     public static MachineAnswer Refused(Guid? id, RefusalCode code, string message) =>
-        new(id, null, null, null, new SnapshotProblem { Code = code, Message = message });
+        new(
+            id,
+            Revision: null,
+            State: null,
+            Context: null,
+            new SnapshotProblem { Code = code, Message = message }
+        );
 
     /// <summary>A refusal of the operation on <paramref name="id"/>.</summary>
     public static MachineAnswer Refused(Guid? id, SnapshotProblem problem) =>
-        new(id, null, null, null, problem);
+        new(id, Revision: null, State: null, Context: null, problem);
 
     /// <summary>The answer holding the canonical snapshot <paramref name="wire"/> the server stored.</summary>
     public static MachineAnswer Of(
@@ -59,7 +65,7 @@ internal sealed record MachineAnswer(
             revision,
             snapshot?["state"]?.GetValue<string>(),
             snapshot?["context"] as JsonObject ?? [],
-            null
+            Problem: null
         )
         {
             DueAt = dueAt,
@@ -85,10 +91,10 @@ internal sealed class MachineReadGate : IDisposable
     /// <summary>Runs <paramref name="read"/> once no other read of this request is running.</summary>
     public async Task<T> RunAsync<T>(Func<Task<T>> read, CancellationToken cancellationToken)
     {
-        await _gate.WaitAsync(cancellationToken);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            return await read();
+            return await read().ConfigureAwait(false);
         }
         finally
         {
@@ -120,35 +126,36 @@ internal static class MachineResolvers
     {
         var requestId = ctx.ArgumentValue<string>("requestId");
         if (RequestIdProblem(requestId) is { } invalid)
-            return MachineAnswer.Refused(null, invalid);
+            return MachineAnswer.Refused(id: null, invalid);
 
         var (input, sensitive) = InputJson(ctx, startType);
         if (TooLarge(input, sensitive) is { } large)
-            return MachineAnswer.Refused(null, large);
+            return MachineAnswer.Refused(id: null, large);
 
         var (output, failure) = await RunAsync<StartSnapshotOutput>(
-            ctx,
-            typeof(IStartSnapshot),
-            new StartSnapshotInput
-            {
-                Machine = machine.Name,
-                Input = input,
-                SensitiveInput = sensitive,
-                RequestId = requestId,
-            },
-            machine.Name,
-            null
-        );
+                ctx,
+                typeof(IStartSnapshot),
+                new StartSnapshotInput
+                {
+                    Machine = machine.Name,
+                    Input = input,
+                    SensitiveInput = sensitive,
+                    RequestId = requestId,
+                },
+                machine.Name,
+                id: null
+            )
+            .ConfigureAwait(false);
         return output switch
         {
-            { Problem: { } problem } => MachineAnswer.Refused(null, problem),
+            { Problem: { } problem } => MachineAnswer.Refused(id: null, problem),
             { Snapshot: { } wire } => MachineAnswer.Of(
                 output.Id,
                 wire,
                 output.Revision,
                 output.DueAt
             ),
-            _ => Failed(null, failure),
+            _ => Failed(id: null, failure),
         };
     }
 
@@ -167,17 +174,18 @@ internal static class MachineResolvers
         {
             // The server runs the effect and hands the edge its receipt: the client sends neither.
             var (sent, failure) = await RunAsync<SendSnapshotOutput>(
-                ctx,
-                typeof(ISendSnapshot),
-                new SendSnapshotInput
-                {
-                    Machine = machine.Name,
-                    Id = id,
-                    RequestId = requestId,
-                },
-                machine.Name,
-                id
-            );
+                    ctx,
+                    typeof(ISendSnapshot),
+                    new SendSnapshotInput
+                    {
+                        Machine = machine.Name,
+                        Id = id,
+                        RequestId = requestId,
+                    },
+                    machine.Name,
+                    id
+                )
+                .ConfigureAwait(false);
             return sent switch
             {
                 { Problem: { } problem } => MachineAnswer.Refused(id, problem),
@@ -211,21 +219,22 @@ internal static class MachineResolvers
             );
 
         var (advanced, failed) = await RunAsync<AdvanceSnapshotOutput>(
-            ctx,
-            typeof(IAdvanceSnapshot),
-            new AdvanceSnapshotInput
-            {
-                Machine = machine.Name,
-                Id = id,
-                Trigger = trigger.Name,
-                Input = input,
-                SensitiveInput = sensitive,
-                RequestId = requestId,
-                ClientResult = clientResult,
-            },
-            machine.Name,
-            id
-        );
+                ctx,
+                typeof(IAdvanceSnapshot),
+                new AdvanceSnapshotInput
+                {
+                    Machine = machine.Name,
+                    Id = id,
+                    Trigger = trigger.Name,
+                    Input = input,
+                    SensitiveInput = sensitive,
+                    RequestId = requestId,
+                    ClientResult = clientResult,
+                },
+                machine.Name,
+                id
+            )
+            .ConfigureAwait(false);
         return advanced switch
         {
             { Problem: { } problem } => MachineAnswer.Refused(id, problem),
@@ -248,22 +257,23 @@ internal static class MachineResolvers
         var id = ctx.ArgumentValue<Guid>("id");
         var requestId = ctx.ArgumentValue<string>("requestId");
         if (RequestIdProblem(requestId) is { } invalid)
-            return new MachineDiscardAnswer(id, false, invalid);
+            return new MachineDiscardAnswer(id, Discarded: false, invalid);
 
         var (output, failure) = await RunAsync<DiscardSnapshotOutput>(
-            ctx,
-            typeof(IDiscardSnapshot),
-            new DiscardSnapshotInput
-            {
-                Machine = machine.Name,
-                Id = id,
-                RequestId = requestId,
-            },
-            machine.Name,
-            id
-        );
+                ctx,
+                typeof(IDiscardSnapshot),
+                new DiscardSnapshotInput
+                {
+                    Machine = machine.Name,
+                    Id = id,
+                    RequestId = requestId,
+                },
+                machine.Name,
+                id
+            )
+            .ConfigureAwait(false);
         return output is null
-            ? new MachineDiscardAnswer(id, false, Failed(id, failure).Problem)
+            ? new MachineDiscardAnswer(id, Discarded: false, Failed(id, failure).Problem)
             : new MachineDiscardAnswer(id, output.Discarded, output.Problem);
     }
 
@@ -283,36 +293,39 @@ internal static class MachineResolvers
         try
         {
             return await gate.RunAsync(
-                async () =>
-                {
-                    var service = ctx
-                        .Services.GetRequiredService<ISnapshotMachineRegistry>()
-                        .Service(machine.Name);
-                    if (service is null)
-                        return null;
-
-                    return await service.Load(actor, id, ctx.RequestAborted) switch
+                    async () =>
                     {
-                        LoadResult.Loaded loaded => new MachineAnswer(
-                            id,
-                            loaded.Revision,
-                            loaded.Snapshot.State,
-                            loaded.Snapshot.Context,
-                            null
-                        )
+                        var service = ctx
+                            .Services.GetRequiredService<ISnapshotMachineRegistry>()
+                            .Service(machine.Name);
+                        if (service is null)
+                            return null;
+
+                        return await service
+                            .Load(actor, id, ctx.RequestAborted)
+                            .ConfigureAwait(false) switch
                         {
-                            DueAt = loaded.DueAt,
-                        },
-                        LoadResult.Invalid invalid => MachineAnswer.Refused(
-                            id,
-                            invalid.Code,
-                            "The stored instance cannot be read by this version of the machine."
-                        ),
-                        _ => null,
-                    };
-                },
-                ctx.RequestAborted
-            );
+                            LoadResult.Loaded loaded => new MachineAnswer(
+                                id,
+                                loaded.Revision,
+                                loaded.Snapshot.State,
+                                loaded.Snapshot.Context,
+                                Problem: null
+                            )
+                            {
+                                DueAt = loaded.DueAt,
+                            },
+                            LoadResult.Invalid invalid => MachineAnswer.Refused(
+                                id,
+                                invalid.Code,
+                                "The stored instance cannot be read by this version of the machine."
+                            ),
+                            _ => null,
+                        };
+                    },
+                    ctx.RequestAborted
+                )
+                .ConfigureAwait(false);
         }
         catch (Exception ex)
             when (ex is not OperationCanceledException
@@ -343,7 +356,8 @@ internal static class MachineResolvers
                     train.FullName!,
                     TrainInputReader.Write(input, input.GetType()),
                     ctx.RequestAborted
-                );
+                )
+                .ConfigureAwait(false);
             return (
                 result.Output as TOutput
                     ?? throw new InvalidOperationException(
@@ -374,7 +388,7 @@ internal static class MachineResolvers
 
     // The answer to an operation whose train answered nothing usable: the problem RunAsync built, or a fixed one.
     private static MachineAnswer Failed(Guid? id, SnapshotProblem? failure) =>
-        MachineAnswer.Refused(id, failure ?? Unexpected(null));
+        MachineAnswer.Refused(id, failure ?? Unexpected(reference: null));
 
     private static SnapshotProblem Unexpected(string? reference) =>
         new() { Code = RefusalCode.InternalError, Message = FailedMessage(reference) };
@@ -470,6 +484,9 @@ internal static class MachineResolvers
         property.IsDefined(typeof(TraxSensitiveAttribute), inherit: true)
         || type.GetConstructors()
             .SelectMany(c => c.GetParameters())
-            .Any(p => p.Name == property.Name && p.IsDefined(typeof(TraxSensitiveAttribute), false))
+            .Any(p =>
+                string.Equals(p.Name, property.Name, StringComparison.Ordinal)
+                && p.IsDefined(typeof(TraxSensitiveAttribute), inherit: false)
+            )
         || TraxRedaction.ReachesSensitiveMember(property.PropertyType);
 }

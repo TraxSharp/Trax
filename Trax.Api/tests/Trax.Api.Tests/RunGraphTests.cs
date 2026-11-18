@@ -65,7 +65,7 @@ public class RunGraphTests
     [Test]
     public async Task A_run_that_recorded_no_hash_has_nothing_to_compare()
     {
-        var (factory, run) = await SeedAsync(null);
+        var (factory, run) = await SeedAsync(chainHash: null);
         await using var db = await factory.CreateDbContextAsync(default);
 
         var graph = await RunGraphs.ReadAsync(db, GraphsServing(After), run, default);
@@ -104,42 +104,45 @@ public class RunGraphTests
     )
     {
         var factory = new InMemoryContextProviderFactory(new InMemoryDatabaseRoot());
-        await using var db = await factory.CreateDbContextAsync(default);
-        var run = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = Train,
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = null,
-            }
-        );
-        run.TrainState = TrainState.Completed;
-        run.EndTime = DateTime.UtcNow;
-        run.ChainHash = chainHash;
-        await db.Track(run);
-        await db.SaveChanges(default);
-
-        var position = 0;
-        foreach (var (node, name) in new[] { ("Fetch#0", "Fetch"), ("Ship#0", "Ship") })
-            db.JunctionRuns.Add(
-                new JunctionRun
+        var db = await factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var run = Metadata.Create(
+                new CreateMetadata
                 {
-                    MetadataId = run.Id,
-                    Position = position++,
-                    Kind = JunctionRunKind.Junction,
-                    Name = name,
-                    State = JunctionRunState.Completed,
-                    StartedAt = DateTime.UtcNow,
-                    NodeId = node,
+                    Name = Train,
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
                 }
             );
-        await db.SaveChanges(default);
-        return (factory, run.Id);
+            run.TrainState = TrainState.Completed;
+            run.EndTime = DateTime.UtcNow;
+            run.ChainHash = chainHash;
+            await db.Track(run).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+
+            var position = 0;
+            foreach (var (node, name) in new[] { ("Fetch#0", "Fetch"), ("Ship#0", "Ship") })
+                db.JunctionRuns.Add(
+                    new JunctionRun
+                    {
+                        MetadataId = run.Id,
+                        Position = position++,
+                        Kind = JunctionRunKind.Junction,
+                        Name = name,
+                        State = JunctionRunState.Completed,
+                        StartedAt = DateTime.UtcNow,
+                        NodeId = node,
+                    }
+                );
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return (factory, run.Id);
+        }
     }
 
     private static ChainGraph Graph(params ChainGraphNode[] nodes) =>
         new("Acme.ShippingTrain", "Order", "Order", nodes, []);
 
     private static ChainGraphNode Node(string id, string junction) =>
-        new(id, ChainStepKind.Chain, junction, "Order", "Order", false, []);
+        new(id, ChainStepKind.Chain, junction, "Order", "Order", Opaque: false, []);
 }

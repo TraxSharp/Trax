@@ -72,7 +72,7 @@ public sealed class TraxCallerProbeMutations
     /// Briefly opens an <see cref="ITrustedExecutionScope"/>, discards the
     /// state observed inside, then disposes the scope. Returns the
     /// <see cref="TraxCaller.IsTrusted"/> value observed AFTER disposal —
-    /// must be <c>false</c>. Pins the scope's <see cref="IDisposable"/>
+    /// must be <see langword="false"/>. Pins the scope's <see cref="IDisposable"/>
     /// contract: closing the handle restores the prior trust state.
     /// </summary>
     [TraxAllowAnonymous]
@@ -92,7 +92,7 @@ public sealed class TraxCallerProbeMutations
     /// Opens <see cref="ITrustedExecutionScope"/> and returns the
     /// <see cref="TraxCaller.IsTrusted"/> value observed inside the scope —
     /// must be <c>true</c>. Verifies the test instrumentation itself is
-    /// functional: if this returns <c>false</c>, the test infrastructure is
+    /// functional: if this returns <see langword="false"/>, the test infrastructure is
     /// broken (not Trax), and every "not-trusted" assertion elsewhere is
     /// trivially passing.
     /// </summary>
@@ -126,7 +126,7 @@ public sealed class TraxCallerProbeMutations
     {
         using (scope.BeginTrusted("test.hold"))
         {
-            await Task.Delay(millis, ct);
+            await Task.Delay(millis, ct).ConfigureAwait(false);
             return caller.IsTrusted;
         }
     }
@@ -149,7 +149,7 @@ public sealed class TraxCallerProbeMutations
         using (scope.BeginTrusted("test.hold"))
         {
             hold.Entered.TrySetResult();
-            await hold.Released.Task.WaitAsync(TimeSpan.FromSeconds(30), ct);
+            await hold.Released.Task.WaitAsync(TimeSpan.FromSeconds(30), ct).ConfigureAwait(false);
             return caller.IsTrusted;
         }
     }
@@ -162,7 +162,9 @@ public sealed class TraxCallerProbeMutations
 /// </summary>
 public sealed class TrustedHold
 {
-    private static readonly ConcurrentDictionary<string, TrustedHold> Holds = new();
+    private static readonly ConcurrentDictionary<string, TrustedHold> Holds = new(
+        StringComparer.Ordinal
+    );
 
     /// <summary>The hold named <paramref name="key"/>, created on first use.</summary>
     public static TrustedHold For(string key) => Holds.GetOrAdd(key, _ => new TrustedHold());

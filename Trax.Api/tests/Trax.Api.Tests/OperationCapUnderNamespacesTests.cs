@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
@@ -129,7 +130,7 @@ public class OperationCapUnderNamespacesTests
     public async Task TheSameCallRepeatedUnderDispatch_CountsOnce()
     {
         var executor = await BuildExecutorAsync();
-        var repeated = string.Join(" ", Enumerable.Repeat(Call("c0", "refund"), 60));
+        var repeated = string.Join(' ', Enumerable.Repeat(Call("c0", "refund"), 60));
 
         var result = await executor.ExecuteAsync(
             $"mutation {{ dispatch {{ {repeated} }} dispatch {{ {repeated} }} }}"
@@ -145,10 +146,15 @@ public class OperationCapUnderNamespacesTests
     {
         var executor = await BuildExecutorAsync();
         var requeues = string.Join(
-            " ",
+            ' ',
             Enumerable
                 .Range(0, 51)
-                .Select(i => $"r{i}: requeueDeadLetter(id: {i}) {{ __typename }}")
+                .Select(i =>
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"r{i}: requeueDeadLetter(id: {i}) {{ __typename }}"
+                    )
+                )
         );
 
         var result = await executor.ExecuteAsync(
@@ -165,10 +171,15 @@ public class OperationCapUnderNamespacesTests
     {
         var executor = await BuildExecutorAsync();
         var lookups = string.Join(
-            " ",
+            ' ',
             Enumerable
                 .Range(0, 51)
-                .Select(i => $"l{i}: lookup(input: {{ value: \"{i}\" }}) {{ __typename }}")
+                .Select(i =>
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"l{i}: lookup(input: {{ value: \"{i}\" }}) {{ __typename }}"
+                    )
+                )
         );
 
         var result = await executor.ExecuteAsync($"{{ discover {{ {lookups} }} }}");
@@ -244,10 +255,15 @@ public class OperationCapUnderNamespacesTests
 
     private static string Gets(int count) =>
         string.Join(
-            " ",
+            ' ',
             Enumerable
                 .Range(0, count)
-                .Select(i => $"g{i}: get(id: \"{Guid.NewGuid()}\") {{ __typename }}")
+                .Select(i =>
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"g{i}: get(id: \"{Guid.NewGuid()}\") {{ __typename }}"
+                    )
+                )
         );
 
     private async Task<IRequestExecutor> BuildMachinesExecutorAsync()
@@ -267,14 +283,20 @@ public class OperationCapUnderNamespacesTests
         _provider = services.BuildServiceProvider();
         return await _provider
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
     }
 
     private static string Call(string alias, string field) =>
         $"{alias}: {field}(input: {{ value: \"x\" }}) {{ externalId }}";
 
     private static string Calls(int count, string field = "refund") =>
-        string.Join(" ", Enumerable.Range(0, count).Select(i => Call($"c{i}", field)));
+        string.Join(
+            ' ',
+            Enumerable
+                .Range(0, count)
+                .Select(i => Call(string.Create(CultureInfo.InvariantCulture, $"c{i}"), field))
+        );
 
     private static IReadOnlyList<string?> ErrorCodes(IExecutionResult result) =>
         result.ExpectOperationResult().Errors?.Select(e => e.Code).ToList() ?? [];
@@ -303,7 +325,8 @@ public class OperationCapUnderNamespacesTests
         _provider = services.BuildServiceProvider();
         return await _provider
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
     }
 
     private static TrainRegistration Train<TService>(bool isQuery, string? ns) =>

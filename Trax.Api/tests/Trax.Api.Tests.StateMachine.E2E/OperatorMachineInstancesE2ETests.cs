@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using HotChocolate.AspNetCore;
@@ -139,11 +140,14 @@ public class OperatorMachineInstancesE2ETests
             .And.NotContain("shopper", "no operator view names the user behind a draft");
 
         using var one = await _host.PostAsync(
-            $$"""
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $$"""
             { operations { machineInstance(machine: "turnstile", ownerKind: USER, id: "{{_draftId}}", rowId: {{item.GetProperty(
                 "rowId"
             ).GetInt64()}}) { id state ownerKind } } }
-            """,
+            """
+            ),
             apiKey: OperatorKey
         );
         one.RootElement.GetProperty("data")
@@ -179,7 +183,9 @@ public class OperatorMachineInstancesE2ETests
             .GetProperty("items")[0]
             .GetProperty("rowId")
             .GetInt64();
-        var history = $$"""
+        var history = string.Create(
+            CultureInfo.InvariantCulture,
+            $$"""
             { operations { machineInstance(machine: "turnstile", ownerKind: USER, id: "{{_draftId}}", rowId: {{rowId}}) {
                 transitions(first: 10) {
                   nextCursor
@@ -187,7 +193,8 @@ public class OperatorMachineInstancesE2ETests
                     startedRun { executionId } startedChild { id } }
                 }
             } } }
-            """;
+            """
+        );
 
         using var asOperator = await _host.PostAsync(history, apiKey: OperatorKey);
         asOperator
@@ -224,7 +231,7 @@ public class OperatorMachineInstancesE2ETests
                         _draftId,
                         rowId
                     ),
-                    null,
+                    beforeRevision: null,
                     10,
                     CancellationToken.None
                 );
@@ -380,7 +387,7 @@ public class OperatorMachineInstancesE2ETests
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
     }
 

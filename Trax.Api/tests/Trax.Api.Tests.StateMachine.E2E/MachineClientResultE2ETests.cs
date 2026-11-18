@@ -208,8 +208,16 @@ public class MachineClientResultE2ETests
             _listener.InstrumentPublished = (instrument, listener) =>
             {
                 if (
-                    instrument.Meter.Name == StateMachineInstruments.MeterName
-                    && instrument.Name == StateMachineInstruments.ClientDivergence
+                    string.Equals(
+                        instrument.Meter.Name,
+                        StateMachineInstruments.MeterName,
+                        StringComparison.Ordinal
+                    )
+                    && string.Equals(
+                        instrument.Name,
+                        StateMachineInstruments.ClientDivergence,
+                        StringComparison.Ordinal
+                    )
                 )
                     listener.EnableMeasurementEvents(instrument);
             };

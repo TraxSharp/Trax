@@ -38,7 +38,7 @@ internal static class TrainRoleRequirements
                 .ToArray();
             if (
                 roles is not { Length: > 0 }
-                || sets.Any(s => s.SequenceEqual(roles, StringComparer.Ordinal))
+                || sets.Exists(s => s.SequenceEqual(roles, StringComparer.Ordinal))
             )
                 continue;
             sets.Add(roles);

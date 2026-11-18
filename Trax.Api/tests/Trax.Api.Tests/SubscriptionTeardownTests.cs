@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.WebSockets;
 using System.Text;
 using AwesomeAssertions;
@@ -87,7 +88,7 @@ public class SubscriptionTeardownTests
         var stream = (await executor.ExecuteAsync(Subscription)).ExpectResponseStream();
         var reader = Task.Run(async () =>
         {
-            await foreach (var _ in stream.ReadResultsAsync()) { }
+            await foreach (var _ in stream.ReadResultsAsync().ConfigureAwait(false)) { }
         });
         (await WaitForAsync(() => topics.Open == 1)).Should().BeTrue();
 
@@ -127,7 +128,7 @@ public class SubscriptionTeardownTests
         );
         var reader = Task.Run(async () =>
         {
-            await foreach (var item in stream.ReadResultsAsync())
+            await foreach (var item in stream.ReadResultsAsync().ConfigureAwait(false))
                 first.TrySetResult(item);
         });
         (await WaitForAsync(() => topics.Open == 1)).Should().BeTrue();
@@ -142,9 +143,9 @@ public class SubscriptionTeardownTests
                     "Some.Train",
                     TrainState.Completed,
                     DateTime.UtcNow,
-                    null,
-                    null,
-                    null
+                    FailureJunction: null,
+                    FailureReason: null,
+                    Output: null
                 ),
                 default
             );
@@ -212,7 +213,7 @@ public class SubscriptionTeardownTests
         ).ExpectResponseStream();
         var reader = Task.Run(async () =>
         {
-            await foreach (var _ in stream.ReadResultsAsync()) { }
+            await foreach (var _ in stream.ReadResultsAsync().ConfigureAwait(false)) { }
         });
         (await WaitForAsync(() => topics.Open == 1))
             .Should()
@@ -316,7 +317,7 @@ public class SubscriptionTeardownTests
         var app = builder.Build();
         app.UseRouting();
         app.UseTraxGraphQL();
-        await app.StartAsync();
+        await app.StartAsync(cancellationToken: CancellationToken.None).ConfigureAwait(false);
         return app;
     }
 
@@ -330,26 +331,40 @@ public class SubscriptionTeardownTests
         var client = new ClientWebSocket();
         client.Options.AddSubProtocol("graphql-transport-ws");
         using var cts = new CancellationTokenSource(Deadline);
-        await client.ConnectAsync(
-            new Uri($"ws://{address.Host}:{address.Port}/trax/graphql"),
-            cts.Token
-        );
+        await client
+            .ConnectAsync(
+                new Uri(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"ws://{address.Host}:{address.Port}/trax/graphql"
+                    )
+                ),
+                cts.Token
+            )
+            .ConfigureAwait(false);
 
-        await SendAsync(client, """{"type":"connection_init","payload":{}}""", cts.Token);
+        await SendAsync(client, """{"type":"connection_init","payload":{}}""", cts.Token)
+            .ConfigureAwait(false);
         var buffer = new byte[4096];
-        var ack = await client.ReceiveAsync(buffer, cts.Token);
+        var ack = await client.ReceiveAsync(buffer, cts.Token).ConfigureAwait(false);
         Encoding.UTF8.GetString(buffer, 0, ack.Count).Should().Contain("connection_ack");
 
         await SendAsync(
-            client,
-            $$$"""{"id":"1","type":"subscribe","payload":{"query":"{{{Subscription}}}"}}""",
-            cts.Token
-        );
+                client,
+                $$$"""{"id":"1","type":"subscribe","payload":{"query":"{{{Subscription}}}"}}""",
+                cts.Token
+            )
+            .ConfigureAwait(false);
         return client;
     }
 
     private static Task SendAsync(ClientWebSocket client, string message, CancellationToken ct) =>
-        client.SendAsync(Encoding.UTF8.GetBytes(message), WebSocketMessageType.Text, true, ct);
+        client.SendAsync(
+            Encoding.UTF8.GetBytes(message),
+            WebSocketMessageType.Text,
+            endOfMessage: true,
+            ct
+        );
 
     private static async Task<bool> WaitForAsync(Func<bool> condition)
     {
@@ -359,7 +374,7 @@ public class SubscriptionTeardownTests
             if (DateTime.UtcNow > until)
                 return false;
             // allowed-delay: poll interval for a condition, bounded by Deadline.
-            await Task.Delay(20);
+            await Task.Delay(20).ConfigureAwait(false);
         }
         return true;
     }
@@ -387,7 +402,13 @@ public class SubscriptionTeardownTests
         public ValueTask<ISourceStream<TMessage>> SubscribeAsync<TMessage>(
             string topicName,
             CancellationToken cancellationToken = default
-        ) => SubscribeAsync<TMessage>(topicName, null, null, cancellationToken);
+        ) =>
+            SubscribeAsync<TMessage>(
+                topicName,
+                bufferCapacity: null,
+                bufferFullMode: null,
+                cancellationToken
+            );
 
         public async ValueTask<ISourceStream<TMessage>> SubscribeAsync<TMessage>(
             string topicName,
@@ -396,12 +417,14 @@ public class SubscriptionTeardownTests
             CancellationToken cancellationToken = default
         )
         {
-            var stream = await inner.SubscribeAsync<TMessage>(
-                topicName,
-                bufferCapacity,
-                bufferFullMode,
-                cancellationToken
-            );
+            var stream = await inner
+                .SubscribeAsync<TMessage>(
+                    topicName,
+                    bufferCapacity,
+                    bufferFullMode,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
             counter.Opened();
             return new Counted<TMessage>(stream, counter);
         }

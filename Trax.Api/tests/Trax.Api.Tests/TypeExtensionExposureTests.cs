@@ -97,8 +97,8 @@ public class TypeExtensionExposureTests
 
         try
         {
-            await host.StartAsync();
-            await host.StopAsync();
+            await host.StartAsync().ConfigureAwait(false);
+            await host.StopAsync().ConfigureAwait(false);
             return null;
         }
         catch (Exception ex)
@@ -703,7 +703,7 @@ public sealed class UndeclaredSubscription
 
     public async IAsyncEnumerable<string> SubscribeAsync()
     {
-        await Task.CompletedTask;
+        await Task.CompletedTask.ConfigureAwait(false);
         yield break;
     }
 }
@@ -717,7 +717,7 @@ public sealed class AnonymousSubscription
 
     public async IAsyncEnumerable<string> SubscribeAsync()
     {
-        await Task.CompletedTask;
+        await Task.CompletedTask.ConfigureAwait(false);
         yield break;
     }
 }

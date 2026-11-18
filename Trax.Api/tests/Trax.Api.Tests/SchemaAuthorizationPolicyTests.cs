@@ -168,8 +168,8 @@ public class SchemaAuthorizationPolicyTests
 
         try
         {
-            await host.StartAsync();
-            await host.StopAsync();
+            await host.StartAsync().ConfigureAwait(false);
+            await host.StopAsync().ConfigureAwait(false);
             return null;
         }
         catch (Exception ex)

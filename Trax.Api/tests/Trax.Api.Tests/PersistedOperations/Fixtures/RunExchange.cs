@@ -18,9 +18,19 @@ internal static class RunExchange
         try
         {
             var factory = new ConnectionFactory { Uri = new Uri(amqpUri) };
-            await using var connection = await factory.CreateConnectionAsync();
-            await using var channel = await connection.CreateChannelAsync();
-            await channel.ExchangeDeleteAsync(exchange);
+            var connection = await factory.CreateConnectionAsync().ConfigureAwait(false);
+            await using (connection.ConfigureAwait(false))
+            {
+                var channel = await connection
+                    .CreateChannelAsync(cancellationToken: CancellationToken.None)
+                    .ConfigureAwait(false);
+                await using (channel.ConfigureAwait(false))
+                {
+                    await channel
+                        .ExchangeDeleteAsync(exchange, cancellationToken: CancellationToken.None)
+                        .ConfigureAwait(false);
+                }
+            }
         }
         catch (Exception)
         {

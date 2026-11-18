@@ -35,10 +35,9 @@ public class AttentionStressTests : StressTestSetup
             AttentionBudget,
             async (sp, ct) =>
             {
-                var attention = await new OperationsQueries().GetAttention(
-                    sp.GetRequiredService<IOperationsService>(),
-                    ct
-                );
+                var attention = await new OperationsQueries()
+                    .GetAttention(sp.GetRequiredService<IOperationsService>(), ct)
+                    .ConfigureAwait(false);
                 attention.DeadLetters.Should().HaveCount(OperationsService.AttentionListCap);
                 attention
                     .DeadLetters.Count.Should()

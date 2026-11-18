@@ -123,7 +123,7 @@ public class HostConfigurationErrorTests
 
     private interface IOrphanTrain;
 
-    private sealed class OrphanTrain;
+    private static class OrphanTrain;
 
     public sealed record OrphanInput
     {

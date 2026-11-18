@@ -205,7 +205,7 @@ public class MachineEnumsTests
                 .GetType()
                 .GetMethod("ShareEnumWithMachines")!
                 .MakeGenericMethod(billing)
-                .Invoke(builder, null);
+                .Invoke(builder, parameters: null);
 
         share
             .Should()

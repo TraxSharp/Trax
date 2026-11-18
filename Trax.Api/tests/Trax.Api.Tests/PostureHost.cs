@@ -108,7 +108,7 @@ internal static class PostureHost
         if (apiKey is not null)
             request.Headers.Add("X-Api-Key", apiKey);
 
-        var response = await host.GetTestClient().SendAsync(request);
-        return await response.Content.ReadAsStringAsync();
+        var response = await host.GetTestClient().SendAsync(request).ConfigureAwait(false);
+        return await response.Content.ReadAsStringAsync().ConfigureAwait(false);
     }
 }

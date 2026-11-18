@@ -91,7 +91,8 @@ public class KeyedClientExecutionTests
                     {
                         Input = new LookupCustomerInput { Email = "acme@example.com" },
                     }
-                );
+                )
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<GraphQLValidationException>();
     }

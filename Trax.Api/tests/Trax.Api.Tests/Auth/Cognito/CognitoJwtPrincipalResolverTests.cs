@@ -530,7 +530,8 @@ public class CognitoJwtPrincipalResolverTests
     {
         var resolver = new CognitoJwtPrincipalResolver();
 
-        var act = async () => await resolver.ResolveAsync(null!, CancellationToken.None);
+        var act = async () =>
+            await resolver.ResolveAsync(null!, CancellationToken.None).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<ArgumentNullException>();
     }

@@ -144,7 +144,7 @@ public sealed class TestTokenBuilder
     public TestTokenBuilder WithSubject(string sub)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sub);
-        _claims.RemoveAll(c => c.Type == "sub");
+        _claims.RemoveAll(c => string.Equals(c.Type, "sub", StringComparison.Ordinal));
         _claims.Add(new Claim("sub", sub));
         return this;
     }

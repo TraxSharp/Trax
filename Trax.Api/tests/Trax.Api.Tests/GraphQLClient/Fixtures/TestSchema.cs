@@ -135,15 +135,15 @@ public sealed class TestPlayerStore
             new Item("item-2", "Shield", ItemCategory.Armor),
         };
 
-        _players = new Dictionary<string, Player>
+        _players = new Dictionary<string, Player>(StringComparer.Ordinal)
         {
             ["player-1"] = new Player("player-1", "Aragorn", 42, Rank.Gold, guild, inventory),
             ["player-2"] = new Player(
                 "player-2",
                 "Bilbo",
-                null,
+                Level: null,
                 Rank.Bronze,
-                null,
+                Guild: null,
                 Array.Empty<Item>()
             ),
             ["player-3"] = new Player("player-3", "Gandalf", 99, Rank.Gold, guild, inventory),

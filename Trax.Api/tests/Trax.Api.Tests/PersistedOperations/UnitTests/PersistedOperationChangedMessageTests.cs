@@ -101,7 +101,7 @@ public class PersistedOperationChangedMessageTests
     public void NullableTenantKey_RoundTripsThroughRecord()
     {
         var msg = new PersistedOperationChangedMessage(
-            null,
+            TenantKey: null,
             "id",
             PersistedOperationChangeType.Upsert,
             DateTime.UtcNow

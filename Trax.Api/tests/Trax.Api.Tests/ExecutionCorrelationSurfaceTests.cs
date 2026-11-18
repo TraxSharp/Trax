@@ -125,7 +125,13 @@ public class ExecutionCorrelationSurfaceTests
         Type(types, typeName)
             .GetProperty("fields")
             .EnumerateArray()
-            .Single(f => f.GetProperty("name").GetString() == fieldName)
+            .Single(f =>
+                string.Equals(
+                    f.GetProperty("name").GetString(),
+                    fieldName,
+                    StringComparison.Ordinal
+                )
+            )
             .GetProperty("args")
             .EnumerateArray()
             .Select(a => a.GetProperty("name").GetString()!)
@@ -144,7 +150,13 @@ public class ExecutionCorrelationSurfaceTests
             Field(types, typeName, fieldName)
                 .GetProperty("args")
                 .EnumerateArray()
-                .Single(a => a.GetProperty("name").GetString() == argumentName)
+                .Single(a =>
+                    string.Equals(
+                        a.GetProperty("name").GetString(),
+                        argumentName,
+                        StringComparison.Ordinal
+                    )
+                )
                 .GetProperty("type")
         );
 
@@ -152,7 +164,13 @@ public class ExecutionCorrelationSurfaceTests
         Type(types, typeName)
             .GetProperty("fields")
             .EnumerateArray()
-            .Single(f => f.GetProperty("name").GetString() == fieldName);
+            .Single(f =>
+                string.Equals(
+                    f.GetProperty("name").GetString(),
+                    fieldName,
+                    StringComparison.Ordinal
+                )
+            );
 
     /// <summary>Renders an introspected type reference in SDL form, e.g. <c>Long!</c>.</summary>
     private static string Render(JsonElement type) =>
@@ -195,23 +213,26 @@ public class ExecutionCorrelationSurfaceTests
 
         var executor = await _serviceProvider
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
 
         const string TypeRef =
             "type { kind name ofType { kind name ofType { kind name ofType { kind name } } } }";
 
-        var result = await executor.ExecuteAsync(
-            $$"""
-            {
-              OperationsQueries: __type(name: "OperationsQueries") { fields { name {{TypeRef}} args { name {{TypeRef}} } } }
-              WorkQueueQueries: __type(name: "WorkQueueQueries") { fields { name {{TypeRef}} args { name {{TypeRef}} } } }
-              WorkQueueSummary: __type(name: "WorkQueueSummary") { fields { name {{TypeRef}} args { name {{TypeRef}} } } }
-              ExecutionSummary: __type(name: "ExecutionSummary") { fields { name {{TypeRef}} args { name {{TypeRef}} } } }
-              WorkQueueDetail: __type(name: "WorkQueueDetail") { fields { name {{TypeRef}} args { name {{TypeRef}} } } }
-              ExecutionDetail: __type(name: "ExecutionDetail") { fields { name {{TypeRef}} args { name {{TypeRef}} } } }
-            }
-            """
-        );
+        var result = await executor
+            .ExecuteAsync(
+                $$"""
+                {
+                  OperationsQueries: __type(name: "OperationsQueries") { fields { name {{TypeRef}} args { name {{TypeRef}} } } }
+                  WorkQueueQueries: __type(name: "WorkQueueQueries") { fields { name {{TypeRef}} args { name {{TypeRef}} } } }
+                  WorkQueueSummary: __type(name: "WorkQueueSummary") { fields { name {{TypeRef}} args { name {{TypeRef}} } } }
+                  ExecutionSummary: __type(name: "ExecutionSummary") { fields { name {{TypeRef}} args { name {{TypeRef}} } } }
+                  WorkQueueDetail: __type(name: "WorkQueueDetail") { fields { name {{TypeRef}} args { name {{TypeRef}} } } }
+                  ExecutionDetail: __type(name: "ExecutionDetail") { fields { name {{TypeRef}} args { name {{TypeRef}} } } }
+                }
+                """
+            )
+            .ConfigureAwait(false);
 
         var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();

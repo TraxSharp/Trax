@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Net.WebSockets;
@@ -71,13 +72,22 @@ public class JunctionEventsE2ETests
         + "trackPosition";
 
     private static string Subscription(long metadataId) =>
-        $"subscription {{ onJunctionEvent(metadataId: {metadataId}) {{ sequence metadataId trainName eventType junction {{ {StepFields} }} }} }}";
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"subscription {{ onJunctionEvent(metadataId: {metadataId}) {{ sequence metadataId trainName eventType junction {{ {StepFields} }} }} }}"
+        );
 
     private static string TimelineQuery(long metadataId) =>
-        $"{{ operations {{ junctionRuns(metadataId: {metadataId}) {{ {StepFields} }} }} }}";
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"{{ operations {{ junctionRuns(metadataId: {metadataId}) {{ {StepFields} }} }} }}"
+        );
 
     private static string ExecutionQuery(long metadataId) =>
-        $"{{ operations {{ executionDetail(id: {metadataId}) {{ id }} }} }}";
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"{{ operations {{ executionDetail(id: {metadataId}) {{ id }} }} }}"
+        );
 
     private IHost _host = null!;
 
@@ -169,7 +179,10 @@ public class JunctionEventsE2ETests
                 ("JUNCTION_FAILED", Withheld)
             );
 
-        var lane = steps.First(s => s.EventType == "DECIDED" && s.Name == "MarkerLane");
+        var lane = steps.First(s =>
+            string.Equals(s.EventType, "DECIDED", StringComparison.Ordinal)
+            && string.Equals(s.Name, "MarkerLane", StringComparison.Ordinal)
+        );
         lane.Fields.GetProperty("answer").GetString().Should().Be("Fast");
         lane.Fields.GetProperty("confidence").GetDouble().Should().Be(0.8);
         lane.Fields.GetProperty("decider")
@@ -177,7 +190,11 @@ public class JunctionEventsE2ETests
             .Should()
             .Be(typeof(ScriptedDecider).FullName);
 
-        foreach (var tier in steps.Where(s => s.Name == "MarkerTier"))
+        foreach (
+            var tier in steps.Where(s =>
+                string.Equals(s.Name, "MarkerTier", StringComparison.Ordinal)
+            )
+        )
         {
             tier.Fields.GetProperty("answerWithheld").GetBoolean().Should().BeTrue();
             tier.Fields.GetProperty("answer")
@@ -186,7 +203,7 @@ public class JunctionEventsE2ETests
             tier.Fields.GetProperty("confidence").ValueKind.Should().Be(JsonValueKind.Null);
         }
 
-        var failed = steps.Last();
+        var failed = steps[^1];
         failed
             .Fields.GetProperty("failureException")
             .GetString()
@@ -235,7 +252,7 @@ public class JunctionEventsE2ETests
         // it was handed none of the hidden train's steps.
         Probe(run.MetadataId, typeof(IBroadcastMarkerTrain), name: "barrier");
         var next = await player.NextStepAsync();
-        while (next.Name == "probe")
+        while (string.Equals(next.Name, "probe", StringComparison.Ordinal))
             next = await player.NextStepAsync();
         next.Name.Should()
             .Be(
@@ -354,7 +371,15 @@ public class JunctionEventsE2ETests
         timeline[^1].GetProperty("nameWithheld").GetBoolean().Should().BeTrue();
         timeline[^1].GetProperty("trackPosition").GetInt32().Should().Be(5);
 
-        foreach (var tier in timeline.Where(s => s.GetProperty("name").GetString() == "MarkerTier"))
+        foreach (
+            var tier in timeline.Where(s =>
+                string.Equals(
+                    s.GetProperty("name").GetString(),
+                    "MarkerTier",
+                    StringComparison.Ordinal
+                )
+            )
+        )
         {
             tier.GetProperty("answerWithheld").GetBoolean().Should().BeTrue();
             tier.GetProperty("answer").ValueKind.Should().Be(JsonValueKind.Null);
@@ -380,7 +405,10 @@ public class JunctionEventsE2ETests
         await TimelineWhenCompleteAsync(run.MetadataId);
 
         using var doc = await PostAsync(
-            $"{{ operations {{ junctionRuns(metadataId: {run.MetadataId}, afterPosition: 2, take: 3) {{ position }} }} }}",
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"{{ operations {{ junctionRuns(metadataId: {run.MetadataId}, afterPosition: 2, take: 3) {{ position }} }} }}"
+            ),
             AdminKey
         );
 
@@ -434,7 +462,10 @@ public class JunctionEventsE2ETests
     private const string RunNodeFields = "id kind state replayed trackTaken steps { position }";
 
     private static string RunGraphQuery(long metadataId) =>
-        $"{{ operations {{ runGraph(metadataId: {metadataId}) {{ metadataId train hasGraph hash moreSteps "
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"{{ operations {{ runGraph(metadataId: {metadataId}) {{ metadataId train hasGraph hash moreSteps "
+        )
         + $"unmatchedSteps {{ position nodeId }} nodes {{ {RunNodeFields} tracks {{ name taken nodes {{ {RunNodeFields} }} }} }} }} }} }}";
 
     [Test]
@@ -486,7 +517,9 @@ public class JunctionEventsE2ETests
             .Select(t => t.GetProperty("name").GetString())
             .Should()
             .Equal("Fast", "Slow");
-        var byId = nodes.EnumerateArray().ToDictionary(n => n.GetProperty("id").GetString()!);
+        var byId = nodes
+            .EnumerateArray()
+            .ToDictionary(n => n.GetProperty("id").GetString()!, StringComparer.Ordinal);
         byId["Seed<IDecider>#0"].GetProperty("state").GetString().Should().Be("NOT_RECORDED");
         byId[nameof(HoldForRelease) + "#0"]
             .GetProperty("state")
@@ -574,7 +607,10 @@ public class JunctionEventsE2ETests
 
     // Deep enough for a Parallel inside a branch: step, branch, step, branch, step.
     private static string ParallelRunGraphQuery(long metadataId) =>
-        $"{{ operations {{ runGraph(metadataId: {metadataId}) {{ unmatchedSteps {{ position }} "
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"{{ operations {{ runGraph(metadataId: {metadataId}) {{ unmatchedSteps {{ position }} "
+        )
         + $"nodes {{ {ParallelNodeFields} tracks {{ name taken nodes {{ {ParallelNodeFields} "
         + $"tracks {{ name taken nodes {{ {ParallelNodeFields} tracks {{ name }} }} }} }} }} }} }} }} }}";
 
@@ -588,7 +624,7 @@ public class JunctionEventsE2ETests
             .Find(typeof(IParallelMarkerTrain).FullName!)!
             .Nodes;
 
-        var fork = nodes.Single(n => n.Id == Fork);
+        var fork = nodes.Single(n => string.Equals(n.Id, Fork, StringComparison.Ordinal));
         fork.Kind.Should().Be(ChainStepKind.Parallel);
         fork.Tracks.Select(b => b.Name).Should().Equal("left", "right");
         fork.Tracks.Should().OnlyContain(b => !b.IsFallback);
@@ -641,7 +677,9 @@ public class JunctionEventsE2ETests
         var fork = graph
             .GetProperty("nodes")
             .EnumerateArray()
-            .Single(n => n.GetProperty("id").GetString() == Fork);
+            .Single(n =>
+                string.Equals(n.GetProperty("id").GetString(), Fork, StringComparison.Ordinal)
+            );
         fork.GetProperty("state").GetString().Should().Be(forkState);
         fork.GetProperty("trackTaken").ValueKind.Should().Be(JsonValueKind.Null);
         fork.GetProperty("tracks")
@@ -649,17 +687,24 @@ public class JunctionEventsE2ETests
             .Should()
             .OnlyContain(b => b.GetProperty("taken").GetBoolean(), "every branch runs");
 
-        var states = NodeStates(graph.GetProperty("nodes")).ToDictionary(s => s.Id, s => s.State);
+        var states = NodeStates(graph.GetProperty("nodes"))
+            .ToDictionary(s => s.Id, s => s.State, StringComparer.Ordinal);
         states[$"{Fork}/left/{nameof(ScoreLeft)}#0"].Should().Be(fail ? "FAILED" : "COMPLETED");
         states[$"{nameof(JoinScores)}#0"].Should().Be(fail ? "NOT_REACHED" : "COMPLETED");
         if (!fail)
             states[NestedFork].Should().Be("COMPLETED");
 
         // Each recorded step says which branch it ran in, from the column Effect writes.
-        rows.Single(r => r.NodeId == $"{Fork}/left/{nameof(ScoreLeft)}#0")
+        rows.Single(r =>
+                string.Equals(
+                    r.NodeId,
+                    $"{Fork}/left/{nameof(ScoreLeft)}#0",
+                    StringComparison.Ordinal
+                )
+            )
             .BranchPath.Should()
             .Be($"{Fork}/left");
-        rows.Where(r => r.NodeId?.StartsWith(Fork + "/") != true)
+        rows.Where(r => r.NodeId?.StartsWith(Fork + "/", StringComparison.Ordinal) != true)
             .Should()
             .OnlyContain(r => r.BranchPath == null, "a step outside the Parallel is in no branch");
     }
@@ -675,13 +720,20 @@ public class JunctionEventsE2ETests
         List<JunctionStep>? last = null;
         while (true)
         {
-            using var context = await factory.CreateDbContextAsync(default);
-            var steps = (await context.JunctionRuns.AsNoTracking().ForRun(metadataId).ToListAsync())
+            using var context = await factory.CreateDbContextAsync(default).ConfigureAwait(false);
+            var steps = (
+                await context
+                    .JunctionRuns.AsNoTracking()
+                    .ForRun(metadataId)
+                    .ToListAsync()
+                    .ConfigureAwait(false)
+            )
                 .Select(JunctionStep.From)
                 .ToList();
 
             var settled =
-                steps.Count >= atLeast && steps.All(s => s.State != JunctionRunState.InProgress);
+                steps.Count >= atLeast
+                && steps.TrueForAll(s => s.State != JunctionRunState.InProgress);
             if (
                 settled
                 && last is not null
@@ -693,10 +745,15 @@ public class JunctionEventsE2ETests
             last = settled ? steps : null;
 
             if (DateTime.UtcNow > deadline)
-                Assert.Fail($"The steps of run {metadataId} were not recorded in time.");
+                Assert.Fail(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"The steps of run {metadataId} were not recorded in time."
+                    )
+                );
 
             // allowed-delay: polls the background writer, bounded by the 15s deadline above.
-            await Task.Delay(200);
+            await Task.Delay(200).ConfigureAwait(false);
         }
     }
 
@@ -752,7 +809,8 @@ public class JunctionEventsE2ETests
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
         while (true)
         {
-            using var doc = await PostAsync(TimelineQuery(metadataId), AdminKey);
+            using var doc = await PostAsync(TimelineQuery(metadataId), AdminKey)
+                .ConfigureAwait(false);
             doc.RootElement.TryGetProperty("errors", out var errors)
                 .Should()
                 .BeFalse(errors.ValueKind == JsonValueKind.Undefined ? "" : errors.GetRawText());
@@ -767,15 +825,24 @@ public class JunctionEventsE2ETests
             if (
                 steps.Count > 0
                 && steps[^1].GetProperty("position").GetInt32() == 7
-                && steps[^1].GetProperty("state").GetString() != "IN_PROGRESS"
+                && !string.Equals(
+                    steps[^1].GetProperty("state").GetString(),
+                    "IN_PROGRESS",
+                    StringComparison.Ordinal
+                )
             )
                 return steps;
 
             if (DateTime.UtcNow > deadline)
-                Assert.Fail($"The timeline of run {metadataId} was not recorded in time.");
+                Assert.Fail(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"The timeline of run {metadataId} was not recorded in time."
+                    )
+                );
 
             // allowed-delay: polls the background writer, bounded by the 15s deadline above.
-            await Task.Delay(100);
+            await Task.Delay(100).ConfigureAwait(false);
         }
     }
 
@@ -789,8 +856,8 @@ public class JunctionEventsE2ETests
         if (apiKey is not null)
             request.Headers.Add("X-Api-Key", apiKey);
 
-        var response = await client.SendAsync(request);
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var response = await client.SendAsync(request).ConfigureAwait(false);
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
     }
 
     /// <summary>
@@ -836,7 +903,7 @@ public class JunctionEventsE2ETests
         {
             try
             {
-                await train.Run(new MarkerInput(key, Marker, fail));
+                await train.Run(new MarkerInput(key, Marker, fail)).ConfigureAwait(false);
             }
             catch (Exception) when (fail)
             {
@@ -851,12 +918,12 @@ public class JunctionEventsE2ETests
             if (DateTime.UtcNow > deadline || finished.IsCompleted)
             {
                 gate.TrySetResult();
-                await finished;
+                await finished.ConfigureAwait(false);
                 Assert.Fail("The run did not start in time.");
             }
 
             // allowed-delay: waits for the run to persist its metadata, bounded by the deadline.
-            await Task.Delay(20);
+            await Task.Delay(20, cancellationToken: CancellationToken.None).ConfigureAwait(false);
         }
 
         return new RunningTrain(scope, gate, concrete.Metadata.Id, finished);
@@ -878,7 +945,7 @@ public class JunctionEventsE2ETests
         public async ValueTask DisposeAsync()
         {
             gate.TrySetResult();
-            await finished.WaitAsync(TimeSpan.FromSeconds(30));
+            await finished.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
             scope.Dispose();
         }
     }
@@ -904,10 +971,14 @@ public class JunctionEventsE2ETests
         {
             var client = host.GetTestServer().CreateWebSocketClient();
             client.SubProtocols.Add("graphql-transport-ws");
-            var socket = await client.ConnectClosingAsync(new Uri(WsUri), CancellationToken.None);
+            var socket = await client
+                .ConnectClosingAsync(new Uri(WsUri), CancellationToken.None)
+                .ConfigureAwait(false);
             var subscriber = new Subscriber(socket);
-            await subscriber.SendAsync(new { type = "connection_init", payload = new { apiKey } });
-            var ack = await subscriber.ReceiveAsync();
+            await subscriber
+                .SendAsync(new { type = "connection_init", payload = new { apiKey } })
+                .ConfigureAwait(false);
+            var ack = await subscriber.ReceiveAsync().ConfigureAwait(false);
             ack.GetProperty("type").GetString().Should().Be("connection_ack");
             return subscriber;
         }
@@ -934,20 +1005,23 @@ public class JunctionEventsE2ETests
         /// </summary>
         public async Task<bool> SubscribeRefusedAsync(string query)
         {
-            await SubscribeAsync(query);
+            await SubscribeAsync(query).ConfigureAwait(false);
 
             JsonElement message;
             try
             {
-                message = await ReceiveAsync();
+                message = await ReceiveAsync().ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
                 return false;
             }
 
-            return message.GetProperty("type").GetString() == "error"
-                || message.GetProperty("payload").TryGetProperty("errors", out _);
+            return string.Equals(
+                    message.GetProperty("type").GetString(),
+                    "error",
+                    StringComparison.Ordinal
+                ) || message.GetProperty("payload").TryGetProperty("errors", out _);
         }
 
         /// <summary>
@@ -962,8 +1036,8 @@ public class JunctionEventsE2ETests
             {
                 if (next.IsCompleted)
                 {
-                    var step = await next;
-                    if (step.Name == "probe")
+                    var step = await next.ConfigureAwait(false);
+                    if (string.Equals(step.Name, "probe", StringComparison.Ordinal))
                         return;
                     _early.Enqueue(step);
                     next = ReceiveStepAsync();
@@ -972,11 +1046,11 @@ public class JunctionEventsE2ETests
 
                 probe();
                 // allowed-delay: re-probe interval, bounded by the deadline; WhenAny wakes on receipt.
-                await Task.WhenAny(next, Task.Delay(100));
+                await Task.WhenAny(next, Task.Delay(100)).ConfigureAwait(false);
             }
 
             next.IsCompleted.Should().BeTrue("the subscription should start listening");
-            (await next).Name.Should().Be("probe");
+            (await next.ConfigureAwait(false)).Name.Should().Be("probe");
         }
 
         /// <summary>Reads real steps, skipping probes, until <paramref name="last"/> matches.</summary>
@@ -985,8 +1059,8 @@ public class JunctionEventsE2ETests
             var steps = new List<Step>();
             while (true)
             {
-                var step = await NextStepAsync();
-                if (step.Name == "probe")
+                var step = await NextStepAsync().ConfigureAwait(false);
+                if (string.Equals(step.Name, "probe", StringComparison.Ordinal))
                     continue;
 
                 steps.Add(step);
@@ -1003,7 +1077,7 @@ public class JunctionEventsE2ETests
         {
             while (true)
             {
-                var message = await ReceiveAsync();
+                var message = await ReceiveAsync().ConfigureAwait(false);
                 var type = message.GetProperty("type").GetString();
                 if (type is "ping" or "pong")
                     continue;
@@ -1025,7 +1099,9 @@ public class JunctionEventsE2ETests
         {
             var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(message));
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            await _socket.SendAsync(bytes, WebSocketMessageType.Text, true, cts.Token);
+            await _socket
+                .SendAsync(bytes, WebSocketMessageType.Text, endOfMessage: true, cts.Token)
+                .ConfigureAwait(false);
         }
 
         private async Task<JsonElement> ReceiveAsync()
@@ -1035,7 +1111,7 @@ public class JunctionEventsE2ETests
             using var ms = new MemoryStream();
             while (true)
             {
-                var result = await _socket.ReceiveAsync(buffer, cts.Token);
+                var result = await _socket.ReceiveAsync(buffer, cts.Token).ConfigureAwait(false);
                 if (result.MessageType == WebSocketMessageType.Close)
                     throw new InvalidOperationException(
                         $"The socket closed: {result.CloseStatus} {result.CloseStatusDescription}"
@@ -1072,7 +1148,7 @@ internal static class AuthOperations
             .Any(e =>
                 e.TryGetProperty("extensions", out var ext)
                 && ext.TryGetProperty("code", out var c)
-                && c.GetString() == code
+                && string.Equals(c.GetString(), code, StringComparison.Ordinal)
             );
 }
 
@@ -1081,7 +1157,9 @@ internal static class AuthOperations
 /// <summary>Holds a run at its first junction until the test releases it.</summary>
 internal static class MarkerGates
 {
-    private static readonly ConcurrentDictionary<string, TaskCompletionSource> Gates = new();
+    private static readonly ConcurrentDictionary<string, TaskCompletionSource> Gates = new(
+        StringComparer.Ordinal
+    );
 
     public static TaskCompletionSource Hold(string key) =>
         Gates.GetOrAdd(key, _ => new(TaskCreationOptions.RunContinuationsAsynchronously));
@@ -1111,7 +1189,10 @@ public class HoldForRelease : EffectJunction<MarkerInput, MarkerInput>
 {
     public override async Task<MarkerInput> Run(MarkerInput input)
     {
-        await MarkerGates.Wait(input.Key).WaitAsync(TimeSpan.FromSeconds(30));
+        await MarkerGates
+            .Wait(input.Key)
+            .WaitAsync(TimeSpan.FromSeconds(30), cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
         return input;
     }
 }

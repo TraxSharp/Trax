@@ -63,8 +63,8 @@ public class MainWindowTests
                             ? HostData.Runs(30, 4800, HostData.Run(4812, "SendInvoice"))
                             : HostData.Runs(
                                 30,
-                                null,
-                                HostData.Run(4799, "Archive", "COMPLETED", null)
+                                next: null,
+                                HostData.Run(4799, "Archive", "COMPLETED", reason: null)
                             )
                     )!
                     .AsObject()
@@ -76,7 +76,7 @@ public class MainWindowTests
         await _terminal.Press(Key.N);
         await _terminal.UntilShown("Archive");
 
-        _host.Sent("Executions").Last()["afterId"]!.GetValue<long>().Should().Be(4800);
+        _host.Sent("Executions")[^1]["afterId"]!.GetValue<long>().Should().Be(4800);
         (await _terminal.Screen()).Should().Contain("page 2");
     }
 
@@ -93,7 +93,7 @@ public class MainWindowTests
             "the runs are read again with the filter"
         );
 
-        var sent = _host.Sent("Executions").Last();
+        var sent = _host.Sent("Executions")[^1];
         sent["trainState"]!.GetValue<string>().Should().Be("FAILED");
         sent["trainName"]!.GetValue<string>().Should().Be("SendInvoice");
         sent.ContainsKey("hostName").Should().BeFalse("a filter left empty is not sent");
@@ -129,7 +129,7 @@ public class MainWindowTests
         await _terminal.UntilShown("SendInvoice");
         await _terminal.OnUi(() => _window.Lists[0].SetFocus());
 
-        _prompts.Choices.Enqueue(null);
+        _prompts.Choices.Enqueue(item: null);
         await _terminal.Press(Key.C);
         await _terminal.OnUi(() => { });
 
@@ -267,10 +267,10 @@ public class MainWindowTests
         );
 
         await _terminal.Until(
-            () => _window.Feed.Any(l => l.Contains("ShipOrder")),
+            () => _window.Feed.Any(l => l.Contains("ShipOrder", StringComparison.Ordinal)),
             "the feed shows the change"
         );
-        _window.Feed.Last().Should().Contain("IN_PROGRESS").And.Contain("4900");
+        _window.Feed[^1].Should().Contain("IN_PROGRESS").And.Contain("4900");
     }
 
     [Test]

@@ -49,7 +49,7 @@ public class MachineDocumentStorageTests
         await ShelfHosts.StopAsync(await ShelfHosts.StartAsync(Database, ShelfShape.V1, "rb_v1"));
         var v1 = await ShelfIdsAsync();
         await ShelfHosts.StopAsync(await ShelfHosts.StartAsync(Database, ShelfShape.V2, "rb_v2"));
-        var v2 = (await ShelfIdsAsync()).Except(v1).ToList();
+        var v2 = (await ShelfIdsAsync()).Except(v1, StringComparer.Ordinal).ToList();
         v2.Should().NotBeEmpty("the newer deploy registered its documents");
 
         // The deploy is rolled back: only nodes of the first shape run from here on.
@@ -67,7 +67,7 @@ public class MachineDocumentStorageTests
                 );
 
         clock.Advance(TimeSpan.FromDays(400));
-        (await E2EWait.UntilAsync(async () => await ActiveAsync(v2) == 0))
+        (await E2EWait.UntilAsync(async () => await ActiveAsync(v2).ConfigureAwait(false) == 0))
             .Should()
             .BeTrue(
                 "no node has registered the newer shape for the grace period, so it is collected, per "
@@ -76,13 +76,12 @@ public class MachineDocumentStorageTests
         (
             await E2EWait.UntilAsync(async () =>
             {
-                using var after = await rolledBack.PostPersistedAsync(
-                    get,
-                    new { id = Guid.NewGuid() }
-                );
+                using var after = await rolledBack
+                    .PostPersistedAsync(get, new { id = Guid.NewGuid() })
+                    .ConfigureAwait(false);
                 return MachineDocumentOps
                     .Codes(after)
-                    .Contains(RefusalCode.ClientOutdated.ToWire());
+                    .Contains(RefusalCode.ClientOutdated.ToWire(), StringComparer.Ordinal);
             })
         ).Should().BeTrue("a collected newer version is served by no node, so its clients reload instead of retrying " + "forever, per " + Adr);
         (await ActiveAsync(v1)).Should().Be(v1.Count, "the rolled-back shape stays");
@@ -99,7 +98,7 @@ public class MachineDocumentStorageTests
         var second = Track(
             await ShelfHosts.StartAsync(Database, ShelfShape.V2, "two_v2", Collecting(clock))
         );
-        var v2 = (await ShelfIdsAsync()).Except(v1).ToList();
+        var v2 = (await ShelfIdsAsync()).Except(v1, StringComparer.Ordinal).ToList();
         v2.Should().NotBeEmpty("the second host registered its own version of the slot");
 
         await MachineDocumentOps.PassTheGracePeriodRegisteringAsync(
@@ -161,7 +160,10 @@ public class MachineDocumentStorageTests
             );
 
         Track(await ShelfHosts.StartAsync(Database, ShelfShape.V2, "pre_v2", Collecting(clock)));
-        var v2 = (await ShelfIdsAsync()).Except(v1).Except(uploaded).ToList();
+        var v2 = (await ShelfIdsAsync())
+            .Except(v1, StringComparer.Ordinal)
+            .Except(uploaded, StringComparer.Ordinal)
+            .ToList();
         v2.Should().NotBeEmpty();
         clock.Advance(TimeSpan.FromDays(400));
         // negative-wait: the host registers several times past the grace period, and leaves the uploaded rows alone.
@@ -199,7 +201,7 @@ public class MachineDocumentStorageTests
         await ShelfHosts.StopAsync(await ShelfHosts.StartAsync(Database, ShelfShape.V1, "re_v1"));
         var v1 = await ShelfIdsAsync();
         await ShelfHosts.StopAsync(await ShelfHosts.StartAsync(Database, ShelfShape.V2, "re_v2"));
-        var v2 = (await ShelfIdsAsync()).Except(v1).ToList();
+        var v2 = (await ShelfIdsAsync()).Except(v1, StringComparer.Ordinal).ToList();
         v2.Should().NotBeEmpty("the newer deploy registered its documents");
 
         // Long ago the newer shape was deployed and rolled back, and its documents were collected. The older shape
@@ -225,7 +227,11 @@ public class MachineDocumentStorageTests
 
         // The newer shape is deployed again, on two nodes one after the other.
         Track(await ShelfHosts.StartAsync(Database, ShelfShape.V2, "re_v2_a", Collecting(clock)));
-        (await E2EWait.UntilAsync(async () => await ActiveAsync(v2) == v2.Count))
+        (
+            await E2EWait.UntilAsync(async () =>
+                await ActiveAsync(v2).ConfigureAwait(false) == v2.Count
+            )
+        )
             .Should()
             .BeTrue("the redeployed node restores its documents");
         // negative-wait: the node registers several times, and must leave the older shape's documents alone.
@@ -247,7 +253,7 @@ public class MachineDocumentStorageTests
             .Be(v1.Count, "a second node counts from the restore too, per " + Adr);
 
         clock.Advance(TimeSpan.FromDays(400));
-        (await E2EWait.UntilAsync(async () => await ActiveAsync(v1) == 0))
+        (await E2EWait.UntilAsync(async () => await ActiveAsync(v1).ConfigureAwait(false) == 0))
             .Should()
             .BeTrue(
                 "once the grace period has passed, the older shape nobody re-stamps is collected"
@@ -276,19 +282,36 @@ public class MachineDocumentStorageTests
     }
 
     private static async Task<IReadOnlyList<string>> ShelfIdsAsync() =>
-        (await MachineDocumentOps.MachineDocumentsAsync(Database, ShelfMachine.MachineId))
-            .Where(d => d.Operation(ShelfMachine.MachineId) != MachineDocumentOps.MachineChanged)
+        (
+            await MachineDocumentOps
+                .MachineDocumentsAsync(Database, ShelfMachine.MachineId)
+                .ConfigureAwait(false)
+        )
+            .Where(d =>
+                !string.Equals(
+                    d.Operation(ShelfMachine.MachineId),
+                    MachineDocumentOps.MachineChanged,
+                    StringComparison.Ordinal
+                )
+            )
             .Select(d => d.Id)
             .ToList();
 
     private static async Task<int> ActiveAsync(IReadOnlyList<string> ids) =>
-        (await MachineDocumentOps.MachineDocumentsAsync(Database, ShelfMachine.MachineId)).Count(
-            d => d.IsActive && ids.Contains(d.Id)
-        );
+        (
+            await MachineDocumentOps
+                .MachineDocumentsAsync(Database, ShelfMachine.MachineId)
+                .ConfigureAwait(false)
+        ).Count(d => d.IsActive && ids.Contains(d.Id, StringComparer.Ordinal));
 
     private static string Pick(IReadOnlyList<string> ids, string operation) =>
         ids.Single(i =>
-            new MachineDocumentOps.StoredDocument("", i, "", true).Operation(ShelfMachine.MachineId)
-            == operation
+            string.Equals(
+                new MachineDocumentOps.StoredDocument("", i, "", IsActive: true).Operation(
+                    ShelfMachine.MachineId
+                ),
+                operation,
+                StringComparison.Ordinal
+            )
         );
 }

@@ -190,7 +190,7 @@ public class AddAuditTests
 
         var disclaimerCount = services.Count(sd =>
             sd.ServiceType == typeof(IHostedService)
-            && sd.ImplementationType?.Name.Contains("Disclaimer") == true
+            && sd.ImplementationType?.Name.Contains("Disclaimer", StringComparison.Ordinal) == true
         );
         disclaimerCount.Should().Be(1);
     }

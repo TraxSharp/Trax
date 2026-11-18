@@ -464,7 +464,8 @@ public class ClientDocumentsTests
         var executor = await services
             .BuildServiceProvider()
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
         var reach = ClientDocumentReach.Of(
             [
                 ("query", null, "findOrder"),
@@ -513,7 +514,7 @@ public class ClientDocumentsTests
 
     private interface IStubTrain;
 
-    private sealed class StubTrain;
+    private static class StubTrain;
 
     #endregion
 }

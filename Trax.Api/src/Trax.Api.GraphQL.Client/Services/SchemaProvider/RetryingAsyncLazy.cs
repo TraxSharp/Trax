@@ -26,7 +26,7 @@ internal sealed class RetryingAsyncLazy<T>
 
     private readonly Func<Task<T>> _factory;
     private readonly TimeProvider _time;
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private Task<T>? _load;
     private int _failures;
     private DateTimeOffset _retryAt;

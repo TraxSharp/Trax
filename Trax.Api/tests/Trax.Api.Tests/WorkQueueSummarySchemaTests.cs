@@ -73,7 +73,8 @@ public class WorkQueueSummarySchemaTests
             .EnumerateArray()
             .ToDictionary(
                 f => f.GetProperty("name").GetString()!,
-                f => f.GetProperty("type").Clone()
+                f => f.GetProperty("type").Clone(),
+                StringComparer.Ordinal
             );
 
         fields

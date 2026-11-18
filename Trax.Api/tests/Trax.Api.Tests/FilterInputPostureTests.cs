@@ -228,7 +228,7 @@ public class FilterInputPostureTests
         public InputOwner? Owner { get; set; }
 
         [UseFiltering]
-        public List<InputComment> Comments { get; set; } = [];
+        public IList<InputComment> Comments { get; set; } = [];
     }
 
     [TraxAuthorize(Roles = "Admin")]

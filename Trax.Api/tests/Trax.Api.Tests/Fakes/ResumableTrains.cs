@@ -1,3 +1,4 @@
+using System.Globalization;
 using Trax.Core.Decisions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
@@ -97,7 +98,7 @@ public static class ResumeProbe
         lock (Gate)
             RanList.Add(junction);
 
-        if (FailIn == junction)
+        if (string.Equals(FailIn, junction, StringComparison.Ordinal))
             throw new TimeoutException($"{junction} timed out");
     }
 
@@ -150,7 +151,11 @@ public sealed class SummarizeSources : EffectJunction<FetchedSources, SourceSumm
     public override Task<SourceSummary> Run(FetchedSources input)
     {
         ResumeProbe.Note(nameof(SummarizeSources));
-        return Task.FromResult(new SourceSummary($"{input.Pages} pages on {input.Topic}"));
+        return Task.FromResult(
+            new SourceSummary(
+                string.Create(CultureInfo.InvariantCulture, $"{input.Pages} pages on {input.Topic}")
+            )
+        );
     }
 }
 

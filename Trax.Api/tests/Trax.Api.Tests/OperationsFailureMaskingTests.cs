@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.Builder;
@@ -194,7 +195,7 @@ public class OperationsFailureMaskingTests
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
     }
 
@@ -214,7 +215,9 @@ public class OperationsFailureMaskingTests
             if (failWith is not null)
                 throw failWith;
             Submitted.Add(metadataId);
-            return Task.FromResult($"job-{metadataId}");
+            return Task.FromResult(
+                string.Create(CultureInfo.InvariantCulture, $"job-{metadataId}")
+            );
         }
     }
 

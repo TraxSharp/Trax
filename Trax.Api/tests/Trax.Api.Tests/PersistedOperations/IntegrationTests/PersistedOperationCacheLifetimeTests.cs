@@ -67,7 +67,12 @@ public class PersistedOperationCacheLifetimeTests
     public async Task AChangeThatNeverReachedTheNode_IsInForceWithinTheMaximumAge()
     {
         var id = $"unbroadcast_{Guid.NewGuid():N}";
-        await _store.UpsertAsync(id, "query Greet { hello }", null, CancellationToken.None);
+        await _store.UpsertAsync(
+            id,
+            "query Greet { hello }",
+            options: null,
+            CancellationToken.None
+        );
         (await ExecuteByIdAsync(id)).Should().Contain("\"hello\"");
 
         // Deactivated behind this node's back: no invalidation, no broadcast.
@@ -116,7 +121,12 @@ public class PersistedOperationCacheLifetimeTests
         var id = $"late_{Guid.NewGuid():N}";
         (await ExecuteByIdAsync(id)).Should().Contain("HC0020");
 
-        await _store.UpsertAsync(id, "query Greet { hello }", null, CancellationToken.None);
+        await _store.UpsertAsync(
+            id,
+            "query Greet { hello }",
+            options: null,
+            CancellationToken.None
+        );
 
         (await ExecuteByIdAsync(id)).Should().Contain("\"hello\"", AdrHint);
     }
@@ -136,35 +146,45 @@ public class PersistedOperationCacheLifetimeTests
 
     private async Task<string> ExecuteByIdAsync(string id)
     {
-        var executor = await GraphQLFixture.GetExecutorAsync(_sp);
-        var result = await executor.ExecuteAsync(
-            OperationRequestBuilder.New().SetDocumentId(new OperationDocumentId(id)).Build()
-        );
+        var executor = await GraphQLFixture.GetExecutorAsync(_sp).ConfigureAwait(false);
+        var result = await executor
+            .ExecuteAsync(
+                OperationRequestBuilder.New().SetDocumentId(new OperationDocumentId(id)).Build()
+            )
+            .ConfigureAwait(false);
         return ((OperationResult)result).ToJson();
     }
 
     private async Task<string> ExecuteInlineAsync(string document)
     {
-        var executor = await GraphQLFixture.GetExecutorAsync(_sp);
+        var executor = await GraphQLFixture.GetExecutorAsync(_sp).ConfigureAwait(false);
         // As the HTTP transports send it: the document, and its hash computed from the bytes.
         var hash = new MD5DocumentHashProvider(HashFormat.Hex).ComputeHash(
             System.Text.Encoding.UTF8.GetBytes(document)
         );
-        var result = await executor.ExecuteAsync(
-            OperationRequestBuilder.New().SetDocument(document).SetDocumentHash(hash).Build()
-        );
+        var result = await executor
+            .ExecuteAsync(
+                OperationRequestBuilder.New().SetDocument(document).SetDocumentHash(hash).Build()
+            )
+            .ConfigureAwait(false);
         return ((OperationResult)result).ToJson();
     }
 
     private static async Task DeactivateDirectlyAsync(string id)
     {
-        await using var conn = new NpgsqlConnection(PostgresFixture.ConnectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(
-            "update trax.persisted_operation set is_active = false where id = @id",
-            conn
-        );
-        cmd.Parameters.AddWithValue("id", id);
-        await cmd.ExecuteNonQueryAsync();
+        var conn = new NpgsqlConnection(PostgresFixture.ConnectionString);
+        await using (conn.ConfigureAwait(false))
+        {
+            await conn.OpenAsync().ConfigureAwait(false);
+            var cmd = new NpgsqlCommand(
+                "update trax.persisted_operation set is_active = false where id = @id",
+                conn
+            );
+            await using (cmd.ConfigureAwait(false))
+            {
+                cmd.Parameters.AddWithValue("id", id);
+                await cmd.ExecuteNonQueryAsync().ConfigureAwait(false);
+            }
+        }
     }
 }

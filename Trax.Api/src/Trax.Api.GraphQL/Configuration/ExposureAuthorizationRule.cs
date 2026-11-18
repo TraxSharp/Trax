@@ -95,6 +95,6 @@ internal static class ExposureAuthorizationRule
                     + "[TraxAllowAnonymous] can never take effect. Remove [TraxAllowAnonymous], or "
                     + "drop the endpoint-level RequireAuthorization() if this surface should be "
                     + "publicly reachable.",
-            _ => throw new ArgumentOutOfRangeException(nameof(violation), violation, null),
+            _ => throw new ArgumentOutOfRangeException(nameof(violation), violation, message: null),
         };
 }

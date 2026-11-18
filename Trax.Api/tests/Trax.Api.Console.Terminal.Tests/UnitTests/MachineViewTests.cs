@@ -34,7 +34,7 @@ public class MachineViewTests
     public void The_graph_draws_each_state_as_a_box_and_each_transition_as_a_labelled_arrow()
     {
         var lines = MachineGraph.Lines(Machine(), current: "Paying");
-        var text = string.Join("\n", lines);
+        var text = string.Join('\n', lines);
         TestContext.Out.WriteLine(text);
 
         text.Should().Contain("●─▶│ Cart", "the initial state is entered by the arrow");
@@ -64,7 +64,7 @@ public class MachineViewTests
                 new GraphEdge("Busy", "Done", "Finish"),
             ]
         );
-        var text = string.Join("\n", lines);
+        var text = string.Join('\n', lines);
         TestContext.Out.WriteLine(text);
 
         text.Should().Contain("↻ Tick", "a transition to the same state is written in its box");
@@ -76,16 +76,16 @@ public class MachineViewTests
     public void Drawn_down_the_states_go_in_rows_and_the_lines_enter_from_above()
     {
         var lines = MachineGraph.Lines(Machine(), current: "Paying", vertical: true).ToList();
-        var text = string.Join("\n", lines);
+        var text = string.Join('\n', lines);
         TestContext.Out.WriteLine(text);
 
         lines[0].Trim().Should().Be("●", "the initial state is entered from above");
         lines[1].Trim().Should().Be("▼");
         text.Should().Contain("Checkout").And.Contain("on Paid").And.Contain("after 15m");
         lines.Sum(l => l.Count(c => c is '▶' or '◀' or '▲' or '▼')).Should().Be(4);
-        var cart = lines.FindIndex(l => l.Contains("Cart"));
-        var paying = lines.FindIndex(l => l.Contains("Paying"));
-        var shipped = lines.FindIndex(l => l.Contains("Shipped"));
+        var cart = lines.FindIndex(l => l.Contains("Cart", StringComparison.Ordinal));
+        var paying = lines.FindIndex(l => l.Contains("Paying", StringComparison.Ordinal));
+        var shipped = lines.FindIndex(l => l.Contains("Shipped", StringComparison.Ordinal));
         cart.Should().BeLessThan(paying, "each state sits below the one before it");
         paying.Should().BeLessThan(shipped);
     }
@@ -107,10 +107,10 @@ public class MachineViewTests
             ],
             vertical: true
         );
-        TestContext.Out.WriteLine(string.Join("\n", lines));
+        TestContext.Out.WriteLine(string.Join('\n', lines));
 
         lines.Should().NotContain(l => l.Contains("──▶"), "every label found room on the graph");
-        string.Join("\n", lines)
+        string.Join('\n', lines)
             .Should()
             .Contain("Pause")
             .And.Contain("Start")
@@ -135,10 +135,10 @@ public class MachineViewTests
             ],
             vertical: true
         );
-        TestContext.Out.WriteLine(string.Join("\n", lines));
+        TestContext.Out.WriteLine(string.Join('\n', lines));
 
         lines.Should().NotContain(l => l.Contains("──▶"), "every label found room on the graph");
-        string.Join("\n", lines)
+        string.Join('\n', lines)
             .Should()
             .Contain("on cancelled")
             .And.Contain("on failed")
@@ -161,7 +161,7 @@ public class MachineViewTests
                              "isInvokedRunsCapped":false,"inStateSince":"2026-10-22T10:01:00Z","overdue":false,"stuck":false,
                              "waitingOn":{"executionId":4900,"trainState":"IN_PROGRESS","workQueueEntryId":null},
                              "invokedRuns":[{"id":4900,"externalId":"run-4900","name":"Shop.IChargeTrain","trainState":"IN_PROGRESS","startTime":"2026-10-22T10:01:00Z","failureClass":"UNCLASSIFIED","cancellationRequested":false,"isLive":true}]}}}
-                            """.Replace("STATE", state)
+                            """.Replace("STATE", state, StringComparison.Ordinal)
                         )!
             )
             .Answer(
@@ -188,7 +188,7 @@ public class MachineViewTests
         await using var _ = terminal;
 
         await terminal.Until(
-            () => window.Lines.Any(l => l.Contains("║ Paying ")),
+            () => window.Lines.Any(l => l.Contains("║ Paying ", StringComparison.Ordinal)),
             "the instance is read"
         );
         window.Lines.Should().Contain("Waits on run 4900 (IN_PROGRESS)");
@@ -207,7 +207,7 @@ public class MachineViewTests
         await terminal.OnUi(() => terminal.Time.Advance(TimeSpan.FromSeconds(1)));
 
         await terminal.Until(
-            () => window.Lines.Any(l => l.Contains("║ Shipped ")),
+            () => window.Lines.Any(l => l.Contains("║ Shipped ", StringComparison.Ordinal)),
             "the change is read"
         );
     }
@@ -244,7 +244,7 @@ public class MachineViewTests
         await using var _ = terminal;
         await terminal.Until(
             () =>
-                window.Lines.Any(l => l.Contains("║ Paying "))
+                window.Lines.Any(l => l.Contains("║ Paying ", StringComparison.Ordinal))
                 && host.Follows("OnMachineInstanceChanged"),
             "the instance is read and followed"
         );
@@ -261,7 +261,7 @@ public class MachineViewTests
         await terminal.OnUi(() => { });
         await terminal.OnUi(() => terminal.Time.Advance(TimeSpan.FromSeconds(1)));
         await terminal.Until(
-            () => window.Lines.Any(l => l.Contains("║ Shipped ")),
+            () => window.Lines.Any(l => l.Contains("║ Shipped ", StringComparison.Ordinal)),
             "the newer read is shown"
         );
 
@@ -339,7 +339,7 @@ public class MachineViewTests
                  "rowId":5,"state":"STATE","version":2,"updatedAt":"2026-10-22T10:01:00Z","hasLiveInvokedRun":false,
                  "isInvokedRunsCapped":false,"inStateSince":"2026-10-22T10:01:00Z","overdue":false,"stuck":false,
                  "waitingOn":null,"invokedRuns":[]}}}
-                """.Replace("STATE", state)
+                """.Replace("STATE", state, StringComparison.Ordinal)
             )!;
 
     private static MachineInstancesAttentionResultOperationsMachineInstancesItems Instance() =>

@@ -79,7 +79,7 @@ namespace Trax.Api.Tests
             registrations.Should().HaveCount(2);
             registrations
                 .Select(r => r.ServiceTypeName)
-                .Distinct()
+                .Distinct(StringComparer.Ordinal)
                 .Should()
                 .ContainSingle("both interfaces are called ICreateOrderTrain");
 
@@ -103,7 +103,8 @@ namespace Trax.Api.Tests
                 await services
                     .BuildServiceProvider()
                     .GetRequiredService<IRequestExecutorProvider>()
-                    .GetExecutorAsync("trax");
+                    .GetExecutorAsync("trax")
+                    .ConfigureAwait(false);
 
             var thrown = await act.Should().ThrowAsync<Exception>();
             // HotChocolate wraps a type module's exception; ToString carries the inner ones.

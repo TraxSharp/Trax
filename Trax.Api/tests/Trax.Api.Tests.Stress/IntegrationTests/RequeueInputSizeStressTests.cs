@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.DTOs;
@@ -80,43 +81,61 @@ public class RequeueInputSizeStressTests : StressTestSetup
         // A seeded run has no saved input and names a train nothing registers.
         var executionId = Profile.Metadata / 3 + 1;
         var seededName = await ScalarAsync<string>(
-            $"SELECT name FROM trax.metadata WHERE id = {executionId}"
-        );
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"SELECT name FROM trax.metadata WHERE id = {executionId}"
+                )
+            )
+            .ConfigureAwait(false);
         var input = $"{{\"Value\":\"{new string('x', inputBytes - JsonOverhead)}\"}}";
         input.Length.Should().Be(inputBytes);
 
         OperationResponse response = null!;
         long queuedInputLength = 0;
         await MeasureWriteAsync(
-            $"operations.requeueExecution ({inputBytes / 1024} KiB input)",
-            ListBudget,
-            () =>
-                ExecSqlAsync(
-                    "DELETE FROM trax.work_queue WHERE status = 'queued' "
-                        + $"AND train_name = '{ProbeTrainName}'; "
-                        + $"UPDATE trax.metadata SET name = '{ProbeTrainName}', "
-                        + $"input = '{input}' WHERE id = {executionId}"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"operations.requeueExecution ({inputBytes / 1024} KiB input)"
                 ),
-            async (sp, ct) =>
-                response = await new OperationsMutations().RequeueExecution(
-                    executionId,
-                    sp.GetRequiredService<IOperationsService>(),
-                    ct
-                ),
-            restore: async () =>
-            {
-                queuedInputLength = await ScalarAsync<long>(
-                    "SELECT coalesce(max(length(input::text)), 0) FROM trax.work_queue "
-                        + $"WHERE status = 'queued' AND train_name = '{ProbeTrainName}'"
-                );
-                await ExecSqlAsync(
-                    "DELETE FROM trax.work_queue WHERE status = 'queued' "
-                        + $"AND train_name = '{ProbeTrainName}'; "
-                        + $"UPDATE trax.metadata SET name = '{seededName}', input = NULL "
-                        + $"WHERE id = {executionId}"
-                );
-            }
-        );
+                ListBudget,
+                () =>
+                    ExecSqlAsync(
+                        "DELETE FROM trax.work_queue WHERE status = 'queued' "
+                            + $"AND train_name = '{ProbeTrainName}'; "
+                            + $"UPDATE trax.metadata SET name = '{ProbeTrainName}', "
+                            + string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"input = '{input}' WHERE id = {executionId}"
+                            )
+                    ),
+                async (sp, ct) =>
+                    response = await new OperationsMutations()
+                        .RequeueExecution(
+                            executionId,
+                            sp.GetRequiredService<IOperationsService>(),
+                            ct
+                        )
+                        .ConfigureAwait(false),
+                restore: async () =>
+                {
+                    queuedInputLength = await ScalarAsync<long>(
+                            "SELECT coalesce(max(length(input::text)), 0) FROM trax.work_queue "
+                                + $"WHERE status = 'queued' AND train_name = '{ProbeTrainName}'"
+                        )
+                        .ConfigureAwait(false);
+                    await ExecSqlAsync(
+                            "DELETE FROM trax.work_queue WHERE status = 'queued' "
+                                + $"AND train_name = '{ProbeTrainName}'; "
+                                + $"UPDATE trax.metadata SET name = '{seededName}', input = NULL "
+                                + string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"WHERE id = {executionId}"
+                                )
+                        )
+                        .ConfigureAwait(false);
+                }
+            )
+            .ConfigureAwait(false);
         return (response, queuedInputLength);
     }
 }

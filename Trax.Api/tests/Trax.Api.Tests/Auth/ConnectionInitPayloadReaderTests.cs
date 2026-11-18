@@ -64,7 +64,7 @@ public class ConnectionInitPayloadReaderTests
         ConnectionInitPayloadReader
             .TryRead<Credentials>(payload)
             .Should()
-            .Be(new Credentials(null, null));
+            .Be(new Credentials(AuthToken: null, ApiKey: null));
     }
 
     [Test]

@@ -91,7 +91,7 @@ public class TraxPrincipalInjectionTests
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
     }
 
@@ -105,7 +105,10 @@ public class TraxPrincipalInjectionTests
                         "alice",
                         "Alice Liddell",
                         ["User", "Tenant.Admin"],
-                        Claims: new Dictionary<string, string> { ["tenant"] = "acme" },
+                        Claims: new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["tenant"] = "acme",
+                        },
                         PrincipalType: "apikey"
                     )
                 )
@@ -140,7 +143,7 @@ public class TraxPrincipalInjectionTests
     [Test]
     public async Task TwoConcurrentRequests_EachSeeOwnPrincipal()
     {
-        var principals = new Dictionary<string, TraxPrincipal>
+        var principals = new Dictionary<string, TraxPrincipal>(StringComparer.Ordinal)
         {
             ["alice-key"] = new("alice", "Alice", ["User"]),
             ["bob-key"] = new("bob", "Bob", ["Admin"]),
@@ -172,7 +175,9 @@ public class TraxPrincipalInjectionTests
                 };
                 var client = host.GetTestClient();
                 client.DefaultRequestHeaders.Add("X-Api-Key", key);
-                var response = await client.GetFromJsonAsync<JunctionResponse>("/junction");
+                var response = await client
+                    .GetFromJsonAsync<JunctionResponse>("/junction")
+                    .ConfigureAwait(false);
                 return (expected, actual: response?.Greeting);
             });
 
@@ -208,7 +213,7 @@ public class TraxPrincipalInjectionTests
         using var host = await CreateHost((_, _) => ValueTask.FromResult<TraxPrincipal?>(null));
         var client = host.GetTestClient();
 
-        var act = async () => await client.GetAsync("/direct");
+        var act = async () => await client.GetAsync("/direct").ConfigureAwait(false);
 
         await act.Should().ThrowAsync<TraxPrincipalNotAvailableException>();
     }

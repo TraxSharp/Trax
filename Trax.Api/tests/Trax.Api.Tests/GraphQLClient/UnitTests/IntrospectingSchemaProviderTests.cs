@@ -38,7 +38,7 @@ public class IntrospectingSchemaProviderTests
 
         var provider = new IntrospectingSchemaProvider(BuildConfig(stub));
 
-        var act = async () => await provider.GetSchemaAsync();
+        var act = async () => await provider.GetSchemaAsync().ConfigureAwait(false);
 
         var ex = await act.Should().ThrowAsync<GraphQLSchemaIntrospectionException>();
         ex.Which.Message.Should().Contain("stub/graphql");
@@ -53,7 +53,7 @@ public class IntrospectingSchemaProviderTests
 
         var provider = new IntrospectingSchemaProvider(BuildConfig(stub));
 
-        var act = async () => await provider.GetSchemaAsync();
+        var act = async () => await provider.GetSchemaAsync().ConfigureAwait(false);
 
         // The exact wrapped exception type varies by serializer version, but it must NOT
         // be a NullReferenceException or other "we forgot to handle this" surprise.
@@ -69,7 +69,7 @@ public class IntrospectingSchemaProviderTests
 
         var provider = new IntrospectingSchemaProvider(BuildConfig(stub));
 
-        var act = async () => await provider.GetSchemaAsync();
+        var act = async () => await provider.GetSchemaAsync().ConfigureAwait(false);
 
         var ex = await act.Should().ThrowAsync<GraphQLSchemaIntrospectionException>();
         ex.Which.Message.Should().Contain("missing __schema");
@@ -84,7 +84,7 @@ public class IntrospectingSchemaProviderTests
 
         var provider = new IntrospectingSchemaProvider(BuildConfig(stub));
 
-        var act = async () => await provider.GetSchemaAsync();
+        var act = async () => await provider.GetSchemaAsync().ConfigureAwait(false);
 
         var ex = await act.Should().ThrowAsync<GraphQLSchemaIntrospectionException>();
         ex.Which.InnerException.Should().BeAssignableTo<Exception>();
@@ -105,7 +105,7 @@ public class IntrospectingSchemaProviderTests
             BuildConfig(new StubHttpMessageHandler(body))
         );
 
-        var act = async () => await provider.GetSchemaAsync();
+        var act = async () => await provider.GetSchemaAsync().ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<GraphQLSchemaIntrospectionException>())
             .Which.Message.Should()

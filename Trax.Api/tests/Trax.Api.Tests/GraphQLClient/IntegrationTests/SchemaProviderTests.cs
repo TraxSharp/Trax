@@ -103,7 +103,7 @@ public class SchemaProviderTests
     {
         var provider = new FileSchemaProvider("/tmp/this-file-does-not-exist-" + Guid.NewGuid());
 
-        var act = async () => await provider.GetSchemaAsync();
+        var act = async () => await provider.GetSchemaAsync().ConfigureAwait(false);
 
         var ex = await act.Should().ThrowAsync<GraphQLSchemaIntrospectionException>();
         ex.Which.Message.Should().Contain("not found");
@@ -118,7 +118,7 @@ public class SchemaProviderTests
         {
             var provider = new FileSchemaProvider(path);
 
-            var act = async () => await provider.GetSchemaAsync();
+            var act = async () => await provider.GetSchemaAsync().ConfigureAwait(false);
 
             var ex = await act.Should().ThrowAsync<GraphQLSchemaIntrospectionException>();
             ex.Which.Message.Should().Contain("empty");
@@ -148,7 +148,7 @@ public class SchemaProviderTests
         {
             var provider = new FileSchemaProvider(path);
 
-            var act = async () => await provider.GetSchemaAsync();
+            var act = async () => await provider.GetSchemaAsync().ConfigureAwait(false);
 
             var ex = await act.Should().ThrowAsync<GraphQLSchemaIntrospectionException>();
             ex.Which.Message.Should().Contain(path);

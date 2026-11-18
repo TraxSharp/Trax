@@ -75,7 +75,11 @@ public class TraxPrincipalTests
             "alice",
             "Alice",
             ["User"],
-            Claims: new Dictionary<string, string> { ["tenant"] = "acme", ["tier"] = "enterprise" }
+            Claims: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["tenant"] = "acme",
+                ["tier"] = "enterprise",
+            }
         );
 
         var claimsPrincipal = principal.ToClaimsPrincipal(Scheme);
@@ -147,7 +151,7 @@ public class TraxPrincipalTests
             "alice",
             "Alice Liddell",
             ["User", "Admin"],
-            Claims: new Dictionary<string, string> { ["tenant"] = "acme" },
+            Claims: new Dictionary<string, string>(StringComparer.Ordinal) { ["tenant"] = "acme" },
             PrincipalType: "apikey"
         );
 
@@ -294,7 +298,10 @@ public class TraxPrincipalTests
             "alice",
             "Alice",
             ["User"],
-            Claims: new Dictionary<string, string> { [ClaimTypes.Role] = "Admin" }
+            Claims: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [ClaimTypes.Role] = "Admin",
+            }
         );
 
         var claimsPrincipal = principal.ToClaimsPrincipal(Scheme);
@@ -311,7 +318,7 @@ public class TraxPrincipalTests
             "alice",
             "Alice",
             ["User"],
-            Claims: new Dictionary<string, string>
+            Claims: new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 [TraxAuthClaimTypes.PrincipalId] = "forged-id",
             }
@@ -333,7 +340,7 @@ public class TraxPrincipalTests
             "alice",
             "Alice",
             ["User"],
-            Claims: new Dictionary<string, string>
+            Claims: new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 [TraxAuthClaimTypes.PrincipalType] = "forged-scheme",
             },
@@ -356,7 +363,10 @@ public class TraxPrincipalTests
             "alice",
             "Alice",
             ["User"],
-            Claims: new Dictionary<string, string> { [ClaimTypes.Name] = "Mallory" }
+            Claims: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [ClaimTypes.Name] = "Mallory",
+            }
         );
 
         var claimsPrincipal = principal.ToClaimsPrincipal(Scheme);
@@ -373,7 +383,11 @@ public class TraxPrincipalTests
             "alice",
             "Alice",
             ["User"],
-            Claims: new Dictionary<string, string> { ["tenant"] = "acme", ["region"] = "us-west-2" }
+            Claims: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["tenant"] = "acme",
+                ["region"] = "us-west-2",
+            }
         );
 
         var claimsPrincipal = principal.ToClaimsPrincipal(Scheme);
@@ -389,7 +403,7 @@ public class TraxPrincipalTests
             "alice",
             "Alice",
             ["User"],
-            Claims: new Dictionary<string, string>
+            Claims: new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 // Reserved, should be stripped on the way out.
                 [ClaimTypes.Role] = "Admin",
@@ -454,13 +468,19 @@ public class TraxPrincipalTests
             "alice",
             "Alice",
             ["User"],
-            Claims: new Dictionary<string, string> { ["iss"] = "https://a.example" }
+            Claims: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["iss"] = "https://a.example",
+            }
         ).ToClaimsPrincipal("SchemeA");
         var second = new TraxPrincipal(
             "alice",
             "Alice",
             ["User"],
-            Claims: new Dictionary<string, string> { ["iss"] = "https://b.example" }
+            Claims: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["iss"] = "https://b.example",
+            }
         ).ToClaimsPrincipal("SchemeB");
         var merged = new ClaimsPrincipal(first.Identities.Concat(second.Identities));
 

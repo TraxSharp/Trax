@@ -120,7 +120,7 @@ public class TestJwksServerTests
         await server.DisposeAsync();
 
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-        Func<Task> act = async () => await http.GetAsync(jwksUri);
+        Func<Task> act = async () => await http.GetAsync(jwksUri).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<HttpRequestException>();
     }
@@ -167,7 +167,7 @@ public class TestJwksServerTests
                     })
             )
             .Build();
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
     }
 

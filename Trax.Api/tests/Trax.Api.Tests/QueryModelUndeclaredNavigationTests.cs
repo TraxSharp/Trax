@@ -73,11 +73,11 @@ public class QueryModelUndeclaredNavigationTests
         try
         {
             foreach (var hosted in provider.GetServices<IHostedService>())
-                await hosted.StartAsync(default);
+                await hosted.StartAsync(default).ConfigureAwait(false);
         }
         catch
         {
-            await provider.DisposeAsync();
+            await provider.DisposeAsync().ConfigureAwait(false);
             throw;
         }
 
@@ -100,12 +100,13 @@ public class QueryModelUndeclaredNavigationTests
                     Account = account,
                 }
             );
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync().ConfigureAwait(false);
         }
 
         var executor = await provider
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
         return (provider, executor);
     }
 

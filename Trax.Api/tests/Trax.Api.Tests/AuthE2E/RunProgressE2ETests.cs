@@ -150,10 +150,12 @@ public class RunProgressE2ETests
 
         Answer(foreign)
             .GetRawText()
-            .Replace(runId, "ID")
+            .Replace(runId, "ID", StringComparison.Ordinal)
             .Should()
             .Be(
-                Answer(missing).GetRawText().Replace(new string('0', 32), "ID"),
+                Answer(missing)
+                    .GetRawText()
+                    .Replace(new string('0', 32), "ID", StringComparison.Ordinal),
                 "a foreign run and a missing one answer alike, per " + Adr
             );
     }
@@ -252,7 +254,7 @@ public class RunProgressE2ETests
             .Should()
             .BeInAscendingOrder()
             .And.OnlyHaveUniqueItems();
-        events.Last().GetProperty("state").GetString().Should().Be("COMPLETED");
+        events[^1].GetProperty("state").GetString().Should().Be("COMPLETED");
         events.Should().Contain(e => e.GetProperty("step").ValueKind == JsonValueKind.Object);
         alice.Received.Should().NotContain(Marker);
     }
@@ -366,8 +368,8 @@ public class RunProgressE2ETests
         );
         var events = await socket.ReadUntilCompleteAsync();
 
-        events.First().GetProperty("state").GetString().Should().Be("FAILED");
-        events.Last().GetProperty("retriedAs").GetString().Should().Be(retry);
+        events[0].GetProperty("state").GetString().Should().Be("FAILED");
+        events[^1].GetProperty("retriedAs").GetString().Should().Be(retry);
     }
 
     [Test]
@@ -385,26 +387,33 @@ public class RunProgressE2ETests
     // Makes the runs occurrences of one manifest, in order, as the scheduler's retries are.
     private async Task OfOneManifestAsync(params string[] runIds)
     {
-        await using var db = await _host
+        var db = await _host
             .Services.GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(CancellationToken.None);
-        var group = new ManifestGroup
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
-            Name = $"progress-{Guid.NewGuid():N}",
-            IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
-        };
-        await db.Track(group);
-        await db.SaveChanges(default);
-        var manifest = Manifest.Create(new CreateManifest { Name = typeof(IProgressMarkerTrain) });
-        manifest.ManifestGroupId = group.Id;
-        await db.Track(manifest);
-        await db.SaveChanges(default);
-        foreach (var runId in runIds)
-            await db
-                .Metadatas.Where(m => m.ExternalId == runId)
-                .ExecuteUpdateAsync(u => u.SetProperty(m => m.ManifestId, manifest.Id));
+            var group = new ManifestGroup
+            {
+                Name = $"progress-{Guid.NewGuid():N}",
+                IsEnabled = true,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            await db.Track(group).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            var manifest = Manifest.Create(
+                new CreateManifest { Name = typeof(IProgressMarkerTrain) }
+            );
+            manifest.ManifestGroupId = group.Id;
+            await db.Track(manifest).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            foreach (var runId in runIds)
+                await db
+                    .Metadatas.Where(m => m.ExternalId == runId)
+                    .ExecuteUpdateAsync(u => u.SetProperty(m => m.ManifestId, manifest.Id))
+                    .ConfigureAwait(false);
+        }
     }
 
     #endregion
@@ -428,7 +437,7 @@ public class RunProgressE2ETests
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
         while (true)
         {
-            var response = await ReadAsync(runId, key);
+            var response = await ReadAsync(runId, key).ConfigureAwait(false);
             if (
                 Answer(response).GetProperty("steps").GetArrayLength() >= 2
                 || DateTime.UtcNow > deadline
@@ -436,7 +445,7 @@ public class RunProgressE2ETests
                 return response;
             response.Dispose();
             // allowed-delay: polls the background step writer, bounded by the deadline.
-            await Task.Delay(50);
+            await Task.Delay(50).ConfigureAwait(false);
         }
     }
 
@@ -448,26 +457,31 @@ public class RunProgressE2ETests
 
     private async Task<string> QueueAsync(string key)
     {
-        using var response = await _host.PostGraphQLAsync(
-            $$"""mutation { dispatch { progressMarker(input: { note: "{{Marker}}", fail: false }, mode: QUEUE) { externalId } } }""",
-            r => r.Headers.Add("X-Api-Key", key)
-        );
+        using var response = await _host
+            .PostGraphQLAsync(
+                $$"""mutation { dispatch { progressMarker(input: { note: "{{Marker}}", fail: false }, mode: QUEUE) { externalId } } }""",
+                r => r.Headers.Add("X-Api-Key", key)
+            )
+            .ConfigureAwait(false);
         return Dispatched(response);
     }
 
     private async Task<string> RunAsync(string key, bool fail)
     {
-        using var response = await _host.PostGraphQLAsync(
-            $$"""mutation { dispatch { progressMarker(input: { note: "{{Marker}}", fail: {{(fail ? "true" : "false")}} }, mode: RUN) { externalId } } }""",
-            r => r.Headers.Add("X-Api-Key", key)
-        );
+        using var response = await _host
+            .PostGraphQLAsync(
+                $$"""mutation { dispatch { progressMarker(input: { note: "{{Marker}}", fail: {{(fail ? "true" : "false")}} }, mode: RUN) { externalId } } }""",
+                r => r.Headers.Add("X-Api-Key", key)
+            )
+            .ConfigureAwait(false);
         if (!fail)
             return Dispatched(response);
 
         // A failed run answers an error rather than its handle; its id is on its row.
         using var db = await _host
             .Services.GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(CancellationToken.None);
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
         return await db
             .Metadatas.AsNoTracking()
             .Where(m =>
@@ -475,7 +489,8 @@ public class RunProgressE2ETests
             )
             .OrderByDescending(m => m.Id)
             .Select(m => m.ExternalId)
-            .FirstAsync();
+            .FirstAsync()
+            .ConfigureAwait(false);
     }
 
     private static string Dispatched(JsonDocument response)
@@ -491,10 +506,13 @@ public class RunProgressE2ETests
     // The external id of the run waiting at the gate, read from its row.
     private async Task<string> RunningIdAsync()
     {
-        await ProgressMarkerTrain.Waiting.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await ProgressMarkerTrain
+            .Waiting.Task.WaitAsync(TimeSpan.FromSeconds(30))
+            .ConfigureAwait(false);
         using var db = await _host
             .Services.GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(CancellationToken.None);
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
         return await db
             .Metadatas.AsNoTracking()
             .Where(m =>
@@ -503,7 +521,8 @@ public class RunProgressE2ETests
             )
             .OrderByDescending(m => m.Id)
             .Select(m => m.ExternalId)
-            .FirstAsync();
+            .FirstAsync()
+            .ConfigureAwait(false);
     }
 
     // A host whose machine user key is whatever the request says, as a host that maps a raw claim would be.
@@ -531,10 +550,14 @@ public class RunProgressE2ETests
         {
             var client = host.GetTestServer().CreateWebSocketClient();
             client.SubProtocols.Add("graphql-transport-ws");
-            var socket = await client.ConnectAsync(new Uri(WsUri), CancellationToken.None);
+            var socket = await client
+                .ConnectAsync(new Uri(WsUri), CancellationToken.None)
+                .ConfigureAwait(false);
             var connected = new Socket(socket);
-            await connected.SendAsync(new { type = "connection_init", payload = new { apiKey } });
-            (await connected.ReceiveAsync())
+            await connected
+                .SendAsync(new { type = "connection_init", payload = new { apiKey } })
+                .ConfigureAwait(false);
+            (await connected.ReceiveAsync().ConfigureAwait(false))
                 .GetProperty("type")
                 .GetString()
                 .Should()
@@ -557,7 +580,7 @@ public class RunProgressE2ETests
         {
             while (true)
             {
-                var message = await ReceiveAsync();
+                var message = await ReceiveAsync().ConfigureAwait(false);
                 var type = message.GetProperty("type").GetString();
                 if (type is "ping" or "pong")
                     continue;
@@ -574,11 +597,11 @@ public class RunProgressE2ETests
             var events = new List<JsonElement>();
             while (true)
             {
-                var message = await ReceiveAsync();
+                var message = await ReceiveAsync().ConfigureAwait(false);
                 var type = message.GetProperty("type").GetString();
                 if (type is "ping" or "pong")
                     continue;
-                if (type == "complete")
+                if (string.Equals(type, "complete", StringComparison.Ordinal))
                     return events;
                 type.Should().Be("next", message.GetRawText());
                 events.Add(
@@ -598,7 +621,13 @@ public class RunProgressE2ETests
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
                 try
                 {
-                    await _socket.CloseAsync(WebSocketCloseStatus.NormalClosure, null, cts.Token);
+                    await _socket
+                        .CloseAsync(
+                            WebSocketCloseStatus.NormalClosure,
+                            statusDescription: null,
+                            cts.Token
+                        )
+                        .ConfigureAwait(false);
                 }
                 catch (Exception e) when (e is WebSocketException or OperationCanceledException) { }
             }
@@ -609,7 +638,9 @@ public class RunProgressE2ETests
         {
             var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(message));
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            await _socket.SendAsync(bytes, WebSocketMessageType.Text, true, cts.Token);
+            await _socket
+                .SendAsync(bytes, WebSocketMessageType.Text, endOfMessage: true, cts.Token)
+                .ConfigureAwait(false);
         }
 
         private async Task<JsonElement> ReceiveAsync()
@@ -619,7 +650,7 @@ public class RunProgressE2ETests
             using var ms = new MemoryStream();
             while (true)
             {
-                var result = await _socket.ReceiveAsync(buffer, cts.Token);
+                var result = await _socket.ReceiveAsync(buffer, cts.Token).ConfigureAwait(false);
                 if (result.MessageType == WebSocketMessageType.Close)
                     throw new InvalidOperationException(
                         $"The socket closed: {result.CloseStatus} {result.CloseStatusDescription}"
@@ -681,7 +712,12 @@ public class WaitForGate : EffectJunction<ProgressMarkerInput, ProgressMarkerInp
     public override async Task<ProgressMarkerInput> Run(ProgressMarkerInput input)
     {
         ProgressMarkerTrain.Waiting.TrySetResult();
-        await ProgressMarkerTrain.Gate.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await ProgressMarkerTrain
+            .Gate.Task.WaitAsync(
+                TimeSpan.FromSeconds(30),
+                cancellationToken: CancellationToken.None
+            )
+            .ConfigureAwait(false);
         return input;
     }
 }

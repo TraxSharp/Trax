@@ -86,7 +86,7 @@ internal sealed class QueryModelProjectionRequirementInterceptor : TypeIntercept
 
     /// <summary>
     /// The requirement a resolver declared with <c>[Parent(requires:)]</c>, or
-    /// <c>null</c> when it declared none.
+    /// <see langword="null"/> when it declared none.
     /// </summary>
     private static string? ReadDeclaredRequirement(ObjectFieldConfiguration field)
     {

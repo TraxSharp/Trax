@@ -21,12 +21,21 @@ public class ManifestTriggerMutationsTests
     {
         var operations = Substitute.For<IOperationsService>();
         operations
-            .TriggerManifestAsync("m", null, false, Arg.Any<CancellationToken>())
+            .TriggerManifestAsync("m", delay: null, askAfresh: false, Arg.Any<CancellationToken>())
             .Returns(
                 new TriggerManifestResult(
-                    true,
+                    Success: true,
                     "Manifest 'm' already had a queued run (work queue entry 9); the trigger brought it forward, now due now, and queued nothing more.",
-                    new ManifestTriggerResult(9, false, null, false, null) { MovedForward = true }
+                    new ManifestTriggerResult(
+                        9,
+                        Created: false,
+                        ScheduledAt: null,
+                        AlreadyDispatched: false,
+                        ReplayDecisionsOf: null
+                    )
+                    {
+                        MovedForward = true,
+                    }
                 )
             );
 
@@ -42,8 +51,19 @@ public class ManifestTriggerMutationsTests
     {
         var operations = Substitute.For<IOperationsService>();
         operations
-            .TriggerManifestAsync("m", TimeSpan.FromMinutes(5), true, Arg.Any<CancellationToken>())
-            .Returns(new TriggerManifestResult(false, OperationsService.NoDispatcherMessage, null));
+            .TriggerManifestAsync(
+                "m",
+                TimeSpan.FromMinutes(5),
+                askAfresh: true,
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(
+                new TriggerManifestResult(
+                    Success: false,
+                    OperationsService.NoDispatcherMessage,
+                    Trigger: null
+                )
+            );
 
         var response = await new OperationsMutations().TriggerManifestDelayed(
             "m",
@@ -71,7 +91,7 @@ public class ManifestTriggerMutationsTests
             )
             .Returns(
                 new BatchTriggerResult(
-                    true,
+                    Success: true,
                     1,
                     2,
                     1,

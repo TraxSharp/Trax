@@ -10,7 +10,7 @@ namespace Trax.Api.GraphQL.Client;
 /// registration; not intended to be constructed directly. Depend on
 /// <see cref="IGraphQLClientConfiguration"/> instead.
 /// </summary>
-internal class GraphQLClientConfiguration : IGraphQLClientConfiguration, IDisposable
+internal sealed class GraphQLClientConfiguration : IGraphQLClientConfiguration, IDisposable
 {
     private bool _disposed;
 
@@ -27,7 +27,7 @@ internal class GraphQLClientConfiguration : IGraphQLClientConfiguration, IDispos
     /// <param name="removeSubscriptionsFromSchema">Whether introspection drops the subscription type.</param>
     /// <param name="responseStrictness">How strictly responses are checked.</param>
     /// <param name="httpClient">The HTTP client requests go through.</param>
-    /// <exception cref="ArgumentNullException">Any reference argument is <c>null</c>.</exception>
+    /// <exception cref="ArgumentNullException">Any reference argument is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">The options name an endpoint other than <paramref name="baseAddress"/>.</exception>
     public GraphQLClientConfiguration(
         Uri baseAddress,

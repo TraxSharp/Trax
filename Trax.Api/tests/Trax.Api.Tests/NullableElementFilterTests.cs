@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -69,7 +70,7 @@ public class NullableElementFilterTests
 
         json.Should().NotContain("\"errors\"");
         foreach (var id in ids)
-            json.Should().Contain($"{{\"id\":{id}}}");
+            json.Should().Contain(string.Create(CultureInfo.InvariantCulture, $"{{\"id\":{id}}}"));
         json.Split("\"id\"").Length.Should().Be(ids.Length + 1);
     }
 

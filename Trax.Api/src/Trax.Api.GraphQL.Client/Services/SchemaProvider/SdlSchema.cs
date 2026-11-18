@@ -94,8 +94,16 @@ internal static class SdlSchema
         var removed = document.Definitions.RemoveAll(definition =>
             definition switch
             {
-                GraphQLObjectTypeDefinition type => type.Name.StringValue == rootName,
-                GraphQLObjectTypeExtension extension => extension.Name.StringValue == rootName,
+                GraphQLObjectTypeDefinition type => string.Equals(
+                    type.Name.StringValue,
+                    rootName,
+                    StringComparison.Ordinal
+                ),
+                GraphQLObjectTypeExtension extension => string.Equals(
+                    extension.Name.StringValue,
+                    rootName,
+                    StringComparison.Ordinal
+                ),
                 _ => false,
             }
         );

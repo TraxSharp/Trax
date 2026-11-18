@@ -42,8 +42,8 @@ public class BuilderValidationTests
     {
         var b = new PersistedOperationsBuilder()
             .SingleNode()
-            .RequirePersisted(false)
-            .LogNonPersistedRequests(false);
+            .RequirePersisted(require: false)
+            .LogNonPersistedRequests(log: false);
 
         Action act = () => b.Build();
         act.Should()

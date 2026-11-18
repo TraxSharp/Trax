@@ -58,7 +58,7 @@ public sealed partial class TraxGraphQLClientBuilder
     internal GraphQLClientConfigurationBuilder ConfigBuilder { get; }
 
     /// <summary>
-    /// The DI key this client was registered under, or <c>null</c> for the unkeyed
+    /// The DI key this client was registered under, or <see langword="null"/> for the unkeyed
     /// (<c>AddTraxGraphQLClient</c>) registration. Builder methods that re-register or resolve
     /// services use this so keyed and unkeyed clients behave identically.
     /// </summary>

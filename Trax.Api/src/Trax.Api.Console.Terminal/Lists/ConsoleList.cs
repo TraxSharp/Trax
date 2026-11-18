@@ -27,7 +27,7 @@ internal static class ListPage
 internal sealed record ListQuery(int Take, long? After, IReadOnlyDictionary<string, string> Filters)
 {
     public static ListQuery First(int take = 25) =>
-        new(take, null, new Dictionary<string, string>(StringComparer.Ordinal));
+        new(take, After: null, new Dictionary<string, string>(StringComparer.Ordinal));
 }
 
 /// <summary>A filter a list takes, by the name its query variable has.</summary>
@@ -49,7 +49,11 @@ internal sealed record ActionOutcome(bool Succeeded, string Message, string? Cod
     public static ActionOutcome Of<T>(TraxAnswer<T> answer, Func<T, (bool Ok, string Message)> read)
     {
         if (!answer.Succeeded)
-            return new ActionOutcome(false, answer.Message ?? "The host refused it.", answer.Code);
+            return new ActionOutcome(
+                Succeeded: false,
+                answer.Message ?? "The host refused it.",
+                answer.Code
+            );
         var (ok, message) = read(answer.Data!);
         return new ActionOutcome(ok, message);
     }
@@ -217,7 +221,7 @@ internal sealed class ConsoleList<TRow> : IConsoleList
         CancellationToken cancellationToken
     )
     {
-        var answer = await Load(client, query, cancellationToken);
+        var answer = await Load(client, query, cancellationToken).ConfigureAwait(false);
         if (answer.Data is not { } page)
             return new() { Errors = answer.Errors, Failure = answer.Failure };
         return new()
@@ -248,7 +252,7 @@ internal sealed class ConsoleList<TRow> : IConsoleList
         CancellationToken cancellationToken
     ) =>
         (
-            Actions.FirstOrDefault(a => a.Name == action)
+            Actions.FirstOrDefault(a => string.Equals(a.Name, action, StringComparison.Ordinal))
             ?? throw new InvalidOperationException(
                 $"{Name} has no action '{action}'. It has {string.Join(", ", Actions.Select(a => a.Name))}."
             )

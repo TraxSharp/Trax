@@ -27,7 +27,11 @@ public class HostTextTests
             .Console()
             .Answer(
                 "Executions",
-                HostData.Runs(1, null, HostData.Run(4812, $"Send{Hostile}Invoice", reason: Clear))
+                HostData.Runs(
+                    1,
+                    next: null,
+                    HostData.Run(4812, $"Send{Hostile}Invoice", reason: Clear)
+                )
             );
         var (terminal, window) = await TerminalHarness.StartAsync(app => new MainWindow(
             new ConsoleContext(
@@ -103,16 +107,17 @@ public class HostTextTests
         )!;
 
         var lines = MachineGraph.Lines(machine, current: $"Shut\u001b]52;c;ZXZpbA==\u0007");
-        TestContext.Out.WriteLine(string.Join("\n", lines));
+        TestContext.Out.WriteLine(string.Join('\n', lines));
 
         lines.SelectMany(Controls).Should().BeEmpty();
-        string.Join("\n", lines)
+        string.Join('\n', lines)
             .Should()
             .Contain("║ Shut�]52;c;ZXZpbA==�", "the current state is still found");
     }
 
     private static string Host(string json) =>
-        json.Replace("HOSTILE", Hostile).Replace("CLEAR", Clear);
+        json.Replace("HOSTILE", Hostile, StringComparison.Ordinal)
+            .Replace("CLEAR", Clear, StringComparison.Ordinal);
 
     private static IEnumerable<char> Controls(string text) =>
         text.Where(c => char.IsControl(c) && c != '\n');

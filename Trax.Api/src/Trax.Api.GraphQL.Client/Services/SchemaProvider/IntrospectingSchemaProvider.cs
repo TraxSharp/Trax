@@ -92,6 +92,8 @@ public class IntrospectingSchemaProvider : ISchemaProvider
 
     private static readonly JsonSerializerOptions IntrospectionParseOptions = new()
     {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
         PropertyNameCaseInsensitive = true,
         Converters = { new JsonStringEnumConverter() },
     };

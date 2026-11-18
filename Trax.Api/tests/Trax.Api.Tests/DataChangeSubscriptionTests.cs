@@ -53,7 +53,8 @@ public class DataChangeSubscriptionTests
         _provider = services.BuildServiceProvider();
         return await _provider
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -98,7 +99,7 @@ public class DataChangeSubscriptionTests
         );
         var reader = Task.Run(async () =>
         {
-            await foreach (var item in stream.ReadResultsAsync())
+            await foreach (var item in stream.ReadResultsAsync().ConfigureAwait(false))
             {
                 received.TrySetResult(item);
                 break;

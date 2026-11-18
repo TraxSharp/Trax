@@ -141,7 +141,7 @@ public class TypeModuleRegistrationTests
 
     #region Stubs
 
-    private class StubTypeModuleA : TypeModule
+    private sealed class StubTypeModuleA : TypeModule
     {
         public override ValueTask<IReadOnlyCollection<ITypeSystemMember>> CreateTypesAsync(
             IDescriptorContext context,
@@ -149,7 +149,7 @@ public class TypeModuleRegistrationTests
         ) => new(Array.Empty<ITypeSystemMember>());
     }
 
-    private class StubTypeModuleB : TypeModule
+    private sealed class StubTypeModuleB : TypeModule
     {
         public override ValueTask<IReadOnlyCollection<ITypeSystemMember>> CreateTypesAsync(
             IDescriptorContext context,

@@ -65,7 +65,8 @@ public class TraxGraphQLAuthPolicyValidatorTests
             sp.GetRequiredService<IAuthorizationPolicyProvider>()
         );
 
-        var act = async () => await validator.StartAsync(CancellationToken.None);
+        var act = async () =>
+            await validator.StartAsync(CancellationToken.None).ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -100,7 +101,8 @@ public class TraxGraphQLAuthPolicyValidatorTests
             sp.GetRequiredService<IAuthorizationPolicyProvider>()
         );
 
-        var act = async () => await validator.StartAsync(CancellationToken.None);
+        var act = async () =>
+            await validator.StartAsync(CancellationToken.None).ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()

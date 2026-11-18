@@ -119,8 +119,14 @@ public class KeyedStartupValidationTests
             .BelongsTo(typeof(KeyedPlayersProbeRequest), TraxKey)
             .Should()
             .BeFalse();
-        GraphQLClientAttribute.BelongsTo(typeof(KeyedPlayersProbeRequest), null).Should().BeFalse();
-        GraphQLClientAttribute.BelongsTo(typeof(UnmarkedProbeRequest), null).Should().BeTrue();
+        GraphQLClientAttribute
+            .BelongsTo(typeof(KeyedPlayersProbeRequest), serviceKey: null)
+            .Should()
+            .BeFalse();
+        GraphQLClientAttribute
+            .BelongsTo(typeof(UnmarkedProbeRequest), serviceKey: null)
+            .Should()
+            .BeTrue();
         GraphQLClientAttribute
             .BelongsTo(typeof(UnmarkedProbeRequest), PlayersKey)
             .Should()

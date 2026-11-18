@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using Terminal.Gui.Input;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
@@ -38,7 +39,7 @@ internal sealed class RunTraceWindow : Window
         _context = context;
         _run = run;
         _open = CancellationTokenSource.CreateLinkedTokenSource(context.Closed);
-        Title = $"Run {run}";
+        Title = string.Create(CultureInfo.InvariantCulture, $"Run {run}");
         _header = new Label { Width = Dim.Fill(), Text = "Reading..." };
         _cut = new Label
         {
@@ -139,7 +140,7 @@ internal sealed class RunTraceWindow : Window
             (TraceKind.Decision, "decisions"),
             (TraceKind.Log, "log lines"),
         }
-            .Where(part => read.Count(e => e.Kind == part.Item1) >= RunTrace.Take)
+            .Where(part => read.Where(e => e.Kind == part.Item1).Skip(499).Any())
             .Select(part => part.Item2)
             .ToArray();
         _cut.Visible = cut.Length > 0;
@@ -167,7 +168,7 @@ internal sealed class RunTraceWindow : Window
     // log.
     private void Place(TraceEntry step)
     {
-        var at = _entries.FindIndex(e => e.Key == step.Key);
+        var at = _entries.FindIndex(e => string.Equals(e.Key, step.Key, StringComparison.Ordinal));
         if (at >= 0)
             _entries[at] = TraceEntry.Newest(_entries[at], step);
         else
@@ -201,12 +202,16 @@ internal sealed class RunTraceWindow : Window
 
     private bool OnKey(Key key)
     {
-        if (Ui.Typed(key) == "q")
+        if (string.Equals(Ui.Typed(key), "q", StringComparison.Ordinal))
         {
             RequestStop();
             return true;
         }
-        if (Ui.Typed(key) != "o" || _lines.SelectedItem is not { } index || index >= _entries.Count)
+        if (
+            !string.Equals(Ui.Typed(key), "o", StringComparison.Ordinal)
+            || _lines.SelectedItem is not { } index
+            || index >= _entries.Count
+        )
             return false;
         var entry = _entries[index];
         if (entry.Kind != TraceKind.Step || entry.Json?["name"]?.GetValue<string>() is not { } name)

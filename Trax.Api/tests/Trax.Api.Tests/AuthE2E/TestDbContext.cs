@@ -63,7 +63,8 @@ public class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(
         {
             db.Database.ExecuteSqlRaw(db.Database.GenerateCreateScript());
         }
-        catch (Npgsql.PostgresException ex) when (ex.SqlState == "42P07")
+        catch (Npgsql.PostgresException ex)
+            when (string.Equals(ex.SqlState, "42P07", StringComparison.Ordinal))
         {
             // Table already exists — ignore.
         }

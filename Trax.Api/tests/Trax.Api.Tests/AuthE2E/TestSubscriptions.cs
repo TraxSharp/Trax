@@ -47,8 +47,12 @@ public sealed class TestSubscriptions
     {
         // Through the gate Trax's own subscriptions use: ten sockets subscribing together would
         // otherwise lose one to HotChocolate's topic, as they did here before.
-        var stream = await TopicSubscribe.OneAtATimeAsync<string>(receiver, TopicName, ct);
-        await foreach (var msg in stream.ReadEventsAsync().WithCancellation(ct))
+        var stream = await TopicSubscribe
+            .OneAtATimeAsync<string>(receiver, TopicName, ct)
+            .ConfigureAwait(false);
+        await foreach (
+            var msg in stream.ReadEventsAsync().WithCancellation(ct).ConfigureAwait(false)
+        )
             yield return msg;
     }
 }
@@ -69,7 +73,7 @@ public sealed class TestMutations
         System.Threading.CancellationToken ct
     )
     {
-        await sender.SendAsync(TestSubscriptions.TopicName, tag, ct);
+        await sender.SendAsync(TestSubscriptions.TopicName, tag, ct).ConfigureAwait(false);
         return true;
     }
 }

@@ -198,7 +198,7 @@ public class EntityKeyResolverTests
         public string Slug { get; set; } = "";
     }
 
-    private sealed class Empty;
+    private static class Empty;
 
     private sealed class PrivateId
     {

@@ -102,7 +102,9 @@ internal static class ConsoleCommandLine
                     () => Target(p),
                     p.GetValue(anyVersion),
                     async (session, version) =>
-                        await ConsoleApp.RunAsync(session, version, p.GetValue(verticalGraphs), ct),
+                        await ConsoleApp
+                            .RunAsync(session, version, p.GetValue(verticalGraphs), ct)
+                            .ConfigureAwait(false),
                     ct
                 )
         );
@@ -394,12 +396,12 @@ internal static class ConsoleCommandLine
             error.WriteLine(TerminalText.Block(ex.Message));
             return Usage;
         }
-        await using (session)
+        await using (session.ConfigureAwait(false))
         {
             VersionCheck version;
             try
             {
-                version = await session.CheckVersionAsync(ct);
+                version = await session.CheckVersionAsync(ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -422,7 +424,7 @@ internal static class ConsoleCommandLine
             }
             try
             {
-                return await command(session, version);
+                return await command(session, version).ConfigureAwait(false);
             }
             catch (InvalidOperationException ex)
             {
@@ -437,7 +439,7 @@ internal static class ConsoleCommandLine
         var filters = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var pair in where ?? [])
         {
-            var at = pair.IndexOf('=');
+            var at = pair.IndexOf('=', StringComparison.Ordinal);
             if (at <= 0)
                 throw new InvalidOperationException($"--where '{pair}' is not name=value.");
             filters[pair[..at].Trim()] = pair[(at + 1)..];

@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Globalization;
 using AwesomeAssertions;
 using HotChocolate.Types;
 using Microsoft.EntityFrameworkCore;
@@ -603,7 +604,7 @@ public class QueryModelTypeModuleTests
 
     #region Stubs
 
-    private class StubDiscoveryService(
+    private sealed class StubDiscoveryService(
         IReadOnlyList<Trax.Mediator.Services.TrainDiscovery.TrainRegistration> registrations
     ) : Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService
     {
@@ -613,7 +614,7 @@ public class QueryModelTypeModuleTests
 
     private interface IStubTrain;
 
-    private class StubTrain;
+    private static class StubTrain;
 
     #endregion
 }
@@ -703,7 +704,7 @@ public class ExplicitEntity
     public string DisplayName { get; set; } = "";
 
     [NotMapped]
-    public string ComputedAlias => $"Entity-{Id}";
+    public string ComputedAlias => string.Create(CultureInfo.InvariantCulture, $"Entity-{Id}");
 
     public string NonColumnProp { get; set; } = "";
 

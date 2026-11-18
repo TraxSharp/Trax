@@ -42,7 +42,7 @@ public class RabbitMqBroadcasterTests
         new()
         {
             ContentType = "application/json",
-            Headers = new Dictionary<string, object?>
+            Headers = new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 [InvalidationMessageSignature.Header] = InvalidationMessageSignature.Create(
                     TestInvalidationKey.Value,
@@ -104,7 +104,7 @@ public class RabbitMqBroadcasterTests
         {
             await publisher.PublishAsync(
                 new PersistedOperationChangedMessage(
-                    null,
+                    TenantKey: null,
                     receivedKey,
                     PersistedOperationChangeType.Upsert,
                     DateTime.UtcNow
@@ -116,7 +116,10 @@ public class RabbitMqBroadcasterTests
             // bound to the shared fanout; it sees every message but we only
             // assert on the one matching our unique id.
             var saw = await WaitUntilAsync(
-                () => cache.Invalidations.Any(p => p.Id == receivedKey),
+                () =>
+                    cache.Invalidations.Exists(p =>
+                        string.Equals(p.Id, receivedKey, StringComparison.Ordinal)
+                    ),
                 TimeSpan.FromSeconds(10)
             );
             saw.Should().BeTrue("the receiver should observe the published invalidation");
@@ -142,7 +145,7 @@ public class RabbitMqBroadcasterTests
 
         await publisher.PublishAsync(
             new PersistedOperationChangedMessage(
-                null,
+                TenantKey: null,
                 $"confirm_{Guid.NewGuid():N}",
                 PersistedOperationChangeType.Upsert,
                 DateTime.UtcNow
@@ -169,14 +172,14 @@ public class RabbitMqBroadcasterTests
             NullLogger<RabbitMqPersistedOperationBroadcaster>.Instance
         );
         var message = new PersistedOperationChangedMessage(
-            null,
+            TenantKey: null,
             $"reopen_{Guid.NewGuid():N}",
             PersistedOperationChangeType.Upsert,
             DateTime.UtcNow
         );
         await publisher.PublishAsync(message, CancellationToken.None);
         var first = publisher.Channel!;
-        await first.CloseAsync();
+        await first.CloseAsync(cancellationToken: CancellationToken.None);
 
         await publisher.PublishAsync(message, CancellationToken.None);
 
@@ -198,7 +201,7 @@ public class RabbitMqBroadcasterTests
         var act = () =>
             publisher.PublishAsync(
                 new PersistedOperationChangedMessage(
-                    null,
+                    TenantKey: null,
                     "unreachable",
                     PersistedOperationChangeType.Upsert,
                     DateTime.UtcNow
@@ -247,7 +250,7 @@ public class RabbitMqBroadcasterTests
         {
             await publisher.PublishAsync(
                 new PersistedOperationChangedMessage(
-                    null,
+                    TenantKey: null,
                     key,
                     PersistedOperationChangeType.Upsert,
                     DateTime.UtcNow
@@ -256,11 +259,17 @@ public class RabbitMqBroadcasterTests
             );
 
             var sawA = await WaitUntilAsync(
-                () => cacheA.Invalidations.Any(p => p.Id == key),
+                () =>
+                    cacheA.Invalidations.Exists(p =>
+                        string.Equals(p.Id, key, StringComparison.Ordinal)
+                    ),
                 TimeSpan.FromSeconds(10)
             );
             var sawB = await WaitUntilAsync(
-                () => cacheB.Invalidations.Any(p => p.Id == key),
+                () =>
+                    cacheB.Invalidations.Exists(p =>
+                        string.Equals(p.Id, key, StringComparison.Ordinal)
+                    ),
                 TimeSpan.FromSeconds(10)
             );
 
@@ -299,14 +308,19 @@ public class RabbitMqBroadcasterTests
         {
             var factory = new ConnectionFactory { Uri = new Uri(AmqpUri) };
             await using (var connection = await factory.CreateConnectionAsync())
-            await using (var channel = await connection.CreateChannelAsync())
+            await using (
+                var channel = await connection.CreateChannelAsync(
+                    cancellationToken: CancellationToken.None
+                )
+            )
             {
                 await channel.BasicPublishAsync(
                     options.RabbitMqExchange,
                     string.Empty,
                     mandatory: false,
                     new BasicProperties(),
-                    Body(unsigned)
+                    Body(unsigned),
+                    cancellationToken: CancellationToken.None
                 );
                 var otherKey = "another-key-of-thirty-two-bytes!"u8.ToArray();
                 await channel.BasicPublishAsync(
@@ -315,7 +329,7 @@ public class RabbitMqBroadcasterTests
                     mandatory: false,
                     new BasicProperties
                     {
-                        Headers = new Dictionary<string, object?>
+                        Headers = new Dictionary<string, object?>(StringComparer.Ordinal)
                         {
                             [InvalidationMessageSignature.Header] =
                                 InvalidationMessageSignature.Create(
@@ -326,7 +340,8 @@ public class RabbitMqBroadcasterTests
                                 ),
                         },
                     },
-                    Body(forged)
+                    Body(forged),
+                    cancellationToken: CancellationToken.None
                 );
             }
 
@@ -338,7 +353,10 @@ public class RabbitMqBroadcasterTests
 
             (
                 await WaitUntilAsync(
-                    () => cache.Invalidations.Any(p => p.Id == sentinel),
+                    () =>
+                        cache.Invalidations.Exists(p =>
+                            string.Equals(p.Id, sentinel, StringComparison.Ordinal)
+                        ),
                     TimeSpan.FromSeconds(10)
                 )
             )
@@ -358,7 +376,7 @@ public class RabbitMqBroadcasterTests
         }
 
         static PersistedOperationChangedMessage Change(string id) =>
-            new(null, id, PersistedOperationChangeType.Upsert, DateTime.UtcNow);
+            new(TenantKey: null, id, PersistedOperationChangeType.Upsert, DateTime.UtcNow);
 
         static byte[] Body(string id) =>
             System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(Change(id));
@@ -409,7 +427,7 @@ public class RabbitMqBroadcasterTests
             foreach (var id in new[] { key, sentinel })
                 await publisher.PublishAsync(
                     new PersistedOperationChangedMessage(
-                        null,
+                        TenantKey: null,
                         id,
                         PersistedOperationChangeType.Upsert,
                         DateTime.UtcNow
@@ -419,7 +437,10 @@ public class RabbitMqBroadcasterTests
 
             (
                 await WaitUntilAsync(
-                    () => liveCache.Invalidations.Any(p => p.Id == sentinel),
+                    () =>
+                        liveCache.Invalidations.Exists(p =>
+                            string.Equals(p.Id, sentinel, StringComparison.Ordinal)
+                        ),
                     TimeSpan.FromSeconds(10)
                 )
             )
@@ -489,7 +510,7 @@ public class RabbitMqBroadcasterTests
                         publisher
                             .PublishAsync(
                                 new PersistedOperationChangedMessage(
-                                    null,
+                                    TenantKey: null,
                                     id,
                                     PersistedOperationChangeType.Upsert,
                                     DateTime.UtcNow
@@ -505,7 +526,9 @@ public class RabbitMqBroadcasterTests
                         // queue while it is being deleted. Not yet resubscribed: try again.
                         return false;
                     }
-                    return cache.Invalidations.Any(p => p.Id == id);
+                    return cache.Invalidations.Exists(p =>
+                        string.Equals(p.Id, id, StringComparison.Ordinal)
+                    );
                 },
                 TimeSpan.FromSeconds(15)
             );
@@ -565,12 +588,15 @@ public class RabbitMqBroadcasterTests
 
         var factory = new RabbitMQ.Client.ConnectionFactory { Uri = new Uri(AmqpUri) };
         await using var conn = await factory.CreateConnectionAsync();
-        await using var channel = await conn.CreateChannelAsync();
+        await using var channel = await conn.CreateChannelAsync(
+            cancellationToken: CancellationToken.None
+        );
         await channel.ExchangeDeclareAsync(
             exchange: _exchange,
             type: RabbitMQ.Client.ExchangeType.Fanout,
             durable: true,
-            autoDelete: false
+            autoDelete: false,
+            cancellationToken: CancellationToken.None
         );
         await channel.BasicPublishAsync(
             exchange: _exchange,
@@ -586,7 +612,7 @@ public class RabbitMqBroadcasterTests
         var sentinel = $"sentinel_{Guid.NewGuid():N}";
         var sentinelBody = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(
             new PersistedOperationChangedMessage(
-                null,
+                TenantKey: null,
                 sentinel,
                 PersistedOperationChangeType.Upsert,
                 DateTime.UtcNow
@@ -602,7 +628,10 @@ public class RabbitMqBroadcasterTests
         );
         (
             await WaitUntilAsync(
-                () => cache.Invalidations.Any(p => p.Id == sentinel),
+                () =>
+                    cache.Invalidations.Exists(p =>
+                        string.Equals(p.Id, sentinel, StringComparison.Ordinal)
+                    ),
                 TimeSpan.FromSeconds(10)
             )
         )
@@ -653,7 +682,7 @@ public class RabbitMqBroadcasterTests
             if (condition())
                 return true;
             // determinism: the poll interval of a wait bounded by the deadline above.
-            await Task.Delay(50);
+            await Task.Delay(50).ConfigureAwait(false);
         }
         return condition();
     }

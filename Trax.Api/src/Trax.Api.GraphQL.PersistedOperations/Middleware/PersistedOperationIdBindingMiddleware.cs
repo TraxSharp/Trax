@@ -76,7 +76,7 @@ internal static class PersistedOperationIdBindingMiddleware
             ImmutableList.Create(
                 ErrorBuilder.New().SetMessage(ErrorMessage).SetCode(ErrorCode).Build()
             ),
-            null
+            extensions: null
         )
         {
             ContextData = ImmutableDictionary<string, object?>.Empty.Add(

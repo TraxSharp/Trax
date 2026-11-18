@@ -30,7 +30,7 @@ internal sealed class PersistedOperationStoreGateValidator(
                 continue;
 
             var declared = Describe(store.ManagementGate);
-            if (declared == graphql)
+            if (string.Equals(declared, graphql, StringComparison.Ordinal))
                 continue;
 
             throw new InvalidOperationException(
@@ -51,7 +51,7 @@ internal sealed class PersistedOperationStoreGateValidator(
         AuthorizeDirectives.ExtractRules(gate, out var policies, out var roleSets);
         var requirements = policies
             .Select(p => $"policy '{p}'")
-            .Concat(roleSets.Select(r => $"roles '{string.Join(",", r)}'"))
+            .Concat(roleSets.Select(r => $"roles '{string.Join(',', r)}'"))
             .Order(StringComparer.Ordinal)
             .ToList();
         return requirements.Count == 0

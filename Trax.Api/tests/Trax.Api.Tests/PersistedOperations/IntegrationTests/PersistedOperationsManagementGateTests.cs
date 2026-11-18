@@ -369,7 +369,7 @@ public class PersistedOperationsManagementGateTests
                 await using var scope = app.Services.CreateAsyncScope();
                 var gate = await scope
                     .ServiceProvider.GetRequiredService<IPersistedOperationsManagementGate>()
-                    .AllowsAsync(principal);
+                    .AllowsAsync(principal, ct: CancellationToken.None);
 
                 // What the console asks to decide whether to show the management pages.
                 var console = CanManageOf(await PostAsPrincipalAsync(app, name, CanManage));
@@ -442,7 +442,9 @@ public class PersistedOperationsManagementGateTests
     private const string ClaimPolicy = "HoldsCanManage";
     private const string PrincipalHeader = "X-Test-Principal";
 
-    private static readonly Dictionary<string, ClaimsPrincipal> Principals = new()
+    private static readonly Dictionary<string, ClaimsPrincipal> Principals = new(
+        StringComparer.Ordinal
+    )
     {
         ["deployer"] = Authenticated(new Claim(ClaimTypes.Role, "Deployer")),
         ["reader"] = Authenticated(new Claim(ClaimTypes.Role, "Reader")),
@@ -499,8 +501,14 @@ public class PersistedOperationsManagementGateTests
         };
         request.Headers.Add(PrincipalHeader, principal);
 
-        var response = await app.GetTestClient().SendAsync(request);
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var response = await app.GetTestClient()
+            .SendAsync(request, cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
+        return JsonDocument.Parse(
+            await response
+                .Content.ReadAsStringAsync(cancellationToken: CancellationToken.None)
+                .ConfigureAwait(false)
+        );
     }
 
     // Built with a descriptor rather than [ExtendObjectType], so an assembly scan does not pick it up.
@@ -520,9 +528,9 @@ public class PersistedOperationsManagementGateTests
     }
 
     private static Dictionary<string, object?> UploadVariables(string id) =>
-        new()
+        new(StringComparer.Ordinal)
         {
-            ["input"] = new Dictionary<string, object?>
+            ["input"] = new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 ["id"] = id,
                 ["document"] = GraphQLFixture.ValidDocument,
@@ -582,7 +590,7 @@ public class PersistedOperationsManagementGateTests
                 .AddTypeExtension<GraphQLFixture.HelloQuery>()
                 .UsePersistedOperations(po =>
                 {
-                    po.RequirePersisted(false).LogNonPersistedRequests(true);
+                    po.RequirePersisted(require: false).LogNonPersistedRequests(log: true);
                     persisted(po);
                 })
         );
@@ -608,11 +616,11 @@ public class PersistedOperationsManagementGateTests
         app.UseTraxGraphQL();
         try
         {
-            await app.StartAsync();
+            await app.StartAsync(cancellationToken: CancellationToken.None).ConfigureAwait(false);
         }
         catch
         {
-            await app.DisposeAsync();
+            await app.DisposeAsync().ConfigureAwait(false);
             throw;
         }
         return app;
@@ -621,7 +629,7 @@ public class PersistedOperationsManagementGateTests
     private static Task<IRequestExecutor> ExecutorAsync(WebApplication app) =>
         app
             .Services.GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax")
+            .GetExecutorAsync("trax", cancellationToken: CancellationToken.None)
             .AsTask();
 
     private static async Task<JsonDocument> PostAsync(
@@ -638,8 +646,14 @@ public class PersistedOperationsManagementGateTests
         if (apiKey is not null)
             request.Headers.Add("X-Api-Key", apiKey);
 
-        var response = await app.GetTestClient().SendAsync(request);
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var response = await app.GetTestClient()
+            .SendAsync(request, cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
+        return JsonDocument.Parse(
+            await response
+                .Content.ReadAsStringAsync(cancellationToken: CancellationToken.None)
+                .ConfigureAwait(false)
+        );
     }
 
     // operations.config.canManagePersistedOperations, from an answer that carries no error.
@@ -663,6 +677,6 @@ public class PersistedOperationsManagementGateTests
             .Any(e =>
                 e.TryGetProperty("extensions", out var ext)
                 && ext.TryGetProperty("code", out var c)
-                && c.GetString() == code
+                && string.Equals(c.GetString(), code, StringComparison.Ordinal)
             );
 }

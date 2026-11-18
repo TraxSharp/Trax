@@ -87,7 +87,7 @@ public class SensitiveInputCopiesTests
 
     private static bool IsMarker(JsonElement element) =>
         element.ValueKind == JsonValueKind.Object
-        && element.EnumerateObject().Count() == 1
+        && element.EnumerateObject().Take(2).Count() == 1
         && element.TryGetProperty("_redacted", out var flag)
         && flag.ValueKind == JsonValueKind.True;
 
@@ -221,7 +221,8 @@ public class SensitiveInputCopiesTests
     )
     {
         long id;
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
             var entry = WorkQueue.Create(
                 new CreateWorkQueue
@@ -231,18 +232,21 @@ public class SensitiveInputCopiesTests
                     InputTypeName = typeName ?? inputType.FullName,
                 }
             );
-            await db.Track(entry);
-            await db.SaveChanges(default);
+            await db.Track(entry).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
             id = entry.Id;
         }
 
-        return (await new WorkQueueQueries().GetDetail(id, Operations, default))!.Input;
+        return (
+            await new WorkQueueQueries().GetDetail(id, Operations, default).ConfigureAwait(false)
+        )!.Input;
     }
 
     private async Task<string?> ReadManifestProperties(string json, Type inputType)
     {
         long id;
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
             var group = new ManifestGroup
             {
@@ -250,19 +254,21 @@ public class SensitiveInputCopiesTests
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow,
             };
-            await db.Track(group);
-            await db.SaveChanges(default);
+            await db.Track(group).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
             var manifest = Manifest.Create(new CreateManifest { Name = typeof(PaymentTrain) });
             manifest.ManifestGroupId = group.Id;
             manifest.PropertyTypeName = inputType.FullName;
             manifest.Properties = json;
-            await db.Track(manifest);
-            await db.SaveChanges(default);
+            await db.Track(manifest).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
             id = manifest.Id;
         }
 
         return (
-            await new OperationsQueries().GetManifestDetail(id, _factory, _discovery, default)
+            await new OperationsQueries()
+                .GetManifestDetail(id, _factory, _discovery, default)
+                .ConfigureAwait(false)
         )!.Properties;
     }
 

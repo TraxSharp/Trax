@@ -37,12 +37,15 @@ internal sealed class DashboardResponseHeaders(DashboardEndpointMetadata endpoin
         DiagnosticListener listener,
         DashboardEndpointMetadata endpoint
     ) =>
-        listener.Subscribe(new DashboardResponseHeaders(endpoint), name => name == EndpointMatched);
+        listener.Subscribe(
+            new DashboardResponseHeaders(endpoint),
+            name => string.Equals(name, EndpointMatched, StringComparison.Ordinal)
+        );
 
     public void OnNext(KeyValuePair<string, object?> value)
     {
         if (
-            value.Key == EndpointMatched
+            string.Equals(value.Key, EndpointMatched, StringComparison.Ordinal)
             && value.Value is HttpContext context
             && ReferenceEquals(
                 context.GetEndpoint()?.Metadata.GetMetadata<DashboardEndpointMetadata>(),

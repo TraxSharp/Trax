@@ -35,7 +35,7 @@ public class ManifestGroupQueries
         take = OperationsPageBounds.Take(take);
         skip = OperationsPageBounds.Skip(skip);
 
-        using var db = await dataContextFactory.CreateDbContextAsync(ct);
+        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
 
         IQueryable<Effect.Models.ManifestGroup.ManifestGroup> baseQuery = db
             .ManifestGroups.AsNoTracking()
@@ -47,14 +47,16 @@ public class ManifestGroupQueries
         var hasFilter = !string.IsNullOrWhiteSpace(nameContains);
 
         var (totalCount, isEstimate) = hasFilter
-            ? (await baseQuery.CountAsync(ct), false)
-            : await CountEstimator.EstimateOrCountAsync(
-                db,
-                sqlDialect,
-                "manifest_group",
-                () => baseQuery.CountAsync(ct),
-                ct
-            );
+            ? (await baseQuery.CountAsync(ct).ConfigureAwait(false), false)
+            : await CountEstimator
+                .EstimateOrCountAsync(
+                    db,
+                    sqlDialect,
+                    "manifest_group",
+                    () => baseQuery.CountAsync(ct),
+                    ct
+                )
+                .ConfigureAwait(false);
 
         var query = afterId.HasValue ? baseQuery.Where(g => g.Id < afterId.Value) : baseQuery;
 
@@ -72,7 +74,8 @@ public class ManifestGroupQueries
                 g.CreatedAt,
                 g.UpdatedAt
             ))
-            .ToListAsync(ct);
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
 
         var nextCursor = items.Count > 0 ? items[^1].Id : (long?)null;
 
@@ -87,7 +90,7 @@ public class ManifestGroupQueries
     }
 
     /// <summary>
-    /// Single-group lookup by id. Returns <c>null</c> when the group does not exist.
+    /// Single-group lookup by id. Returns <see langword="null"/> when the group does not exist.
     /// Required by the dashboard's group detail page so it can pre-populate the
     /// <c>maxActiveJobs</c>, <c>priority</c>, and <c>isEnabled</c> form before the
     /// operator submits a patch.
@@ -98,7 +101,7 @@ public class ManifestGroupQueries
         CancellationToken ct
     )
     {
-        using var db = await dataContextFactory.CreateDbContextAsync(ct);
+        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
 
         return await db
             .ManifestGroups.AsNoTracking()
@@ -112,7 +115,8 @@ public class ManifestGroupQueries
                 g.CreatedAt,
                 g.UpdatedAt
             ))
-            .FirstOrDefaultAsync(ct);
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -142,7 +146,9 @@ public class ManifestGroupQueries
                     .Build()
             );
 
-        var stats = await operationsService.GetManifestGroupExecutionStatsAsync(ids, ct);
+        var stats = await operationsService
+            .GetManifestGroupExecutionStatsAsync(ids, ct)
+            .ConfigureAwait(false);
 
         return stats
             .Select(s => new ManifestGroupStats(
@@ -161,7 +167,7 @@ public class ManifestGroupQueries
     }
 
     /// <summary>
-    /// Returns the dependency graph for the given group, or <c>null</c> if the group
+    /// Returns the dependency graph for the given group, or <see langword="null"/> if the group
     /// does not exist. Empty groups still return a single-node graph (the focal group)
     /// so the UI can render it.
     /// </summary>
@@ -171,7 +177,9 @@ public class ManifestGroupQueries
         CancellationToken ct
     )
     {
-        return await operationsService.GetManifestGroupDependencyGraphAsync(groupId, ct);
+        return await operationsService
+            .GetManifestGroupDependencyGraphAsync(groupId, ct)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -184,6 +192,6 @@ public class ManifestGroupQueries
         CancellationToken ct
     )
     {
-        return await operationsService.GetGlobalManifestGroupGraphAsync(ct);
+        return await operationsService.GetGlobalManifestGroupGraphAsync(ct).ConfigureAwait(false);
     }
 }

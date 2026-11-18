@@ -74,7 +74,7 @@ internal sealed class TerminalHarness : IAsyncDisposable
             Name = "terminal-harness",
         };
         loop.Start();
-        var window = await started.Task.WaitAsync(Deadline);
+        var window = await started.Task.WaitAsync(Deadline).ConfigureAwait(false);
         return (new TerminalHarness(app, time, loop, stopped.Task), window);
     }
 
@@ -101,7 +101,7 @@ internal sealed class TerminalHarness : IAsyncDisposable
                 done.TrySetException(ex);
             }
         });
-        return await done.Task.WaitAsync(Deadline);
+        return await done.Task.WaitAsync(Deadline).ConfigureAwait(false);
     }
 
     /// <summary>Presses <paramref name="key"/> and waits until the UI thread has handled it.</summary>
@@ -111,11 +111,11 @@ internal sealed class TerminalHarness : IAsyncDisposable
     public Task<string> Screen() =>
         OnUi(() =>
         {
-            App.LayoutAndDraw(true);
+            App.LayoutAndDraw(forceRedraw: true);
             var driver = App.Driver!;
             var cells = driver.Contents!;
             return string.Join(
-                "\n",
+                '\n',
                 Enumerable
                     .Range(0, driver.Rows)
                     .Select(r =>
@@ -135,7 +135,7 @@ internal sealed class TerminalHarness : IAsyncDisposable
     public async Task Until(Func<bool> condition, string because)
     {
         var clock = Stopwatch.StartNew();
-        while (!await OnUi(condition))
+        while (!await OnUi(condition).ConfigureAwait(false))
             if (clock.Elapsed > Deadline)
                 Assert.Fail($"Timed out waiting until {because}.");
     }
@@ -144,9 +144,11 @@ internal sealed class TerminalHarness : IAsyncDisposable
     public async Task UntilShown(string text)
     {
         var clock = Stopwatch.StartNew();
-        while (!(await Screen()).Contains(text, StringComparison.Ordinal))
+        while (!(await Screen().ConfigureAwait(false)).Contains(text, StringComparison.Ordinal))
             if (clock.Elapsed > Deadline)
-                Assert.Fail($"Timed out waiting for '{text}' on the screen:\n{await Screen()}");
+                Assert.Fail(
+                    $"Timed out waiting for '{text}' on the screen:\n{await Screen().ConfigureAwait(false)}"
+                );
     }
 
     public async ValueTask DisposeAsync()
@@ -154,7 +156,7 @@ internal sealed class TerminalHarness : IAsyncDisposable
         try
         {
             if (!Stopped.IsCompleted)
-                await OnUi(() => App.RequestStop());
+                await OnUi(() => App.RequestStop()).ConfigureAwait(false);
         }
         catch (TimeoutException)
         {

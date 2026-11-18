@@ -1,3 +1,4 @@
+using System.Globalization;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.EffectJunction;
@@ -40,7 +41,9 @@ public class CountY : EffectJunction<MarkerInput, YCount>
 public class JoinScores : EffectJunction<(LeftScore, RightScore), string>
 {
     public override Task<string> Run((LeftScore, RightScore) input) =>
-        Task.FromResult($"{input.Item1.Value}+{input.Item2.Value}");
+        Task.FromResult(
+            string.Create(CultureInfo.InvariantCulture, $"{input.Item1.Value}+{input.Item2.Value}")
+        );
 }
 
 public interface IParallelMarkerTrain : IServiceTrain<MarkerInput, string>;

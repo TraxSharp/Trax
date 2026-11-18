@@ -27,26 +27,25 @@ public class InMemoryRefreshTokenStoreTests
     }
 
     [Test]
-    public void IssueAsync_EmptyClientId_Throws()
+    public async Task IssueAsync_EmptyClientId_Throws()
     {
         var store = new InMemoryRefreshTokenStore();
         Func<Task> act = async () =>
-            await store.IssueAsync(
-                Guid.NewGuid(),
-                "",
-                TimeSpan.FromHours(1),
-                CancellationToken.None
-            );
-        act.Should().ThrowAsync<ArgumentException>();
+            await store
+                .IssueAsync(Guid.NewGuid(), "", TimeSpan.FromHours(1), CancellationToken.None)
+                .ConfigureAwait(false);
+        await act.Should().ThrowAsync<ArgumentException>();
     }
 
     [Test]
-    public void IssueAsync_ZeroLifetime_Throws()
+    public async Task IssueAsync_ZeroLifetime_Throws()
     {
         var store = new InMemoryRefreshTokenStore();
         Func<Task> act = async () =>
-            await store.IssueAsync(Guid.NewGuid(), ClientId, TimeSpan.Zero, CancellationToken.None);
-        act.Should().ThrowAsync<ArgumentOutOfRangeException>();
+            await store
+                .IssueAsync(Guid.NewGuid(), ClientId, TimeSpan.Zero, CancellationToken.None)
+                .ConfigureAwait(false);
+        await act.Should().ThrowAsync<ArgumentOutOfRangeException>();
     }
 
     [Test]
@@ -274,7 +273,8 @@ public class InMemoryRefreshTokenStoreTests
     public async Task RevokeAsync_UnknownToken_NoThrow()
     {
         var store = new InMemoryRefreshTokenStore();
-        Func<Task> act = async () => await store.RevokeAsync("not-issued", CancellationToken.None);
+        Func<Task> act = async () =>
+            await store.RevokeAsync("not-issued", CancellationToken.None).ConfigureAwait(false);
         await act.Should().NotThrowAsync();
     }
 
@@ -358,12 +358,14 @@ public class InMemoryRefreshTokenStoreTests
     }
 
     [Test]
-    public void RevokeAllAsync_EmptyClientId_Throws()
+    public async Task RevokeAllAsync_EmptyClientId_Throws()
     {
         var store = new InMemoryRefreshTokenStore();
         Func<Task> act = async () =>
-            await store.RevokeAllAsync(Guid.NewGuid(), "", CancellationToken.None);
-        act.Should().ThrowAsync<ArgumentException>();
+            await store
+                .RevokeAllAsync(Guid.NewGuid(), "", CancellationToken.None)
+                .ConfigureAwait(false);
+        await act.Should().ThrowAsync<ArgumentException>();
     }
 
     private sealed class FakeTimeProvider(DateTimeOffset start) : TimeProvider

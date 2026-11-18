@@ -296,7 +296,9 @@ public class MachineRulesE2ETests
     // The whole response, with the id asked for replaced, so two answers compare by shape and content alone.
     private async Task<string> ReadAs(string apiKey, Guid id)
     {
-        using var doc = await _host.PostAsync(WizardOps.Get(id), apiKey: apiKey);
+        using var doc = await _host
+            .PostAsync(WizardOps.Get(id), apiKey: apiKey)
+            .ConfigureAwait(false);
         return doc
             .RootElement.GetRawText()
             .Replace(id.ToString(), "<id>", StringComparison.Ordinal);

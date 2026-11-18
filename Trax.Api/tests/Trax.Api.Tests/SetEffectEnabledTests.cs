@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.DTOs;
@@ -17,9 +18,9 @@ namespace Trax.Api.Tests;
 [TestFixture]
 public class SetEffectEnabledTests
 {
-    private sealed class ToggleableFactory;
+    private static class ToggleableFactory;
 
-    private sealed class FixedFactory;
+    private static class FixedFactory;
 
     public sealed class SinkSettings
     {
@@ -69,7 +70,7 @@ public class SetEffectEnabledTests
     {
         var result = new OperationsMutations().SetEffectEnabled(
             typeof(ToggleableFactory).FullName!,
-            false,
+            enabled: false,
             _settings
         );
 
@@ -85,7 +86,7 @@ public class SetEffectEnabledTests
         _registry.Disable(typeof(ToggleableFactory));
 
         new OperationsMutations()
-            .SetEffectEnabled(typeof(ToggleableFactory).FullName!, true, _settings)
+            .SetEffectEnabled(typeof(ToggleableFactory).FullName!, enabled: true, _settings)
             .Success.Should()
             .BeTrue();
 
@@ -97,7 +98,7 @@ public class SetEffectEnabledTests
     {
         var result = new OperationsMutations().SetEffectEnabled(
             typeof(FixedFactory).FullName!,
-            false,
+            enabled: false,
             _settings
         );
 
@@ -111,7 +112,7 @@ public class SetEffectEnabledTests
     {
         var result = new OperationsMutations().SetEffectEnabled(
             "No.Such.Factory",
-            false,
+            enabled: false,
             _settings
         );
 
@@ -125,7 +126,7 @@ public class SetEffectEnabledTests
         new OperationsMutations()
             .SetEffectEnabled(
                 typeof(ToggleableFactory).FullName!.ToUpperInvariant(),
-                false,
+                enabled: false,
                 _settings
             )
             .Success.Should()
@@ -141,7 +142,7 @@ public class SetEffectEnabledTests
         new OperationsMutations()
             .SetEffectEnabled(
                 typeof(ToggleableFactory).FullName!,
-                false,
+                enabled: false,
                 new EffectSettingsService(empty)
             )
             .Success.Should()
@@ -197,7 +198,10 @@ public class SetEffectEnabledTests
     {
         var values = Enumerable
             .Range(0, 1001)
-            .Select(i => new EffectSettingValueInput($"S{i}", "1"))
+            .Select(i => new EffectSettingValueInput(
+                string.Create(CultureInfo.InvariantCulture, $"S{i}"),
+                "1"
+            ))
             .ToList();
 
         var result = new OperationsMutations().ConfigureEffect(

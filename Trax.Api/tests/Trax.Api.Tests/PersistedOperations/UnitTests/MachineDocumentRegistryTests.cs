@@ -38,18 +38,23 @@ public class MachineDocumentRegistryTests
         };
         registry.Publish(
             [new MachineDocument(OwnGet, "wizard", "get", "query { }", OwnHash)],
-            new Dictionary<string, int> { ["wizard"] = 2 },
+            new Dictionary<string, int>(StringComparer.Ordinal) { ["wizard"] = 2 },
             Stored((OwnGet, 2), (OldGet, 1))
         );
         return registry;
     }
 
     private static IReadOnlyDictionary<string, StoredMachineDocument> Empty() =>
-        new Dictionary<string, StoredMachineDocument>();
+        new Dictionary<string, StoredMachineDocument>(StringComparer.Ordinal);
 
     private static IReadOnlyDictionary<string, StoredMachineDocument> Stored(
         params (string Id, int Version)[] rows
-    ) => rows.ToDictionary(r => r.Id, r => new StoredMachineDocument(r.Version, true));
+    ) =>
+        rows.ToDictionary(
+            r => r.Id,
+            r => new StoredMachineDocument(r.Version, IsActive: true),
+            StringComparer.Ordinal
+        );
 
     private static Func<
         CancellationToken,
@@ -68,7 +73,7 @@ public class MachineDocumentRegistryTests
         var registry = Registry();
         registry.Publish(
             [new MachineDocument(OwnGet, "wizard", "get", "query { }", OwnHash)],
-            new Dictionary<string, int> { ["wizard"] = 2 },
+            new Dictionary<string, int>(StringComparer.Ordinal) { ["wizard"] = 2 },
             Stored((OwnGet, 2), (ledger, 1))
         );
 
@@ -98,12 +103,12 @@ public class MachineDocumentRegistryTests
                     "client document 'OrderCard'"
                 ),
             ],
-            new Dictionary<string, int> { ["trax_client_OrderCard"] = 3 },
-            new Dictionary<string, StoredMachineDocument>
+            new Dictionary<string, int>(StringComparer.Ordinal) { ["trax_client_OrderCard"] = 3 },
+            new Dictionary<string, StoredMachineDocument>(StringComparer.Ordinal)
             {
-                [own] = new(3, true),
-                [older] = new(2, true),
-                [collected] = new(1, false),
+                [own] = new(3, IsActive: true),
+                [older] = new(2, IsActive: true),
+                [collected] = new(1, IsActive: false),
             }
         );
 
@@ -137,11 +142,11 @@ public class MachineDocumentRegistryTests
         var registry = Registry();
         registry.Publish(
             [new MachineDocument(OwnGet, "wizard", "get", "query { }", OwnHash)],
-            new Dictionary<string, int> { ["wizard"] = 2 },
-            new Dictionary<string, StoredMachineDocument>
+            new Dictionary<string, int>(StringComparer.Ordinal) { ["wizard"] = 2 },
+            new Dictionary<string, StoredMachineDocument>(StringComparer.Ordinal)
             {
-                [OwnGet] = new(2, true),
-                [ledger] = new(1, false),
+                [OwnGet] = new(2, IsActive: true),
+                [ledger] = new(1, IsActive: false),
             }
         );
 
@@ -225,8 +230,10 @@ public class MachineDocumentRegistryTests
         )
         {
             // allowed-delay: polls the answer until the background read has run.
-            await Task.Delay(20);
-            verdict = await registry.ClassifyAsync(id, store, CancellationToken.None);
+            await Task.Delay(20).ConfigureAwait(false);
+            verdict = await registry
+                .ClassifyAsync(id, store, CancellationToken.None)
+                .ConfigureAwait(false);
         }
         return verdict;
     }
@@ -265,7 +272,7 @@ public class MachineDocumentRegistryTests
         > slowStore = async _ =>
         {
             Interlocked.Increment(ref reads);
-            await release.Task;
+            await release.Task.ConfigureAwait(false);
             return Empty();
         };
 

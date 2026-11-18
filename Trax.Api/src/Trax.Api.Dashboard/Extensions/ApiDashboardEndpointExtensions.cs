@@ -177,7 +177,7 @@ public static class ApiDashboardEndpointExtensions
             assets.IndexTemplate,
             routePrefix,
             DefaultGraphQLPath,
-            new Dictionary<string, string>()
+            new Dictionary<string, string>(StringComparer.Ordinal)
         );
 
         // The documents the app sends, for a host that runs persisted operations to register when it starts; it hands
@@ -233,7 +233,7 @@ public static class ApiDashboardEndpointExtensions
             new AuthorizeAttribute
             {
                 Policy = options.Policy,
-                Roles = options.Roles is null ? null : string.Join(",", options.Roles),
+                Roles = options.Roles is null ? null : string.Join(',', options.Roles),
             }
         );
         return builder;
@@ -280,7 +280,11 @@ public static class ApiDashboardEndpointExtensions
     {
         ArgumentNullException.ThrowIfNull(path);
         var trimmed = "/" + path.Trim().Trim('/');
-        if (trimmed == "/" || !IsLocalPath(trimmed) || trimmed.Contains('{'))
+        if (
+            string.Equals(trimmed, "/", StringComparison.Ordinal)
+            || !IsLocalPath(trimmed)
+            || trimmed.Contains('{', StringComparison.Ordinal)
+        )
             throw new ArgumentException(
                 $"'{path}' cannot be the dashboard's path: it needs a literal path of its own, "
                     + "such as /trax/dashboard, because everything under it is the app's.",
@@ -292,7 +296,7 @@ public static class ApiDashboardEndpointExtensions
     private static bool IsLocalPath(string path) =>
         path.StartsWith('/')
         && !path.StartsWith("//", StringComparison.Ordinal)
-        && !path.Contains('\\')
+        && !path.Contains('\\', StringComparison.Ordinal)
         && !path.Contains("://", StringComparison.Ordinal);
 
     private static void VerifyAuthorizationPosture(

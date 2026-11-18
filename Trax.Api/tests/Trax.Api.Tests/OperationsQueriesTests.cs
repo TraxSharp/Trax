@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -49,7 +50,10 @@ public class OperationsQueriesTests
     // contention. Pool Size=8 across the four test fixtures in this assembly
     // stays well under Postgres's default max_connections=100.
     private static readonly string ConnectionString =
-        $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_operations;Username=trax;Password=trax123;"
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_operations;Username=trax;Password=trax123;"
+        )
         + "Maximum Pool Size=8;Minimum Pool Size=0;Connection Idle Lifetime=30;"
         + "Timeout=30;Tcp Keepalive=true";
 
@@ -107,58 +111,70 @@ public class OperationsQueriesTests
 
     private async Task SeedManifests(int count, long? groupId = null)
     {
-        groupId ??= await SeedManifestGroup("default-group");
-        await using var db = await _factory.CreateDbContextAsync(default);
-        for (var i = 0; i < count; i++)
+        groupId ??= await SeedManifestGroup("default-group").ConfigureAwait(false);
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
-            var m = Manifest.Create(new CreateManifest { Name = typeof(SomeFakeTrain) });
-            m.IsEnabled = i % 2 == 0;
-            m.ManifestGroupId = groupId.Value;
-            await db.Track(m);
+            for (var i = 0; i < count; i++)
+            {
+                var m = Manifest.Create(new CreateManifest { Name = typeof(SomeFakeTrain) });
+                m.IsEnabled = i % 2 == 0;
+                m.ManifestGroupId = groupId.Value;
+                await db.Track(m).ConfigureAwait(false);
+            }
+            await db.SaveChanges(default).ConfigureAwait(false);
         }
-        await db.SaveChanges(default);
     }
 
     private async Task<long> SeedManifestGroup(string name = "test-group")
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var grp = new ManifestGroup
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
-            Name = name,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
-        };
-        await db.Track(grp);
-        await db.SaveChanges(default);
-        return grp.Id;
+            var grp = new ManifestGroup
+            {
+                Name = name,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            await db.Track(grp).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return grp.Id;
+        }
     }
 
     private async Task SeedExecutions(int count)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        for (var i = 0; i < count; i++)
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
-            var meta = Metadata.Create(
-                new CreateMetadata
-                {
-                    Name = $"Trax.X.Train{i}",
-                    ExternalId = Guid.NewGuid().ToString("N"),
-                    Input = null,
-                }
-            );
-            await db.Track(meta);
+            for (var i = 0; i < count; i++)
+            {
+                var meta = Metadata.Create(
+                    new CreateMetadata
+                    {
+                        Name = string.Create(CultureInfo.InvariantCulture, $"Trax.X.Train{i}"),
+                        ExternalId = Guid.NewGuid().ToString("N"),
+                        Input = null,
+                    }
+                );
+                await db.Track(meta).ConfigureAwait(false);
+            }
+            await db.SaveChanges(default).ConfigureAwait(false);
         }
-        await db.SaveChanges(default);
     }
 
     private async Task<long> SeedManifestInGroup(long groupId)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var m = Manifest.Create(new CreateManifest { Name = typeof(SomeFakeTrain) });
-        m.ManifestGroupId = groupId;
-        await db.Track(m);
-        await db.SaveChanges(default);
-        return m.Id;
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var m = Manifest.Create(new CreateManifest { Name = typeof(SomeFakeTrain) });
+            m.ManifestGroupId = groupId;
+            await db.Track(m).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return m.Id;
+        }
     }
 
     private async Task SeedExecutionsForManifest(
@@ -167,54 +183,63 @@ public class OperationsQueriesTests
         TrainState state = TrainState.Completed
     )
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        for (var i = 0; i < count; i++)
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
-            var meta = Metadata.Create(
-                new CreateMetadata
-                {
-                    Name = "Trax.X.Run",
-                    ExternalId = Guid.NewGuid().ToString("N"),
-                    Input = null,
-                }
-            );
-            meta.ManifestId = manifestId;
-            meta.TrainState = state;
-            // Terminal runs carry an end time so last-successful-run aggregation has data.
-            if (state is TrainState.Completed or TrainState.Failed or TrainState.Cancelled)
-                meta.EndTime = DateTime.UtcNow;
-            await db.Track(meta);
+            for (var i = 0; i < count; i++)
+            {
+                var meta = Metadata.Create(
+                    new CreateMetadata
+                    {
+                        Name = "Trax.X.Run",
+                        ExternalId = Guid.NewGuid().ToString("N"),
+                        Input = null,
+                    }
+                );
+                meta.ManifestId = manifestId;
+                meta.TrainState = state;
+                // Terminal runs carry an end time so last-successful-run aggregation has data.
+                if (state is TrainState.Completed or TrainState.Failed or TrainState.Cancelled)
+                    meta.EndTime = DateTime.UtcNow;
+                await db.Track(meta).ConfigureAwait(false);
+            }
+            await db.SaveChanges(default).ConfigureAwait(false);
         }
-        await db.SaveChanges(default);
     }
 
     private async Task<Manifest> SeedManifestForDeadLetter()
     {
-        var groupId = await SeedManifestGroup();
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var m = Manifest.Create(new CreateManifest { Name = typeof(SomeFakeTrain) });
-        m.ManifestGroupId = groupId;
-        await db.Track(m);
-        await db.SaveChanges(default);
-        return m;
+        var groupId = await SeedManifestGroup().ConfigureAwait(false);
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var m = Manifest.Create(new CreateManifest { Name = typeof(SomeFakeTrain) });
+            m.ManifestGroupId = groupId;
+            await db.Track(m).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return m;
+        }
     }
 
     private async Task SeedDeadLetters(int count, Manifest manifest)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        for (var i = 0; i < count; i++)
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
-            var dl = DeadLetter.Create(
-                new CreateDeadLetter
-                {
-                    Manifest = manifest,
-                    Reason = $"failure-{i}",
-                    RetryCount = 3,
-                }
-            );
-            await db.Track(dl);
+            for (var i = 0; i < count; i++)
+            {
+                var dl = DeadLetter.Create(
+                    new CreateDeadLetter
+                    {
+                        Manifest = manifest,
+                        Reason = string.Create(CultureInfo.InvariantCulture, $"failure-{i}"),
+                        RetryCount = 3,
+                    }
+                );
+                await db.Track(dl).ConfigureAwait(false);
+            }
+            await db.SaveChanges(default).ConfigureAwait(false);
         }
-        await db.SaveChanges(default);
     }
 
     [Test]
@@ -280,7 +305,7 @@ public class OperationsQueriesTests
     {
         await SeedManifests(2);
         var queries = new OperationsQueries();
-        var first = (await queries.GetManifests(_factory, default)).Items.First();
+        var first = (await queries.GetManifests(_factory, default)).Items[0];
 
         var fetched = await queries.GetManifestDetail(first.Id, _factory, Discovery, default);
 
@@ -421,7 +446,7 @@ public class OperationsQueriesTests
             .BeEquivalentTo(
                 new LookupMatch(
                     LookupKind.Run,
-                    id.ToString(),
+                    id.ToString(System.Globalization.CultureInfo.InvariantCulture),
                     "Trax.X.LookupTrain · Pending",
                     "externalId"
                 )
@@ -491,7 +516,7 @@ public class OperationsQueriesTests
             .Which.Should()
             .Match<LookupMatch>(m =>
                 m.Kind == LookupKind.WorkQueueEntry
-                && m.Id == entryId.ToString()
+                && m.Id == entryId.ToString(System.Globalization.CultureInfo.InvariantCulture)
                 && m.MatchedOn == "subjectKey"
             );
 
@@ -772,7 +797,7 @@ public class OperationsQueriesTests
     [Test]
     public async Task GetExecutions_HideAdminTrains_ExcludesAdminTrainRuns()
     {
-        var adminName = AdminTrains.FullNames.First();
+        var adminName = AdminTrains.FullNames[0];
         await using (var db = await _factory.CreateDbContextAsync(default))
         {
             foreach (var name in new[] { adminName, adminName, "Trax.X.RegularTrain" })
@@ -824,40 +849,46 @@ public class OperationsQueriesTests
         int? workerSlotsInUse = null
     )
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        db.HostHeartbeats.Add(
-            new HostHeartbeat
-            {
-                InstanceId = instance,
-                HostName = name,
-                HostEnvironment = "kubernetes",
-                TraxVersion = "1.70.0",
-                StartedAt = (lastBeat - TimeSpan.FromHours(1)).UtcDateTime,
-                LastHeartbeatAt = lastBeat.UtcDateTime,
-                RunsDispatcher = runsDispatcher,
-                RunsManifestManager = runsDispatcher,
-                WorkerSlots = workerSlots,
-                WorkerSlotsInUse = workerSlotsInUse,
-            }
-        );
-        await db.SaveChanges(default);
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            db.HostHeartbeats.Add(
+                new HostHeartbeat
+                {
+                    InstanceId = instance,
+                    HostName = name,
+                    HostEnvironment = "kubernetes",
+                    TraxVersion = "1.70.0",
+                    StartedAt = (lastBeat - TimeSpan.FromHours(1)).UtcDateTime,
+                    LastHeartbeatAt = lastBeat.UtcDateTime,
+                    RunsDispatcher = runsDispatcher,
+                    RunsManifestManager = runsDispatcher,
+                    WorkerSlots = workerSlots,
+                    WorkerSlotsInUse = workerSlotsInUse,
+                }
+            );
+            await db.SaveChanges(default).ConfigureAwait(false);
+        }
     }
 
     private async Task SeedRun(string? instance, TrainState state)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var m = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = "Trax.X.HostTrain",
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = null,
-            }
-        );
-        m.HostInstanceId = instance;
-        m.TrainState = state;
-        await db.Track(m);
-        await db.SaveChanges(default);
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var m = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = "Trax.X.HostTrain",
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                }
+            );
+            m.HostInstanceId = instance;
+            m.TrainState = state;
+            await db.Track(m).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+        }
     }
 
     [Test]
@@ -914,11 +945,9 @@ public class OperationsQueriesTests
 
         async Task<bool> OnlineAt(TimeSpan later) =>
             (
-                await new OperationsQueries().GetHosts(
-                    _factory,
-                    default,
-                    new ManualTime(lastBeat + later)
-                )
+                await new OperationsQueries()
+                    .GetHosts(_factory, default, new ManualTime(lastBeat + later))
+                    .ConfigureAwait(false)
             )
                 .Single()
                 .Online;
@@ -936,7 +965,7 @@ public class OperationsQueriesTests
         // A host that predates the heartbeat, or one that stopped more than a day ago and was
         // pruned, has runs but no row: it is not up, so it is not listed.
         await SeedRun("old-host", TrainState.Completed);
-        await SeedRun(null, TrainState.InProgress);
+        await SeedRun(instance: null, TrainState.InProgress);
 
         var hosts = await new OperationsQueries().GetHosts(
             _factory,
@@ -966,12 +995,15 @@ public class OperationsQueriesTests
             var groupId = await SeedManifestGroup("attention-group");
             async Task<Manifest> SeedManifest()
             {
-                await using var db = await _factory.CreateDbContextAsync(default);
-                var m = Manifest.Create(new CreateManifest { Name = typeof(SomeFakeTrain) });
-                m.ManifestGroupId = groupId;
-                await db.Track(m);
-                await db.SaveChanges(default);
-                return m;
+                var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+                await using (db.ConfigureAwait(false))
+                {
+                    var m = Manifest.Create(new CreateManifest { Name = typeof(SomeFakeTrain) });
+                    m.ManifestGroupId = groupId;
+                    await db.Track(m).ConfigureAwait(false);
+                    await db.SaveChanges(default).ConfigureAwait(false);
+                    return m;
+                }
             }
             var first = await SeedManifest();
             var second = await SeedManifest();
@@ -987,19 +1019,22 @@ public class OperationsQueriesTests
                     }
                 )
                     await db.Track(
-                        DeadLetter.Create(
-                            new CreateDeadLetter
-                            {
-                                Manifest = manifest,
-                                Reason = reason,
-                                RetryCount = 3,
-                            }
+                            DeadLetter.Create(
+                                new CreateDeadLetter
+                                {
+                                    Manifest = manifest,
+                                    Reason = reason,
+                                    RetryCount = 3,
+                                }
+                            )
                         )
-                    );
-                await db.SaveChanges(default);
+                        .ConfigureAwait(false);
+                await db.SaveChanges(default).ConfigureAwait(false);
             }
 
-            var attention = await new OperationsQueries().GetAttention(ops, default);
+            var attention = await new OperationsQueries()
+                .GetAttention(ops, default)
+                .ConfigureAwait(false);
 
             attention.Scheduler.JobDispatcherEnabled.Should().BeFalse();
             attention.Scheduler.ManifestManagerEnabled.Should().BeTrue();
@@ -1022,8 +1057,13 @@ public class OperationsQueriesTests
         }
         finally
         {
-            await using var db = await _factory.CreateDbContextAsync(default);
-            await ((DbContext)db).Database.ExecuteSqlRawAsync("DELETE FROM trax.scheduler_config");
+            var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+            await using (db.ConfigureAwait(false))
+            {
+                await ((DbContext)db)
+                    .Database.ExecuteSqlRawAsync("DELETE FROM trax.scheduler_config")
+                    .ConfigureAwait(false);
+            }
         }
     }
 
@@ -1094,7 +1134,12 @@ public class OperationsQueriesTests
 
         var now = DateTimeOffset.UtcNow;
         await SeedHeartbeat("pod-up", "host-up", now - TimeSpan.FromSeconds(5));
-        await SeedHeartbeat("pod-gone", "host-gone", now - TimeSpan.FromMinutes(10), true);
+        await SeedHeartbeat(
+            "pod-gone",
+            "host-gone",
+            now - TimeSpan.FromMinutes(10),
+            runsDispatcher: true
+        );
 
         await using (var db = await _factory.CreateDbContextAsync(default))
         {
@@ -1154,9 +1199,9 @@ public class OperationsQueriesTests
                 Instance("Waiting", now - TimeSpan.FromMinutes(5)),
                 Instance("Waiting", now - TimeSpan.FromMinutes(6)),
                 Instance("Waiting", now + TimeSpan.FromMinutes(5)),
-                Instance("Shipped", null),
-                Instance("Charging", null, failedRun.ExternalId),
-                Instance("Charging", null, completedRun.ExternalId)
+                Instance("Shipped", due: null),
+                Instance("Charging", due: null, failedRun.ExternalId),
+                Instance("Charging", due: null, completedRun.ExternalId)
             );
             await db.SaveChanges(default);
         }
@@ -1214,13 +1259,13 @@ public class OperationsQueriesTests
                 m.StartTime = start;
                 m.TrainState = state;
                 m.EndTime = end;
-                await db.Track(m);
+                await db.Track(m).ConfigureAwait(false);
             }
 
             // Two completed runs (2s and 4s) → avg 3000ms. One failed. Plus another train, ignored.
             await Seed("Trax.X.StatTrain", TrainState.Completed, start.AddSeconds(2));
             await Seed("Trax.X.StatTrain", TrainState.Completed, start.AddSeconds(4));
-            await Seed("Trax.X.StatTrain", TrainState.Failed, null);
+            await Seed("Trax.X.StatTrain", TrainState.Failed, end: null);
             await Seed("Trax.X.OtherTrain", TrainState.Completed, start.AddSeconds(9));
             await db.SaveChanges(default);
         }
@@ -1460,17 +1505,21 @@ public class OperationsQueriesTests
                     { typeof(FakeOutput), false },
                 }
             );
-        registry.IsToggleable(typeof(FakeInput)).Returns(true);
-        registry.IsToggleable(typeof(FakeOutput)).Returns(false);
+        registry.IsToggleable(typeof(FakeInput)).Returns(returnThis: true);
+        registry.IsToggleable(typeof(FakeOutput)).Returns(returnThis: false);
 
         var result = new OperationsQueries().GetEffects(EffectSettings(registry));
 
         result.Should().HaveCount(2);
-        var enabled = result.Single(e => e.Name == nameof(FakeInput));
+        var enabled = result.Single(e =>
+            string.Equals(e.Name, nameof(FakeInput), StringComparison.Ordinal)
+        );
         enabled.Enabled.Should().BeTrue();
         enabled.Toggleable.Should().BeTrue();
         enabled.FullName.Should().Be(typeof(FakeInput).FullName);
-        var disabled = result.Single(e => e.Name == nameof(FakeOutput));
+        var disabled = result.Single(e =>
+            string.Equals(e.Name, nameof(FakeOutput), StringComparison.Ordinal)
+        );
         disabled.Enabled.Should().BeFalse();
         disabled.Toggleable.Should().BeFalse();
     }
@@ -1642,38 +1691,44 @@ public class OperationsQueriesTests
 
     private async Task<long> SeedIntervalManifest()
     {
-        await SeedManifests(1);
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var seeded = await db.Manifests.FirstAsync();
-        seeded.ScheduleType = ScheduleType.Interval;
-        seeded.IntervalSeconds = 60;
-        seeded.CronExpression = null;
-        seeded.TimeoutSeconds = 30;
-        seeded.MaxRetries = 2;
-        await db.SaveChanges(default);
-        return seeded.Id;
+        await SeedManifests(1).ConfigureAwait(false);
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var seeded = await db.Manifests.FirstAsync().ConfigureAwait(false);
+            seeded.ScheduleType = ScheduleType.Interval;
+            seeded.IntervalSeconds = 60;
+            seeded.CronExpression = null;
+            seeded.TimeoutSeconds = 30;
+            seeded.MaxRetries = 2;
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return seeded.Id;
+        }
     }
 
     private async Task<OperationResponse> RefusedUpdate(long id, UpdateManifestInput input)
     {
         var signal = new RecordingChangeSignal();
-        var resp = await new OperationsMutations().UpdateManifest(
-            id,
-            input,
-            OperationsWith(signal),
-            default
-        );
+        var resp = await new OperationsMutations()
+            .UpdateManifest(id, input, OperationsWith(signal), default)
+            .ConfigureAwait(false);
 
         resp.Success.Should().BeFalse(resp.Message);
         signal.Domains.Should().BeEmpty("a refused update changes nothing");
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var m = await db.Manifests.AsNoTracking().FirstAsync(x => x.Id == id);
-        m.ScheduleType.Should().Be(ScheduleType.Interval, "nothing is saved");
-        m.IntervalSeconds.Should().Be(60, "nothing is saved");
-        m.CronExpression.Should().BeNull("nothing is saved");
-        m.TimeoutSeconds.Should().Be(30, "nothing is saved");
-        m.MaxRetries.Should().Be(2, "nothing is saved");
-        return resp;
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var m = await db
+                .Manifests.AsNoTracking()
+                .FirstAsync(x => x.Id == id)
+                .ConfigureAwait(false);
+            m.ScheduleType.Should().Be(ScheduleType.Interval, "nothing is saved");
+            m.IntervalSeconds.Should().Be(60, "nothing is saved");
+            m.CronExpression.Should().BeNull("nothing is saved");
+            m.TimeoutSeconds.Should().Be(30, "nothing is saved");
+            m.MaxRetries.Should().Be(2, "nothing is saved");
+            return resp;
+        }
     }
 
     [Test]
@@ -1913,40 +1968,43 @@ public class OperationsQueriesTests
         long? replayDecisionsOf = null
     )
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var meta = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = trainName ?? typeof(IRequeueProbeTrain).FullName!,
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = null,
-                ReplayDecisionsOf = replayDecisionsOf,
-            }
-        );
-        meta.Input = input;
-        await db.Track(meta);
-        await db.SaveChanges(default);
-
-        if (recordDecision)
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
-            db.RecordedDecisions.Add(
-                new RecordedDecision
+            var meta = Metadata.Create(
+                new CreateMetadata
                 {
-                    MetadataId = meta.Id,
-                    QuestionKey = "Route",
-                    Occurrence = 0,
-                    Fingerprint = new string('0', 64),
-                    Kind = "choice",
-                    Question = "{}",
-                    Answer = "\"Express\"",
-                    Routes = """[{"track": "Express", "fallback_reason": null}]""",
-                    DecidedAt = DateTime.UtcNow,
+                    Name = trainName ?? typeof(IRequeueProbeTrain).FullName!,
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                    ReplayDecisionsOf = replayDecisionsOf,
                 }
             );
-            await db.SaveChanges(default);
-        }
+            meta.Input = input;
+            await db.Track(meta).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
 
-        return meta.Id;
+            if (recordDecision)
+            {
+                db.RecordedDecisions.Add(
+                    new RecordedDecision
+                    {
+                        MetadataId = meta.Id,
+                        QuestionKey = "Route",
+                        Occurrence = 0,
+                        Fingerprint = new string('0', 64),
+                        Kind = "choice",
+                        Question = "{}",
+                        Answer = "\"Express\"",
+                        Routes = """[{"track": "Express", "fallback_reason": null}]""",
+                        DecidedAt = DateTime.UtcNow,
+                    }
+                );
+                await db.SaveChanges(default).ConfigureAwait(false);
+            }
+
+            return meta.Id;
+        }
     }
 
     /// <summary>
@@ -2007,7 +2065,7 @@ public class OperationsQueriesTests
     {
         var ops = Substitute.For<IOperationsService>();
         ops.RequeueExecutionAsync(42, Arg.Any<CancellationToken>())
-            .Returns(new OperationResult(true, Id: 7, Count: 1, Message: "queued"));
+            .Returns(new OperationResult(Success: true, Id: 7, Count: 1, Message: "queued"));
 
         var resp = await new OperationsMutations().RequeueExecution(42, ops, default);
 
@@ -2070,14 +2128,15 @@ public class OperationsQueriesTests
     {
         var ops = Substitute.For<IOperationsService>();
         ops.RequeueExecutionAsync(42, Arg.Any<CancellationToken>())
-            .Returns(new OperationResult(true, Count: 1));
+            .Returns(new OperationResult(Success: true, Count: 1));
         ops.RequeueExecutionAsync(42, Arg.Any<bool>(), Arg.Any<CancellationToken>())
-            .Returns(new OperationResult(true, Count: 1));
+            .Returns(new OperationResult(Success: true, Count: 1));
 
         await new OperationsMutations().RequeueExecution(42, ops, default, askAfresh);
 
         if (askAfresh)
-            await ops.Received(1).RequeueExecutionAsync(42, true, Arg.Any<CancellationToken>());
+            await ops.Received(1)
+                .RequeueExecutionAsync(42, askAfresh: true, Arg.Any<CancellationToken>());
         else
         {
             await ops.Received(1).RequeueExecutionAsync(42, Arg.Any<CancellationToken>());
@@ -2106,7 +2165,7 @@ public class OperationsQueriesTests
                 typeof(IRequeueProbeTrain).FullName!,
                 "{\"v\":1}",
                 0,
-                null,
+                scheduledAt: null,
                 Arg.Any<CancellationToken>()
             );
         await execution
@@ -2150,8 +2209,10 @@ public class OperationsQueriesTests
         resp.Success.Should().BeFalse();
         resp.Message.Should()
             .Be(
-                $"Train Some.Retired.ITrain is no longer registered, so execution {id} cannot be "
-                    + "re-queued."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Train Some.Retired.ITrain is no longer registered, so execution {id} cannot be "
+                ) + "re-queued."
             );
         execution.ReceivedCalls().Should().BeEmpty();
     }
@@ -2175,13 +2236,18 @@ public class OperationsQueriesTests
 
         resp.Success.Should().BeFalse();
         resp.Message.Should()
-            .Be($"The saved input of run {id} no longer reads as System.Object: v is not a member");
+            .Be(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The saved input of run {id} no longer reads as System.Object: v is not a member"
+                )
+            );
     }
 
     [Test]
     public async Task RequeueExecution_WithNoSavedInput_ReturnsFalseWithoutQueuing()
     {
-        var id = await SeedRequeueSourceAsync(null);
+        var id = await SeedRequeueSourceAsync(input: null);
         var ops = RequeueOperations(out var execution);
 
         var resp = await new OperationsMutations().RequeueExecution(id, ops, default);
@@ -2348,7 +2414,7 @@ public class OperationsQueriesTests
     {
         await SeedExecutions(1);
         var queries = new OperationsQueries();
-        var first = (await queries.GetExecutions(_factory, default)).Items.First();
+        var first = (await queries.GetExecutions(_factory, default)).Items[0];
 
         var fetched = await queries.GetExecutionDetail(first.Id, _factory, default);
 
@@ -2440,7 +2506,7 @@ public class OperationsQueriesTests
     }
 
     private interface IUserTrain
-        : Trax.Effect.Services.ServiceTrain.IServiceTrain<FakeInput, FakeOutput> { }
+        : Trax.Effect.Services.ServiceTrain.IServiceTrain<FakeInput, FakeOutput>;
 
     [Test]
     public void DeadLettersNamespace_ReturnsNewInstance()
@@ -2542,7 +2608,7 @@ public class OperationsQueriesTests
         var manifest = await SeedManifestForDeadLetter();
         await SeedDeadLetters(1, manifest);
         var queries = new DeadLetterQueries();
-        var first = (await queries.GetDeadLetters(_factory, default)).Items.First();
+        var first = (await queries.GetDeadLetters(_factory, default)).Items[0];
 
         var fetched = await queries.GetDeadLetter(first.Id, _factory, default);
 
@@ -2781,11 +2847,15 @@ public class OperationsQueriesTests
 
         var result = new OperationsQueries().GetEffects(EffectSettings(registry, services));
 
-        var configurable = result.Single(e => e.Name == nameof(FakeConfigurableFactory));
+        var configurable = result.Single(e =>
+            string.Equals(e.Name, nameof(FakeConfigurableFactory), StringComparison.Ordinal)
+        );
         configurable.IsConfigurable.Should().BeTrue();
         configurable.ConfigurationTypeName.Should().Be(typeof(FakeEffectSettings).FullName);
         configurable.Configuration.Should().Contain("\"batchSize\"").And.Contain("50");
-        var plain = result.Single(e => e.Name == nameof(FakeInput));
+        var plain = result.Single(e =>
+            string.Equals(e.Name, nameof(FakeInput), StringComparison.Ordinal)
+        );
         plain.IsConfigurable.Should().BeFalse();
         plain.ConfigurationTypeName.Should().BeNull();
         plain.Configuration.Should().BeNull();
@@ -2852,18 +2922,32 @@ public class OperationsQueriesTests
             .Single()
             .Fields;
 
-        var endpoint = fields.Single(f => f.Name == nameof(FakeCredentialedSettings.Endpoint));
+        var endpoint = fields.Single(f =>
+            string.Equals(
+                f.Name,
+                nameof(FakeCredentialedSettings.Endpoint),
+                StringComparison.Ordinal
+            )
+        );
         endpoint.Kind.Should().Be(Trax.Scheduler.Services.Effects.EffectFieldKind.Text);
         endpoint.Value.Should().Be("https://sink.example");
         endpoint.Sensitive.Should().BeFalse();
 
-        var apiKey = fields.Single(f => f.Name == nameof(FakeCredentialedSettings.ApiKey));
+        var apiKey = fields.Single(f =>
+            string.Equals(f.Name, nameof(FakeCredentialedSettings.ApiKey), StringComparison.Ordinal)
+        );
         apiKey.Sensitive.Should().BeTrue();
         apiKey.HasValue.Should().BeTrue();
         apiKey.Value.Should().BeNull("a [TraxSensitive] setting is never read back");
 
         fields
-            .Single(f => f.Name == nameof(FakeCredentialedSettings.Nested))
+            .Single(f =>
+                string.Equals(
+                    f.Name,
+                    nameof(FakeCredentialedSettings.Nested),
+                    StringComparison.Ordinal
+                )
+            )
             .Kind.Should()
             .Be(Trax.Scheduler.Services.Effects.EffectFieldKind.SetInCode);
         fields.Should().NotContain(f => f.Value != null && f.Value.Contains("sk-live-123"));
@@ -2926,12 +3010,18 @@ public class OperationsQueriesTests
             .Select(p => p.Name)
             .Should()
             .BeEquivalentTo(["playerId", "tier", "maybeTier", "custom_name"]);
-        schema.Single(p => p.Name == "tier").EnumValues.Should().Equal("Bronze", "Silver", "Gold");
         schema
-            .Single(p => p.Name == "maybeTier")
+            .Single(p => string.Equals(p.Name, "tier", StringComparison.Ordinal))
             .EnumValues.Should()
             .Equal("Bronze", "Silver", "Gold");
-        schema.Single(p => p.Name == "playerId").EnumValues.Should().BeNull();
+        schema
+            .Single(p => string.Equals(p.Name, "maybeTier", StringComparison.Ordinal))
+            .EnumValues.Should()
+            .Equal("Bronze", "Silver", "Gold");
+        schema
+            .Single(p => string.Equals(p.Name, "playerId", StringComparison.Ordinal))
+            .EnumValues.Should()
+            .BeNull();
     }
 
     [Test]
@@ -3002,7 +3092,7 @@ public class OperationsQueriesTests
                 Arg.Any<IReadOnlyCollection<long>>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(new OperationResult(false, Count: 0, Message: "refused"));
+            .Returns(new OperationResult(Success: false, Count: 0, Message: "refused"));
 
         var resp = await new OperationsMutations().CancelExecution(7, ops, default);
 
@@ -3051,10 +3141,7 @@ public class OperationsQueriesTests
 
     public interface IRequeueProbeTrain;
 
-    private interface ISomeFakeTrain
-        : Trax.Effect.Services.ServiceTrain.IServiceTrain<FakeInput, FakeOutput> { }
-
-    private class SomeFakeTrain { }
+    private static class SomeFakeTrain;
 
     public record FakeInput;
 

@@ -90,7 +90,7 @@ public sealed class GraphQLArgumentAttribute : Attribute
     /// <param name="graphQLType">
     /// The full GraphQL type annotation, e.g. <c>"String!"</c>, <c>"Int"</c>, or
     /// <c>"RenamePlayerInput!"</c>. Required because the CLR type alone is ambiguous: a
-    /// C# <c>string</c> could be GraphQL <c>String</c>, <c>ID</c>, or a custom scalar.
+    /// C# <see langword="string"/> could be GraphQL <c>String</c>, <c>ID</c>, or a custom scalar.
     /// </param>
     public GraphQLArgumentAttribute(string graphQLType)
     {

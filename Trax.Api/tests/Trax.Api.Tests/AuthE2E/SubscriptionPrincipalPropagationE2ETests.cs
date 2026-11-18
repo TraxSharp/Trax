@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Net.WebSockets;
@@ -181,13 +182,19 @@ public class SubscriptionPrincipalPropagationE2ETests
         {
             for (var i = 0; i < N; i++)
             {
-                var id = $"user-{i}";
+                var id = string.Create(CultureInfo.InvariantCulture, $"user-{i}");
                 var token = SignJwt(id, id, "Player");
                 var ws = await ConnectAsync(host);
                 await InitAsync(ws, new { authToken = token });
                 await ExpectAckAsync(ws);
-                await SubscribeAsync(ws, $"sub-{i}", WhoAmISubscription);
-                subscribers.Add((ws, "TraxJwt:" + id, $"sub-{i}"));
+                await SubscribeAsync(
+                    ws,
+                    string.Create(CultureInfo.InvariantCulture, $"sub-{i}"),
+                    WhoAmISubscription
+                );
+                subscribers.Add(
+                    (ws, "TraxJwt:" + id, string.Create(CultureInfo.InvariantCulture, $"sub-{i}"))
+                );
             }
 
             // Each broadcast fans out to all N subscribers.
@@ -230,7 +237,7 @@ public class SubscriptionPrincipalPropagationE2ETests
         {
             var payload = await PokeUntilReceivedAsync(
                 host,
-                $"ping-{i}",
+                string.Create(CultureInfo.InvariantCulture, $"ping-{i}"),
                 pokerToken,
                 Schemes.Jwt,
                 (ws, "sub-1")
@@ -245,18 +252,20 @@ public class SubscriptionPrincipalPropagationE2ETests
     {
         var client = host.GetTestServer().CreateWebSocketClient();
         client.SubProtocols.Add("graphql-transport-ws");
-        return await client.ConnectClosingAsync(new Uri(WsUri), CancellationToken.None);
+        return await client
+            .ConnectClosingAsync(new Uri(WsUri), CancellationToken.None)
+            .ConfigureAwait(false);
     }
 
     private static async Task InitAsync(WebSocket ws, object payload)
     {
         var msg = JsonSerializer.Serialize(new { type = "connection_init", payload });
-        await SendRawAsync(ws, msg);
+        await SendRawAsync(ws, msg).ConfigureAwait(false);
     }
 
     private static async Task ExpectAckAsync(WebSocket ws)
     {
-        var msg = await ReceiveAsync(ws);
+        var msg = await ReceiveAsync(ws).ConfigureAwait(false);
         msg.GetProperty("type").GetString().Should().Be("connection_ack");
     }
 
@@ -272,14 +281,15 @@ public class SubscriptionPrincipalPropagationE2ETests
         );
         // graphql-transport-ws has no "subscribe_ack", so the subscription may not be wired to
         // its topic yet when this returns. PokeUntilReceivedAsync publishes until it is.
-        await SendRawAsync(ws, msg);
+        await SendRawAsync(ws, msg).ConfigureAwait(false);
     }
 
     private static async Task SendRawAsync(WebSocket ws, string json)
     {
         var bytes = Encoding.UTF8.GetBytes(json);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await ws.SendAsync(bytes, WebSocketMessageType.Text, endOfMessage: true, cts.Token);
+        await ws.SendAsync(bytes, WebSocketMessageType.Text, endOfMessage: true, cts.Token)
+            .ConfigureAwait(false);
     }
 
     private static async Task<JsonElement> ReceiveAsync(WebSocket ws)
@@ -297,7 +307,7 @@ public class SubscriptionPrincipalPropagationE2ETests
 
         while (true)
         {
-            var result = await ws.ReceiveAsync(buffer, cts.Token);
+            var result = await ws.ReceiveAsync(buffer, cts.Token).ConfigureAwait(false);
 
             if (result.MessageType == WebSocketMessageType.Close)
                 throw new InvalidOperationException(
@@ -333,7 +343,7 @@ public class SubscriptionPrincipalPropagationE2ETests
             using var ms = new MemoryStream();
             while (!cts.IsCancellationRequested)
             {
-                var result = await ws.ReceiveAsync(buffer, cts.Token);
+                var result = await ws.ReceiveAsync(buffer, cts.Token).ConfigureAwait(false);
 
                 if (result.MessageType == WebSocketMessageType.Close)
                     throw new InvalidOperationException(
@@ -360,9 +370,12 @@ public class SubscriptionPrincipalPropagationE2ETests
                     $"Subscription {subscriptionId} ended before an event arrived: {text}"
                 );
 
-            if (type == "next")
+            if (string.Equals(type, "next", StringComparison.Ordinal))
             {
-                if (msg.TryGetProperty("id", out var idEl) && idEl.GetString() == subscriptionId)
+                if (
+                    msg.TryGetProperty("id", out var idEl)
+                    && string.Equals(idEl.GetString(), subscriptionId, StringComparison.Ordinal)
+                )
                 {
                     return msg.GetProperty("payload")
                         .GetProperty("data")
@@ -395,12 +408,12 @@ public class SubscriptionPrincipalPropagationE2ETests
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
         while (!received.IsCompleted && DateTime.UtcNow < deadline)
         {
-            await PokeAsync(host, tag, credential, scheme);
+            await PokeAsync(host, tag, credential, scheme).ConfigureAwait(false);
             // allowed-delay: re-publish interval, bounded by the 10s deadline; WhenAny wakes the
             // instant every subscriber has received.
-            await Task.WhenAny(received, Task.Delay(100));
+            await Task.WhenAny(received, Task.Delay(100)).ConfigureAwait(false);
         }
-        return await received;
+        return await received.ConfigureAwait(false);
     }
 
     /// <summary>
@@ -419,7 +432,7 @@ public class SubscriptionPrincipalPropagationE2ETests
         else
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", credential);
 
-        var res = await client.SendAsync(req);
+        var res = await client.SendAsync(req).ConfigureAwait(false);
         res.EnsureSuccessStatusCode();
     }
 }

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Security.Claims;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
@@ -67,7 +68,9 @@ public class TraxGraphQLAuditListenerTests
 
         var result = await host.Executor.ExecuteAsync(
             QueryRequestBuilder("query Q($s: String!) { echo(s: $s) }")
-                .SetVariableValues(new Dictionary<string, object?> { ["s"] = "hi" })
+                .SetVariableValues(
+                    new Dictionary<string, object?>(StringComparer.Ordinal) { ["s"] = "hi" }
+                )
                 .Build()
         );
         AssertNoErrors(result);
@@ -83,13 +86,17 @@ public class TraxGraphQLAuditListenerTests
     {
         await using var host = await TestHost.BuildAsync(configureServices: KeepAllVariables);
 
-        var variables = new Dictionary<string, object?>
+        var variables = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["s"] = "hello",
             ["i"] = 42,
             ["e"] = "HAPPY",
             ["list"] = new[] { 1, 2, 3 },
-            ["obj"] = new Dictionary<string, object?> { ["name"] = "bob", ["count"] = 7 },
+            ["obj"] = new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["name"] = "bob",
+                ["count"] = 7,
+            },
         };
 
         var result = await host.Executor.ExecuteAsync(
@@ -126,7 +133,7 @@ public class TraxGraphQLAuditListenerTests
                         + "{ decimal(f: $f) maybe(s: $n) @include(if: $b) }"
                 )
                 .SetVariableValues(
-                    new Dictionary<string, object?>
+                    new Dictionary<string, object?>(StringComparer.Ordinal)
                     {
                         ["f"] = 3.25m,
                         ["n"] = null,
@@ -151,7 +158,9 @@ public class TraxGraphQLAuditListenerTests
 
         var result = await host.Executor.ExecuteAsync(
             QueryRequestBuilder("query Q($s: String!) { echo(s: $s) }")
-                .SetVariableValues(new Dictionary<string, object?> { ["s"] = "hunter2" })
+                .SetVariableValues(
+                    new Dictionary<string, object?>(StringComparer.Ordinal) { ["s"] = "hunter2" }
+                )
                 .Build()
         );
         AssertNoErrors(result);
@@ -386,7 +395,11 @@ public class TraxGraphQLAuditListenerTests
                         + "{ a: echo(s: $u) b: echo(s: $password) }"
                 )
                 .SetVariableValues(
-                    new Dictionary<string, object?> { ["u"] = "bob", ["password"] = "hunter2" }
+                    new Dictionary<string, object?>(StringComparer.Ordinal)
+                    {
+                        ["u"] = "bob",
+                        ["password"] = "hunter2",
+                    }
                 )
                 .Build()
         );
@@ -409,9 +422,9 @@ public class TraxGraphQLAuditListenerTests
         var result = await host.Executor.ExecuteAsync(
             QueryRequestBuilder("mutation M($input: LoginInput!) { login(input: $input) }")
                 .SetVariableValues(
-                    new Dictionary<string, object?>
+                    new Dictionary<string, object?>(StringComparer.Ordinal)
                     {
-                        ["input"] = new Dictionary<string, object?>
+                        ["input"] = new Dictionary<string, object?>(StringComparer.Ordinal)
                         {
                             ["user"] = "bob",
                             ["password"] = "hunter2",
@@ -440,7 +453,9 @@ public class TraxGraphQLAuditListenerTests
 
         var result = await host.Executor.ExecuteAsync(
             QueryRequestBuilder("query Q($s: String!) { echo(s: $s) }")
-                .SetVariableValues(new Dictionary<string, object?> { ["s"] = "hi" })
+                .SetVariableValues(
+                    new Dictionary<string, object?>(StringComparer.Ordinal) { ["s"] = "hi" }
+                )
                 .Build()
         );
         AssertNoErrors(result);
@@ -673,7 +688,9 @@ public class TraxGraphQLAuditListenerTests
 
         await host.Executor.ExecuteAsync(
             QueryRequestBuilder("query Q($i: Int!) { complexInt(i: $i) }")
-                .SetVariableValues(new Dictionary<string, object?> { ["i"] = "hunter2" })
+                .SetVariableValues(
+                    new Dictionary<string, object?>(StringComparer.Ordinal) { ["i"] = "hunter2" }
+                )
                 .Build()
         );
 
@@ -877,7 +894,12 @@ public class TraxGraphQLAuditListenerTests
             opts.RecordErrorMessages = true;
         });
         // Every unknown field is its own error, so the joined text grows with the request.
-        var fields = string.Join(" ", Enumerable.Range(0, 2_000).Select(i => $"missing{i}"));
+        var fields = string.Join(
+            ' ',
+            Enumerable
+                .Range(0, 2_000)
+                .Select(i => string.Create(CultureInfo.InvariantCulture, $"missing{i}"))
+        );
 
         await host.Executor.ExecuteAsync($"{{ {fields} }}");
 
@@ -911,7 +933,12 @@ public class TraxGraphQLAuditListenerTests
         // The field that matters comes after enough padding to push it past the limit, so the
         // head alone would show only the padding.
         await using var host = await TestHost.BuildAsync(opts => opts.MaxDocumentLength = 64);
-        var padding = string.Join(" ", Enumerable.Range(0, 50).Select(i => $"p{i}: ping"));
+        var padding = string.Join(
+            ' ',
+            Enumerable
+                .Range(0, 50)
+                .Select(i => string.Create(CultureInfo.InvariantCulture, $"p{i}: ping"))
+        );
 
         var result = await host.Executor.ExecuteAsync($"{{ {padding} echo(s: \"x\") }}");
         AssertNoErrors(result);
@@ -926,7 +953,12 @@ public class TraxGraphQLAuditListenerTests
     public async Task DocumentTruncation_FieldsReachedThroughFragments_AreRecorded()
     {
         await using var host = await TestHost.BuildAsync(opts => opts.MaxDocumentLength = 32);
-        var padding = string.Join(" ", Enumerable.Range(0, 20).Select(i => $"p{i}: ping"));
+        var padding = string.Join(
+            ' ',
+            Enumerable
+                .Range(0, 20)
+                .Select(i => string.Create(CultureInfo.InvariantCulture, $"p{i}: ping"))
+        );
 
         var result = await host.Executor.ExecuteAsync(
             $"{{ {padding} ...F ... on TestQuery {{ throwsNot: ping }} }} "
@@ -1039,7 +1071,10 @@ public class TraxGraphQLAuditListenerTests
             s.AddSingleton<IHttpContextAccessor>(new FixedHttpContextAccessor(httpContext))
         );
 
-        var result = await host.Executor.ExecuteAsync("{ ping }");
+        var result = await host.Executor.ExecuteAsync(
+            "{ ping }",
+            cancellationToken: CancellationToken.None
+        );
         AssertNoErrors(result);
 
         var entries = host.DrainEntries();
@@ -1064,7 +1099,9 @@ public class TraxGraphQLAuditListenerTests
             s.AddSingleton<IHttpContextAccessor>(new FixedHttpContextAccessor(httpContext))
         );
 
-        AssertNoErrors(await host.Executor.ExecuteAsync("{ ping }"));
+        AssertNoErrors(
+            await host.Executor.ExecuteAsync("{ ping }", cancellationToken: CancellationToken.None)
+        );
 
         var entry = host.DrainEntries().Should().ContainSingle().Subject;
         entry.PrincipalId.Should().Be("user-7");
@@ -1159,7 +1196,8 @@ public class TraxGraphQLAuditListenerTests
             return list;
         }
 
-        public async ValueTask DisposeAsync() => await Provider.DisposeAsync();
+        public async ValueTask DisposeAsync() =>
+            await Provider.DisposeAsync().ConfigureAwait(false);
 
         public static async Task<TestHost> BuildAsync(
             Action<TraxAuditOptions>? configureOptions = null,
@@ -1192,7 +1230,11 @@ public class TraxGraphQLAuditListenerTests
                 .UseRequest(
                     next =>
                         context =>
-                            context.Request.OperationName == "Boom"
+                            string.Equals(
+                                context.Request.OperationName,
+                                "Boom",
+                                StringComparison.Ordinal
+                            )
                                 ? throw new InvalidOperationException("request pipeline exploded")
                                 : next(context),
                     key: "TraxAuditTestFault",
@@ -1201,7 +1243,11 @@ public class TraxGraphQLAuditListenerTests
                 .UseRequest(
                     next =>
                         context =>
-                            context.Request.OperationName == "Early"
+                            string.Equals(
+                                context.Request.OperationName,
+                                "Early",
+                                StringComparison.Ordinal
+                            )
                                 ? throw new InvalidOperationException("refused before parsing")
                                 : next(context),
                     key: "TraxAuditTestEarlyFault",
@@ -1224,7 +1270,8 @@ public class TraxGraphQLAuditListenerTests
             var provider = services.BuildServiceProvider();
             var executor = await provider
                 .GetRequiredService<IRequestExecutorProvider>()
-                .GetExecutorAsync();
+                .GetExecutorAsync()
+                .ConfigureAwait(false);
 
             return new TestHost
             {
@@ -1318,7 +1365,10 @@ public class TraxGraphQLAuditListenerTests
         public string Echo(string s) => s;
 
         public string Complex(string s, int i, Mood e, int[] list, FooInput obj) =>
-            $"{s}-{i}-{e}-{list.Length}-{obj.Name}-{obj.Count}";
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"{s}-{i}-{e}-{list.Length}-{obj.Name}-{obj.Count}"
+            );
 
         public string Throws() => throw new InvalidOperationException("resolver exploded");
 

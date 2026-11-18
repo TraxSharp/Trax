@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Claims;
 using AwesomeAssertions;
 using HotChocolate.Execution;
@@ -41,7 +42,7 @@ public class JunctionEventSubscriptionTests
 
     private static string OnJunctionEvent(long metadataId) =>
         "subscription { onJunctionEvent(metadataId: "
-        + metadataId
+        + metadataId.ToString(CultureInfo.InvariantCulture)
         + ") { sequence metadataId trainName eventType junction { position kind name state "
         + "questionKey answer confidence answerWithheld decider failureException failureClass "
         + "attempt nameWithheld trackPosition } } }";
@@ -270,7 +271,7 @@ public class JunctionEventSubscriptionTests
                     + Adr
             );
         step["confidence"].Should().BeNull();
-        step["answerWithheld"].Should().Be(false);
+        step["answerWithheld"].Should().Be(expected: false);
         step["questionKey"].Should().Be("Lane", "that the question was asked is still shown");
     }
 
@@ -307,7 +308,7 @@ public class JunctionEventSubscriptionTests
         );
 
         var step = Step(received);
-        step["answerWithheld"].Should().Be(true);
+        step["answerWithheld"].Should().Be(expected: true);
         step["answer"].Should().BeNull("a [TraxSensitive] answer is withheld from everyone");
         step["confidence"].Should().BeNull();
     }
@@ -330,7 +331,7 @@ public class JunctionEventSubscriptionTests
                 "which junction ran on a track gives away the answer the subscriber is not shown, per "
                     + Adr
             );
-        step["nameWithheld"].Should().Be(true);
+        step["nameWithheld"].Should().Be(expected: true);
         step["trackPosition"].Should().Be(2);
     }
 
@@ -345,7 +346,7 @@ public class JunctionEventSubscriptionTests
         );
 
         Step(received)["name"].Should().Be("Step");
-        Step(received)["nameWithheld"].Should().Be(false);
+        Step(received)["nameWithheld"].Should().Be(expected: false);
     }
 
     [Test]
@@ -362,7 +363,7 @@ public class JunctionEventSubscriptionTests
         );
 
         Step(received)["name"].Should().Be("ChargeCard");
-        Step(received)["nameWithheld"].Should().Be(false);
+        Step(received)["nameWithheld"].Should().Be(expected: false);
     }
 
     private static readonly object[] StepsOnATrack =
@@ -393,7 +394,7 @@ public class JunctionEventSubscriptionTests
                 JunctionStep.WithheldName,
                 "a question or route on a track is withheld as a junction on it is, per " + Adr
             );
-        step["nameWithheld"].Should().Be(true);
+        step["nameWithheld"].Should().Be(expected: true);
         step["questionKey"].Should().BeNull("the key names the question as the name does");
         step["answer"].Should().BeNull();
         step["confidence"].Should().BeNull();
@@ -419,7 +420,7 @@ public class JunctionEventSubscriptionTests
 
         var step = Step(received);
         step["name"].Should().Be("Region");
-        step["nameWithheld"].Should().Be(false);
+        step["nameWithheld"].Should().Be(expected: false);
         step["questionKey"].Should().Be("Region");
         step["answer"].Should().Be("North");
         step["confidence"].Should().Be(0.7);
@@ -442,7 +443,7 @@ public class JunctionEventSubscriptionTests
 
         var step = Step(received);
         step["name"].Should().Be("Region");
-        step["nameWithheld"].Should().Be(false);
+        step["nameWithheld"].Should().Be(expected: false);
         step["questionKey"].Should().Be("Region");
         step["answer"].Should().Be("North");
         step["confidence"].Should().Be(0.7);
@@ -490,7 +491,7 @@ public class JunctionEventSubscriptionTests
         var received = await sub.NextAsync(() => Handle(OnTrack("Some.Train", nameWithheld: true)));
 
         Step(received)["name"].Should().Be(JunctionStep.WithheldName);
-        Step(received)["nameWithheld"].Should().Be(true);
+        Step(received)["nameWithheld"].Should().Be(expected: true);
     }
 
     [Test]
@@ -578,7 +579,7 @@ public class JunctionEventSubscriptionTests
         );
 
         var step = Step(received);
-        step["answerWithheld"].Should().Be(true);
+        step["answerWithheld"].Should().Be(expected: true);
         step["answer"].Should().BeNull("a [TraxSensitive] question's answer is never published");
         step["confidence"].Should().BeNull();
     }
@@ -718,7 +719,7 @@ public class JunctionEventSubscriptionTests
                 JunctionStep.WithheldName,
                 "a step from another host is shown to each subscriber as a local one is, per " + Adr
             );
-        step["nameWithheld"].Should().Be(true);
+        step["nameWithheld"].Should().Be(expected: true);
     }
 
     private static TrainLifecycleEventMessage FromAnotherHost(TrainLifecycleEventMessage message) =>
@@ -735,8 +736,8 @@ public class JunctionEventSubscriptionTests
     {
         var transport = new CapturingReceiver();
         var service = new TrainEventReceiverService(transport, _provider!);
-        await service.StartAsync(default);
-        await transport.Started.WaitAsync(TimeSpan.FromSeconds(10));
+        await service.StartAsync(default).ConfigureAwait(false);
+        await transport.Started.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         return new RunningReceiver(service, transport);
     }
 
@@ -750,7 +751,7 @@ public class JunctionEventSubscriptionTests
 
         public async ValueTask DisposeAsync()
         {
-            await service.StopAsync(default);
+            await service.StopAsync(default).ConfigureAwait(false);
             service.Dispose();
         }
     }
@@ -918,7 +919,7 @@ public class JunctionEventSubscriptionTests
     ) =>
         new(
             MetadataId: run,
-            ExternalId: "ext-" + run,
+            ExternalId: "ext-" + run.ToString(CultureInfo.InvariantCulture),
             TrainName: train,
             TrainState: nameof(TrainState.InProgress),
             Timestamp: DateTime.UtcNow,
@@ -965,7 +966,8 @@ public class JunctionEventSubscriptionTests
         _provider = services.BuildServiceProvider();
         return await _provider
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
     }
 
     private static async Task<Subscription> SubscribeAsync(
@@ -974,15 +976,19 @@ public class JunctionEventSubscriptionTests
         ClaimsPrincipal user
     )
     {
-        var result = await executor.ExecuteAsync(
-            OperationRequestBuilder
-                .New()
-                .SetDocument(query)
-                .SetGlobalState("ClaimsPrincipal", user)
-                .Build()
-        );
+        var result = await executor
+            .ExecuteAsync(
+                OperationRequestBuilder
+                    .New()
+                    .SetDocument(query)
+                    .SetGlobalState("ClaimsPrincipal", user)
+                    .Build()
+            )
+            .ConfigureAwait(false);
 
-        return result is IResponseStream stream ? new Subscription(stream) : new Subscription(null);
+        return result is IResponseStream stream
+            ? new Subscription(stream)
+            : new Subscription(stream: null);
     }
 
     private sealed class Subscription(IResponseStream? stream) : IAsyncDisposable
@@ -1001,7 +1007,7 @@ public class JunctionEventSubscriptionTests
             );
             var reader = Task.Run(async () =>
             {
-                await foreach (var item in stream!.ReadResultsAsync())
+                await foreach (var item in stream!.ReadResultsAsync().ConfigureAwait(false))
                 {
                     received.TrySetResult(item);
                     break;
@@ -1016,20 +1022,20 @@ public class JunctionEventSubscriptionTests
                 publish();
                 // allowed-delay: re-publish interval, bounded by the 10s deadline; WhenAny wakes
                 // the instant the subscriber receives.
-                await Task.WhenAny(received.Task, Task.Delay(100));
+                await Task.WhenAny(received.Task, Task.Delay(100)).ConfigureAwait(false);
             }
 
             received.Task.IsCompleted.Should().BeTrue("an event should reach the subscriber");
-            var payload = await received.Task;
+            var payload = await received.Task.ConfigureAwait(false);
             payload.Errors.Should().BeNullOrEmpty();
-            await reader;
+            await reader.ConfigureAwait(false);
             return (IReadOnlyDictionary<string, object?>)payload.DataMap()["onJunctionEvent"]!;
         }
 
         public async ValueTask DisposeAsync()
         {
             if (stream is not null)
-                await stream.DisposeAsync();
+                await stream.DisposeAsync().ConfigureAwait(false);
         }
     }
 

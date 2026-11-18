@@ -138,7 +138,8 @@ public class DispatchListInputTests
         _services = services.BuildServiceProvider();
         return await _services
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
     }
 
     private static TrainRegistration Registration() =>
@@ -166,7 +167,7 @@ public class DispatchListInputTests
 
     private interface IVoteTrain;
 
-    private sealed class VoteTrain;
+    private static class VoteTrain;
 
     public sealed record Place(string City, int Zip);
 
@@ -175,7 +176,7 @@ public class DispatchListInputTests
         public long PollId { get; init; }
         public IReadOnlyList<string> ChoiceKeys { get; init; } = [];
         public int[] Ids { get; init; } = [];
-        public List<Place> Stops { get; init; } = [];
+        public IList<Place> Stops { get; init; } = [];
         public Place? Home { get; init; }
     }
 }

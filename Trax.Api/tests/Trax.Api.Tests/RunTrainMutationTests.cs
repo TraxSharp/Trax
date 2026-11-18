@@ -65,8 +65,11 @@ public class RunTrainMutationTests
 
     private async Task<int> RunsWritten()
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        return await db.Metadatas.CountAsync();
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            return await db.Metadatas.CountAsync().ConfigureAwait(false);
+        }
     }
 
     [Test]
@@ -81,7 +84,7 @@ public class RunTrainMutationTests
 
         var doc = await AdminOperationsAuthorizationTests.PostAsync(
             host,
-            null,
+            apiKey: null,
             RunTrain(TrainName, """{"value":"now"}""")
         );
 
@@ -107,7 +110,7 @@ public class RunTrainMutationTests
 
         var doc = await AdminOperationsAuthorizationTests.PostAsync(
             host,
-            null,
+            apiKey: null,
             RunTrain(TrainName, "{not json")
         );
 
@@ -135,7 +138,7 @@ public class RunTrainMutationTests
 
         var doc = await AdminOperationsAuthorizationTests.PostAsync(
             host,
-            null,
+            apiKey: null,
             RunTrain("Trax.X.INothing", "{}")
         );
 
@@ -160,7 +163,7 @@ public class RunTrainMutationTests
         // Malformed input too: authorization runs first, so the caller learns nothing about it.
         var doc = await AdminOperationsAuthorizationTests.PostAsync(
             host,
-            null,
+            apiKey: null,
             RunTrain(TrainName, "{not json")
         );
 
@@ -186,7 +189,7 @@ public class RunTrainMutationTests
 
         var doc = await AdminOperationsAuthorizationTests.PostAsync(
             host,
-            null,
+            apiKey: null,
             RunTrain(TrainName, "{}")
         );
 

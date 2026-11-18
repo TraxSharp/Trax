@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using Trax.Api.Console.Terminal.Lists;
 using Trax.Api.Console.Terminal.Operations;
@@ -58,27 +59,33 @@ internal static class RunTrace
         CancellationToken cancellationToken
     )
     {
-        var steps = await client.JunctionRunsAsync(
-            new JunctionRunsVariables { MetadataId = run, Take = Take },
-            cancellationToken
-        );
+        var steps = await client
+            .JunctionRunsAsync(
+                new JunctionRunsVariables { MetadataId = run, Take = Take },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
         if (!steps.Succeeded)
             return Failed(steps);
-        var decisions = await client.DecisionsAsync(
-            new DecisionsVariables { MetadataId = run, Take = Take },
-            cancellationToken
-        );
+        var decisions = await client
+            .DecisionsAsync(
+                new DecisionsVariables { MetadataId = run, Take = Take },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
         if (!decisions.Succeeded)
             return Failed(decisions);
-        var logs = await client.LogsAsync(
-            new LogsVariables
-            {
-                Take = Take,
-                MetadataId = run,
-                Order = SortOrder.Oldest,
-            },
-            cancellationToken
-        );
+        var logs = await client
+            .LogsAsync(
+                new LogsVariables
+                {
+                    Take = Take,
+                    MetadataId = run,
+                    Order = SortOrder.Oldest,
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
         if (!logs.Succeeded)
             return Failed(logs);
 
@@ -139,7 +146,7 @@ internal static class RunTrace
     private static TraceEntry Step(JunctionRunsResultOperationsJunctionRuns s) =>
         new(
             TraceKind.Step,
-            $"step:{s.Position}",
+            string.Create(CultureInfo.InvariantCulture, $"step:{s.Position}"),
             s.StartedAt,
             StepText(
                 Wire.Name(s.Kind),
@@ -156,7 +163,7 @@ internal static class RunTrace
     private static TraceEntry StepOf(OnJunctionEventResultOnJunctionEventJunction s) =>
         new(
             TraceKind.Step,
-            $"step:{s.Position}",
+            string.Create(CultureInfo.InvariantCulture, $"step:{s.Position}"),
             s.StartedAt,
             StepText(
                 Wire.Name(s.Kind),
@@ -184,7 +191,9 @@ internal static class RunTrace
             {
                 $"{kind.ToLowerInvariant()} {name}",
                 state,
-                durationMs is { } ms ? $"{ms:0} ms" : null,
+                durationMs is { } ms
+                    ? string.Create(CultureInfo.InvariantCulture, $"{ms:0} ms")
+                    : null,
                 answer is null ? null : $"answer {answer}",
                 failure,
             }.Where(p => p is not null)
@@ -193,7 +202,7 @@ internal static class RunTrace
     private static TraceEntry Decision(DecisionsResultOperationsDecisionsItems d) =>
         new(
             TraceKind.Decision,
-            $"decision:{d.Id}",
+            string.Create(CultureInfo.InvariantCulture, $"decision:{d.Id}"),
             d.DecidedAt,
             string.Join(
                 "  ",
@@ -211,8 +220,8 @@ internal static class RunTrace
     private static TraceEntry Log(LogsResultOperationsLogsLogsItems l) =>
         new(
             TraceKind.Log,
-            $"log:{l.Id}",
-            null,
+            string.Create(CultureInfo.InvariantCulture, $"log:{l.Id}"),
+            At: null,
             $"{Wire.Name(l.Level).ToLowerInvariant()}  {l.Category}  {l.Message}"
                 + (l.Exception is null ? "" : $"  {l.Exception}"),
             Wire.Json(l)

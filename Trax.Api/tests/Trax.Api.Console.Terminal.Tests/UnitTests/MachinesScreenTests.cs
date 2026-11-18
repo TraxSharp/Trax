@@ -27,7 +27,11 @@ public class MachinesScreenTests
             .AnswerLater(
                 "MachineInstancesAttention",
                 v =>
-                    v["machine"]!.GetValue<string>() == "alpha"
+                    string.Equals(
+                        v["machine"]!.GetValue<string>(),
+                        "alpha",
+                        StringComparison.Ordinal
+                    )
                         ? alpha.Task
                         : Task.FromResult(Instances("beta", "bbbbbbbb-0000-4000-8000-000000000002"))
             );
@@ -55,7 +59,9 @@ public class MachinesScreenTests
         await terminal.OnUi(() => screen.SetFocus());
         await terminal.Press(Key.J);
         await terminal.Until(
-            () => screen.Instances.Count == 1 && screen.Selected?.Name == "beta",
+            () =>
+                screen.Instances.Count == 1
+                && string.Equals(screen.Selected?.Name, "beta", StringComparison.Ordinal),
             "beta's instances show"
         );
 
@@ -85,7 +91,11 @@ public class MachinesScreenTests
                 {"operations":{"machineInstances":{"totalCount":1,"isCountCapped":false,"items":[
                   {"machine":"MACHINE","ownerKind":"USER","id":"ID","rowId":1,"state":"Open",
                    "updatedAt":"2026-10-22T10:01:00Z","inStateSince":"2026-10-22T10:01:00Z","overdue":false,"stuck":false}]}}}
-                """.Replace("MACHINE", machine).Replace("ID", id)
+                """.Replace("MACHINE", machine, StringComparison.Ordinal).Replace(
+                    "ID",
+                    id,
+                    StringComparison.Ordinal
+                )
             )!
             .AsObject();
 }

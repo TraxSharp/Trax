@@ -21,6 +21,6 @@ public abstract class GraphQLResourceRequest<TResponse> : IGraphQLClientRequest<
     /// </summary>
     public virtual string Query => ResourceQueryCache.GetQuery(GetType());
 
-    /// <summary>The operation's variables; <c>null</c> unless a subclass overrides it.</summary>
+    /// <summary>The operation's variables; <see langword="null"/> unless a subclass overrides it.</summary>
     public virtual object? Variables => null;
 }

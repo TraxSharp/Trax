@@ -90,7 +90,9 @@ public class MachineBoardE2ETests
         var stickies = board.GetProperty("stickies").EnumerateArray().ToList();
         stickies.Should().OnlyContain(s => s.GetProperty("machine").GetString() == machine);
         var actors = stickies
-            .Where(s => s.GetProperty("kind").GetString() == "actor")
+            .Where(s =>
+                string.Equals(s.GetProperty("kind").GetString(), "actor", StringComparison.Ordinal)
+            )
             .Select(s => s.GetProperty("id").GetString())
             .ToList();
         actors.Should().Contain("actor:anyone signed in", "the machine's own actor is still drawn");
@@ -99,7 +101,7 @@ public class MachineBoardE2ETests
             .Should()
             .OnlyContain(
                 a =>
-                    links.Any(l =>
+                    links.Exists(l =>
                         l.GetProperty("from").GetString() == a
                         || l.GetProperty("to").GetString() == a
                     ),
@@ -157,7 +159,9 @@ public class MachineBoardE2ETests
 
     private async Task<JsonElement> Board(string key, string machine)
     {
-        using var answer = await _host.PostAsync(Query, new { machine }, apiKey: key);
+        using var answer = await _host
+            .PostAsync(Query, new { machine }, apiKey: key)
+            .ConfigureAwait(false);
         answer
             .RootElement.TryGetProperty("errors", out _)
             .Should()

@@ -59,7 +59,7 @@ public class CustomStepsTests
             Then Ada's order is a draft
         """;
 
-    private static readonly Dictionary<string, string> Keys = new()
+    private static readonly Dictionary<string, string> Keys = new(StringComparer.Ordinal)
     {
         ["Ada"] = E2EHost.AliceKey,
         ["Bo"] = E2EHost.CarolKey,
@@ -108,13 +108,18 @@ public class CustomStepsTests
                     var person = match.Groups["person"].Value;
                     var id = scenario.InstanceOf(person, "c-order");
                     id.Should().NotBeNull();
-                    var order = await Get(scenario, person, id!.Value);
+                    var order = await Get(scenario, person, id!.Value).ConfigureAwait(false);
                     order.Should().NotBeNull("the order is the person's own");
                     order!["problem"].Should().BeNull();
                     order["context"]!["loaves"]!
                         .GetValue<int>()
                         .Should()
-                        .Be(int.Parse(match.Groups["n"].Value));
+                        .Be(
+                            int.Parse(
+                                match.Groups["n"].Value,
+                                System.Globalization.CultureInfo.InvariantCulture
+                            )
+                        );
                 }
             )
             .Then(
@@ -123,10 +128,11 @@ public class CustomStepsTests
                 {
                     scenario.InstanceOf("Bo", "c-order").Should().BeNull();
                     var order = await Get(
-                        scenario,
-                        "Bo",
-                        scenario.InstanceOf("Ada", "c-order")!.Value
-                    );
+                            scenario,
+                            "Bo",
+                            scenario.InstanceOf("Ada", "c-order")!.Value
+                        )
+                        .ConfigureAwait(false);
                     order.Should().BeNull("another user's id is answered as an unknown one");
                 }
             );
@@ -196,7 +202,9 @@ public class CustomStepsTests
                             break;
                         default:
                             using (var request = new HttpRequestMessage(HttpMethod.Get, "/"))
-                                (await scenario.SendAsync("Cy", request)).Dispose();
+                                (
+                                    await scenario.SendAsync("Cy", request).ConfigureAwait(false)
+                                ).Dispose();
                             break;
                     }
                 }
@@ -333,7 +341,10 @@ public class CustomStepsTests
             Glossary = FeatureGlossary.Read(Glossary),
             Credential = (_, person, _) =>
                 new FeatureCredential(
-                    new Dictionary<string, string> { ["X-Api-Key"] = Keys[person] }
+                    new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["X-Api-Key"] = Keys[person],
+                    }
                 ),
         };
 
@@ -357,8 +368,10 @@ public class CustomStepsTests
                 }
             ),
         };
-        using var response = await scenario.SendAsync(person, request);
-        var body = JsonNode.Parse(await response.Content.ReadAsStringAsync())!.AsObject();
+        using var response = await scenario.SendAsync(person, request).ConfigureAwait(false);
+        var body = JsonNode
+            .Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false))!
+            .AsObject();
         body["errors"].Should().BeNull("the host answers the read");
         var orders = body["data"]!["machines"]!["cOrder"]!.AsObject();
         orders.ContainsKey("get").Should().BeTrue();

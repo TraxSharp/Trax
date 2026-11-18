@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -64,8 +65,10 @@ public class MachineEventStressTests
 
     private static string ConnectionString =>
         Environment.GetEnvironmentVariable("TRAX_STRESS_CONNECTION")
-        ?? $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_stress;Username=trax;Password=trax123;"
-            + "Maximum Pool Size=16;Timeout=30;Command Timeout=1200;Include Error Detail=true";
+        ?? string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_stress;Username=trax;Password=trax123;"
+        ) + "Maximum Pool Size=16;Timeout=30;Command Timeout=1200;Include Error Detail=true";
 
     private IHost _host = null!;
     private IRequestExecutor _executor = null!;
@@ -112,8 +115,8 @@ public class MachineEventStressTests
                         .UsePersistedOperations(persisted =>
                             persisted
                                 .SingleNode()
-                                .RequirePersisted(false)
-                                .LogNonPersistedRequests(true)
+                                .RequirePersisted(require: false)
+                                .LogNonPersistedRequests(log: true)
                         )
                 );
             })
@@ -147,7 +150,7 @@ public class MachineEventStressTests
         var notices = 0;
         listener.Notification += (_, e) =>
         {
-            if (e.Channel == Channel)
+            if (string.Equals(e.Channel, Channel, StringComparison.Ordinal))
                 Interlocked.Increment(ref notices);
         };
         await using (var listen = new NpgsqlCommand($"LISTEN {Channel}", listener))
@@ -165,7 +168,7 @@ public class MachineEventStressTests
         (
             await UntilAsync(async () =>
             {
-                await listener.WaitAsync(TimeSpan.FromMilliseconds(50));
+                await listener.WaitAsync(TimeSpan.FromMilliseconds(50)).ConfigureAwait(false);
                 return Volatile.Read(ref notices) >= Events;
             })
         )
@@ -180,10 +183,20 @@ public class MachineEventStressTests
             .BeTrue("each event's request is audited once");
 
         var perEvent = clock.Elapsed / Events;
+        var runsSince = await AdvanceRunsAsync() - runsBefore;
         TestContext.Out.WriteLine(
-            $"{Events} events: {clock.Elapsed.TotalMilliseconds:F0} ms, {perEvent.TotalMilliseconds:F2} ms each; "
-                + $"runs {await AdvanceRunsAsync() - runsBefore}, audits {CountingAuditSink.Entries - auditsBefore}, "
-                + $"notices {Volatile.Read(ref notices)}"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"{Events} events: {clock.Elapsed.TotalMilliseconds:F0} ms, {perEvent.TotalMilliseconds:F2} ms each; "
+            )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"runs {runsSince}, audits {CountingAuditSink.Entries - auditsBefore}, "
+                )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"notices {Volatile.Read(ref notices)}"
+                )
         );
 
         (await AdvanceRunsAsync() - runsBefore)
@@ -220,7 +233,8 @@ public class MachineEventStressTests
                     Task.Run(async () =>
                     {
                         for (var e = 0; e < EventsPerInstance; e++)
-                            await EventAsync(id, e % 2 == 0 ? "close" : "open");
+                            await EventAsync(id, e % 2 == 0 ? "close" : "open")
+                                .ConfigureAwait(false);
                     })
                 )
             )
@@ -241,7 +255,7 @@ public class MachineEventStressTests
                         id,
                         await RowIdAsync(id)
                     ),
-                    null,
+                    beforeRevision: null,
                     100,
                     CancellationToken.None
                 );
@@ -268,9 +282,18 @@ public class MachineEventStressTests
         read.Stop();
 
         TestContext.Out.WriteLine(
-            $"{ConcurrentInstances} instances x {EventsPerInstance} events at once: {clock.Elapsed.TotalMilliseconds:F0} ms, "
-                + $"{perEvent.TotalMilliseconds:F2} ms per event; {ConcurrentInstances} histories read in "
-                + $"{read.Elapsed.TotalMilliseconds:F0} ms"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"{ConcurrentInstances} instances x {EventsPerInstance} events at once: {clock.Elapsed.TotalMilliseconds:F0} ms, "
+            )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{perEvent.TotalMilliseconds:F2} ms per event; {ConcurrentInstances} histories read in "
+                )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{read.Elapsed.TotalMilliseconds:F0} ms"
+                )
         );
         perEvent
             .Should()
@@ -279,21 +302,28 @@ public class MachineEventStressTests
 
     private static async Task<long> RowIdAsync(Guid id)
     {
-        await using var connection = new NpgsqlConnection(ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(
-            "SELECT row_id FROM trax.snapshot_draft WHERE machine = 'stress-toggle' AND id = @id",
-            connection
-        );
-        command.Parameters.AddWithValue("id", id);
-        return (long)(await command.ExecuteScalarAsync())!;
+        var connection = new NpgsqlConnection(ConnectionString);
+        await using (connection.ConfigureAwait(false))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            var command = new NpgsqlCommand(
+                "SELECT row_id FROM trax.snapshot_draft WHERE machine = 'stress-toggle' AND id = @id",
+                connection
+            );
+            await using (command.ConfigureAwait(false))
+            {
+                command.Parameters.AddWithValue("id", id);
+                return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
+            }
+        }
     }
 
     private async Task<Guid> StartAsync()
     {
         var data = await ExecuteAsync(
-            $"mutation {{ machines {{ stressToggle {{ start(input: {{ label: \"stress\" }}, requestId: \"{Guid.NewGuid():N}\") {{ id problem {{ code message }} }} }} }} }}"
-        );
+                $"mutation {{ machines {{ stressToggle {{ start(input: {{ label: \"stress\" }}, requestId: \"{Guid.NewGuid():N}\") {{ id problem {{ code message }} }} }} }} }}"
+            )
+            .ConfigureAwait(false);
         var start = data.GetProperty("machines").GetProperty("stressToggle").GetProperty("start");
         if (start.GetProperty("problem").ValueKind == JsonValueKind.Object)
             Assert.Fail($"start was refused: {start.GetProperty("problem").GetRawText()}");
@@ -307,21 +337,23 @@ public class MachineEventStressTests
 
     private async Task<JsonElement> ExecuteAsync(string document)
     {
-        var result = await _executor.ExecuteAsync(
-            OperationRequestBuilder
-                .New()
-                .SetDocument(document)
-                .SetGlobalState(
-                    nameof(ClaimsPrincipal),
-                    new ClaimsPrincipal(
-                        new ClaimsIdentity(
-                            [new Claim(ClaimTypes.Name, FixedPrincipal.User)],
-                            "Stress"
+        var result = await _executor
+            .ExecuteAsync(
+                OperationRequestBuilder
+                    .New()
+                    .SetDocument(document)
+                    .SetGlobalState(
+                        nameof(ClaimsPrincipal),
+                        new ClaimsPrincipal(
+                            new ClaimsIdentity(
+                                [new Claim(ClaimTypes.Name, FixedPrincipal.User)],
+                                "Stress"
+                            )
                         )
                     )
-                )
-                .Build()
-        );
+                    .Build()
+            )
+            .ConfigureAwait(false);
         var response = JsonDocument.Parse(((OperationResult)result).ToJson()).RootElement.Clone();
         if (response.TryGetProperty("errors", out var errors))
             Assert.Fail($"The request failed: {errors[0].GetProperty("message").GetString()}");
@@ -331,25 +363,37 @@ public class MachineEventStressTests
     /// <summary>Deletes the toggles an earlier run left in the stress database, so every run starts from none.</summary>
     internal static async Task ClearToggleDraftsAsync(string connectionString)
     {
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(
-            "DELETE FROM trax.snapshot_draft WHERE machine = 'stress-toggle'",
-            connection
-        );
-        await command.ExecuteNonQueryAsync();
+        var connection = new NpgsqlConnection(connectionString);
+        await using (connection.ConfigureAwait(false))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            var command = new NpgsqlCommand(
+                "DELETE FROM trax.snapshot_draft WHERE machine = 'stress-toggle'",
+                connection
+            );
+            await using (command.ConfigureAwait(false))
+            {
+                await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+            }
+        }
     }
 
     private static async Task<long> AdvanceRunsAsync()
     {
-        await using var connection = new NpgsqlConnection(ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(
-            "SELECT count(*) FROM trax.metadata WHERE name = @name",
-            connection
-        );
-        command.Parameters.AddWithValue("name", typeof(IAdvanceSnapshot).FullName!);
-        return (long)(await command.ExecuteScalarAsync())!;
+        var connection = new NpgsqlConnection(ConnectionString);
+        await using (connection.ConfigureAwait(false))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            var command = new NpgsqlCommand(
+                "SELECT count(*) FROM trax.metadata WHERE name = @name",
+                connection
+            );
+            await using (command.ConfigureAwait(false))
+            {
+                command.Parameters.AddWithValue("name", typeof(IAdvanceSnapshot).FullName!);
+                return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
+            }
+        }
     }
 
     private static async Task<bool> UntilAsync(Func<Task<bool>> condition)
@@ -357,9 +401,9 @@ public class MachineEventStressTests
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(60));
         try
         {
-            while (!await condition())
+            while (!await condition().ConfigureAwait(false))
                 // determinism: the poll interval of a wait bounded by the timeout above.
-                await Task.Delay(25, deadline.Token);
+                await Task.Delay(25, deadline.Token).ConfigureAwait(false);
             return true;
         }
         catch (OperationCanceledException)

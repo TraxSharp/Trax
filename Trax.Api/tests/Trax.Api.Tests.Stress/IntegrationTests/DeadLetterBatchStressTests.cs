@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.Mutations;
@@ -91,14 +92,18 @@ public class DeadLetterBatchStressTests : StressTestSetup
             {
                 var answer = Stopwatch.StartNew();
                 var job = await OperationsFieldAsync(
-                    "mutation { operations { deadLetters { requeueAllDeadLetters "
-                        + "{ id status awaitingAtStart } } } }",
-                    ct,
-                    "deadLetters"
-                );
+                        "mutation { operations { deadLetters { requeueAllDeadLetters "
+                            + "{ id status awaitingAtStart } } } }",
+                        ct,
+                        "deadLetters"
+                    )
+                    .ConfigureAwait(false);
                 answer.Stop();
                 TestContext.Out.WriteLine(
-                    $"requeueAllDeadLetters answered in {answer.Elapsed.TotalMilliseconds:F0}ms"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"requeueAllDeadLetters answered in {answer.Elapsed.TotalMilliseconds:F0}ms"
+                    )
                 );
 
                 answer
@@ -113,15 +118,16 @@ public class DeadLetterBatchStressTests : StressTestSetup
                 var id = Guid.Parse(job.GetProperty("id").GetString()!);
                 while (jobs.Get(id)?.Status == DeadLetterRequeueJobStatus.Running)
                     // determinism: the poll interval while the background fold finishes.
-                    await Task.Delay(50, ct);
+                    await Task.Delay(50, ct).ConfigureAwait(false);
 
                 var done = await OperationsFieldAsync(
-                    "{ operations { deadLetters { requeueAllJob(id: \""
-                        + job.GetProperty("id").GetString()
-                        + "\") { status count message } } } }",
-                    ct,
-                    "deadLetters"
-                );
+                        "{ operations { deadLetters { requeueAllJob(id: \""
+                            + job.GetProperty("id").GetString()
+                            + "\") { status count message } } } }",
+                        ct,
+                        "deadLetters"
+                    )
+                    .ConfigureAwait(false);
                 done.GetProperty("status")
                     .GetString()
                     .Should()
@@ -141,11 +147,12 @@ public class DeadLetterBatchStressTests : StressTestSetup
             async (_, ct) =>
                 (
                     await OperationsFieldAsync(
-                        "mutation { operations { deadLetters { acknowledgeAllDeadLetters"
-                            + "(note: \"stress\") { count } } } }",
-                        ct,
-                        "deadLetters"
-                    )
+                            "mutation { operations { deadLetters { acknowledgeAllDeadLetters"
+                                + "(note: \"stress\") { count } } } }",
+                            ct,
+                            "deadLetters"
+                        )
+                        .ConfigureAwait(false)
                 )
                     .GetProperty("count")
                     .GetInt32()

@@ -27,7 +27,9 @@ public class MetricsQueries
         bool hideAdminTrains = false
     )
     {
-        return await operationsService.GetDashboardMetricsAsync(range, hideAdminTrains, ct);
+        return await operationsService
+            .GetDashboardMetricsAsync(range, hideAdminTrains, ct)
+            .ConfigureAwait(false);
     }
 
     /// <summary>The error code a series with a missing or wrong argument is refused with.</summary>
@@ -64,7 +66,9 @@ public class MetricsQueries
                 ErrorBuilder.New().SetMessage(refusal).SetCode(SeriesArgumentCode).Build()
             );
 
-        return await operationsService.GetMetricSeriesAsync(scope, id, name, range, ct);
+        return await operationsService
+            .GetMetricSeriesAsync(scope, id, name, range, ct)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -79,7 +83,7 @@ public class MetricsQueries
     /// <summary>
     /// This API process's CPU utilisation since the previous poll (0-100, normalised by core
     /// count). Separate from <see cref="GetServer"/> because it is stateful per process: it needs
-    /// a delta between two samples, so the first poll returns <c>null</c> while the baseline primes.
+    /// a delta between two samples, so the first poll returns <see langword="null"/> while the baseline primes.
     /// </summary>
     public double? GetServerCpuPercent([Service] ProcessCpuSampler sampler)
     {

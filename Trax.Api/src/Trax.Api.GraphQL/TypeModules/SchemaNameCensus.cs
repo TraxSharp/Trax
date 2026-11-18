@@ -32,12 +32,13 @@ internal sealed class SchemaNameCensus
     private readonly Dictionary<(string Type, string Field), List<SchemaNameOwner>> _fields = [];
     private readonly Dictionary<string, List<SchemaNameOwner>> _types = new(StringComparer.Ordinal);
 
-    /// <summary>The owner Trax recorded for a field, or <c>null</c> when Trax places none there.</summary>
+    /// <summary>The owner Trax recorded for a field, or <see langword="null"/> when Trax places none there.</summary>
     public SchemaNameOwner? FieldOwner(string typeName, string fieldName) =>
         _fields.TryGetValue((typeName, fieldName), out var owners) ? owners[0] : null;
 
     /// <summary>Every type name the census places fields on.</summary>
-    public IReadOnlySet<string> FieldParents { get; private set; } = new HashSet<string>();
+    public IReadOnlySet<string> FieldParents { get; private set; } =
+        new HashSet<string>(StringComparer.Ordinal);
 
     /// <summary>
     /// Records every field and generated type, and throws naming each pair of owners that claim
@@ -125,7 +126,9 @@ internal sealed class SchemaNameCensus
                 );
         }
 
-        census.FieldParents = census._fields.Keys.Select(k => k.Type).ToHashSet();
+        census.FieldParents = census
+            ._fields.Keys.Select(k => k.Type)
+            .ToHashSet(StringComparer.Ordinal);
         census.ThrowOnClashes();
         return census;
     }
@@ -164,7 +167,7 @@ internal sealed class SchemaNameCensus
     {
         if (!map.TryGetValue(key, out var owners))
             map[key] = owners = [];
-        if (!owners.Any(o => o.Key == owner.Key))
+        if (!owners.Exists(o => string.Equals(o.Key, owner.Key, StringComparison.Ordinal)))
             owners.Add(owner);
     }
 

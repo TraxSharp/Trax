@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -41,7 +42,10 @@ public class WorkQueueOperationsTests
     // lets the pool reuse connections across tests instead of paying TCP+auth
     // every SetUp, which is what was timing out under CI Postgres contention.
     private static readonly string ConnectionString =
-        $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_workqueue;Username=trax;Password=trax123;"
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_workqueue;Username=trax;Password=trax123;"
+        )
         + "Maximum Pool Size=8;Minimum Pool Size=0;Connection Idle Lifetime=30;"
         + "Timeout=30;Tcp Keepalive=true";
 
@@ -93,20 +97,28 @@ public class WorkQueueOperationsTests
         string? trainName = null
     )
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        for (var i = 0; i < count; i++)
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
-            var entry = WorkQueue.Create(
-                new CreateWorkQueue
-                {
-                    TrainName = trainName ?? $"Trax.Tests.IFakeTrain{i}",
-                    Priority = i % 4,
-                }
-            );
-            entry.Status = status;
-            await db.Track(entry);
+            for (var i = 0; i < count; i++)
+            {
+                var entry = WorkQueue.Create(
+                    new CreateWorkQueue
+                    {
+                        TrainName =
+                            trainName
+                            ?? string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"Trax.Tests.IFakeTrain{i}"
+                            ),
+                        Priority = i % 4,
+                    }
+                );
+                entry.Status = status;
+                await db.Track(entry).ConfigureAwait(false);
+            }
+            await db.SaveChanges(default).ConfigureAwait(false);
         }
-        await db.SaveChanges(default);
     }
 
     #region CancelWorkQueueEntries (batch)
@@ -305,7 +317,7 @@ public class WorkQueueOperationsTests
     {
         await SeedWorkQueues(2);
         var queries = new WorkQueueQueries();
-        var first = (await queries.GetWorkQueues(_factory, default)).Items.First();
+        var first = (await queries.GetWorkQueues(_factory, default)).Items[0];
 
         var fetched = await queries.GetDetail(first.Id, Operations, default);
 
@@ -344,13 +356,17 @@ public class WorkQueueOperationsTests
 
         var items = (await new WorkQueueQueries().GetWorkQueues(_factory, default)).Items;
 
-        var staged = items.Single(i => i.TrainName == "Trax.Tests.IStagedTrain");
+        var staged = items.Single(i =>
+            string.Equals(i.TrainName, "Trax.Tests.IStagedTrain", StringComparison.Ordinal)
+        );
         staged
             .ConfirmedAt.Should()
             .BeNull("a staged entry reads as Queued, and this is what tells it apart");
         staged.SubjectKey.Should().Be("customer-7");
 
-        var ready = items.Single(i => i.TrainName == "Trax.Tests.IReadyTrain");
+        var ready = items.Single(i =>
+            string.Equals(i.TrainName, "Trax.Tests.IReadyTrain", StringComparison.Ordinal)
+        );
         ready.ConfirmedAt.Should().NotBeNull();
         ready.SubjectKey.Should().BeNull();
     }
@@ -378,7 +394,7 @@ public class WorkQueueOperationsTests
         }
 
         var queries = new WorkQueueQueries();
-        var first = (await queries.GetWorkQueues(_factory, default)).Items.First();
+        var first = (await queries.GetWorkQueues(_factory, default)).Items[0];
         var fetched = await queries.GetDetail(first.Id, Operations, default);
 
         fetched.Should().NotBeNull();
@@ -410,41 +426,47 @@ public class WorkQueueOperationsTests
         DateTime? createdAt = null
     )
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var entry = WorkQueue.Create(
-            new CreateWorkQueue
-            {
-                TrainName = "Trax.Tests.ISubjectTrain",
-                InputTypeName = "Trax.Tests.SubjectInput",
-                Input = input,
-                SubjectKey = subject,
-                Priority = priority,
-            }
-        );
-        entry.Status = status;
-        entry.MetadataId = metadataId;
-        if (createdAt is { } at)
-            entry.CreatedAt = at;
-        await db.Track(entry);
-        await db.SaveChanges(default);
-        return entry.Id;
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var entry = WorkQueue.Create(
+                new CreateWorkQueue
+                {
+                    TrainName = "Trax.Tests.ISubjectTrain",
+                    InputTypeName = "Trax.Tests.SubjectInput",
+                    Input = input,
+                    SubjectKey = subject,
+                    Priority = priority,
+                }
+            );
+            entry.Status = status;
+            entry.MetadataId = metadataId;
+            if (createdAt is { } at)
+                entry.CreatedAt = at;
+            await db.Track(entry).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return entry.Id;
+        }
     }
 
     private async Task<long> AddRun(TrainState state)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var run = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = "Trax.Tests.ISubjectTrain",
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = null,
-            }
-        );
-        run.TrainState = state;
-        await db.Track(run);
-        await db.SaveChanges(default);
-        return run.Id;
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var run = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = "Trax.Tests.ISubjectTrain",
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                }
+            );
+            run.TrainState = state;
+            await db.Track(run).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return run.Id;
+        }
     }
 
     [Test]
@@ -585,7 +607,7 @@ public class WorkQueueOperationsTests
     {
         var ops = Substitute.For<IOperationsService>();
         ops.QueueTrainAsync(Arg.Any<QueueTrainInput>(), Arg.Any<CancellationToken>())
-            .Returns(new OperationResult(true, Id: 42, Count: 1, Message: "ok"));
+            .Returns(new OperationResult(Success: true, Id: 42, Count: 1, Message: "ok"));
         var mutations = new WorkQueueMutations();
         var input = new QueueTrainInput("Trax.Tests.IFake", "{}", Priority: 3);
 
@@ -602,7 +624,7 @@ public class WorkQueueOperationsTests
     {
         var ops = Substitute.For<IOperationsService>();
         ops.QueueTrainAsync(Arg.Any<QueueTrainInput>(), Arg.Any<CancellationToken>())
-            .Returns(new OperationResult(false, Message: "Unknown train: nope"));
+            .Returns(new OperationResult(Success: false, Message: "Unknown train: nope"));
         var mutations = new WorkQueueMutations();
 
         var response = await mutations.QueueTrain(new QueueTrainInput("nope"), ops, default);
@@ -616,7 +638,7 @@ public class WorkQueueOperationsTests
     {
         var ops = Substitute.For<IOperationsService>();
         ops.CancelWorkQueueEntryAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
-            .Returns(new OperationResult(true, Id: 7, Count: 1, Message: "cancelled"));
+            .Returns(new OperationResult(Success: true, Id: 7, Count: 1, Message: "cancelled"));
         var mutations = new WorkQueueMutations();
 
         var response = await mutations.CancelWorkQueueEntry(7, ops, default);
@@ -631,7 +653,9 @@ public class WorkQueueOperationsTests
     {
         var ops = Substitute.For<IOperationsService>();
         ops.CancelWorkQueueEntryAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
-            .Returns(new OperationResult(false, Message: "Work queue entry 999 not found."));
+            .Returns(
+                new OperationResult(Success: false, Message: "Work queue entry 999 not found.")
+            );
         var mutations = new WorkQueueMutations();
 
         var response = await mutations.CancelWorkQueueEntry(999, ops, default);

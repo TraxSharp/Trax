@@ -46,7 +46,7 @@ internal sealed class TraxSocketRefusalAudit(
                 Timestamp: timeProvider.GetUtcNow(),
                 Success: false,
                 ErrorText: $"{RefusedCode} at connection_init ({refusal.Reason})",
-                Metadata: new Dictionary<string, string>
+                Metadata: new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     ["transport"] = "websocket",
                     ["stage"] = "connection_init",

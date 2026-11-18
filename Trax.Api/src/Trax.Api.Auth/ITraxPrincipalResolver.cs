@@ -15,7 +15,7 @@ namespace Trax.Api.Auth;
 /// responsible for securing systems that use it. See SECURITY-DISCLAIMER.md.
 /// <para>
 /// Implementations should be cheap or cache aggressively. The resolver runs on
-/// every request that presents credentials. Returning <c>null</c> signals that
+/// every request that presents credentials. Returning <see langword="null"/> signals that
 /// the credential was well-formed but does not map to a known principal; the
 /// scheme handler translates this to an authentication failure.
 /// </para>
@@ -25,7 +25,7 @@ public interface ITraxPrincipalResolver<in TInput>
 {
     /// <summary>
     /// Resolves the supplied credential to a <see cref="TraxPrincipal"/>, or returns
-    /// <c>null</c> to signal "credential format was valid but no matching principal exists."
+    /// <see langword="null"/> to signal "credential format was valid but no matching principal exists."
     /// </summary>
     ValueTask<TraxPrincipal?> ResolveAsync(TInput input, CancellationToken ct);
 }

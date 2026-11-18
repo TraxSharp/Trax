@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Security.Cryptography;
 using AwesomeAssertions;
 using Trax.Api.Auth;
@@ -164,8 +165,13 @@ public class HashedApiKeyResolverTests
             .Range(0, count)
             .Select(i =>
                 HashedApiKeyResolver.Entry.FromPlainKey(
-                    $"key-{i}",
-                    () => new TraxPrincipal($"u{i}", $"U{i}", [])
+                    string.Create(CultureInfo.InvariantCulture, $"key-{i}"),
+                    () =>
+                        new TraxPrincipal(
+                            string.Create(CultureInfo.InvariantCulture, $"u{i}"),
+                            string.Create(CultureInfo.InvariantCulture, $"U{i}"),
+                            []
+                        )
                 )
             )
             .ToArray();
@@ -177,11 +183,11 @@ public class HashedApiKeyResolverTests
         {
             // Warm-up
             for (var i = 0; i < 200; i++)
-                await resolver.ResolveAsync(input, CancellationToken.None);
+                await resolver.ResolveAsync(input, CancellationToken.None).ConfigureAwait(false);
 
             sw.Restart();
             for (var i = 0; i < iters; i++)
-                await resolver.ResolveAsync(input, CancellationToken.None);
+                await resolver.ResolveAsync(input, CancellationToken.None).ConfigureAwait(false);
             sw.Stop();
             return sw.Elapsed.TotalMicroseconds / iters;
         }

@@ -13,7 +13,7 @@ namespace Trax.Api.DTOs;
 /// <param name="DeadLetteredAt">When the run was dead-lettered (UTC).</param>
 /// <param name="Reason">Why the run was dead-lettered.</param>
 /// <param name="RetryCountAtDeadLetter">How many retries had been made when the run was dead-lettered.</param>
-/// <param name="ResolvedAt">When the dead letter was retried or acknowledged (UTC), or <c>null</c> while it awaits intervention.</param>
+/// <param name="ResolvedAt">When the dead letter was retried or acknowledged (UTC), or <see langword="null"/> while it awaits intervention.</param>
 /// <param name="ResolutionNote">The note the operator left when resolving it, if any.</param>
 /// <param name="RetryMetadataId">The id of the execution a retry started, once the dead letter has been retried.</param>
 public record DeadLetterSummary(
@@ -31,7 +31,7 @@ public record DeadLetterSummary(
 {
     /// <summary>
     /// The external id of the manifest whose run was dead-lettered, the name an operator gave it
-    /// when scheduling it; <c>null</c> when the manifest can no longer be read.
+    /// when scheduling it; <see langword="null"/> when the manifest can no longer be read.
     /// </summary>
     public string? ManifestExternalId { get; init; }
 }

@@ -47,14 +47,24 @@ public class AllowlistMatcherTests
 
     [Test]
     public void IsAllowed_PredicateMatch_ReturnsTrue() =>
-        Build(predicates: new Func<string, bool>[] { id => id.StartsWith("dev_") })
+        Build(
+                predicates: new Func<string, bool>[]
+                {
+                    id => id.StartsWith("dev_", StringComparison.Ordinal),
+                }
+            )
             .IsAllowed("dev_explore", documentId: null)
             .Should()
             .BeTrue();
 
     [Test]
     public void IsAllowed_PredicateNoMatch_ReturnsFalse() =>
-        Build(predicates: new Func<string, bool>[] { id => id.StartsWith("dev_") })
+        Build(
+                predicates: new Func<string, bool>[]
+                {
+                    id => id.StartsWith("dev_", StringComparison.Ordinal),
+                }
+            )
             .IsAllowed("prod_explore", documentId: null)
             .Should()
             .BeFalse();

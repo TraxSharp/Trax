@@ -54,11 +54,17 @@ public class UiTests
             )
         );
         await terminal.OnUi(() =>
-            Ui.Start(terminal.App, () => Task.FromResult(1), _ => later = true, _ => { })
+            Ui.Start(
+                terminal.App,
+                () => Task.FromResult(1),
+                _ => later = true,
+                _ => { },
+                cancellation: CancellationToken.None
+            )
         );
         await terminal.Until(() => later, "a later start finishes");
         // negative-wait: a report for the cancelled start, were one made, would arrive within this window.
-        await Task.Delay(100);
+        await Task.Delay(100, cancellationToken: CancellationToken.None);
         await terminal.OnUi(() => { });
 
         reported.Should().BeEmpty();
@@ -97,9 +103,9 @@ public class UiTests
             );
             context.Close();
             // negative-wait: a closed context sends no further polls in these windows.
-            await Task.Delay(200);
+            await Task.Delay(200, context.Closed);
             var after = host.Sent("BulkOperation").Count;
-            await Task.Delay(300);
+            await Task.Delay(300, context.Closed);
 
             host.Sent("BulkOperation")
                 .Count.Should()

@@ -96,10 +96,10 @@ public class ExtensionMethodTests
 
         // Functional: set/get/invalidate round-trip through the resolved cache.
         var cache = sp.GetRequiredService<IPersistedOperationCache>();
-        cache.Set(null, "id", "doc");
-        cache.TryGet(null, "id").Should().Be("doc");
-        cache.Invalidate(null, "id");
-        cache.TryGet(null, "id").Should().BeNull();
+        cache.Set(tenantKey: null, "id", "doc");
+        cache.TryGet(tenantKey: null, "id").Should().Be("doc");
+        cache.Invalidate(tenantKey: null, "id");
+        cache.TryGet(tenantKey: null, "id").Should().BeNull();
     }
 
     [Test]
@@ -218,11 +218,18 @@ public class ExtensionMethodTests
         await using var sp = sc.BuildServiceProvider();
         var store = sp.GetRequiredService<IPersistedOperationStore>();
 
-        await store.UpsertAsync("mem_v1", "query Greet { hello }", null, CancellationToken.None);
-        await store.DeactivateAsync("mem_v1", null, "retired", CancellationToken.None);
-        await store.RestoreAsync("mem_v1", null, CancellationToken.None);
+        await store.UpsertAsync(
+            "mem_v1",
+            "query Greet { hello }",
+            options: null,
+            CancellationToken.None
+        );
+        await store.DeactivateAsync("mem_v1", tenantKey: null, "retired", CancellationToken.None);
+        await store.RestoreAsync("mem_v1", tenantKey: null, CancellationToken.None);
 
-        (await store.GetAsync("mem_v1", null, CancellationToken.None)).Should().NotBeNull();
+        (await store.GetAsync("mem_v1", tenantKey: null, CancellationToken.None))
+            .Should()
+            .NotBeNull();
     }
 
     [Test]

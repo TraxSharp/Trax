@@ -41,7 +41,7 @@ public sealed class TestJwksServer : IAsyncDisposable
 {
     private readonly IHost _host;
     private readonly ConcurrentDictionary<string, KeyEntry> _keys = new(StringComparer.Ordinal);
-    private readonly object _currentKidLock = new();
+    private readonly Lock _currentKidLock = new();
     private string _currentKid;
 
     /// <summary>The authority URL (issuer) advertised by this JWKS server.</summary>
@@ -146,7 +146,7 @@ public sealed class TestJwksServer : IAsyncDisposable
             }
         );
 
-        await app.StartAsync(ct);
+        await app.StartAsync(ct).ConfigureAwait(false);
 
         var addresses = app
             .Services.GetRequiredService<IServer>()
@@ -212,7 +212,7 @@ public sealed class TestJwksServer : IAsyncDisposable
     {
         try
         {
-            await _host.StopAsync(TimeSpan.FromSeconds(2));
+            await _host.StopAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -244,7 +244,7 @@ public sealed class TestJwksServer : IAsyncDisposable
         var keys = _keys
             .Values.Select(k =>
             {
-                var p = k.Rsa.ExportParameters(false);
+                var p = k.Rsa.ExportParameters(includePrivateParameters: false);
                 return new
                 {
                     kty = "RSA",
@@ -261,7 +261,7 @@ public sealed class TestJwksServer : IAsyncDisposable
 
     private static string BuildSingleKeyJwksJson(KeyEntry entry)
     {
-        var p = entry.Rsa.ExportParameters(false);
+        var p = entry.Rsa.ExportParameters(includePrivateParameters: false);
         var key = new
         {
             kty = "RSA",

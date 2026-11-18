@@ -40,8 +40,18 @@ public class RunGraphMatchTests
                 ChainStepKind.Switch,
                 tracks:
                 [
-                    new ChainGraphTrack("Fast", null, false, [Node(FastShip, ChainStepKind.Chain)]),
-                    new ChainGraphTrack("Slow", null, false, [Node(SlowShip, ChainStepKind.Chain)]),
+                    new ChainGraphTrack(
+                        "Fast",
+                        Description: null,
+                        IsFallback: false,
+                        [Node(FastShip, ChainStepKind.Chain)]
+                    ),
+                    new ChainGraphTrack(
+                        "Slow",
+                        Description: null,
+                        IsFallback: false,
+                        [Node(SlowShip, ChainStepKind.Chain)]
+                    ),
                 ]
             ),
             Node("Extract<Order, Total>#0", ChainStepKind.Extract),
@@ -71,7 +81,7 @@ public class RunGraphMatchTests
         run.Hash.Should().Be(Graph.Hash);
         run.UnmatchedSteps.Should().BeEmpty();
 
-        var nodes = run.Nodes.ToDictionary(n => n.Id);
+        var nodes = run.Nodes.ToDictionary(n => n.Id, StringComparer.Ordinal);
         nodes["Fetch#0"].State.Should().Be(RunNodeState.Completed);
         nodes["Fetch#0"].Steps.Select(s => s.Position).Should().Equal(0);
         nodes[Decide].Steps.Select(s => s.Position).Should().Equal(1);
@@ -233,32 +243,35 @@ public class RunGraphMatchTests
         var graphs = Substitute.For<ITrainChainGraphs>();
         graphs.Find("Acme.IRoutedTrain").Returns(Graph);
 
-        await using var db = await factory.CreateDbContextAsync(default);
-        var run = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = "Acme.IRoutedTrain",
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = null,
-            }
-        );
-        run.TrainState = runState;
-        await db.Track(run);
-        await db.SaveChanges(default);
-        db.JunctionRuns.Add(
-            new JunctionRun
-            {
-                MetadataId = run.Id,
-                Position = 0,
-                Kind = JunctionRunKind.Junction,
-                Name = "Fetch",
-                State = stepState,
-                StartedAt = DateTime.UtcNow,
-                NodeId = "Fetch#0",
-            }
-        );
-        await db.SaveChanges(default);
-        return (factory, graphs, run.Id);
+        var db = await factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var run = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = "Acme.IRoutedTrain",
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                }
+            );
+            run.TrainState = runState;
+            await db.Track(run).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            db.JunctionRuns.Add(
+                new JunctionRun
+                {
+                    MetadataId = run.Id,
+                    Position = 0,
+                    Kind = JunctionRunKind.Junction,
+                    Name = "Fetch",
+                    State = stepState,
+                    StartedAt = DateTime.UtcNow,
+                    NodeId = "Fetch#0",
+                }
+            );
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return (factory, graphs, run.Id);
+        }
     }
 
     [Test]
@@ -279,7 +292,7 @@ public class RunGraphMatchTests
     {
         var steps = new[] { Step(0, "Fetch#0"), Step(1, nodeId: null) };
 
-        var run = RunGraphs.Match(9, "Acme.IGone", null, steps, moreSteps: true);
+        var run = RunGraphs.Match(9, "Acme.IGone", graph: null, steps, moreSteps: true);
 
         run.HasGraph.Should().BeFalse();
         run.Hash.Should().BeNull();
@@ -339,17 +352,17 @@ public class RunGraphMatchTests
             nodeId ?? "Old",
             state,
             DateTime.UtcNow,
-            null,
-            null,
-            null,
-            null,
+            EndedAt: null,
+            DurationMs: null,
+            FailureClass: null,
+            FailureException: null,
             kind == JunctionRunKind.Junction ? null : "Lane",
             answer,
-            null,
+            Confidence: null,
             replayed,
-            null,
-            false,
-            null
+            Decider: null,
+            AnswerWithheld: false,
+            Attempt: null
         )
         {
             NodeId = nodeId,

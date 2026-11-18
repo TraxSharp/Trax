@@ -170,7 +170,10 @@ public class OperationsExposureTests
         var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
         operationResult!.Errors.Should().NotBeNullOrEmpty();
-        operationResult.Errors!.Any(e => e.Message.Contains("operations")).Should().BeTrue();
+        operationResult
+            .Errors!.Any(e => e.Message.Contains("operations", StringComparison.Ordinal))
+            .Should()
+            .BeTrue();
     }
 
     [Test]
@@ -382,7 +385,11 @@ public class OperationsExposureTests
         var opResult = result as OperationResult;
         opResult!.Errors.Should().BeNullOrEmpty();
         // mutationType is null when the schema has no mutation root.
-        opResult.ToJson().Replace(" ", "").Should().Contain("\"mutationType\":null");
+        opResult
+            .ToJson()
+            .Replace(" ", "", StringComparison.Ordinal)
+            .Should()
+            .Contain("\"mutationType\":null");
     }
 
     [Test]
@@ -765,7 +772,12 @@ public class OperationsExposureTests
 
         var field = executor.Schema.QueryType.Fields["operations"];
 
-        field.Directives.Any(d => d.Definition.Name == "authorize").Should().BeTrue();
+        field
+            .Directives.Any(d =>
+                string.Equals(d.Definition.Name, "authorize", StringComparison.Ordinal)
+            )
+            .Should()
+            .BeTrue();
     }
 
     [Test]
@@ -784,7 +796,9 @@ public class OperationsExposureTests
 
         executor
             .Schema.MutationType!.Fields["operations"]
-            .Directives.Any(d => d.Definition.Name == "authorize")
+            .Directives.Any(d =>
+                string.Equals(d.Definition.Name, "authorize", StringComparison.Ordinal)
+            )
             .Should()
             .BeTrue();
     }
@@ -804,7 +818,9 @@ public class OperationsExposureTests
 
         executor
             .Schema.QueryType.Fields["operations"]
-            .Directives.Any(d => d.Definition.Name == "authorize")
+            .Directives.Any(d =>
+                string.Equals(d.Definition.Name, "authorize", StringComparison.Ordinal)
+            )
             .Should()
             .BeFalse();
     }
@@ -852,7 +868,8 @@ public class OperationsExposureTests
 
         return await _serviceProvider
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -879,11 +896,11 @@ public class OperationsExposureTests
 
     private interface IFakeQueryTrain;
 
-    private class FakeQueryTrain;
+    private static class FakeQueryTrain;
 
     private interface IFakeMutationTrain;
 
-    private class FakeMutationTrain;
+    private static class FakeMutationTrain;
 
     public record FakeInput
     {

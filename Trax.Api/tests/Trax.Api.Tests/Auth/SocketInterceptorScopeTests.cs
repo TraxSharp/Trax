@@ -109,7 +109,9 @@ public class SocketInterceptorScopeTests
 
         var result = await interceptor.OnConnectAsync(
             session,
-            Payload(new TraxApiKeySocketInterceptor.ConnectionInitPayload(null, "the-key")),
+            Payload(
+                new TraxApiKeySocketInterceptor.ConnectionInitPayload(AuthToken: null, "the-key")
+            ),
             CancellationToken.None
         );
 
@@ -147,7 +149,12 @@ public class SocketInterceptorScopeTests
             var (session, _) = NewSession();
             await interceptor.OnConnectAsync(
                 session,
-                Payload(new TraxApiKeySocketInterceptor.ConnectionInitPayload(null, "the-key")),
+                Payload(
+                    new TraxApiKeySocketInterceptor.ConnectionInitPayload(
+                        AuthToken: null,
+                        "the-key"
+                    )
+                ),
                 CancellationToken.None
             );
         }
@@ -180,7 +187,9 @@ public class SocketInterceptorScopeTests
 
         await interceptor.OnConnectAsync(
             session,
-            Payload(new TraxApiKeySocketInterceptor.ConnectionInitPayload(null, "the-key")),
+            Payload(
+                new TraxApiKeySocketInterceptor.ConnectionInitPayload(AuthToken: null, "the-key")
+            ),
             CancellationToken.None
         );
 
@@ -210,7 +219,9 @@ public class SocketInterceptorScopeTests
 
         var result = await interceptor.OnConnectAsync(
             session,
-            Payload(new TraxApiKeySocketInterceptor.ConnectionInitPayload(null, "the-key")),
+            Payload(
+                new TraxApiKeySocketInterceptor.ConnectionInitPayload(AuthToken: null, "the-key")
+            ),
             CancellationToken.None
         );
 

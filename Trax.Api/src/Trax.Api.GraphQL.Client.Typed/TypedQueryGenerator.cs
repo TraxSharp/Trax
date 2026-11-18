@@ -212,7 +212,10 @@ internal static class TypedQueryGenerator
             var underlying = Nullable.GetUnderlyingType(nested) ?? nested;
 
             sb.Append(new string(' ', indent));
-            if (fieldName is null || fieldName == responseKey)
+            if (
+                fieldName is null
+                || string.Equals(fieldName, responseKey, StringComparison.Ordinal)
+            )
             {
                 sb.Append(responseKey);
             }
@@ -294,7 +297,7 @@ internal static class TypedQueryGenerator
     // server, and selecting their CLR properties would ask for fields no schema has.
     private static bool HasGraphQLType(Type t)
     {
-        if (t.GetCustomAttribute<GraphQLTypeAttribute>() is not null)
+        if (Attribute.IsDefined(t, typeof(GraphQLTypeAttribute)))
             return true;
         if (!t.IsClass || t == typeof(string) || t == typeof(object) || IsBclType(t))
             return false;
@@ -303,7 +306,10 @@ internal static class TypedQueryGenerator
 
     private static bool IsBclType(Type t) =>
         t.Namespace is { } ns
-        && (ns == "System" || ns.StartsWith("System.", StringComparison.Ordinal));
+        && (
+            string.Equals(ns, "System", StringComparison.Ordinal)
+            || ns.StartsWith("System.", StringComparison.Ordinal)
+        );
 
     private static Type? UnwrapEnumerable(Type t)
     {

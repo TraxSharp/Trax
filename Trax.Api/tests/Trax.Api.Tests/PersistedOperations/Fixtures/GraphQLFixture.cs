@@ -86,7 +86,7 @@ public static class GraphQLFixture
             Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder,
             Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder
         > topology
-    ) => BuildCoreAsync(topology, null);
+    ) => BuildCoreAsync(topology, services: null);
 
     private static async Task<ServiceProvider> BuildCoreAsync(
         Func<
@@ -96,7 +96,7 @@ public static class GraphQLFixture
         Action<IServiceCollection>? services
     )
     {
-        await DatabaseMigrator.Migrate(PostgresFixture.ConnectionString);
+        await DatabaseMigrator.Migrate(PostgresFixture.ConnectionString).ConfigureAwait(false);
         var sc = new ServiceCollection();
         sc.AddLogging();
         sc.AddSingleton<TraxMarker>();
@@ -113,7 +113,9 @@ public static class GraphQLFixture
         return sc.BuildServiceProvider();
     }
 
-    private static readonly ConcurrentDictionary<string, HeldRequest> s_held = new();
+    private static readonly ConcurrentDictionary<string, HeldRequest> s_held = new(
+        StringComparer.Ordinal
+    );
 
     /// <summary>
     /// A document whose <c>held</c> field does not return until <see cref="HeldRequest.Release"/>
@@ -144,7 +146,7 @@ public static class GraphQLFixture
         internal async Task<string> RunAsync()
         {
             _entered.TrySetResult();
-            await _released.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            await _released.Task.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
             return "held";
         }
     }
@@ -155,7 +157,7 @@ public static class GraphQLFixture
     )
     {
         var resolver = sp.GetRequiredService<IRequestExecutorProvider>();
-        return await resolver.GetExecutorAsync("trax", ct);
+        return await resolver.GetExecutorAsync("trax", ct).ConfigureAwait(false);
     }
 
     [ExtendObjectType("RootQuery")]

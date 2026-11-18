@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using HotChocolate.Language;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
@@ -116,7 +117,10 @@ public class ClearableOperationCachesTests
         var cache = DocumentCache(8);
 
         for (var i = 0; i < 500; i++)
-            cache.TryAddDocument($"id-{i}", Document("{ a }"));
+            cache.TryAddDocument(
+                string.Create(CultureInfo.InvariantCulture, $"id-{i}"),
+                Document("{ a }")
+            );
 
         // Two generations of at most `capacity` entries each.
         cache.Count.Should().BeLessThanOrEqualTo(16);
@@ -133,7 +137,10 @@ public class ClearableOperationCachesTests
 
         for (var i = 0; i < 200; i++)
         {
-            cache.TryAddDocument($"cold-{i}", Document("{ a }"));
+            cache.TryAddDocument(
+                string.Create(CultureInfo.InvariantCulture, $"cold-{i}"),
+                Document("{ a }")
+            );
             cache.TryGetDocument("hot", out _);
         }
 
@@ -151,8 +158,14 @@ public class ClearableOperationCachesTests
             2_000,
             i =>
             {
-                cache.TryAddDocument($"id-{i}", Document("{ a }"));
-                cache.TryGetDocument($"id-{i / 2}", out _);
+                cache.TryAddDocument(
+                    string.Create(CultureInfo.InvariantCulture, $"id-{i}"),
+                    Document("{ a }")
+                );
+                cache.TryGetDocument(
+                    string.Create(CultureInfo.InvariantCulture, $"id-{i / 2}"),
+                    out _
+                );
             }
         );
 
@@ -169,11 +182,14 @@ public class ClearableOperationCachesTests
             var document = Document("{ a }");
             var largest = 0;
             using var done = new CancellationTokenSource();
-            var sampler = Task.Run(() =>
-            {
-                while (!done.IsCancellationRequested)
-                    largest = Math.Max(largest, cache.Count);
-            });
+            var sampler = Task.Run(
+                () =>
+                {
+                    while (!done.IsCancellationRequested)
+                        largest = Math.Max(largest, cache.Count);
+                },
+                cancellationToken: CancellationToken.None
+            );
 
             Parallel.For(
                 0,
@@ -181,14 +197,25 @@ public class ClearableOperationCachesTests
                 new ParallelOptions { MaxDegreeOfParallelism = 8 },
                 i =>
                 {
-                    cache.TryAddDocument($"id-{round}-{i}", document);
-                    cache.TryGetDocument($"id-{round}-{i / 2}", out _);
+                    cache.TryAddDocument(
+                        string.Create(CultureInfo.InvariantCulture, $"id-{round}-{i}"),
+                        document
+                    );
+                    cache.TryGetDocument(
+                        string.Create(CultureInfo.InvariantCulture, $"id-{round}-{i / 2}"),
+                        out _
+                    );
                 }
             );
             done.Cancel();
-            sampler.Wait();
+            sampler.Wait(cancellationToken: CancellationToken.None);
 
-            Math.Max(largest, cache.Count).Should().BeLessThanOrEqualTo(16, $"round {round}");
+            Math.Max(largest, cache.Count)
+                .Should()
+                .BeLessThanOrEqualTo(
+                    16,
+                    string.Create(CultureInfo.InvariantCulture, $"round {round}")
+                );
         }
     }
 

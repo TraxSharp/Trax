@@ -270,7 +270,7 @@ public class ModelQueryAuthE2ETests
             .Select(n => n.GetProperty("title").GetString())
             .ToArray();
         titles.Should().HaveCount(3);
-        titles.Should().BeInAscendingOrder();
+        titles.Should().BeInAscendingOrder(StringComparer.Ordinal);
     }
 
     [Test]
@@ -319,7 +319,7 @@ public class ModelQueryAuthE2ETests
             .Select(n => n.GetProperty("author").GetString())
             .ToArray();
         authors.Should().NotContain("Martin");
-        authors.Should().BeInAscendingOrder();
+        authors.Should().BeInAscendingOrder(StringComparer.Ordinal);
     }
 
     // ── Multi-scheme model queries ──────────────────────────────────────
@@ -381,9 +381,10 @@ public class ModelQueryAuthE2ETests
             {
                 var key = i % 2 == 0 ? AdminApiKey : PlayerApiKey;
                 using var doc = await host.PostGraphQLAsync(
-                    CountQuery,
-                    req => req.Headers.Add("X-Api-Key", key)
-                );
+                        CountQuery,
+                        req => req.Headers.Add("X-Api-Key", key)
+                    )
+                    .ConfigureAwait(false);
                 AssertNoErrors(doc);
                 return BookRecordsField(doc).GetProperty("totalCount").GetInt32();
             });

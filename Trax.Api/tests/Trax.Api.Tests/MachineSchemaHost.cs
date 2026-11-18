@@ -99,8 +99,8 @@ internal static class MachineSchemaHost
                                 ? built
                                 : built.UsePersistedOperations(po =>
                                     po.SingleNode()
-                                        .RequirePersisted(false)
-                                        .LogNonPersistedRequests(true)
+                                        .RequirePersisted(require: false)
+                                        .LogNonPersistedRequests(log: true)
                                 );
                         });
                     })
@@ -116,7 +116,7 @@ internal static class MachineSchemaHost
 
         try
         {
-            await host.StartAsync();
+            await host.StartAsync().ConfigureAwait(false);
         }
         catch
         {
@@ -133,10 +133,10 @@ internal static class MachineSchemaHost
         IReadOnlyList<TrainRegistration>? trains = null
     )
     {
-        var host = await StartAsync(machines, graphql, trains);
+        var host = await StartAsync(machines, graphql, trains).ConfigureAwait(false);
         try
         {
-            return (host, await ExecutorAsync(host));
+            return (host, await ExecutorAsync(host).ConfigureAwait(false));
         }
         catch
         {
@@ -161,14 +161,15 @@ internal static class MachineSchemaHost
         try
         {
             using var host = await StartAsync(
-                machines,
-                graphql,
-                trains,
-                services,
-                persistedOperations: persistedOperations,
-                scan: scan
-            );
-            await ExecutorAsync(host);
+                    machines,
+                    graphql,
+                    trains,
+                    services,
+                    persistedOperations: persistedOperations,
+                    scan: scan
+                )
+                .ConfigureAwait(false);
+            await ExecutorAsync(host).ConfigureAwait(false);
             return null;
         }
         catch (Exception ex)
@@ -185,7 +186,9 @@ internal static class MachineSchemaHost
 
     /// <summary>The object type named <paramref name="name"/>, or null.</summary>
     public static ObjectType? ObjectTypeNamed(IRequestExecutor executor, string name) =>
-        executor.Schema.Types.OfType<ObjectType>().SingleOrDefault(t => t.Name == name);
+        executor
+            .Schema.Types.OfType<ObjectType>()
+            .SingleOrDefault(t => string.Equals(t.Name, name, StringComparison.Ordinal));
 
     /// <summary>
     /// The type <c>machines.&lt;machine&gt;</c> resolves to under <paramref name="root"/>, or null when there is no
@@ -250,8 +253,8 @@ internal static class MachineSchemaHost
         if (apiKey is not null)
             request.Headers.Add("X-Api-Key", apiKey);
 
-        var response = await host.GetTestClient().SendAsync(request);
-        return await response.Content.ReadAsStringAsync();
+        var response = await host.GetTestClient().SendAsync(request).ConfigureAwait(false);
+        return await response.Content.ReadAsStringAsync().ConfigureAwait(false);
     }
 
     /// <summary>A train registration for the schema only: nothing runs it.</summary>

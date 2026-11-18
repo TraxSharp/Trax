@@ -64,7 +64,7 @@ public class MachineChangedOrderTests
             Changed(new string('f', 64)),
             Machine,
             (IMachineInternals)Machine,
-            new FixedOrder(true)
+            new FixedOrder(newer: true)
         );
 
         presented!.Value.Ends.Should().BeTrue();

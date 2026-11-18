@@ -141,7 +141,7 @@ public class AdminOperationsAuthorizationTests
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
     }
 
@@ -159,8 +159,8 @@ public class AdminOperationsAuthorizationTests
         if (apiKey is not null)
             req.Headers.Add("X-Api-Key", apiKey);
 
-        var res = await client.SendAsync(req);
-        return JsonDocument.Parse(await res.Content.ReadAsStringAsync());
+        var res = await client.SendAsync(req).ConfigureAwait(false);
+        return JsonDocument.Parse(await res.Content.ReadAsStringAsync().ConfigureAwait(false));
     }
 
     internal static bool HasErrorCode(JsonDocument doc, string code) =>
@@ -170,7 +170,7 @@ public class AdminOperationsAuthorizationTests
             .Any(e =>
                 e.TryGetProperty("extensions", out var ext)
                 && ext.TryGetProperty("code", out var c)
-                && c.GetString() == code
+                && string.Equals(c.GetString(), code, StringComparison.Ordinal)
             );
 
     [Test]

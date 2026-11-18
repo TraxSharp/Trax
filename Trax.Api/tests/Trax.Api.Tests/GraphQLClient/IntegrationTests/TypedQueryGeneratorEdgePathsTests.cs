@@ -252,20 +252,20 @@ public class TypedQueryGeneratorEdgePathsTests
     }
 
     [GraphQLOperation(OperationType.Query, Path = "", RootField = "typedCustomers")]
-    private sealed class EmptyPathRequest : TypedRequest<IReadOnlyList<TypedItemSummary>> { }
+    private sealed class EmptyPathRequest : TypedRequest<IReadOnlyList<TypedItemSummary>>;
 
     [GraphQLOperation(OperationType.Query, Path = ".discover", RootField = "typedCustomers")]
-    private sealed class LeadingDotPathRequest : TypedRequest<IReadOnlyList<TypedItemSummary>> { }
+    private sealed class LeadingDotPathRequest : TypedRequest<IReadOnlyList<TypedItemSummary>>;
 
     [GraphQLOperation(OperationType.Query, Path = "discover.", RootField = "typedCustomers")]
-    private sealed class TrailingDotPathRequest : TypedRequest<IReadOnlyList<TypedItemSummary>> { }
+    private sealed class TrailingDotPathRequest : TypedRequest<IReadOnlyList<TypedItemSummary>>;
 
     [GraphQLOperation(
         OperationType.Query,
         Path = "discover..netsuite",
         RootField = "typedCustomers"
     )]
-    private sealed class DoubleDotPathRequest : TypedRequest<IReadOnlyList<TypedItemSummary>> { }
+    private sealed class DoubleDotPathRequest : TypedRequest<IReadOnlyList<TypedItemSummary>>;
 
     [GraphQLOperation(
         OperationType.Query,
@@ -273,7 +273,7 @@ public class TypedQueryGeneratorEdgePathsTests
         RootField = "typedCustomers"
     )]
     private sealed class WhitespaceSegmentPathRequest
-        : TypedRequest<IReadOnlyList<TypedItemSummary>> { }
+        : TypedRequest<IReadOnlyList<TypedItemSummary>>;
 
     #endregion
 }

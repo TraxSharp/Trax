@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
@@ -49,7 +50,12 @@ public class QueryModelProjectionTests
         var nodes = await NodesAsync(executor, "widgets", "slug echoId");
 
         // Without the requirement the resolver sees Id = 0 and echoes 0.
-        nodes.Select(n => Convert.ToInt32(n["echoId"])).Should().Equal(1, 2);
+        nodes
+            .Select(n =>
+                Convert.ToInt32(n["echoId"], System.Globalization.CultureInfo.InvariantCulture)
+            )
+            .Should()
+            .Equal(1, 2);
     }
 
     [Test]
@@ -59,8 +65,18 @@ public class QueryModelProjectionTests
 
         var nodes = await NodesAsync(executor, "widgets", "id echoId");
 
-        nodes.Select(n => Convert.ToInt32(n["echoId"])).Should().Equal(1, 2);
-        nodes.Select(n => Convert.ToInt32(n["id"])).Should().Equal(1, 2);
+        nodes
+            .Select(n =>
+                Convert.ToInt32(n["echoId"], System.Globalization.CultureInfo.InvariantCulture)
+            )
+            .Should()
+            .Equal(1, 2);
+        nodes
+            .Select(n =>
+                Convert.ToInt32(n["id"], System.Globalization.CultureInfo.InvariantCulture)
+            )
+            .Should()
+            .Equal(1, 2);
     }
 
     [Test]
@@ -119,7 +135,15 @@ public class QueryModelProjectionTests
 
         var nodes = await NodesAsync(executor, "widgets", "slug lambdaEchoId");
 
-        nodes.Select(n => Convert.ToInt32(n["lambdaEchoId"])).Should().Equal(1, 2);
+        nodes
+            .Select(n =>
+                Convert.ToInt32(
+                    n["lambdaEchoId"],
+                    System.Globalization.CultureInfo.InvariantCulture
+                )
+            )
+            .Should()
+            .Equal(1, 2);
     }
 
     [Test]
@@ -171,7 +195,12 @@ public class QueryModelProjectionTests
         var nodes = await NodesAsync(executor, "cogs", "slug echoName echoId");
 
         nodes.Select(n => (string?)n["echoName"]).Should().Equal("Alpha", "Beta");
-        nodes.Select(n => Convert.ToInt32(n["echoId"])).Should().Equal(1, 2);
+        nodes
+            .Select(n =>
+                Convert.ToInt32(n["echoId"], System.Globalization.CultureInfo.InvariantCulture)
+            )
+            .Should()
+            .Equal(1, 2);
     }
 
     #endregion
@@ -191,7 +220,10 @@ public class QueryModelProjectionTests
         );
 
         nodes.Should().ContainSingle();
-        Convert.ToInt32(nodes[0]["echoId"]).Should().Be(2);
+        Convert
+            .ToInt32(nodes[0]["echoId"], System.Globalization.CultureInfo.InvariantCulture)
+            .Should()
+            .Be(2);
     }
 
     [Test]
@@ -206,7 +238,12 @@ public class QueryModelProjectionTests
             "(order: [{ name: DESC }])"
         );
 
-        nodes.Select(n => Convert.ToInt32(n["echoId"])).Should().Equal(2, 1);
+        nodes
+            .Select(n =>
+                Convert.ToInt32(n["echoId"], System.Globalization.CultureInfo.InvariantCulture)
+            )
+            .Should()
+            .Equal(2, 1);
     }
 
     [Test]
@@ -223,7 +260,10 @@ public class QueryModelProjectionTests
 
         var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"]!;
         var widgets = (IReadOnlyDictionary<string, object?>)discover["widgets"]!;
-        Convert.ToInt32(widgets["totalCount"]).Should().Be(2);
+        Convert
+            .ToInt32(widgets["totalCount"], System.Globalization.CultureInfo.InvariantCulture)
+            .Should()
+            .Be(2);
     }
 
     [Test]
@@ -234,7 +274,10 @@ public class QueryModelProjectionTests
         var nodes = await NodesAsync(executor, "widgets", "slug echoId", "(first: 1)");
 
         nodes.Should().ContainSingle();
-        Convert.ToInt32(nodes[0]["echoId"]).Should().Be(1);
+        Convert
+            .ToInt32(nodes[0]["echoId"], System.Globalization.CultureInfo.InvariantCulture)
+            .Should()
+            .Be(1);
     }
 
     [Test]
@@ -259,7 +302,10 @@ public class QueryModelProjectionTests
                 var node =
                     (IReadOnlyDictionary<string, object?>)
                         ((IReadOnlyDictionary<string, object?>)e!)["node"]!;
-                return Convert.ToInt32(node["echoId"]);
+                return Convert.ToInt32(
+                    node["echoId"],
+                    System.Globalization.CultureInfo.InvariantCulture
+                );
             })
             .Should()
             .Equal(1, 2);
@@ -293,9 +339,9 @@ public class QueryModelProjectionTests
         string arguments = ""
     )
     {
-        var result = await executor.ExecuteAsync(
-            $"{{ discover {{ {field}{arguments} {{ nodes {{ {selection} }} }} }} }}"
-        );
+        var result = await executor
+            .ExecuteAsync($"{{ discover {{ {field}{arguments} {{ nodes {{ {selection} }} }} }} }}")
+            .ConfigureAwait(false);
 
         var op = result.ExpectOperationResult();
         op.Errors.Should().BeNullOrEmpty();
@@ -397,12 +443,13 @@ public class QueryModelProjectionTests
                     Note = "second",
                 }
             );
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync().ConfigureAwait(false);
         }
 
         return await provider
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -474,7 +521,7 @@ public sealed class WidgetProbeExtension
 
     /// <summary>Reads a non-key column, declared through HotChocolate's own mechanism.</summary>
     public string GetEchoGadgetId([Parent(requires: nameof(Widget.GadgetId))] Widget widget) =>
-        widget.GadgetId?.ToString() ?? "<unset>";
+        widget.GadgetId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "<unset>";
 
     /// <summary>Reads a non-key column with no declaration: must stay unset.</summary>
     public string GetEchoName([Parent] Widget widget) =>
@@ -489,7 +536,10 @@ public sealed class WidgetProbeExtension
     /// requirement with the declared one instead of replacing either.
     /// </summary>
     public string GetEchoNameAndId([Parent(requires: nameof(Widget.Name))] Widget widget) =>
-        $"{(string.IsNullOrEmpty(widget.Name) ? "<unset>" : widget.Name)}/{widget.Id}";
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"{(string.IsNullOrEmpty(widget.Name) ? "<unset>" : widget.Name)}/{widget.Id}"
+        );
 }
 
 [ExtendObjectType(typeof(Cog))]
@@ -511,7 +561,8 @@ public sealed class SprocketProbeExtension
 [ExtendObjectType(typeof(Pair))]
 public sealed class PairProbeExtension
 {
-    public string GetEchoKey([Parent] Pair pair) => $"{pair.Left}/{pair.Right}";
+    public string GetEchoKey([Parent] Pair pair) =>
+        string.Create(CultureInfo.InvariantCulture, $"{pair.Left}/{pair.Right}");
 }
 
 public class ProjectionDbContext(DbContextOptions<ProjectionDbContext> options) : DbContext(options)

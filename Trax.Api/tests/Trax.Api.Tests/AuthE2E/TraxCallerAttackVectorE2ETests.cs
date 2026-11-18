@@ -10,7 +10,7 @@ namespace Trax.Api.Tests.AuthE2E;
 /// <summary>
 /// Security E2E suite for <see cref="Trax.Api.Auth.TraxCaller.IsTrusted"/>.
 /// Each test fires a deliberately hostile HTTP request against a real server
-/// and asserts the server-observed <c>IsTrusted</c> stays <c>false</c>.
+/// and asserts the server-observed <c>IsTrusted</c> stays <see langword="false"/>.
 ///
 /// <para>
 /// The threat model: an attacker has HTTP access to the GraphQL endpoint but

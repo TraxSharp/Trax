@@ -349,7 +349,9 @@ public class CognitoJwtBuilderExtensionsTests
         var validator = GetLifetimeValidator(CognitoTokenUse.IdAndAccess);
         var token = MakeJwt(audience: ClientId);
 
-        validator(DateTime.UtcNow.AddMinutes(-1), null, token, MakeParams()).Should().BeFalse();
+        validator(DateTime.UtcNow.AddMinutes(-1), expires: null, token, MakeParams())
+            .Should()
+            .BeFalse();
     }
 
     [Test]
@@ -358,7 +360,9 @@ public class CognitoJwtBuilderExtensionsTests
         var validator = GetLifetimeValidator(CognitoTokenUse.IdAndAccess);
         var token = MakeJwt(audience: ClientId);
 
-        validator(null, DateTime.UtcNow.AddMinutes(5), token, MakeParams()).Should().BeTrue();
+        validator(notBefore: null, DateTime.UtcNow.AddMinutes(5), token, MakeParams())
+            .Should()
+            .BeTrue();
     }
 
     [Test]

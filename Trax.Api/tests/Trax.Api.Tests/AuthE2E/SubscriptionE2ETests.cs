@@ -304,7 +304,9 @@ public class SubscriptionE2ETests
     {
         var client = host.GetTestServer().CreateWebSocketClient();
         client.SubProtocols.Add("graphql-transport-ws");
-        return await client.ConnectClosingAsync(new Uri(WsUri), CancellationToken.None);
+        return await client
+            .ConnectClosingAsync(new Uri(WsUri), CancellationToken.None)
+            .ConfigureAwait(false);
     }
 
     private static async Task SendInitAsync(WebSocket ws, object payload)
@@ -312,7 +314,8 @@ public class SubscriptionE2ETests
         var msg = JsonSerializer.Serialize(new { type = "connection_init", payload });
         var bytes = Encoding.UTF8.GetBytes(msg);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await ws.SendAsync(bytes, WebSocketMessageType.Text, endOfMessage: true, cts.Token);
+        await ws.SendAsync(bytes, WebSocketMessageType.Text, endOfMessage: true, cts.Token)
+            .ConfigureAwait(false);
     }
 
     private static async Task<JsonElement> ReceiveAsync(WebSocket ws)
@@ -326,7 +329,7 @@ public class SubscriptionE2ETests
 
         while (true)
         {
-            var result = await ws.ReceiveAsync(buffer, cts.Token);
+            var result = await ws.ReceiveAsync(buffer, cts.Token).ConfigureAwait(false);
 
             if (result.MessageType == WebSocketMessageType.Close)
                 throw new InvalidOperationException(
@@ -367,7 +370,7 @@ public class SubscriptionE2ETests
                 using var ms = new MemoryStream();
                 while (!cts.IsCancellationRequested)
                 {
-                    var result = await ws.ReceiveAsync(buffer, cts.Token);
+                    var result = await ws.ReceiveAsync(buffer, cts.Token).ConfigureAwait(false);
                     if (result.MessageType == WebSocketMessageType.Close)
                         return true;
 
@@ -384,9 +387,9 @@ public class SubscriptionE2ETests
                 var text = Encoding.UTF8.GetString(ms.ToArray());
                 var msg = JsonDocument.Parse(text).RootElement;
                 var type = msg.GetProperty("type").GetString();
-                if (type == "connection_error")
+                if (string.Equals(type, "connection_error", StringComparison.Ordinal))
                     return true;
-                if (type == "connection_ack")
+                if (string.Equals(type, "connection_ack", StringComparison.Ordinal))
                     return false; // authentication succeeded — test expected rejection
             }
         }

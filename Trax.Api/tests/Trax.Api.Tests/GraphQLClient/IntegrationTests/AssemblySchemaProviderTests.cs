@@ -19,7 +19,9 @@ namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 public class AssemblySchemaProviderTests
 {
     private static void ConfigureTestSchema(IRequestExecutorBuilder b) =>
-        b.AddQueryType<TestQuery>().AddMutationType<TestMutation>().DisableIntrospection(false);
+        b.AddQueryType<TestQuery>()
+            .AddMutationType<TestMutation>()
+            .DisableIntrospection(disable: false);
 
     [Test]
     public async Task GetSchemaAsync_BuildsFromConfigurator()
@@ -62,7 +64,9 @@ public class AssemblySchemaProviderTests
         var validator = new GraphQLClientValidator(provider);
 
         var act = async () =>
-            await validator.ValidateAsync("query { allItems { id totally_made_up } }");
+            await validator
+                .ValidateAsync("query { allItems { id totally_made_up } }")
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<GraphQLValidationException>();
     }

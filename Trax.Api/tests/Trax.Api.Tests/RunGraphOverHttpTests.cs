@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Json;
 using System.Text.Json;
 using AwesomeAssertions;
@@ -111,7 +112,10 @@ public class RunGraphOverHttpTests
 
         var run = await SeedRunAsync(TrainState.Completed, (_leafId, JunctionRunState.Completed));
         var doc = await PostAsync(
-            $"{{ operations {{ runGraph(metadataId: {run}) {{ nodes {{ {selection} }} }} }} }}"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"{{ operations {{ runGraph(metadataId: {run}) {{ nodes {{ {selection} }} }} }} }}"
+            )
         );
 
         doc.RootElement.TryGetProperty("errors", out _)
@@ -129,8 +133,10 @@ public class RunGraphOverHttpTests
 
         var graph = Operations(
             await PostAsync(
-                $"{{ operations {{ runGraph(metadataId: {run}) {{ "
-                    + "allNodes { id kind state parentId track depth tracks { name taken } } } } }"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{{ operations {{ runGraph(metadataId: {run}) {{ "
+                ) + "allNodes { id kind state parentId track depth tracks { name taken } } } } }"
             ),
             "runGraph"
         );
@@ -140,7 +146,9 @@ public class RunGraphOverHttpTests
             .Should()
             .Equal(DeclaredOrder(_graph.Nodes), "depth first, each node before its tracks' nodes");
 
-        var leaf = all.Single(n => n.GetProperty("id").GetString() == _leafId);
+        var leaf = all.Single(n =>
+            string.Equals(n.GetProperty("id").GetString(), _leafId, StringComparison.Ordinal)
+        );
         leaf.GetProperty("state").GetString().Should().Be("COMPLETED");
         leaf.GetProperty("depth").GetInt32().Should().Be(Levels);
         leaf.GetProperty("parentId").GetString().Should().Be(_parallelIds[^1]);
@@ -162,7 +170,10 @@ public class RunGraphOverHttpTests
 
         var graph = Operations(
             await PostAsync(
-                $"{{ operations {{ runGraph(metadataId: {run}) {{ allNodes {{ id state }} }} }} }}"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{{ operations {{ runGraph(metadataId: {run}) {{ allNodes {{ id state }} }} }} }}"
+                )
             ),
             "runGraph"
         );
@@ -170,7 +181,11 @@ public class RunGraphOverHttpTests
         var states = graph
             .GetProperty("allNodes")
             .EnumerateArray()
-            .ToDictionary(n => n.GetProperty("id").GetString()!, n => n.GetProperty("state"));
+            .ToDictionary(
+                n => n.GetProperty("id").GetString()!,
+                n => n.GetProperty("state"),
+                StringComparer.Ordinal
+            );
         states[_leafId].GetString().Should().Be("INTERRUPTED");
         states[_parallelIds[0]]
             .GetString()
@@ -185,7 +200,10 @@ public class RunGraphOverHttpTests
 
         var graph = Operations(
             await PostAsync(
-                $"{{ operations {{ runGraph(metadataId: {run}) {{ allNodes {{ id state }} }} }} }}"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{{ operations {{ runGraph(metadataId: {run}) {{ allNodes {{ id state }} }} }} }}"
+                )
             ),
             "runGraph"
         );
@@ -193,7 +211,9 @@ public class RunGraphOverHttpTests
         graph
             .GetProperty("allNodes")
             .EnumerateArray()
-            .Single(n => n.GetProperty("id").GetString() == _leafId)
+            .Single(n =>
+                string.Equals(n.GetProperty("id").GetString(), _leafId, StringComparison.Ordinal)
+            )
             .GetProperty("state")
             .GetString()
             .Should()
@@ -211,23 +231,31 @@ public class RunGraphOverHttpTests
         }
         var leaf = $"{prefix}Leaf#0";
 
-        ChainGraphNode node = new(leaf, ChainStepKind.Chain, "Leaf", "Paper", "Paper", false, []);
+        ChainGraphNode node = new(
+            leaf,
+            ChainStepKind.Chain,
+            "Leaf",
+            "Paper",
+            "Paper",
+            Opaque: false,
+            []
+        );
         for (var i = Levels - 1; i >= 0; i--)
         {
             var id = parallels[i];
             node = new ChainGraphNode(
                 id,
                 ChainStepKind.Parallel,
-                null,
+                Junction: null,
                 "Paper",
                 "Paper",
-                false,
+                Opaque: false,
                 [
-                    new ChainGraphTrack("deep", null, false, [node]),
+                    new ChainGraphTrack("deep", Description: null, IsFallback: false, [node]),
                     new ChainGraphTrack(
                         "side",
-                        null,
-                        false,
+                        Description: null,
+                        IsFallback: false,
                         [
                             new ChainGraphNode(
                                 $"{id}/side/Side#0",
@@ -235,7 +263,7 @@ public class RunGraphOverHttpTests
                                 "Side",
                                 "Paper",
                                 "Paper",
-                                false,
+                                Opaque: false,
                                 []
                             ),
                         ]
@@ -255,7 +283,7 @@ public class RunGraphOverHttpTests
                     "Fetch",
                     "Paper",
                     "Paper",
-                    false,
+                    Opaque: false,
                     []
                 ),
                 node,
@@ -275,11 +303,11 @@ public class RunGraphOverHttpTests
     // A tree written out as "id[track(children) ...]", from the declared graph.
     private static string Shape(IReadOnlyList<ChainGraphNode> nodes) =>
         string.Join(
-            " ",
+            ' ',
             nodes.Select(n =>
                 n.Id
                 + "["
-                + string.Join(" ", n.Tracks.Select(t => $"{t.Name}({Shape(t.Nodes)})"))
+                + string.Join(' ', n.Tracks.Select(t => $"{t.Name}({Shape(t.Nodes)})"))
                 + "]"
             )
         );
@@ -287,12 +315,15 @@ public class RunGraphOverHttpTests
     // The same tree, rebuilt as a client would from the flat list's parentId and track, in list order.
     private static string Rebuild(List<JsonElement> all)
     {
-        return Children(null, null);
+        return Children(parent: null, track: null);
 
         string Children(string? parent, string? track) =>
             string.Join(
-                " ",
-                all.Where(n => Str(n, "parentId") == parent && Str(n, "track") == track)
+                ' ',
+                all.Where(n =>
+                        string.Equals(Str(n, "parentId"), parent, StringComparison.Ordinal)
+                        && string.Equals(Str(n, "track"), track, StringComparison.Ordinal)
+                    )
                     .Select(n =>
                     {
                         var id = Str(n, "id")!;
@@ -300,7 +331,7 @@ public class RunGraphOverHttpTests
                             .EnumerateArray()
                             .Select(t => t.GetProperty("name").GetString()!)
                             .Select(name => $"{name}({Children(id, name)})");
-                        return id + "[" + string.Join(" ", tracks) + "]";
+                        return id + "[" + string.Join(' ', tracks) + "]";
                     })
             );
 
@@ -315,37 +346,40 @@ public class RunGraphOverHttpTests
         params (string NodeId, JunctionRunState State)[] steps
     )
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var run = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = Train,
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = null,
-            }
-        );
-        run.TrainState = state;
-        if (state is TrainState.Completed or TrainState.Failed or TrainState.Cancelled)
-            run.EndTime = DateTime.UtcNow;
-        await db.Track(run);
-        await db.SaveChanges(default);
-
-        var position = 0;
-        foreach (var step in steps)
-            db.JunctionRuns.Add(
-                new JunctionRun
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var run = Metadata.Create(
+                new CreateMetadata
                 {
-                    MetadataId = run.Id,
-                    Position = position++,
-                    Kind = JunctionRunKind.Junction,
-                    Name = step.NodeId.Split('/')[^1],
-                    State = step.State,
-                    StartedAt = DateTime.UtcNow,
-                    NodeId = step.NodeId,
+                    Name = Train,
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
                 }
             );
-        await db.SaveChanges(default);
-        return run.Id;
+            run.TrainState = state;
+            if (state is TrainState.Completed or TrainState.Failed or TrainState.Cancelled)
+                run.EndTime = DateTime.UtcNow;
+            await db.Track(run).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+
+            var position = 0;
+            foreach (var step in steps)
+                db.JunctionRuns.Add(
+                    new JunctionRun
+                    {
+                        MetadataId = run.Id,
+                        Position = position++,
+                        Kind = JunctionRunKind.Junction,
+                        Name = step.NodeId.Split('/')[^1],
+                        State = step.State,
+                        StartedAt = DateTime.UtcNow,
+                        NodeId = step.NodeId,
+                    }
+                );
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return run.Id;
+        }
     }
 
     private static JsonElement Operations(JsonDocument doc, string field)
@@ -364,7 +398,7 @@ public class RunGraphOverHttpTests
             Content = JsonContent.Create(new { query }),
         };
         request.Headers.Add("X-Api-Key", Key);
-        var response = await client.SendAsync(request);
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var response = await client.SendAsync(request).ConfigureAwait(false);
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
     }
 }

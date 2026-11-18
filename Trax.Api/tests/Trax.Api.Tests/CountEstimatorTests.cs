@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,7 +23,10 @@ namespace Trax.Api.Tests;
 public class CountEstimatorTests
 {
     private static readonly string ConnectionString =
-        $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_operations;Username=trax;Password=trax123;"
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_operations;Username=trax;Password=trax123;"
+        )
         + "Maximum Pool Size=8;Minimum Pool Size=0;Connection Idle Lifetime=30;"
         + "Timeout=30;Tcp Keepalive=true";
 
@@ -64,24 +68,31 @@ public class CountEstimatorTests
 
     private async Task ExecAsync(string sql)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        await ((DbContext)db).Database.ExecuteSqlRawAsync(sql);
+        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            await ((DbContext)db).Database.ExecuteSqlRawAsync(sql).ConfigureAwait(false);
+        }
     }
 
     private Task SeedGroupsAsync(int count) =>
         ExecAsync(
             "INSERT INTO trax.manifest_group (name) "
-                + $"SELECT 'estimate-group-' || g FROM generate_series(1, {count}) g"
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"SELECT 'estimate-group-' || g FROM generate_series(1, {count}) g"
+                )
         );
 
     private async Task SeedManifestsAsync()
     {
-        await SeedGroupsAsync(1);
+        await SeedGroupsAsync(1).ConfigureAwait(false);
         await ExecAsync(
-            "INSERT INTO trax.manifest (external_id, name, manifest_group_id, schedule_type, is_enabled) "
-                + "SELECT 'estimate-manifest-' || g, 'Trax.Estimate.ITrain', 1, 'none'::trax.schedule_type, "
-                + $"       g % 2 = 0 FROM generate_series(1, {LargeTableRows}) g"
-        );
+                "INSERT INTO trax.manifest (external_id, name, manifest_group_id, schedule_type, is_enabled) "
+                    + "SELECT 'estimate-manifest-' || g, 'Trax.Estimate.ITrain', 1, 'none'::trax.schedule_type, "
+                    + $"       g % 2 = 0 FROM generate_series(1, {LargeTableRows}) g"
+            )
+            .ConfigureAwait(false);
     }
 
     private Task SeedExecutionsAsync() =>
@@ -258,7 +269,14 @@ public class CountEstimatorTests
         result.IsEstimatedCount.Should().BeFalse();
         result
             .TotalCount.Should()
-            .Be(Enumerable.Range(1, LargeTableRows).Count(g => g.ToString().StartsWith('1')));
+            .Be(
+                Enumerable
+                    .Range(1, LargeTableRows)
+                    .Count(g =>
+                        g.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                            .StartsWith('1')
+                    )
+            );
     }
 
     [Test]

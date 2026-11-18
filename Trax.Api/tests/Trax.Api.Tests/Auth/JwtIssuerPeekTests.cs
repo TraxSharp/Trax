@@ -40,7 +40,7 @@ public class JwtIssuerPeekTests
 
     [Test]
     public void TryReadIssuer_Null_ReturnsNull() =>
-        JwtIssuerPeek.TryReadIssuer(null).Should().BeNull();
+        JwtIssuerPeek.TryReadIssuer(token: null).Should().BeNull();
 
     [Test]
     public void TryReadIssuer_Empty_ReturnsNull() =>
@@ -110,7 +110,7 @@ public class JwtIssuerPeekTests
 
     [Test]
     public void TryReadBearerToken_Null_ReturnsNull() =>
-        JwtIssuerPeek.TryReadBearerToken(null).Should().BeNull();
+        JwtIssuerPeek.TryReadBearerToken(authorizationHeader: null).Should().BeNull();
 
     [Test]
     public void TryReadBearerToken_Empty_ReturnsNull() =>

@@ -45,7 +45,14 @@ internal sealed record MachineChange(
 
     /// <summary>The terminal answer that carries only a problem, <paramref name="code"/> and <paramref name="message"/>.</summary>
     public static MachineChange Refused(long? rowId, RefusalCode code, string message) =>
-        new(rowId, null, null, null, false, new SnapshotProblem { Code = code, Message = message });
+        new(
+            rowId,
+            Revision: null,
+            State: null,
+            Context: null,
+            Gone: false,
+            new SnapshotProblem { Code = code, Message = message }
+        );
 }
 
 /// <summary>
@@ -199,7 +206,7 @@ internal static class MachineChangedSubscription
                 is not ISnapshotWatchAccess access
             || machine is not IMachineInternals internals
         )
-            return Once(MachineChange.Refused(null, RefusalCode.NotFound, NotFoundMessage));
+            return Once(MachineChange.Refused(rowId: null, RefusalCode.NotFound, NotFoundMessage));
 
         if (
             await access
@@ -207,7 +214,7 @@ internal static class MachineChangedSubscription
                 .ConfigureAwait(false)
             is not { } row
         )
-            return Once(MachineChange.Refused(null, RefusalCode.NotFound, NotFoundMessage));
+            return Once(MachineChange.Refused(rowId: null, RefusalCode.NotFound, NotFoundMessage));
 
         // The endpoint policy and the watch rule are asked again at every connection re-check, for
         // the same caller and the same row, each in a scope of its own so it shares no data context
@@ -219,13 +226,16 @@ internal static class MachineChangedSubscription
             ctx.GetGlobalStateOrDefault<ClaimsPrincipal>("ClaimsPrincipal"),
             async ct =>
             {
-                await using var scope = scopes.CreateAsyncScope();
-                var scoped = scope.ServiceProvider;
-                return scoped.GetService<ISnapshotMachineRegistry>()?.Service(machine.Name)
-                        is ISnapshotWatchAccess current
-                    && await current
-                        .AuthorizeWatch(Caller(scoped, userKey), id, ct)
-                        .ConfigureAwait(false) == row;
+                var scope = scopes.CreateAsyncScope();
+                await using (scope.ConfigureAwait(false))
+                {
+                    var scoped = scope.ServiceProvider;
+                    return scoped.GetService<ISnapshotMachineRegistry>()?.Service(machine.Name)
+                            is ISnapshotWatchAccess current
+                        && await current
+                            .AuthorizeWatch(Caller(scoped, userKey), id, ct)
+                            .ConfigureAwait(false) == row;
+                }
             }
         );
 
@@ -233,7 +243,7 @@ internal static class MachineChangedSubscription
         if (lease is null)
             return Once(
                 MachineChange.Refused(
-                    null,
+                    rowId: null,
                     RefusalCode.TooManySubscriptions,
                     $"You may hold {MachineWatchLimits.PerInstance} subscriptions to one instance and "
                         + $"{MachineWatchLimits.PerPrincipal} in all. Complete one to open another."
@@ -281,7 +291,17 @@ internal static class MachineChangedSubscription
         switch (change.Kind)
         {
             case SnapshotRowChangeKind.Gone:
-                return (new MachineChange(change.RowId, null, null, null, true, null), true);
+                return (
+                    new MachineChange(
+                        change.RowId,
+                        Revision: null,
+                        State: null,
+                        Context: null,
+                        Gone: true,
+                        Problem: null
+                    ),
+                    true
+                );
             case SnapshotRowChangeKind.Unreadable:
                 return (
                     Newer(change, machine, internals, order)
@@ -319,8 +339,8 @@ internal static class MachineChangedSubscription
                     change.Revision,
                     ok.Snapshot.State,
                     (JsonObject)ok.Snapshot.Context.DeepClone(),
-                    false,
-                    null
+                    Gone: false,
+                    Problem: null
                 )
                 {
                     DueAt = change.DueAt,
@@ -377,7 +397,7 @@ internal static class MachineChangedSubscription
     }
 
     private static ISourceStream Once(MachineChange answer) =>
-        new MachineChangedStream(null, null, _ => null, answer);
+        new MachineChangedStream(watch: null, lease: null, _ => null, answer);
 }
 
 /// <summary>

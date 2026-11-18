@@ -20,7 +20,7 @@ public class DeadLetterQueries
     /// <param name="ct">Cancels the read.</param>
     /// <param name="skip">How many dead letters to skip (negative is treated as 0; above 10,000 is refused with <c>TRAX_SKIP_TOO_DEEP</c>, so page deeper with <c>afterId</c>).</param>
     /// <param name="take">The page size, clamped to 1 through 500.</param>
-    /// <param name="status">Only dead letters in this status; <c>null</c> for all.</param>
+    /// <param name="status">Only dead letters in this status; <see langword="null"/> for all.</param>
     /// <param name="afterId">Only dead letters older than this id (a keyset cursor).</param>
     /// <param name="manifestId">Only dead letters of this manifest.</param>
     public async Task<PagedResult<DeadLetterSummary>> GetDeadLetters(
@@ -36,7 +36,7 @@ public class DeadLetterQueries
         take = OperationsPageBounds.Take(take);
         skip = OperationsPageBounds.Skip(skip);
 
-        using var db = await dataContextFactory.CreateDbContextAsync(ct);
+        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
 
         var baseQuery = db.DeadLetters.AsNoTracking().OrderByDescending(dl => dl.Id);
 
@@ -50,7 +50,7 @@ public class DeadLetterQueries
 
         // The total is every record the filter matches, whatever page this is, so it is counted
         // before the cursor narrows the query.
-        var totalCount = await query.CountAsync(ct);
+        var totalCount = await query.CountAsync(ct).ConfigureAwait(false);
 
         if (afterId.HasValue)
             query = query.Where(dl => dl.Id < afterId.Value);
@@ -76,7 +76,8 @@ public class DeadLetterQueries
             {
                 ManifestExternalId = dl.Manifest != null ? dl.Manifest.ExternalId : null,
             })
-            .ToListAsync(ct);
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
 
         var nextCursor = items.Count > 0 ? items[^1].Id : (long?)null;
 
@@ -90,7 +91,7 @@ public class DeadLetterQueries
     }
 
     /// <summary>
-    /// A requeue-all job <c>requeueAllDeadLetters</c> started on this node, or <c>null</c> when this
+    /// A requeue-all job <c>requeueAllDeadLetters</c> started on this node, or <see langword="null"/> when this
     /// node does not know the id: it was started on another node, this node has restarted since,
     /// or it finished more than 24 hours ago. A job is read on the node that started it; the
     /// backlog itself is <c>deadLetters(status: AWAITING_INTERVENTION).totalCount</c> on any node.
@@ -101,7 +102,7 @@ public class DeadLetterQueries
     ) => jobs.Get(id) is { } job ? DeadLetterRequeueJob.From(job) : null;
 
     /// <summary>
-    /// One dead letter by id, or <c>null</c> when none has that id.
+    /// One dead letter by id, or <see langword="null"/> when none has that id.
     /// </summary>
     public async Task<DeadLetterSummary?> GetDeadLetter(
         long id,
@@ -109,7 +110,7 @@ public class DeadLetterQueries
         CancellationToken ct
     )
     {
-        using var db = await dataContextFactory.CreateDbContextAsync(ct);
+        using var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
 
         return await db
             .DeadLetters.AsNoTracking()
@@ -130,6 +131,7 @@ public class DeadLetterQueries
             {
                 ManifestExternalId = dl.Manifest != null ? dl.Manifest.ExternalId : null,
             })
-            .FirstOrDefaultAsync(ct);
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
     }
 }

@@ -252,7 +252,7 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
         if (
             state.Documents.Any(d =>
                 d is MachineDocument m
-                && m.Machine == machine
+                && string.Equals(m.Machine, machine, StringComparison.Ordinal)
                 && string.Equals(m.IrHash, irHash, StringComparison.Ordinal)
             )
         )

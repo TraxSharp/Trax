@@ -209,10 +209,8 @@ public class ClientDocumentsE2ETests
             string? title = null;
             var ran = await E2EWait.UntilAsync(async () =>
             {
-                using var answer = await a.PostPersistedAsync(
-                    newer,
-                    new { input = new { id = 2 } }
-                );
+                using var answer = await a.PostPersistedAsync(newer, new { input = new { id = 2 } })
+                    .ConfigureAwait(false);
                 if (
                     answer.RootElement.TryGetProperty("data", out var data)
                     && data.ValueKind == JsonValueKind.Object
@@ -250,10 +248,9 @@ public class ClientDocumentsE2ETests
         string[] codes = [];
         await E2EWait.UntilAsync(async () =>
         {
-            using var answer = await host.Host.PostPersistedAsync(
-                made,
-                new { input = new { id = 1 } }
-            );
+            using var answer = await host
+                .Host.PostPersistedAsync(made, new { input = new { id = 1 } })
+                .ConfigureAwait(false);
             codes = [.. MachineDocumentOps.Codes(answer)];
             return codes.SequenceEqual([RefusalCode.ClientOutdated.ToWire()]);
         });
@@ -294,7 +291,7 @@ public class ClientDocumentsE2ETests
             GraphQL = graphql =>
             {
                 graphql = graphql.UsePersistedOperations(po =>
-                    po.SingleNode().RequirePersisted(true).ClientDocuments(file)
+                    po.SingleNode().RequirePersisted(require: true).ClientDocuments(file)
                 );
                 return maxExecutionDepth is { } depth ? graphql.MaxExecutionDepth(depth) : graphql;
             },
@@ -308,19 +305,21 @@ public class ClientDocumentsE2ETests
     )
     {
         file ??= DocumentsFile(texts.Select(t => (t.Split(' ', '(', '{')[1], t)).ToArray());
-        await E2EHost.RecreateDatabaseAsync(database);
+        await E2EHost.RecreateDatabaseAsync(database).ConfigureAwait(false);
         try
         {
-            var host = await E2EHost.StartAsync(
-                database,
-                new CountingCharge(),
-                Options(file, "single", maxExecutionDepth)
-            );
+            var host = await E2EHost
+                .StartAsync(
+                    database,
+                    new CountingCharge(),
+                    Options(file, "single", maxExecutionDepth)
+                )
+                .ConfigureAwait(false);
             return new HostedDatabase(database, host);
         }
         catch
         {
-            await E2EHost.DropDatabaseAsync(database);
+            await E2EHost.DropDatabaseAsync(database).ConfigureAwait(false);
             throw;
         }
     }
@@ -330,7 +329,7 @@ public class ClientDocumentsE2ETests
         public async ValueTask DisposeAsync()
         {
             Host.Dispose();
-            await E2EHost.DropDatabaseAsync(Database);
+            await E2EHost.DropDatabaseAsync(Database).ConfigureAwait(false);
         }
     }
 }

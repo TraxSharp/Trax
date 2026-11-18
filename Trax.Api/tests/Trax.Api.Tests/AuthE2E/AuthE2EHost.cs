@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Net.Http.Json;
 using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
@@ -31,7 +33,7 @@ namespace Trax.Api.Tests.AuthE2E;
 /// combination of auth schemes. Points at the docker-compose Postgres so
 /// the mediator's data context is real.
 /// </summary>
-public static class AuthE2EHost
+public static partial class AuthE2EHost
 {
     // Each AuthE2E test class passes its own database name to keep migrations
     // and advisory locks isolated; the database is provisioned on demand by
@@ -49,7 +51,10 @@ public static class AuthE2EHost
     //   - Pool Size=8 — small enough that 5 fixtures × 8 = 40 connections
     //     stays well under postgres's default max_connections=100.
     public static string ConnectionString(string database) =>
-        $"Host=localhost;Port={TestPostgres.Port};Database={database};Username=trax;Password=trax123;"
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Database={database};Username=trax;Password=trax123;"
+        )
         + "Maximum Pool Size=8;Minimum Pool Size=0;Connection Idle Lifetime=30;"
         + "Timeout=30;Tcp Keepalive=true";
 
@@ -68,8 +73,10 @@ public static class AuthE2EHost
     /// </remarks>
     public static void EnsureDatabaseExists(string database)
     {
-        var maintenanceConnectionString =
-            $"Host=localhost;Port={TestPostgres.Port};Database=trax;Username=trax;Password=trax123;Timeout=30";
+        var maintenanceConnectionString = string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Database=trax;Username=trax;Password=trax123;Timeout=30"
+        );
 
         using var connection = new Npgsql.NpgsqlConnection(maintenanceConnectionString);
         connection.Open();
@@ -79,7 +86,7 @@ public static class AuthE2EHost
         // binding for identifiers. The test fixtures always pass compile-time
         // literals, but enforce the shape defensively to make accidental
         // misuse loud.
-        if (!System.Text.RegularExpressions.Regex.IsMatch(database, "^[a-z_][a-z0-9_]*$"))
+        if (!DatabaseName.IsMatch(database))
             throw new ArgumentException(
                 $"Database name '{database}' contains characters outside [a-z0-9_]. "
                     + "Test fixtures must use snake_case ASCII identifiers.",
@@ -91,7 +98,8 @@ public static class AuthE2EHost
         {
             command.ExecuteNonQuery();
         }
-        catch (Npgsql.PostgresException ex) when (ex.SqlState == "42P04")
+        catch (Npgsql.PostgresException ex)
+            when (string.Equals(ex.SqlState, "42P04", StringComparison.Ordinal))
         {
             // Database already exists — idempotent no-op.
         }
@@ -226,7 +234,7 @@ public static class AuthE2EHost
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
     }
 
@@ -289,8 +297,11 @@ public static class AuthE2EHost
         };
         configureRequest?.Invoke(req);
 
-        var res = await client.SendAsync(req);
-        var body = await res.Content.ReadAsStringAsync();
+        var res = await client.SendAsync(req).ConfigureAwait(false);
+        var body = await res.Content.ReadAsStringAsync().ConfigureAwait(false);
         return System.Text.Json.JsonDocument.Parse(body);
     }
+
+    [GeneratedRegex("^[a-z_][a-z0-9_]*$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex DatabaseName { get; }
 }

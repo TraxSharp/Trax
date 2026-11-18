@@ -33,7 +33,7 @@ internal sealed class TypeExtensionExposureValidator(
 
         // Building the schema is the check: the interceptor writes into the report while this
         // runs.
-        await provider.GetExecutorAsync(TraxSchemaName, cancellationToken);
+        await provider.GetExecutorAsync(TraxSchemaName, cancellationToken).ConfigureAwait(false);
 
         var violations = report.Violations;
         if (violations.Count == 0)

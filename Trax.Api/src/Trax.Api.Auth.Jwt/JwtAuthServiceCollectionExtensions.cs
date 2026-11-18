@@ -22,7 +22,7 @@ namespace Trax.Api.Auth.Jwt;
 /// <see cref="JwtBearerHandler"/>. After validation, Trax's
 /// <c>OnTokenValidated</c> hook runs an
 /// <see cref="ITraxPrincipalResolver{JwtTokenInput}"/> to project the token
-/// into a <see cref="TraxPrincipal"/>. A resolver that returns <c>null</c>
+/// into a <see cref="TraxPrincipal"/>. A resolver that returns <see langword="null"/>
 /// fails authentication.
 /// </para>
 /// <para>
@@ -108,7 +108,7 @@ public static class JwtAuthServiceCollectionExtensions
         var registry = JwtResolverRegistry.GetOrAdd(services);
         registry.Register(schemeName, sp => sp.GetRequiredService<DefaultJwtPrincipalResolver>());
 
-        if (schemeName == JwtDefaults.SchemeName)
+        if (string.Equals(schemeName, JwtDefaults.SchemeName, StringComparison.Ordinal))
             services.TryAddSingleton<
                 ITraxPrincipalResolver<JwtTokenInput>,
                 DefaultJwtPrincipalResolver
@@ -136,7 +136,7 @@ public static class JwtAuthServiceCollectionExtensions
         var registry = JwtResolverRegistry.GetOrAdd(services);
         registry.Register(schemeName, sp => sp.GetRequiredService<TResolver>());
 
-        if (schemeName == JwtDefaults.SchemeName)
+        if (string.Equals(schemeName, JwtDefaults.SchemeName, StringComparison.Ordinal))
             services.TryAddScoped<ITraxPrincipalResolver<JwtTokenInput>, TResolver>();
 
         return AddCore(services, schemeName, configure);
@@ -218,7 +218,7 @@ public static class JwtAuthServiceCollectionExtensions
                         // the scheme that validated the token.
                         .AddRequirements(
                             new TraxSchemeRequirement([
-                                .. mappings.Values.Distinct(),
+                                .. mappings.Values.Distinct(StringComparer.Ordinal),
                                 .. builder.FallbackSchemeName is { } fallbackScheme
                                     ? new[] { fallbackScheme }
                                     : [],
@@ -246,7 +246,7 @@ public static class JwtAuthServiceCollectionExtensions
         services.Any(sd =>
             sd.ServiceType == typeof(SchemeMarker)
             && sd.ImplementationInstance is SchemeMarker marker
-            && marker.Name == schemeName
+            && string.Equals(marker.Name, schemeName, StringComparison.Ordinal)
         );
 
     private static AuthenticationBuilder AddCore(
@@ -287,7 +287,7 @@ public static class JwtAuthServiceCollectionExtensions
     }
 
     private static string ResolvePolicyName(string schemeName) =>
-        schemeName == JwtDefaults.SchemeName
+        string.Equals(schemeName, JwtDefaults.SchemeName, StringComparison.Ordinal)
             ? JwtDefaults.PolicyName
             : schemeName + JwtDefaults.PolicyNameSuffix;
 
@@ -343,7 +343,7 @@ public static class JwtAuthServiceCollectionExtensions
         options.Events.OnTokenValidated = async context =>
         {
             if (existingValidated is not null)
-                await existingValidated(context);
+                await existingValidated(context).ConfigureAwait(false);
 
             if (context.Result is not null)
                 return;
@@ -370,7 +370,7 @@ public static class JwtAuthServiceCollectionExtensions
             if (resolver is null)
             {
                 context.Fail(
-                    schemeName == JwtDefaults.SchemeName
+                    string.Equals(schemeName, JwtDefaults.SchemeName, StringComparison.Ordinal)
                         ? "No ITraxPrincipalResolver<JwtTokenInput> registered. "
                             + "Call AddTraxJwtAuth before UseAuthentication."
                         : $"No ITraxPrincipalResolver<JwtTokenInput> registered for scheme '{schemeName}'."
@@ -382,10 +382,9 @@ public static class JwtAuthServiceCollectionExtensions
             try
             {
                 var input = new JwtTokenInput(context.Principal, context.SecurityToken);
-                traxPrincipal = await resolver.ResolveAsync(
-                    input,
-                    context.HttpContext.RequestAborted
-                );
+                traxPrincipal = await resolver
+                    .ResolveAsync(input, context.HttpContext.RequestAborted)
+                    .ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -418,7 +417,7 @@ public static class JwtAuthServiceCollectionExtensions
         // to the registry (the legacy "RemoveAll then no replacement" path
         // resolves to null and the caller fails the auth, matching the
         // original behavior).
-        if (schemeName == JwtDefaults.SchemeName)
+        if (string.Equals(schemeName, JwtDefaults.SchemeName, StringComparison.Ordinal))
             return sp.GetService<ITraxPrincipalResolver<JwtTokenInput>>();
 
         var registry = sp.GetService<JwtResolverRegistry>();

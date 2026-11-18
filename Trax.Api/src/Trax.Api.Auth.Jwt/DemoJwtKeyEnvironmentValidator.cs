@@ -31,7 +31,7 @@ internal sealed class DemoJwtKeyEnvironmentValidator(
         if (environment.IsDevelopment())
             return;
 
-        foreach (var scheme in await schemes.GetAllSchemesAsync())
+        foreach (var scheme in await schemes.GetAllSchemesAsync().ConfigureAwait(false))
         {
             if (!typeof(JwtBearerHandler).IsAssignableFrom(scheme.HandlerType))
                 continue;

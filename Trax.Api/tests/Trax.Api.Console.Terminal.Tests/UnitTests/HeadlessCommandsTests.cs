@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Trax.Api.Console.Terminal.Headless;
@@ -265,7 +266,10 @@ public class HeadlessCommandsTests
         (await host.StreamAsync("OnDataChanged")).Error(new IOException("Connection reset."));
         await WaitAsync(() => run.IsCompleted || Interrupted(host));
         stop.Cancel();
-        var (exit, _, error) = await run.WaitAsync(TimeSpan.FromSeconds(10));
+        var (exit, _, error) = await run.WaitAsync(
+            TimeSpan.FromSeconds(10),
+            cancellationToken: CancellationToken.None
+        );
 
         exit.Should().Be(0);
         Lines(error)
@@ -303,7 +307,7 @@ public class HeadlessCommandsTests
             var host = new FakeHost();
             await list.LoadAsync(
                 new TraxClient(host),
-                new ListQuery(25, null, filters),
+                new ListQuery(25, After: null, filters),
                 CancellationToken.None
             );
             var query = host.Requests.Single().Variables;
@@ -345,7 +349,7 @@ public class HeadlessCommandsTests
             if (DateTime.UtcNow > deadline)
                 throw new TimeoutException("The condition never held.");
             // allowed-delay: the polling interval of a wait with a deadline.
-            await Task.Delay(10);
+            await Task.Delay(10).ConfigureAwait(false);
         }
     }
 
@@ -368,7 +372,7 @@ public class HeadlessCommandsTests
                 {"operations":{"startBulkOperation":{"success":true,"message":"Started.","matched":3,"operation":
                   {"id":"OPERATION","kind":"REQUEUE","status":"RUNNING","actor":"op","startedAt":"2026-10-22T10:00:00Z",
                    "total":3,"done":0,"failed":0,"message":"Running."}}}}
-                """.Replace("OPERATION", Operation)
+                """.Replace("OPERATION", Operation, StringComparison.Ordinal)
             : """{"operations":{"startBulkOperation":{"success":false,"message":"The filter now matches 4.","matched":4,"operation":null}}}""";
 
     // A host that starts a bulk operation and reports it through the states given, (status, done, failed) each.
@@ -391,13 +395,15 @@ public class HeadlessCommandsTests
                               "actor":"op","askAfresh":false,"startedAt":"2026-10-22T10:00:00Z","finishedAt":null,
                               "total":3,"done":DONE,"failed":FAILED,"message":"Done so far.",
                               "filter":{"executions":null,"deadLetters":null,"manifests":null},"failureReasons":[],"failures":[]}}}
-                            """.Replace("OPERATION", Operation).Replace(
+                            """.Replace("OPERATION", Operation, StringComparison.Ordinal).Replace(
                                 "DONE",
-                                $"{states[at + 1]}"
-                            ).Replace("FAILED", $"{states[at + 2]}").Replace(
-                                "STATUS",
-                                $"{states[at]}"
-                            )
+                                $"{states[at + 1]}",
+                                StringComparison.Ordinal
+                            ).Replace(
+                                "FAILED",
+                                $"{states[at + 2]}",
+                                StringComparison.Ordinal
+                            ).Replace("STATUS", $"{states[at]}", StringComparison.Ordinal)
                         )!;
                 }
             );
@@ -421,10 +427,19 @@ public class HeadlessCommandsTests
                                         {
                                             ["position"] = i,
                                             ["kind"] = "JUNCTION",
-                                            ["name"] = $"Step{i}",
+                                            ["name"] = string.Create(
+                                                CultureInfo.InvariantCulture,
+                                                $"Step{i}"
+                                            ),
                                             ["state"] = "COMPLETED",
                                             ["startedAt"] = DateTimeOffset
-                                                .Parse("2026-10-22T10:00:00Z")
+                                                .Parse(
+                                                    "2026-10-22T10:00:00Z",
+                                                    System
+                                                        .Globalization
+                                                        .CultureInfo
+                                                        .InvariantCulture
+                                                )
                                                 .AddSeconds(i)
                                                 .ToString("O"),
                                             ["replayed"] = false,

@@ -157,7 +157,7 @@ public class TrainExceptionMessageRuleTests
                 Arg.Is<RunTrainOptions>(o => o.RecordCaller),
                 Arg.Any<CancellationToken>()
             )
-            .ThrowsAsync(new ArgumentException("development detail"));
+            .ThrowsAsync(new InvalidOperationException("development detail"));
 
         await using var services = BuildDetailedServices(execution);
         var executor = await services
@@ -202,35 +202,40 @@ public class TrainExceptionMessageRuleTests
         // A store that is not the in-memory one, so both surfaces attempt the enqueue rather than
         // refuse it as having nothing to dispatch it.
         using var host = await StartHostAsync(
-            execution,
-            new RecordingSubmitter(),
-            QueueRegistration(),
-            Substitute.For<IDataContextProviderFactory>()
-        );
+                execution,
+                new RecordingSubmitter(),
+                QueueRegistration(),
+                Substitute.For<IDataContextProviderFactory>()
+            )
+            .ConfigureAwait(false);
 
-        using var typed = await AdminOperationsAuthorizationTests.PostAsync(
-            host,
-            apiKey: null,
-            "mutation { dispatch { masked(input: {}) { __typename } } }"
-        );
-        using var operations = await AdminOperationsAuthorizationTests.PostAsync(
-            host,
-            apiKey: null,
-            $$"""
-            mutation {
-              operations {
-                workQueue {
-                  queueTrain(input: { trainName: "{{TrainName}}", inputJson: "{}" }) {
-                    success
-                    message
+        using var typed = await AdminOperationsAuthorizationTests
+            .PostAsync(
+                host,
+                apiKey: null,
+                "mutation { dispatch { masked(input: {}) { __typename } } }"
+            )
+            .ConfigureAwait(false);
+        using var operations = await AdminOperationsAuthorizationTests
+            .PostAsync(
+                host,
+                apiKey: null,
+                $$"""
+                mutation {
+                  operations {
+                    workQueue {
+                      queueTrain(input: { trainName: "{{TrainName}}", inputJson: "{}" }) {
+                        success
+                        message
+                      }
+                    }
                   }
                 }
-              }
-            }
-            """
-        );
+                """
+            )
+            .ConfigureAwait(false);
 
-        await host.StopAsync();
+        await host.StopAsync().ConfigureAwait(false);
 
         var typedMessage = typed
             .RootElement.GetProperty("errors")[0]

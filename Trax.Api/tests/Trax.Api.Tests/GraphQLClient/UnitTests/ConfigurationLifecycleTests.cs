@@ -23,7 +23,11 @@ public class ConfigurationLifecycleTests
                 baseAddress: null!,
                 jsonSerializer: new SystemTextJsonSerializer(),
                 graphQLHttpClientOptions: new GraphQLHttpClientOptions(),
-                jsonSerializerOptions: new JsonSerializerOptions(),
+                jsonSerializerOptions: new JsonSerializerOptions()
+                {
+                    RespectNullableAnnotations = false,
+                    RespectRequiredConstructorParameters = false,
+                },
                 disposeHttpClient: false,
                 removeSubscriptionsFromSchema: true,
                 responseStrictness: ResponseStrictness.Lenient,
@@ -40,7 +44,11 @@ public class ConfigurationLifecycleTests
                 baseAddress: new Uri("http://x/graphql"),
                 jsonSerializer: null!,
                 graphQLHttpClientOptions: new GraphQLHttpClientOptions(),
-                jsonSerializerOptions: new JsonSerializerOptions(),
+                jsonSerializerOptions: new JsonSerializerOptions()
+                {
+                    RespectNullableAnnotations = false,
+                    RespectRequiredConstructorParameters = false,
+                },
                 disposeHttpClient: false,
                 removeSubscriptionsFromSchema: true,
                 responseStrictness: ResponseStrictness.Lenient,
@@ -57,7 +65,11 @@ public class ConfigurationLifecycleTests
                 baseAddress: new Uri("http://x/graphql"),
                 jsonSerializer: new SystemTextJsonSerializer(),
                 graphQLHttpClientOptions: new GraphQLHttpClientOptions(),
-                jsonSerializerOptions: new JsonSerializerOptions(),
+                jsonSerializerOptions: new JsonSerializerOptions()
+                {
+                    RespectNullableAnnotations = false,
+                    RespectRequiredConstructorParameters = false,
+                },
                 disposeHttpClient: false,
                 removeSubscriptionsFromSchema: true,
                 responseStrictness: ResponseStrictness.Lenient,
@@ -74,7 +86,11 @@ public class ConfigurationLifecycleTests
             baseAddress: new Uri("http://x/graphql"),
             jsonSerializer: new SystemTextJsonSerializer(),
             graphQLHttpClientOptions: new GraphQLHttpClientOptions(),
-            jsonSerializerOptions: new JsonSerializerOptions(),
+            jsonSerializerOptions: new JsonSerializerOptions()
+            {
+                RespectNullableAnnotations = false,
+                RespectRequiredConstructorParameters = false,
+            },
             disposeHttpClient: false,
             removeSubscriptionsFromSchema: true,
             responseStrictness: ResponseStrictness.Lenient,
@@ -96,7 +112,11 @@ public class ConfigurationLifecycleTests
             baseAddress: new Uri("http://x/graphql"),
             jsonSerializer: new SystemTextJsonSerializer(),
             graphQLHttpClientOptions: new GraphQLHttpClientOptions(),
-            jsonSerializerOptions: new JsonSerializerOptions(),
+            jsonSerializerOptions: new JsonSerializerOptions()
+            {
+                RespectNullableAnnotations = false,
+                RespectRequiredConstructorParameters = false,
+            },
             disposeHttpClient: true,
             removeSubscriptionsFromSchema: true,
             responseStrictness: ResponseStrictness.Lenient,
@@ -116,7 +136,11 @@ public class ConfigurationLifecycleTests
             baseAddress: new Uri("http://x/graphql"),
             jsonSerializer: new SystemTextJsonSerializer(),
             graphQLHttpClientOptions: new GraphQLHttpClientOptions(),
-            jsonSerializerOptions: new JsonSerializerOptions(),
+            jsonSerializerOptions: new JsonSerializerOptions()
+            {
+                RespectNullableAnnotations = false,
+                RespectRequiredConstructorParameters = false,
+            },
             disposeHttpClient: true,
             removeSubscriptionsFromSchema: true,
             responseStrictness: ResponseStrictness.Lenient,

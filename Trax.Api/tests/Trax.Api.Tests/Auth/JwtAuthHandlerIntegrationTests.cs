@@ -88,9 +88,8 @@ public class JwtAuthHandlerIntegrationTests
                                 "/authresult",
                                 async (HttpContext ctx) =>
                                 {
-                                    var result = await ctx.AuthenticateAsync(
-                                        JwtDefaults.SchemeName
-                                    );
+                                    var result = await ctx.AuthenticateAsync(JwtDefaults.SchemeName)
+                                        .ConfigureAwait(false);
                                     return Results.Ok(
                                         new AuthResultResponse
                                         {
@@ -106,7 +105,7 @@ public class JwtAuthHandlerIntegrationTests
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
     }
 

@@ -76,8 +76,8 @@ internal sealed class MachineDocumentRegistration(
             // node serves, and collects them after the grace period, so an earlier deploy's clients reload.
             registry.Publish(
                 [],
-                new Dictionary<string, int>(),
-                new Dictionary<string, StoredMachineDocument>()
+                new Dictionary<string, int>(StringComparer.Ordinal),
+                new Dictionary<string, StoredMachineDocument>(StringComparer.Ordinal)
             );
             try
             {
@@ -163,7 +163,11 @@ internal sealed class MachineDocumentRegistration(
         foreach (var file in options.ClientDocumentFiles)
         foreach (var document in Services.ClientDocuments.Load(Path.GetFullPath(file, root)))
         {
-            if (documents.Any(d => d.Name == document.Name))
+            if (
+                documents.Exists(d =>
+                    string.Equals(d.Name, document.Name, StringComparison.Ordinal)
+                )
+            )
                 throw new InvalidOperationException(
                     $"The {document.Owner} is named in two client documents files. Operation names are unique "
                         + "across a host's frontends."
@@ -195,7 +199,7 @@ internal sealed class MachineDocumentRegistration(
             PublishConsoleDocumentIds();
         }
         if (_collecting is null)
-            _collecting = Task.Run(() => CollectAsync(_stopping.Token));
+            _collecting = Task.Run(() => CollectAsync(_stopping.Token), cancellationToken);
     }
 
     public async Task StoppingAsync(CancellationToken cancellationToken)
