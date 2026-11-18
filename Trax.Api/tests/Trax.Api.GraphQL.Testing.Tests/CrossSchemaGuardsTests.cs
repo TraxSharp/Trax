@@ -158,7 +158,7 @@ public class CrossSchemaGuardsTests
         using var repo = new TempRepo().Write(
             "src/App.CrossSchema/Edges/LoanToBookEdge.cs",
             "[ExtendObjectType(typeof(Loan))] public class E {"
-                + " public Task<Book?> GetBook(CrossSchemaLoader<C, Book> b) => null!; }"
+                + " public Task<Book?> GetBook(CrossSchemaLoader<C, Book> b) => Null.Of<object>(); }"
         );
 
         CrossSchemaGuards
@@ -175,7 +175,7 @@ public class CrossSchemaGuardsTests
         using var repo = new TempRepo().Write(
             "src/App.CrossSchema/Edges/LoanToBookEdge.cs",
             "[ExtendObjectType(typeof(Loan))] public class E {"
-                + " public Task<Book?> GetBook(ICatalogDbContext db) => null!; }"
+                + " public Task<Book?> GetBook(ICatalogDbContext db) => Null.Of<object>(); }"
         );
 
         var result = CrossSchemaGuards.EdgeResolversUseLoader(
@@ -457,7 +457,7 @@ public class CrossSchemaGuardsTests
                 public Task<Book?> GetBook([Parent] Loan loan, CrossSchemaLoader<C, Book> books) =>
                     books.LoadAsync(loan.BookId);
 
-                public Task<Book?> GetLatest([Parent] Loan loan, ICatalogDbContext db) => null!;
+                public Task<Book?> GetLatest([Parent] Loan loan, ICatalogDbContext db) => Null.Of<object>();
             }
             """
         );
@@ -474,7 +474,7 @@ public class CrossSchemaGuardsTests
             [Authorize, ObjectType<Loan>]
             public static partial class E
             {
-                public static Task<Book?> GetBook([Parent] Loan loan, ICatalogDbContext db) => null!;
+                public static Task<Book?> GetBook([Parent] Loan loan, ICatalogDbContext db) => Null.Of<object>();
             }
             """
         );
@@ -491,7 +491,7 @@ public class CrossSchemaGuardsTests
             [ExtendObjectType(typeof(Loan))]
             public sealed class E
             {
-                public Task<Book?> GetBook(CrossSchemaLoader<C, Book> books) => null!;
+                public Task<Book?> GetBook(CrossSchemaLoader<C, Book> books) => Null.Of<object>();
 
                 private static int Helper(ICatalogDbContext db) => 0;
 
@@ -566,7 +566,10 @@ public class CrossSchemaGuardsTests
     [Test]
     public void ExtensionResolvers_NullOptions_Throws()
     {
-        var act = () => CrossSchemaGuards.ExtensionResolversDeclareParentRequirements(null!);
+        var act = () =>
+            CrossSchemaGuards.ExtensionResolversDeclareParentRequirements(
+                Null.Of<Trax.Core.Testing.ArchitectureGuardOptions>()
+            );
 
         act.Should().Throw<ArgumentNullException>();
     }

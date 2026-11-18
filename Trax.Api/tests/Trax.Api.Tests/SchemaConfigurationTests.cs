@@ -35,7 +35,7 @@ public class SchemaConfigurationTests
 
         // Verify order is preserved by invoking them
         foreach (var action in builder.SchemaConfigurations)
-            action(null!);
+            action(Null.Of<HotChocolate.Execution.Configuration.IRequestExecutorBuilder>());
 
         callOrder.Should().ContainInOrder(1, 2, 3);
     }

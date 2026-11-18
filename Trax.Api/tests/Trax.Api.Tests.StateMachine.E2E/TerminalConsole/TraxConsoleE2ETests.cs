@@ -12,6 +12,7 @@ using Trax.Api.Dashboard.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Api.StateMachine.E2E.Fakes;
 using Trax.Client;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Services.TraxScheduler;
 
 namespace Trax.Api.StateMachine.E2E.TerminalConsole;
@@ -55,10 +56,10 @@ public class TraxConsoleE2ETests
 
         page.Succeeded.Should().BeTrue(page.Message);
         host.Sent.Should()
-            .ContainSingle(b => b["operationName"]!.GetValue<string>() == "Executions")
+            .ContainSingle(b => b["operationName"].NotNull().GetValue<string>() == "Executions")
             .Which.Should()
             .Match<JsonObject>(b =>
-                b["id"]!.GetValue<string>().StartsWith("trax_console_Executions_")
+                b["id"].NotNull().GetValue<string>().StartsWith("trax_console_Executions_")
                 && !b.ContainsKey("query")
             );
     }
@@ -177,8 +178,16 @@ public class TraxConsoleE2ETests
 
         exit.Should().Be(0, error.ToString());
         output.ToString().Should().BeEmpty("the host has no dead letters");
-        JsonNode.Parse(error.ToString())!["totalCount"]!.GetValue<int>().Should().Be(0);
-        host.Sent.Single()["variables"]!["status"]!
+        JsonNode
+            .Parse(error.ToString())
+            .NotNull()["totalCount"]
+            .NotNull()
+            .GetValue<int>()
+            .Should()
+            .Be(0);
+        host.Sent.Single()["variables"]
+            .NotNull()["status"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be("AWAITING_INTERVENTION");
@@ -291,10 +300,13 @@ public class TraxConsoleE2ETests
         )
         {
             var body = JsonNode.Parse(
-                await request.Content!.ReadAsStringAsync(cancellationToken).ConfigureAwait(false)
+                await request
+                    .Content.NotNull()
+                    .ReadAsStringAsync(cancellationToken)
+                    .ConfigureAwait(false)
             );
             lock (_bodies)
-                _bodies.Add((JsonObject)body!);
+                _bodies.Add((JsonObject)body.NotNull());
             return await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
         }
     }
@@ -323,7 +335,7 @@ public class TraxConsoleE2ETests
                 )
             )
             {
-                var ids = (long[])args![0]!;
+                var ids = (long[])args.NotNull()[0].NotNull();
                 lock (_requeued)
                     _requeued.AddRange(ids);
                 return Task.FromResult(

@@ -9,6 +9,7 @@ using Microsoft.Extensions.Hosting;
 using NSubstitute;
 using Trax.Api.GraphQL.Authorization;
 using Trax.Api.GraphQL.Configuration;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests;
 
@@ -55,7 +56,7 @@ public class TraxHttpAuthenticationInterceptorTests
         );
 
         await schemeProvider.DidNotReceive().GetAllSchemesAsync();
-        httpContext.User.Identity!.Name.Should().Be("alice");
+        httpContext.User.Identity.NotNull().Name.Should().Be("alice");
         httpContext.User.Identity.AuthenticationType.Should().Be("preauth");
     }
 
@@ -94,7 +95,8 @@ public class TraxHttpAuthenticationInterceptorTests
         );
 
         httpContext
-            .User.Identity!.IsAuthenticated.Should()
+            .User.Identity.NotNull()
+            .IsAuthenticated.Should()
             .BeFalse(
                 "a request no scheme authenticates stays anonymous, per docs/adr/0010-a-scheme-policy-requires-its-scheme.md"
             );
@@ -142,7 +144,7 @@ public class TraxHttpAuthenticationInterceptorTests
             CancellationToken.None
         );
 
-        httpContext.User.Identity!.Name.Should().Be("winner");
+        httpContext.User.Identity.NotNull().Name.Should().Be("winner");
         httpContext.User.Identity.AuthenticationType.Should().Be("schemeA");
     }
 
@@ -171,7 +173,7 @@ public class TraxHttpAuthenticationInterceptorTests
             CancellationToken.None
         );
 
-        httpContext.User.Identity!.Name.Should().Be("bob");
+        httpContext.User.Identity.NotNull().Name.Should().Be("bob");
     }
 
     [Test]
@@ -203,7 +205,8 @@ public class TraxHttpAuthenticationInterceptorTests
         );
 
         httpContext
-            .User.Identity!.Name.Should()
+            .User.Identity.NotNull()
+            .Name.Should()
             .Be("carol", "per docs/adr/0010-a-scheme-policy-requires-its-scheme.md");
     }
 

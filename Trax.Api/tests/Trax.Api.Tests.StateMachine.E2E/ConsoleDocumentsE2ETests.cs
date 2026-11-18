@@ -267,8 +267,8 @@ public partial class ConsoleDocumentsE2ETests
         };
         await using var host = await HostAsync("trax_sm_console_docs_late", options);
 
-        var console = () => mapped!.UseTraxOperatorConsoleDocuments();
-        var dashboard = () => mapped!.UseTraxApiDashboard(d => d.AllowAnonymousShell());
+        var console = () => mapped.NotNull().UseTraxOperatorConsoleDocuments();
+        var dashboard = () => mapped.NotNull().UseTraxApiDashboard(d => d.AllowAnonymousShell());
 
         console.Should().Throw<InvalidOperationException>().WithMessage("*after the host started*");
         dashboard
@@ -326,7 +326,11 @@ public partial class ConsoleDocumentsE2ETests
         return config.RootElement.TryGetProperty("documents", out var documents)
             ? documents
                 .EnumerateObject()
-                .ToDictionary(p => p.Name, p => p.Value.GetString()!, StringComparer.Ordinal)
+                .ToDictionary(
+                    p => p.Name,
+                    p => p.Value.GetString().NotNull(),
+                    StringComparer.Ordinal
+                )
             : [];
     }
 

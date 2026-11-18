@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using HotChocolate.Resolvers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Utils;
 using Trax.Mediator.Services.TrainExecution;
@@ -262,7 +263,7 @@ internal static class MachineResolvers
             var result = await ctx
                 .Services.GetRequiredService<ITrainExecutionService>()
                 .RunAsync(
-                    train.FullName!,
+                    train.FullName.NotNull(),
                     TrainInputReader.Write(input, input.GetType()),
                     ctx.RequestAborted
                 )

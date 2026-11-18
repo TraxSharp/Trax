@@ -87,7 +87,7 @@ public class MetricsQueriesTests
     {
         var ops = Substitute.For<IOperationsService>();
         var snap = new ServerMetrics(
-            DateTime.UtcNow.AddHours(-1),
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1),
             UptimeSeconds: 3600,
             WorkingSetBytes: 1024 * 1024,
             GcHeapBytes: 512 * 1024
@@ -106,7 +106,7 @@ public class MetricsQueriesTests
                 new Microsoft.EntityFrameworkCore.Storage.InMemoryDatabaseRoot()
             );
         const string train = "Trax.Tests.ISeriesTrain";
-        var now = DateTime.UtcNow;
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime;
         var quarter = TimeSpan.FromMinutes(15).Ticks;
         var t0 = new DateTime(now.Ticks - now.Ticks % quarter, DateTimeKind.Utc).AddHours(-2);
         var durations = new List<(DateTime Start, double Ms)>();
@@ -122,7 +122,8 @@ public class MetricsQueriesTests
                         Name = train,
                         ExternalId = Guid.NewGuid().ToString("N"),
                         Input = null,
-                    }
+                    },
+                    TimeProvider.System
                 );
                 run.TrainState =
                     i == 3
@@ -221,8 +222,8 @@ public class MetricsQueriesTests
         var result = new MetricSeries(
             MetricSeriesScope.Group,
             MetricSeriesRange.Last7Days,
-            DateTime.UtcNow,
-            DateTime.UtcNow,
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime,
             3600,
             []
         );

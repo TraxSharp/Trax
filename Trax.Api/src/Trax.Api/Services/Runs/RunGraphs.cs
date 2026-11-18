@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Trax.Api.DTOs;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Effect.Data.JunctionEvents;
 using Trax.Effect.Data.Services.DataContext;
@@ -372,7 +373,7 @@ internal static class RunGraphs
             moreSteps
         )
         {
-            CanResume = resume.Offers && resumes!.Latest.CanResume,
+            CanResume = resume.Offers && resumes.NotNull().Latest.CanResume,
         };
     }
 
@@ -698,7 +699,7 @@ internal static class RunGraphs
         public bool Holds(string id) => _checkpoints.Contains(id);
 
         public bool CanResumeAt(string id) =>
-            offers && checks!.At.TryGetValue(id, out var verdict) && verdict.CanResume;
+            offers && checks.NotNull().At.TryGetValue(id, out var verdict) && verdict.CanResume;
     }
 
     // The worst state any of the node's steps reached, should a node have more than one: it fails

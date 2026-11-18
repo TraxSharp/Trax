@@ -2,6 +2,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 
@@ -19,21 +20,25 @@ namespace Trax.Api.StateMachine.E2E;
 public class StateMachineGraphQLE2ETests
 {
     private const string Database = "trax_statemachine_e2e";
-    private IHost _host = null!;
-    private CountingCharge _charge = null!;
+    private IHost? _host;
+    private CountingCharge? _charge;
 
     [OneTimeSetUp]
     public async Task Up()
     {
         await E2EHost.RecreateDatabaseAsync(Database);
         _charge = new CountingCharge();
-        _host = await E2EHost.StartAsync(Database, _charge, E2EHostOptions.GenericOptIn());
+        _host = await E2EHost.StartAsync(
+            Database,
+            _charge.NotNull(),
+            E2EHostOptions.GenericOptIn()
+        );
     }
 
     [OneTimeTearDown]
     public async Task Down()
     {
-        _host.Dispose();
+        _host?.Dispose();
         await E2EHost.DropDatabaseAsync(Database);
     }
 
@@ -72,19 +77,21 @@ public class StateMachineGraphQLE2ETests
     [Test]
     public async Task Anonymous_request_is_an_auth_error_at_http_200_not_a_crash()
     {
-        using var doc = await _host.PostAsync(
-            SaveMutation,
-            new
-            {
-                input = new
+        using var doc = await _host
+            .NotNull()
+            .PostAsync(
+                SaveMutation,
+                new
                 {
-                    machine = "turnstile",
-                    id = Guid.NewGuid().ToString(),
-                    snapshot = TurnstileMachine.InitialJson,
-                },
-            }
-        // no API key → anonymous
-        );
+                    input = new
+                    {
+                        machine = "turnstile",
+                        id = Guid.NewGuid().ToString(),
+                        snapshot = TurnstileMachine.InitialJson,
+                    },
+                }
+            // no API key → anonymous
+            );
 
         doc.RootElement.TryGetProperty("errors", out var errors).Should().BeTrue();
         errors.GetArrayLength().Should().BeGreaterThan(0);
@@ -102,44 +109,50 @@ public class StateMachineGraphQLE2ETests
         var id = Guid.NewGuid().ToString();
 
         // The plain hatch has nothing the server does, so the generic save serves it.
-        using var save = await _host.PostAsync(
-            SaveMutation,
-            new
-            {
-                input = new
+        using var save = await _host
+            .NotNull()
+            .PostAsync(
+                SaveMutation,
+                new
                 {
-                    machine = PlainHatchMachine.MachineId,
-                    id,
-                    snapshot = PlainHatchMachine.Json(HatchState.Shut),
+                    input = new
+                    {
+                        machine = PlainHatchMachine.MachineId,
+                        id,
+                        snapshot = PlainHatchMachine.Json(HatchState.Shut),
+                    },
                 },
-            },
-            E2EHost.AdminApiKey
-        );
+                E2EHost.AdminApiKey
+            );
         NoErrors(save);
         ProblemCode(Output(save, "saveSnapshot")).Should().BeNull(save.RootElement.GetRawText());
         Snapshot(Output(save, "saveSnapshot")).Should().Contain("\"state\":\"Shut\"");
 
-        using var advance = await _host.PostAsync(
-            AdvanceMutation,
-            new
-            {
-                input = new
+        using var advance = await _host
+            .NotNull()
+            .PostAsync(
+                AdvanceMutation,
+                new
                 {
-                    machine = PlainHatchMachine.MachineId,
-                    id,
-                    trigger = "Open",
+                    input = new
+                    {
+                        machine = PlainHatchMachine.MachineId,
+                        id,
+                        trigger = "Open",
+                    },
                 },
-            },
-            E2EHost.AdminApiKey
-        );
+                E2EHost.AdminApiKey
+            );
         NoErrors(advance);
         Snapshot(Output(advance, "advanceSnapshot")).Should().Contain("\"state\":\"Open\"");
 
-        using var load = await _host.PostAsync(
-            LoadMutation,
-            new { input = new { machine = PlainHatchMachine.MachineId, id } },
-            E2EHost.AdminApiKey
-        );
+        using var load = await _host
+            .NotNull()
+            .PostAsync(
+                LoadMutation,
+                new { input = new { machine = PlainHatchMachine.MachineId, id } },
+                E2EHost.AdminApiKey
+            );
         NoErrors(load);
         Snapshot(Output(load, "loadSnapshot")).Should().Contain("\"state\":\"Open\"");
     }
@@ -150,35 +163,37 @@ public class StateMachineGraphQLE2ETests
         var id = Guid.NewGuid().ToString();
 
         // The turnstile guards its coin, so the generic save does not serve it: the host writes the draft.
-        await _host.SeedDraftAsync(
-            "TraxApiKey:admin",
-            Guid.Parse(id),
-            TurnstileMachine.InitialJson
-        );
+        await _host
+            .NotNull()
+            .SeedDraftAsync("TraxApiKey:admin", Guid.Parse(id), TurnstileMachine.InitialJson);
 
-        using var advance = await _host.PostAsync(
-            AdvanceMutation,
-            new
-            {
-                input = new
+        using var advance = await _host
+            .NotNull()
+            .PostAsync(
+                AdvanceMutation,
+                new
                 {
-                    machine = "turnstile",
-                    id,
-                    trigger = "Coin",
-                    input = "{\"coin\":\"quarter\"}",
+                    input = new
+                    {
+                        machine = "turnstile",
+                        id,
+                        trigger = "Coin",
+                        input = "{\"coin\":\"quarter\"}",
+                    },
                 },
-            },
-            E2EHost.AdminApiKey
-        );
+                E2EHost.AdminApiKey
+            );
         NoErrors(advance);
         Snapshot(Output(advance, "advanceSnapshot")).Should().Contain("\"state\":\"Unlocked\"");
 
         // Load on the same id resumes the server-persisted draft.
-        using var load = await _host.PostAsync(
-            LoadMutation,
-            new { input = new { machine = "turnstile", id } },
-            E2EHost.AdminApiKey
-        );
+        using var load = await _host
+            .NotNull()
+            .PostAsync(
+                LoadMutation,
+                new { input = new { machine = "turnstile", id } },
+                E2EHost.AdminApiKey
+            );
         NoErrors(load);
         Snapshot(Output(load, "loadSnapshot")).Should().Contain("\"state\":\"Unlocked\"");
     }
@@ -190,10 +205,12 @@ public class StateMachineGraphQLE2ETests
 
         // The generic save serves only machines with no server-side behaviour, and the order has an effect, so its
         // draft is written by the host. The API key scheme qualifies the principal id with its name.
-        var scope = _host.Services.CreateAsyncScope();
+        var scope = _host.NotNull().Services.CreateAsyncScope();
         await using (scope.ConfigureAwait(false))
         {
-            var review = System.Text.Json.Nodes.JsonNode.Parse(OrderMachine.ReviewSnapshot(1, 2))!;
+            var review = System
+                .Text.Json.Nodes.JsonNode.Parse(OrderMachine.ReviewSnapshot(1, 2))
+                .NotNull();
             (
                 await scope
                     .ServiceProvider.GetRequiredService<ISnapshotStore>()
@@ -204,56 +221,62 @@ public class StateMachineGraphQLE2ETests
                         {
                             Machine = "order",
                             Version = 1,
-                            State = review["state"]!.GetValue<string>(),
-                            Context = review["context"]!.AsObject().DeepClone().AsObject(),
+                            State = review["state"].NotNull().GetValue<string>(),
+                            Context = review["context"].NotNull().AsObject().DeepClone().AsObject(),
                         }
                     )
             ).Should().BeTrue();
         }
         using (
-            var load = await _host.PostAsync(
-                LoadMutation,
-                new { input = new { machine = "order", id } },
-                E2EHost.AdminApiKey
-            )
+            var load = await _host
+                .NotNull()
+                .PostAsync(
+                    LoadMutation,
+                    new { input = new { machine = "order", id } },
+                    E2EHost.AdminApiKey
+                )
         )
             Snapshot(Output(load, "loadSnapshot")).Should().Contain("\"state\":\"Review\"");
 
-        var before = _charge.Calls;
+        var before = _charge.NotNull().Calls;
 
-        using var send = await _host.PostAsync(
-            SendMutation,
-            new
-            {
-                input = new
+        using var send = await _host
+            .NotNull()
+            .PostAsync(
+                SendMutation,
+                new
                 {
-                    machine = "order",
-                    id,
-                    requestId = "r1",
+                    input = new
+                    {
+                        machine = "order",
+                        id,
+                        requestId = "r1",
+                    },
                 },
-            },
-            E2EHost.AdminApiKey
-        );
+                E2EHost.AdminApiKey
+            );
         NoErrors(send);
         Snapshot(Output(send, "sendSnapshot")).Should().Contain("\"state\":\"Placed\"");
-        (_charge.Calls - before).Should().Be(1, "the charge fires exactly once");
+        (_charge.NotNull().Calls - before).Should().Be(1, "the charge fires exactly once");
 
         // A retry (already Placed) must not deliver again.
-        using var retry = await _host.PostAsync(
-            SendMutation,
-            new
-            {
-                input = new
+        using var retry = await _host
+            .NotNull()
+            .PostAsync(
+                SendMutation,
+                new
                 {
-                    machine = "order",
-                    id,
-                    requestId = "r2",
+                    input = new
+                    {
+                        machine = "order",
+                        id,
+                        requestId = "r2",
+                    },
                 },
-            },
-            E2EHost.AdminApiKey
-        );
+                E2EHost.AdminApiKey
+            );
         Snapshot(Output(retry, "sendSnapshot")).Should().Contain("\"state\":\"Placed\"");
-        (_charge.Calls - before).Should().Be(1, "a resend does not re-charge");
+        (_charge.NotNull().Calls - before).Should().Be(1, "a resend does not re-charge");
     }
 
     [Test]
@@ -262,46 +285,52 @@ public class StateMachineGraphQLE2ETests
         var id = Guid.NewGuid().ToString();
 
         // Unlocked is reached only past the coin guard; the generic save would step around it.
-        using var save = await _host.PostAsync(
-            SaveMutation,
-            new
-            {
-                input = new
+        using var save = await _host
+            .NotNull()
+            .PostAsync(
+                SaveMutation,
+                new
                 {
-                    machine = "turnstile",
-                    id,
-                    snapshot = """{"machine":"turnstile","version":1,"state":"Unlocked","context":{"paidWith":"quarter"}}""",
+                    input = new
+                    {
+                        machine = "turnstile",
+                        id,
+                        snapshot = """{"machine":"turnstile","version":1,"state":"Unlocked","context":{"paidWith":"quarter"}}""",
+                    },
                 },
-            },
-            E2EHost.AdminApiKey
-        );
+                E2EHost.AdminApiKey
+            );
 
         NoErrors(save);
         ProblemCode(Output(save, "saveSnapshot")).Should().Be("SAVE_NOT_ALLOWED");
-        using var load = await _host.PostAsync(
-            LoadMutation,
-            new { input = new { machine = "turnstile", id } },
-            E2EHost.AdminApiKey
-        );
+        using var load = await _host
+            .NotNull()
+            .PostAsync(
+                LoadMutation,
+                new { input = new { machine = "turnstile", id } },
+                E2EHost.AdminApiKey
+            );
         ProblemCode(Output(load, "loadSnapshot")).Should().Be("NOT_FOUND");
     }
 
     [Test]
     public async Task An_unknown_machine_comes_back_as_a_typed_problem_not_an_error()
     {
-        using var doc = await _host.PostAsync(
-            SaveMutation,
-            new
-            {
-                input = new
+        using var doc = await _host
+            .NotNull()
+            .PostAsync(
+                SaveMutation,
+                new
                 {
-                    machine = "nope",
-                    id = Guid.NewGuid().ToString(),
-                    snapshot = TurnstileMachine.InitialJson,
+                    input = new
+                    {
+                        machine = "nope",
+                        id = Guid.NewGuid().ToString(),
+                        snapshot = TurnstileMachine.InitialJson,
+                    },
                 },
-            },
-            E2EHost.AdminApiKey
-        );
+                E2EHost.AdminApiKey
+            );
 
         NoErrors(doc);
         ProblemCode(Output(doc, "saveSnapshot")).Should().Be("UNKNOWN_MACHINE");
@@ -311,17 +340,17 @@ public class StateMachineGraphQLE2ETests
     public async Task Send_to_a_machine_with_no_effect_is_a_typed_problem()
     {
         var id = Guid.NewGuid().ToString();
-        await _host.SeedDraftAsync(
-            "TraxApiKey:admin",
-            Guid.Parse(id),
-            TurnstileMachine.InitialJson
-        );
+        await _host
+            .NotNull()
+            .SeedDraftAsync("TraxApiKey:admin", Guid.Parse(id), TurnstileMachine.InitialJson);
 
-        using var doc = await _host.PostAsync(
-            SendMutation,
-            new { input = new { machine = "turnstile", id } },
-            E2EHost.AdminApiKey
-        );
+        using var doc = await _host
+            .NotNull()
+            .PostAsync(
+                SendMutation,
+                new { input = new { machine = "turnstile", id } },
+                E2EHost.AdminApiKey
+            );
 
         NoErrors(doc);
         ProblemCode(Output(doc, "sendSnapshot")).Should().Be("NO_EFFECT");

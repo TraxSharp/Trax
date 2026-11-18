@@ -3,6 +3,7 @@ using HotChocolate;
 using HotChocolate.Language;
 using HotChocolate.Types;
 using Trax.Api.GraphQL.Validation;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.GraphQL.PersistedOperations.Services;
 
@@ -111,7 +112,7 @@ internal static partial class DocumentTypes
     private static HashSet<string> Roots(ISchemaDefinition schema) =>
         new[] { schema.QueryType, schema.MutationType, schema.SubscriptionType }
             .Where(t => t is not null)
-            .Select(t => t!.Name)
+            .Select(t => t.NotNull().Name)
             .ToHashSet(StringComparer.Ordinal);
 
     private static void Select(

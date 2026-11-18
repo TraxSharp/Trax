@@ -6,6 +6,7 @@ using Trax.Api.GraphQL.Client;
 using Trax.Api.GraphQL.Client.Trax;
 using Trax.Api.Tests.GraphQLClient.Fixtures;
 using Trax.Api.Tests.GraphQLClient.IntegrationTests.Fakes;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 
@@ -18,20 +19,20 @@ namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 [TestFixture]
 public class StartupValidatorTests
 {
-    private GraphQLTestServerFixture _fixture = null!;
+    private GraphQLTestServerFixture? _fixture;
 
     [SetUp]
     public void SetUp() => _fixture = new GraphQLTestServerFixture();
 
     [TearDown]
-    public void TearDown() => _fixture.Dispose();
+    public void TearDown() => _fixture?.Dispose();
 
     [Test]
     public async Task StartAsync_AllRequestsValid_CompletesWithoutThrowing()
     {
-        var config = new GraphQLClientConfigurationBuilder(_fixture.BaseAddress)
+        var config = new GraphQLClientConfigurationBuilder(_fixture.NotNull().BaseAddress)
         {
-            HttpClient = _fixture.CreateHttpClient(),
+            HttpClient = _fixture.NotNull().CreateHttpClient(),
         }.Build();
         var validator = new GraphQLClientValidator(new IntrospectingSchemaProvider(config));
 
@@ -50,9 +51,9 @@ public class StartupValidatorTests
     [Test]
     public async Task StartAsync_DriftedRequest_ThrowsValidationException()
     {
-        var config = new GraphQLClientConfigurationBuilder(_fixture.BaseAddress)
+        var config = new GraphQLClientConfigurationBuilder(_fixture.NotNull().BaseAddress)
         {
-            HttpClient = _fixture.CreateHttpClient(),
+            HttpClient = _fixture.NotNull().CreateHttpClient(),
         }.Build();
         var validator = new GraphQLClientValidator(new IntrospectingSchemaProvider(config));
 
@@ -69,7 +70,11 @@ public class StartupValidatorTests
     [Test]
     public async Task StopAsync_Always_Completes()
     {
-        var v = new GraphQLClientStartupValidator(null!, Array.Empty<Assembly>(), typeFilter: null);
+        var v = new GraphQLClientStartupValidator(
+            Null.Of<Trax.Api.GraphQL.Client.IGraphQLClientValidator>(),
+            Array.Empty<Assembly>(),
+            typeFilter: null
+        );
 
         await v.StopAsync(CancellationToken.None);
     }

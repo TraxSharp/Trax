@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AwesomeAssertions;
+using Trax.Api.Console.Terminal.Checks;
 using Trax.Api.Console.Terminal.Machines;
 using Trax.Api.Console.Terminal.Operations;
 using Trax.Api.Console.Terminal.Screens;
@@ -154,15 +155,17 @@ public class MachineViewTests
                 "MachineInstance",
                 _ =>
                     (System.Text.Json.Nodes.JsonObject)
-                        System.Text.Json.Nodes.JsonNode.Parse(
-                            """
-                            {"operations":{"machineInstance":{"machine":"checkout","ownerKind":"USER","id":"3f2a1c4e-0000-4000-8000-000000000001",
-                             "rowId":5,"state":"STATE","version":2,"updatedAt":"2026-10-22T10:01:00Z","hasLiveInvokedRun":true,
-                             "isInvokedRunsCapped":false,"inStateSince":"2026-10-22T10:01:00Z","overdue":false,"stuck":false,
-                             "waitingOn":{"executionId":4900,"trainState":"IN_PROGRESS","workQueueEntryId":null},
-                             "invokedRuns":[{"id":4900,"externalId":"run-4900","name":"Shop.IChargeTrain","trainState":"IN_PROGRESS","startTime":"2026-10-22T10:01:00Z","failureClass":"UNCLASSIFIED","cancellationRequested":false,"isLive":true}]}}}
-                            """.Replace("STATE", state, StringComparison.Ordinal)
-                        )!
+                        System
+                            .Text.Json.Nodes.JsonNode.Parse(
+                                """
+                                {"operations":{"machineInstance":{"machine":"checkout","ownerKind":"USER","id":"3f2a1c4e-0000-4000-8000-000000000001",
+                                 "rowId":5,"state":"STATE","version":2,"updatedAt":"2026-10-22T10:01:00Z","hasLiveInvokedRun":true,
+                                 "isInvokedRunsCapped":false,"inStateSince":"2026-10-22T10:01:00Z","overdue":false,"stuck":false,
+                                 "waitingOn":{"executionId":4900,"trainState":"IN_PROGRESS","workQueueEntryId":null},
+                                 "invokedRuns":[{"id":4900,"externalId":"run-4900","name":"Shop.IChargeTrain","trainState":"IN_PROGRESS","startTime":"2026-10-22T10:01:00Z","failureClass":"UNCLASSIFIED","cancellationRequested":false,"isLive":true}]}}}
+                                """.Replace("STATE", state, StringComparison.Ordinal)
+                            )
+                            .NotNull()
             )
             .Answer(
                 "MachineInstanceTransitions",
@@ -171,11 +174,12 @@ public class MachineViewTests
                   {"revision":2,"kind":"COMMAND","trigger":"Checkout","actor":"OWNER","fromState":"Cart","toState":"Paying","at":"2026-10-22T10:01:00Z","startedRun":{"executionId":4900}}]}}}}
                 """
             );
-        var instance =
-            JsonSerializer.Deserialize<MachineInstancesAttentionResultOperationsMachineInstancesItems>(
+        var instance = JsonSerializer
+            .Deserialize<MachineInstancesAttentionResultOperationsMachineInstancesItems>(
                 """{"machine":"checkout","ownerKind":"USER","id":"3f2a1c4e-0000-4000-8000-000000000001","rowId":5,"state":"Paying","updatedAt":"2026-10-22T10:01:00Z","inStateSince":"2026-10-22T10:01:00Z","overdue":false,"stuck":false}""",
                 TraxJson.Options
-            )!;
+            )
+            .NotNull();
         var (terminal, window) = await TerminalHarness.StartAsync(app => new MachineInstanceWindow(
             new ConsoleContext(
                 app,
@@ -322,8 +326,8 @@ public class MachineViewTests
 
         await terminal.OnUi(() => window.RequestStop());
 
-        await terminal.Stopped.WaitAsync(TimeSpan.FromSeconds(15));
-        await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(15));
+        await terminal.Stopped.WaitAsync(TimeSpan.FromSeconds(15), TimeProvider.System);
+        await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(15), TimeProvider.System);
         host.Sent("MachineInstanceTransitions").Should().BeEmpty();
     }
 
@@ -333,21 +337,27 @@ public class MachineViewTests
 
     private static System.Text.Json.Nodes.JsonObject Detail(string state) =>
         (System.Text.Json.Nodes.JsonObject)
-            System.Text.Json.Nodes.JsonNode.Parse(
-                """
-                {"operations":{"machineInstance":{"machine":"checkout","ownerKind":"USER","id":"3f2a1c4e-0000-4000-8000-000000000001",
-                 "rowId":5,"state":"STATE","version":2,"updatedAt":"2026-10-22T10:01:00Z","hasLiveInvokedRun":false,
-                 "isInvokedRunsCapped":false,"inStateSince":"2026-10-22T10:01:00Z","overdue":false,"stuck":false,
-                 "waitingOn":null,"invokedRuns":[]}}}
-                """.Replace("STATE", state, StringComparison.Ordinal)
-            )!;
+            System
+                .Text.Json.Nodes.JsonNode.Parse(
+                    """
+                    {"operations":{"machineInstance":{"machine":"checkout","ownerKind":"USER","id":"3f2a1c4e-0000-4000-8000-000000000001",
+                     "rowId":5,"state":"STATE","version":2,"updatedAt":"2026-10-22T10:01:00Z","hasLiveInvokedRun":false,
+                     "isInvokedRunsCapped":false,"inStateSince":"2026-10-22T10:01:00Z","overdue":false,"stuck":false,
+                     "waitingOn":null,"invokedRuns":[]}}}
+                    """.Replace("STATE", state, StringComparison.Ordinal)
+                )
+                .NotNull();
 
     private static MachineInstancesAttentionResultOperationsMachineInstancesItems Instance() =>
-        JsonSerializer.Deserialize<MachineInstancesAttentionResultOperationsMachineInstancesItems>(
-            """{"machine":"checkout","ownerKind":"USER","id":"3f2a1c4e-0000-4000-8000-000000000001","rowId":5,"state":"Paying","updatedAt":"2026-10-22T10:01:00Z","inStateSince":"2026-10-22T10:01:00Z","overdue":false,"stuck":false}""",
-            TraxJson.Options
-        )!;
+        JsonSerializer
+            .Deserialize<MachineInstancesAttentionResultOperationsMachineInstancesItems>(
+                """{"machine":"checkout","ownerKind":"USER","id":"3f2a1c4e-0000-4000-8000-000000000001","rowId":5,"state":"Paying","updatedAt":"2026-10-22T10:01:00Z","inStateSince":"2026-10-22T10:01:00Z","overdue":false,"stuck":false}""",
+                TraxJson.Options
+            )
+            .NotNull();
 
     private static MachinesResultOperationsMachines Machine() =>
-        JsonSerializer.Deserialize<MachinesResultOperationsMachines>(Checkout, TraxJson.Options)!;
+        JsonSerializer
+            .Deserialize<MachinesResultOperationsMachines>(Checkout, TraxJson.Options)
+            .NotNull();
 }

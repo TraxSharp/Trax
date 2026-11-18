@@ -2,6 +2,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests;
 
@@ -43,7 +44,7 @@ internal static class GraphQLExecutionResultExtensions
 
         data.ValueKind.Should().Be(JsonValueKind.Object);
 
-        return (IReadOnlyDictionary<string, object?>)ToClrValue(data)!;
+        return (IReadOnlyDictionary<string, object?>)ToClrValue(data).NotNull();
     }
 
     private static object? ToClrValue(JsonElement element) =>

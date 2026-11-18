@@ -3,6 +3,7 @@ using HotChocolate.Internal;
 using HotChocolate.Types;
 using HotChocolate.Types.Descriptors;
 using HotChocolate.Types.Descriptors.Configurations;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 
 namespace Trax.Api.GraphQL.Configuration;
@@ -127,7 +128,7 @@ internal static class AuthorizeDirectives
         policies = attributes
             .Select(a => a.Policy)
             .Where(p => !string.IsNullOrWhiteSpace(p))
-            .Select(p => p!)
+            .Select(p => p.NotNull())
             .Distinct(StringComparer.Ordinal)
             .ToArray();
     }

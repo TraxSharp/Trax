@@ -88,7 +88,7 @@ public class UiTests
                  "filter":{},"failureReasons":[],"failures":[]}}}
                 """
             );
-            ConsoleContext context = null!;
+            ConsoleContext context = Null.Of<ConsoleContext>();
             var (terminal, _) = await TerminalHarness.StartAsync(app =>
             {
                 context = new ConsoleContext(
@@ -107,9 +107,9 @@ public class UiTests
             );
             context.Close();
             // negative-wait: a closed context sends no further polls in these windows.
-            await Task.Delay(200, context.Closed);
+            await Task.Delay(TimeSpan.FromMilliseconds(200), context.Clock, CancellationToken.None);
             var after = host.Sent("BulkOperation").Count;
-            await Task.Delay(300, context.Closed);
+            await Task.Delay(TimeSpan.FromMilliseconds(300), context.Clock, CancellationToken.None);
 
             host.Sent("BulkOperation")
                 .Count.Should()

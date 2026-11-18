@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.DTOs;
 using Trax.Api.Services.Lists;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Scheduler.Services.Operations;
@@ -40,10 +41,10 @@ internal static class BulkOperationTargets
 
         var fits = kind switch
         {
-            BulkOperationKind.Cancel => filter!.Executions is not null,
-            BulkOperationKind.Requeue or BulkOperationKind.Acknowledge => filter!.DeadLetters
+            BulkOperationKind.Cancel => filter?.Executions is not null,
+            BulkOperationKind.Requeue or BulkOperationKind.Acknowledge => filter?.DeadLetters
                 is not null,
-            _ => filter!.Manifests is not null,
+            _ => filter?.Manifests is not null,
         };
         return fits
             ? null
@@ -70,7 +71,7 @@ internal static class BulkOperationTargets
     )
     {
         if (kind == BulkOperationKind.Requeue)
-            return await RequeueSnapshotAsync(factory, filter.DeadLetters!, ct)
+            return await RequeueSnapshotAsync(factory, filter.DeadLetters.NotNull(), ct)
                 .ConfigureAwait(false);
 
         var ids = new List<long>();
@@ -252,7 +253,7 @@ internal static class BulkOperationTargets
             {
                 await services
                     .GetRequiredService<ITraxScheduler>()
-                    .AcknowledgeDeadLettersAsync(batch, run.Note!, ct)
+                    .AcknowledgeDeadLettersAsync(batch, run.Note.NotNull(), ct)
                     .ConfigureAwait(false);
                 return (
                     await DeadLetterFailuresAsync(factory, batch, DeadLetterStatus.Acknowledged, ct)

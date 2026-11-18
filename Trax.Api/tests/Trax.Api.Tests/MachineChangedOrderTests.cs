@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Trax.Api.GraphQL.TypeModules;
 using Trax.Api.Tests.Fakes.Machines;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 
@@ -34,7 +35,7 @@ public class MachineChangedOrderTests
             State: nameof(PartsState.Picking),
             Context: "{}",
             IrHash: irHash,
-            UpdatedAt: DateTimeOffset.UtcNow
+            UpdatedAt: TimeProvider.System.GetUtcNow()
         );
 
     [Test]
@@ -50,7 +51,8 @@ public class MachineChangedOrderTests
         );
 
         presented.Should().NotBeNull();
-        presented!
+        presented
+            .NotNull()
             .Value.Ends.Should()
             .BeFalse(
                 "with no order of the versions, an older node's write must not end the stream"
@@ -67,8 +69,8 @@ public class MachineChangedOrderTests
             new FixedOrder(newer: true)
         );
 
-        presented!.Value.Ends.Should().BeTrue();
-        presented.Value.Event.Problem!.Code.Should().Be(RefusalCode.ClientOutdated);
+        presented.NotNull().Value.Ends.Should().BeTrue();
+        presented.Value.Event.Problem.NotNull().Code.Should().Be(RefusalCode.ClientOutdated);
     }
 
     private sealed class FixedOrder(bool? newer) : IMachineIrOrder

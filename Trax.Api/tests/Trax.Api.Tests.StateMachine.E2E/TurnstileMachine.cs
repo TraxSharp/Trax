@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 
@@ -16,7 +17,7 @@ public sealed class TurnstileMachine : Machine<TurnstileState, TurnstileTrigger>
 
     private static string? Coin(JsonNode? input) =>
         input is JsonObject o && o["coin"]?.GetValueKind() == JsonValueKind.String
-            ? o["coin"]!.GetValue<string>()
+            ? o["coin"].NotNull().GetValue<string>()
             : null;
 
     protected override void Configure(IMachineBuilder<TurnstileState, TurnstileTrigger> m)
@@ -41,7 +42,7 @@ public sealed class TurnstileMachine : Machine<TurnstileState, TurnstileTrigger>
         m.In(TurnstileState.Unlocked)
             .Holds(ctx =>
                 ctx["paidWith"]?.GetValueKind() == JsonValueKind.String
-                && ctx["paidWith"]!.GetValue<string>().Length > 0
+                && ctx["paidWith"].NotNull().GetValue<string>().Length > 0
                     ? null
                     : "Unlocked requires a non-empty paidWith."
             )

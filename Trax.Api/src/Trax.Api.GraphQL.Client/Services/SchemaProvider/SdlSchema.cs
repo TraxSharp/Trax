@@ -4,6 +4,7 @@ using GraphQL.Types;
 using GraphQLParser;
 using GraphQLParser.AST;
 using GraphQLParser.Visitors;
+using Trax.Api.GraphQL.Client.Checks;
 
 namespace Trax.Api.GraphQL.Client;
 
@@ -79,7 +80,7 @@ internal static class SdlSchema
             );
             if (entry is not null)
             {
-                rootName = entry.Type!.Name.StringValue;
+                rootName = entry.Type.NotNull().Name.StringValue;
                 schemaDefinition.OperationTypes.Remove(entry);
             }
         }

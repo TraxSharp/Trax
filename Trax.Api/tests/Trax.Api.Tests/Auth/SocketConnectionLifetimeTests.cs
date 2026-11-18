@@ -63,7 +63,7 @@ public class SocketConnectionLifetimeTests
     [Test]
     public async Task ApiKeySocket_WhoseKeyIsRevoked_ClosesWithinTheRecheckInterval()
     {
-        var time = new ManualTimeProvider(DateTimeOffset.UtcNow);
+        var time = new ManualTimeProvider(TimeProvider.System.GetUtcNow());
         var resolver = ResolverReturning(Alice);
         var session = await ConnectWithKeyAsync(resolver, time);
 
@@ -85,7 +85,7 @@ public class SocketConnectionLifetimeTests
     [Test]
     public async Task ApiKeySocket_WhoseKeyNowResolvesToOtherRoles_Closes()
     {
-        var time = new ManualTimeProvider(DateTimeOffset.UtcNow);
+        var time = new ManualTimeProvider(TimeProvider.System.GetUtcNow());
         var resolver = ResolverReturning(Alice);
         var session = await ConnectWithKeyAsync(resolver, time);
 
@@ -107,7 +107,7 @@ public class SocketConnectionLifetimeTests
     [Test]
     public async Task ApiKeySocket_WhoseKeyNowResolvesToOtherClaims_Closes()
     {
-        var time = new ManualTimeProvider(DateTimeOffset.UtcNow);
+        var time = new ManualTimeProvider(TimeProvider.System.GetUtcNow());
         var resolver = ResolverReturning(Alice);
         var session = await ConnectWithKeyAsync(resolver, time);
 
@@ -160,7 +160,7 @@ public class SocketConnectionLifetimeTests
     [Test]
     public async Task ApiKeySocket_WhoseKeyNowResolvesWithOnlyANewDisplayName_StaysOpen()
     {
-        var time = new ManualTimeProvider(DateTimeOffset.UtcNow);
+        var time = new ManualTimeProvider(TimeProvider.System.GetUtcNow());
         var resolver = ResolverReturning(Alice);
         var session = await ConnectWithKeyAsync(resolver, time);
 
@@ -175,7 +175,7 @@ public class SocketConnectionLifetimeTests
     [Test]
     public async Task ApiKeySocket_WhoseResolverFailsOnRecheck_Closes()
     {
-        var time = new ManualTimeProvider(DateTimeOffset.UtcNow);
+        var time = new ManualTimeProvider(TimeProvider.System.GetUtcNow());
         var resolver = ResolverReturning(Alice);
         var session = await ConnectWithKeyAsync(resolver, time);
 
@@ -194,7 +194,7 @@ public class SocketConnectionLifetimeTests
     [Test]
     public async Task ApiKeySocket_WhoseKeyKeepsResolving_ClosesAtTheMaximumLifetime()
     {
-        var time = new ManualTimeProvider(DateTimeOffset.UtcNow);
+        var time = new ManualTimeProvider(TimeProvider.System.GetUtcNow());
         var resolver = ResolverReturning(Alice);
         var session = await ConnectWithKeyAsync(resolver, time);
 
@@ -218,7 +218,7 @@ public class SocketConnectionLifetimeTests
     [Test]
     public async Task ApiKeyInterceptor_UsedOnItsOwn_RechecksItsKey()
     {
-        var time = new ManualTimeProvider(DateTimeOffset.UtcNow);
+        var time = new ManualTimeProvider(TimeProvider.System.GetUtcNow());
         var resolver = ResolverReturning(Alice);
         var services = new ServiceCollection();
         services.AddLogging();
@@ -263,7 +263,7 @@ public class SocketConnectionLifetimeTests
     [Test]
     public async Task JwtSocket_WhoseTokenOutlivesTheLifetime_ClosesAtTheLifetime()
     {
-        var time = new ManualTimeProvider(DateTimeOffset.UtcNow);
+        var time = new ManualTimeProvider(TimeProvider.System.GetUtcNow());
         var issuer = TestTokenIssuer.Symmetric(JwtIssuer, JwtAudience, JwtKey);
         var services = new ServiceCollection();
         services.AddLogging();
@@ -308,7 +308,7 @@ public class SocketConnectionLifetimeTests
     [Test]
     public async Task SocketWithNoTokenScheme_ClosesAtTheMaximumLifetime()
     {
-        var time = new ManualTimeProvider(DateTimeOffset.UtcNow);
+        var time = new ManualTimeProvider(TimeProvider.System.GetUtcNow());
         var interceptor = Composite(Services(time));
         var (session, _) = NewSession();
         (
@@ -337,7 +337,7 @@ public class SocketConnectionLifetimeTests
     [Test]
     public async Task CookieSocket_ClosesWhenItsSignInExpires()
     {
-        var time = new ManualTimeProvider(DateTimeOffset.UtcNow);
+        var time = new ManualTimeProvider(TimeProvider.System.GetUtcNow());
         var interceptor = Composite(Services(time));
         var (session, http) = NewSession();
         http.Features.Set<IAuthenticateResultFeature>(new SignIn(time.GetUtcNow().AddMinutes(10)));
@@ -365,7 +365,7 @@ public class SocketConnectionLifetimeTests
     [Test]
     public async Task CookieSocket_WhoseSignInOutlivesTheLifetime_ClosesAtTheLifetime()
     {
-        var time = new ManualTimeProvider(DateTimeOffset.UtcNow);
+        var time = new ManualTimeProvider(TimeProvider.System.GetUtcNow());
         var interceptor = Composite(Services(time));
         var (session, http) = NewSession();
         http.Features.Set<IAuthenticateResultFeature>(new SignIn(time.GetUtcNow().AddDays(14)));
@@ -391,7 +391,7 @@ public class SocketConnectionLifetimeTests
     [Test]
     public async Task RejectedConnection_IsNeverClosedLater()
     {
-        var time = new ManualTimeProvider(DateTimeOffset.UtcNow);
+        var time = new ManualTimeProvider(TimeProvider.System.GetUtcNow());
         var interceptor = Composite(Services(time, ResolverReturning(principal: null)));
         var (session, _) = NewSession();
         (
@@ -416,7 +416,7 @@ public class SocketConnectionLifetimeTests
     [Test]
     public void DeadlineBeyondTheLongestTimerDue_IsReachedInSteps()
     {
-        var time = new ManualTimeProvider(DateTimeOffset.UtcNow);
+        var time = new ManualTimeProvider(TimeProvider.System.GetUtcNow());
         var (session, _) = NewSession();
         Track(session, time)
             .CloseAt(
@@ -435,7 +435,7 @@ public class SocketConnectionLifetimeTests
     [Test]
     public void LaterDeadline_DoesNotReplaceAnEarlierOne()
     {
-        var time = new ManualTimeProvider(DateTimeOffset.UtcNow);
+        var time = new ManualTimeProvider(TimeProvider.System.GetUtcNow());
         var (session, _) = NewSession();
         var lifetime = Track(session, time);
 
@@ -461,7 +461,7 @@ public class SocketConnectionLifetimeTests
     [Test]
     public void ConnectionThatFailsToClose_DoesNotThrowFromTheTimer()
     {
-        var time = new ManualTimeProvider(DateTimeOffset.UtcNow);
+        var time = new ManualTimeProvider(TimeProvider.System.GetUtcNow());
         var (session, _) = NewSession();
         session
             .Connection.CloseAsync(
@@ -482,7 +482,7 @@ public class SocketConnectionLifetimeTests
     [Test]
     public void RecheckStillRunningAtTheDeadline_ClosesTheConnectionOnce()
     {
-        var time = new ManualTimeProvider(DateTimeOffset.UtcNow);
+        var time = new ManualTimeProvider(TimeProvider.System.GetUtcNow());
         var (session, _) = NewSession();
         var lifetime = Track(session, time);
         var answer = new TaskCompletionSource<bool>();

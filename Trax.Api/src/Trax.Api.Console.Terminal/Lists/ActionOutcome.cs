@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Api.Console.Terminal.Checks;
 using Trax.Api.Console.Terminal.Operations;
 using Trax.Client;
 
@@ -15,7 +16,7 @@ internal sealed record ActionOutcome(bool Succeeded, string Message, string? Cod
                 answer.Message ?? "The host refused it.",
                 answer.Code
             );
-        var (ok, message) = read(answer.Data!);
+        var (ok, message) = read(answer.Data.NotNull());
         return new ActionOutcome(ok, message);
     }
 }

@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Trax.Api.GraphQL.Audit;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Audit;
 
@@ -18,7 +19,7 @@ public class TraxAuditWriterTests
             "{ x }",
             Variables: null,
             1,
-            DateTimeOffset.UtcNow,
+            TimeProvider.System.GetUtcNow(),
             Success: true,
             ErrorText: null
         );
@@ -58,8 +59,8 @@ public class TraxAuditWriterTests
     /// </summary>
     private static async Task WaitUntilAsync(Func<bool> predicate, TimeSpan timeout)
     {
-        var deadline = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + timeout;
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             if (predicate())
                 return;
@@ -294,6 +295,7 @@ public class TraxAuditWriterTests
             // Throws TimeoutException if stopping is not bounded by the shutdown timeout.
             await stopping.WaitAsync(
                 TimeSpan.FromSeconds(10),
+                TimeProvider.System,
                 cancellationToken: CancellationToken.None
             );
 
@@ -359,13 +361,14 @@ public class TraxAuditWriterTests
                 channel.TryEnqueue(
                     SampleEntry(string.Create(CultureInfo.InvariantCulture, $"e{i}"))
                 );
-            await sink.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await sink.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
 
             using var shutdown = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
             var stopping = writer.StopAsync(shutdown.Token);
             // A sink that ignores cancellation cannot hold shutdown open past its timeout.
             await stopping.WaitAsync(
                 TimeSpan.FromSeconds(10),
+                TimeProvider.System,
                 cancellationToken: CancellationToken.None
             );
 
@@ -417,7 +420,10 @@ public class TraxAuditWriterTests
             using var shutdown = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             await writer.StopAsync(shutdown.Token);
 
-            writer.ExecuteTask!.IsCompletedSuccessfully.Should().BeTrue("the quiet loop ended");
+            writer
+                .ExecuteTask.NotNull()
+                .IsCompletedSuccessfully.Should()
+                .BeTrue("the quiet loop ended");
             sink.Batches.Should().ContainSingle("a quiet channel flushes nothing on stop");
             channel.TotalDropped.Should().Be(0);
         }
@@ -497,14 +503,19 @@ public class TraxAuditWriterTests
             await writer.StartAsync(CancellationToken.None);
             channel.TryEnqueue(SampleEntry("a"));
             channel.TryEnqueue(SampleEntry("b"));
-            await sink.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await sink.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
 
             using var shutdown = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
             await writer
                 .StopAsync(shutdown.Token)
-                .WaitAsync(TimeSpan.FromSeconds(10), cancellationToken: CancellationToken.None);
+                .WaitAsync(
+                    TimeSpan.FromSeconds(10),
+                    TimeProvider.System,
+                    cancellationToken: CancellationToken.None
+                );
             await sink.Cancelled.Task.WaitAsync(
                 TimeSpan.FromSeconds(10),
+                TimeProvider.System,
                 cancellationToken: CancellationToken.None
             );
 
@@ -552,20 +563,27 @@ public class TraxAuditWriterTests
         {
             await writer.StartAsync(CancellationToken.None);
             channel.TryEnqueue(SampleEntry("a"));
-            await sink.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await sink.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
 
             using var shutdown = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
             await writer
                 .StopAsync(shutdown.Token)
-                .WaitAsync(TimeSpan.FromSeconds(10), cancellationToken: CancellationToken.None);
+                .WaitAsync(
+                    TimeSpan.FromSeconds(10),
+                    TimeProvider.System,
+                    cancellationToken: CancellationToken.None
+                );
             channel.TotalDropped.Should().Be(1, "shutdown gave up on the batch");
 
             // The sink returns after all. The batch was already counted when shutdown gave up.
             sink.Release.SetResult();
-            await writer.ExecuteTask!.WaitAsync(
-                TimeSpan.FromSeconds(10),
-                cancellationToken: CancellationToken.None
-            );
+            await writer
+                .ExecuteTask.NotNull()
+                .WaitAsync(
+                    TimeSpan.FromSeconds(10),
+                    TimeProvider.System,
+                    cancellationToken: CancellationToken.None
+                );
 
             channel.TotalDropped.Should().Be(1);
         }
@@ -606,11 +624,15 @@ public class TraxAuditWriterTests
                 channel.TryEnqueue(
                     SampleEntry(string.Create(CultureInfo.InvariantCulture, $"e{i}"))
                 );
-            await sink.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await sink.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
 
             using var shutdown = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
             await Task.WhenAll(writer.StopAsync(shutdown.Token), writer.StopAsync(shutdown.Token))
-                .WaitAsync(TimeSpan.FromSeconds(10), cancellationToken: CancellationToken.None);
+                .WaitAsync(
+                    TimeSpan.FromSeconds(10),
+                    TimeProvider.System,
+                    cancellationToken: CancellationToken.None
+                );
 
             channel.TotalDropped.Should().Be(3);
         }

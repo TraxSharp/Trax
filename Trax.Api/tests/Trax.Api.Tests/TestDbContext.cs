@@ -13,7 +13,7 @@ namespace Trax.Api.Tests;
 
 public class TestDbContext : DbContext
 {
-    public DbSet<TestPlayer> Players { get; set; } = null!;
+    public DbSet<TestPlayer> Players => Set<TestPlayer>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
         optionsBuilder.UseInMemoryDatabase("TestDb_" + Guid.NewGuid());

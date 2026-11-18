@@ -15,6 +15,7 @@ using Trax.Api.Auth.Jwt;
 using Trax.Api.Auth.Jwt.Testing;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
@@ -137,7 +138,8 @@ public class TraxJwtDispatcherSocketE2ETests
 
             using var cts = new CancellationTokenSource(WarmupBudget);
             await options
-                .ConfigurationManager!.GetConfigurationAsync(cts.Token)
+                .ConfigurationManager.NotNull()
+                .GetConfigurationAsync(cts.Token)
                 .ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -161,7 +163,7 @@ public class TraxJwtDispatcherSocketE2ETests
         await using var _Disposal = _.ConfigureAwait(false);
         using var __ = host;
 
-        var token = jwks.CreateIssuer(Audience)
+        var token = jwks.CreateIssuer(Audience, TimeProvider.System)
             .Mint(b => b.WithSubject("cog").WithClaim("name", "Cog"));
 
         using var ws = await ConnectAsync(host);

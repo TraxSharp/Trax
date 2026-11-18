@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Persistence.FromIr;
@@ -31,7 +32,7 @@ public class IrMachineViewSchemaTests
         var refusal = await RefusalAsync(field);
 
         refusal.Should().NotBeNull();
-        refusal!.ToString().Should().Contain("'turnstile'").And.Contain($"'{field}'");
+        refusal.NotNull().ToString().Should().Contain("'turnstile'").And.Contain($"'{field}'");
     }
 
     [TestCase("shop's sign")]
@@ -42,7 +43,12 @@ public class IrMachineViewSchemaTests
         var refusal = await RefusalAsync("status", name);
 
         refusal.Should().NotBeNull();
-        refusal!.ToString().Should().Contain($"'{name}'").And.Contain("has no GraphQL name");
+        refusal
+            .NotNull()
+            .ToString()
+            .Should()
+            .Contain($"'{name}'")
+            .And.Contain("has no GraphQL name");
     }
 
     [Test]
@@ -51,7 +57,8 @@ public class IrMachineViewSchemaTests
         var refusal = await RefusalAsync("status", "the turnstile", "the-turnstile");
 
         refusal.Should().NotBeNull();
-        refusal!
+        refusal
+            .NotNull()
             .ToString()
             .Should()
             .Contain("'the turnstile'")
@@ -70,7 +77,8 @@ public class IrMachineViewSchemaTests
                     await File.ReadAllTextAsync(IrMachineSchemaTests.IrFile("turnstile"))
                         .ConfigureAwait(false)
                 )
-            )!
+            )
+            .NotNull()
             .AsObject();
         ir["id"] = "ir-turnstile";
         var host = new HostMachine(

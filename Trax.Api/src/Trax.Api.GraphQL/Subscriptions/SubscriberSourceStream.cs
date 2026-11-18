@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using HotChocolate.Execution;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.GraphQL.Subscriptions;
 
@@ -41,7 +42,7 @@ internal sealed class SubscriberSourceStream<T> : ISourceStream<T>
     )
     {
         await foreach (var e in _read(_topic, ct).WithCancellation(ct).ConfigureAwait(false))
-            yield return (TOut)(object?)e!;
+            yield return (TOut)(object)e.NotNull();
     }
 
     /// <summary>The topic registration, released at most once.</summary>

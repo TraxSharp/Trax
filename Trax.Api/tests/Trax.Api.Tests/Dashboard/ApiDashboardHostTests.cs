@@ -23,6 +23,7 @@ using Trax.Api.Dashboard.Extensions;
 using Trax.Api.Dashboard.Serving;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;
@@ -86,7 +87,7 @@ public partial class ApiDashboardHostTests
         var response = await GetAsync(app, "/trax/dashboard/");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        response.Content.Headers.ContentType!.MediaType.Should().Be("text/html");
+        response.Content.Headers.ContentType.NotNull().MediaType.Should().Be("text/html");
         var html = await response.Content.ReadAsStringAsync(
             cancellationToken: CancellationToken.None
         );
@@ -98,7 +99,10 @@ public partial class ApiDashboardHostTests
                 html.IndexOf("./assets/", StringComparison.Ordinal),
                 "the base must precede every relative URL it resolves"
             );
-        response.Headers.CacheControl!.NoCache.Should().BeTrue("a new build must be seen at once");
+        response
+            .Headers.CacheControl.NotNull()
+            .NoCache.Should()
+            .BeTrue("a new build must be seen at once");
         response
             .Headers.CacheControl.Private.Should()
             .BeTrue("the page names who loaded it, so no shared cache may keep it");
@@ -112,7 +116,7 @@ public partial class ApiDashboardHostTests
         var response = await GetAsync(app, "/trax/dashboard?x=1");
 
         response.StatusCode.Should().Be(HttpStatusCode.Redirect);
-        response.Headers.Location!.OriginalString.Should().Be("/trax/dashboard/?x=1");
+        response.Headers.Location.NotNull().OriginalString.Should().Be("/trax/dashboard/?x=1");
     }
 
     [Test]
@@ -143,7 +147,7 @@ public partial class ApiDashboardHostTests
         var response = await GetAsync(app, path);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK, "a train or machine name is not a file");
-        response.Content.Headers.ContentType!.MediaType.Should().Be("text/html");
+        response.Content.Headers.ContentType.NotNull().MediaType.Should().Be("text/html");
         Config(await response.Content.ReadAsStringAsync(cancellationToken: CancellationToken.None))
             .Should()
             .Be(("/trax/dashboard/", "/trax/graphql"));
@@ -181,7 +185,7 @@ public partial class ApiDashboardHostTests
         response
             .StatusCode.Should()
             .Be(HttpStatusCode.OK, "an id is not a file because it ends in .zip or .log");
-        response.Content.Headers.ContentType!.MediaType.Should().Be("text/html");
+        response.Content.Headers.ContentType.NotNull().MediaType.Should().Be("text/html");
         Config(await response.Content.ReadAsStringAsync(cancellationToken: CancellationToken.None))
             .Should()
             .Be(("/trax/dashboard/", "/trax/graphql"));
@@ -195,11 +199,11 @@ public partial class ApiDashboardHostTests
         var response = await GetAsync(app, "/trax/dashboard/assets/index-3f2a9c.js");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        response.Content.Headers.ContentType!.MediaType.Should().Be("text/javascript");
+        response.Content.Headers.ContentType.NotNull().MediaType.Should().Be("text/javascript");
         (await response.Content.ReadAsStringAsync(cancellationToken: CancellationToken.None))
             .Should()
             .Be("console.log('app');");
-        response.Headers.CacheControl!.ToString().Should().Contain("immutable");
+        response.Headers.CacheControl.NotNull().ToString().Should().Contain("immutable");
         response.Headers.CacheControl.MaxAge.Should().Be(TimeSpan.FromDays(365));
         response
             .Headers.CacheControl.Public.Should()
@@ -223,11 +227,12 @@ public partial class ApiDashboardHostTests
 
         asset.StatusCode.Should().Be(HttpStatusCode.OK);
         asset
-            .Headers.CacheControl!.Private.Should()
+            .Headers.CacheControl.NotNull()
+            .Private.Should()
             .BeTrue($"{Adr}: a shared cache would hand a gated file to anyone");
         asset.Headers.CacheControl.Public.Should().BeFalse();
         asset.Headers.CacheControl.MaxAge.Should().Be(TimeSpan.FromDays(365));
-        page.Headers.CacheControl!.Private.Should().BeTrue();
+        page.Headers.CacheControl.NotNull().Private.Should().BeTrue();
         page.Headers.CacheControl.NoCache.Should().BeTrue();
     }
 
@@ -240,7 +245,8 @@ public partial class ApiDashboardHostTests
 
         asset.StatusCode.Should().Be(HttpStatusCode.OK);
         asset
-            .Headers.CacheControl!.Private.Should()
+            .Headers.CacheControl.NotNull()
+            .Private.Should()
             .BeTrue("the fallback policy gated it, so no shared cache may keep it");
     }
 
@@ -252,7 +258,7 @@ public partial class ApiDashboardHostTests
         var response = await GetAsync(app, "/trax/dashboard/favicon.svg");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        response.Headers.CacheControl!.NoCache.Should().BeTrue();
+        response.Headers.CacheControl.NotNull().NoCache.Should().BeTrue();
     }
 
     [TestCase("/trax/dashboard/assets/index-000000.js")]
@@ -278,7 +284,7 @@ public partial class ApiDashboardHostTests
         foreach (var path in new[] { "/trax/dashboard/", "/trax/dashboard/assets/index-3f2a9c.js" })
         {
             var first = await GetAsync(app, path);
-            var etag = first.Headers.ETag!;
+            var etag = first.Headers.ETag.NotNull();
 
             using var request = new HttpRequestMessage(HttpMethod.Get, path);
             request.Headers.IfNoneMatch.Add(etag);
@@ -398,7 +404,9 @@ public partial class ApiDashboardHostTests
             .Should()
             .Be(adaPage);
         grace.Headers.ETag.Should().Be(ada.Headers.ETag);
-        ada.Headers.CacheControl!.Private.Should().BeTrue("no shared cache may keep the shell");
+        ada.Headers.CacheControl.NotNull()
+            .Private.Should()
+            .BeTrue("no shared cache may keep the shell");
         ada.Headers.CacheControl.NoCache.Should().BeTrue();
     }
 
@@ -827,7 +835,7 @@ public partial class ApiDashboardHostTests
         {
             var response = await GetAsync(app, "/trax/dashboard/" + file[2..]);
             response.StatusCode.Should().Be(HttpStatusCode.OK, file);
-            response.Headers.CacheControl!.ToString().Should().Contain("immutable", file);
+            response.Headers.CacheControl.NotNull().ToString().Should().Contain("immutable", file);
             HashedAssetName.IsMatch(file).Should().BeTrue($"{file} is named by its content");
         }
     }
@@ -988,8 +996,8 @@ public partial class ApiDashboardHostTests
         content.Success.Should().BeTrue("the page carries its runtime config");
         using var json = JsonDocument.Parse(WebUtility.HtmlDecode(content.Groups["json"].Value));
         return (
-            json.RootElement.GetProperty("basePath").GetString()!,
-            json.RootElement.GetProperty("graphqlPath").GetString()!
+            json.RootElement.GetProperty("basePath").GetString().NotNull(),
+            json.RootElement.GetProperty("graphqlPath").GetString().NotNull()
         );
     }
 

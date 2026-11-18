@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using HotChocolate.Types;
 using Microsoft.Extensions.Hosting;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Persistence.FromIr;
@@ -20,13 +21,14 @@ public class IrMachineSchemaTests
 {
     private const string Approver = "Approver";
 
-    private IHost _host = null!;
+    private IHost? _host;
 
     [OneTimeSetUp]
     public async Task SetUp()
     {
         var ir = JsonNode
-            .Parse((await File.ReadAllTextAsync(IrFile("turnstile")).ConfigureAwait(false)))!
+            .Parse((await File.ReadAllTextAsync(IrFile("turnstile")).ConfigureAwait(false)))
+            .NotNull()
             .AsObject();
         ir["id"] = "ir-turnstile";
         var approvers = new AccessRule([
@@ -54,12 +56,12 @@ public class IrMachineSchemaTests
     }
 
     [OneTimeTearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     [Test]
     public async Task Its_operations_are_in_the_schema_typed_from_the_emitted_records()
     {
-        var executor = await MachineSchemaHost.ExecutorAsync(_host);
+        var executor = await MachineSchemaHost.ExecutorAsync(_host.NotNull());
 
         var mutations = MachineSchemaHost.MachineType(
             executor,
@@ -67,7 +69,7 @@ public class IrMachineSchemaTests
             "irTurnstile"
         );
         mutations.Should().NotBeNull("a user's machine from its IR is served");
-        mutations!.Fields.Select(f => f.Name).Should().Contain(["start", "coin", "push"]);
+        mutations.NotNull().Fields.Select(f => f.Name).Should().Contain(["start", "coin", "push"]);
         var coin = mutations.Fields["coin"].Arguments["input"].Type.NamedType();
         ((InputObjectType)coin).Fields.Select(f => f.Name).Should().Contain("coin");
     }

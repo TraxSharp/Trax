@@ -10,6 +10,7 @@ using Microsoft.Extensions.Hosting;
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.BroadcasterBuilder;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.JunctionEvents;
@@ -49,10 +50,10 @@ public class RunProgressCrossNodeE2ETests
         "sequence state failure step { name state } problem { code }";
 
     private readonly LoopbackBus _bus = new();
-    private LoopbackBus.Endpoint _apiEndpoint = null!;
-    private LoopbackBus.Endpoint _workerEndpoint = null!;
-    private IHost _api = null!;
-    private IHost _worker = null!;
+    private LoopbackBus.Endpoint? _apiEndpoint;
+    private LoopbackBus.Endpoint? _workerEndpoint;
+    private IHost? _api;
+    private IHost? _worker;
 
     [OneTimeSetUp]
     public async Task StartApiNode()
@@ -82,7 +83,7 @@ public class RunProgressCrossNodeE2ETests
                                     effects
                                         .UsePostgres(connectionString)
                                         .AddJunctionEvents()
-                                        .UseBroadcaster(b => _apiEndpoint.Register(b))
+                                        .UseBroadcaster(b => _apiEndpoint.NotNull().Register(b))
                                 )
                                 .AddMediator(typeof(AuthE2EHost).Assembly)
                         );
@@ -99,7 +100,7 @@ public class RunProgressCrossNodeE2ETests
                     })
             )
             .Build();
-        await _api.StartAsync();
+        await _api.NotNull().StartAsync();
 
         // Node B: built now, started by the test once Alice has seen her run queued.
         _worker = new HostBuilder()
@@ -112,7 +113,7 @@ public class RunProgressCrossNodeE2ETests
                                 .UsePostgres(connectionString)
                                 .AddDecisionRecording()
                                 .AddJunctionEvents()
-                                .UseBroadcaster(b => _workerEndpoint.Register(b))
+                                .UseBroadcaster(b => _workerEndpoint.NotNull().Register(b))
                         )
                         // A worker takes no API submissions, so it authorizes nobody.
                         .AddMediator(mediator =>
@@ -130,12 +131,14 @@ public class RunProgressCrossNodeE2ETests
     public async Task StopNodes()
     {
         ProgressMarkerTrain.Gate.TrySetResult();
-        await _worker.StopAsync();
-        _worker.Dispose();
-        await _api.StopAsync();
-        _api.Dispose();
-        await _workerEndpoint.DisposeAsync();
-        await _apiEndpoint.DisposeAsync();
+        await _worker.NotNull().StopAsync();
+        _worker?.Dispose();
+        await _api.NotNull().StopAsync();
+        _api?.Dispose();
+        if (_workerEndpoint is not null)
+            await _workerEndpoint.DisposeAsync();
+        if (_apiEndpoint is not null)
+            await _apiEndpoint.DisposeAsync();
     }
 
     [Test]
@@ -144,7 +147,10 @@ public class RunProgressCrossNodeE2ETests
         ProgressMarkerTrain.Reset(open: false);
         var runId = await QueueAsync(AliceKey);
 
-        await using var alice = await RunProgressE2ETests.Socket.ConnectAsync(_api, AliceKey);
+        await using var alice = await RunProgressE2ETests.Socket.ConnectAsync(
+            _api.NotNull(),
+            AliceKey
+        );
         await alice.SubscribeAsync(
             $$"""subscription { runProgress(runId: "{{runId}}") { {{EventFields}} } }"""
         );
@@ -158,7 +164,7 @@ public class RunProgressCrossNodeE2ETests
                 .Should()
                 .Be("NOT_FOUND", "only the caller who started a run may read it, per " + Adr);
 
-        await _worker.StartAsync();
+        await _worker.NotNull().StartAsync();
 
         // The run waits at the gate on node B, so all of this arrived over the transport.
         var live = new List<JsonElement>();
@@ -172,7 +178,10 @@ public class RunProgressCrossNodeE2ETests
             ) || !live.Exists(e => e.GetProperty("step").ValueKind == JsonValueKind.Object)
         )
             live.Add(await alice.NextAsync());
-        await ProgressMarkerTrain.Waiting.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await ProgressMarkerTrain.Waiting.Task.WaitAsync(
+            TimeSpan.FromSeconds(30),
+            TimeProvider.System
+        );
 
         ProgressMarkerTrain.Gate.TrySetResult();
         var rest = await alice.ReadUntilCompleteAsync();
@@ -191,12 +200,13 @@ public class RunProgressCrossNodeE2ETests
         alice.Received.Should().NotContain(RunProgressE2ETests.Marker);
 
         _apiEndpoint
+            .NotNull()
             .Published.Should()
             .NotContain(
                 m => m.ExternalId == runId,
                 "node A runs nothing, so none of the run's events can have come from it"
             );
-        _workerEndpoint.Published.Should().Contain(m => m.ExternalId == runId);
+        _workerEndpoint.NotNull().Published.Should().Contain(m => m.ExternalId == runId);
     }
 
     #region Helpers
@@ -211,14 +221,16 @@ public class RunProgressCrossNodeE2ETests
     }
 
     private Task<JsonDocument> ReadAsync(string runId, string key) =>
-        _api.PostGraphQLAsync(
-            $$"""{ runProgress(runId: "{{runId}}") { {{Fields}} } }""",
-            r => r.Headers.Add("X-Api-Key", key)
-        );
+        _api.NotNull()
+            .PostGraphQLAsync(
+                $$"""{ runProgress(runId: "{{runId}}") { {{Fields}} } }""",
+                r => r.Headers.Add("X-Api-Key", key)
+            );
 
     private async Task<string> QueueAsync(string key)
     {
-        using var response = await _api.PostGraphQLAsync(
+        using var response = await _api.NotNull()
+            .PostGraphQLAsync(
                 $$"""mutation { dispatch { progressMarker(input: { note: "{{RunProgressE2ETests.Marker}}", fail: false }, mode: QUEUE) { externalId } } }""",
                 r => r.Headers.Add("X-Api-Key", key)
             )
@@ -228,7 +240,8 @@ public class RunProgressCrossNodeE2ETests
         return data.GetProperty("dispatch")
             .GetProperty("progressMarker")
             .GetProperty("externalId")
-            .GetString()!;
+            .GetString()
+            .NotNull();
     }
 
     #endregion

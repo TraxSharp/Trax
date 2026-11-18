@@ -6,6 +6,7 @@ using Npgsql;
 using Trax.Api.Tests.Stress.Fakes.Trains;
 using Trax.Api.Tests.Stress.Fixtures;
 using Trax.Api.Tests.Stress.Utils;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
@@ -86,7 +87,7 @@ public class SeederTimeZoneTests
             await using var command = connection.CreateCommand();
             command.CommandText =
                 $"SELECT extract(epoch FROM now() - max({column}))::float8 FROM trax.{table}";
-            var lagSeconds = (double)(await command.ExecuteScalarAsync())!;
+            var lagSeconds = (double)(await command.ExecuteScalarAsync()).NotNull();
 
             lagSeconds
                 .Should()

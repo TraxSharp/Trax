@@ -6,6 +6,7 @@ using NSubstitute;
 using NUnit.Framework;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Queries;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
@@ -52,8 +53,8 @@ public class OperationsPageBoundsTests
 
     private static string Because(string rule) => $"{rule} (see {Adr})";
 
-    private ServiceProvider _provider = null!;
-    private IDataContextProviderFactory _factory = null!;
+    private ServiceProvider? _provider;
+    private IDataContextProviderFactory? _factory;
 
     private static IOperationsService OperationsOver(IDataContextProviderFactory factory) =>
         new OperationsService(
@@ -72,9 +73,9 @@ public class OperationsPageBoundsTests
         services.AddLogging();
         services.AddTrax(t => t.AddEffects(e => e.UsePostgres(ConnectionString)));
         _provider = services.BuildServiceProvider();
-        _factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        _factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
 
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             await ((DbContext)db).Database.ExecuteSqlRawAsync(
                 "TRUNCATE TABLE trax.log, trax.work_queue, trax.dead_letter, trax.metadata, trax.manifest, trax.manifest_group RESTART IDENTITY CASCADE"
@@ -87,7 +88,8 @@ public class OperationsPageBoundsTests
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await _provider.DisposeAsync();
+        if (_provider is not null)
+            await _provider.DisposeAsync();
         Npgsql.NpgsqlConnection.ClearAllPools();
     }
 
@@ -95,7 +97,7 @@ public class OperationsPageBoundsTests
     {
         Manifest manifest;
         {
-            var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+            var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
             await using (db.ConfigureAwait(false))
             {
                 var groups = new List<ManifestGroup>();
@@ -104,8 +106,8 @@ public class OperationsPageBoundsTests
                     var grp = new ManifestGroup
                     {
                         Name = string.Create(CultureInfo.InvariantCulture, $"group-{i}"),
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow,
+                        CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+                        UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                     };
                     groups.Add(grp);
                     await db.Track(grp).ConfigureAwait(false);
@@ -126,7 +128,7 @@ public class OperationsPageBoundsTests
         }
 
         {
-            var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+            var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
             await using (db.ConfigureAwait(false))
             {
                 var parent = Metadata.Create(
@@ -135,7 +137,8 @@ public class OperationsPageBoundsTests
                         Name = "Trax.X.Parent",
                         ExternalId = Guid.NewGuid().ToString("N"),
                         Input = null,
-                    }
+                    },
+                    TimeProvider.System
                 );
                 await db.Track(parent).ConfigureAwait(false);
                 await db.SaveChanges(default).ConfigureAwait(false);
@@ -149,7 +152,8 @@ public class OperationsPageBoundsTests
                             Name = "Trax.X.Child",
                             ExternalId = Guid.NewGuid().ToString("N"),
                             Input = null,
-                        }
+                        },
+                        TimeProvider.System
                     );
                     child.ParentId = _parentId;
                     await db.Track(child).ConfigureAwait(false);
@@ -164,7 +168,8 @@ public class OperationsPageBoundsTests
                                         $"failure-{i}"
                                     ),
                                     RetryCount = 3,
-                                }
+                                },
+                                TimeProvider.System
                             )
                         )
                         .ConfigureAwait(false);
@@ -177,7 +182,8 @@ public class OperationsPageBoundsTests
                                         CultureInfo.InvariantCulture,
                                         $"Trax.Tests.IFake{i}"
                                     ),
-                                }
+                                },
+                                TimeProvider.System
                             )
                         )
                         .ConfigureAwait(false);
@@ -246,7 +252,7 @@ public class OperationsPageBoundsTests
         Func<IDataContextProviderFactory, int, int, Task<(int Count, int Skip, int Take)>> query
     )
     {
-        var page = await query(_factory, 0, 100_000);
+        var page = await query(_factory.NotNull(), 0, 100_000);
 
         page.Count.Should()
             .Be(OperationsPageBounds.MaxPageSize, Because("caps an operations page at 500 rows"));
@@ -259,10 +265,10 @@ public class OperationsPageBoundsTests
         Func<IDataContextProviderFactory, int, int, Task<(int Count, int Skip, int Take)>> query
     )
     {
-        (await query(_factory, 0, 0))
+        (await query(_factory.NotNull(), 0, 0))
             .Should()
             .Be((1, 0, 1), Because("clamps take to 1..500 and skip to 0 or more"));
-        (await query(_factory, 0, -5))
+        (await query(_factory.NotNull(), 0, -5))
             .Should()
             .Be((1, 0, 1), Because("clamps take to 1..500 and skip to 0 or more"));
     }
@@ -272,7 +278,7 @@ public class OperationsPageBoundsTests
         Func<IDataContextProviderFactory, int, int, Task<(int Count, int Skip, int Take)>> query
     )
     {
-        (await query(_factory, -10, 3))
+        (await query(_factory.NotNull(), -10, 3))
             .Should()
             .Be((3, 0, 3), Because("clamps take to 1..500 and skip to 0 or more"));
     }
@@ -282,7 +288,7 @@ public class OperationsPageBoundsTests
         Func<IDataContextProviderFactory, int, int, Task<(int Count, int Skip, int Take)>> query
     )
     {
-        (await query(_factory, OperationsPageBounds.MaxSkip, 3))
+        (await query(_factory.NotNull(), OperationsPageBounds.MaxSkip, 3))
             .Should()
             .Be((0, OperationsPageBounds.MaxSkip, 3), Because("serves a skip up to the cap"));
     }
@@ -292,7 +298,7 @@ public class OperationsPageBoundsTests
         Func<IDataContextProviderFactory, int, int, Task<(int Count, int Skip, int Take)>> query
     )
     {
-        var act = () => query(_factory, OperationsPageBounds.MaxSkip + 1, 3);
+        var act = () => query(_factory.NotNull(), OperationsPageBounds.MaxSkip + 1, 3);
 
         var refused = (await act.Should().ThrowAsync<HotChocolate.GraphQLException>()).Which;
         var error = refused.Errors.Should().ContainSingle().Which;
@@ -314,7 +320,7 @@ public class OperationsPageBoundsTests
     {
         var page = await new OperationsQueries().GetExecutionChildren(
             _parentId,
-            _factory,
+            _factory.NotNull(),
             default,
             take: 100_000
         );
@@ -333,7 +339,7 @@ public class OperationsPageBoundsTests
     {
         var page = await new OperationsQueries().GetExecutionChildren(
             _parentId,
-            _factory,
+            _factory.NotNull(),
             default,
             take: 0
         );

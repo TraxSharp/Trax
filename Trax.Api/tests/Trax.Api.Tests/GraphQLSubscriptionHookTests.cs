@@ -7,6 +7,7 @@ using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Hooks;
 using Trax.Api.GraphQL.Subscriptions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
@@ -178,7 +179,7 @@ public class GraphQLSubscriptionHookTests
 
         var evt = sender.Events[0].Message as TrainLifecycleEvent;
         evt.Should().NotBeNull();
-        evt!.TrainName.Should().Be("My.Train");
+        evt.NotNull().TrainName.Should().Be("My.Train");
         evt.TrainState.Should().Be(TrainState.Completed);
         evt.MetadataId.Should().Be(metadata.Id);
         evt.ExternalId.Should().Be(metadata.ExternalId);
@@ -201,7 +202,7 @@ public class GraphQLSubscriptionHookTests
 
         var evt = sender.Events[0].Message as TrainLifecycleEvent;
         evt.Should().NotBeNull();
-        evt!.FailureReason.Should().Contain("something broke");
+        evt.NotNull().FailureReason.Should().Contain("something broke");
     }
 
     [Test]
@@ -228,7 +229,7 @@ public class GraphQLSubscriptionHookTests
 
         var evt = sender.Events[0].Message as TrainLifecycleEvent;
         evt.Should().NotBeNull();
-        evt!.FailureJunction.Should().Be("CallApiJunction");
+        evt.NotNull().FailureJunction.Should().Be("CallApiJunction");
         evt.FailureReason.Should().Be("HTTP 500");
     }
 
@@ -257,7 +258,7 @@ public class GraphQLSubscriptionHookTests
 
         var evt = sender.Events[0].Message as TrainLifecycleEvent;
         evt.Should().NotBeNull();
-        evt!.FailureReason.Should().Be("Connection timed out after 30s");
+        evt.NotNull().FailureReason.Should().Be("Connection timed out after 30s");
         evt.FailureReason.Should().NotStartWith("{");
     }
 
@@ -274,7 +275,7 @@ public class GraphQLSubscriptionHookTests
 
         var evt = sender.Events[0].Message as TrainLifecycleEvent;
         evt.Should().NotBeNull();
-        evt!.Output.Should().Be("{\"score\":42}");
+        evt.NotNull().Output.Should().Be("{\"score\":42}");
     }
 
     [Test]
@@ -288,7 +289,7 @@ public class GraphQLSubscriptionHookTests
 
         var evt = sender.Events[0].Message as TrainLifecycleEvent;
         evt.Should().NotBeNull();
-        evt!.Output.Should().BeNull();
+        evt.NotNull().Output.Should().BeNull();
     }
 
     [Test]
@@ -299,12 +300,12 @@ public class GraphQLSubscriptionHookTests
         var metadata = CreateMetadata("My.Train");
         metadata.EndTime = null;
 
-        var before = DateTime.UtcNow;
+        var before = TimeProvider.System.GetUtcNow().UtcDateTime;
         await hook.OnStarted(metadata, CancellationToken.None);
-        var after = DateTime.UtcNow;
+        var after = TimeProvider.System.GetUtcNow().UtcDateTime;
 
         var evt = sender.Events[0].Message as TrainLifecycleEvent;
-        evt!.Timestamp.Should().BeOnOrAfter(before).And.BeOnOrBefore(after);
+        evt.NotNull().Timestamp.Should().BeOnOrAfter(before).And.BeOnOrBefore(after);
     }
 
     #endregion
@@ -782,7 +783,7 @@ public class GraphQLSubscriptionHookTests
             CancellationToken cancellationToken = default
         )
         {
-            Events.Add(new RecordedEvent(topicName, message!));
+            Events.Add(new RecordedEvent(topicName, message.NotNull()));
             return ValueTask.CompletedTask;
         }
 

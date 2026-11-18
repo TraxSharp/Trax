@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Terminal.Gui.Input;
+using Trax.Api.Console.Terminal.Checks;
 using Trax.Api.Console.Terminal.Screens;
 using Trax.Api.Console.Terminal.Tests.Fakes;
 using Trax.Client;
@@ -17,11 +18,11 @@ namespace Trax.Api.Console.Terminal.Tests.UnitTests;
 [NonParallelizable]
 public class ListScreenTests
 {
-    private FakeHost _host = null!;
-    private ScriptedPrompts _prompts = null!;
-    private TerminalHarness _terminal = null!;
-    private MainWindow _window = null!;
-    private ConsoleContext _context = null!;
+    private FakeHost? _host;
+    private ScriptedPrompts? _prompts;
+    private TerminalHarness? _terminal;
+    private MainWindow? _window;
+    private ConsoleContext? _context;
 
     [SetUp]
     public async Task Open()
@@ -38,92 +39,112 @@ public class ListScreenTests
         (_terminal, _window) = await TerminalHarness.StartAsync(app => new MainWindow(
             _context = new ConsoleContext(
                 app,
-                new TraxClient(_host),
+                new TraxClient(_host.NotNull()),
                 new Uri("https://ops.example.com/trax/graphql"),
-                _prompts
+                _prompts.NotNull()
             ),
             state: null,
             banner: "ready"
         ));
-        await _terminal.UntilShown("SyncCustomers");
-        await _terminal.OnUi(() => _window.Lists[0].SetFocus());
+        await _terminal.NotNull().UntilShown("SyncCustomers");
+        await _terminal.NotNull().OnUi(() => _window.NotNull().Lists[0].SetFocus());
     }
 
     [TearDown]
-    public async Task Close() => await _terminal.DisposeAsync();
+    public async Task Close()
+    {
+        if (_terminal is not null)
+            await _terminal.DisposeAsync();
+    }
 
     [Test]
     public async Task A_refresh_that_puts_a_row_above_keeps_the_cursor_on_the_same_row()
     {
-        await _terminal.Press(Key.J);
-        _host.Answer(
-            "Executions",
-            HostData.Runs(
-                3,
-                next: null,
-                HostData.Run(4900, "ShipOrder"),
-                HostData.Run(4812, "SendInvoice"),
-                HostData.Run(4807, "SyncCustomers", "COMPLETED", reason: null)
-            )
-        );
-        await _terminal.OnUi(() => _window.Lists[0].Refresh());
-        await _terminal.Until(() => _window.Lists[0].Rows.Count == 3, "the new row is read");
+        await _terminal.NotNull().Press(Key.J);
+        _host
+            .NotNull()
+            .Answer(
+                "Executions",
+                HostData.Runs(
+                    3,
+                    next: null,
+                    HostData.Run(4900, "ShipOrder"),
+                    HostData.Run(4812, "SendInvoice"),
+                    HostData.Run(4807, "SyncCustomers", "COMPLETED", reason: null)
+                )
+            );
+        await _terminal.NotNull().OnUi(() => _window.NotNull().Lists[0].Refresh());
+        await _terminal
+            .NotNull()
+            .Until(() => _window.NotNull().Lists[0].Rows.Count == 3, "the new row is read");
 
-        _prompts.Choices.Enqueue(0);
-        await _terminal.Press(Key.C);
-        await _terminal.Until(
-            () => _host.Sent("CancelExecutions").Count == 1,
-            "the cancel is sent"
-        );
+        _prompts.NotNull().Choices.Enqueue(0);
+        await _terminal.NotNull().Press(Key.C);
+        await _terminal
+            .NotNull()
+            .Until(() => _host.NotNull().Sent("CancelExecutions").Count == 1, "the cancel is sent");
 
-        _host.Sent("CancelExecutions")[0]["ids"]!
+        _host
+            .NotNull()
+            .Sent("CancelExecutions")[0]["ids"]
+            .NotNull()
             .ToJsonString()
             .Should()
             .Be("[4807]", "the cursor followed the row it was on, not its place");
-        _prompts.Asked.Should().ContainSingle(a => a.StartsWith("Cancel: Cancel runs 4807?"));
+        _prompts
+            .NotNull()
+            .Asked.Should()
+            .ContainSingle(a => a.StartsWith("Cancel: Cancel runs 4807?"));
     }
 
     [Test]
     public async Task A_prompt_names_every_marked_row()
     {
-        await _terminal.Press(Key.Space);
-        await _terminal.Press(Key.Space);
-        _prompts.Choices.Enqueue(item: null);
+        await _terminal.NotNull().Press(Key.Space);
+        await _terminal.NotNull().Press(Key.Space);
+        _prompts.NotNull().Choices.Enqueue(item: null);
 
-        await _terminal.Press(Key.C);
-        await _terminal.OnUi(() => { });
+        await _terminal.NotNull().Press(Key.C);
+        await _terminal.NotNull().OnUi(() => { });
 
         _prompts
+            .NotNull()
             .Asked.Should()
             .ContainSingle(a => a.StartsWith("Cancel: Cancel 2 runs (4807, 4812)?"));
-        _host.Sent("CancelExecutions").Should().BeEmpty();
+        _host.NotNull().Sent("CancelExecutions").Should().BeEmpty();
     }
 
     [Test]
     public async Task The_note_form_names_the_row_it_acknowledges()
     {
-        await _terminal.Press(Key.L);
-        await _terminal.UntilShown("NightlyBilling");
+        await _terminal.NotNull().Press(Key.L);
+        await _terminal.NotNull().UntilShown("NightlyBilling");
 
-        await _terminal.Press(Key.A);
-        await _terminal.OnUi(() => { });
+        await _terminal.NotNull().Press(Key.A);
+        await _terminal.NotNull().OnUi(() => { });
 
-        _prompts.Asked.Should().ContainSingle(a => a == "Acknowledge dead letters 7: Note");
-        _host.Sent("AcknowledgeDeadLetters").Should().BeEmpty("the form was cancelled");
+        _prompts
+            .NotNull()
+            .Asked.Should()
+            .ContainSingle(a => a == "Acknowledge dead letters 7: Note");
+        _host.NotNull().Sent("AcknowledgeDeadLetters").Should().BeEmpty("the form was cancelled");
     }
 
     [Test]
     public async Task Enabling_a_manifest_is_confirmed_first()
     {
-        await _terminal.Press(Key.D4);
-        await _terminal.UntilShown("NightlyBilling");
+        await _terminal.NotNull().Press(Key.D4);
+        await _terminal.NotNull().UntilShown("NightlyBilling");
 
-        _prompts.Choices.Enqueue(item: null);
-        await _terminal.Press(Key.E);
-        await _terminal.OnUi(() => { });
+        _prompts.NotNull().Choices.Enqueue(item: null);
+        await _terminal.NotNull().Press(Key.E);
+        await _terminal.NotNull().OnUi(() => { });
 
-        _prompts.Asked.Should().ContainSingle(a => a.StartsWith("Enable: Enable manifests 9?"));
-        _host.Sent("SetManifestsEnabled").Should().BeEmpty();
+        _prompts
+            .NotNull()
+            .Asked.Should()
+            .ContainSingle(a => a.StartsWith("Enable: Enable manifests 9?"));
+        _host.NotNull().Sent("SetManifestsEnabled").Should().BeEmpty();
     }
 
     [Test]
@@ -133,24 +154,32 @@ public class ListScreenTests
             TaskCreationOptions.RunContinuationsAsynchronously
         );
         var reads = 0;
-        _host.AnswerLater(
-            "Executions",
-            _ =>
-                Interlocked.Increment(ref reads) == 1
-                    ? held.Task
-                    : Task.FromResult(
-                        Parse(HostData.Runs(1, next: null, HostData.Run(4799, "Archive")))
-                    )
-        );
+        _host
+            .NotNull()
+            .AnswerLater(
+                "Executions",
+                _ =>
+                    Interlocked.Increment(ref reads) == 1
+                        ? held.Task
+                        : Task.FromResult(
+                            Parse(HostData.Runs(1, next: null, HostData.Run(4799, "Archive")))
+                        )
+            );
 
-        await _terminal.OnUi(() => _window.Lists[0].Refresh());
-        await _terminal.OnUi(() => _window.Lists[0].Refresh());
-        await _terminal.UntilShown("Archive");
+        await _terminal.NotNull().OnUi(() => _window.NotNull().Lists[0].Refresh());
+        await _terminal.NotNull().OnUi(() => _window.NotNull().Lists[0].Refresh());
+        await _terminal.NotNull().UntilShown("Archive");
         held.SetResult(Parse(HostData.Runs(1, next: null, HostData.Run(4700, "Stale"))));
-        await _terminal.Until(() => _host.Sent("Executions").Count >= 3, "both reads were sent");
-        await _terminal.OnUi(() => { });
+        await _terminal
+            .NotNull()
+            .Until(() => _host.NotNull().Sent("Executions").Count >= 3, "both reads were sent");
+        await _terminal.NotNull().OnUi(() => { });
 
-        (await _terminal.OnUi(() => _window.Lists[0].Rows.Select(r => r.Id).ToList()))
+        (
+            await _terminal
+                .NotNull()
+                .OnUi(() => _window.NotNull().Lists[0].Rows.Select(r => r.Id).ToList())
+        )
             .Should()
             .Equal(4799);
     }
@@ -161,21 +190,24 @@ public class ListScreenTests
         var cancelled = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
-        _host.HoldUntilCancelled("Executions", cancelled);
-        var reads = _host.Sent("Executions").Count;
+        _host.NotNull().HoldUntilCancelled("Executions", cancelled);
+        var reads = _host.NotNull().Sent("Executions").Count;
 
-        await _terminal.OnUi(() => _window.Lists[0].Refresh());
-        await _terminal.Until(() => _host.Sent("Executions").Count > reads, "the read is sent");
-        _context.Close();
+        await _terminal.NotNull().OnUi(() => _window.NotNull().Lists[0].Refresh());
+        await _terminal
+            .NotNull()
+            .Until(() => _host.NotNull().Sent("Executions").Count > reads, "the read is sent");
+        _context.NotNull().Close();
 
         await cancelled.Task.WaitAsync(
             TimeSpan.FromSeconds(15),
+            _context.Clock,
             cancellationToken: CancellationToken.None
         );
         // negative-wait: a report of the cancelled read, were one made, would be drawn within this window.
         await Task.Delay(200, cancellationToken: CancellationToken.None);
-        await _terminal.OnUi(() => { });
-        (await _terminal.Screen()).Should().NotContain("canceled");
+        await _terminal.NotNull().OnUi(() => { });
+        (await _terminal.NotNull().Screen()).Should().NotContain("canceled");
     }
 
     [Test]
@@ -184,41 +216,57 @@ public class ListScreenTests
         var held = new TaskCompletionSource<JsonObject>(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
-        _host.AnswerLater("Executions", _ => held.Task);
-        _host.Answer(
-            "StartBulkOperation",
-            """{"operations":{"startBulkOperation":{"success":true,"message":"Started.","matched":1,"operation":null}}}"""
-        );
-        _prompts.Forms.Enqueue(["failed", "", "", "", "", "", ""]);
-        await _terminal.Press(Key.F);
-        await _terminal.Until(
-            () => _host.Sent("Executions").Count >= 2,
-            "the runs are read with the filter"
-        );
+        _host.NotNull().AnswerLater("Executions", _ => held.Task);
+        _host
+            .NotNull()
+            .Answer(
+                "StartBulkOperation",
+                """{"operations":{"startBulkOperation":{"success":true,"message":"Started.","matched":1,"operation":null}}}"""
+            );
+        _prompts.NotNull().Forms.Enqueue(["failed", "", "", "", "", "", ""]);
+        await _terminal.NotNull().Press(Key.F);
+        await _terminal
+            .NotNull()
+            .Until(
+                () => _host.NotNull().Sent("Executions").Count >= 2,
+                "the runs are read with the filter"
+            );
 
-        _prompts.Choices.Enqueue(0);
-        await _terminal.Press(Key.B);
-        await _terminal.OnUi(() => { });
+        _prompts.NotNull().Choices.Enqueue(0);
+        await _terminal.NotNull().Press(Key.B);
+        await _terminal.NotNull().OnUi(() => { });
 
         _host
+            .NotNull()
             .Sent("StartBulkOperation")
             .Should()
             .BeEmpty("the count shown is the one read without the filter");
-        _prompts.Asked.Should().Contain(a => a.StartsWith("All matching: The list is being read"));
+        _prompts
+            .NotNull()
+            .Asked.Should()
+            .Contain(a => a.StartsWith("All matching: The list is being read"));
 
         held.SetResult(Parse(HostData.Runs(1, next: null, HostData.Run(4812, "SendInvoice"))));
-        await _terminal.UntilShown("1 in all");
-        await _terminal.Press(Key.B);
-        await _terminal.Until(
-            () => _host.Sent("StartBulkOperation").Count == 1,
-            "the bulk operation starts"
-        );
-        var sent = _host.Sent("StartBulkOperation")[0];
-        sent["expectedCount"]!.GetValue<int>().Should().Be(1);
-        sent["filter"]!["executions"]!["trainState"]!.GetValue<string>().Should().Be("FAILED");
+        await _terminal.NotNull().UntilShown("1 in all");
+        await _terminal.NotNull().Press(Key.B);
+        await _terminal
+            .NotNull()
+            .Until(
+                () => _host.NotNull().Sent("StartBulkOperation").Count == 1,
+                "the bulk operation starts"
+            );
+        var sent = _host.NotNull().Sent("StartBulkOperation")[0];
+        sent["expectedCount"].NotNull().GetValue<int>().Should().Be(1);
+        sent["filter"]
+            .NotNull()["executions"]
+            .NotNull()["trainState"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("FAILED");
     }
 
-    private static JsonObject Parse(string data) => JsonNode.Parse(data)!.AsObject();
+    private static JsonObject Parse(string data) => JsonNode.Parse(data).NotNull().AsObject();
 
     private static string Manifest(long id, string name) =>
         string.Create(

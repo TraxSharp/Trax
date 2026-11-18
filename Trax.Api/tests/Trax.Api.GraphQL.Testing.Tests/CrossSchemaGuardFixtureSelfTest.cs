@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Trax.Api.GraphQL.DataLoaders.CrossSchema;
+using Trax.Core.Extensions;
 using Trax.Core.Testing;
 
 namespace Trax.Api.GraphQL.Testing.Tests;
@@ -11,10 +12,10 @@ namespace Trax.Api.GraphQL.Testing.Tests;
 [TestFixture]
 public sealed class CrossSchemaGuardFixtureSelfTest : CrossSchemaGuardFixture
 {
-    private TempRepo _repo = null!;
+    private TempRepo? _repo;
 
     protected override ArchitectureGuardOptions Options =>
-        new() { RepoRootOverride = _repo.Root, SourceScanRoots = ["src"] };
+        new() { RepoRootOverride = _repo.NotNull().Root, SourceScanRoots = ["src"] };
 
     protected override IReadOnlyList<CrossSchemaEdge> Edges =>
         [
@@ -75,7 +76,11 @@ public sealed class CrossSchemaGuardFixtureSelfTest : CrossSchemaGuardFixture
         }
 
         failure.Should().NotBeNull("an empty scan must not pass");
-        failure!.Message.Should().Contain("[src]").And.Contain(nameof(ExpectsCrossSchemaResolvers));
+        failure
+            .NotNull()
+            .Message.Should()
+            .Contain("[src]")
+            .And.Contain(nameof(ExpectsCrossSchemaResolvers));
     }
 
     [Test]
@@ -109,7 +114,11 @@ public sealed class CrossSchemaGuardFixtureSelfTest : CrossSchemaGuardFixture
         }
 
         failure.Should().NotBeNull("an empty scan must not pass");
-        failure!.Message.Should().Contain("[src]").And.Contain(nameof(ExpectsParentResolvers));
+        failure
+            .NotNull()
+            .Message.Should()
+            .Contain("[src]")
+            .And.Contain(nameof(ExpectsParentResolvers));
     }
 
     [Test]
@@ -127,5 +136,5 @@ public sealed class CrossSchemaGuardFixtureSelfTest : CrossSchemaGuardFixture
     }
 
     [OneTimeTearDown]
-    public void Cleanup() => _repo.Dispose();
+    public void Cleanup() => _repo?.Dispose();
 }

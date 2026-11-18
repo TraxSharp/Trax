@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Trax.Api.Console.Terminal.Checks;
 using Trax.Api.Console.Terminal.Lists;
 using Trax.Api.Console.Terminal.Operations;
 using Trax.Client;
@@ -146,7 +147,7 @@ internal sealed partial class ConsoleSession : IAsyncDisposable
                 answer.Code,
                 answer.Message ?? "The host answered without its version."
             );
-        var host = answer.Data!.Operations?.Config.Version;
+        var host = answer.Data.NotNull().Operations?.Config.Version;
         if (host is null)
             return new VersionCheck.Failed(
                 Code: null,

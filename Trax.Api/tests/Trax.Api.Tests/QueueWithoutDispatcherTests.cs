@@ -8,6 +8,7 @@ using NSubstitute;
 using Trax.Api.Exceptions;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;
@@ -36,14 +37,15 @@ public class QueueWithoutDispatcherTests
         "nothing dispatches a queued run on a host whose store is in memory "
         + "(docs/adr/0038-a-queued-mutation-is-refused-where-nothing-dispatches-it.md)";
 
-    private ITrainExecutionService _execution = null!;
-    private ServiceProvider _services = null!;
+    private ITrainExecutionService? _execution;
+    private ServiceProvider? _services;
 
     [SetUp]
     public void SetUp()
     {
         _execution = Substitute.For<ITrainExecutionService>();
         _execution
+            .NotNull()
             .QueueAsync(
                 Arg.Any<string>(),
                 Arg.Any<string?>(),
@@ -54,7 +56,11 @@ public class QueueWithoutDispatcherTests
     }
 
     [TearDown]
-    public async Task TearDown() => await _services.DisposeAsync();
+    public async Task TearDown()
+    {
+        if (_services is not null)
+            await _services.DisposeAsync();
+    }
 
     [Test]
     public async Task ModeQueue_OnAnInMemoryStore_IsRefusedAndNothingIsQueued()
@@ -79,6 +85,7 @@ public class QueueWithoutDispatcherTests
             .Be("TRAX_QUEUE_UNAVAILABLE", Because);
         error.GetProperty("message").GetString().Should().Contain("mode: RUN");
         await _execution
+            .NotNull()
             .DidNotReceiveWithAnyArgs()
             .QueueAsync(
                 Arg.Any<string>(),
@@ -92,9 +99,13 @@ public class QueueWithoutDispatcherTests
     public async Task ModeQueue_OnAnInMemoryStore_ByACallerTheTrainRefuses_IsNotAuthorized()
     {
         _execution
+            .NotNull()
             .PrepareAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns<Task<PreparedTrain>>(_ =>
-                throw new TrainAuthorizationException(typeof(IReportTrain).FullName!, "role")
+                throw new TrainAuthorizationException(
+                    typeof(IReportTrain).FullName.NotNull(),
+                    "role"
+                )
             );
         var executor = await BuildAsync(withDatabase: false);
 
@@ -120,6 +131,7 @@ public class QueueWithoutDispatcherTests
         error.GetProperty("message").GetString().Should().Be("Not authorized.");
         body.Should().NotContain("in memory");
         await _execution
+            .NotNull()
             .DidNotReceiveWithAnyArgs()
             .QueueAsync(
                 Arg.Any<string>(),
@@ -174,10 +186,11 @@ public class QueueWithoutDispatcherTests
         );
         services.AddScoped(_ => Substitute.For<ITraxHealthService>());
         services.AddScoped(_ => Substitute.For<IOperationsService>());
-        services.AddScoped(_ => _execution);
+        services.AddScoped(_ => _execution.NotNull());
         services.AddScoped(_ => Substitute.For<ITraxScheduler>());
         _services = services.BuildServiceProvider();
         return await _services
+            .NotNull()
             .GetRequiredService<IRequestExecutorProvider>()
             .GetExecutorAsync("trax")
             .ConfigureAwait(false);
@@ -191,7 +204,7 @@ public class QueueWithoutDispatcherTests
             InputType = typeof(ReportInput),
             OutputType = typeof(Trax.Core.Functional.Unit),
             Lifetime = ServiceLifetime.Scoped,
-            ServiceTypeName = typeof(IReportTrain).FullName!,
+            ServiceTypeName = typeof(IReportTrain).FullName.NotNull(),
             ImplementationTypeName = nameof(ReportTrain),
             InputTypeName = nameof(ReportInput),
             OutputTypeName = nameof(Trax.Core.Functional.Unit),

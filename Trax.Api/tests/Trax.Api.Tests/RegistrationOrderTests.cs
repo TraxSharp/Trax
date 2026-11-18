@@ -19,6 +19,7 @@ using Trax.Api.Auth.Jwt;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Subscriptions;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
@@ -413,7 +414,8 @@ public class RegistrationOrderTests
     private static Uri BaseAddress(WebApplication app) =>
         new(
             app.Services.GetRequiredService<IServer>()
-                .Features.Get<IServerAddressesFeature>()!
+                .Features.Get<IServerAddressesFeature>()
+                .NotNull()
                 .Addresses.First()
         );
 

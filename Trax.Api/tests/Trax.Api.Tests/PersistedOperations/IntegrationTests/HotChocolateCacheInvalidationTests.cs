@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
 using Trax.Api.Tests.PersistedOperations.Fixtures;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.PersistedOperations.IntegrationTests;
 
@@ -40,8 +41,8 @@ public class HotChocolateCacheInvalidationTests
     private const string DocHello = "query Greet { hello }";
     private const string DocVersion = "query Greet { version }";
 
-    private ServiceProvider _sp = null!;
-    private IPersistedOperationStore _store = null!;
+    private ServiceProvider? _sp;
+    private IPersistedOperationStore? _store;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -50,14 +51,15 @@ public class HotChocolateCacheInvalidationTests
             Assert.Ignore("Postgres not reachable; skipping HC cache invalidation tests.");
 
         _sp = await GraphQLFixture.BuildAsync();
-        _store = _sp.GetRequiredService<IPersistedOperationStore>();
+        _store = _sp.NotNull().GetRequiredService<IPersistedOperationStore>();
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
         if (_sp is not null)
-            await _sp.DisposeAsync();
+            if (_sp is not null)
+                await _sp.DisposeAsync();
     }
 
     [SetUp]
@@ -67,15 +69,17 @@ public class HotChocolateCacheInvalidationTests
     public async Task Upsert_AfterFirstExecute_ServesNewDocument_OnNextExecute()
     {
         const string id = "hotfix_via_store_v1";
-        await _store.UpsertAsync(id, DocHello, options: null, CancellationToken.None);
+        await _store.NotNull().UpsertAsync(id, DocHello, options: null, CancellationToken.None);
         (await ExecuteByIdAsync(id)).Should().Contain("\"hello\"");
 
-        await _store.UpsertAsync(
-            id,
-            DocVersion,
-            new UpsertOptions { BypassShapeDiff = true },
-            CancellationToken.None
-        );
+        await _store
+            .NotNull()
+            .UpsertAsync(
+                id,
+                DocVersion,
+                new UpsertOptions { BypassShapeDiff = true },
+                CancellationToken.None
+            );
 
         var second = await ExecuteByIdAsync(id);
         second.Should().Contain("\"version\"", "the new document must take effect immediately");
@@ -91,7 +95,7 @@ public class HotChocolateCacheInvalidationTests
     public async Task Upsert_ViaGraphQLMutation_AlsoInvalidatesHCCache()
     {
         const string id = "hotfix_via_mutation_v1";
-        await _store.UpsertAsync(id, DocHello, options: null, CancellationToken.None);
+        await _store.NotNull().UpsertAsync(id, DocHello, options: null, CancellationToken.None);
         (await ExecuteByIdAsync(id)).Should().Contain("\"hello\"");
 
         await ExecuteUploadMutationAsync(id, DocVersion, bypassShapeDiff: true);
@@ -105,19 +109,21 @@ public class HotChocolateCacheInvalidationTests
     public async Task Upsert_EmptiesBothCaches()
     {
         const string id = "cache_empty_on_upsert_v1";
-        await _store.UpsertAsync(id, DocHello, options: null, CancellationToken.None);
+        await _store.NotNull().UpsertAsync(id, DocHello, options: null, CancellationToken.None);
         await ExecuteByIdAsync(id);
 
         var (documents, operations) = await CachesAsync();
         documents.Count.Should().BeGreaterThan(0, "the warm execute must have populated it");
         operations.Count.Should().BeGreaterThan(0, "the warm execute must have compiled it");
 
-        await _store.UpsertAsync(
-            id,
-            DocVersion,
-            new UpsertOptions { BypassShapeDiff = true },
-            CancellationToken.None
-        );
+        await _store
+            .NotNull()
+            .UpsertAsync(
+                id,
+                DocVersion,
+                new UpsertOptions { BypassShapeDiff = true },
+                CancellationToken.None
+            );
 
         documents.Count.Should().Be(0, "Upsert must drop the parsed document");
         operations.Count.Should().Be(0, "Upsert must drop the compiled operation");
@@ -127,10 +133,10 @@ public class HotChocolateCacheInvalidationTests
     public async Task Deactivate_InvalidatesCache_SoStaleDocumentIsNotServed()
     {
         const string id = "deact_cache_v1";
-        await _store.UpsertAsync(id, DocHello, options: null, CancellationToken.None);
+        await _store.NotNull().UpsertAsync(id, DocHello, options: null, CancellationToken.None);
         (await ExecuteByIdAsync(id)).Should().Contain("\"hello\"");
 
-        await _store.DeactivateAsync(id, tenantKey: null, "test", CancellationToken.None);
+        await _store.NotNull().DeactivateAsync(id, tenantKey: null, "test", CancellationToken.None);
 
         // After deactivation the storage returns null. If the HC caches
         // weren't cleared the prior compiled operation would still serve.
@@ -148,15 +154,15 @@ public class HotChocolateCacheInvalidationTests
     public async Task Restore_InvalidatesCache_AndRestoredDocumentRuns()
     {
         const string id = "restore_cache_v1";
-        await _store.UpsertAsync(id, DocHello, options: null, CancellationToken.None);
-        await _store.DeactivateAsync(id, tenantKey: null, "test", CancellationToken.None);
+        await _store.NotNull().UpsertAsync(id, DocHello, options: null, CancellationToken.None);
+        await _store.NotNull().DeactivateAsync(id, tenantKey: null, "test", CancellationToken.None);
 
         // Confirm the executor cannot serve while deactivated.
         (await ExecuteByIdAsync(id))
             .Should()
             .NotContain("\"hello\"");
 
-        await _store.RestoreAsync(id, tenantKey: null, CancellationToken.None);
+        await _store.NotNull().RestoreAsync(id, tenantKey: null, CancellationToken.None);
 
         (await ExecuteByIdAsync(id)).Should().Contain("\"hello\"");
     }
@@ -172,13 +178,13 @@ public class HotChocolateCacheInvalidationTests
         const string original = "query Greet { hello }";
         const string rewrite = "query Greet { hello # rewritten\n}";
 
-        await _store.UpsertAsync(id, original, options: null, CancellationToken.None);
+        await _store.NotNull().UpsertAsync(id, original, options: null, CancellationToken.None);
         (await ExecuteByIdAsync(id)).Should().Contain("\"hello\"");
 
-        await _store.UpsertAsync(id, rewrite, options: null, CancellationToken.None);
+        await _store.NotNull().UpsertAsync(id, rewrite, options: null, CancellationToken.None);
 
-        var stored = await _store.GetAsync(id, tenantKey: null, CancellationToken.None);
-        stored!.Document.Should().Be(rewrite, "the rewritten document must be persisted");
+        var stored = await _store.NotNull().GetAsync(id, tenantKey: null, CancellationToken.None);
+        stored.NotNull().Document.Should().Be(rewrite, "the rewritten document must be persisted");
 
         // The response shape is unchanged, so the observable consequence is that the
         // cached compiled form was dropped and the rewritten document still runs.
@@ -194,14 +200,14 @@ public class HotChocolateCacheInvalidationTests
         // Direct exercise of the invalidator from root services. Pins the contract that
         // both cache layers are reachable from it, not just one of them.
         const string id = "invalidator_v1";
-        await _store.UpsertAsync(id, DocHello, options: null, CancellationToken.None);
+        await _store.NotNull().UpsertAsync(id, DocHello, options: null, CancellationToken.None);
         await ExecuteByIdAsync(id);
 
         var (documents, operations) = await CachesAsync();
         documents.Count.Should().BeGreaterThan(0);
         operations.Count.Should().BeGreaterThan(0);
 
-        var invalidator = _sp.GetRequiredService<HotChocolateOperationCacheInvalidator>();
+        var invalidator = _sp.NotNull().GetRequiredService<HotChocolateOperationCacheInvalidator>();
         await invalidator.InvalidateAsync(CancellationToken.None);
 
         documents.Count.Should().Be(0);
@@ -215,7 +221,7 @@ public class HotChocolateCacheInvalidationTests
     /// </summary>
     private async Task<(IDocumentCache Documents, IPreparedOperationCache Operations)> CachesAsync()
     {
-        var services = (await GraphQLFixture.GetExecutorAsync(_sp).ConfigureAwait(false))
+        var services = (await GraphQLFixture.GetExecutorAsync(_sp.NotNull()).ConfigureAwait(false))
             .Schema
             .Services;
 
@@ -284,7 +290,7 @@ public class HotChocolateCacheInvalidationTests
     [Test]
     public async Task Invalidator_PreCancelledToken_Throws()
     {
-        var invalidator = _sp.GetRequiredService<HotChocolateOperationCacheInvalidator>();
+        var invalidator = _sp.NotNull().GetRequiredService<HotChocolateOperationCacheInvalidator>();
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
@@ -295,7 +301,7 @@ public class HotChocolateCacheInvalidationTests
 
     private async Task<string> ExecuteByIdAsync(string id)
     {
-        var executor = await GraphQLFixture.GetExecutorAsync(_sp).ConfigureAwait(false);
+        var executor = await GraphQLFixture.GetExecutorAsync(_sp.NotNull()).ConfigureAwait(false);
         var request = OperationRequestBuilder
             .New()
             .SetDocumentId(new OperationDocumentId(id))
@@ -303,7 +309,7 @@ public class HotChocolateCacheInvalidationTests
         var result = await executor.ExecuteAsync(request).ConfigureAwait(false);
         var op = result as OperationResult;
         op.Should().NotBeNull();
-        return op!.ToJson();
+        return op.NotNull().ToJson();
     }
 
     private async Task ExecuteUploadMutationAsync(string id, string document, bool bypassShapeDiff)
@@ -324,7 +330,7 @@ public class HotChocolateCacheInvalidationTests
             ["document"] = document,
             ["bypassShapeDiff"] = bypassShapeDiff,
         };
-        var executor = await GraphQLFixture.GetExecutorAsync(_sp).ConfigureAwait(false);
+        var executor = await GraphQLFixture.GetExecutorAsync(_sp.NotNull()).ConfigureAwait(false);
         var request = OperationRequestBuilder
             .New()
             .SetDocument(mutation)

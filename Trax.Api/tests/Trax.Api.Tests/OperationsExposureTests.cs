@@ -8,6 +8,7 @@ using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.Services.HealthCheck;
 using Trax.Api.Tests.Fakes;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.EffectRegistry;
@@ -26,17 +27,17 @@ namespace Trax.Api.Tests;
 [TestFixture]
 public class OperationsExposureTests
 {
-    private ITrainDiscoveryService _emptyDiscovery = null!;
-    private ITrainDiscoveryService _queryOnlyDiscovery = null!;
-    private ITrainDiscoveryService _mutationOnlyDiscovery = null!;
-    private ITrainDiscoveryService _queryAndMutationDiscovery = null!;
+    private ITrainDiscoveryService? _emptyDiscovery;
+    private ITrainDiscoveryService? _queryOnlyDiscovery;
+    private ITrainDiscoveryService? _mutationOnlyDiscovery;
+    private ITrainDiscoveryService? _queryAndMutationDiscovery;
     private ServiceProvider? _serviceProvider;
 
     [SetUp]
     public void SetUp()
     {
         _emptyDiscovery = Substitute.For<ITrainDiscoveryService>();
-        _emptyDiscovery.DiscoverTrains().Returns([]);
+        _emptyDiscovery.NotNull().DiscoverTrains().Returns([]);
 
         var queryReg = new TrainRegistration
         {
@@ -60,7 +61,7 @@ public class OperationsExposureTests
         };
 
         _queryOnlyDiscovery = Substitute.For<ITrainDiscoveryService>();
-        _queryOnlyDiscovery.DiscoverTrains().Returns([queryReg]);
+        _queryOnlyDiscovery.NotNull().DiscoverTrains().Returns([queryReg]);
 
         var mutationReg = new TrainRegistration
         {
@@ -84,10 +85,10 @@ public class OperationsExposureTests
         };
 
         _mutationOnlyDiscovery = Substitute.For<ITrainDiscoveryService>();
-        _mutationOnlyDiscovery.DiscoverTrains().Returns([mutationReg]);
+        _mutationOnlyDiscovery.NotNull().DiscoverTrains().Returns([mutationReg]);
 
         _queryAndMutationDiscovery = Substitute.For<ITrainDiscoveryService>();
-        _queryAndMutationDiscovery.DiscoverTrains().Returns([queryReg, mutationReg]);
+        _queryAndMutationDiscovery.NotNull().DiscoverTrains().Returns([queryReg, mutationReg]);
     }
 
     [TearDown]
@@ -163,15 +164,16 @@ public class OperationsExposureTests
     [Test]
     public async Task Default_OperationsNamespace_OmittedFromQuerySchema()
     {
-        var executor = await BuildExecutor(_queryOnlyDiscovery);
+        var executor = await BuildExecutor(_queryOnlyDiscovery.NotNull());
 
         var result = await executor.ExecuteAsync("{ operations { health { status } } }");
 
         var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
-        operationResult!.Errors.Should().NotBeNullOrEmpty();
+        operationResult.NotNull().Errors.Should().NotBeNullOrEmpty();
         operationResult
-            .Errors!.Any(e => e.Message.Contains("operations", StringComparison.Ordinal))
+            .Errors.NotNull()
+            .Any(e => e.Message.Contains("operations", StringComparison.Ordinal))
             .Should()
             .BeTrue();
     }
@@ -179,7 +181,7 @@ public class OperationsExposureTests
     [Test]
     public async Task Default_NoTrainMutations_RootMutationTypeAbsent()
     {
-        var executor = await BuildExecutor(_queryOnlyDiscovery);
+        var executor = await BuildExecutor(_queryOnlyDiscovery.NotNull());
 
         var result = await executor.ExecuteAsync(
             "mutation { operations { triggerManifest(externalId: \"x\") { success } } }"
@@ -187,13 +189,13 @@ public class OperationsExposureTests
 
         var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
-        operationResult!.Errors.Should().NotBeNullOrEmpty();
+        operationResult.NotNull().Errors.Should().NotBeNullOrEmpty();
     }
 
     [Test]
     public void Default_NoQueriesAtAll_AddTraxGraphQL_ThrowsHelpfulError()
     {
-        var services = BuildBaseServices(_emptyDiscovery);
+        var services = BuildBaseServices(_emptyDiscovery.NotNull());
 
         Action act = () =>
             Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(services);
@@ -214,7 +216,7 @@ public class OperationsExposureTests
             .Returns(new Trax.Api.DTOs.HealthStatus("Healthy", "ok", 0, 0, 0, 0));
 
         var executor = await BuildExecutor(
-            _emptyDiscovery,
+            _emptyDiscovery.NotNull(),
             graphql => graphql.ExposeOperationQueries().AllowAnonymousOperations(),
             registerHealth: true
         );
@@ -223,7 +225,7 @@ public class OperationsExposureTests
 
         var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
-        operationResult!.Errors.Should().BeNullOrEmpty();
+        operationResult.NotNull().Errors.Should().BeNullOrEmpty();
         operationResult.ToJson().Should().Contain("Healthy");
     }
 
@@ -231,7 +233,7 @@ public class OperationsExposureTests
     public async Task ExposeOperationQueries_DeadLettersNestedUnderOperations()
     {
         var executor = await BuildExecutor(
-            _emptyDiscovery,
+            _emptyDiscovery.NotNull(),
             graphql => graphql.ExposeOperationQueries().AllowAnonymousOperations(),
             registerHealth: true
         );
@@ -242,7 +244,7 @@ public class OperationsExposureTests
             "{ __type(name: \"OperationsQueries\") { fields { name } } }"
         );
         var opResult = schemaResult as OperationResult;
-        opResult!.Errors.Should().BeNullOrEmpty();
+        opResult.NotNull().Errors.Should().BeNullOrEmpty();
         opResult.ToJson().Should().Contain("deadLetters");
     }
 
@@ -250,7 +252,7 @@ public class OperationsExposureTests
     public async Task ExposeOperationQueries_DeadLettersNotAtRoot()
     {
         var executor = await BuildExecutor(
-            _emptyDiscovery,
+            _emptyDiscovery.NotNull(),
             graphql => graphql.ExposeOperationQueries().AllowAnonymousOperations(),
             registerHealth: true
         );
@@ -259,7 +261,7 @@ public class OperationsExposureTests
             "{ __type(name: \"RootQuery\") { fields { name } } }"
         );
         var opResult = result as OperationResult;
-        opResult!.Errors.Should().BeNullOrEmpty();
+        opResult.NotNull().Errors.Should().BeNullOrEmpty();
         var json = opResult.ToJson();
         json.Should().Contain("operations");
         json.Should().NotContain("deadLetters");
@@ -269,7 +271,7 @@ public class OperationsExposureTests
     public async Task The_consoles_persisted_operations_probe_is_answered_without_an_error_on_a_host_without_them()
     {
         var executor = await BuildExecutor(
-            _emptyDiscovery,
+            _emptyDiscovery.NotNull(),
             graphql => graphql.ExposeOperationQueries().AllowAnonymousOperations()
         );
         var probe = (
@@ -328,7 +330,7 @@ public class OperationsExposureTests
         _scheduler = Substitute.For<ITraxScheduler>();
 
         var executor = await BuildExecutor(
-            _queryOnlyDiscovery,
+            _queryOnlyDiscovery.NotNull(),
             graphql => graphql.ExposeOperationMutations().AllowAnonymousOperations(),
             registerScheduler: true
         );
@@ -339,8 +341,8 @@ public class OperationsExposureTests
 
         var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
-        operationResult!.Errors.Should().BeNullOrEmpty();
-        await _scheduler!.Received(1).DisableAsync("abc", Arg.Any<CancellationToken>());
+        operationResult.NotNull().Errors.Should().BeNullOrEmpty();
+        await _scheduler.NotNull().Received(1).DisableAsync("abc", Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -349,7 +351,7 @@ public class OperationsExposureTests
         _scheduler = Substitute.For<ITraxScheduler>();
 
         var executor = await BuildExecutor(
-            _queryOnlyDiscovery,
+            _queryOnlyDiscovery.NotNull(),
             graphql => graphql.ExposeOperationMutations().AllowAnonymousOperations(),
             registerScheduler: true
         );
@@ -358,7 +360,7 @@ public class OperationsExposureTests
             "{ __type(name: \"OperationsMutations\") { fields { name } } }"
         );
         var opResult = schemaResult as OperationResult;
-        opResult!.Errors.Should().BeNullOrEmpty();
+        opResult.NotNull().Errors.Should().BeNullOrEmpty();
         opResult.ToJson().Should().Contain("deadLetters");
     }
 
@@ -366,14 +368,14 @@ public class OperationsExposureTests
     public async Task ExposeOperationMutations_AddsMutationRoot_EvenWithoutTrainMutations()
     {
         var executor = await BuildExecutor(
-            _queryOnlyDiscovery,
+            _queryOnlyDiscovery.NotNull(),
             graphql => graphql.ExposeOperationMutations().AllowAnonymousOperations(),
             registerScheduler: true
         );
 
         var result = await executor.ExecuteAsync("{ __schema { mutationType { name } } }");
         var opResult = result as OperationResult;
-        opResult!.Errors.Should().BeNullOrEmpty();
+        opResult.NotNull().Errors.Should().BeNullOrEmpty();
         opResult.ToJson().Should().Contain("RootMutation");
     }
 
@@ -381,14 +383,14 @@ public class OperationsExposureTests
     public async Task QueriesExposed_MutationsNotExposed_NoMutationRoot()
     {
         var executor = await BuildExecutor(
-            _queryOnlyDiscovery,
+            _queryOnlyDiscovery.NotNull(),
             graphql => graphql.ExposeOperationQueries().AllowAnonymousOperations(),
             registerHealth: true
         );
 
         var result = await executor.ExecuteAsync("{ __schema { mutationType { name } } }");
         var opResult = result as OperationResult;
-        opResult!.Errors.Should().BeNullOrEmpty();
+        opResult.NotNull().Errors.Should().BeNullOrEmpty();
         // mutationType is null when the schema has no mutation root.
         opResult
             .ToJson()
@@ -403,11 +405,11 @@ public class OperationsExposureTests
         // Both query and mutation trains present so the schema build is valid;
         // we are asserting that the mutation root appears purely from the train
         // mutation, not from any operations flag.
-        var executor = await BuildExecutor(_queryAndMutationDiscovery);
+        var executor = await BuildExecutor(_queryAndMutationDiscovery.NotNull());
 
         var result = await executor.ExecuteAsync("{ __schema { mutationType { name } } }");
         var opResult = result as OperationResult;
-        opResult!.Errors.Should().BeNullOrEmpty();
+        opResult.NotNull().Errors.Should().BeNullOrEmpty();
         opResult.ToJson().Should().Contain("RootMutation");
     }
 
@@ -436,7 +438,7 @@ public class OperationsExposureTests
     [Test]
     public void ExposeOperationMutations_WithoutAuthorization_ThrowsAtBuild()
     {
-        var services = BuildBaseServices(_emptyDiscovery);
+        var services = BuildBaseServices(_emptyDiscovery.NotNull());
 
         Action act = () =>
             Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
@@ -457,7 +459,7 @@ public class OperationsExposureTests
     [Test]
     public void ExposeOperationMutations_WithOnlyRequireAuthorization_ThrowsAtBuild()
     {
-        var services = BuildBaseServices(_emptyDiscovery);
+        var services = BuildBaseServices(_emptyDiscovery.NotNull());
 
         Action act = () =>
             Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
@@ -478,7 +480,7 @@ public class OperationsExposureTests
     [Test]
     public void ExposeOperationQueriesOnly_WithOnlyRequireAuthorization_ThrowsAtBuild()
     {
-        var services = BuildBaseServices(_emptyDiscovery);
+        var services = BuildBaseServices(_emptyDiscovery.NotNull());
 
         Action act = () =>
             Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
@@ -494,7 +496,7 @@ public class OperationsExposureTests
     [Test]
     public void ExposeOperationMutations_WithGateOperationsToAuthenticatedUsers_DoesNotThrow()
     {
-        var services = BuildBaseServices(_emptyDiscovery);
+        var services = BuildBaseServices(_emptyDiscovery.NotNull());
 
         Action act = () =>
             Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
@@ -512,7 +514,7 @@ public class OperationsExposureTests
     [Test]
     public void ExposeOperationMutations_WithAllowAnonymousOperations_DoesNotThrow()
     {
-        var services = BuildBaseServices(_emptyDiscovery);
+        var services = BuildBaseServices(_emptyDiscovery.NotNull());
 
         Action act = () =>
             Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
@@ -530,7 +532,7 @@ public class OperationsExposureTests
         // The read surface is an infrastructure disclosure in its own right: operations.hosts
         // reports internal hostnames and execution volume, operations.config the scheduler's
         // settings. Exposing it anonymously has to be as deliberate as exposing the mutations.
-        var services = BuildBaseServices(_emptyDiscovery);
+        var services = BuildBaseServices(_emptyDiscovery.NotNull());
 
         Action act = () =>
             Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
@@ -550,7 +552,7 @@ public class OperationsExposureTests
     [Test]
     public void RequireAuthorization_WithAllowAnonymousOperations_ThrowsContradiction()
     {
-        var services = BuildBaseServices(_emptyDiscovery);
+        var services = BuildBaseServices(_emptyDiscovery.NotNull());
 
         Action act = () =>
             Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
@@ -573,7 +575,7 @@ public class OperationsExposureTests
     [Test]
     public void GateOperations_WithQueriesExposed_DoesNotThrow()
     {
-        var services = BuildBaseServices(_emptyDiscovery);
+        var services = BuildBaseServices(_emptyDiscovery.NotNull());
 
         Action act = () =>
             Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
@@ -588,7 +590,7 @@ public class OperationsExposureTests
     public void GateOperations_WithMutationsExposed_DoesNotThrow()
     {
         // A query train supplies the root Query type, which a mutations-only host would lack.
-        var services = BuildBaseServices(_queryOnlyDiscovery);
+        var services = BuildBaseServices(_queryOnlyDiscovery.NotNull());
 
         Action act = () =>
             Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
@@ -607,7 +609,7 @@ public class OperationsExposureTests
     [Test]
     public void GateOperations_WithRequireAuthorization_DoesNotThrow()
     {
-        var services = BuildBaseServices(_emptyDiscovery);
+        var services = BuildBaseServices(_emptyDiscovery.NotNull());
 
         Action act = () =>
             Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
@@ -622,7 +624,7 @@ public class OperationsExposureTests
     [Test]
     public void GateOperations_WithAllowAnonymousOperations_ThrowsContradiction()
     {
-        var services = BuildBaseServices(_emptyDiscovery);
+        var services = BuildBaseServices(_emptyDiscovery.NotNull());
 
         Action act = () =>
             Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
@@ -645,7 +647,7 @@ public class OperationsExposureTests
     [Test]
     public void AllowAnonymousOperations_ThenGateOperations_ThrowsContradiction()
     {
-        var services = BuildBaseServices(_emptyDiscovery);
+        var services = BuildBaseServices(_emptyDiscovery.NotNull());
 
         Action act = () =>
             Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
@@ -662,7 +664,7 @@ public class OperationsExposureTests
     [Test]
     public void GateOperations_WithNothingExposed_ThrowsDeadConfiguration()
     {
-        var services = BuildBaseServices(_queryOnlyDiscovery);
+        var services = BuildBaseServices(_queryOnlyDiscovery.NotNull());
 
         Action act = () =>
             Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
@@ -685,7 +687,7 @@ public class OperationsExposureTests
     [TestCase("  ", null)]
     public void GateOperations_WithNoPolicyOrRoles_FailsAtStartup(string? policy, string? roles)
     {
-        var services = BuildBaseServices(_emptyDiscovery);
+        var services = BuildBaseServices(_emptyDiscovery.NotNull());
 
         Action act = () =>
             Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
@@ -703,7 +705,7 @@ public class OperationsExposureTests
     [Test]
     public void GateOperationsToAuthenticatedUsers_WithQueriesExposed_DoesNotThrow()
     {
-        var services = BuildBaseServices(_emptyDiscovery);
+        var services = BuildBaseServices(_emptyDiscovery.NotNull());
 
         Action act = () =>
             Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
@@ -770,7 +772,7 @@ public class OperationsExposureTests
     public async Task GateOperations_PutsAuthorizeOnTheRootQueryOperationsField()
     {
         var executor = await BuildExecutor(
-            _emptyDiscovery,
+            _emptyDiscovery.NotNull(),
             graphql => graphql.ExposeOperationQueries().GateOperations(roles: "admin"),
             registerHealth: true
         );
@@ -789,7 +791,7 @@ public class OperationsExposureTests
     public async Task GateOperations_PutsAuthorizeOnTheRootMutationOperationsField()
     {
         var executor = await BuildExecutor(
-            _emptyDiscovery,
+            _emptyDiscovery.NotNull(),
             graphql =>
                 graphql
                     .ExposeOperationQueries()
@@ -800,7 +802,8 @@ public class OperationsExposureTests
         );
 
         executor
-            .Schema.MutationType!.Fields["operations"]
+            .Schema.MutationType.NotNull()
+            .Fields["operations"]
             .Directives.Any(d =>
                 string.Equals(d.Definition.Name, "authorize", StringComparison.Ordinal)
             )
@@ -816,7 +819,7 @@ public class OperationsExposureTests
     public async Task WithoutGateOperations_TheOperationsFieldCarriesNoAuthorizeDirective()
     {
         var executor = await BuildExecutor(
-            _emptyDiscovery,
+            _emptyDiscovery.NotNull(),
             graphql => graphql.ExposeOperationQueries().AllowAnonymousOperations(),
             registerHealth: true
         );

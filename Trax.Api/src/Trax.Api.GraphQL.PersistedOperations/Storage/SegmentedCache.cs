@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using HotChocolate.Execution.Caching;
 using HotChocolate.Execution.Processing;
 using HotChocolate.Language;
@@ -28,13 +29,13 @@ internal sealed class SegmentedCache<TKey, TValue>(int capacity)
 
     public int Count => _hot.Count + _cold.Count;
 
-    public bool TryGet(TKey key, out TValue value)
+    public bool TryGet(TKey key, [MaybeNullWhen(false)] out TValue value)
     {
-        if (_hot.TryGetValue(key, out value!))
+        if (_hot.TryGetValue(key, out value))
             return true;
 
         var cold = _cold;
-        if (!cold.TryGetValue(key, out value!))
+        if (!cold.TryGetValue(key, out value))
             return false;
 
         // Promote so a steady-state working set survives generation turnover, unless the

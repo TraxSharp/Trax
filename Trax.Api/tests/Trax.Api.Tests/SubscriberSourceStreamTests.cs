@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using HotChocolate.Execution;
 using Trax.Api.GraphQL.Subscriptions;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests;
 
@@ -67,7 +68,7 @@ public class SubscriberSourceStreamTests
                     .WithCancellation(ct)
                     .ConfigureAwait(false)
             )
-                yield return (int)e!;
+                yield return (int)e.NotNull();
         }
     }
 

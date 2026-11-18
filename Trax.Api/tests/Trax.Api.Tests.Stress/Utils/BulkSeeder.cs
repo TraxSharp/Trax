@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Npgsql;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Stress.Utils;
 
@@ -24,7 +25,7 @@ public static partial class BulkSeeder
 
     public static void EnsureDatabaseExists(string connectionString)
     {
-        var database = new NpgsqlConnectionStringBuilder(connectionString).Database!;
+        var database = new NpgsqlConnectionStringBuilder(connectionString).Database.NotNull();
         if (!DatabaseName.IsMatch(database))
             throw new ArgumentException(
                 $"Database name '{database}' must be a snake_case ASCII identifier.",
@@ -97,7 +98,7 @@ public static partial class BulkSeeder
                 )
                 .ConfigureAwait(false);
 
-            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var sw = TimeProvider.System.GetTimestamp();
 
             // ── manifest_group (serial id 1..Groups) ─────────────────────────────
             await log(
@@ -334,7 +335,7 @@ public static partial class BulkSeeder
             await log(
                     string.Create(
                         CultureInfo.InvariantCulture,
-                        $"Inserts done in {sw.Elapsed.TotalSeconds:F0}s. Running VACUUM ANALYZE..."
+                        $"Inserts done in {TimeProvider.System.GetElapsedTime(sw).TotalSeconds:F0}s. Running VACUUM ANALYZE..."
                     )
                 )
                 .ConfigureAwait(false);
@@ -354,7 +355,7 @@ public static partial class BulkSeeder
             await log(
                     string.Create(
                         CultureInfo.InvariantCulture,
-                        $"Seed complete in {sw.Elapsed.TotalSeconds:F0}s."
+                        $"Seed complete in {TimeProvider.System.GetElapsedTime(sw).TotalSeconds:F0}s."
                     )
                 )
                 .ConfigureAwait(false);

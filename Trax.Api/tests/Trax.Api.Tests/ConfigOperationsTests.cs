@@ -7,6 +7,7 @@ using NUnit.Framework;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Services.LogLevels;
 using Trax.Scheduler.Services.Operations;
 
@@ -229,7 +230,7 @@ public class ConfigOperationsTests
         version
             .Should()
             .Be(
-                typeof(ConfigQueries).Assembly.GetName().Version!.ToString(3),
+                typeof(ConfigQueries).Assembly.GetName().Version.NotNull().ToString(3),
                 "it is the Trax.Api.GraphQL package version"
             );
     }

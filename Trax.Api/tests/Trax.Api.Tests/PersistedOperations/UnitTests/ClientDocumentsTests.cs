@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.GraphQL.TypeModules;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Mediator.Services.TrainDiscovery;
 using Path = System.IO.Path;
@@ -26,17 +27,17 @@ public class ClientDocumentsTests
     private const string Adr =
         "Trax.Docs/adr/0053-a-client-document-is-registered-by-the-host-at-boot.md";
 
-    private string _dir = null!;
+    private string? _dir;
 
     [SetUp]
     public void SetUp()
     {
         _dir = Path.Combine(Path.GetTempPath(), $"trax-client-docs-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(_dir);
+        Directory.CreateDirectory(_dir.NotNull());
     }
 
     [TearDown]
-    public void TearDown() => Directory.Delete(_dir, recursive: true);
+    public void TearDown() => Directory.Delete(_dir.NotNull(), recursive: true);
 
     #region Ids
 
@@ -106,7 +107,7 @@ public class ClientDocumentsTests
     [Test]
     public async Task A_missing_file_refuses_naming_it()
     {
-        var path = Path.Combine(_dir, "nope.json");
+        var path = Path.Combine(_dir.NotNull(), "nope.json");
 
         var act = () => ClientDocuments.LoadAsync(path, CancellationToken.None);
 
@@ -370,7 +371,7 @@ public class ClientDocumentsTests
 
     private async Task<string> WriteAsync(string json)
     {
-        var path = Path.Combine(_dir, $"{Guid.NewGuid():N}.json");
+        var path = Path.Combine(_dir.NotNull(), $"{Guid.NewGuid():N}.json");
         await File.WriteAllTextAsync(path, json).ConfigureAwait(false);
         return path;
     }
@@ -404,9 +405,9 @@ public class ClientDocumentsTests
                 .EnumerateArray()
                 .Select(c =>
                     (
-                        c.GetProperty("name").GetString()!,
-                        c.GetProperty("text").GetString()!,
-                        c.GetProperty("id").GetString()!
+                        c.GetProperty("name").GetString().NotNull(),
+                        c.GetProperty("text").GetString().NotNull(),
+                        c.GetProperty("id").GetString().NotNull()
                     )
                 )
                 .ToList();

@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using HotChocolate.Types;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 
@@ -178,7 +179,7 @@ internal static partial class MachineEnums
         }
         if (type.IsArray)
         {
-            Walk(type.GetElementType()!, enums, seen);
+            Walk(type.GetElementType().NotNull(), enums, seen);
             return;
         }
         // A collection is its elements, however it is declared: List<T>, a class deriving from it, a dictionary's
@@ -214,9 +215,11 @@ internal static partial class MachineEnums
     private static ITypeSystemMember Create(Type enumType) =>
         (ITypeSystemMember)
             typeof(MachineEnums)
-                .GetMethod(nameof(Stored), BindingFlags.NonPublic | BindingFlags.Static)!
+                .GetMethod(nameof(Stored), BindingFlags.NonPublic | BindingFlags.Static)
+                .NotNull()
                 .MakeGenericMethod(enumType)
-                .Invoke(null, parameters: null)!;
+                .Invoke(null, parameters: null)
+                .NotNull();
 
     private static EnumType<TEnum> Stored<TEnum>()
         where TEnum : struct, Enum => new MachineEnumType<TEnum>();

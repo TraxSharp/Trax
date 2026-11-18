@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using HotChocolate.Execution;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -233,7 +232,7 @@ internal sealed class MachineDocumentRegistration(
 
     private async Task RegisterAsync(CancellationToken cancellationToken)
     {
-        var readStartedAt = Stopwatch.GetTimestamp();
+        var readStartedAt = registry.Clock.GetTimestamp();
         var (ownVersions, stored) = await storage
             .RegisterMachineDocumentsAsync(
                 _documents,
@@ -257,7 +256,7 @@ internal sealed class MachineDocumentRegistration(
         {
             try
             {
-                await Task.Delay(Interval, stoppingToken).ConfigureAwait(false);
+                await Task.Delay(Interval, registry.Clock, stoppingToken).ConfigureAwait(false);
                 await RegisterAsync(stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

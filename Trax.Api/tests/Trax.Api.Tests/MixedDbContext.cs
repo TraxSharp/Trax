@@ -13,8 +13,8 @@ namespace Trax.Api.Tests;
 
 public class MixedDbContext : DbContext
 {
-    public DbSet<TestPlayer> Players { get; set; } = null!;
-    public DbSet<TestIgnored> Ignored { get; set; } = null!;
+    public DbSet<TestPlayer> Players => Set<TestPlayer>();
+    public DbSet<TestIgnored> Ignored => Set<TestIgnored>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
         optionsBuilder.UseInMemoryDatabase("MixedDb_" + Guid.NewGuid());

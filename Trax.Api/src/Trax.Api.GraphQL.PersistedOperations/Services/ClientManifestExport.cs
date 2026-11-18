@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.TypeModules;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.ClientExport;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.StateMachine;
@@ -113,8 +114,8 @@ internal static class ClientManifestExport
             .Select(machine => new ClientManifestMachine
             {
                 Id = machine.Name,
-                IrHash = machine.SchemaHash!,
-                Ir = (JsonObject)JsonNode.Parse(machine.ExportIr())!,
+                IrHash = machine.SchemaHash.NotNull(),
+                Ir = (JsonObject)JsonNode.Parse(machine.ExportIr()).NotNull(),
                 Documents = documents
                     .Where(d => string.Equals(d.Machine, machine.Name, StringComparison.Ordinal))
                     .OrderBy(d => d.Operation, StringComparer.Ordinal)
@@ -215,7 +216,9 @@ internal static class ClientManifestExport
                 .AuthorizeAttributes.Where(a => !string.IsNullOrWhiteSpace(a.Roles))
                 .Select(a =>
                     (IReadOnlyList<string>)
-                        a.Roles!.Split(
+                        a
+                            .Roles.NotNull()
+                            .Split(
                                 ',',
                                 StringSplitOptions.TrimEntries
                                     | StringSplitOptions.RemoveEmptyEntries

@@ -7,6 +7,7 @@ using NUnit.Framework;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.Tests.Fakes;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -49,8 +50,8 @@ public class WorkQueueOperationsTests
         + "Maximum Pool Size=8;Minimum Pool Size=0;Connection Idle Lifetime=30;"
         + "Timeout=30;Tcp Keepalive=true";
 
-    private ServiceProvider _provider = null!;
-    private IDataContextProviderFactory _factory = null!;
+    private ServiceProvider? _provider;
+    private IDataContextProviderFactory? _factory;
 
     // No train is registered, so a stored input can't be read as its type and shows masked.
     private static ITrainDiscoveryService Discovery => Substitute.For<ITrainDiscoveryService>();
@@ -59,7 +60,7 @@ public class WorkQueueOperationsTests
     private IOperationsService Operations =>
         new OperationsService(
             Discovery,
-            _factory,
+            _factory.NotNull(),
             new SchedulerConfiguration(),
             Substitute.For<ITrainExecutionService>()
         );
@@ -71,20 +72,21 @@ public class WorkQueueOperationsTests
         services.AddLogging();
         services.AddTrax(t => t.AddEffects(e => e.UsePostgres(ConnectionString)));
         _provider = services.BuildServiceProvider();
-        _factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        _factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await _provider.DisposeAsync();
+        if (_provider is not null)
+            await _provider.DisposeAsync();
         Npgsql.NpgsqlConnection.ClearAllPools();
     }
 
     [SetUp]
     public async Task SetUp()
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         var ctx = (Microsoft.EntityFrameworkCore.DbContext)db;
         await ctx.Database.ExecuteSqlRawAsync(
             "TRUNCATE TABLE trax.work_queue, trax.dead_letter, trax.metadata, trax.manifest, trax.manifest_group RESTART IDENTITY CASCADE"
@@ -97,7 +99,7 @@ public class WorkQueueOperationsTests
         string? trainName = null
     )
     {
-        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             for (var i = 0; i < count; i++)
@@ -112,7 +114,8 @@ public class WorkQueueOperationsTests
                                 $"Trax.Tests.IFakeTrain{i}"
                             ),
                         Priority = i % 4,
-                    }
+                    },
+                    TimeProvider.System
                 );
                 entry.Status = status;
                 await db.Track(entry).ConfigureAwait(false);
@@ -130,7 +133,7 @@ public class WorkQueueOperationsTests
         await SeedWorkQueues(1, WorkQueueStatus.Dispatched);
 
         long[] ids;
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
             ids = await db.WorkQueues.Select(q => q.Id).ToArrayAsync();
 
         var signal = new RecordingChangeSignal();
@@ -143,7 +146,7 @@ public class WorkQueueOperationsTests
         resp.Success.Should().BeTrue();
         resp.Count.Should().Be(3); // only the 3 queued; the dispatched one is skipped
         signal.Domains.Should().ContainSingle().Which.Should().Be(ChangeDomain.WorkQueue);
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             var cancelled = await db.WorkQueues.CountAsync(q =>
                 q.Status == WorkQueueStatus.Cancelled
@@ -172,7 +175,7 @@ public class WorkQueueOperationsTests
     private IOperationsService OperationsSignalling(ITraxChangeSignal signal) =>
         new OperationsService(
             Substitute.For<ITrainDiscoveryService>(),
-            _factory,
+            _factory.NotNull(),
             new SchedulerConfiguration(),
             Substitute.For<ITrainExecutionService>(),
             changeSignal: signal
@@ -187,7 +190,7 @@ public class WorkQueueOperationsTests
     {
         var queries = new WorkQueueQueries();
 
-        var result = await queries.GetWorkQueues(_factory, default);
+        var result = await queries.GetWorkQueues(_factory.NotNull(), default);
 
         result.Items.Should().BeEmpty();
         result.TotalCount.Should().Be(0);
@@ -200,7 +203,7 @@ public class WorkQueueOperationsTests
         await SeedWorkQueues(5);
         var queries = new WorkQueueQueries();
 
-        var result = await queries.GetWorkQueues(_factory, default, take: 2);
+        var result = await queries.GetWorkQueues(_factory.NotNull(), default, take: 2);
 
         result.Items.Should().HaveCount(2);
         result.NextCursor.Should().NotBeNull();
@@ -211,10 +214,10 @@ public class WorkQueueOperationsTests
     {
         await SeedWorkQueues(5);
         var queries = new WorkQueueQueries();
-        var first = await queries.GetWorkQueues(_factory, default, take: 2);
+        var first = await queries.GetWorkQueues(_factory.NotNull(), default, take: 2);
 
         var page2 = await queries.GetWorkQueues(
-            _factory,
+            _factory.NotNull(),
             default,
             take: 2,
             afterId: first.NextCursor
@@ -224,7 +227,7 @@ public class WorkQueueOperationsTests
         page2
             .Items.Select(q => q.Id)
             .Should()
-            .AllSatisfy(id => id.Should().BeLessThan(first.NextCursor!.Value));
+            .AllSatisfy(id => id.Should().BeLessThan(first.NextCursor.NotNull().Value));
         page2.IsEstimatedCount.Should().BeFalse();
     }
 
@@ -234,7 +237,7 @@ public class WorkQueueOperationsTests
         await SeedWorkQueues(5);
         var queries = new WorkQueueQueries();
 
-        var result = await queries.GetWorkQueues(_factory, default, skip: 2, take: 2);
+        var result = await queries.GetWorkQueues(_factory.NotNull(), default, skip: 2, take: 2);
 
         result.Items.Should().HaveCount(2);
         result.Skip.Should().Be(2);
@@ -247,9 +250,13 @@ public class WorkQueueOperationsTests
         await SeedWorkQueues(3, WorkQueueStatus.Cancelled);
         var queries = new WorkQueueQueries();
 
-        var queued = await queries.GetWorkQueues(_factory, default, status: WorkQueueStatus.Queued);
+        var queued = await queries.GetWorkQueues(
+            _factory.NotNull(),
+            default,
+            status: WorkQueueStatus.Queued
+        );
         var cancelled = await queries.GetWorkQueues(
-            _factory,
+            _factory.NotNull(),
             default,
             status: WorkQueueStatus.Cancelled
         );
@@ -267,7 +274,11 @@ public class WorkQueueOperationsTests
         await SeedWorkQueues(3, trainName: "Trax.Tests.IBeta");
         var queries = new WorkQueueQueries();
 
-        var alpha = await queries.GetWorkQueues(_factory, default, trainName: "Trax.Tests.IAlpha");
+        var alpha = await queries.GetWorkQueues(
+            _factory.NotNull(),
+            default,
+            trainName: "Trax.Tests.IAlpha"
+        );
 
         alpha.Items.Should().HaveCount(2);
         alpha.Items.Should().OnlyContain(q => q.TrainName == "Trax.Tests.IAlpha");
@@ -279,7 +290,7 @@ public class WorkQueueOperationsTests
         await SeedWorkQueues(3);
         var queries = new WorkQueueQueries();
 
-        var result = await queries.GetWorkQueues(_factory, default, trainName: "   ");
+        var result = await queries.GetWorkQueues(_factory.NotNull(), default, trainName: "   ");
 
         result.Items.Should().HaveCount(3);
     }
@@ -291,14 +302,14 @@ public class WorkQueueOperationsTests
         await SeedWorkQueues(3, WorkQueueStatus.Cancelled);
         var queries = new WorkQueueQueries();
         var firstCancelled = await queries.GetWorkQueues(
-            _factory,
+            _factory.NotNull(),
             default,
             status: WorkQueueStatus.Cancelled,
             take: 1
         );
 
         var page2 = await queries.GetWorkQueues(
-            _factory,
+            _factory.NotNull(),
             default,
             status: WorkQueueStatus.Cancelled,
             take: 5,
@@ -309,7 +320,7 @@ public class WorkQueueOperationsTests
         page2
             .Items.Select(q => q.Id)
             .Should()
-            .AllSatisfy(id => id.Should().BeLessThan(firstCancelled.NextCursor!.Value));
+            .AllSatisfy(id => id.Should().BeLessThan(firstCancelled.NextCursor.NotNull().Value));
     }
 
     [Test]
@@ -317,19 +328,19 @@ public class WorkQueueOperationsTests
     {
         await SeedWorkQueues(2);
         var queries = new WorkQueueQueries();
-        var first = (await queries.GetWorkQueues(_factory, default)).Items[0];
+        var first = (await queries.GetWorkQueues(_factory.NotNull(), default)).Items[0];
 
         var fetched = await queries.GetDetail(first.Id, Operations, default);
 
         fetched.Should().NotBeNull();
-        fetched!.Id.Should().Be(first.Id);
+        fetched.NotNull().Id.Should().Be(first.Id);
         fetched.ExternalId.Should().Be(first.ExternalId);
     }
 
     [Test]
     public async Task GetWorkQueues_SaysWhichEntriesAreStagedAndWhatTheyTouch()
     {
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             await db.Track(
                 WorkQueue.Create(
@@ -339,7 +350,8 @@ public class WorkQueueOperationsTests
                         InputTypeName = "Trax.Tests.StagedInput",
                         DeferPromotion = true,
                         SubjectKey = "customer-7",
-                    }
+                    },
+                    TimeProvider.System
                 )
             );
             await db.Track(
@@ -348,13 +360,14 @@ public class WorkQueueOperationsTests
                     {
                         TrainName = "Trax.Tests.IReadyTrain",
                         InputTypeName = "Trax.Tests.ReadyInput",
-                    }
+                    },
+                    TimeProvider.System
                 )
             );
             await db.SaveChanges(default);
         }
 
-        var items = (await new WorkQueueQueries().GetWorkQueues(_factory, default)).Items;
+        var items = (await new WorkQueueQueries().GetWorkQueues(_factory.NotNull(), default)).Items;
 
         var staged = items.Single(i =>
             string.Equals(i.TrainName, "Trax.Tests.IStagedTrain", StringComparison.Ordinal)
@@ -374,8 +387,8 @@ public class WorkQueueOperationsTests
     [Test]
     public async Task GetDetail_AllSummaryFields_PopulatedFromRow()
     {
-        var when = DateTime.UtcNow.AddMinutes(15);
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        var when = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(15);
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             var entry = WorkQueue.Create(
                 new CreateWorkQueue
@@ -384,25 +397,28 @@ public class WorkQueueOperationsTests
                     InputTypeName = "Trax.Tests.RichInput",
                     Priority = 7,
                     ScheduledAt = when,
-                }
+                },
+                TimeProvider.System
             );
             entry.Status = WorkQueueStatus.Dispatched;
-            entry.DispatchedAt = DateTime.UtcNow.AddMinutes(-1);
+            entry.DispatchedAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-1);
             entry.DispatchAttempts = 2;
             await db.Track(entry);
             await db.SaveChanges(default);
         }
 
         var queries = new WorkQueueQueries();
-        var first = (await queries.GetWorkQueues(_factory, default)).Items[0];
+        var first = (await queries.GetWorkQueues(_factory.NotNull(), default)).Items[0];
         var fetched = await queries.GetDetail(first.Id, Operations, default);
 
         fetched.Should().NotBeNull();
-        fetched!.Id.Should().Be(first.Id);
+        fetched.NotNull().Id.Should().Be(first.Id);
         fetched.ExternalId.Should().NotBeNullOrEmpty();
         fetched.TrainName.Should().Be("Trax.Tests.IRichTrain");
         fetched.Status.Should().Be(WorkQueueStatus.Dispatched);
-        fetched.CreatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));
+        fetched
+            .CreatedAt.Should()
+            .BeCloseTo(TimeProvider.System.GetUtcNow().UtcDateTime, TimeSpan.FromMinutes(1));
         fetched.DispatchedAt.Should().NotBeNull();
         fetched.ScheduledAt.Should().BeCloseTo(when, TimeSpan.FromSeconds(1));
         fetched.Priority.Should().Be(7);
@@ -426,7 +442,7 @@ public class WorkQueueOperationsTests
         DateTime? createdAt = null
     )
     {
-        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             var entry = WorkQueue.Create(
@@ -437,7 +453,8 @@ public class WorkQueueOperationsTests
                     Input = input,
                     SubjectKey = subject,
                     Priority = priority,
-                }
+                },
+                TimeProvider.System
             );
             entry.Status = status;
             entry.MetadataId = metadataId;
@@ -451,7 +468,7 @@ public class WorkQueueOperationsTests
 
     private async Task<long> AddRun(TrainState state)
     {
-        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             var run = Metadata.Create(
@@ -460,7 +477,8 @@ public class WorkQueueOperationsTests
                     Name = "Trax.Tests.ISubjectTrain",
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
-                }
+                },
+                TimeProvider.System
             );
             run.TrainState = state;
             await db.Track(run).ConfigureAwait(false);
@@ -477,7 +495,7 @@ public class WorkQueueOperationsTests
         var detail = await new WorkQueueQueries().GetDetail(id, Operations, default);
 
         detail.Should().NotBeNull();
-        detail!.Id.Should().Be(id);
+        detail.NotNull().Id.Should().Be(id);
         // No train on this host takes Trax.Tests.SubjectInput, so nothing shows the stored copy
         // holds no [TraxSensitive] member: the read masks it whole.
         detail.Input.Should().Contain("_redacted").And.NotContain("amount");
@@ -497,7 +515,7 @@ public class WorkQueueOperationsTests
 
         var detail = await new WorkQueueQueries().GetDetail(waiting, Operations, default);
 
-        detail!.SubjectHeldBy.Should().Be(holder);
+        detail.NotNull().SubjectHeldBy.Should().Be(holder);
         detail
             .SubjectQueuedBehind.Should()
             .BeNull("an entry held by a running sibling says so, not what is queued ahead");
@@ -512,31 +530,37 @@ public class WorkQueueOperationsTests
 
         var detail = await new WorkQueueQueries().GetDetail(waiting, Operations, default);
 
-        detail!.SubjectHeldBy.Should().BeNull();
+        detail.NotNull().SubjectHeldBy.Should().BeNull();
         detail.SubjectQueuedBehind.Should().BeNull();
     }
 
     [Test]
     public async Task GetDetail_OlderOrHigherPrioritySibling_IsWhatItQueuesBehind()
     {
-        var older = await AddEntry("customer-4", createdAt: DateTime.UtcNow.AddMinutes(-5));
+        var older = await AddEntry(
+            "customer-4",
+            createdAt: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5)
+        );
         var younger = await AddEntry("customer-4");
         var urgent = await AddEntry(
             "customer-5",
-            createdAt: DateTime.UtcNow.AddMinutes(1),
+            createdAt: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(1),
             priority: 9
         );
         var ordinary = await AddEntry("customer-5");
 
         var queries = new WorkQueueQueries();
 
-        (await queries.GetDetail(younger, Operations, default))!
+        (await queries.GetDetail(younger, Operations, default))
+            .NotNull()
             .SubjectQueuedBehind.Should()
             .Be(older);
-        (await queries.GetDetail(older, Operations, default))!
+        (await queries.GetDetail(older, Operations, default))
+            .NotNull()
             .SubjectQueuedBehind.Should()
             .BeNull();
-        (await queries.GetDetail(ordinary, Operations, default))!
+        (await queries.GetDetail(ordinary, Operations, default))
+            .NotNull()
             .SubjectQueuedBehind.Should()
             .Be(urgent);
     }
@@ -545,7 +569,7 @@ public class WorkQueueOperationsTests
     public async Task GetDetail_SiblingNotYetDue_IsNotAheadOfIt()
     {
         long later;
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             var entry = WorkQueue.Create(
                 new CreateWorkQueue
@@ -553,8 +577,9 @@ public class WorkQueueOperationsTests
                     TrainName = "Trax.Tests.ISubjectTrain",
                     SubjectKey = "customer-6",
                     Priority = 9,
-                    ScheduledAt = DateTime.UtcNow.AddDays(1),
-                }
+                    ScheduledAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddDays(1),
+                },
+                TimeProvider.System
             );
             await db.Track(entry);
             await db.SaveChanges(default);
@@ -565,7 +590,8 @@ public class WorkQueueOperationsTests
         var detail = await new WorkQueueQueries().GetDetail(dueNow, Operations, default);
 
         later.Should().BePositive();
-        detail!
+        detail
+            .NotNull()
             .SubjectQueuedBehind.Should()
             .BeNull("dispatch does not offer an entry before it is due");
     }
@@ -582,9 +608,9 @@ public class WorkQueueOperationsTests
         var d1 = await queries.GetDetail(dispatched, Operations, default);
         var d2 = await queries.GetDetail(noSubject, Operations, default);
 
-        d1!.SubjectHeldBy.Should().BeNull();
+        d1.NotNull().SubjectHeldBy.Should().BeNull();
         d1.SubjectQueuedBehind.Should().BeNull();
-        d2!.SubjectHeldBy.Should().BeNull();
+        d2.NotNull().SubjectHeldBy.Should().BeNull();
         d2.SubjectQueuedBehind.Should().BeNull();
     }
 

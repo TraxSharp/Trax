@@ -350,7 +350,7 @@ public class RunGraphParallelTests
             Kind = JunctionRunKind.Junction,
             Name = "ScoreCoCitation",
             State = JunctionRunState.Completed,
-            StartedAt = DateTime.UtcNow,
+            StartedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
             NodeId = CoCitation,
         };
 
@@ -402,7 +402,7 @@ public class RunGraphParallelTests
             kind,
             nodeId ?? "Old",
             state,
-            DateTime.UtcNow,
+            TimeProvider.System.GetUtcNow().UtcDateTime,
             EndedAt: null,
             DurationMs: null,
             FailureClass: null,

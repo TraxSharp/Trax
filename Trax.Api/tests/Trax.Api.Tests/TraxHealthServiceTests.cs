@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -29,9 +30,9 @@ public class TraxHealthServiceTests
         + "Maximum Pool Size=8;Minimum Pool Size=0;Connection Idle Lifetime=30;"
         + "Timeout=30;Tcp Keepalive=true";
 
-    private ServiceProvider _provider = null!;
-    private IDataContextProviderFactory _factory = null!;
-    private TraxHealthService _service = null!;
+    private ServiceProvider? _provider;
+    private IDataContextProviderFactory? _factory;
+    private TraxHealthService? _service;
 
     [OneTimeSetUp]
     public void OneTimeSetUp()
@@ -40,21 +41,22 @@ public class TraxHealthServiceTests
         services.AddLogging();
         services.AddTrax(t => t.AddEffects(e => e.UsePostgres(ConnectionString)));
         _provider = services.BuildServiceProvider();
-        _factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        _service = new TraxHealthService(_factory);
+        _factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
+        _service = new TraxHealthService(_factory.NotNull(), TimeProvider.System);
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await _provider.DisposeAsync();
+        if (_provider is not null)
+            await _provider.DisposeAsync();
         Npgsql.NpgsqlConnection.ClearAllPools();
     }
 
     [SetUp]
     public async Task SetUp()
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         var ctx = (DbContext)db;
         await ctx.Database.ExecuteSqlRawAsync(
             "TRUNCATE TABLE trax.dead_letter, trax.metadata, trax.work_queue, trax.manifest, trax.manifest_group RESTART IDENTITY CASCADE"
@@ -64,7 +66,7 @@ public class TraxHealthServiceTests
     [Test]
     public async Task GetHealthAsync_NoActivity_ReportsHealthyAndZeroes()
     {
-        var status = await _service.GetHealthAsync();
+        var status = await _service.NotNull().GetHealthAsync();
 
         status.Status.Should().Be("Healthy");
         status.Description.Should().Be("All systems operational");
@@ -79,9 +81,12 @@ public class TraxHealthServiceTests
     {
         await SeedMetadata(state: TrainState.InProgress, endTime: null);
         await SeedMetadata(state: TrainState.InProgress, endTime: null);
-        await SeedMetadata(state: TrainState.Completed, endTime: DateTime.UtcNow);
+        await SeedMetadata(
+            state: TrainState.Completed,
+            endTime: TimeProvider.System.GetUtcNow().UtcDateTime
+        );
 
-        var status = await _service.GetHealthAsync();
+        var status = await _service.NotNull().GetHealthAsync();
 
         status.InProgress.Should().Be(2);
     }
@@ -89,10 +94,16 @@ public class TraxHealthServiceTests
     [Test]
     public async Task GetHealthAsync_RecentFailures_CountedInFailedLastHour()
     {
-        await SeedMetadata(TrainState.Failed, DateTime.UtcNow.AddMinutes(-30));
-        await SeedMetadata(TrainState.Failed, DateTime.UtcNow.AddHours(-2));
+        await SeedMetadata(
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-30)
+        );
+        await SeedMetadata(
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
+        );
 
-        var status = await _service.GetHealthAsync();
+        var status = await _service.NotNull().GetHealthAsync();
 
         status.FailedLastHour.Should().Be(1);
     }
@@ -101,9 +112,12 @@ public class TraxHealthServiceTests
     public async Task GetHealthAsync_ManyFailures_ReportsDegraded()
     {
         for (var i = 0; i < 11; i++)
-            await SeedMetadata(TrainState.Failed, DateTime.UtcNow.AddMinutes(-10));
+            await SeedMetadata(
+                TrainState.Failed,
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10)
+            );
 
-        var status = await _service.GetHealthAsync();
+        var status = await _service.NotNull().GetHealthAsync();
 
         status.Status.Should().Be("Degraded");
         status.Description.Should().Contain("Elevated");
@@ -111,7 +125,7 @@ public class TraxHealthServiceTests
 
     private async Task SeedMetadata(TrainState state, DateTime? endTime)
     {
-        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             var meta = Metadata.Create(
@@ -120,7 +134,8 @@ public class TraxHealthServiceTests
                     Name = "Trax.X.SomeTrain",
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
-                }
+                },
+                TimeProvider.System
             );
             meta.TrainState = state;
             if (endTime.HasValue)

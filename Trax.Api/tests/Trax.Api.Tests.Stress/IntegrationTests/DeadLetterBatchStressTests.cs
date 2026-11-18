@@ -4,6 +4,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.Tests.Stress.Fixtures;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Services.DeadLetterRequeue;
 
 namespace Trax.Api.Tests.Stress.IntegrationTests;
@@ -90,7 +91,7 @@ public class DeadLetterBatchStressTests : StressTestSetup
             RestoreSeed,
             async (_, ct) =>
             {
-                var answer = Stopwatch.StartNew();
+                var answer = TimeProvider.System.GetTimestamp();
                 var job = await OperationsFieldAsync(
                         "mutation { operations { deadLetters { requeueAllDeadLetters "
                             + "{ id status awaitingAtStart } } } }",
@@ -98,18 +99,18 @@ public class DeadLetterBatchStressTests : StressTestSetup
                         "deadLetters"
                     )
                     .ConfigureAwait(false);
-                answer.Stop();
+                var answerTook = TimeProvider.System.GetElapsedTime(answer);
                 await TestContext
                     .Out.WriteLineAsync(
                         string.Create(
                             CultureInfo.InvariantCulture,
-                            $"requeueAllDeadLetters answered in {answer.Elapsed.TotalMilliseconds:F0}ms"
+                            $"requeueAllDeadLetters answered in {answerTook.TotalMilliseconds:F0}ms"
                         )
                     )
                     .ConfigureAwait(false);
 
-                answer
-                    .Elapsed.Should()
+                answerTook
+                    .Should()
                     .BeLessThan(
                         RequeueAllAnswerBudget,
                         $"the mutation returns a handle without waiting for the fold ({Adr})"
@@ -117,7 +118,7 @@ public class DeadLetterBatchStressTests : StressTestSetup
                 job.GetProperty("status").GetString().Should().Be("RUNNING");
                 job.GetProperty("awaitingAtStart").GetInt32().Should().Be((int)SeededAwaiting);
 
-                var id = Guid.Parse(job.GetProperty("id").GetString()!);
+                var id = Guid.Parse(job.GetProperty("id").GetString().NotNull());
                 while (jobs.Get(id)?.Status == DeadLetterRequeueJobStatus.Running)
                     // determinism: the poll interval while the background fold finishes.
                     await Task.Delay(50, ct).ConfigureAwait(false);

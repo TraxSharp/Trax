@@ -4,6 +4,7 @@ using Terminal.Gui.Input;
 using Terminal.Gui.Testing;
 using Terminal.Gui.Time;
 using Terminal.Gui.Views;
+using Trax.Api.Console.Terminal.Checks;
 using Trax.Api.Console.Terminal.Screens;
 
 namespace Trax.Api.Console.Terminal.Tests.Fakes;
@@ -53,7 +54,7 @@ internal sealed class TerminalHarness : IAsyncDisposable
             try
             {
                 app.Init("ansi");
-                app.Driver!.SetScreenSize(140, 40);
+                app.Driver.NotNull().SetScreenSize(140, 40);
                 window = build(app);
             }
             catch (Exception ex)
@@ -75,7 +76,9 @@ internal sealed class TerminalHarness : IAsyncDisposable
             Name = "terminal-harness",
         };
         loop.Start();
-        var window = await started.Task.WaitAsync(Deadline).ConfigureAwait(false);
+        var window = await started
+            .Task.WaitAsync(Deadline, TimeProvider.System)
+            .ConfigureAwait(false);
         return (new TerminalHarness(app, time, loop, stopped.Task), window);
     }
 
@@ -102,7 +105,7 @@ internal sealed class TerminalHarness : IAsyncDisposable
                 done.TrySetException(ex);
             }
         });
-        return await done.Task.WaitAsync(Deadline).ConfigureAwait(false);
+        return await done.Task.WaitAsync(Deadline, TimeProvider.System).ConfigureAwait(false);
     }
 
     /// <summary>Presses <paramref name="key"/> and waits until the UI thread has handled it.</summary>
@@ -113,8 +116,8 @@ internal sealed class TerminalHarness : IAsyncDisposable
         OnUi(() =>
         {
             App.LayoutAndDraw(forceRedraw: true);
-            var driver = App.Driver!;
-            var cells = driver.Contents!;
+            var driver = App.Driver.NotNull();
+            var cells = driver.Contents.NotNull();
             return string.Join(
                 '\n',
                 Enumerable
@@ -135,18 +138,18 @@ internal sealed class TerminalHarness : IAsyncDisposable
     /// <summary>Waits until <paramref name="condition"/>, checked on the UI thread, holds.</summary>
     public async Task Until(Func<bool> condition, string because)
     {
-        var clock = Stopwatch.StartNew();
+        var clock = TimeProvider.System.GetTimestamp();
         while (!await OnUi(condition).ConfigureAwait(false))
-            if (clock.Elapsed > Deadline)
+            if (TimeProvider.System.GetElapsedTime(clock) > Deadline)
                 Assert.Fail($"Timed out waiting until {because}.");
     }
 
     /// <summary>Waits until the screen shows <paramref name="text"/>.</summary>
     public async Task UntilShown(string text)
     {
-        var clock = Stopwatch.StartNew();
+        var clock = TimeProvider.System.GetTimestamp();
         while (!(await Screen().ConfigureAwait(false)).Contains(text, StringComparison.Ordinal))
-            if (clock.Elapsed > Deadline)
+            if (TimeProvider.System.GetElapsedTime(clock) > Deadline)
                 Assert.Fail(
                     $"Timed out waiting for '{text}' on the screen:\n{await Screen().ConfigureAwait(false)}"
                 );

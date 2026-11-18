@@ -20,7 +20,7 @@ public class ConfigurationLifecycleTests
     {
         var act = () =>
             new GraphQLClientConfiguration(
-                baseAddress: null!,
+                baseAddress: Null.Of<Uri>(),
                 jsonSerializer: new SystemTextJsonSerializer(),
                 graphQLHttpClientOptions: new GraphQLHttpClientOptions(),
                 jsonSerializerOptions: new JsonSerializerOptions()
@@ -42,7 +42,7 @@ public class ConfigurationLifecycleTests
         var act = () =>
             new GraphQLClientConfiguration(
                 baseAddress: new Uri("http://x/graphql"),
-                jsonSerializer: null!,
+                jsonSerializer: Null.Of<global::GraphQL.Client.Abstractions.Websocket.IGraphQLWebsocketJsonSerializer>(),
                 graphQLHttpClientOptions: new GraphQLHttpClientOptions(),
                 jsonSerializerOptions: new JsonSerializerOptions()
                 {
@@ -73,7 +73,7 @@ public class ConfigurationLifecycleTests
                 disposeHttpClient: false,
                 removeSubscriptionsFromSchema: true,
                 responseStrictness: ResponseStrictness.Lenient,
-                httpClient: null!
+                httpClient: Null.Of<System.Net.Http.HttpClient>()
             );
         act.Should().Throw<ArgumentNullException>();
     }

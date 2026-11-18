@@ -175,7 +175,7 @@ public class TrainAuthorizationServiceTests
     public async Task BareAttribute_NoUserOnContext_Denies()
     {
         var ctx = new DefaultHttpContext();
-        ctx.User = null!;
+        ctx.User = Null.Of<System.Security.Claims.ClaimsPrincipal>();
         var service = CreateService(ctx);
         var reg = Registration(hasAuthorize: true);
 
@@ -552,13 +552,17 @@ public class TrainAuthorizationServiceTests
         {
             using var _ = scope.BeginTrusted("flow-a");
             opened.SetResult();
-            await read.Task.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+            await read
+                .Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System)
+                .ConfigureAwait(false);
             return scope.IsTrusted;
         });
 
         var untrustedFlow = Task.Run(async () =>
         {
-            await opened.Task.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+            await opened
+                .Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System)
+                .ConfigureAwait(false);
             var trusted = scope.IsTrusted;
             read.SetResult();
             return trusted;

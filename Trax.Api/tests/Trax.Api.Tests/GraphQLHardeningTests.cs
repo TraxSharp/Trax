@@ -88,7 +88,8 @@ public class GraphQLHardeningTests
     {
         var builder = new TraxGraphQLBuilder(new ServiceCollection());
 
-        Action act = () => builder.AllowIntrospection(null!);
+        Action act = () =>
+            builder.AllowIntrospection(Null.Of<Predicate<Microsoft.AspNetCore.Http.HttpContext>>());
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -109,7 +110,8 @@ public class GraphQLHardeningTests
     {
         var builder = new TraxGraphQLBuilder(new ServiceCollection());
 
-        Action act = () => builder.ConfigureCost(null!);
+        Action act = () =>
+            builder.ConfigureCost(Null.Of<Action<HotChocolate.CostAnalysis.CostOptions>>());
 
         act.Should().Throw<ArgumentNullException>();
     }

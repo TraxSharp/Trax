@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text;
+using Trax.Api.Console.Terminal.Checks;
 
 namespace Trax.Api.Console.Terminal.Machines;
 
@@ -521,7 +522,7 @@ internal static class GraphLayout
             }
             Write(box.X + 2, box.Y + 1, box.State.Name);
             for (var i = 0; i < (loops?.Count ?? 0); i++)
-                Write(box.X + 2, box.Y + 2 + i, $"↻ {loops![i]}");
+                Write(box.X + 2, box.Y + 2 + i, $"↻ {loops.NotNull()[i]}");
         }
 
         // The initial state's entry: a dot and an arrow into its left side.

@@ -1,4 +1,5 @@
 using System.Reflection;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 
 namespace Trax.Api.GraphQL.Configuration;
@@ -117,7 +118,7 @@ internal sealed record NavigationTargetPosture(
         }
         else if (type.IsArray)
         {
-            type = type.GetElementType()!;
+            type = type.GetElementType().NotNull();
         }
 
         if (!type.IsClass || type == typeof(string) || type.IsArray)

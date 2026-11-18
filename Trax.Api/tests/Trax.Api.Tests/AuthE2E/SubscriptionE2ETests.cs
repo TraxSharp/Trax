@@ -131,7 +131,7 @@ public class SubscriptionE2ETests
             key,
             Microsoft.IdentityModel.Tokens.SecurityAlgorithms.HmacSha256
         );
-        var now = DateTime.UtcNow;
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime;
         var expired = new System.IdentityModel.Tokens.Jwt.JwtSecurityToken(
             issuer: JwtIssuer,
             audience: JwtAudience,
@@ -161,7 +161,7 @@ public class SubscriptionE2ETests
             new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(otherKey),
             Microsoft.IdentityModel.Tokens.SecurityAlgorithms.HmacSha256
         );
-        var now = DateTime.UtcNow;
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime;
         var token = new System.IdentityModel.Tokens.Jwt.JwtSecurityToken(
             issuer: JwtIssuer,
             audience: JwtAudience,

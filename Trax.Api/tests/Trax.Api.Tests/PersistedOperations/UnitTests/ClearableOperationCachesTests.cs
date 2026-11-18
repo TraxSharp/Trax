@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using HotChocolate.Language;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
 using Trax.Api.Tests.PersistedOperations.Fixtures;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.PersistedOperations.UnitTests;
 
@@ -16,8 +17,8 @@ public class ClearableOperationCachesTests
 {
     private static readonly TimeSpan MaxAge = TimeSpan.FromMinutes(5);
 
-    private PersistedOperationCacheGeneration _generation = null!;
-    private ManualClock _clock = null!;
+    private PersistedOperationCacheGeneration? _generation;
+    private ManualClock? _clock;
 
     [SetUp]
     public void SetUp()
@@ -25,17 +26,17 @@ public class ClearableOperationCachesTests
         _generation = new PersistedOperationCacheGeneration();
         _clock = new ManualClock();
         // Entries are added only inside a request scope, as HotChocolate's middleware does.
-        PersistedOperationRequestScope.Begin(_generation, carriesDocument: false);
+        PersistedOperationRequestScope.Begin(_generation.NotNull(), carriesDocument: false);
     }
 
     [TearDown]
     public void TearDown() => PersistedOperationRequestScope.End();
 
     private ClearableDocumentCache DocumentCache(int capacity) =>
-        new(capacity, _generation, _clock, MaxAge);
+        new(capacity, _generation.NotNull(), _clock.NotNull(), MaxAge);
 
     private ClearablePreparedOperationCache OperationCache(int capacity) =>
-        new(capacity, _generation, _clock, MaxAge);
+        new(capacity, _generation.NotNull(), _clock.NotNull(), MaxAge);
 
     private static CachedDocument Document(string text) =>
         new(Utf8GraphQLParser.Parse(text), default, isPersisted: true);
@@ -229,7 +230,7 @@ public class ClearableOperationCachesTests
         var cache = DocumentCache(16);
         cache.TryAddDocument("id", Document("{ a }"));
 
-        _generation.Advance();
+        _generation.NotNull().Advance();
 
         cache.TryGetDocument("id", out _).Should().BeFalse();
     }
@@ -240,7 +241,7 @@ public class ClearableOperationCachesTests
         // The request started (scope opened in SetUp), a change landed, then the request
         // finished and wrote what it had read.
         var cache = DocumentCache(16);
-        _generation.Advance();
+        _generation.NotNull().Advance();
 
         cache.TryAddDocument("id", Document("{ old }"));
 
@@ -264,10 +265,10 @@ public class ClearableOperationCachesTests
         var cache = DocumentCache(16);
         cache.TryAddDocument("id", Document("{ a }"));
 
-        _clock.Advance(MaxAge - TimeSpan.FromTicks(1));
+        _clock.NotNull().Advance(MaxAge - TimeSpan.FromTicks(1));
         cache.TryGetDocument("id", out _).Should().BeTrue();
 
-        _clock.Advance(TimeSpan.FromTicks(1));
+        _clock.NotNull().Advance(TimeSpan.FromTicks(1));
         cache.TryGetDocument("id", out _).Should().BeFalse();
     }
 
@@ -275,14 +276,17 @@ public class ClearableOperationCachesTests
     public void AnEntrysAge_CountsFromWhenItsDocumentWasRead()
     {
         // A document read from the store a minute ago and compiled now is a minute old.
-        var readAt = _clock.GetTimestamp();
-        _clock.Advance(TimeSpan.FromMinutes(1));
-        var scope = PersistedOperationRequestScope.Begin(_generation, carriesDocument: false);
+        var readAt = _clock.NotNull().GetTimestamp();
+        _clock.NotNull().Advance(TimeSpan.FromMinutes(1));
+        var scope = PersistedOperationRequestScope.Begin(
+            _generation.NotNull(),
+            carriesDocument: false
+        );
         scope.NoteSource(readAt);
         var cache = DocumentCache(16);
 
         cache.TryAddDocument("id", Document("{ a }"));
-        _clock.Advance(MaxAge - TimeSpan.FromMinutes(1));
+        _clock.NotNull().Advance(MaxAge - TimeSpan.FromMinutes(1));
 
         cache.TryGetDocument("id", out _).Should().BeFalse();
     }
@@ -291,10 +295,13 @@ public class ClearableOperationCachesTests
     public void ACacheHit_TellsTheRequestHowOldItsDocumentIs()
     {
         var cache = DocumentCache(16);
-        var addedAt = _clock.GetTimestamp();
+        var addedAt = _clock.NotNull().GetTimestamp();
         cache.TryAddDocument("id", Document("{ a }"));
-        _clock.Advance(TimeSpan.FromSeconds(30));
-        var scope = PersistedOperationRequestScope.Begin(_generation, carriesDocument: false);
+        _clock.NotNull().Advance(TimeSpan.FromSeconds(30));
+        var scope = PersistedOperationRequestScope.Begin(
+            _generation.NotNull(),
+            carriesDocument: false
+        );
 
         cache.TryGetDocument("id", out _).Should().BeTrue();
 
@@ -319,7 +326,10 @@ public class ClearableOperationCachesTests
     [Test]
     public void AScope_KeepsTheOldestSourceItWasGiven()
     {
-        var scope = PersistedOperationRequestScope.Begin(_generation, carriesDocument: false);
+        var scope = PersistedOperationRequestScope.Begin(
+            _generation.NotNull(),
+            carriesDocument: false
+        );
         scope.SourceTimestamp.Should().BeNull();
 
         scope.NoteSource(50);

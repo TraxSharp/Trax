@@ -17,6 +17,7 @@ internal static class ConsoleApp
         ConsoleSession session,
         VersionCheck version,
         bool verticalGraphs,
+        TimeProvider clock,
         CancellationToken cancellationToken
     )
     {
@@ -41,7 +42,12 @@ internal static class ConsoleApp
                 using var searching = CancellationTokenSource.CreateLinkedTokenSource(
                     cancellationToken
                 );
-                var context = new ConsoleContext(app, session.Client, session.Target.Endpoint)
+                var context = new ConsoleContext(
+                    app,
+                    session.Client,
+                    session.Target.Endpoint,
+                    clock: clock
+                )
                 {
                     VerticalGraphs = verticalGraphs,
                 };

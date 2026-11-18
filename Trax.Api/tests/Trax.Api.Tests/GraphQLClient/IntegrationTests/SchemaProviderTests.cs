@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.Client;
 using Trax.Api.Tests.GraphQLClient.Fixtures;
 using Trax.Api.Tests.GraphQLClient.IntegrationTests.Fakes;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 
@@ -16,13 +17,13 @@ namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 [TestFixture]
 public class SchemaProviderTests
 {
-    private GraphQLTestServerFixture _fixture = null!;
+    private GraphQLTestServerFixture? _fixture;
 
     [SetUp]
     public void SetUp() => _fixture = new GraphQLTestServerFixture();
 
     [TearDown]
-    public void TearDown() => _fixture.Dispose();
+    public void TearDown() => _fixture?.Dispose();
 
     [Test]
     public async Task IntrospectingProvider_FetchesSchema_AndContainsExpectedRootTypes()
@@ -34,9 +35,9 @@ public class SchemaProviderTests
 
         schema.Should().NotBeNull();
         schema.Query.Should().NotBeNull();
-        schema.Query!.Name.Should().Be("TestQuery");
+        schema.Query.NotNull().Name.Should().Be("TestQuery");
         schema.Mutation.Should().NotBeNull();
-        schema.Mutation!.Name.Should().Be("TestMutation");
+        schema.Mutation.NotNull().Name.Should().Be("TestMutation");
     }
 
     [Test]
@@ -132,7 +133,7 @@ public class SchemaProviderTests
     [Test]
     public void FileSchemaProvider_NullOrWhitespacePath_ThrowsArgument()
     {
-        var actNull = () => new FileSchemaProvider(null!);
+        var actNull = () => new FileSchemaProvider(Null.Of<string>());
         actNull.Should().Throw<ArgumentException>();
 
         var actEmpty = () => new FileSchemaProvider("   ");
@@ -161,9 +162,9 @@ public class SchemaProviderTests
 
     private IGraphQLClientConfiguration BuildConfig()
     {
-        var builder = new GraphQLClientConfigurationBuilder(_fixture.BaseAddress)
+        var builder = new GraphQLClientConfigurationBuilder(_fixture.NotNull().BaseAddress)
         {
-            HttpClient = _fixture.CreateHttpClient(),
+            HttpClient = _fixture.NotNull().CreateHttpClient(),
         };
         return builder.Build();
     }

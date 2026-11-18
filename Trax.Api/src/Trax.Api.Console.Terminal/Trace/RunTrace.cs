@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
+using Trax.Api.Console.Terminal.Checks;
 using Trax.Api.Console.Terminal.Lists;
 using Trax.Api.Console.Terminal.Operations;
 using Trax.Client;
@@ -52,12 +53,12 @@ internal static class RunTrace
         if (!logs.Succeeded)
             return Failed(logs);
 
-        var timeline = (steps.Data!.Operations?.JunctionRuns ?? [])
+        var timeline = (steps.Data.NotNull().Operations?.JunctionRuns ?? [])
             .Select(Step)
-            .Concat((decisions.Data!.Operations?.Decisions.Items ?? []).Select(Decision))
+            .Concat((decisions.Data.NotNull().Operations?.Decisions.Items ?? []).Select(Decision))
             .OrderBy(e => e.At)
             .ThenBy(e => e.Kind)
-            .Concat((logs.Data!.Operations?.Logs.Logs.Items ?? []).Select(Log))
+            .Concat((logs.Data.NotNull().Operations?.Logs.Logs.Items ?? []).Select(Log))
             .ToList();
         return new() { Data = timeline };
     }

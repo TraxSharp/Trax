@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Trax.Api.GraphQL.DataLoaders.CrossSchema;
+using Trax.Core.Extensions;
 using Trax.Core.Testing;
 
 namespace Trax.Api.GraphQL.Testing.Tests;
@@ -11,10 +12,10 @@ namespace Trax.Api.GraphQL.Testing.Tests;
 [TestFixture]
 public sealed class CrossSchemaGuardFixtureOptOutSelfTest : CrossSchemaGuardFixture
 {
-    private TempRepo _repo = null!;
+    private TempRepo? _repo;
 
     protected override ArchitectureGuardOptions Options =>
-        new() { RepoRootOverride = _repo.Root, SourceScanRoots = ["src"] };
+        new() { RepoRootOverride = _repo.NotNull().Root, SourceScanRoots = ["src"] };
 
     protected override bool ExpectsCrossSchemaResolvers => false;
 
@@ -27,5 +28,5 @@ public sealed class CrossSchemaGuardFixtureOptOutSelfTest : CrossSchemaGuardFixt
             .Write("src/App/Book.cs", "public sealed class Book { public int Id { get; set; } }");
 
     [OneTimeTearDown]
-    public void Cleanup() => _repo.Dispose();
+    public void Cleanup() => _repo?.Dispose();
 }

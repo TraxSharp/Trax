@@ -11,6 +11,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Trax.Api.Auth;
 using Trax.Api.Auth.Jwt;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Auth;
 
@@ -84,7 +85,7 @@ public class AddTraxJwtAuthTests
         var policy = await policyProvider.GetPolicyAsync(JwtDefaults.PolicyName);
 
         policy.Should().NotBeNull();
-        policy!.AuthenticationSchemes.Should().Contain(JwtDefaults.SchemeName);
+        policy.NotNull().AuthenticationSchemes.Should().Contain(JwtDefaults.SchemeName);
     }
 
     [Test]
@@ -100,7 +101,7 @@ public class AddTraxJwtAuthTests
         var policy = await policyProvider.GetPolicyAsync(TraxAuthClaimTypes.TraxAuthPolicy);
 
         policy.Should().NotBeNull();
-        policy!.AuthenticationSchemes.Should().Contain(JwtDefaults.SchemeName);
+        policy.NotNull().AuthenticationSchemes.Should().Contain(JwtDefaults.SchemeName);
     }
 
     [Test]
@@ -128,7 +129,7 @@ public class AddTraxJwtAuthTests
     {
         var services = NewServices();
 
-        var act = () => services.AddTraxJwtAuth((Action<JwtBuilder>)null!);
+        var act = () => services.AddTraxJwtAuth((Action<JwtBuilder>)Null.Of<object>());
 
         act.Should().Throw<ArgumentNullException>();
     }

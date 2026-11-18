@@ -2,6 +2,7 @@ using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.StateMachine.E2E;
 
@@ -24,7 +25,7 @@ public class MachineErrorMappingE2ETests
 
     private const string Database = "trax_sm_machine_errors";
 
-    private IHost _host = null!;
+    private IHost? _host;
 
     [OneTimeSetUp]
     public async Task Up()
@@ -36,14 +37,14 @@ public class MachineErrorMappingE2ETests
     [OneTimeTearDown]
     public async Task Down()
     {
-        _host.Dispose();
+        _host?.Dispose();
         await E2EHost.DropDatabaseAsync(Database);
     }
 
     [Test]
     public async Task An_infrastructure_failure_inside_advance_is_a_typed_problem_without_server_detail()
     {
-        var paying = await _host.WizardInPayingAsync(E2EHost.AliceKey);
+        var paying = await _host.NotNull().WizardInPayingAsync(E2EHost.AliceKey);
 
         // The draft table disappears under the host, as a broken connection or a failed migration would leave it.
         await E2ESql.ExecuteAsync(
@@ -53,10 +54,12 @@ public class MachineErrorMappingE2ETests
         string body;
         try
         {
-            using var doc = await _host.PostAsync(
-                WizardOps.Event("back", paying.Id, WizardOps.NewRequestId()),
-                apiKey: E2EHost.AliceKey
-            );
+            using var doc = await _host
+                .NotNull()
+                .PostAsync(
+                    WizardOps.Event("back", paying.Id, WizardOps.NewRequestId()),
+                    apiKey: E2EHost.AliceKey
+                );
             body = doc.RootElement.GetRawText();
             WizardOps
                 .Result(doc, "back")

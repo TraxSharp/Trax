@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.StateMachine.E2E;
 
@@ -28,7 +29,7 @@ public class GenericStartDiscardE2ETests
     /// <summary>The policy the gate test names: the Admin role.</summary>
     private const string ToolingPolicy = "StateMachineTooling";
 
-    private IHost _host = null!;
+    private IHost? _host;
 
     [OneTimeSetUp]
     public async Task Up()
@@ -118,7 +119,7 @@ public class GenericStartDiscardE2ETests
         started.GetProperty("problem").ValueKind.Should().Be(JsonValueKind.Null);
         started.GetProperty("created").GetBoolean().Should().BeTrue();
         started.GetProperty("revision").GetInt64().Should().Be(1);
-        var id = started.GetProperty("id").GetString()!;
+        var id = started.GetProperty("id").GetString().NotNull();
         State(started).Should().Be("Locked");
 
         var retried = await Start(E2EHost.AliceKey, "turnstile", requestId);
@@ -161,7 +162,7 @@ public class GenericStartDiscardE2ETests
     public async Task Another_users_discard_answers_as_a_missing_one_and_deletes_nothing()
     {
         var started = await Start(E2EHost.AliceKey, "turnstile", $"start-{Guid.NewGuid():N}");
-        var id = started.GetProperty("id").GetString()!;
+        var id = started.GetProperty("id").GetString().NotNull();
 
         (await Discard(E2EHost.BobKey, id, "bob-discard"))
             .GetProperty("discarded")
@@ -254,6 +255,7 @@ public class GenericStartDiscardE2ETests
     )
     {
         using var response = await _host
+            .NotNull()
             .PostAsync(
                 $$"""
                 mutation M($input: {{inputType}}!) {
@@ -279,7 +281,8 @@ public class GenericStartDiscardE2ETests
 
     private static string State(JsonElement output) =>
         JsonDocument
-            .Parse(output.GetProperty("snapshot").GetString()!)
+            .Parse(output.GetProperty("snapshot").GetString().NotNull())
             .RootElement.GetProperty("state")
-            .GetString()!;
+            .GetString()
+            .NotNull();
 }

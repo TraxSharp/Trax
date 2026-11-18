@@ -11,6 +11,7 @@ using Microsoft.Extensions.Hosting;
 using NSubstitute;
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;
@@ -45,11 +46,11 @@ public class RunGraphOverHttpTests
     // Six Parallel steps, each nested in a branch of the one before, with a junction at the bottom.
     private const int Levels = 6;
 
-    private IHost _host = null!;
-    private IDataContextProviderFactory _factory = null!;
-    private ChainGraph _graph = null!;
-    private List<string> _parallelIds = null!;
-    private string _leafId = null!;
+    private IHost? _host;
+    private IDataContextProviderFactory? _factory;
+    private ChainGraph? _graph;
+    private List<string>? _parallelIds;
+    private string? _leafId;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -75,9 +76,9 @@ public class RunGraphOverHttpTests
                         );
 
                         var graphs = Substitute.For<ITrainChainGraphs>();
-                        graphs.Find(Train).Returns(_graph);
+                        graphs.Find(Train).Returns(_graph.NotNull());
                         services.AddSingleton(graphs);
-                        services.AddSingleton(_factory);
+                        services.AddSingleton(_factory.NotNull());
                         services.AddScoped(_ => Substitute.For<IOperationsService>());
                         services.AddScoped(_ => Substitute.For<ITraxScheduler>());
                         services.AddScoped(_ => Substitute.For<ITrainExecutionService>());
@@ -92,14 +93,14 @@ public class RunGraphOverHttpTests
             )
             .Build();
 
-        await _host.StartAsync();
+        await _host.NotNull().StartAsync();
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await _host.StopAsync();
-        _host.Dispose();
+        await _host.NotNull().StopAsync();
+        _host?.Dispose();
     }
 
     [Test]
@@ -110,7 +111,10 @@ public class RunGraphOverHttpTests
         for (var i = 0; i < Levels; i++)
             selection = $"id state tracks {{ name nodes {{ {selection} }} }}";
 
-        var run = await SeedRunAsync(TrainState.Completed, (_leafId, JunctionRunState.Completed));
+        var run = await SeedRunAsync(
+            TrainState.Completed,
+            (_leafId.NotNull(), JunctionRunState.Completed)
+        );
         var doc = await PostAsync(
             string.Create(
                 CultureInfo.InvariantCulture,
@@ -129,7 +133,10 @@ public class RunGraphOverHttpTests
     [Test]
     public async Task RunGraph_AllNodes_ReachesEveryNode_WithWhereItSits()
     {
-        var run = await SeedRunAsync(TrainState.Completed, (_leafId, JunctionRunState.Completed));
+        var run = await SeedRunAsync(
+            TrainState.Completed,
+            (_leafId.NotNull(), JunctionRunState.Completed)
+        );
 
         var graph = Operations(
             await PostAsync(
@@ -144,14 +151,21 @@ public class RunGraphOverHttpTests
         var all = graph.GetProperty("allNodes").EnumerateArray().ToList();
         all.Select(n => n.GetProperty("id").GetString())
             .Should()
-            .Equal(DeclaredOrder(_graph.Nodes), "depth first, each node before its tracks' nodes");
+            .Equal(
+                DeclaredOrder(_graph.NotNull().Nodes),
+                "depth first, each node before its tracks' nodes"
+            );
 
         var leaf = all.Single(n =>
-            string.Equals(n.GetProperty("id").GetString(), _leafId, StringComparison.Ordinal)
+            string.Equals(
+                n.GetProperty("id").GetString(),
+                _leafId.NotNull(),
+                StringComparison.Ordinal
+            )
         );
         leaf.GetProperty("state").GetString().Should().Be("COMPLETED");
         leaf.GetProperty("depth").GetInt32().Should().Be(Levels);
-        leaf.GetProperty("parentId").GetString().Should().Be(_parallelIds[^1]);
+        leaf.GetProperty("parentId").GetString().Should().Be(_parallelIds.NotNull()[^1]);
         leaf.GetProperty("track").GetString().Should().Be("deep");
 
         all[0].GetProperty("parentId").ValueKind.Should().Be(JsonValueKind.Null);
@@ -159,14 +173,17 @@ public class RunGraphOverHttpTests
         all[0].GetProperty("depth").GetInt32().Should().Be(0);
 
         // The tree the flat list rebuilds is the one the nested fields describe.
-        Rebuild(all).Should().Be(Shape(_graph.Nodes));
+        Rebuild(all).Should().Be(Shape(_graph.NotNull().Nodes));
     }
 
     [Test]
     public async Task AStepStillInProgress_InARunThatHasEnded_IsInterrupted()
     {
         // The leaf's end event was dropped: its row still says in progress, though the run ended.
-        var run = await SeedRunAsync(TrainState.Completed, (_leafId, JunctionRunState.InProgress));
+        var run = await SeedRunAsync(
+            TrainState.Completed,
+            (_leafId.NotNull(), JunctionRunState.InProgress)
+        );
 
         var graph = Operations(
             await PostAsync(
@@ -182,12 +199,12 @@ public class RunGraphOverHttpTests
             .GetProperty("allNodes")
             .EnumerateArray()
             .ToDictionary(
-                n => n.GetProperty("id").GetString()!,
+                n => n.GetProperty("id").GetString().NotNull(),
                 n => n.GetProperty("state"),
                 StringComparer.Ordinal
             );
-        states[_leafId].GetString().Should().Be("INTERRUPTED");
-        states[_parallelIds[0]]
+        states[_leafId.NotNull()].GetString().Should().Be("INTERRUPTED");
+        states[_parallelIds.NotNull()[0]]
             .GetString()
             .Should()
             .Be("INTERRUPTED", "a step whose branch was interrupted is not still running");
@@ -196,7 +213,10 @@ public class RunGraphOverHttpTests
     [Test]
     public async Task AStepInProgress_InARunStillRunning_IsInProgress()
     {
-        var run = await SeedRunAsync(TrainState.InProgress, (_leafId, JunctionRunState.InProgress));
+        var run = await SeedRunAsync(
+            TrainState.InProgress,
+            (_leafId.NotNull(), JunctionRunState.InProgress)
+        );
 
         var graph = Operations(
             await PostAsync(
@@ -212,7 +232,11 @@ public class RunGraphOverHttpTests
             .GetProperty("allNodes")
             .EnumerateArray()
             .Single(n =>
-                string.Equals(n.GetProperty("id").GetString(), _leafId, StringComparison.Ordinal)
+                string.Equals(
+                    n.GetProperty("id").GetString(),
+                    _leafId.NotNull(),
+                    StringComparison.Ordinal
+                )
             )
             .GetProperty("state")
             .GetString()
@@ -326,10 +350,10 @@ public class RunGraphOverHttpTests
                     )
                     .Select(n =>
                     {
-                        var id = Str(n, "id")!;
+                        var id = Str(n, "id").NotNull();
                         var tracks = n.GetProperty("tracks")
                             .EnumerateArray()
-                            .Select(t => t.GetProperty("name").GetString()!)
+                            .Select(t => t.GetProperty("name").GetString().NotNull())
                             .Select(name => $"{name}({Children(id, name)})");
                         return id + "[" + string.Join(' ', tracks) + "]";
                     })
@@ -346,7 +370,7 @@ public class RunGraphOverHttpTests
         params (string NodeId, JunctionRunState State)[] steps
     )
     {
-        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             var run = Metadata.Create(
@@ -355,11 +379,12 @@ public class RunGraphOverHttpTests
                     Name = Train,
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
-                }
+                },
+                TimeProvider.System
             );
             run.TrainState = state;
             if (state is TrainState.Completed or TrainState.Failed or TrainState.Cancelled)
-                run.EndTime = DateTime.UtcNow;
+                run.EndTime = TimeProvider.System.GetUtcNow().UtcDateTime;
             await db.Track(run).ConfigureAwait(false);
             await db.SaveChanges(default).ConfigureAwait(false);
 
@@ -373,7 +398,7 @@ public class RunGraphOverHttpTests
                         Kind = JunctionRunKind.Junction,
                         Name = step.NodeId.Split('/')[^1],
                         State = step.State,
-                        StartedAt = DateTime.UtcNow,
+                        StartedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                         NodeId = step.NodeId,
                     }
                 );
@@ -392,7 +417,7 @@ public class RunGraphOverHttpTests
 
     private async Task<JsonDocument> PostAsync(string query)
     {
-        var client = _host.GetTestServer().CreateClient();
+        var client = _host.NotNull().GetTestServer().CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/trax/graphql")
         {
             Content = JsonContent.Create(new { query }),

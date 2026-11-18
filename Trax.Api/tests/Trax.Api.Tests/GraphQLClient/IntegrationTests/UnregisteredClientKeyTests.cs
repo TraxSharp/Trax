@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.GraphQL.Client;
 using Trax.Api.GraphQL.Client.Trax;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 
@@ -21,7 +22,7 @@ public class UnregisteredClientKeyTests
 {
     private const string Adr = "docs/adr/0031-a-request-names-the-client-that-validates-it.md";
 
-    private string _schema = null!;
+    private string? _schema;
 
     [SetUp]
     public async Task SetUp()
@@ -30,11 +31,11 @@ public class UnregisteredClientKeyTests
             System.IO.Path.GetTempPath(),
             $"keys-{Guid.NewGuid():N}.graphql"
         );
-        await File.WriteAllTextAsync(_schema, "type Query { ping: String }");
+        await File.WriteAllTextAsync(_schema.NotNull(), "type Query { ping: String }");
     }
 
     [TearDown]
-    public void TearDown() => File.Delete(_schema);
+    public void TearDown() => File.Delete(_schema.NotNull());
 
     [Test]
     public async Task A_request_marked_with_a_key_no_client_has_refuses_startup()
@@ -43,7 +44,7 @@ public class UnregisteredClientKeyTests
         var services = new ServiceCollection();
         services
             .AddTraxGraphQLClient(new Uri("http://localhost/graphql"))
-            .UseFileSchema(_schema)
+            .UseFileSchema(_schema.NotNull())
             .UseStartupValidation(requests);
         await using var sp = services.BuildServiceProvider();
 
@@ -62,7 +63,7 @@ public class UnregisteredClientKeyTests
         var services = new ServiceCollection();
         services
             .AddKeyedTraxGraphQLClient("billing", new Uri("http://localhost/graphql"))
-            .UseFileSchema(_schema)
+            .UseFileSchema(_schema.NotNull())
             .UseStartupValidation(requests);
         await using var sp = services.BuildServiceProvider();
 
@@ -81,11 +82,11 @@ public class UnregisteredClientKeyTests
         var services = new ServiceCollection();
         services
             .AddTraxGraphQLClient(new Uri("http://localhost/graphql"))
-            .UseFileSchema(_schema)
+            .UseFileSchema(_schema.NotNull())
             .UseStartupValidation(requests);
         services
             .AddKeyedTraxGraphQLClient("billing", new Uri("http://localhost/billing"))
-            .UseFileSchema(_schema)
+            .UseFileSchema(_schema.NotNull())
             .UseStartupValidation(requests);
         await using var sp = services.BuildServiceProvider();
 
@@ -101,10 +102,12 @@ public class UnregisteredClientKeyTests
     {
         var requests = Requests(("Unmarked", null), ("Billing", "billing"), ("Mistyped", "biling"));
         var services = new ServiceCollection();
-        services.AddTraxGraphQLClient(new Uri("http://localhost/graphql")).UseFileSchema(_schema);
+        services
+            .AddTraxGraphQLClient(new Uri("http://localhost/graphql"))
+            .UseFileSchema(_schema.NotNull());
         services
             .AddKeyedTraxGraphQLClient("billing", new Uri("http://localhost/billing"))
-            .UseFileSchema(_schema);
+            .UseFileSchema(_schema.NotNull());
         await using var sp = services.BuildServiceProvider();
 
         await sp.Invoking(p => p.ValidateGraphQLClientAssembliesAsync(requests))
@@ -139,7 +142,7 @@ public class UnregisteredClientKeyTests
             if (key is not null)
                 type.SetCustomAttribute(
                     new CustomAttributeBuilder(
-                        typeof(GraphQLClientAttribute).GetConstructor([typeof(object)])!,
+                        typeof(GraphQLClientAttribute).GetConstructor([typeof(object)]).NotNull(),
                         [key]
                     )
                 );

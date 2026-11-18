@@ -6,6 +6,7 @@ using Trax.Api.Tests.GraphQLClient.Fakes;
 using Trax.Api.Tests.GraphQLClient.Fixtures;
 using Trax.Api.Tests.GraphQLClient.IntegrationTests.Fakes;
 using Trax.Api.Tests.GraphQLClient.IntegrationTests.Fakes.TraxServer;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 
@@ -22,9 +23,9 @@ public class KeyedClientExecutionTests
     private const string PlayersKey = "players";
     private const string NetsuiteKey = "netsuite";
 
-    private GraphQLTestServerFixture _players = null!;
-    private TraxServerFixture _netsuite = null!;
-    private ServiceProvider _services = null!;
+    private GraphQLTestServerFixture? _players;
+    private TraxServerFixture? _netsuite;
+    private ServiceProvider? _services;
 
     [SetUp]
     public void SetUp()
@@ -34,11 +35,11 @@ public class KeyedClientExecutionTests
 
         var services = new ServiceCollection();
         services
-            .AddKeyedTraxGraphQLClient(PlayersKey, _players.BaseAddress)
-            .ConfigureHttpClient(_players.CreateHttpClient());
+            .AddKeyedTraxGraphQLClient(PlayersKey, _players.NotNull().BaseAddress)
+            .ConfigureHttpClient(_players.NotNull().CreateHttpClient());
         services
-            .AddKeyedTraxGraphQLClient(NetsuiteKey, _netsuite.BaseAddress)
-            .ConfigureHttpClient(_netsuite.CreateHttpClient());
+            .AddKeyedTraxGraphQLClient(NetsuiteKey, _netsuite.NotNull().BaseAddress)
+            .ConfigureHttpClient(_netsuite.NotNull().CreateHttpClient());
 
         _services = services.BuildServiceProvider();
     }
@@ -46,13 +47,13 @@ public class KeyedClientExecutionTests
     [TearDown]
     public void TearDown()
     {
-        _services.Dispose();
-        _netsuite.Dispose();
-        _players.Dispose();
+        _services?.Dispose();
+        _netsuite?.Dispose();
+        _players?.Dispose();
     }
 
     private IGraphQLClientExecutor Executor(string key) =>
-        _services.GetRequiredKeyedService<IGraphQLClientExecutor>(key);
+        _services.NotNull().GetRequiredKeyedService<IGraphQLClientExecutor>(key);
 
     [Test]
     public async Task PlayersKey_RunsPlayerQuery_AgainstPlayerServer()
@@ -100,12 +101,12 @@ public class KeyedClientExecutionTests
     [Test]
     public void EachKey_ResolvesDistinctValidatorInstances()
     {
-        var playersValidator = _services.GetRequiredKeyedService<IGraphQLClientValidator>(
-            PlayersKey
-        );
-        var netsuiteValidator = _services.GetRequiredKeyedService<IGraphQLClientValidator>(
-            NetsuiteKey
-        );
+        var playersValidator = _services
+            .NotNull()
+            .GetRequiredKeyedService<IGraphQLClientValidator>(PlayersKey);
+        var netsuiteValidator = _services
+            .NotNull()
+            .GetRequiredKeyedService<IGraphQLClientValidator>(NetsuiteKey);
 
         playersValidator.Should().NotBeSameAs(netsuiteValidator);
     }
@@ -119,9 +120,9 @@ public class KeyedClientExecutionTests
         {
             var services = new ServiceCollection();
             services
-                .AddKeyedTraxGraphQLClient(PlayersKey, _players.BaseAddress)
+                .AddKeyedTraxGraphQLClient(PlayersKey, _players.NotNull().BaseAddress)
                 .UseFileSchema(sdlPath);
-            services.AddKeyedTraxGraphQLClient(NetsuiteKey, _netsuite.BaseAddress);
+            services.AddKeyedTraxGraphQLClient(NetsuiteKey, _netsuite.NotNull().BaseAddress);
 
             using var sp = services.BuildServiceProvider();
 
@@ -146,7 +147,9 @@ public class KeyedClientExecutionTests
         // The keyed validator drives startup validation. A request valid on the player schema
         // passes; a request from the other server's schema fails — proving UseStartupValidation
         // resolved the validator by key, not the (nonexistent) unkeyed one.
-        var validator = _services.GetRequiredKeyedService<IGraphQLClientValidator>(PlayersKey);
+        var validator = _services
+            .NotNull()
+            .GetRequiredKeyedService<IGraphQLClientValidator>(PlayersKey);
 
         var valid = new GraphQLClientStartupValidator(
             validator,

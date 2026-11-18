@@ -17,7 +17,7 @@ namespace Trax.Api.Tests;
 
 public class ExposeAsPlusExplicitDbContext : DbContext
 {
-    public DbSet<ConflictBook> Books { get; set; } = null!;
+    public DbSet<ConflictBook> Books => Set<ConflictBook>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
         optionsBuilder.UseInMemoryDatabase("ConflictDb_" + Guid.NewGuid());

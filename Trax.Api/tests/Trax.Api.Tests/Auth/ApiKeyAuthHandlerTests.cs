@@ -14,6 +14,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Trax.Api.Auth;
 using Trax.Api.Auth.ApiKey;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Auth;
 
@@ -114,7 +115,7 @@ public class ApiKeyAuthHandlerTests
         var response = await client.GetFromJsonAsync<AuthResultResponse>("/authresult");
 
         response.Should().NotBeNull();
-        response!.None.Should().BeTrue();
+        response.NotNull().None.Should().BeTrue();
         response.Succeeded.Should().BeFalse();
         response.FailureMessage.Should().BeNull();
     }
@@ -151,7 +152,7 @@ public class ApiKeyAuthHandlerTests
         var response = await client.GetFromJsonAsync<AuthResultResponse>("/authresult");
 
         response.Should().NotBeNull();
-        response!.Succeeded.Should().BeFalse();
+        response.NotNull().Succeeded.Should().BeFalse();
         response.None.Should().BeFalse();
         response.FailureMessage.Should().NotBeNullOrEmpty();
     }
@@ -184,7 +185,7 @@ public class ApiKeyAuthHandlerTests
         var response = await client.GetFromJsonAsync<ProtectedResponse>("/protected");
 
         response.Should().NotBeNull();
-        response!.Name.Should().Be("Alice");
+        response.NotNull().Name.Should().Be("Alice");
     }
 
     #endregion
@@ -204,7 +205,7 @@ public class ApiKeyAuthHandlerTests
         var response = await client.GetFromJsonAsync<ProtectedResponse>("/protected");
 
         response.Should().NotBeNull();
-        response!.PrincipalId.Should().Be("TraxApiKey:alice");
+        response.NotNull().PrincipalId.Should().Be("TraxApiKey:alice");
     }
 
     [Test]
@@ -221,7 +222,7 @@ public class ApiKeyAuthHandlerTests
 
         var response = await client.GetFromJsonAsync<ProtectedResponse>("/protected");
 
-        response!.Name.Should().Be("Alice Liddell");
+        response.NotNull().Name.Should().Be("Alice Liddell");
     }
 
     [Test]
@@ -238,7 +239,7 @@ public class ApiKeyAuthHandlerTests
 
         var response = await client.GetFromJsonAsync<ProtectedResponse>("/protected");
 
-        response!.Roles.Should().BeEquivalentTo("Admin", "Player");
+        response.NotNull().Roles.Should().BeEquivalentTo("Admin", "Player");
     }
 
     [Test]
@@ -263,7 +264,7 @@ public class ApiKeyAuthHandlerTests
 
         var response = await client.GetFromJsonAsync<ProtectedResponse>("/protected");
 
-        response!.TenantClaim.Should().Be("acme");
+        response.NotNull().TenantClaim.Should().Be("acme");
     }
 
     #endregion
@@ -279,7 +280,7 @@ public class ApiKeyAuthHandlerTests
 
         var response = await client.GetFromJsonAsync<AuthResultResponse>("/authresult");
 
-        response!.Succeeded.Should().BeFalse();
+        response.NotNull().Succeeded.Should().BeFalse();
         response.None.Should().BeFalse();
     }
 
@@ -296,7 +297,7 @@ public class ApiKeyAuthHandlerTests
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<AuthResultResponse>();
-        body!.Succeeded.Should().BeFalse();
+        body.NotNull().Succeeded.Should().BeFalse();
         body.FailureMessage.Should().NotBeNullOrEmpty();
     }
 
@@ -378,7 +379,7 @@ public class ApiKeyAuthHandlerTests
         var response = await client.SendAsync(request);
         var body = await response.Content.ReadFromJsonAsync<AuthResultResponse>();
 
-        body!.Succeeded.Should().BeFalse();
+        body.NotNull().Succeeded.Should().BeFalse();
         body.None.Should().BeFalse();
         body.FailureMessage.Should().Contain("Multiple API keys");
         invocationCount.Should().Be(0);
@@ -424,7 +425,7 @@ public class ApiKeyAuthHandlerTests
 
         var response = await client.GetFromJsonAsync<AuthResultResponse>("/authresult");
 
-        response!.Succeeded.Should().BeFalse();
+        response.NotNull().Succeeded.Should().BeFalse();
         response.None.Should().BeFalse();
         response.FailureMessage.Should().Contain("Ambiguous");
         invocationCount.Should().Be(0);

@@ -5,6 +5,7 @@ using HotChocolate.Types;
 using Microsoft.Extensions.DependencyInjection;
 using Systematic.Orders;
 using Trax.Api.Tests.Fakes.Machines;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 
 namespace Trax.Api.Tests;
@@ -31,10 +32,11 @@ public class MachineEnumsTests
         var refusal = await MachineSchemaHost.RefusalAsync([typeof(NullMemberMachine)]);
 
         refusal.Should().NotBeNull("null is a GraphQL literal and no enum value, per " + Adr);
-        refusal!
+        refusal
+            .NotNull()
             .ToString()
             .Should()
-            .Contain(typeof(NullMember).FullName!)
+            .Contain(typeof(NullMember).FullName.NotNull())
             .And.Contain("'null'")
             .And.Contain("Rename the member");
     }
@@ -45,10 +47,11 @@ public class MachineEnumsTests
         var refusal = await MachineSchemaHost.RefusalAsync([typeof(DunderMemberMachine)]);
 
         refusal.Should().NotBeNull("GraphQL keeps names starting with __ for itself, per " + Adr);
-        refusal!
+        refusal
+            .NotNull()
             .ToString()
             .Should()
-            .Contain(typeof(DunderMember).FullName!)
+            .Contain(typeof(DunderMember).FullName.NotNull())
             .And.Contain("'__Hidden'")
             .And.Contain("Rename the member");
     }
@@ -95,12 +98,13 @@ public class MachineEnumsTests
                 "the train's wire would change from VERY_HIGH to VeryHigh without a word, per "
                     + Adr
             );
-        refusal!
+        refusal
+            .NotNull()
             .ToString()
             .Should()
-            .Contain(typeof(SharedPriority).FullName!)
+            .Contain(typeof(SharedPriority).FullName.NotNull())
             .And.Contain($"'{SharedPriorityMachine.MachineId}'")
-            .And.Contain(typeof(ISharedPriorityTrain).FullName!)
+            .And.Contain(typeof(ISharedPriorityTrain).FullName.NotNull())
             .And.Contain("ShareEnumWithMachines<SharedPriority>()");
     }
 
@@ -138,10 +142,11 @@ public class MachineEnumsTests
         refusal
             .Should()
             .NotBeNull("GraphQL takes one type per CLR enum, and a machine's has its, per " + Adr);
-        refusal!
+        refusal
+            .NotNull()
             .ToString()
             .Should()
-            .Contain(typeof(HostBound).FullName!)
+            .Contain(typeof(HostBound).FullName.NotNull())
             .And.Contain("Remove the host's type");
     }
 
@@ -163,16 +168,17 @@ public class MachineEnumsTests
                         + "Completed, and the dashboard sends COMPLETED, so Trax never shares its enums, per "
                         + Adr
                 );
-            refusal!
+            refusal
+                .NotNull()
                 .ToString()
                 .Should()
-                .Contain(typeof(Trax.Effect.Enums.TrainState).FullName!)
+                .Contain(typeof(Trax.Effect.Enums.TrainState).FullName.NotNull())
                 .And.Contain("Trax's own")
                 .And.Contain("Give the machine its own enum")
                 .And.NotContain("to accept the new spelling");
         }
-        unshared!.ToString().Should().Contain($"'{TrainStateHoldingMachine.MachineId}'");
-        shared!.ToString().Should().Contain("ShareEnumWithMachines<TrainState>()");
+        unshared.NotNull().ToString().Should().Contain($"'{TrainStateHoldingMachine.MachineId}'");
+        shared.NotNull().ToString().Should().Contain("ShareEnumWithMachines<TrainState>()");
     }
 
     [Test]
@@ -192,7 +198,7 @@ public class MachineEnumsTests
         var name = new AssemblyName("Trax.Billing");
         var module = AssemblyBuilder
             .DefineDynamicAssembly(name, AssemblyBuilderAccess.Run)
-            .DefineDynamicModule(name.Name!);
+            .DefineDynamicModule(name.Name.NotNull());
         var plan = module.DefineEnum("Billing.Plan", TypeAttributes.Public, typeof(int));
         plan.DefineLiteral("Free", 0);
         var billing = plan.CreateType();
@@ -203,7 +209,8 @@ public class MachineEnumsTests
         var share = () =>
             builder
                 .GetType()
-                .GetMethod("ShareEnumWithMachines")!
+                .GetMethod("ShareEnumWithMachines")
+                .NotNull()
                 .MakeGenericMethod(billing)
                 .Invoke(builder, parameters: null);
 
@@ -229,10 +236,11 @@ public class MachineEnumsTests
         );
 
         refusal.Should().NotBeNull("the host's field would change its spelling too, per " + Adr);
-        refusal!
+        refusal
+            .NotNull()
             .ToString()
             .Should()
-            .Contain(typeof(ExtendedPriority).FullName!)
+            .Contain(typeof(ExtendedPriority).FullName.NotNull())
             .And.Contain("'RootQuery.hostPriority'");
     }
 

@@ -138,7 +138,7 @@ public class KeyedRegistrationTests
     public void AddKeyedTraxGraphQLClient_NullServiceKey_Throws()
     {
         var services = new ServiceCollection();
-        var act = () => services.AddKeyedTraxGraphQLClient(null!, ServerB);
+        var act = () => services.AddKeyedTraxGraphQLClient(Null.Of<object>(), ServerB);
         act.Should().Throw<ArgumentNullException>();
     }
 
@@ -146,14 +146,14 @@ public class KeyedRegistrationTests
     public void AddKeyedTraxGraphQLClient_NullBaseAddress_Throws()
     {
         var services = new ServiceCollection();
-        var act = () => services.AddKeyedTraxGraphQLClient("serverB", null!);
+        var act = () => services.AddKeyedTraxGraphQLClient("serverB", Null.Of<Uri>());
         act.Should().Throw<ArgumentNullException>();
     }
 
     [Test]
     public void AddKeyedTraxGraphQLClient_NullServices_Throws()
     {
-        IServiceCollection services = null!;
+        IServiceCollection services = Null.Of<IServiceCollection>();
         var act = () => services.AddKeyedTraxGraphQLClient("serverB", ServerB);
         act.Should().Throw<ArgumentNullException>();
     }
@@ -265,14 +265,17 @@ public class KeyedRegistrationTests
         // Cast to object so the call binds to the keyed overload rather than the params-Assembly
         // one (a null first argument is otherwise ambiguous between them).
         Action act = () =>
-            _ = sp.ValidateGraphQLClientAssembliesAsync((object)null!, typeof(object).Assembly);
+            _ = sp.ValidateGraphQLClientAssembliesAsync(
+                (object)Null.Of<object>(),
+                typeof(object).Assembly
+            );
         act.Should().Throw<ArgumentNullException>();
     }
 
     [Test]
     public void KeyedValidateAssemblies_NullServices_Throws()
     {
-        IServiceProvider sp = null!;
+        IServiceProvider sp = Null.Of<IServiceProvider>();
         Action act = () =>
             _ = sp.ValidateGraphQLClientAssembliesAsync("serverB", typeof(object).Assembly);
         act.Should().Throw<ArgumentNullException>();

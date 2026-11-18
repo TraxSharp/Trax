@@ -6,6 +6,7 @@ using NSubstitute;
 using Trax.Api.Auth.Jwt;
 using Trax.Api.GraphQL.Audit;
 using Trax.Api.GraphQL.Types;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests;
 
@@ -32,7 +33,10 @@ public class CoverageEdgeTests
     {
         var builder = new JwtBuilder();
 
-        Action act = () => builder.CustomizeBearerOptions(null!);
+        Action act = () =>
+            builder.CustomizeBearerOptions(
+                Null.Of<Action<Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions>>()
+            );
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -52,7 +56,7 @@ public class CoverageEdgeTests
 
         var loggerFactory = NullLoggerFactory.Instance;
         var instance = (Microsoft.Extensions.Hosting.IHostedService)
-            Activator.CreateInstance(t!, loggerFactory)!;
+            Activator.CreateInstance(t.NotNull(), loggerFactory).NotNull();
 
         await instance.StartAsync(CancellationToken.None);
         await instance.StopAsync(CancellationToken.None);
@@ -80,7 +84,7 @@ public class CoverageEdgeTests
             """;
 
         var result = JsonElementConverter.ToObject(json);
-        var dict = (System.Collections.Generic.Dictionary<string, object?>)result!;
+        var dict = (System.Collections.Generic.Dictionary<string, object?>)result.NotNull();
 
         dict["obj"].Should().BeOfType<System.Collections.Generic.Dictionary<string, object?>>();
         dict["arr"].Should().BeOfType<System.Collections.Generic.List<object?>>();

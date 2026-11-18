@@ -20,7 +20,7 @@ public class NoOpBroadcasterTests
                 TenantKey: null,
                 "id1",
                 PersistedOperationChangeType.Upsert,
-                DateTime.UtcNow
+                TimeProvider.System.GetUtcNow().UtcDateTime
             ),
             CancellationToken.None
         );
@@ -38,7 +38,10 @@ public class NoOpBroadcasterTests
         // that storage's broadcaster-error suppression is never invoked for
         // the default path.
         var b = new NoOpPersistedOperationBroadcaster();
-        var task = b.PublishAsync(null!, CancellationToken.None);
+        var task = b.PublishAsync(
+            Null.Of<Trax.Api.GraphQL.PersistedOperations.Broadcasting.PersistedOperationChangedMessage>(),
+            CancellationToken.None
+        );
         task.IsCompletedSuccessfully.Should().BeTrue();
         await task;
     }
@@ -57,7 +60,7 @@ public class NoOpBroadcasterTests
                 TenantKey: null,
                 "id",
                 PersistedOperationChangeType.Upsert,
-                DateTime.UtcNow
+                TimeProvider.System.GetUtcNow().UtcDateTime
             ),
             cts.Token
         );

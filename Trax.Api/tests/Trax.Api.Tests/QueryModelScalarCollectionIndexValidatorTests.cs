@@ -13,6 +13,7 @@ using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.GraphQL.TypeModules;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
@@ -101,9 +102,9 @@ public class QueryModelScalarCollectionIndexValidatorTests
 
         await using var provider = services.BuildServiceProvider();
 
-        var validatorType = typeof(GraphQLConfiguration).Assembly.GetType(
-            "Trax.Api.GraphQL.Startup.QueryModelScalarCollectionIndexValidator"
-        )!;
+        var validatorType = typeof(GraphQLConfiguration)
+            .Assembly.GetType("Trax.Api.GraphQL.Startup.QueryModelScalarCollectionIndexValidator")
+            .NotNull();
         var validator = (IHostedService)ActivatorUtilities.CreateInstance(provider, validatorType);
 
         var act = async () =>
@@ -246,9 +247,11 @@ public class QueryModelScalarCollectionIndexValidatorTests
     {
         public Task StartAsync(CancellationToken cancellationToken)
         {
-            var validatorType = typeof(GraphQLConfiguration).Assembly.GetType(
-                "Trax.Api.GraphQL.Startup.QueryModelScalarCollectionIndexValidator"
-            )!;
+            var validatorType = typeof(GraphQLConfiguration)
+                .Assembly.GetType(
+                    "Trax.Api.GraphQL.Startup.QueryModelScalarCollectionIndexValidator"
+                )
+                .NotNull();
 
             var validator = (IHostedService)
                 ActivatorUtilities.CreateInstance(serviceProvider, validatorType);

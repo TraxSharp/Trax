@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Startup;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 
 namespace Trax.Api.Tests;
@@ -43,19 +44,19 @@ public class QueryModelAuthorizationValidatorTests
         DbContextOptions<RegisteredPolicyDbContext> options
     ) : DbContext(options)
     {
-        public DbSet<GatedWithRegisteredPolicy> Rows { get; set; } = null!;
+        public DbSet<GatedWithRegisteredPolicy> Rows => Set<GatedWithRegisteredPolicy>();
     }
 
     private sealed class MissingPolicyDbContext(DbContextOptions<MissingPolicyDbContext> options)
         : DbContext(options)
     {
-        public DbSet<GatedWithMissingPolicy> Rows { get; set; } = null!;
+        public DbSet<GatedWithMissingPolicy> Rows => Set<GatedWithMissingPolicy>();
     }
 
     private sealed class RolesOnlyDbContext(DbContextOptions<RolesOnlyDbContext> options)
         : DbContext(options)
     {
-        public DbSet<GatedRolesOnly> Rows { get; set; } = null!;
+        public DbSet<GatedRolesOnly> Rows => Set<GatedRolesOnly>();
     }
 
     [Test]
@@ -104,7 +105,7 @@ public class QueryModelAuthorizationValidatorTests
             .Which.Message.Should()
             .Contain("MissingPolicy", "the error must name the policy the consumer typo'd")
             .And.Contain(
-                typeof(GatedWithMissingPolicy).FullName!,
+                typeof(GatedWithMissingPolicy).FullName.NotNull(),
                 "the error must name the entity that declared the policy"
             )
             .And.Contain("AddAuthorization", "the error must point the consumer at the fix");
@@ -208,8 +209,8 @@ public class QueryModelAuthorizationValidatorTests
         DbContextOptions<DuplicatePolicyDbContext> options
     ) : DbContext(options)
     {
-        public DbSet<FirstGatedBySharedPolicy> First { get; set; } = null!;
-        public DbSet<SecondGatedBySharedPolicy> Second { get; set; } = null!;
+        public DbSet<FirstGatedBySharedPolicy> First => Set<FirstGatedBySharedPolicy>();
+        public DbSet<SecondGatedBySharedPolicy> Second => Set<SecondGatedBySharedPolicy>();
     }
 
     /// <summary>

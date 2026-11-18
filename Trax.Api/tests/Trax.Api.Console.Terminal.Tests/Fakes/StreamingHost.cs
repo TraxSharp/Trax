@@ -38,7 +38,7 @@ internal sealed class StreamingHost(ITraxTransport inner) : ITraxTransport
     /// <summary>The sink of the stream of <paramref name="operation"/> followed now, once it is.</summary>
     public async Task<ISubscriptionSink> StreamAsync(string operation)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(10);
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(10);
         for (; ; )
         {
             lock (_streams)
@@ -55,7 +55,7 @@ internal sealed class StreamingHost(ITraxTransport inner) : ITraxTransport
                     { } sink
                 )
                     return sink;
-            if (DateTime.UtcNow > deadline)
+            if (TimeProvider.System.GetUtcNow().UtcDateTime > deadline)
                 throw new TimeoutException($"Nothing follows {operation}.");
             // allowed-delay: the polling interval of a wait with a deadline.
             await Task.Delay(10).ConfigureAwait(false);

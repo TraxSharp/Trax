@@ -56,7 +56,7 @@ public class AddTraxOidcAuthTests
     [Test]
     public void AddTraxOidcAuth_NullServices_Throws()
     {
-        IServiceCollection services = null!;
+        IServiceCollection services = Null.Of<IServiceCollection>();
 
         Action act = () => services.AddTraxOidcAuth(_ => { });
 
@@ -67,7 +67,7 @@ public class AddTraxOidcAuthTests
     public void AddTraxOidcAuth_NullConfigure_Throws()
     {
         var services = new ServiceCollection();
-        Action<OidcBuilder> configure = null!;
+        Action<OidcBuilder> configure = Null.Of<Action<OidcBuilder>>();
 
         Action act = () => services.AddTraxOidcAuth(configure);
 
@@ -118,7 +118,7 @@ public class AddTraxOidcAuthTests
     [Test]
     public void AddTraxOidcAuth_GenericResolverWithNullServices_Throws()
     {
-        IServiceCollection services = null!;
+        IServiceCollection services = Null.Of<IServiceCollection>();
         Action act = () => services.AddTraxOidcAuth<CustomResolver>(_ => { });
         act.Should().Throw<ArgumentNullException>();
     }
@@ -127,7 +127,7 @@ public class AddTraxOidcAuthTests
     public void AddTraxOidcAuth_GenericResolverWithNullConfigure_Throws()
     {
         var services = new ServiceCollection();
-        Action<OidcBuilder> configure = null!;
+        Action<OidcBuilder> configure = Null.Of<Action<OidcBuilder>>();
         Action act = () => services.AddTraxOidcAuth<CustomResolver>(configure);
         act.Should().Throw<ArgumentNullException>();
     }

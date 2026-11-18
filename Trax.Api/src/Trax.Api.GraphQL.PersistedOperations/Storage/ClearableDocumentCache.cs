@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using HotChocolate.Execution.Caching;
 using HotChocolate.Execution.Processing;
 using HotChocolate.Language;
@@ -36,8 +37,10 @@ internal sealed class ClearableDocumentCache(
 
     public int Count => _cache.Count;
 
-    public bool TryGetDocument(string documentId, out CachedDocument document) =>
-        _cache.TryGet(documentId, out document!);
+    public bool TryGetDocument(
+        string documentId,
+        [NotNullWhen(true)] out CachedDocument? document
+    ) => _cache.TryGet(documentId, out document);
 
     /// <summary>
     /// Caches a document under <paramref name="documentId"/>. A document the store did not supply

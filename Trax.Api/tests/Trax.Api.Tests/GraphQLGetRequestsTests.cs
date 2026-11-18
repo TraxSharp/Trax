@@ -11,6 +11,7 @@ using NSubstitute;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;
@@ -129,7 +130,7 @@ public class GraphQLGetRequestsTests
         var response = await client.SendAsync(request);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        response.Content.Headers.ContentType!.MediaType.Should().Be("text/html");
+        response.Content.Headers.ContentType.NotNull().MediaType.Should().Be("text/html");
     }
 
     private static HttpRequestMessage Get(string uri, bool preflight)

@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.Auth;
 using Trax.Api.GraphQL.Configuration;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.GraphQL.Startup;
 
@@ -291,7 +292,7 @@ internal sealed class QueryModelReachValidator(
                     + "AddTraxGraphQL(graphql => graphql.RequireAuthorization(...)).",
             _ => ExposureAuthorizationRule.BuildMessage(
                 $"Entity reached from a query model through {through},",
-                entity.FullName!,
+                entity.FullName.NotNull(),
                 violation
             ),
         };

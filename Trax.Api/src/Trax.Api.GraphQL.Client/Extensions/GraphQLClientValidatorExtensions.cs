@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using Trax.Api.GraphQL.Client.Checks;
 
 namespace Trax.Api.GraphQL.Client;
 
@@ -113,7 +114,7 @@ public static class GraphQLClientValidatorExtensions
                 (Type: t, Mark: t.GetCustomAttribute<GraphQLClientAttribute>(inherit: false))
             )
             .Where(r => r.Mark is not null && !isRegisteredKey(r.Mark.Key))
-            .Select(r => $"{r.Type.FullName} [GraphQLClient({r.Mark!.Key})]")
+            .Select(r => $"{r.Type.FullName} [GraphQLClient({r.Mark.NotNull().Key})]")
             .ToList();
 
         if (orphans.Count == 0)

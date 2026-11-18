@@ -33,7 +33,7 @@ internal static class BulkProgress
                     TraxAnswer<BulkOperationResult> answer;
                     try
                     {
-                        await Task.Delay(Every, closed).ConfigureAwait(false);
+                        await Task.Delay(Every, context.Clock, closed).ConfigureAwait(false);
                         answer = await context
                             .Client.BulkOperationAsync(
                                 new BulkOperationVariables { Id = operation, FailuresTake = 0 },

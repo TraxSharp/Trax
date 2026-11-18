@@ -13,7 +13,7 @@ namespace Trax.Api.Tests;
 
 public class ToggleDbContext : DbContext
 {
-    public DbSet<ToggleEntity> Toggles { get; set; } = null!;
+    public DbSet<ToggleEntity> Toggles => Set<ToggleEntity>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
         optionsBuilder.UseInMemoryDatabase("ToggleDb_" + Guid.NewGuid());

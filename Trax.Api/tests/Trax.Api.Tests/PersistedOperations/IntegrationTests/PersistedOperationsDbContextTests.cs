@@ -2,6 +2,7 @@ using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Models.PersistedOperation;
 using Trax.Effect.Models.PersistedOperationHistory;
@@ -21,7 +22,7 @@ namespace Trax.Api.Tests.PersistedOperations.IntegrationTests;
 [Category("Integration")]
 public class PersistedOperationsDbContextTests
 {
-    private IDataContextProviderFactory _factory = null!;
+    private IDataContextProviderFactory? _factory;
 
     [SetUp]
     public async Task SetUp()
@@ -39,7 +40,7 @@ public class PersistedOperationsDbContextTests
     [Test]
     public async Task PersistedOperation_RoundTrip_PersistsAllColumns()
     {
-        var now = DateTime.UtcNow;
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime;
         var row = new PersistedOperation
         {
             TenantKey = "tenant-x",
@@ -56,18 +57,18 @@ public class PersistedOperationsDbContextTests
         };
 
         {
-            var ctx = await _factory.CreateDbContextAsync(CancellationToken.None);
+            var ctx = await _factory.NotNull().CreateDbContextAsync(CancellationToken.None);
             ctx.PersistedOperations.Add(row);
             await ctx.SaveChanges(CancellationToken.None);
         }
 
-        var read = await _factory.CreateDbContextAsync(CancellationToken.None);
+        var read = await _factory.NotNull().CreateDbContextAsync(CancellationToken.None);
         var found = await read
             .PersistedOperations.AsNoTracking()
             .FirstOrDefaultAsync(p => p.TenantKey == "tenant-x" && p.Id == "userProfile_v3");
 
         found.Should().NotBeNull();
-        found!.OperationName.Should().Be("UserProfile");
+        found.NotNull().OperationName.Should().Be("UserProfile");
         found.Version.Should().Be(3);
         found.Document.Should().Contain("$id: Int!");
         found.ShapeFingerprint.Should().Be(new string('a', 64));
@@ -82,7 +83,7 @@ public class PersistedOperationsDbContextTests
     public async Task PersistedOperation_CompositeKey_AllowsSameIdAcrossTenants()
     {
         {
-            var ctx = await _factory.CreateDbContextAsync(CancellationToken.None);
+            var ctx = await _factory.NotNull().CreateDbContextAsync(CancellationToken.None);
             ctx.PersistedOperations.Add(
                 new PersistedOperation
                 {
@@ -108,7 +109,7 @@ public class PersistedOperationsDbContextTests
             await ctx.SaveChanges(CancellationToken.None);
         }
 
-        var read = await _factory.CreateDbContextAsync(CancellationToken.None);
+        var read = await _factory.NotNull().CreateDbContextAsync(CancellationToken.None);
         var rows = await read
             .PersistedOperations.AsNoTracking()
             .Where(p => p.Id == "shared_v1")
@@ -124,7 +125,7 @@ public class PersistedOperationsDbContextTests
     public async Task PersistedOperation_Defaults_IsActiveTrueAndTimestampsPopulated()
     {
         {
-            var ctx = await _factory.CreateDbContextAsync(CancellationToken.None);
+            var ctx = await _factory.NotNull().CreateDbContextAsync(CancellationToken.None);
             ctx.PersistedOperations.Add(
                 new PersistedOperation
                 {
@@ -139,7 +140,7 @@ public class PersistedOperationsDbContextTests
             await ctx.SaveChanges(CancellationToken.None);
         }
 
-        var read = await _factory.CreateDbContextAsync(CancellationToken.None);
+        var read = await _factory.NotNull().CreateDbContextAsync(CancellationToken.None);
         var row = await read
             .PersistedOperations.AsNoTracking()
             .FirstAsync(p => p.Id == "defaults_v1");
@@ -153,7 +154,7 @@ public class PersistedOperationsDbContextTests
     public async Task PersistedOperation_PrimaryKeyConflict_Throws()
     {
         {
-            var ctx = await _factory.CreateDbContextAsync(CancellationToken.None);
+            var ctx = await _factory.NotNull().CreateDbContextAsync(CancellationToken.None);
             ctx.PersistedOperations.Add(
                 new PersistedOperation
                 {
@@ -168,7 +169,7 @@ public class PersistedOperationsDbContextTests
             await ctx.SaveChanges(CancellationToken.None);
         }
 
-        var ctx2 = await _factory.CreateDbContextAsync(CancellationToken.None);
+        var ctx2 = await _factory.NotNull().CreateDbContextAsync(CancellationToken.None);
         ctx2.PersistedOperations.Add(
             new PersistedOperation
             {
@@ -188,7 +189,7 @@ public class PersistedOperationsDbContextTests
     [Test]
     public async Task PersistedOperationHistory_RoundTrip_PersistsAllColumns()
     {
-        var now = DateTime.UtcNow;
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime;
         var entry = new PersistedOperationHistory
         {
             TenantKey = "",
@@ -201,7 +202,7 @@ public class PersistedOperationsDbContextTests
         };
 
         {
-            var ctx = await _factory.CreateDbContextAsync(CancellationToken.None);
+            var ctx = await _factory.NotNull().CreateDbContextAsync(CancellationToken.None);
             ctx.PersistedOperationHistories.Add(entry);
             await ctx.SaveChanges(CancellationToken.None);
         }
@@ -209,7 +210,7 @@ public class PersistedOperationsDbContextTests
         // History row should have a DB-generated history_id.
         entry.HistoryId.Should().BeGreaterThan(0);
 
-        var read = await _factory.CreateDbContextAsync(CancellationToken.None);
+        var read = await _factory.NotNull().CreateDbContextAsync(CancellationToken.None);
         var found = await read
             .PersistedOperationHistories.AsNoTracking()
             .FirstAsync(h => h.Id == "history_v1");
@@ -225,7 +226,7 @@ public class PersistedOperationsDbContextTests
     public async Task PersistedOperationHistory_OrderedByChangedAtDesc_ReturnsMostRecentFirst()
     {
         {
-            var ctx = await _factory.CreateDbContextAsync(CancellationToken.None);
+            var ctx = await _factory.NotNull().CreateDbContextAsync(CancellationToken.None);
             for (var i = 0; i < 3; i++)
             {
                 ctx.PersistedOperationHistories.Add(
@@ -236,7 +237,7 @@ public class PersistedOperationsDbContextTests
                         Document = string.Create(CultureInfo.InvariantCulture, $"v{i}"),
                         ShapeFingerprint = "fp",
                         ChangeType = "Upsert",
-                        ChangedAt = DateTime.UtcNow.AddMinutes(i),
+                        ChangedAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(i),
                         ChangedReason = string.Create(CultureInfo.InvariantCulture, $"step{i}"),
                     }
                 );
@@ -244,7 +245,7 @@ public class PersistedOperationsDbContextTests
             await ctx.SaveChanges(CancellationToken.None);
         }
 
-        var read = await _factory.CreateDbContextAsync(CancellationToken.None);
+        var read = await _factory.NotNull().CreateDbContextAsync(CancellationToken.None);
         var rows = await read
             .PersistedOperationHistories.AsNoTracking()
             .Where(h => h.Id == "ordered_v1")
@@ -259,7 +260,7 @@ public class PersistedOperationsDbContextTests
     public async Task PersistedOperation_NullableColumns_PersistAsNull()
     {
         {
-            var ctx = await _factory.CreateDbContextAsync(CancellationToken.None);
+            var ctx = await _factory.NotNull().CreateDbContextAsync(CancellationToken.None);
             ctx.PersistedOperations.Add(
                 new PersistedOperation
                 {
@@ -276,7 +277,7 @@ public class PersistedOperationsDbContextTests
             await ctx.SaveChanges(CancellationToken.None);
         }
 
-        var read = await _factory.CreateDbContextAsync(CancellationToken.None);
+        var read = await _factory.NotNull().CreateDbContextAsync(CancellationToken.None);
         var row = await read.PersistedOperations.AsNoTracking().FirstAsync(p => p.Id == "nulls_v1");
         row.DeprecationReason.Should().BeNull();
         row.Description.Should().BeNull();

@@ -250,7 +250,7 @@ public static partial class AuthE2EHost
         foreach (var role in roles)
             claims.Add(new System.Security.Claims.Claim("role", role));
 
-        var now = DateTime.UtcNow;
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime;
         var token = new System.IdentityModel.Tokens.Jwt.JwtSecurityToken(
             issuer: JwtIssuer,
             audience: JwtAudience,

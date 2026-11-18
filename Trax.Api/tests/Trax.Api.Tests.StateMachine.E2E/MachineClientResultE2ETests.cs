@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 
@@ -35,7 +36,7 @@ public class MachineClientResultE2ETests
 
     private const string ClientDivergence = "CLIENT_DIVERGENCE";
 
-    private IHost _host = null!;
+    private IHost? _host;
     private readonly CapturingLoggerProvider _logs = new();
 
     [OneTimeSetUp]
@@ -55,7 +56,7 @@ public class MachineClientResultE2ETests
     [OneTimeTearDown]
     public async Task Down()
     {
-        _host.Dispose();
+        _host?.Dispose();
         await E2EHost.DropDatabaseAsync(Database);
     }
 
@@ -82,19 +83,21 @@ public class MachineClientResultE2ETests
     [Test]
     public async Task A_mismatched_clientResult_is_refused_as_client_divergence_and_counted()
     {
-        var paying = await _host.WizardInPayingAsync(E2EHost.AliceKey);
+        var paying = await _host.NotNull().WizardInPayingAsync(E2EHost.AliceKey);
         var before = await E2ESql.DraftAsync(Database, WizardMachine.MachineId, paying.Id);
         using var meter = new DivergenceMeter();
 
-        using var doc = await _host.PostAsync(
-            WizardOps.Event(
-                "back",
-                paying.Id,
-                WizardOps.NewRequestId(),
-                clientResult: WrongPrediction(paying.Id)
-            ),
-            apiKey: E2EHost.AliceKey
-        );
+        using var doc = await _host
+            .NotNull()
+            .PostAsync(
+                WizardOps.Event(
+                    "back",
+                    paying.Id,
+                    WizardOps.NewRequestId(),
+                    clientResult: WrongPrediction(paying.Id)
+                ),
+                apiKey: E2EHost.AliceKey
+            );
 
         WizardOps
             .Result(doc, "back")
@@ -109,34 +112,40 @@ public class MachineClientResultE2ETests
     [Test]
     public async Task A_replayed_request_does_not_falsely_diverge()
     {
-        var paying = await _host.WizardInPayingAsync(E2EHost.AliceKey);
+        var paying = await _host.NotNull().WizardInPayingAsync(E2EHost.AliceKey);
         var requestId = WizardOps.NewRequestId();
         var prediction = RightPrediction(paying);
-        var first = await _host.SendWizardEventAsync(
-            E2EHost.AliceKey,
-            "back",
-            paying.Id,
-            requestId: requestId,
-            clientResult: prediction
-        );
+        var first = await _host
+            .NotNull()
+            .SendWizardEventAsync(
+                E2EHost.AliceKey,
+                "back",
+                paying.Id,
+                requestId: requestId,
+                clientResult: prediction
+            );
         first.ProblemCode.Should().BeNull(first.Raw.GetRawText());
 
         // A write in between: the row moves on past the recorded result.
-        await _host.AdvanceWizardAsync(
-            E2EHost.AliceKey,
-            "describe",
-            paying.Id,
-            WizardOps.DetailsInput(title: "Moved on")
-        );
+        await _host
+            .NotNull()
+            .AdvanceWizardAsync(
+                E2EHost.AliceKey,
+                "describe",
+                paying.Id,
+                WizardOps.DetailsInput(title: "Moved on")
+            );
         using var meter = new DivergenceMeter();
 
-        var replayed = await _host.SendWizardEventAsync(
-            E2EHost.AliceKey,
-            "back",
-            paying.Id,
-            requestId: requestId,
-            clientResult: prediction
-        );
+        var replayed = await _host
+            .NotNull()
+            .SendWizardEventAsync(
+                E2EHost.AliceKey,
+                "back",
+                paying.Id,
+                requestId: requestId,
+                clientResult: prediction
+            );
 
         replayed
             .ProblemCode.Should()
@@ -153,17 +162,14 @@ public class MachineClientResultE2ETests
     [Test]
     public async Task ClientResult_is_capped_and_only_its_hash_and_length_are_logged()
     {
-        var paying = await _host.WizardInPayingAsync(E2EHost.AliceKey);
+        var paying = await _host.NotNull().WizardInPayingAsync(E2EHost.AliceKey);
         var marker = $"marker-{Guid.NewGuid():N}";
         var wrong = WrongPrediction(paying.Id, marker);
         _logs.Clear();
 
-        var diverged = await _host.SendWizardEventAsync(
-            E2EHost.AliceKey,
-            "back",
-            paying.Id,
-            clientResult: wrong
-        );
+        var diverged = await _host
+            .NotNull()
+            .SendWizardEventAsync(E2EHost.AliceKey, "back", paying.Id, clientResult: wrong);
         diverged.ProblemCode.Should().Be(ClientDivergence);
         _logs
             .Messages.Should()
@@ -182,12 +188,14 @@ public class MachineClientResultE2ETests
             );
 
         using var meter = new DivergenceMeter();
-        var oversized = await _host.SendWizardEventAsync(
-            E2EHost.AliceKey,
-            "back",
-            paying.Id,
-            clientResult: new string('x', 4 * 1024 * 1024)
-        );
+        var oversized = await _host
+            .NotNull()
+            .SendWizardEventAsync(
+                E2EHost.AliceKey,
+                "back",
+                paying.Id,
+                clientResult: new string('x', 4 * 1024 * 1024)
+            );
         oversized
             .ProblemCode.Should()
             .Be(

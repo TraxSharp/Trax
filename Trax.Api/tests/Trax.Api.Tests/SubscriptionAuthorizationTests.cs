@@ -9,6 +9,7 @@ using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Hooks;
 using Trax.Api.GraphQL.Subscriptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Enums;
@@ -120,7 +121,7 @@ public class SubscriptionAuthorizationTests
         var executor = await BuildAsync(g =>
             g.ExposeOperationQueries().GateOperations(roles: "Admin")
         );
-        var hook = _provider!.GetRequiredService<GraphQLSubscriptionHook>();
+        var hook = _provider.NotNull().GetRequiredService<GraphQLSubscriptionHook>();
         for (var i = 0; i < 5; i++)
             await hook.OnCompleted(Completed("Some.Earlier.Train"), default);
 
@@ -179,8 +180,10 @@ public class SubscriptionAuthorizationTests
         // public one.
         var received = await sub.NextAsync(async () =>
         {
-            await PublishAsync(Event(typeof(IAdminOnlyTrain).FullName!)).ConfigureAwait(false);
-            await PublishAsync(Event(typeof(IPublicTrain).FullName!)).ConfigureAwait(false);
+            await PublishAsync(Event(typeof(IAdminOnlyTrain).FullName.NotNull()))
+                .ConfigureAwait(false);
+            await PublishAsync(Event(typeof(IPublicTrain).FullName.NotNull()))
+                .ConfigureAwait(false);
         });
 
         received["trainName"]
@@ -198,7 +201,7 @@ public class SubscriptionAuthorizationTests
         await using var sub = await SubscribeAsync(executor, LifecycleQuery, User("Admin"));
 
         var received = await sub.NextAsync(() =>
-            PublishAsync(Event(typeof(IAdminOnlyTrain).FullName!))
+            PublishAsync(Event(typeof(IAdminOnlyTrain).FullName.NotNull()))
         );
 
         received["trainName"].Should().Be(typeof(IAdminOnlyTrain).FullName);
@@ -218,8 +221,10 @@ public class SubscriptionAuthorizationTests
 
         var received = await sub.NextAsync(async () =>
         {
-            await PublishAsync(Event(typeof(IAdminOnlyTrain).FullName!)).ConfigureAwait(false);
-            await PublishAsync(Event(typeof(IPublicTrain).FullName!)).ConfigureAwait(false);
+            await PublishAsync(Event(typeof(IAdminOnlyTrain).FullName.NotNull()))
+                .ConfigureAwait(false);
+            await PublishAsync(Event(typeof(IPublicTrain).FullName.NotNull()))
+                .ConfigureAwait(false);
         });
 
         received["trainName"]
@@ -248,7 +253,10 @@ public class SubscriptionAuthorizationTests
 
         var received = await sub.NextAsync(() =>
             PublishAsync(
-                Event(typeof(IPublicTrain).FullName!, failureReason: "db at 10.0.0.5 refused")
+                Event(
+                    typeof(IPublicTrain).FullName.NotNull(),
+                    failureReason: "db at 10.0.0.5 refused"
+                )
             )
         );
 
@@ -272,7 +280,7 @@ public class SubscriptionAuthorizationTests
         var received = await sub.NextAsync(() =>
             PublishAsync(
                 Event(
-                    typeof(IPublicTrain).FullName!,
+                    typeof(IPublicTrain).FullName.NotNull(),
                     failureReason: "Card declined.",
                     failureException: "TrainException"
                 )
@@ -289,7 +297,7 @@ public class SubscriptionAuthorizationTests
         await using var sub = await SubscribeAsync(executor, LifecycleQuery, Anonymous());
 
         var received = await sub.NextAsync(() =>
-            PublishAsync(Event(typeof(IPublicTrain).FullName!, output: """{"total":3}"""))
+            PublishAsync(Event(typeof(IPublicTrain).FullName.NotNull(), output: """{"total":3}"""))
         );
 
         received["trainName"].Should().Be(typeof(IPublicTrain).FullName);
@@ -311,7 +319,7 @@ public class SubscriptionAuthorizationTests
         await using var sub = await SubscribeAsync(executor, LifecycleQuery, User("Admin"));
 
         var received = await sub.NextAsync(() =>
-            PublishAsync(Event(typeof(IPublicTrain).FullName!, output: """{"total":3}"""))
+            PublishAsync(Event(typeof(IPublicTrain).FullName.NotNull(), output: """{"total":3}"""))
         );
 
         received["output"].Should().NotBeNull("the operations view sees every run's detail");
@@ -343,7 +351,10 @@ public class SubscriptionAuthorizationTests
 
         var received = await sub.NextAsync(() =>
             PublishAsync(
-                Event(typeof(IPublicTrain).FullName!, output: """{"total":3,"items":["a"]}""")
+                Event(
+                    typeof(IPublicTrain).FullName.NotNull(),
+                    output: """{"total":3,"items":["a"]}"""
+                )
             )
         );
 
@@ -351,7 +362,7 @@ public class SubscriptionAuthorizationTests
             .Should()
             .BeAssignableTo<IReadOnlyDictionary<string, object?>>()
             .Subject;
-        output["total"]!.ToString().Should().Be("3");
+        output["total"].NotNull().ToString().Should().Be("3");
     }
 
     [Test]
@@ -478,8 +489,8 @@ public class SubscriptionAuthorizationTests
             InputType = typeof(object),
             OutputType = typeof(object),
             Lifetime = ServiceLifetime.Transient,
-            ServiceTypeName = type.FullName!,
-            ImplementationTypeName = type.FullName!,
+            ServiceTypeName = type.FullName.NotNull(),
+            ImplementationTypeName = type.FullName.NotNull(),
             InputTypeName = "Object",
             OutputTypeName = "Object",
             RequiredPolicies = [],
@@ -501,7 +512,8 @@ public class SubscriptionAuthorizationTests
                 Name = trainName,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = TrainState.Completed;
         return metadata;
@@ -518,7 +530,7 @@ public class SubscriptionAuthorizationTests
             ExternalId: "ext",
             TrainName: trainName,
             TrainState: TrainState.Completed,
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TimeProvider.System.GetUtcNow().UtcDateTime,
             FailureJunction: null,
             FailureReason: failureReason,
             Output: output,
@@ -530,7 +542,8 @@ public class SubscriptionAuthorizationTests
         };
 
     private async Task PublishAsync(TrainLifecycleEvent e) =>
-        await _provider!
+        await _provider
+            .NotNull()
             .GetRequiredService<ITopicEventSender>()
             .SendAsync(nameof(LifecycleSubscriptions.OnTrainCompleted), e)
             .AsTask()
@@ -602,7 +615,9 @@ public class SubscriptionAuthorizationTests
             );
             var reader = Task.Run(async () =>
             {
-                await foreach (var item in stream!.ReadResultsAsync().ConfigureAwait(false))
+                await foreach (
+                    var item in stream.NotNull().ReadResultsAsync().ConfigureAwait(false)
+                )
                 {
                     received.TrySetResult(item);
                     break;
@@ -611,8 +626,10 @@ public class SubscriptionAuthorizationTests
 
             // Publish until the subscriber picks one up: ExecuteAsync can return before the topic
             // subscription is registered, so a single publish can race ahead of it.
-            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-            while (!received.Task.IsCompleted && DateTime.UtcNow < deadline)
+            var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(10);
+            while (
+                !received.Task.IsCompleted && TimeProvider.System.GetUtcNow().UtcDateTime < deadline
+            )
             {
                 await publish().ConfigureAwait(false);
                 // allowed-delay: re-publish interval, bounded by the 10s deadline; WhenAny wakes
@@ -624,7 +641,8 @@ public class SubscriptionAuthorizationTests
             var payload = await received.Task.ConfigureAwait(false);
             payload.Errors.Should().BeNullOrEmpty();
             await reader.ConfigureAwait(false);
-            return (IReadOnlyDictionary<string, object?>)payload.DataMap()["onTrainCompleted"]!;
+            return (IReadOnlyDictionary<string, object?>)
+                payload.DataMap()["onTrainCompleted"].NotNull();
         }
 
         public async ValueTask DisposeAsync()

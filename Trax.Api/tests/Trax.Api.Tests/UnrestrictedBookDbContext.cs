@@ -17,7 +17,7 @@ namespace Trax.Api.Tests;
 
 public class UnrestrictedBookDbContext : DbContext
 {
-    public DbSet<UnrestrictedBookRef> Books { get; set; } = null!;
+    public DbSet<UnrestrictedBookRef> Books => Set<UnrestrictedBookRef>();
 
     public UnrestrictedBookDbContext(DbContextOptions<UnrestrictedBookDbContext> options)
         : base(options) { }

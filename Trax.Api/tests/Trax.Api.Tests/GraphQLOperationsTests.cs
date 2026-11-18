@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Api.DTOs;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.EffectRegistry;
@@ -21,11 +22,11 @@ namespace Trax.Api.Tests;
 [TestFixture]
 public class GraphQLOperationsTests
 {
-    private ITraxScheduler _scheduler = null!;
-    private Trax.Scheduler.Services.Operations.IOperationsService _operations = null!;
-    private ITraxHealthService _healthService = null!;
-    private ITrainDiscoveryService _discoveryService = null!;
-    private ServiceProvider _serviceProvider = null!;
+    private ITraxScheduler? _scheduler;
+    private Trax.Scheduler.Services.Operations.IOperationsService? _operations;
+    private ITraxHealthService? _healthService;
+    private ITrainDiscoveryService? _discoveryService;
+    private ServiceProvider? _serviceProvider;
 
     [SetUp]
     public void SetUp()
@@ -40,6 +41,7 @@ public class GraphQLOperationsTests
         // so we provide separate fake query and mutation registrations (TrainTypeModule uses
         // if/else — a registration goes to queries OR mutations, not both).
         _discoveryService
+            .NotNull()
             .DiscoverTrains()
             .Returns([
                 new TrainRegistration
@@ -89,7 +91,8 @@ public class GraphQLOperationsTests
     public async Task TearDown()
     {
         if (_serviceProvider is not null)
-            await _serviceProvider.DisposeAsync();
+            if (_serviceProvider is not null)
+                await _serviceProvider.DisposeAsync();
     }
 
     #region Query Tests
@@ -99,6 +102,7 @@ public class GraphQLOperationsTests
     {
         // Arrange
         _healthService
+            .NotNull()
             .GetHealthAsync(Arg.Any<CancellationToken>())
             .Returns(new HealthStatus("Healthy", "All systems operational", 3, 1, 0, 0));
 
@@ -125,7 +129,7 @@ public class GraphQLOperationsTests
         // Assert
         var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
-        operationResult!.Errors.Should().BeNullOrEmpty();
+        operationResult.NotNull().Errors.Should().BeNullOrEmpty();
         var json = operationResult.ToJson();
         json.Should().Contain("Healthy");
         json.Should().Contain("All systems operational");
@@ -153,15 +157,16 @@ public class GraphQLOperationsTests
         // Assert
         var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
-        operationResult!.Errors.Should().BeNullOrEmpty();
+        operationResult.NotNull().Errors.Should().BeNullOrEmpty();
     }
 
     [Test]
     public async Task ManifestNextRunsAndScheduleText_ReadEveryManifestOfTheRequestInOneCall()
     {
         var executor = await BuildExecutor();
-        var factory =
-            _serviceProvider.GetRequiredService<Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory>();
+        var factory = _serviceProvider
+            .NotNull()
+            .GetRequiredService<Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory>();
         long groupId;
         long manifestId;
         await using (var db = await factory.CreateDbContextAsync(default))
@@ -183,6 +188,7 @@ public class GraphQLOperationsTests
         var t0 = new DateTime(2026, 10, 19, 2, 0, 0, DateTimeKind.Utc);
         var times = Enumerable.Range(0, 10).Select(d => t0.AddDays(d)).ToList();
         _operations
+            .NotNull()
             .GetUpcomingRunsAsync(
                 Arg.Any<IReadOnlyCollection<long>>(),
                 Arg.Any<int>(),
@@ -237,6 +243,7 @@ public class GraphQLOperationsTests
 
         // Four fields over one manifest, one batch, at the most times any field can ask for.
         await _operations
+            .NotNull()
             .Received(1)
             .GetUpcomingRunsAsync(
                 Arg.Is<IReadOnlyCollection<long>>(ids => ids.SequenceEqual(new[] { manifestId })),
@@ -254,6 +261,7 @@ public class GraphQLOperationsTests
     {
         // Arrange
         _operations
+            .NotNull()
             .TriggerManifestAsync(
                 "test-job",
                 delay: null,
@@ -292,11 +300,12 @@ public class GraphQLOperationsTests
         // Assert
         var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
-        operationResult!.Errors.Should().BeNullOrEmpty();
+        operationResult.NotNull().Errors.Should().BeNullOrEmpty();
         var json = operationResult.ToJson();
         json.Should().Contain("true");
         json.Should().Contain("queued a new run");
         await _operations
+            .NotNull()
             .Received(1)
             .TriggerManifestAsync(
                 "test-job",
@@ -329,8 +338,11 @@ public class GraphQLOperationsTests
         // Assert
         var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
-        operationResult!.Errors.Should().BeNullOrEmpty();
-        await _scheduler.Received(1).DisableAsync("test-job", Arg.Any<CancellationToken>());
+        operationResult.NotNull().Errors.Should().BeNullOrEmpty();
+        await _scheduler
+            .NotNull()
+            .Received(1)
+            .DisableAsync("test-job", Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -356,15 +368,18 @@ public class GraphQLOperationsTests
         // Assert
         var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
-        operationResult!.Errors.Should().BeNullOrEmpty();
-        await _scheduler.Received(1).EnableAsync("test-job", Arg.Any<CancellationToken>());
+        operationResult.NotNull().Errors.Should().BeNullOrEmpty();
+        await _scheduler
+            .NotNull()
+            .Received(1)
+            .EnableAsync("test-job", Arg.Any<CancellationToken>());
     }
 
     [Test]
     public async Task CancelManifest_ReturnsCount()
     {
         // Arrange
-        _scheduler.CancelAsync("test-job", Arg.Any<CancellationToken>()).Returns(2);
+        _scheduler.NotNull().CancelAsync("test-job", Arg.Any<CancellationToken>()).Returns(2);
 
         var executor = await BuildExecutor();
 
@@ -386,7 +401,7 @@ public class GraphQLOperationsTests
         // Assert
         var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
-        operationResult!.Errors.Should().BeNullOrEmpty();
+        operationResult.NotNull().Errors.Should().BeNullOrEmpty();
         var json = operationResult.ToJson();
         json.Should().Contain("Cancellation requested");
     }
@@ -396,6 +411,7 @@ public class GraphQLOperationsTests
     {
         // Arrange
         _operations
+            .NotNull()
             .TriggerManifestGroupsAsync(
                 Arg.Is<IReadOnlyCollection<long>>(ids => ids != null && ids.Single() == 42L),
                 Arg.Any<CancellationToken>()
@@ -433,7 +449,7 @@ public class GraphQLOperationsTests
         // Assert
         var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
-        operationResult!.Errors.Should().BeNullOrEmpty();
+        operationResult.NotNull().Errors.Should().BeNullOrEmpty();
     }
 
     #endregion
@@ -450,7 +466,7 @@ public class GraphQLOperationsTests
         );
 
         var operationResult = result as OperationResult;
-        operationResult!.Errors.Should().BeNullOrEmpty();
+        operationResult.NotNull().Errors.Should().BeNullOrEmpty();
     }
 
     private async Task<IRequestExecutor> BuildExecutor()
@@ -461,7 +477,7 @@ public class GraphQLOperationsTests
         services.AddSingleton<Trax.Effect.Configuration.TraxBuilder.TraxMarker>();
 
         // Register discovery and effect registry before AddTraxGraphQL (needed during schema build)
-        services.AddSingleton(_discoveryService);
+        services.AddSingleton(_discoveryService.NotNull());
         services.AddSingleton(Substitute.For<IEffectRegistry>());
 
         // The manifest mutations look the external id up before asking the scheduler.
@@ -496,13 +512,14 @@ public class GraphQLOperationsTests
         );
 
         // Register mocks AFTER AddTraxGraphQL so they override the concrete registrations
-        services.AddScoped(_ => _healthService);
-        services.AddScoped(_ => _scheduler);
-        services.AddScoped(_ => _operations);
+        services.AddScoped(_ => _healthService.NotNull());
+        services.AddScoped(_ => _scheduler.NotNull());
+        services.AddScoped(_ => _operations.NotNull());
 
         _serviceProvider = services.BuildServiceProvider();
 
         return await _serviceProvider
+            .NotNull()
             .GetRequiredService<IRequestExecutorProvider>()
             .GetExecutorAsync("trax")
             .ConfigureAwait(false);

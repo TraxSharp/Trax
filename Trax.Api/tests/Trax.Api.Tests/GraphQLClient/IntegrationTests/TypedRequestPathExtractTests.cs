@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Trax.Api.GraphQL.Client;
 using Trax.Api.GraphQL.Client.Typed;
 using Trax.Api.Tests.GraphQLClient.IntegrationTests.Fakes;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 
@@ -59,7 +60,7 @@ public class TypedRequestPathExtractTests
         var result = request.Extract(data, Options);
 
         result.Should().NotBeNull();
-        result!.Id.Should().Be("c1");
+        result.NotNull().Id.Should().Be("c1");
         result.Name.Should().Be("Acme");
     }
 

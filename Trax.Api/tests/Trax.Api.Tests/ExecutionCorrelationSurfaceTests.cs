@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Api.Services.HealthCheck;
 using Trax.Api.Tests.Fakes;
+using Trax.Core.Extensions;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Services.TraxScheduler;
@@ -114,7 +115,7 @@ public class ExecutionCorrelationSurfaceTests
         Type(types, typeName)
             .GetProperty("fields")
             .EnumerateArray()
-            .Select(f => f.GetProperty("name").GetString()!)
+            .Select(f => f.GetProperty("name").GetString().NotNull())
             .ToList();
 
     private static IReadOnlyList<string> ArgumentsOf(
@@ -134,7 +135,7 @@ public class ExecutionCorrelationSurfaceTests
             )
             .GetProperty("args")
             .EnumerateArray()
-            .Select(a => a.GetProperty("name").GetString()!)
+            .Select(a => a.GetProperty("name").GetString().NotNull())
             .ToList();
 
     private static string FieldTypeOf(JsonElement types, string typeName, string fieldName) =>
@@ -178,7 +179,7 @@ public class ExecutionCorrelationSurfaceTests
         {
             "NON_NULL" => Render(type.GetProperty("ofType")) + "!",
             "LIST" => "[" + Render(type.GetProperty("ofType")) + "]",
-            _ => type.GetProperty("name").GetString()!,
+            _ => type.GetProperty("name").GetString().NotNull(),
         };
 
     private static JsonElement Type(JsonElement types, string typeName)
@@ -236,7 +237,7 @@ public class ExecutionCorrelationSurfaceTests
 
         var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
-        operationResult!.Errors.Should().BeNullOrEmpty();
+        operationResult.NotNull().Errors.Should().BeNullOrEmpty();
 
         using var document = JsonDocument.Parse(operationResult.ToJson());
         return document.RootElement.GetProperty("data").Clone();

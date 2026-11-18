@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Trax.Api.Tests.Fakes.Machines;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 
@@ -34,7 +35,7 @@ public class MachineExposureCensusTests
                     + "posture, per "
                     + Adr
             );
-        var message = refusal!.ToString();
+        var message = refusal.NotNull().ToString();
         message.Should().Contain($"'{UndeclaredRuleMachine.MachineId}'").And.Contain("Back");
         message
             .Should()

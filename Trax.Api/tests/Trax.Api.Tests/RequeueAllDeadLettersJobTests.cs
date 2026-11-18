@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using NSubstitute;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;
@@ -38,14 +39,14 @@ public class RequeueAllDeadLettersJobTests
 
     private const int Awaiting = 3;
 
-    private ITraxScheduler _scheduler = null!;
-    private TaskCompletionSource<BatchDeadLetterResult> _fold = null!;
+    private ITraxScheduler? _scheduler;
+    private TaskCompletionSource<BatchDeadLetterResult>? _fold;
     private CancellationToken _foldToken;
-    private TaskCompletionSource _foldStarted = null!;
-    private CancellationTokenSource _stopping = null!;
-    private ManualTime _time = null!;
-    private ServiceProvider _provider = null!;
-    private IRequestExecutor _executor = null!;
+    private TaskCompletionSource? _foldStarted;
+    private CancellationTokenSource? _stopping;
+    private ManualTime? _time;
+    private ServiceProvider? _provider;
+    private IRequestExecutor? _executor;
 
     [SetUp]
     public async Task SetUp()
@@ -56,6 +57,7 @@ public class RequeueAllDeadLettersJobTests
         _foldStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _scheduler = Substitute.For<ITraxScheduler>();
         _scheduler
+            .NotNull()
             .RequeueAllDeadLettersAsync(
                 Arg.Any<bool>(),
                 Arg.Any<IProgress<int>?>(),
@@ -64,8 +66,8 @@ public class RequeueAllDeadLettersJobTests
             .Returns(call =>
             {
                 _foldToken = call.Arg<CancellationToken>();
-                _foldStarted.TrySetResult();
-                return _fold.Task.WaitAsync(_foldToken);
+                _foldStarted.NotNull().TrySetResult();
+                return _fold.NotNull().Task.WaitAsync(_foldToken);
             });
 
         _stopping = new CancellationTokenSource();
@@ -84,10 +86,11 @@ public class RequeueAllDeadLettersJobTests
                         Manifest = manifest,
                         Reason = string.Create(CultureInfo.InvariantCulture, $"failure-{i}"),
                         RetryCount = 3,
-                    }
+                    },
+                    _time.NotNull()
                 );
                 if (i >= Awaiting)
-                    dl.Acknowledge("handled");
+                    dl.Acknowledge("handled", _time.NotNull());
                 await db.Track(dl);
             }
             await db.SaveChanges(default);
@@ -120,7 +123,7 @@ public class RequeueAllDeadLettersJobTests
             ]);
 
         var lifetime = Substitute.For<IHostApplicationLifetime>();
-        lifetime.ApplicationStopping.Returns(_stopping.Token);
+        lifetime.ApplicationStopping.Returns(_stopping.NotNull().Token);
 
         var services = new ServiceCollection();
         services.AddLogging();
@@ -129,7 +132,7 @@ public class RequeueAllDeadLettersJobTests
         services.AddSingleton(Substitute.For<IEffectRegistry>());
         services.AddSingleton<IDataContextProviderFactory>(factory);
         services.AddSingleton(lifetime);
-        services.AddSingleton<TimeProvider>(_time);
+        services.AddSingleton<TimeProvider>(_time.NotNull());
         Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
             services,
             graphql =>
@@ -139,10 +142,11 @@ public class RequeueAllDeadLettersJobTests
                     .AllowAnonymousOperations()
         );
         services.AddScoped(_ => Substitute.For<ITraxHealthService>());
-        services.AddScoped(_ => _scheduler);
+        services.AddScoped(_ => _scheduler.NotNull());
 
         _provider = services.BuildServiceProvider();
         _executor = await _provider
+            .NotNull()
             .GetRequiredService<IRequestExecutorProvider>()
             .GetExecutorAsync("trax", cancellationToken: CancellationToken.None);
     }
@@ -150,12 +154,14 @@ public class RequeueAllDeadLettersJobTests
     [TearDown]
     public async Task TearDown()
     {
-        _fold.TrySetCanceled(cancellationToken: CancellationToken.None);
-        await _provider.DisposeAsync();
-        _stopping.Dispose();
+        _fold.NotNull().TrySetCanceled(cancellationToken: CancellationToken.None);
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+        _stopping?.Dispose();
     }
 
-    private IDeadLetterRequeueJobs Jobs => _provider.GetRequiredService<IDeadLetterRequeueJobs>();
+    private IDeadLetterRequeueJobs Jobs =>
+        _provider.NotNull().GetRequiredService<IDeadLetterRequeueJobs>();
 
     /// <summary>Waits for the background fold of job <paramref name="id"/> to finish.</summary>
     private async Task FinishedAsync(string id)
@@ -168,7 +174,8 @@ public class RequeueAllDeadLettersJobTests
 
     private async Task<JsonElement> ExecuteAsync(string query, CancellationToken ct = default)
     {
-        var result = (OperationResult)await _executor.ExecuteAsync(query, ct).ConfigureAwait(false);
+        var result = (OperationResult)
+            await _executor.NotNull().ExecuteAsync(query, ct).ConfigureAwait(false);
         var json = result.ToJson();
         result.Errors.Should().BeNullOrEmpty(json);
         return JsonDocument.Parse(json).RootElement.GetProperty("data");
@@ -217,16 +224,21 @@ public class RequeueAllDeadLettersJobTests
         job.GetProperty("finishedAt").ValueKind.Should().Be(JsonValueKind.Null);
         job.GetProperty("started").GetBoolean().Should().BeTrue();
 
-        var read = await ReadAsync(job.GetProperty("id").GetString()!);
+        var read = await ReadAsync(job.GetProperty("id").GetString().NotNull());
         read.GetProperty("status").GetString().Should().Be("RUNNING");
     }
 
     [Test]
     public async Task Fold_WhenItFinishes_IsReadAsSucceededWithItsResult()
     {
-        var id = (await StartAsync(ct: CancellationToken.None)).GetProperty("id").GetString()!;
+        var id = (await StartAsync(ct: CancellationToken.None))
+            .GetProperty("id")
+            .GetString()
+            .NotNull();
 
-        _fold.SetResult(new BatchDeadLetterResult(Awaiting, "3 dead letter(s) requeued."));
+        _fold
+            .NotNull()
+            .SetResult(new BatchDeadLetterResult(Awaiting, "3 dead letter(s) requeued."));
         await FinishedAsync(id);
 
         var read = await ReadAsync(id);
@@ -243,14 +255,20 @@ public class RequeueAllDeadLettersJobTests
         var job = await StartAsync(request.Token);
 
         await request.CancelAsync();
-        await _foldStarted.Task.WaitAsync(
-            TimeSpan.FromSeconds(10),
-            cancellationToken: CancellationToken.None
-        );
+        await _foldStarted
+            .NotNull()
+            .Task.WaitAsync(
+                TimeSpan.FromSeconds(10),
+                _time.NotNull(),
+                cancellationToken: CancellationToken.None
+            );
 
-        _foldToken.Should().Be(_stopping.Token, Because("binds the fold to the host's lifetime"));
+        _foldToken
+            .Should()
+            .Be(_stopping.NotNull().Token, Because("binds the fold to the host's lifetime"));
         _foldToken.IsCancellationRequested.Should().BeFalse();
-        Jobs.Get(Guid.Parse(job.GetProperty("id").GetString()!))!
+        Jobs.Get(Guid.Parse(job.GetProperty("id").GetString().NotNull()))
+            .NotNull()
             .Status.Should()
             .Be(DeadLetterRequeueJobStatus.Running, "the fold runs on after the request ends");
     }
@@ -258,9 +276,12 @@ public class RequeueAllDeadLettersJobTests
     [Test]
     public async Task Fold_WhenTheHostStops_IsReadAsCanceled()
     {
-        var id = (await StartAsync(ct: CancellationToken.None)).GetProperty("id").GetString()!;
+        var id = (await StartAsync(ct: CancellationToken.None))
+            .GetProperty("id")
+            .GetString()
+            .NotNull();
 
-        await _stopping.CancelAsync();
+        await _stopping.NotNull().CancelAsync();
         await FinishedAsync(id);
 
         var read = await ReadAsync(id);
@@ -271,9 +292,14 @@ public class RequeueAllDeadLettersJobTests
     [Test]
     public async Task Fold_WhenTheServerFails_IsReadAsFailedWithNothingAboutTheServer()
     {
-        var id = (await StartAsync(ct: CancellationToken.None)).GetProperty("id").GetString()!;
+        var id = (await StartAsync(ct: CancellationToken.None))
+            .GetProperty("id")
+            .GetString()
+            .NotNull();
 
-        _fold.SetException(new InvalidOperationException("connection to 10.0.0.5 refused"));
+        _fold
+            .NotNull()
+            .SetException(new InvalidOperationException("connection to 10.0.0.5 refused"));
         await FinishedAsync(id);
 
         var read = await ReadAsync(id);
@@ -291,11 +317,15 @@ public class RequeueAllDeadLettersJobTests
         second.GetProperty("id").GetString().Should().Be(first.GetProperty("id").GetString());
         second.GetProperty("started").GetBoolean().Should().BeFalse();
         // The fold runs in the background, so the scheduler is called after the start returns.
-        await _foldStarted.Task.WaitAsync(
-            TimeSpan.FromSeconds(10),
-            cancellationToken: CancellationToken.None
-        );
+        await _foldStarted
+            .NotNull()
+            .Task.WaitAsync(
+                TimeSpan.FromSeconds(10),
+                _time.NotNull(),
+                cancellationToken: CancellationToken.None
+            );
         await _scheduler
+            .NotNull()
             .Received(1)
             .RequeueAllDeadLettersAsync(
                 Arg.Any<bool>(),
@@ -307,8 +337,11 @@ public class RequeueAllDeadLettersJobTests
     [Test]
     public async Task Start_AfterTheLastOneFinished_StartsANewOne()
     {
-        var first = (await StartAsync(ct: CancellationToken.None)).GetProperty("id").GetString()!;
-        _fold.SetResult(new BatchDeadLetterResult(Awaiting, "done"));
+        var first = (await StartAsync(ct: CancellationToken.None))
+            .GetProperty("id")
+            .GetString()
+            .NotNull();
+        _fold.NotNull().SetResult(new BatchDeadLetterResult(Awaiting, "done"));
         await FinishedAsync(first);
 
         var second = await StartAsync(ct: CancellationToken.None);
@@ -337,14 +370,17 @@ public class RequeueAllDeadLettersJobTests
     [Test]
     public async Task FinishedJob_IsForgottenAfterTheRetention()
     {
-        var id = (await StartAsync(ct: CancellationToken.None)).GetProperty("id").GetString()!;
-        _fold.SetResult(new BatchDeadLetterResult(Awaiting, "done"));
+        var id = (await StartAsync(ct: CancellationToken.None))
+            .GetProperty("id")
+            .GetString()
+            .NotNull();
+        _fold.NotNull().SetResult(new BatchDeadLetterResult(Awaiting, "done"));
         await FinishedAsync(id);
 
-        _time.Advance(DeadLetterRequeueJobs.Retention - TimeSpan.FromMinutes(1));
+        _time.NotNull().Advance(DeadLetterRequeueJobs.Retention - TimeSpan.FromMinutes(1));
         Jobs.Get(Guid.Parse(id)).Should().NotBeNull(Because("keeps a finished job for 24 hours"));
 
-        _time.Advance(TimeSpan.FromMinutes(2));
+        _time.NotNull().Advance(TimeSpan.FromMinutes(2));
         Jobs.Get(Guid.Parse(id)).Should().BeNull(Because("forgets a finished job after 24 hours"));
     }
 
@@ -352,6 +388,7 @@ public class RequeueAllDeadLettersJobTests
     public async Task FinishedJobs_AreKeptUpToTheLimit_OldestForgottenFirst()
     {
         _scheduler
+            .NotNull()
             .RequeueAllDeadLettersAsync(
                 Arg.Any<bool>(),
                 Arg.Any<IProgress<int>?>(),
@@ -365,7 +402,7 @@ public class RequeueAllDeadLettersJobTests
         {
             ids.Add((await jobs.StartAsync(ct: CancellationToken.None)).Id);
             await FinishedAsync(ids[^1].ToString());
-            _time.Advance(TimeSpan.FromSeconds(1));
+            _time.NotNull().Advance(TimeSpan.FromSeconds(1));
         }
         await FinishedAsync((await jobs.StartAsync(ct: CancellationToken.None)).Id.ToString());
 

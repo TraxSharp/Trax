@@ -9,6 +9,7 @@ using NSubstitute;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Subscriptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Enums;
 using Trax.Effect.Services.EffectRegistry;
@@ -49,7 +50,7 @@ public class LifecycleExternalIdFilterTests
         var executor = await BuildAsync(g =>
             g.ExposeOperationQueries().GateOperations(roles: "Admin")
         );
-        var subscription = executor.Schema.SubscriptionType!;
+        var subscription = executor.Schema.SubscriptionType.NotNull();
 
         foreach (var name in LifecycleFields)
         {
@@ -167,14 +168,15 @@ public class LifecycleExternalIdFilterTests
             ExternalId: externalId,
             TrainName: "Some.Train",
             TrainState: TrainState.Completed,
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TimeProvider.System.GetUtcNow().UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             Output: null
         );
 
     private async Task PublishAsync(string topic, TrainLifecycleEvent e) =>
-        await _provider!
+        await _provider
+            .NotNull()
             .GetRequiredService<ITopicEventSender>()
             .SendAsync(topic, e)
             .AsTask()
@@ -247,7 +249,9 @@ public class LifecycleExternalIdFilterTests
             );
             var reader = Task.Run(async () =>
             {
-                await foreach (var item in stream!.ReadResultsAsync().ConfigureAwait(false))
+                await foreach (
+                    var item in stream.NotNull().ReadResultsAsync().ConfigureAwait(false)
+                )
                 {
                     received.TrySetResult(item);
                     break;
@@ -256,8 +260,10 @@ public class LifecycleExternalIdFilterTests
 
             // ExecuteAsync can return before the topic subscription is registered, so a single
             // publish can race ahead of it.
-            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-            while (!received.Task.IsCompleted && DateTime.UtcNow < deadline)
+            var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(10);
+            while (
+                !received.Task.IsCompleted && TimeProvider.System.GetUtcNow().UtcDateTime < deadline
+            )
             {
                 await publish().ConfigureAwait(false);
                 // allowed-delay: re-publish interval, bounded by the 10s deadline; WhenAny wakes
@@ -269,7 +275,7 @@ public class LifecycleExternalIdFilterTests
             var payload = await received.Task.ConfigureAwait(false);
             payload.Errors.Should().BeNullOrEmpty();
             await reader.ConfigureAwait(false);
-            return (IReadOnlyDictionary<string, object?>)payload.DataMap()[field]!;
+            return (IReadOnlyDictionary<string, object?>)payload.DataMap()[field].NotNull();
         }
 
         public async ValueTask DisposeAsync()

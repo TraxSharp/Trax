@@ -104,7 +104,7 @@ public class PersistedOperationCacheTests
         public void Set_RespectsTtl_Deterministically()
         {
             // MemoryCacheOptions.Clock lets us drive expiration without sleeping.
-            var clock = new TestClock(DateTimeOffset.UtcNow);
+            var clock = new TestClock(TimeProvider.System.GetUtcNow());
             var memCache = new MemoryCache(
                 new MemoryCacheOptions { Clock = clock, ExpirationScanFrequency = TimeSpan.Zero }
             );
@@ -174,7 +174,7 @@ public class PersistedOperationCacheTests
                 _ = new InMemoryPersistedOperationCache(
                     new MemoryCache(new MemoryCacheOptions()),
                     new PersistedOperationsOptions(),
-                    null!,
+                    Null.Of<Trax.Api.GraphQL.PersistedOperations.Storage.PersistedOperationCacheGeneration>(),
                     TimeProvider.System
                 );
             Action nullClock = () =>
@@ -182,7 +182,7 @@ public class PersistedOperationCacheTests
                     new MemoryCache(new MemoryCacheOptions()),
                     new PersistedOperationsOptions(),
                     new PersistedOperationCacheGeneration(),
-                    null!
+                    Null.Of<TimeProvider>()
                 );
             nullGeneration.Should().Throw<ArgumentNullException>();
             nullClock.Should().Throw<ArgumentNullException>();
@@ -202,7 +202,7 @@ public class PersistedOperationCacheTests
         {
             Action act = () =>
                 _ = new InMemoryPersistedOperationCache(
-                    null!,
+                    Null.Of<Microsoft.Extensions.Caching.Memory.IMemoryCache>(),
                     new PersistedOperationsOptions(),
                     new PersistedOperationCacheGeneration(),
                     TimeProvider.System
@@ -216,7 +216,7 @@ public class PersistedOperationCacheTests
             Action act = () =>
                 _ = new InMemoryPersistedOperationCache(
                     new MemoryCache(new MemoryCacheOptions()),
-                    null!,
+                    Null.Of<Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsOptions>(),
                     new PersistedOperationCacheGeneration(),
                     TimeProvider.System
                 );

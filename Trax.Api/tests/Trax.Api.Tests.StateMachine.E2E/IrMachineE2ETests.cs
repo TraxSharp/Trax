@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Persistence.FromIr;
@@ -24,7 +25,7 @@ public class IrMachineE2ETests
 
     private const string Approver = WizardMachine.ApproverRole;
 
-    private IHost _host = null!;
+    private IHost? _host;
 
     [OneTimeSetUp]
     public async Task Up()
@@ -32,7 +33,8 @@ public class IrMachineE2ETests
         await E2EHost.RecreateDatabaseAsync(Database);
 
         var ir = JsonNode
-            .Parse((await File.ReadAllTextAsync(IrFile("turnstile")).ConfigureAwait(false)))!
+            .Parse((await File.ReadAllTextAsync(IrFile("turnstile")).ConfigureAwait(false)))
+            .NotNull()
             .AsObject();
         ir["id"] = "ir-turnstile";
         var approvers = new AccessRule([
@@ -63,7 +65,7 @@ public class IrMachineE2ETests
     [OneTimeTearDown]
     public async Task Down()
     {
-        _host.Dispose();
+        _host?.Dispose();
         await E2EHost.DropDatabaseAsync(Database);
     }
 
@@ -77,7 +79,7 @@ public class IrMachineE2ETests
             .Should()
             .Be("FORBIDDEN", "only an approver may start one");
 
-        var id = (await Start("s1", E2EHost.AliceKey)).GetProperty("id").GetString()!;
+        var id = (await Start("s1", E2EHost.AliceKey)).GetProperty("id").GetString().NotNull();
 
         (await Event("coin", id, "c0", E2EHost.BobKey, """input: { coin: "quarter" }, """))
             .GetProperty("problem")
@@ -108,12 +110,14 @@ public class IrMachineE2ETests
     [Test]
     public async Task An_input_that_is_not_the_records_is_refused()
     {
-        var id = (await Start("s2", E2EHost.AliceKey)).GetProperty("id").GetString()!;
+        var id = (await Start("s2", E2EHost.AliceKey)).GetProperty("id").GetString().NotNull();
 
-        using var doc = await _host.PostAsync(
-            $$"""mutation { machines { irTurnstile { coin(id: "{{id}}", input: { coin: 25 }, requestId: "c2") { state } } } }""",
-            apiKey: E2EHost.AliceKey
-        );
+        using var doc = await _host
+            .NotNull()
+            .PostAsync(
+                $$"""mutation { machines { irTurnstile { coin(id: "{{id}}", input: { coin: 25 }, requestId: "c2") { state } } } }""",
+                apiKey: E2EHost.AliceKey
+            );
 
         doc.RootElement.TryGetProperty("errors", out _)
             .Should()
@@ -123,6 +127,7 @@ public class IrMachineE2ETests
     private async Task<JsonElement> Start(string requestId, string key)
     {
         using var doc = await _host
+            .NotNull()
             .PostAsync(
                 $$"""mutation { machines { irTurnstile { start(requestId: "{{requestId}}") { id problem { code } } } } }""",
                 apiKey: key
@@ -140,6 +145,7 @@ public class IrMachineE2ETests
     )
     {
         using var doc = await _host
+            .NotNull()
             .PostAsync(
                 $$"""mutation { machines { irTurnstile { {{field}}(id: "{{id}}", {{input}}requestId: "{{requestId}}") { state problem { code } } } } }""",
                 apiKey: key

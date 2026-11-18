@@ -13,7 +13,7 @@ namespace Trax.Api.Tests;
 
 public class ExplicitDbContext : DbContext
 {
-    public DbSet<ExplicitEntity> Entities { get; set; } = null!;
+    public DbSet<ExplicitEntity> Entities => Set<ExplicitEntity>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
         optionsBuilder.UseInMemoryDatabase("ExplicitDb_" + Guid.NewGuid());

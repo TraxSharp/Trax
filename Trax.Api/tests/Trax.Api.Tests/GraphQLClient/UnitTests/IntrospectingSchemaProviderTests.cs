@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Trax.Api.GraphQL.Client;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.GraphQLClient.UnitTests;
 
@@ -143,7 +144,7 @@ public class IntrospectingSchemaProviderTests
         var schema = await provider.GetSchemaAsync();
 
         schema.Subscription.Should().NotBeNull();
-        schema.Subscription!.Name.Should().Be("Subscription");
+        schema.Subscription.NotNull().Name.Should().Be("Subscription");
     }
 
     [Test]
@@ -179,8 +180,8 @@ public class IntrospectingSchemaProviderTests
         schema.Initialize();
 
         schema.Query.Should().NotBeNull();
-        schema.Query!.GetField("payload").Should().NotBeNull();
-        schema.Query.GetField("payload")!.ResolvedType!.Name.Should().Be("Any");
+        schema.Query.NotNull().GetField("payload").Should().NotBeNull();
+        schema.Query.GetField("payload").NotNull().ResolvedType.NotNull().Name.Should().Be("Any");
     }
 
     [Test]
@@ -243,9 +244,15 @@ public class IntrospectingSchemaProviderTests
         var schema = await provider.GetSchemaAsync();
         schema.Initialize();
 
-        schema.Query!.GetField("payload")!.ResolvedType!.Name.Should().Be("Any");
-        schema.Query.GetField("when")!.ResolvedType!.Name.Should().Be("DateTime");
-        schema.Query.GetField("id")!.ResolvedType!.Name.Should().Be("Uuid");
+        schema
+            .Query.NotNull()
+            .GetField("payload")
+            .NotNull()
+            .ResolvedType.NotNull()
+            .Name.Should()
+            .Be("Any");
+        schema.Query.GetField("when").NotNull().ResolvedType.NotNull().Name.Should().Be("DateTime");
+        schema.Query.GetField("id").NotNull().ResolvedType.NotNull().Name.Should().Be("Uuid");
     }
 
     [Test]
@@ -325,7 +332,7 @@ public class IntrospectingSchemaProviderTests
         // The Int field's resolved type must still be graphql-dotnet's built-in IntGraphType,
         // not a permissive shim. We verify by checking the resolved type's CLR type comes
         // from graphql-dotnet's built-in scalar namespace, not our internal one.
-        var intType = schema.Query!.GetField("n")!.ResolvedType!;
+        var intType = schema.Query.NotNull().GetField("n").NotNull().ResolvedType.NotNull();
         intType
             .GetType()
             .FullName.Should()

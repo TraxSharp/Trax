@@ -4,6 +4,7 @@ using HotChocolate.Execution;
 using HotChocolate.Subscriptions;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Subscriptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 
 namespace Trax.Api.Tests;
@@ -180,7 +181,7 @@ public class LifecycleSequenceTests
             ExternalId: externalId,
             TrainName: trainName,
             TrainState: TrainState.Completed,
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TimeProvider.System.GetUtcNow().UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             Output: null
@@ -227,7 +228,7 @@ public class LifecycleSequenceTests
                 FailNext = false;
                 throw new InvalidOperationException("transport down");
             }
-            Sent.Add((topicName, (TrainLifecycleEvent)(object)message!));
+            Sent.Add((topicName, (TrainLifecycleEvent)(object)message.NotNull()));
             return ValueTask.CompletedTask;
         }
 

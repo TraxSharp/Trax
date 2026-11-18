@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
 using Trax.Api.Tests.PersistedOperations.Fixtures;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.PersistedOperations.IntegrationTests;
 
@@ -31,9 +32,9 @@ public class PersistedOperationBroadcastFailureTests
 
     private static readonly TimeSpan MaxAge = TimeSpan.FromMinutes(2);
 
-    private ServiceProvider _changingNode = null!;
-    private ServiceProvider _otherNode = null!;
-    private ManualClock _otherClock = null!;
+    private ServiceProvider? _changingNode;
+    private ServiceProvider? _otherNode;
+    private ManualClock? _otherClock;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -49,7 +50,7 @@ public class PersistedOperationBroadcastFailureTests
         _otherClock = new ManualClock();
         _otherNode = await GraphQLFixture.BuildAsync(
             po => po.SingleNode().WithCacheMaxAge(MaxAge),
-            services => services.AddSingleton<TimeProvider>(_otherClock)
+            services => services.AddSingleton<TimeProvider>(_otherClock.NotNull())
         );
     }
 
@@ -57,9 +58,11 @@ public class PersistedOperationBroadcastFailureTests
     public async Task OneTimeTearDown()
     {
         if (_changingNode is not null)
-            await _changingNode.DisposeAsync();
+            if (_changingNode is not null)
+                await _changingNode.DisposeAsync();
         if (_otherNode is not null)
-            await _otherNode.DisposeAsync();
+            if (_otherNode is not null)
+                await _otherNode.DisposeAsync();
     }
 
     [SetUp]
@@ -70,9 +73,10 @@ public class PersistedOperationBroadcastFailureTests
     {
         var id = $"unconfirmed_{Guid.NewGuid():N}";
         await _otherNode
+            .NotNull()
             .GetRequiredService<IPersistedOperationStore>()
             .UpsertAsync(id, "query Greet { hello }", options: null, CancellationToken.None);
-        (await ExecuteByIdAsync(_otherNode, id)).Should().Contain("\"hello\"");
+        (await ExecuteByIdAsync(_otherNode.NotNull(), id)).Should().Contain("\"hello\"");
 
         var payload = await MutateAsync(
             "deactivatePersistedOperation",
@@ -94,11 +98,11 @@ public class PersistedOperationBroadcastFailureTests
             .Be("CHANGE_NOT_BROADCAST", AdrHint);
 
         // The other node was not told; its cache's maximum age is the backstop.
-        (await ExecuteByIdAsync(_otherNode, id))
+        (await ExecuteByIdAsync(_otherNode.NotNull(), id))
             .Should()
             .Contain("\"hello\"");
-        _otherClock.Advance(MaxAge);
-        (await ExecuteByIdAsync(_otherNode, id)).Should().Contain("HC0020", AdrHint);
+        _otherClock.NotNull().Advance(MaxAge);
+        (await ExecuteByIdAsync(_otherNode.NotNull(), id)).Should().Contain("HC0020", AdrHint);
     }
 
     [Test]
@@ -130,7 +134,7 @@ public class PersistedOperationBroadcastFailureTests
     public async Task ARestoreThatWasNotBroadcast_ReturnsTheSavedOperationAndAnError()
     {
         var id = $"unconfirmed_restore_{Guid.NewGuid():N}";
-        var store = _otherNode.GetRequiredService<IPersistedOperationStore>();
+        var store = _otherNode.NotNull().GetRequiredService<IPersistedOperationStore>();
         await store.UpsertAsync(id, "query Greet { hello }", options: null, CancellationToken.None);
         await store.DeactivateAsync(id, tenantKey: null, "retired", CancellationToken.None);
 
@@ -156,7 +160,9 @@ public class PersistedOperationBroadcastFailureTests
         Dictionary<string, object?> input
     )
     {
-        var executor = await GraphQLFixture.GetExecutorAsync(_changingNode).ConfigureAwait(false);
+        var executor = await GraphQLFixture
+            .GetExecutorAsync(_changingNode.NotNull())
+            .ConfigureAwait(false);
         var result = await executor
             .ExecuteAsync(
                 OperationRequestBuilder

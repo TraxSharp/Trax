@@ -5,6 +5,7 @@ using HotChocolate.Types;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Services;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.PersistedOperations.UnitTests;
 
@@ -21,7 +22,7 @@ public class ConsoleDocumentsTests
     private const string Adr =
         "docs/adr/0042-the-operations-console-is-registered-as-persisted-documents.md";
 
-    private static ISchemaDefinition _schema = null!;
+    private static ISchemaDefinition? _schema;
 
     [OneTimeSetUp]
     public async Task BuildTheSchema()
@@ -113,7 +114,7 @@ public class ConsoleDocumentsTests
     public void A_document_of_the_operations_surface_is_served(string text)
     {
         var (served, skipped) = ConsoleDocuments.Select(
-            _schema,
+            _schema.NotNull(),
             [new ConsoleDocumentText("Hosts", text)]
         );
 
@@ -136,7 +137,7 @@ public class ConsoleDocumentsTests
     public void A_document_the_host_cannot_serve_is_left_out_naming_why(string text, string reason)
     {
         var (served, skipped) = ConsoleDocuments.Select(
-            _schema,
+            _schema.NotNull(),
             [new ConsoleDocumentText("Hosts", text)]
         );
 
@@ -150,7 +151,7 @@ public class ConsoleDocumentsTests
     public void Leaving_one_out_keeps_the_rest()
     {
         var (served, skipped) = ConsoleDocuments.Select(
-            _schema,
+            _schema.NotNull(),
             [
                 new ConsoleDocumentText("Hosts", "query Hosts { operations { hosts } }"),
                 new ConsoleDocumentText("Gone", "query Gone { operations { missing } }"),
@@ -189,9 +190,9 @@ public class ConsoleDocumentsTests
                 .EnumerateArray()
                 .Select(c =>
                     (
-                        c.GetProperty("name").GetString()!,
-                        c.GetProperty("text").GetString()!,
-                        c.GetProperty("id").GetString()!
+                        c.GetProperty("name").GetString().NotNull(),
+                        c.GetProperty("text").GetString().NotNull(),
+                        c.GetProperty("id").GetString().NotNull()
                     )
                 )
                 .ToList();

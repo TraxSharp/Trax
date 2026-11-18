@@ -17,6 +17,7 @@ using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Authorization;
 using Trax.Api.GraphQL.Subscriptions;
 using Trax.Api.GraphQL.Types;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.JunctionEvents;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -57,6 +58,9 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
 
     /// <summary>Where a failed read of a queued run is logged.</summary>
     public ILogger? Logger { get; init; }
+
+    /// <summary>The clock the stream waits on and stamps a run's missing end with.</summary>
+    internal TimeProvider Clock { get; init; } = TimeProvider.System;
 
     /// <summary>How the stream waits between two reads; replaced in tests.</summary>
     internal Func<TimeSpan, CancellationToken, Task> Delay { get; init; } = Task.Delay;
@@ -146,7 +150,7 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
                         events,
                         () =>
                             new RunProgressEvent(
-                                _run!.RunId,
+                                _run.NotNull().RunId,
                                 sequence + 1,
                                 State: null,
                                 Step: null,
@@ -173,7 +177,7 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
         [EnumeratorCancellation] CancellationToken ct = default
     )
     {
-        var run = _run!;
+        var run = _run.NotNull();
         var merged = Channel.CreateUnbounded<(
             TrainLifecycleEvent? State,
             JunctionEvent? Step,
@@ -183,7 +187,7 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct, _disposing.Token);
         var pumps = Task.WhenAll(
             Pump(
-                _states!,
+                _states.NotNull(),
                 new StrongBox<long>(_statesBaseline),
                 e => e.PublishSequence,
                 e => (e, null),
@@ -191,7 +195,7 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
                 stop.Token
             ),
             Pump(
-                _steps!,
+                _steps.NotNull(),
                 stepsSeen,
                 e => e.PublishSequence,
                 e => (null, e),
@@ -266,7 +270,7 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
             // The run published its steps before its end, but on another topic, which may be read later. The steps
             // published until the end was read are waited for, briefly: a step dropped on the way never arrives, and
             // counts as a loss instead.
-            var target = await _stepsLastPublished!(stop.Token).ConfigureAwait(false);
+            var target = await _stepsLastPublished.NotNull()(stop.Token).ConfigureAwait(false);
             using (var settle = CancellationTokenSource.CreateLinkedTokenSource(stop.Token))
             {
                 settle.CancelAfter(SettleBound);
@@ -274,7 +278,7 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
                 {
                     try
                     {
-                        await Task.Delay(SettlePoll, settle.Token).ConfigureAwait(false);
+                        await Task.Delay(SettlePoll, Clock, settle.Token).ConfigureAwait(false);
                     }
                     catch (OperationCanceledException) when (!stop.IsCancellationRequested)
                     {
@@ -290,7 +294,7 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
             yield return (end with { Sequence = ++sequence });
 
             await foreach (
-                var retry in RetryOf(run with { State = end.State!.Value }, stop.Token)
+                var retry in RetryOf(run with { State = end.State.NotNull().Value }, stop.Token)
                     .ConfigureAwait(false)
             )
                 yield return new RunProgressEvent(
@@ -328,7 +332,10 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
     {
         if (run.State != RunProgressState.Failed || NextTry is null)
             yield break;
-        var failed = run with { EndedAt = run.EndedAt ?? DateTime.UtcNow.AddSeconds(-5) };
+        var failed = run with
+        {
+            EndedAt = run.EndedAt ?? Clock.GetUtcNow().UtcDateTime.AddSeconds(-5),
+        };
         using var waiting = CancellationTokenSource.CreateLinkedTokenSource(ct);
         waiting.CancelAfter(RetryWait);
         // Backed off, so many streams waiting on retries that are minutes away do not poll the database every second.

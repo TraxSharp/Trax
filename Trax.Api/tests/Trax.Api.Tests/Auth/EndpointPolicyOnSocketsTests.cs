@@ -18,6 +18,7 @@ using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Subscriptions;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Services.EffectRegistry;
@@ -62,7 +63,7 @@ public class EndpointPolicyOnSocketsTests
         (await ReceiveTypeAsync(ws))
             .Should()
             .Be("(closed)", "the endpoint policy is evaluated over a socket too, per " + Adr);
-        await scheduler.DidNotReceiveWithAnyArgs().DisableAsync(default!, default);
+        await scheduler.DidNotReceiveWithAnyArgs().DisableAsync(Null.Of<string>(), default);
     }
 
     [Test]
@@ -127,7 +128,7 @@ public class EndpointPolicyOnSocketsTests
                 new[] { "TRAX_AUTHORIZATION" },
                 "the pipeline evaluates the endpoint policy for every operation, per " + Adr
             );
-        await scheduler.DidNotReceiveWithAnyArgs().DisableAsync(default!, default);
+        await scheduler.DidNotReceiveWithAnyArgs().DisableAsync(Null.Of<string>(), default);
     }
 
     [Test]
@@ -324,7 +325,8 @@ public class EndpointPolicyOnSocketsTests
                 var type = JsonDocument
                     .Parse(Encoding.UTF8.GetString(buffer, 0, received.Count))
                     .RootElement.GetProperty("type")
-                    .GetString()!;
+                    .GetString()
+                    .NotNull();
                 if (type is "ping" or "pong")
                     continue;
                 return type;

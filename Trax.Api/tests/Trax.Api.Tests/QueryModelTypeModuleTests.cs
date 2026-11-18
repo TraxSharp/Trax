@@ -201,7 +201,10 @@ public class QueryModelTypeModuleTests
         var config = new GraphQLConfiguration([], [], [], []);
         var module = new QueryModelTypeModule(config);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         types.Should().BeEmpty();
     }
@@ -223,7 +226,10 @@ public class QueryModelTypeModuleTests
         );
         var module = new QueryModelTypeModule(config);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // ObjectType<TestPlayer> + ObjectTypeExtension on DiscoverQueries
         types.Should().HaveCount(2);
@@ -261,7 +267,10 @@ public class QueryModelTypeModuleTests
         );
         var module = new QueryModelTypeModule(config);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // Only 1 ObjectType<TestPlayer> despite 2 registrations
         types
@@ -317,7 +326,10 @@ public class QueryModelTypeModuleTests
         );
 
         var module = new Trax.Api.GraphQL.TypeModules.TrainTypeModule(discovery, config);
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // Should NOT contain ObjectType<DiscoverQueries> (base type registered externally)
         types
@@ -359,7 +371,10 @@ public class QueryModelTypeModuleTests
         ]);
 
         var module = new Trax.Api.GraphQL.TypeModules.TrainTypeModule(discovery);
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // SHOULD contain ObjectType<DiscoverQueries> (no model registrations, so we own it)
         types
@@ -436,7 +451,10 @@ public class QueryModelTypeModuleTests
         );
         var module = new QueryModelTypeModule(config);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // ObjectType<TestPlayer> + ObjectType (namespace base) + 2x ObjectTypeExtension
         // (namespace fields + namespace field on DiscoverQueries)
@@ -463,7 +481,10 @@ public class QueryModelTypeModuleTests
         );
         var module = new QueryModelTypeModule(config);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // Should still have one extension directly on DiscoverQueries
         types.OfType<ObjectTypeExtension>().Should().HaveCount(1);
@@ -506,7 +527,10 @@ public class QueryModelTypeModuleTests
         );
         var module = new QueryModelTypeModule(config);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // Root model extension on DiscoverQueries + namespace field extension on DiscoverQueries
         // + namespace type extension (GameDiscoverQueries)
@@ -558,7 +582,10 @@ public class QueryModelTypeModuleTests
         );
         var module = new QueryModelTypeModule(config);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         types.Should().HaveCount(2);
         types
@@ -588,7 +615,10 @@ public class QueryModelTypeModuleTests
         );
         var module = new QueryModelTypeModule(config);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         types.Should().HaveCount(2);
         types

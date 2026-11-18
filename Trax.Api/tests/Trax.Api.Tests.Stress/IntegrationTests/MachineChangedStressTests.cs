@@ -18,6 +18,7 @@ using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Api.Tests.Stress.Fixtures;
 using Trax.Api.Tests.Stress.Utils;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Postgres.Services.PostgresContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -77,11 +78,11 @@ public class MachineChangedStressTests
             $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_stress;Username=trax;Password=trax123;"
         ) + "Maximum Pool Size=32;Timeout=30;Command Timeout=1200;Include Error Detail=true";
 
-    private IHost _writer = null!;
-    private IHost _subscriber = null!;
-    private IRequestExecutor _writes = null!;
-    private IRequestExecutor _subscriptions = null!;
-    private ReadCounter _reads = null!;
+    private IHost? _writer;
+    private IHost? _subscriber;
+    private IRequestExecutor? _writes;
+    private IRequestExecutor? _subscriptions;
+    private ReadCounter? _reads;
 
     [OneTimeSetUp]
     public async Task Up()
@@ -90,15 +91,15 @@ public class MachineChangedStressTests
         _writer = await StartAsync(counter: null);
         await MachineEventStressTests.ClearToggleDraftsAsync(ConnectionString);
         _reads = new ReadCounter();
-        _subscriber = await StartAsync(_reads);
-        _writes = await ExecutorAsync(_writer);
-        _subscriptions = await ExecutorAsync(_subscriber);
+        _subscriber = await StartAsync(_reads.NotNull());
+        _writes = await ExecutorAsync(_writer.NotNull());
+        _subscriptions = await ExecutorAsync(_subscriber.NotNull());
     }
 
     [OneTimeTearDown]
     public async Task Down()
     {
-        foreach (var host in new[] { _subscriber, _writer })
+        foreach (var host in new[] { _subscriber.NotNull(), _writer.NotNull() })
         {
             using var stopping = new CancellationTokenSource(EndBudget);
             await host.StopAsync(stopping.Token);
@@ -175,7 +176,7 @@ public class MachineChangedStressTests
                                 .GetProperty("revision")
                                 .GetInt64();
                             latest[id] = revision;
-                            arrived.TryAdd((id, revision), Stopwatch.GetTimestamp());
+                            arrived.TryAdd((id, revision), TimeProvider.System.GetTimestamp());
                         }
                     },
                     cancellationToken: CancellationToken.None
@@ -188,7 +189,7 @@ public class MachineChangedStressTests
             .ConfigureAwait(false);
         GC.Collect();
         var memoryBefore = GC.GetTotalMemory(forceFullCollection: true);
-        var readsBefore = _reads.Count;
+        var readsBefore = _reads.NotNull().Count;
         var written = new ConcurrentDictionary<(Guid, long), long>();
         var finalRevision = new ConcurrentDictionary<Guid, long>();
         // Every write in flight, with when it was sent, so a write that never answers is named rather than waited
@@ -203,10 +204,10 @@ public class MachineChangedStressTests
                 for (var i = 0; i < WritesPerInstance; i++)
                 {
                     var write = EventAsync(id, i % 2 == 0 ? "close" : "open");
-                    inFlight[(id, i)] = (Stopwatch.GetTimestamp(), write);
+                    inFlight[(id, i)] = (TimeProvider.System.GetTimestamp(), write);
                     var revision = await write.ConfigureAwait(false);
                     inFlight.TryRemove((id, i), out _);
-                    written[(id, revision)] = Stopwatch.GetTimestamp();
+                    written[(id, revision)] = TimeProvider.System.GetTimestamp();
                     finalRevision[id] = revision;
                 }
             }
@@ -228,7 +229,7 @@ public class MachineChangedStressTests
                                 )
                                 + string.Create(
                                     CultureInfo.InvariantCulture,
-                                    $"({Stopwatch.GetElapsedTime(w.Value.Sent).TotalSeconds:F0} s ago, "
+                                    $"({TimeProvider.System.GetElapsedTime(w.Value.Sent).TotalSeconds:F0} s ago, "
                                 )
                                 + string.Create(
                                     CultureInfo.InvariantCulture,
@@ -300,10 +301,10 @@ public class MachineChangedStressTests
                 .ConfigureAwait(false)
         ).Should().BeTrue(string.Create(CultureInfo.InvariantCulture, $"each write sends a notice on {Channel}; {Volatile.Read(ref notices)} arrived"));
 
-        var reads = _reads.Count - readsBefore;
+        var reads = _reads.NotNull().Count - readsBefore;
         var latencies = written
             .Where(w => arrived.ContainsKey(w.Key))
-            .Select(w => Stopwatch.GetElapsedTime(w.Value, arrived[w.Key]))
+            .Select(w => TimeProvider.System.GetElapsedTime(w.Value, arrived[w.Key]))
             .Order()
             .ToList();
         var p99 = latencies[(int)(latencies.Count * 0.99)];
@@ -362,7 +363,8 @@ public class MachineChangedStressTests
     /// <summary>Whether <paramref name="task"/> completes within <paramref name="budget"/>; it is not awaited.</summary>
     // allowed-delay: the budget bounds a wait on the task; it is never awaited on its own.
     private static async Task<bool> FinishesWithinAsync(Task task, TimeSpan budget) =>
-        await Task.WhenAny(task, Task.Delay(budget)).ConfigureAwait(false) == task;
+        await Task.WhenAny(task, Task.Delay(budget, TimeProvider.System)).ConfigureAwait(false)
+        == task;
 
     /// <summary>The revision the database holds for each of <paramref name="ids"/>.</summary>
     private static async Task<Dictionary<Guid, long>> StoredRevisionsAsync(IEnumerable<Guid> ids)
@@ -448,20 +450,20 @@ public class MachineChangedStressTests
     private async Task<Guid> StartAsync()
     {
         var data = await ExecuteAsync(
-                _writes,
+                _writes.NotNull(),
                 $"mutation {{ machines {{ stressToggle {{ start(input: {{ label: \"stress\" }}, requestId: \"{Guid.NewGuid():N}\") {{ id problem {{ code message }} }} }} }} }}"
             )
             .ConfigureAwait(false);
         var start = data.GetProperty("machines").GetProperty("stressToggle").GetProperty("start");
         if (start.GetProperty("problem").ValueKind == JsonValueKind.Object)
             Assert.Fail($"start was refused: {start.GetProperty("problem").GetRawText()}");
-        return Guid.Parse(start.GetProperty("id").GetString()!);
+        return Guid.Parse(start.GetProperty("id").GetString().NotNull());
     }
 
     private async Task<long> EventAsync(Guid id, string field)
     {
         var data = await ExecuteAsync(
-                _writes,
+                _writes.NotNull(),
                 $"mutation {{ machines {{ stressToggle {{ {field}(id: \"{id}\", requestId: \"{Guid.NewGuid():N}\") {{ revision }} }} }} }}"
             )
             .ConfigureAwait(false);
@@ -475,6 +477,7 @@ public class MachineChangedStressTests
     private async Task<IResponseStream> SubscribeAsync(Guid id)
     {
         var result = await _subscriptions
+            .NotNull()
             .ExecuteAsync(
                 Request(
                     $"subscription {{ stressToggleChanged(id: \"{id}\") {{ revision state gone }} }}"
@@ -572,7 +575,10 @@ public class MachineChangedStressTests
                         (IDbContextFactory<PostgresContext>)(
                             contexts.ImplementationInstance
                             ?? contexts.ImplementationFactory?.Invoke(sp)
-                            ?? ActivatorUtilities.CreateInstance(sp, contexts.ImplementationType!)
+                            ?? ActivatorUtilities.CreateInstance(
+                                sp,
+                                contexts.ImplementationType.NotNull()
+                            )
                         ),
                         this
                     ),

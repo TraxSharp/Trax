@@ -21,6 +21,7 @@ using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.Services.HealthCheck;
 using Trax.Api.Tests.PersistedOperations.Fixtures;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Postgres.Utils;
@@ -115,7 +116,11 @@ public class PersistedOperationsManagementGateTests
         var schema = (await ExecutorAsync(gated)).Schema;
 
         schema.QueryType.Fields.Select(f => f.Name).Should().Contain("persistedOperations");
-        schema.MutationType!.Fields.Select(f => f.Name).Should().Contain("persistedOperations");
+        schema
+            .MutationType.NotNull()
+            .Fields.Select(f => f.Name)
+            .Should()
+            .Contain("persistedOperations");
         RootFields(schema)
             .Should()
             .NotContain("operations", "a management gate exposes nothing under operations");
@@ -275,7 +280,7 @@ public class PersistedOperationsManagementGateTests
             .Which.ToString()
             .Should()
             .Contain("RootQuery.persistedOperations")
-            .And.Contain(typeof(HostResolvers).FullName!);
+            .And.Contain(typeof(HostResolvers).FullName.NotNull());
     }
 
     [Test]

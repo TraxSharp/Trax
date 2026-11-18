@@ -8,6 +8,7 @@ using Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
 using Trax.Api.GraphQL.PersistedOperations.Storage.Validation;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Models.PersistedOperation;
 
@@ -17,13 +18,13 @@ namespace Trax.Api.Tests.PersistedOperations.IntegrationTests;
 [Category("Integration")]
 public class DbPersistedOperationStorageTests
 {
-    private DbPersistedOperationStorage _storage = null!;
-    private RecordingBroadcaster _broadcaster = null!;
+    private DbPersistedOperationStorage? _storage;
+    private RecordingBroadcaster? _broadcaster;
 
     // Service provider is shared via PostgresFixture so migrations and the
     // Npgsql connection pool are amortised across the whole test process.
     // We MUST NOT dispose it from per-test TearDown.
-    private IDataContextProviderFactory _factory = null!;
+    private IDataContextProviderFactory? _factory;
 
     [SetUp]
     public async Task SetUp()
@@ -43,10 +44,10 @@ public class DbPersistedOperationStorageTests
         var cache = new NoOpPersistedOperationCache();
 
         _storage = new DbPersistedOperationStorage(
-            _factory,
+            _factory.NotNull(),
             options,
             cache,
-            _broadcaster,
+            _broadcaster.NotNull(),
             new NoOpPersistedOperationValidator(),
             NoOpInvalidator(),
             _generation,
@@ -60,12 +61,14 @@ public class DbPersistedOperationStorageTests
     {
         const string doc = "query Greet { greeting }";
 
-        var row = await _storage.UpsertAsync(
-            "greet_v1",
-            doc,
-            options: new UpsertOptions { Version = 1 },
-            CancellationToken.None
-        );
+        var row = await _storage
+            .NotNull()
+            .UpsertAsync(
+                "greet_v1",
+                doc,
+                options: new UpsertOptions { Version = 1 },
+                CancellationToken.None
+            );
 
         row.Id.Should().Be("greet_v1");
         // OperationName is taken from the document's operation definition,
@@ -81,12 +84,9 @@ public class DbPersistedOperationStorageTests
     [Test]
     public async Task Upsert_AnonymousOperation_StoresEmptyOperationName()
     {
-        var row = await _storage.UpsertAsync(
-            "anon_v1",
-            "{ greeting }",
-            options: null,
-            CancellationToken.None
-        );
+        var row = await _storage
+            .NotNull()
+            .UpsertAsync("anon_v1", "{ greeting }", options: null, CancellationToken.None);
 
         row.OperationName.Should().BeEmpty();
         row.Version.Should().Be(0);
@@ -96,12 +96,14 @@ public class DbPersistedOperationStorageTests
     public async Task Upsert_ArbitraryId_DoesNotThrow()
     {
         // Ids are opaque strings; there is no parse rule.
-        var row = await _storage.UpsertAsync(
-            "this-is-an-opaque/id::v0",
-            "query Greet { greeting }",
-            options: null,
-            CancellationToken.None
-        );
+        var row = await _storage
+            .NotNull()
+            .UpsertAsync(
+                "this-is-an-opaque/id::v0",
+                "query Greet { greeting }",
+                options: null,
+                CancellationToken.None
+            );
 
         row.Id.Should().Be("this-is-an-opaque/id::v0");
         row.OperationName.Should().Be("Greet");
@@ -111,20 +113,24 @@ public class DbPersistedOperationStorageTests
     [Test]
     public async Task Upsert_Existing_UpdatesDocument()
     {
-        await _storage.UpsertAsync(
-            "greet_v1",
-            "query Greet { hello }",
-            options: null,
-            CancellationToken.None
-        );
+        await _storage
+            .NotNull()
+            .UpsertAsync(
+                "greet_v1",
+                "query Greet { hello }",
+                options: null,
+                CancellationToken.None
+            );
 
         // Shape-preserving change: same selection set, different argument value.
-        var updated = await _storage.UpsertAsync(
-            "greet_v1",
-            "query Greet { hello(loud: true) }",
-            new UpsertOptions { Description = "fix typo" },
-            CancellationToken.None
-        );
+        var updated = await _storage
+            .NotNull()
+            .UpsertAsync(
+                "greet_v1",
+                "query Greet { hello(loud: true) }",
+                new UpsertOptions { Description = "fix typo" },
+                CancellationToken.None
+            );
 
         updated.Document.Should().Be("query Greet { hello(loud: true) }");
         updated.Description.Should().Be("fix typo");
@@ -133,65 +139,74 @@ public class DbPersistedOperationStorageTests
     [Test]
     public async Task Get_Active_ReturnsRow()
     {
-        await _storage.UpsertAsync(
-            "greet_v1",
-            "query Greet { hello }",
-            options: null,
-            CancellationToken.None
-        );
+        await _storage
+            .NotNull()
+            .UpsertAsync(
+                "greet_v1",
+                "query Greet { hello }",
+                options: null,
+                CancellationToken.None
+            );
 
-        var fetched = await _storage.GetAsync("greet_v1", tenantKey: null, CancellationToken.None);
+        var fetched = await _storage
+            .NotNull()
+            .GetAsync("greet_v1", tenantKey: null, CancellationToken.None);
 
         fetched.Should().NotBeNull();
-        fetched!.Id.Should().Be("greet_v1");
+        fetched.NotNull().Id.Should().Be("greet_v1");
     }
 
     [Test]
     public async Task Get_Missing_ReturnsNull()
     {
-        var fetched = await _storage.GetAsync(
-            "nonexistent_v1",
-            tenantKey: null,
-            CancellationToken.None
-        );
+        var fetched = await _storage
+            .NotNull()
+            .GetAsync("nonexistent_v1", tenantKey: null, CancellationToken.None);
         fetched.Should().BeNull();
     }
 
     [Test]
     public async Task Deactivate_HidesFromGet()
     {
-        await _storage.UpsertAsync(
-            "greet_v1",
-            "query Greet { hello }",
-            options: null,
-            CancellationToken.None
-        );
-        await _storage.DeactivateAsync(
-            "greet_v1",
-            tenantKey: null,
-            "broken filter",
-            CancellationToken.None
-        );
+        await _storage
+            .NotNull()
+            .UpsertAsync(
+                "greet_v1",
+                "query Greet { hello }",
+                options: null,
+                CancellationToken.None
+            );
+        await _storage
+            .NotNull()
+            .DeactivateAsync("greet_v1", tenantKey: null, "broken filter", CancellationToken.None);
 
-        var fetched = await _storage.GetAsync("greet_v1", tenantKey: null, CancellationToken.None);
+        var fetched = await _storage
+            .NotNull()
+            .GetAsync("greet_v1", tenantKey: null, CancellationToken.None);
         fetched.Should().BeNull();
     }
 
     [Test]
     public async Task Restore_BringsBackActive()
     {
-        await _storage.UpsertAsync(
-            "greet_v1",
-            "query Greet { hello }",
-            options: null,
-            CancellationToken.None
-        );
-        await _storage.DeactivateAsync("greet_v1", tenantKey: null, "test", CancellationToken.None);
-        await _storage.RestoreAsync("greet_v1", tenantKey: null, CancellationToken.None);
+        await _storage
+            .NotNull()
+            .UpsertAsync(
+                "greet_v1",
+                "query Greet { hello }",
+                options: null,
+                CancellationToken.None
+            );
+        await _storage
+            .NotNull()
+            .DeactivateAsync("greet_v1", tenantKey: null, "test", CancellationToken.None);
+        await _storage.NotNull().RestoreAsync("greet_v1", tenantKey: null, CancellationToken.None);
 
-        var fetched = await _storage.GetAsync("greet_v1", tenantKey: null, CancellationToken.None);
+        var fetched = await _storage
+            .NotNull()
+            .GetAsync("greet_v1", tenantKey: null, CancellationToken.None);
         fetched.Should().NotBeNull();
-        fetched!.IsActive.Should().BeTrue();
+        fetched.NotNull().IsActive.Should().BeTrue();
         fetched.DeprecationReason.Should().BeNull();
     }
 
@@ -199,7 +214,9 @@ public class DbPersistedOperationStorageTests
     public async Task Deactivate_NonexistentId_Throws()
     {
         Func<Task> act = () =>
-            _storage.DeactivateAsync("nope_v1", tenantKey: null, "x", CancellationToken.None);
+            _storage
+                .NotNull()
+                .DeactivateAsync("nope_v1", tenantKey: null, "x", CancellationToken.None);
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
 
@@ -207,28 +224,24 @@ public class DbPersistedOperationStorageTests
     public async Task Restore_NonexistentId_Throws()
     {
         Func<Task> act = () =>
-            _storage.RestoreAsync("nope_v1", tenantKey: null, CancellationToken.None);
+            _storage.NotNull().RestoreAsync("nope_v1", tenantKey: null, CancellationToken.None);
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
 
     [Test]
     public async Task List_ReturnsActiveAndDeactivated()
     {
-        await _storage.UpsertAsync(
-            "a_v1",
-            "query A { hello }",
-            options: null,
-            CancellationToken.None
-        );
-        await _storage.UpsertAsync(
-            "b_v1",
-            "query B { world }",
-            options: null,
-            CancellationToken.None
-        );
-        await _storage.DeactivateAsync("a_v1", tenantKey: null, "test", CancellationToken.None);
+        await _storage
+            .NotNull()
+            .UpsertAsync("a_v1", "query A { hello }", options: null, CancellationToken.None);
+        await _storage
+            .NotNull()
+            .UpsertAsync("b_v1", "query B { world }", options: null, CancellationToken.None);
+        await _storage
+            .NotNull()
+            .DeactivateAsync("a_v1", tenantKey: null, "test", CancellationToken.None);
 
-        var list = await _storage.ListAsync(tenantKey: null, CancellationToken.None);
+        var list = await _storage.NotNull().ListAsync(tenantKey: null, CancellationToken.None);
         list.Should().HaveCount(2);
         list.Single(r => string.Equals(r.Id, "a_v1", StringComparison.Ordinal))
             .IsActive.Should()
@@ -241,25 +254,31 @@ public class DbPersistedOperationStorageTests
     [Test]
     public async Task TenantIsolation_DocumentsAreScopedByTenant()
     {
-        await _storage.UpsertAsync(
-            "greet_v1",
-            "query Greet { tenantA }",
-            new UpsertOptions { TenantKey = "a" },
-            CancellationToken.None
-        );
-        await _storage.UpsertAsync(
-            "greet_v1",
-            "query Greet { tenantB }",
-            new UpsertOptions { TenantKey = "b" },
-            CancellationToken.None
-        );
+        await _storage
+            .NotNull()
+            .UpsertAsync(
+                "greet_v1",
+                "query Greet { tenantA }",
+                new UpsertOptions { TenantKey = "a" },
+                CancellationToken.None
+            );
+        await _storage
+            .NotNull()
+            .UpsertAsync(
+                "greet_v1",
+                "query Greet { tenantB }",
+                new UpsertOptions { TenantKey = "b" },
+                CancellationToken.None
+            );
 
-        var a = await _storage.GetAsync("greet_v1", "a", CancellationToken.None);
-        var b = await _storage.GetAsync("greet_v1", "b", CancellationToken.None);
-        var none = await _storage.GetAsync("greet_v1", tenantKey: null, CancellationToken.None);
+        var a = await _storage.NotNull().GetAsync("greet_v1", "a", CancellationToken.None);
+        var b = await _storage.NotNull().GetAsync("greet_v1", "b", CancellationToken.None);
+        var none = await _storage
+            .NotNull()
+            .GetAsync("greet_v1", tenantKey: null, CancellationToken.None);
 
-        a!.Document.Should().Contain("tenantA");
-        b!.Document.Should().Contain("tenantB");
+        a.NotNull().Document.Should().Contain("tenantA");
+        b.NotNull().Document.Should().Contain("tenantB");
         none.Should().BeNull();
     }
 
@@ -267,22 +286,28 @@ public class DbPersistedOperationStorageTests
     public async Task Upsert_WritesHistoryRow()
     {
         // Shape-preserving updates so the guardrail does not reject the second.
-        await _storage.UpsertAsync(
-            "greet_v1",
-            "query Greet { v1(arg: 1) }",
-            options: null,
-            CancellationToken.None
-        );
-        await _storage.UpsertAsync(
-            "greet_v1",
-            "query Greet { v1(arg: 2) }",
-            options: null,
-            CancellationToken.None
-        );
-        await _storage.DeactivateAsync("greet_v1", tenantKey: null, "test", CancellationToken.None);
-        await _storage.RestoreAsync("greet_v1", tenantKey: null, CancellationToken.None);
+        await _storage
+            .NotNull()
+            .UpsertAsync(
+                "greet_v1",
+                "query Greet { v1(arg: 1) }",
+                options: null,
+                CancellationToken.None
+            );
+        await _storage
+            .NotNull()
+            .UpsertAsync(
+                "greet_v1",
+                "query Greet { v1(arg: 2) }",
+                options: null,
+                CancellationToken.None
+            );
+        await _storage
+            .NotNull()
+            .DeactivateAsync("greet_v1", tenantKey: null, "test", CancellationToken.None);
+        await _storage.NotNull().RestoreAsync("greet_v1", tenantKey: null, CancellationToken.None);
 
-        var ctx = await _factory.CreateDbContextAsync(CancellationToken.None);
+        var ctx = await _factory.NotNull().CreateDbContextAsync(CancellationToken.None);
         var rows = await ctx
             .PersistedOperationHistories.Where(h => h.Id == "greet_v1")
             .OrderBy(h => h.ChangedAt)
@@ -297,7 +322,7 @@ public class DbPersistedOperationStorageTests
     public async Task AChangeThatCouldNotBeBroadcast_IsSaved_AndSaysSo()
     {
         var storage = new DbPersistedOperationStorage(
-            _factory,
+            _factory.NotNull(),
             new PersistedOperationsBuilder().SingleNode().Build(),
             new NoOpPersistedOperationCache(),
             new ThrowingBroadcaster(),
@@ -321,7 +346,7 @@ public class DbPersistedOperationStorageTests
             .ThrowAsync<Trax.Api.GraphQL.PersistedOperations.Storage.Exceptions.PersistedOperationNotBroadcastException>();
         thrown.Which.Code.Should().Be("CHANGE_NOT_BROADCAST");
         thrown.Which.Id.Should().Be("throw_v1");
-        thrown.Which.Operation!.Id.Should().Be("throw_v1");
+        thrown.Which.Operation.NotNull().Id.Should().Be("throw_v1");
         _generation
             .Current.Should()
             .BeGreaterThan(before, "this node's caches still apply the change");
@@ -346,15 +371,12 @@ public class DbPersistedOperationStorageTests
         // Once the row is saved the broadcast is not the caller's to cancel.
         using var callerToken = new CancellationTokenSource();
 
-        await _storage.UpsertAsync(
-            "greet_v1",
-            "query Greet { hi }",
-            options: null,
-            callerToken.Token
-        );
+        await _storage
+            .NotNull()
+            .UpsertAsync("greet_v1", "query Greet { hi }", options: null, callerToken.Token);
 
-        _broadcaster.Messages.Should().ContainSingle();
-        _broadcaster.LastTokenCouldCancel.Should().BeFalse();
+        _broadcaster.NotNull().Messages.Should().ContainSingle();
+        _broadcaster.NotNull().LastTokenCouldCancel.Should().BeFalse();
     }
 
     private sealed class ThrowingBroadcaster
@@ -369,14 +391,12 @@ public class DbPersistedOperationStorageTests
     [Test]
     public async Task Upsert_PublishesBroadcast()
     {
-        await _storage.UpsertAsync(
-            "greet_v1",
-            "query Greet { hi }",
-            options: null,
-            CancellationToken.None
-        );
+        await _storage
+            .NotNull()
+            .UpsertAsync("greet_v1", "query Greet { hi }", options: null, CancellationToken.None);
 
         _broadcaster
+            .NotNull()
             .Messages.Should()
             .ContainSingle(m =>
                 m.Id == "greet_v1" && m.ChangeType == PersistedOperationChangeType.Upsert
@@ -386,16 +406,16 @@ public class DbPersistedOperationStorageTests
     [Test]
     public async Task Deactivate_PublishesBroadcast()
     {
-        await _storage.UpsertAsync(
-            "greet_v1",
-            "query Greet { hi }",
-            options: null,
-            CancellationToken.None
-        );
-        _broadcaster.Messages.Clear();
-        await _storage.DeactivateAsync("greet_v1", tenantKey: null, "test", CancellationToken.None);
+        await _storage
+            .NotNull()
+            .UpsertAsync("greet_v1", "query Greet { hi }", options: null, CancellationToken.None);
+        _broadcaster.NotNull().Messages.Clear();
+        await _storage
+            .NotNull()
+            .DeactivateAsync("greet_v1", tenantKey: null, "test", CancellationToken.None);
 
         _broadcaster
+            .NotNull()
             .Messages.Should()
             .ContainSingle(m => m.ChangeType == PersistedOperationChangeType.Deactivate);
     }
@@ -403,17 +423,17 @@ public class DbPersistedOperationStorageTests
     [Test]
     public async Task Restore_PublishesBroadcast()
     {
-        await _storage.UpsertAsync(
-            "greet_v1",
-            "query Greet { hi }",
-            options: null,
-            CancellationToken.None
-        );
-        await _storage.DeactivateAsync("greet_v1", tenantKey: null, "x", CancellationToken.None);
-        _broadcaster.Messages.Clear();
-        await _storage.RestoreAsync("greet_v1", tenantKey: null, CancellationToken.None);
+        await _storage
+            .NotNull()
+            .UpsertAsync("greet_v1", "query Greet { hi }", options: null, CancellationToken.None);
+        await _storage
+            .NotNull()
+            .DeactivateAsync("greet_v1", tenantKey: null, "x", CancellationToken.None);
+        _broadcaster.NotNull().Messages.Clear();
+        await _storage.NotNull().RestoreAsync("greet_v1", tenantKey: null, CancellationToken.None);
 
         _broadcaster
+            .NotNull()
             .Messages.Should()
             .ContainSingle(m => m.ChangeType == PersistedOperationChangeType.Restore);
     }
@@ -421,54 +441,52 @@ public class DbPersistedOperationStorageTests
     [Test]
     public async Task TryReadAsync_HotPath_ReturnsDocument()
     {
-        await _storage.UpsertAsync(
-            "greet_v1",
-            "query Greet { hello }",
-            options: null,
-            CancellationToken.None
-        );
+        await _storage
+            .NotNull()
+            .UpsertAsync(
+                "greet_v1",
+                "query Greet { hello }",
+                options: null,
+                CancellationToken.None
+            );
 
-        var doc = await _storage.TryReadAsync(
-            new OperationDocumentId("greet_v1"),
-            CancellationToken.None
-        );
+        var doc = await _storage
+            .NotNull()
+            .TryReadAsync(new OperationDocumentId("greet_v1"), CancellationToken.None);
 
         doc.Should().NotBeNull();
-        doc!.ToString().Should().Contain("hello");
+        doc.NotNull().ToString().Should().Contain("hello");
     }
 
     [Test]
     public async Task TryReadAsync_HotPath_Missing_ReturnsNull()
     {
-        var doc = await _storage.TryReadAsync(
-            new OperationDocumentId("nothing_v1"),
-            CancellationToken.None
-        );
+        var doc = await _storage
+            .NotNull()
+            .TryReadAsync(new OperationDocumentId("nothing_v1"), CancellationToken.None);
         doc.Should().BeNull();
     }
 
     [Test]
     public async Task TryReadAsync_HotPath_Deactivated_ReturnsNull()
     {
-        await _storage.UpsertAsync(
-            "greet_v1",
-            "query Greet { hi }",
-            options: null,
-            CancellationToken.None
-        );
-        await _storage.DeactivateAsync("greet_v1", tenantKey: null, "test", CancellationToken.None);
+        await _storage
+            .NotNull()
+            .UpsertAsync("greet_v1", "query Greet { hi }", options: null, CancellationToken.None);
+        await _storage
+            .NotNull()
+            .DeactivateAsync("greet_v1", tenantKey: null, "test", CancellationToken.None);
 
-        var doc = await _storage.TryReadAsync(
-            new OperationDocumentId("greet_v1"),
-            CancellationToken.None
-        );
+        var doc = await _storage
+            .NotNull()
+            .TryReadAsync(new OperationDocumentId("greet_v1"), CancellationToken.None);
         doc.Should().BeNull();
     }
 
     [Test]
     public async Task TryReadAsync_EmptyId_ReturnsNull()
     {
-        var doc = await _storage.TryReadAsync(default, CancellationToken.None);
+        var doc = await _storage.NotNull().TryReadAsync(default, CancellationToken.None);
         doc.Should().BeNull();
     }
 
@@ -477,6 +495,7 @@ public class DbPersistedOperationStorageTests
     {
         Func<Task> act = async () =>
             await _storage
+                .NotNull()
                 .SaveAsync(
                     new OperationDocumentId("x_v1"),
                     new OperationDocumentSourceText("query { hi }"),
@@ -490,21 +509,25 @@ public class DbPersistedOperationStorageTests
     [Test]
     public async Task Upsert_ShapeChange_Throws_ShapeDiffViolationException()
     {
-        await _storage.UpsertAsync(
-            "shape_v1",
-            "query Shape { greet(name: \"x\") }",
-            options: null,
-            CancellationToken.None
-        );
-
-        // Add a field — different response shape.
-        Func<Task> act = () =>
-            _storage.UpsertAsync(
+        await _storage
+            .NotNull()
+            .UpsertAsync(
                 "shape_v1",
-                "query Shape { greet(name: \"x\") echo(text: \"y\") }",
+                "query Shape { greet(name: \"x\") }",
                 options: null,
                 CancellationToken.None
             );
+
+        // Add a field — different response shape.
+        Func<Task> act = () =>
+            _storage
+                .NotNull()
+                .UpsertAsync(
+                    "shape_v1",
+                    "query Shape { greet(name: \"x\") echo(text: \"y\") }",
+                    options: null,
+                    CancellationToken.None
+                );
 
         var ex = (await act.Should().ThrowAsync<ShapeDiffViolationException>()).Which;
         ex.Id.Should().Be("shape_v1");
@@ -516,19 +539,23 @@ public class DbPersistedOperationStorageTests
     [Test]
     public async Task Upsert_ShapeChange_WithBypass_Succeeds()
     {
-        await _storage.UpsertAsync(
-            "shape_bypass_v1",
-            "query Shape { greet(name: \"x\") }",
-            options: null,
-            CancellationToken.None
-        );
+        await _storage
+            .NotNull()
+            .UpsertAsync(
+                "shape_bypass_v1",
+                "query Shape { greet(name: \"x\") }",
+                options: null,
+                CancellationToken.None
+            );
 
-        var updated = await _storage.UpsertAsync(
-            "shape_bypass_v1",
-            "query Shape { greet(name: \"x\") echo(text: \"y\") }",
-            new UpsertOptions { BypassShapeDiff = true },
-            CancellationToken.None
-        );
+        var updated = await _storage
+            .NotNull()
+            .UpsertAsync(
+                "shape_bypass_v1",
+                "query Shape { greet(name: \"x\") echo(text: \"y\") }",
+                new UpsertOptions { BypassShapeDiff = true },
+                CancellationToken.None
+            );
 
         updated.Document.Should().Contain("echo");
     }
@@ -538,20 +565,24 @@ public class DbPersistedOperationStorageTests
     {
         // Argument changes do not change the response shape; the guardrail
         // should let this through.
-        await _storage.UpsertAsync(
-            "shape_args_v1",
-            "query Q { greet(name: \"alice\") }",
-            options: null,
-            CancellationToken.None
-        );
-
-        Func<Task> act = () =>
-            _storage.UpsertAsync(
+        await _storage
+            .NotNull()
+            .UpsertAsync(
                 "shape_args_v1",
-                "query Q { greet(name: \"bob\") }",
+                "query Q { greet(name: \"alice\") }",
                 options: null,
                 CancellationToken.None
             );
+
+        Func<Task> act = () =>
+            _storage
+                .NotNull()
+                .UpsertAsync(
+                    "shape_args_v1",
+                    "query Q { greet(name: \"bob\") }",
+                    options: null,
+                    CancellationToken.None
+                );
 
         await act.Should().NotThrowAsync();
     }
@@ -563,35 +594,35 @@ public class DbPersistedOperationStorageTests
         // connection-pooling + transaction handling without contending on
         // the same row.
         await Task.WhenAll(
-            _storage.UpsertAsync(
-                "concurrent_a_v1",
-                "query A { greet(name: \"a\") }",
-                options: null,
-                CancellationToken.None
-            ),
-            _storage.UpsertAsync(
-                "concurrent_b_v1",
-                "query B { greet(name: \"b\") }",
-                options: null,
-                CancellationToken.None
-            )
+            _storage
+                .NotNull()
+                .UpsertAsync(
+                    "concurrent_a_v1",
+                    "query A { greet(name: \"a\") }",
+                    options: null,
+                    CancellationToken.None
+                ),
+            _storage
+                .NotNull()
+                .UpsertAsync(
+                    "concurrent_b_v1",
+                    "query B { greet(name: \"b\") }",
+                    options: null,
+                    CancellationToken.None
+                )
         );
 
-        var rowA = await _storage.GetAsync(
-            "concurrent_a_v1",
-            tenantKey: null,
-            CancellationToken.None
-        );
-        var rowB = await _storage.GetAsync(
-            "concurrent_b_v1",
-            tenantKey: null,
-            CancellationToken.None
-        );
+        var rowA = await _storage
+            .NotNull()
+            .GetAsync("concurrent_a_v1", tenantKey: null, CancellationToken.None);
+        var rowB = await _storage
+            .NotNull()
+            .GetAsync("concurrent_b_v1", tenantKey: null, CancellationToken.None);
 
         rowA.Should().NotBeNull();
-        rowA!.Document.Should().Contain("\"a\"");
+        rowA.NotNull().Document.Should().Contain("\"a\"");
         rowB.Should().NotBeNull();
-        rowB!.Document.Should().Contain("\"b\"");
+        rowB.NotNull().Document.Should().Contain("\"b\"");
     }
 
     [Test]
@@ -614,8 +645,8 @@ public class DbPersistedOperationStorageTests
         const string docB = "query Q { greet(name: \"B\") }";
 
         // Start both before awaiting either, so they actually race.
-        var taskA = _storage.UpsertAsync(id, docA, options: null, CancellationToken.None);
-        var taskB = _storage.UpsertAsync(id, docB, options: null, CancellationToken.None);
+        var taskA = _storage.NotNull().UpsertAsync(id, docA, options: null, CancellationToken.None);
+        var taskB = _storage.NotNull().UpsertAsync(id, docB, options: null, CancellationToken.None);
         var (a, b) = (await WrapAsync(taskA), await WrapAsync(taskB));
 
         var successes = new[] { a, b }.Where(r => r.Success).ToList();
@@ -624,16 +655,19 @@ public class DbPersistedOperationStorageTests
         successes.Should().NotBeEmpty("at least one upsert must commit");
         foreach (var failure in failures)
             failure
-                .Exception!.Should()
+                .Exception.NotNull()
+                .Should()
                 .BeAssignableTo<DbUpdateException>(
                     "any concurrent failure must surface as DbUpdateException, never a silent drop"
                 );
 
-        var row = await _storage.GetAsync(id, tenantKey: null, CancellationToken.None);
+        var row = await _storage.NotNull().GetAsync(id, tenantKey: null, CancellationToken.None);
         row.Should().NotBeNull();
-        row!.Document.Should().BeOneOf(successes.Select(s => s.Document!).ToArray());
+        row.NotNull()
+            .Document.Should()
+            .BeOneOf(successes.Select(s => s.Document.NotNull()).ToArray());
 
-        var ctx = await _factory.CreateDbContextAsync(CancellationToken.None);
+        var ctx = await _factory.NotNull().CreateDbContextAsync(CancellationToken.None);
         var historyDocs = await ctx
             .PersistedOperationHistories.Where(h =>
                 h.Id == id && h.ChangeType == PersistedOperationChangeType.Upsert
@@ -669,7 +703,9 @@ public class DbPersistedOperationStorageTests
     public async Task Upsert_EmptyDocument_Throws()
     {
         Func<Task> act = () =>
-            _storage.UpsertAsync("greet_v1", string.Empty, options: null, CancellationToken.None);
+            _storage
+                .NotNull()
+                .UpsertAsync("greet_v1", string.Empty, options: null, CancellationToken.None);
 
         await act.Should().ThrowAsync<ArgumentException>();
     }
@@ -686,7 +722,7 @@ public class DbPersistedOperationStorageTests
             TimeProvider.System
         );
         var storage = new DbPersistedOperationStorage(
-            _factory,
+            _factory.NotNull(),
             new PersistedOperationsBuilder().SingleNode().Build(),
             memCache,
             new NoOpPersistedOperationBroadcaster(),
@@ -712,7 +748,7 @@ public class DbPersistedOperationStorageTests
 
         // Manually wipe DB to verify subsequent read is served from cache.
         {
-            var ctx = await _factory.CreateDbContextAsync(CancellationToken.None);
+            var ctx = await _factory.NotNull().CreateDbContextAsync(CancellationToken.None);
             await ctx.PersistedOperations.ExecuteDeleteAsync();
         }
 
@@ -723,25 +759,26 @@ public class DbPersistedOperationStorageTests
 
         first.Should().NotBeNull();
         second.Should().NotBeNull();
-        second!.ToString().Should().Contain("hello");
+        second.NotNull().ToString().Should().Contain("hello");
     }
 
     [Test]
     public async Task TryReadAsync_ForARequestThatSentItsOwnDocument_DoesNotReadTheStore()
     {
-        await _storage.UpsertAsync(
-            "greet_v1",
-            "query Greet { hello }",
-            options: null,
-            CancellationToken.None
-        );
+        await _storage
+            .NotNull()
+            .UpsertAsync(
+                "greet_v1",
+                "query Greet { hello }",
+                options: null,
+                CancellationToken.None
+            );
         PersistedOperationRequestScope.Begin(_generation, carriesDocument: true);
         try
         {
-            var read = await _storage.TryReadAsync(
-                new OperationDocumentId("greet_v1"),
-                CancellationToken.None
-            );
+            var read = await _storage
+                .NotNull()
+                .TryReadAsync(new OperationDocumentId("greet_v1"), CancellationToken.None);
 
             read.Should().BeNull("the document the request sent is what runs");
         }
@@ -757,7 +794,7 @@ public class DbPersistedOperationStorageTests
         var clock = new Trax.Api.Tests.PersistedOperations.Fixtures.ManualClock();
         var options = new PersistedOperationsBuilder().SingleNode().WithInMemoryCache().Build();
         var storage = new DbPersistedOperationStorage(
-            _factory,
+            _factory.NotNull(),
             options,
             new InMemoryPersistedOperationCache(
                 new Microsoft.Extensions.Caching.Memory.MemoryCache(
@@ -807,16 +844,13 @@ public class DbPersistedOperationStorageTests
     public async Task TryReadAsync_AnIdUploadedAfterItWasMissing_IsFound()
     {
         var id = new OperationDocumentId("late_v1");
-        (await _storage.TryReadAsync(id, CancellationToken.None)).Should().BeNull();
+        (await _storage.NotNull().TryReadAsync(id, CancellationToken.None)).Should().BeNull();
 
-        await _storage.UpsertAsync(
-            "late_v1",
-            "query Late { hello }",
-            options: null,
-            CancellationToken.None
-        );
+        await _storage
+            .NotNull()
+            .UpsertAsync("late_v1", "query Late { hello }", options: null, CancellationToken.None);
 
-        (await _storage.TryReadAsync(id, CancellationToken.None)).Should().NotBeNull();
+        (await _storage.NotNull().TryReadAsync(id, CancellationToken.None)).Should().NotBeNull();
     }
 
     [Test]
@@ -824,7 +858,7 @@ public class DbPersistedOperationStorageTests
     {
         var foreign = new DictionaryCache();
         var storage = new DbPersistedOperationStorage(
-            _factory,
+            _factory.NotNull(),
             new PersistedOperationsBuilder().SingleNode().Build(),
             foreign,
             new NoOpPersistedOperationBroadcaster(),
@@ -849,7 +883,7 @@ public class DbPersistedOperationStorageTests
             new OperationDocumentId("greet_v1"),
             CancellationToken.None
         );
-        second!.ToString().Should().Contain("version");
+        second.NotNull().ToString().Should().Contain("version");
     }
 
     private sealed class DictionaryCache : IPersistedOperationCache

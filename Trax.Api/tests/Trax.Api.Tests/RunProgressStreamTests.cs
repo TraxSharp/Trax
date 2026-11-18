@@ -4,6 +4,7 @@ using HotChocolate.Execution;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Subscriptions;
 using Trax.Api.GraphQL.TypeModules;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 
 namespace Trax.Api.Tests;
@@ -59,19 +60,21 @@ public class RunProgressStreamTests
                 return Task.FromResult<(string?, bool)>((null, false));
             },
             // allowed-delay: the stream's own wait between looks, kept short so the loop runs while the test watches.
-            (_, ct) => Task.Delay(TimeSpan.FromMilliseconds(10), ct)
+            (_, ct) => Task.Delay(TimeSpan.FromMilliseconds(10), TimeProvider.System, ct)
         );
         var reader = stream.ReadEventsAsync().GetAsyncEnumerator();
         (await reader.MoveNextAsync()).Should().BeTrue();
         var waiting = reader.MoveNextAsync().AsTask();
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-        while (Volatile.Read(ref looks) < 2 && DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(10);
+        while (
+            Volatile.Read(ref looks) < 2 && TimeProvider.System.GetUtcNow().UtcDateTime < deadline
+        )
             // allowed-delay: waits for the retry loop to start, bounded by the deadline.
             await Task.Delay(10);
 
         await stream.DisposeAsync();
 
-        (await waiting.WaitAsync(TimeSpan.FromSeconds(5)))
+        (await waiting.WaitAsync(TimeSpan.FromSeconds(5), stream.Clock))
             .Should()
             .BeFalse("a disposed stream ends");
         var after = Volatile.Read(ref looks);
@@ -162,7 +165,7 @@ public class RunProgressStreamTests
                 "a read that keeps failing is tried less often"
             );
         events.Should().HaveCount(2);
-        events[1].Problem!.Code.Should().Be(RefusalCode.InternalError);
+        events[1].Problem.NotNull().Code.Should().Be(RefusalCode.InternalError);
         events[1].Sequence.Should().Be(2);
         lease.Disposed.Should().Be(1, "the ended stream gives its place back");
     }

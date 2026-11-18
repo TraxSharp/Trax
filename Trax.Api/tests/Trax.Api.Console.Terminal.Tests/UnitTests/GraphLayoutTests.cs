@@ -50,13 +50,13 @@ public class GraphLayoutTests
             )
             .ToList();
 
-        var clock = Stopwatch.StartNew();
+        var clock = TimeProvider.System.GetTimestamp();
         var lines = GraphLayout.Render(states, edges, "S50", vertical, out var work);
-        clock.Stop();
+        var clockTook = TimeProvider.System.GetElapsedTime(clock);
         TestContext.Out.WriteLine(
             string.Create(
                 CultureInfo.InvariantCulture,
-                $"{clock.ElapsedMilliseconds} ms, {lines.Count} lines, {work.Steps} of {work.Budget} steps, {work.CellsSearched} cells searched"
+                $"{((long)clockTook.TotalMilliseconds)} ms, {lines.Count} lines, {work.Steps} of {work.Budget} steps, {work.CellsSearched} cells searched"
             )
         );
 
@@ -68,7 +68,7 @@ public class GraphLayoutTests
         work.Steps.Should().BeLessThanOrEqualTo(work.Budget + edges.Count);
         work.CellsSearched.Should().BeLessThan(4 * work.Budget);
         // A ceiling for what neither count sees (layering, ordering, placing), far above what any runner takes.
-        clock.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(30));
+        clockTook.Should().BeLessThan(TimeSpan.FromSeconds(30));
         var text = string.Join('\n', lines);
         text.Should().Contain("S0").And.Contain("S99");
     }

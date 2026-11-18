@@ -17,7 +17,7 @@ namespace Trax.Api.Tests;
 
 public class ExplicitImplDbContext : DbContext
 {
-    public DbSet<ExplicitImplBook> Books { get; set; } = null!;
+    public DbSet<ExplicitImplBook> Books => Set<ExplicitImplBook>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
         optionsBuilder.UseInMemoryDatabase("ExplicitImplDb_" + Guid.NewGuid());

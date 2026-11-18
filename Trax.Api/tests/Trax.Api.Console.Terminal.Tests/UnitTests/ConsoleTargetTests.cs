@@ -269,7 +269,7 @@ public class ConsoleTargetTests
                     .ThrowAsync<InvalidOperationException>()
                     .WithMessage("*not a regular file*")
             );
-            await reading.WaitAsync(TimeSpan.FromSeconds(30));
+            await reading.WaitAsync(TimeSpan.FromSeconds(30), TimeProvider.System);
         }
         finally
         {

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Api.GraphQL.Client;
 using Trax.Api.Tests.GraphQLClient.Fixtures;
 using Trax.Api.Tests.GraphQLClient.IntegrationTests.Fakes;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 
@@ -17,13 +18,13 @@ namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 [TestFixture]
 public class StrictExtractTests
 {
-    private GraphQLTestServerFixture _fixture = null!;
+    private GraphQLTestServerFixture? _fixture;
 
     [SetUp]
     public void SetUp() => _fixture = new GraphQLTestServerFixture();
 
     [TearDown]
-    public void TearDown() => _fixture.Dispose();
+    public void TearDown() => _fixture?.Dispose();
 
     private IGraphQLClientExecutor BuildExecutor(
         ResponseStrictness strictness,
@@ -32,8 +33,8 @@ public class StrictExtractTests
     {
         var services = new ServiceCollection();
         services
-            .AddTraxGraphQLClient(_fixture.BaseAddress)
-            .ConfigureHttpClient(_fixture.CreateHttpClient())
+            .AddTraxGraphQLClient(_fixture.NotNull().BaseAddress)
+            .ConfigureHttpClient(_fixture.NotNull().CreateHttpClient())
             .WithStrictness(strictness);
         if (logger is not null)
         {
@@ -114,7 +115,7 @@ public class StrictExtractTests
 
         result.AllItems.Should().HaveCount(3);
         result.Player.Should().NotBeNull();
-        result.Player!.Id.Should().Be("player-1");
+        result.Player.NotNull().Id.Should().Be("player-1");
         result.Player.Name.Should().Be("Aragorn");
     }
 
@@ -146,7 +147,7 @@ public class StrictExtractTests
         var result = await executor.Run(new GetNestedCustomerByEmailRequest { Email = "Aragorn" });
 
         result.Should().NotBeNull();
-        result!.Id.Should().Be("player-1");
+        result.NotNull().Id.Should().Be("player-1");
     }
 
     private sealed class CapturedLogger : ILogger<GraphQLClientExecutor>

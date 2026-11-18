@@ -11,6 +11,7 @@ using Trax.Api.Auth.ApiKey;
 using Trax.Api.Auth.Jwt;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Attributes;
@@ -40,12 +41,12 @@ namespace Trax.Api.Tests.AuthE2E;
 public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
 {
     private string Database => "trax_api_operations_train_authorize" + (withApiKeys ? "_keys" : "");
-    private static readonly string TrainName = typeof(IPlaceOrderTrain).FullName!;
+    private static readonly string TrainName = typeof(IPlaceOrderTrain).FullName.NotNull();
 
-    private IHost _host = null!;
-    private string _customer = null!;
-    private string _staff = null!;
-    private string _staffCustomer = null!;
+    private IHost? _host;
+    private string? _customer;
+    private string? _staff;
+    private string? _staffCustomer;
 
     [OneTimeSetUp]
     public async Task StartHost()
@@ -109,7 +110,7 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
                     })
             )
             .Build();
-        await _host.StartAsync();
+        await _host.NotNull().StartAsync();
 
         _customer = AuthE2EHost.SignJwt("customer-1", "Customer One", "Customer");
         _staff = AuthE2EHost.SignJwt("staff-1", "Staff One", "Staff");
@@ -119,8 +120,8 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
     [OneTimeTearDown]
     public async Task StopHost()
     {
-        await _host.StopAsync();
-        _host.Dispose();
+        await _host.NotNull().StopAsync();
+        _host?.Dispose();
         Npgsql.NpgsqlConnection.ClearAllPools();
     }
 
@@ -134,7 +135,7 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
                 CultureInfo.InvariantCulture,
                 $$"""mutation { operations { requeueExecution(id: {{run}}) { success message } } }"""
             ),
-            _staff
+            _staff.NotNull()
         );
 
         ErrorCodes(doc).Should().Contain("TRAX_AUTHORIZATION", doc.RootElement.GetRawText());
@@ -146,7 +147,7 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
                 CultureInfo.InvariantCulture,
                 $$"""mutation { operations { requeueExecution(id: {{run}}) { success message } } }"""
             ),
-            _staffCustomer
+            _staffCustomer.NotNull()
         );
         ErrorCodes(allowed).Should().BeEmpty(allowed.RootElement.GetRawText());
         allowed
@@ -164,7 +165,7 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
     {
         using var doc = await PostAsync(
             $$"""mutation { operations { workQueue { queueTrain(input: { trainName: "{{TrainName}}", inputJson: "{\"sku\":\"x\"}" }) { success message } } } }""",
-            _staff
+            _staff.NotNull()
         );
 
         ErrorCodes(doc).Should().Contain("TRAX_AUTHORIZATION", doc.RootElement.GetRawText());
@@ -175,7 +176,7 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
     {
         using var doc = await PostAsync(
             $$"""mutation { operations { workQueue { runTrain(input: { trainName: "{{TrainName}}", inputJson: "{\"sku\":\"x\"}" }) { success message } } } }""",
-            _staff
+            _staff.NotNull()
         );
 
         ErrorCodes(doc).Should().Contain("TRAX_AUTHORIZATION", doc.RootElement.GetRawText());
@@ -191,7 +192,7 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
                 CultureInfo.InvariantCulture,
                 $$"""mutation { operations { resumeExecution(id: {{run}}) { success message } } }"""
             ),
-            _staff
+            _staff.NotNull()
         );
 
         // A run with no checkpoint is refused for that reason too; what must not happen is a
@@ -213,12 +214,13 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
         var sku = Guid.NewGuid().ToString("N");
         using var doc = await PostAsync(
                 $$"""mutation { dispatch { shop { placeOrder(input: { sku: "{{sku}}" }) { externalId } } } }""",
-                _customer
+                _customer.NotNull()
             )
             .ConfigureAwait(false);
         ErrorCodes(doc).Should().NotContain("TRAX_AUTHORIZATION", doc.RootElement.GetRawText());
 
         var db = await _host
+            .NotNull()
             .Services.GetRequiredService<IDataContextProviderFactory>()
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
@@ -255,6 +257,7 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
     private async Task<int> QueuedEntriesAsync()
     {
         var db = await _host
+            .NotNull()
             .Services.GetRequiredService<IDataContextProviderFactory>()
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
@@ -267,7 +270,9 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
     }
 
     private Task<JsonDocument> PostAsync(string query, string token) =>
-        _host.PostGraphQLAsync(query, r => r.Headers.Authorization = new("Bearer", token));
+        _host
+            .NotNull()
+            .PostGraphQLAsync(query, r => r.Headers.Authorization = new("Bearer", token));
 
     private static List<string?> ErrorCodes(JsonDocument response) =>
         response.RootElement.TryGetProperty("errors", out var errors)

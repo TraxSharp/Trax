@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Trax.Api.Auth;
 using Trax.Api.GraphQL.Subscriptions;
+using Trax.Core.Extensions;
 using static Trax.Api.Tests.Auth.SocketInterceptorTestHelpers;
 
 namespace Trax.Api.Tests.Auth;
@@ -120,9 +121,12 @@ public class TraxApiKeySocketInterceptorTests
         var result = await interceptor.OnConnectAsync(session, payload, CancellationToken.None);
 
         result.Accepted.Should().BeTrue();
-        http.User.Identity!.IsAuthenticated.Should().BeTrue();
+        http.User.Identity.NotNull().IsAuthenticated.Should().BeTrue();
         http.User.Identity.AuthenticationType.Should().Be("TraxApiKey");
-        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)!.Value.Should().Be("TraxApiKey:alice");
+        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)
+            .NotNull()
+            .Value.Should()
+            .Be("TraxApiKey:alice");
         http.User.IsInRole("Player").Should().BeTrue();
     }
 
@@ -144,7 +148,10 @@ public class TraxApiKeySocketInterceptorTests
         var result = await interceptor.OnConnectAsync(session, payload, CancellationToken.None);
 
         result.Accepted.Should().BeTrue();
-        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)!.Value.Should().Be("TraxApiKey:alice");
+        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)
+            .NotNull()
+            .Value.Should()
+            .Be("TraxApiKey:alice");
     }
 
     [Test]

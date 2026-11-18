@@ -192,7 +192,7 @@ public class SchemePolicyRequiresItsSchemeTests
 
     private static string SignJwt()
     {
-        var now = DateTime.UtcNow;
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime;
         return new JwtSecurityTokenHandler().WriteToken(
             new JwtSecurityToken(
                 Issuer,

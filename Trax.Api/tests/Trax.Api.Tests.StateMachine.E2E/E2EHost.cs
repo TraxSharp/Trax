@@ -16,6 +16,7 @@ using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.PersistedOperations;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
@@ -256,7 +257,7 @@ public static class E2EHost
         string snapshotJson
     )
     {
-        var wire = System.Text.Json.Nodes.JsonNode.Parse(snapshotJson)!.AsObject();
+        var wire = System.Text.Json.Nodes.JsonNode.Parse(snapshotJson).NotNull().AsObject();
         var scope = host.Services.CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var stored = await scope
@@ -266,10 +267,10 @@ public static class E2EHost
                 id,
                 new Trax.StateMachine.Snapshot
                 {
-                    Machine = wire["machine"]!.GetValue<string>(),
-                    Version = wire["version"]!.GetValue<int>(),
-                    State = wire["state"]!.GetValue<string>(),
-                    Context = wire["context"]!.AsObject().DeepClone().AsObject(),
+                    Machine = wire["machine"].NotNull().GetValue<string>(),
+                    Version = wire["version"].NotNull().GetValue<int>(),
+                    State = wire["state"].NotNull().GetValue<string>(),
+                    Context = wire["context"].NotNull().AsObject().DeepClone().AsObject(),
                 }
             )
             .ConfigureAwait(false);

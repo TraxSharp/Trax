@@ -17,7 +17,7 @@ namespace Trax.Api.Tests;
 
 public class EmptyInterfaceDbContext : DbContext
 {
-    public DbSet<EmptyExposed> Items { get; set; } = null!;
+    public DbSet<EmptyExposed> Items => Set<EmptyExposed>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
         optionsBuilder.UseInMemoryDatabase("EmptyDb_" + Guid.NewGuid());

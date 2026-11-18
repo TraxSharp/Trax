@@ -55,7 +55,13 @@ internal static class Hosts
         var output = new StringWriter();
         var error = new StringWriter();
         var exit = await ConsoleCommandLine
-            .Create(_ => null, target => ConsoleSession.Over(target, host), output, error)
+            .Create(
+                _ => null,
+                target => ConsoleSession.Over(target, host),
+                output,
+                error,
+                TimeProvider.System
+            )
             .Parse(["--host", Url, .. args])
             .InvokeAsync(cancellationToken: cancellationToken)
             .ConfigureAwait(false);

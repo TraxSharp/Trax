@@ -17,7 +17,7 @@ namespace Trax.Api.Tests;
 
 public class ExposeAsClassDbContext : DbContext
 {
-    public DbSet<WrongExposeAsKind> Items { get; set; } = null!;
+    public DbSet<WrongExposeAsKind> Items => Set<WrongExposeAsKind>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
         optionsBuilder.UseInMemoryDatabase("WrongKindDb_" + Guid.NewGuid());

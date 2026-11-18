@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 
 namespace Trax.Api.Tests.AuthE2E;
@@ -42,7 +43,12 @@ public class PublicBook
     [Column("linked_owned_book_id")]
     public long? LinkedOwnedBookId { get; set; }
 
-    public Owner Owner { get; set; } = null!;
+    // Set by EF when the owner is loaded; reading it unloaded is a mistake in the test.
+    public Owner Owner
+    {
+        get => field.NotNull(nameof(Owner));
+        set;
+    }
 
     public OwnedBook? LinkedOwnedBook { get; set; }
 }

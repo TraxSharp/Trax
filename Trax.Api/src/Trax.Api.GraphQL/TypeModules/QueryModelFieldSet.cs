@@ -3,6 +3,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using HotChocolate.Data.Filters;
 using HotChocolate.Data.Sorting;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 
 namespace Trax.Api.GraphQL.TypeModules;
@@ -66,15 +67,13 @@ internal static class QueryModelFieldSet
                 .Invoke(null, [descriptor, Selector<TEntity>(prop)]);
     }
 
-    private static readonly MethodInfo FilterFieldMethod = typeof(QueryModelFieldSet).GetMethod(
-        nameof(AddFilterField),
-        BindingFlags.NonPublic | BindingFlags.Static
-    )!;
+    private static readonly MethodInfo FilterFieldMethod = typeof(QueryModelFieldSet)
+        .GetMethod(nameof(AddFilterField), BindingFlags.NonPublic | BindingFlags.Static)
+        .NotNull();
 
-    private static readonly MethodInfo SortFieldMethod = typeof(QueryModelFieldSet).GetMethod(
-        nameof(AddSortField),
-        BindingFlags.NonPublic | BindingFlags.Static
-    )!;
+    private static readonly MethodInfo SortFieldMethod = typeof(QueryModelFieldSet)
+        .GetMethod(nameof(AddSortField), BindingFlags.NonPublic | BindingFlags.Static)
+        .NotNull();
 
     private static void AddFilterField<TEntity, TField>(
         IFilterInputTypeDescriptor<TEntity> descriptor,

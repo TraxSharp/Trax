@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Api.Console.Terminal.Checks;
 using Trax.Api.Console.Terminal.Operations;
 using Trax.Client;
 
@@ -77,7 +78,7 @@ internal sealed class OutdatedTransport(ITraxTransport inner) : ITraxTransport
             if (value["errors"] is JsonArray)
             {
                 var copy = (JsonObject)value.DeepClone();
-                if (Explain((JsonArray)copy["errors"]!))
+                if (Explain((JsonArray)copy["errors"].NotNull()))
                     value = copy;
             }
             inner.Next(value);

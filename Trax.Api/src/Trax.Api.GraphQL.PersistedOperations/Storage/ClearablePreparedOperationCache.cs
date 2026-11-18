@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using HotChocolate.Execution.Caching;
 using HotChocolate.Execution.Processing;
 using HotChocolate.Language;
@@ -19,8 +20,8 @@ internal sealed class ClearablePreparedOperationCache(
 
     public int Count => _cache.Count;
 
-    public bool TryGetOperation(string operationId, out Operation operation) =>
-        _cache.TryGet(operationId, out operation!);
+    public bool TryGetOperation(string operationId, [NotNullWhen(true)] out Operation? operation) =>
+        _cache.TryGet(operationId, out operation);
 
     public void TryAddOperation(string operationId, Operation operation) =>
         _cache.Add(operationId, operation);

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -283,14 +282,14 @@ internal sealed class BulkOperationJobs
                 var batch = ids[offset..end];
                 offset = end;
 
-                var took = Stopwatch.StartNew();
+                var started = _time.GetTimestamp();
                 var scope = _scopes.CreateAsyncScope();
                 await using (scope.ConfigureAwait(false))
                 {
                     var (failures, refusal) = await BulkOperationTargets
                         .RunAsync(run, batch, scope.ServiceProvider, _stopping)
                         .ConfigureAwait(false);
-                    took.Stop();
+                    var took = _time.GetElapsedTime(started);
 
                     if (refusal is not null)
                     {
@@ -300,7 +299,7 @@ internal sealed class BulkOperationJobs
                             + "batches before it stay applied; the ids it had not reached were not attempted.";
                         break;
                     }
-                    run.Record(batch.Length, failures, took.Elapsed);
+                    run.Record(batch.Length, failures, took);
                 }
             }
         }

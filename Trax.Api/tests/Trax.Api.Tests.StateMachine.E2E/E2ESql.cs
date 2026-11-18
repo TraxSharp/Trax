@@ -1,4 +1,5 @@
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Mutations;
 
 namespace Trax.Api.StateMachine.E2E;
@@ -12,10 +13,10 @@ public static class E2ESql
     /// <summary>The canonical names of the internal trains every machine event runs through.</summary>
     public static readonly IReadOnlyList<string> MachineTrainNames =
     [
-        typeof(IAdvanceSnapshot).FullName!,
-        typeof(ISendSnapshot).FullName!,
-        typeof(ISaveSnapshot).FullName!,
-        typeof(ILoadSnapshot).FullName!,
+        typeof(IAdvanceSnapshot).FullName.NotNull(),
+        typeof(ISendSnapshot).FullName.NotNull(),
+        typeof(ISaveSnapshot).FullName.NotNull(),
+        typeof(ILoadSnapshot).FullName.NotNull(),
     ];
 
     /// <summary>The first column of the first row, or default when there is none.</summary>

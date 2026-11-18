@@ -5,6 +5,7 @@ using Npgsql;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 
 namespace Trax.Api.StateMachine.E2E;
@@ -34,15 +35,15 @@ public class GeneratedTrainDocumentsRemovedE2ETests
         "query OrderCard($input: FindOrderInput!) { discover { findOrder(input: $input) { title customer { name "
         + "orders { title } } } } }";
 
-    private IHost _host = null!;
-    private string _file = null!;
+    private IHost? _host;
+    private string? _file;
 
     [OneTimeSetUp]
     public async Task Up()
     {
         _file = Path.Combine(Path.GetTempPath(), $"trax-documents-{Guid.NewGuid():N}.json");
         await File.WriteAllTextAsync(
-            _file,
+            _file.NotNull(),
             JsonSerializer.Serialize(
                 new
                 {
@@ -67,7 +68,9 @@ public class GeneratedTrainDocumentsRemovedE2ETests
                 Served = [typeof(WizardMachine)],
                 GraphQL = graphql =>
                     graphql.UsePersistedOperations(po =>
-                        po.SingleNode().RequirePersisted(require: true).ClientDocuments(_file)
+                        po.SingleNode()
+                            .RequirePersisted(require: true)
+                            .ClientDocuments(_file.NotNull())
                     ),
             }
         );
@@ -76,9 +79,9 @@ public class GeneratedTrainDocumentsRemovedE2ETests
     [OneTimeTearDown]
     public async Task Down()
     {
-        _host.Dispose();
+        _host?.Dispose();
         await E2EHost.DropDatabaseAsync(Database);
-        File.Delete(_file);
+        File.Delete(_file.NotNull());
     }
 
     [Test]
@@ -92,10 +95,12 @@ public class GeneratedTrainDocumentsRemovedE2ETests
     [Test]
     public async Task A_client_document_reaches_a_train_answering_a_mesh()
     {
-        using var answer = await _host.PostPersistedAsync(
-            ClientDocuments.IdOf("MeshCard", MeshCard),
-            new { input = new { name = "zero" } }
-        );
+        using var answer = await _host
+            .NotNull()
+            .PostPersistedAsync(
+                ClientDocuments.IdOf("MeshCard", MeshCard),
+                new { input = new { name = "zero" } }
+            );
 
         var mesh = answer
             .RootElement.GetProperty("data")
@@ -113,10 +118,12 @@ public class GeneratedTrainDocumentsRemovedE2ETests
     [Test]
     public async Task A_client_document_follows_a_back_reference_the_frontend_chose()
     {
-        using var answer = await _host.PostPersistedAsync(
-            ClientDocuments.IdOf("OrderCard", OrderCard),
-            new { input = new { id = 7 } }
-        );
+        using var answer = await _host
+            .NotNull()
+            .PostPersistedAsync(
+                ClientDocuments.IdOf("OrderCard", OrderCard),
+                new { input = new { id = 7 } }
+            );
 
         answer
             .RootElement.GetProperty("data")
@@ -138,11 +145,13 @@ public class GeneratedTrainDocumentsRemovedE2ETests
             + "mutation__recordNote_"
             + new string('9', MachineDocuments.IrHashLength + MachineDocuments.TextHashLength);
 
-        var (status, body) = await _host.PostPersistedWithStatusAsync(
-            earlier,
-            new { input = new { text = "x" } },
-            E2EHost.AliceKey
-        );
+        var (status, body) = await _host
+            .NotNull()
+            .PostPersistedWithStatusAsync(
+                earlier,
+                new { input = new { text = "x" } },
+                E2EHost.AliceKey
+            );
 
         using (body)
         {
@@ -168,7 +177,11 @@ public class GeneratedTrainDocumentsRemovedE2ETests
         var path = Path.Combine(Path.GetTempPath(), $"trax-trains-{Guid.NewGuid():N}.json");
         try
         {
-            await ClientManifestExport.WriteAsync(_host.Services, path, CancellationToken.None);
+            await ClientManifestExport.WriteAsync(
+                _host.NotNull().Services,
+                path,
+                CancellationToken.None
+            );
             var text = await File.ReadAllTextAsync(path);
             var manifest = ClientManifest.Read(text);
 
@@ -176,13 +189,19 @@ public class GeneratedTrainDocumentsRemovedE2ETests
                 string.Equals(t.Field, "recordNote", StringComparison.Ordinal)
             );
             record.Root.Should().Be("mutation");
-            record.Requires!.RoleSets.Should().ContainSingle().Which.Should().Equal("Approver");
+            record
+                .Requires.NotNull()
+                .RoleSets.Should()
+                .ContainSingle()
+                .Which.Should()
+                .Equal("Approver");
             record
                 .Arguments.Should()
                 .Contain(a => a.Name == "input" && a.Type == "RecordNoteInput!");
             manifest
                 .Trains.Single(t => string.Equals(t.Field, "ping", StringComparison.Ordinal))
-                .Requires!.Anonymous.Should()
+                .Requires.NotNull()
+                .Anonymous.Should()
                 .BeTrue();
             text.Should().NotContain(TrainDocuments.ReservedIdPrefix);
             manifest

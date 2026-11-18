@@ -158,7 +158,7 @@ public class GraphQLServiceExtensionsTests
                     .Configure(app =>
                     {
                         app.UseRouting();
-                        ((WebApplication)null!)?.UseTraxGraphQL();
+                        ((WebApplication)Null.Of<object>())?.UseTraxGraphQL();
                         // WebApplication-only extension; emulate the surface area
                         // by mapping the endpoint directly via the same route the
                         // extension uses, then assert the generated path.

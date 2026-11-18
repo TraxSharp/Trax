@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using AwesomeAssertions;
+using Trax.Api.Console.Terminal.Checks;
 using Trax.Api.Console.Terminal.Connection;
 
 namespace Trax.Api.Console.Terminal.Tests.UnitTests;
@@ -39,7 +40,7 @@ public class CredentialFileTests
         var flags = CredentialFile.LinuxOpenFlags(architecture);
 
         flags.Should().Be(NonBlock | NoCtty | CloseOnExec | ArmAndPowerPcNoFollow);
-        (flags!.Value & GenericNoFollow)
+        (flags.NotNull().Value & GenericNoFollow)
             .Should()
             .Be(0, "0x20000 is O_LARGEFILE on ARM and O_DIRECT on PowerPC, not O_NOFOLLOW");
     }

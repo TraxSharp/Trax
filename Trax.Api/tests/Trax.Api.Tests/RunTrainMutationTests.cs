@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using NSubstitute;
 using Trax.Api.Tests.Auth;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -30,7 +31,7 @@ public class RunTrainMutationTests
 
     private const string TrainName = "Trax.Api.Tests.OperationsFailureMaskingTests+IMaskedTrain";
 
-    private IDataContextProviderFactory _factory = null!;
+    private IDataContextProviderFactory? _factory;
 
     [SetUp]
     public void SetUp() =>
@@ -65,7 +66,7 @@ public class RunTrainMutationTests
 
     private async Task<int> RunsWritten()
     {
-        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             return await db.Metadatas.CountAsync().ConfigureAwait(false);
@@ -79,7 +80,7 @@ public class RunTrainMutationTests
         using var host = await StartHostAsync(
             execution: null,
             submitter,
-            dataContextFactory: _factory
+            dataContextFactory: _factory.NotNull()
         );
 
         var doc = await AdminOperationsAuthorizationTests.PostAsync(
@@ -92,7 +93,7 @@ public class RunTrainMutationTests
         payload.GetProperty("success").GetBoolean().Should().BeTrue(doc.RootElement.ToString());
         var id = payload.GetProperty("id").GetInt64();
         submitter.Submitted.Should().Equal(id);
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         (await db.Metadatas.SingleAsync()).Id.Should().Be(id, "the id is the run's metadata id");
 
         await host.StopAsync();
@@ -105,7 +106,7 @@ public class RunTrainMutationTests
         using var host = await StartHostAsync(
             execution: null,
             submitter,
-            dataContextFactory: _factory
+            dataContextFactory: _factory.NotNull()
         );
 
         var doc = await AdminOperationsAuthorizationTests.PostAsync(
@@ -133,7 +134,7 @@ public class RunTrainMutationTests
         using var host = await StartHostAsync(
             execution: null,
             new RecordingSubmitter(),
-            dataContextFactory: _factory
+            dataContextFactory: _factory.NotNull()
         );
 
         var doc = await AdminOperationsAuthorizationTests.PostAsync(
@@ -157,7 +158,7 @@ public class RunTrainMutationTests
             execution: null,
             submitter,
             Registration(requiredRoles: ["RunOperators"]),
-            _factory
+            _factory.NotNull()
         );
 
         // Malformed input too: authorization runs first, so the caller learns nothing about it.
@@ -184,7 +185,7 @@ public class RunTrainMutationTests
         using var host = await StartHostAsync(
             execution: null,
             new RecordingSubmitter(new HttpRequestException("worker 10.0.0.5:8080 refused")),
-            dataContextFactory: _factory
+            dataContextFactory: _factory.NotNull()
         );
 
         var doc = await AdminOperationsAuthorizationTests.PostAsync(
@@ -203,7 +204,7 @@ public class RunTrainMutationTests
             );
         errors[0].GetProperty("message").GetString().Should().Be("Unexpected Execution Error");
         doc.RootElement.GetRawText().Should().NotContain("10.0.0.5");
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         (await db.Metadatas.SingleAsync()).TrainState.Should().Be(TrainState.Failed);
 
         await host.StopAsync();

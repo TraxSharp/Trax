@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence;
 
 namespace Trax.Api.StateMachine.E2E;
@@ -31,7 +32,7 @@ public class OperatorMachineDefinitionsE2ETests
         } }
         """;
 
-    private IHost _host = null!;
+    private IHost? _host;
 
     [OneTimeSetUp]
     public async Task Up()
@@ -47,14 +48,14 @@ public class OperatorMachineDefinitionsE2ETests
     [OneTimeTearDown]
     public async Task Down()
     {
-        await ShelfHosts.StopAsync(_host);
+        await ShelfHosts.StopAsync(_host.NotNull());
         await E2EHost.DropDatabaseAsync(Database);
     }
 
     [Test]
     public async Task A_registered_machine_with_no_instances_is_listed_with_the_graph_trax_machine_show_draws()
     {
-        using var doc = await _host.PostAsync(Machines, apiKey: E2EHost.OperatorKey);
+        using var doc = await _host.NotNull().PostAsync(Machines, apiKey: E2EHost.OperatorKey);
         doc.RootElement.TryGetProperty("errors", out _)
             .Should()
             .BeFalse(doc.RootElement.GetRawText());
@@ -78,6 +79,7 @@ public class OperatorMachineDefinitionsE2ETests
                 string.Equals(m.GetProperty("name").GetString(), name, StringComparison.Ordinal)
             );
             var registered = _host
+                .NotNull()
                 .Services.GetServices<IMachine>()
                 .Single(m => string.Equals(m.Name, name, StringComparison.Ordinal));
             var drawn = MachineGraph.Parse(registered.ExportIr());
@@ -117,7 +119,7 @@ public class OperatorMachineDefinitionsE2ETests
         var states = wizard
             .GetProperty("states")
             .EnumerateArray()
-            .ToDictionary(s => s.GetProperty("name").GetString()!, StringComparer.Ordinal);
+            .ToDictionary(s => s.GetProperty("name").GetString().NotNull(), StringComparer.Ordinal);
         states[nameof(WizardState.Naming)].GetProperty("isInitial").GetBoolean().Should().BeTrue();
         states[nameof(WizardState.Building)]
             .GetProperty("invokesTrain")
@@ -154,10 +156,9 @@ public class OperatorMachineDefinitionsE2ETests
     {
         foreach (var caller in new[] { E2EHost.BobKey, null })
         {
-            using var doc = await _host.PostAsync(
-                "{ operations { machines { name } } }",
-                apiKey: caller
-            );
+            using var doc = await _host
+                .NotNull()
+                .PostAsync("{ operations { machines { name } } }", apiKey: caller);
             doc.RootElement.TryGetProperty("errors", out _)
                 .Should()
                 .BeTrue($"{caller ?? "an anonymous caller"} is outside the operations gate");

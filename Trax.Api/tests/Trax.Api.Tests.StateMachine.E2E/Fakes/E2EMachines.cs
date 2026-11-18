@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.StateMachine.Persistence;
 
@@ -35,11 +36,14 @@ public static class E2EMachines
                 !t.IsDefined(typeof(TraxMachineAttribute), inherit: false)
             )
         )
-            services.AddSingleton(typeof(IMachine), served.Contains(type) ? MarkedOf(type)! : type);
+            services.AddSingleton(
+                typeof(IMachine),
+                served.Contains(type) ? MarkedOf(type).NotNull() : type
+            );
 
         // An abstract fake is registered only where a host serves it.
         foreach (var type in served.Where(t => t.IsAbstract))
-            services.AddSingleton(typeof(IMachine), MarkedOf(type)!);
+            services.AddSingleton(typeof(IMachine), MarkedOf(type).NotNull());
     }
 
     private static Type? MarkedOf(Type machine) =>

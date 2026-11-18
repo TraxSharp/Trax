@@ -15,6 +15,7 @@ using NSubstitute;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;
@@ -467,7 +468,8 @@ public class SocketUpgradeOriginTests
             return JsonDocument
                 .Parse(Encoding.UTF8.GetString(buffer, 0, received.Count))
                 .RootElement.GetProperty("type")
-                .GetString()!;
+                .GetString()
+                .NotNull();
         }
     }
 }

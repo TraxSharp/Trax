@@ -10,13 +10,16 @@ namespace Trax.Api.Auth.Jwt.Testing;
 public sealed class TestTokenBuilder
 {
     private readonly List<Claim> _claims = new();
+    private readonly TimeProvider _clock;
 
-    internal TestTokenBuilder(string issuer, string audience)
+    internal TestTokenBuilder(string issuer, string audience, TimeProvider clock)
     {
+        _clock = clock;
         IssuerValue = issuer;
         AudienceValue = audience;
-        NotBeforeValue = DateTime.UtcNow.AddMinutes(-1);
-        ExpiresValue = DateTime.UtcNow.AddMinutes(5);
+        var now = clock.GetUtcNow().UtcDateTime;
+        NotBeforeValue = now.AddMinutes(-1);
+        ExpiresValue = now.AddMinutes(5);
     }
 
     internal string IssuerValue { get; private set; }
@@ -85,8 +88,9 @@ public sealed class TestTokenBuilder
     {
         if (lifetime <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(lifetime), "Lifetime must be positive.");
-        NotBeforeValue = DateTime.UtcNow.AddMinutes(-1);
-        ExpiresValue = DateTime.UtcNow.Add(lifetime);
+        var now = _clock.GetUtcNow().UtcDateTime;
+        NotBeforeValue = now.AddMinutes(-1);
+        ExpiresValue = now.Add(lifetime);
         return this;
     }
 

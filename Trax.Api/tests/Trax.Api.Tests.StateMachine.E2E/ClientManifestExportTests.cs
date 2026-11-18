@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.ClientExport;
 using Trax.StateMachine;
 
@@ -25,8 +26,8 @@ public class ClientManifestExportTests
 {
     private const string Database = "trax_sm_client_manifest";
 
-    private IHost _host = null!;
-    private string _path = null!;
+    private IHost? _host;
+    private string? _path;
 
     [OneTimeSetUp]
     public async Task Up()
@@ -46,7 +47,7 @@ public class ClientManifestExportTests
     [OneTimeTearDown]
     public async Task Down()
     {
-        _host.Dispose();
+        _host?.Dispose();
         await E2EHost.DropDatabaseAsync(Database);
     }
 
@@ -61,16 +62,18 @@ public class ClientManifestExportTests
     [TearDown]
     public void RemovePath()
     {
-        if (Directory.Exists(Path.GetDirectoryName(_path)))
-            Directory.Delete(Path.GetDirectoryName(_path)!, recursive: true);
+        if (Directory.Exists(Path.GetDirectoryName(_path.NotNull())))
+            Directory.Delete(Path.GetDirectoryName(_path.NotNull()).NotNull(), recursive: true);
     }
 
     private async Task<ClientManifest> ExportAsync()
     {
         await ClientManifestExport
-            .WriteAsync(_host.Services, _path, CancellationToken.None)
+            .WriteAsync(_host.NotNull().Services, _path.NotNull(), CancellationToken.None)
             .ConfigureAwait(false);
-        return ClientManifest.Read(await File.ReadAllTextAsync(_path).ConfigureAwait(false));
+        return ClientManifest.Read(
+            await File.ReadAllTextAsync(_path.NotNull()).ConfigureAwait(false)
+        );
     }
 
     [Test]
@@ -112,7 +115,7 @@ public class ClientManifestExportTests
             string.Equals(m.Id, WizardMachine.MachineId, StringComparison.Ordinal)
         );
 
-        wizard.Ir["id"]!.GetValue<string>().Should().Be(WizardMachine.MachineId);
+        wizard.Ir["id"].NotNull().GetValue<string>().Should().Be(WizardMachine.MachineId);
         Convert
             .ToHexStringLower(
                 System.Security.Cryptography.SHA256.HashData(
@@ -150,11 +153,19 @@ public class ClientManifestExportTests
     [Test]
     public async Task The_same_host_writes_the_same_bytes()
     {
-        await ClientManifestExport.WriteAsync(_host.Services, _path, CancellationToken.None);
-        var first = await File.ReadAllTextAsync(_path);
-        await ClientManifestExport.WriteAsync(_host.Services, _path, CancellationToken.None);
+        await ClientManifestExport.WriteAsync(
+            _host.NotNull().Services,
+            _path.NotNull(),
+            CancellationToken.None
+        );
+        var first = await File.ReadAllTextAsync(_path.NotNull());
+        await ClientManifestExport.WriteAsync(
+            _host.NotNull().Services,
+            _path.NotNull(),
+            CancellationToken.None
+        );
 
-        (await File.ReadAllTextAsync(_path)).Should().Be(first);
+        (await File.ReadAllTextAsync(_path.NotNull())).Should().Be(first);
     }
 
     [Test]
@@ -164,10 +175,13 @@ public class ClientManifestExportTests
         services.AddSingleton<IHostedService, RefusingCheck>();
         await using var provider = services.BuildServiceProvider();
 
-        var export = () => ClientManifestExport.WriteAsync(provider, _path, CancellationToken.None);
+        var export = () =>
+            ClientManifestExport.WriteAsync(provider, _path.NotNull(), CancellationToken.None);
 
         await export.Should().ThrowAsync<InvalidOperationException>().WithMessage("refused");
-        File.Exists(_path).Should().BeFalse("nothing is written for a host that would not start");
+        File.Exists(_path.NotNull())
+            .Should()
+            .BeFalse("nothing is written for a host that would not start");
     }
 
     [Test]
@@ -191,7 +205,7 @@ public class ClientManifestExportTests
                             TraxClientExport.SkipsDatabase(
                                 services,
                                 new ClientExportFlag(() =>
-                                    ["host.dll", TraxClientExport.Argument, _path]
+                                    ["host.dll", TraxClientExport.Argument, _path.NotNull()]
                                 )
                             ),
                     }

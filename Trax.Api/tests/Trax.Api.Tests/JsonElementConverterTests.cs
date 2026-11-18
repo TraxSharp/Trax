@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Trax.Api.GraphQL.Types;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests;
 
@@ -13,7 +14,7 @@ public class JsonElementConverterTests
     [Test]
     public void ToObject_NullJson_ThrowsArgumentNullException()
     {
-        var act = () => JsonElementConverter.ToObject(null!);
+        var act = () => JsonElementConverter.ToObject(Null.Of<string>());
         act.Should().Throw<ArgumentNullException>();
     }
 
@@ -23,7 +24,7 @@ public class JsonElementConverterTests
         var result = JsonElementConverter.ToObject("{}");
 
         result.Should().BeOfType<Dictionary<string, object?>>();
-        var dict = (Dictionary<string, object?>)result!;
+        var dict = (Dictionary<string, object?>)result.NotNull();
         dict.Should().BeEmpty();
     }
 
@@ -33,7 +34,7 @@ public class JsonElementConverterTests
         var result = JsonElementConverter.ToObject("[]");
 
         result.Should().BeOfType<List<object?>>();
-        var list = (List<object?>)result!;
+        var list = (List<object?>)result.NotNull();
         list.Should().BeEmpty();
     }
 
@@ -145,7 +146,7 @@ public class JsonElementConverterTests
         var result = JsonElementConverter.ToObject(json);
 
         result.Should().BeOfType<Dictionary<string, object?>>();
-        var dict = (Dictionary<string, object?>)result!;
+        var dict = (Dictionary<string, object?>)result.NotNull();
         dict["name"].Should().Be("Alice");
         dict["age"].Should().Be(30L);
         dict["active"].Should().Be(expected: true);
@@ -157,7 +158,7 @@ public class JsonElementConverterTests
         var json = """{"key":null}""";
         var result = JsonElementConverter.ToObject(json);
 
-        var dict = (Dictionary<string, object?>)result!;
+        var dict = (Dictionary<string, object?>)result.NotNull();
         dict.Should().ContainKey("key");
         dict["key"].Should().BeNull();
     }
@@ -168,7 +169,7 @@ public class JsonElementConverterTests
         var json = """{"str":"hello","int":1,"float":1.5,"bool":false,"nil":null}""";
         var result = JsonElementConverter.ToObject(json);
 
-        var dict = (Dictionary<string, object?>)result!;
+        var dict = (Dictionary<string, object?>)result.NotNull();
         dict["str"].Should().BeOfType<string>().And.Be("hello");
         dict["int"].Should().BeOfType<long>().And.Be(1L);
         dict["float"].Should().BeOfType<double>().And.Be(1.5);
@@ -186,7 +187,7 @@ public class JsonElementConverterTests
         var json = """["a","b","c"]""";
         var result = JsonElementConverter.ToObject(json);
 
-        var list = (List<object?>)result!;
+        var list = (List<object?>)result.NotNull();
         list.Should().HaveCount(3);
         list.Should().ContainInOrder("a", "b", "c");
     }
@@ -197,7 +198,7 @@ public class JsonElementConverterTests
         var json = "[1,2,3]";
         var result = JsonElementConverter.ToObject(json);
 
-        var list = (List<object?>)result!;
+        var list = (List<object?>)result.NotNull();
         list.Should().HaveCount(3);
         list.Should().ContainInOrder(1L, 2L, 3L);
     }
@@ -208,7 +209,7 @@ public class JsonElementConverterTests
         var json = """["text",42,3.14,true,null]""";
         var result = JsonElementConverter.ToObject(json);
 
-        var list = (List<object?>)result!;
+        var list = (List<object?>)result.NotNull();
         list.Should().HaveCount(5);
         list[0].Should().Be("text");
         list[1].Should().Be(42L);
@@ -227,9 +228,9 @@ public class JsonElementConverterTests
         var json = """{"outer":{"inner":"value"}}""";
         var result = JsonElementConverter.ToObject(json);
 
-        var dict = (Dictionary<string, object?>)result!;
+        var dict = (Dictionary<string, object?>)result.NotNull();
         dict["outer"].Should().BeOfType<Dictionary<string, object?>>();
-        var inner = (Dictionary<string, object?>)dict["outer"]!;
+        var inner = (Dictionary<string, object?>)dict["outer"].NotNull();
         inner["inner"].Should().Be("value");
     }
 
@@ -239,9 +240,9 @@ public class JsonElementConverterTests
         var json = """{"tags":["violence","spam","hate-speech"]}""";
         var result = JsonElementConverter.ToObject(json);
 
-        var dict = (Dictionary<string, object?>)result!;
+        var dict = (Dictionary<string, object?>)result.NotNull();
         dict["tags"].Should().BeOfType<List<object?>>();
-        var tags = (List<object?>)dict["tags"]!;
+        var tags = (List<object?>)dict["tags"].NotNull();
         tags.Should().ContainInOrder("violence", "spam", "hate-speech");
     }
 
@@ -251,14 +252,14 @@ public class JsonElementConverterTests
         var json = """[{"id":1,"name":"Alice"},{"id":2,"name":"Bob"}]""";
         var result = JsonElementConverter.ToObject(json);
 
-        var list = (List<object?>)result!;
+        var list = (List<object?>)result.NotNull();
         list.Should().HaveCount(2);
 
-        var first = (Dictionary<string, object?>)list[0]!;
+        var first = (Dictionary<string, object?>)list[0].NotNull();
         first["id"].Should().Be(1L);
         first["name"].Should().Be("Alice");
 
-        var second = (Dictionary<string, object?>)list[1]!;
+        var second = (Dictionary<string, object?>)list[1].NotNull();
         second["id"].Should().Be(2L);
         second["name"].Should().Be("Bob");
     }
@@ -269,10 +270,10 @@ public class JsonElementConverterTests
         var json = """{"level1":{"level2":{"level3":{"value":"deep"}}}}""";
         var result = JsonElementConverter.ToObject(json);
 
-        var l1 = (Dictionary<string, object?>)result!;
-        var l2 = (Dictionary<string, object?>)l1["level1"]!;
-        var l3 = (Dictionary<string, object?>)l2["level2"]!;
-        var l4 = (Dictionary<string, object?>)l3["level3"]!;
+        var l1 = (Dictionary<string, object?>)result.NotNull();
+        var l2 = (Dictionary<string, object?>)l1["level1"].NotNull();
+        var l3 = (Dictionary<string, object?>)l2["level2"].NotNull();
+        var l4 = (Dictionary<string, object?>)l3["level3"].NotNull();
         l4["value"].Should().Be("deep");
     }
 
@@ -282,13 +283,13 @@ public class JsonElementConverterTests
         var json = "[[1,2],[3,4]]";
         var result = JsonElementConverter.ToObject(json);
 
-        var outer = (List<object?>)result!;
+        var outer = (List<object?>)result.NotNull();
         outer.Should().HaveCount(2);
 
-        var first = (List<object?>)outer[0]!;
+        var first = (List<object?>)outer[0].NotNull();
         first.Should().ContainInOrder(1L, 2L);
 
-        var second = (List<object?>)outer[1]!;
+        var second = (List<object?>)outer[1].NotNull();
         second.Should().ContainInOrder(3L, 4L);
     }
 
@@ -310,11 +311,11 @@ public class JsonElementConverterTests
 
         var result = JsonElementConverter.ToObject(json);
 
-        var dict = (Dictionary<string, object?>)result!;
+        var dict = (Dictionary<string, object?>)result.NotNull();
         dict["totalReviewed"].Should().Be(1247L);
         dict["totalFlagged"].Should().Be(83L);
         dict["falsePositiveRate"].Should().Be(0.042);
-        var violations = (List<object?>)dict["topViolationTypes"]!;
+        var violations = (List<object?>)dict["topViolationTypes"].NotNull();
         violations.Should().ContainInOrder("violence", "spam", "hate-speech");
     }
 
@@ -331,7 +332,7 @@ public class JsonElementConverterTests
 
         var result = JsonElementConverter.ToObject(json);
 
-        var dict = (Dictionary<string, object?>)result!;
+        var dict = (Dictionary<string, object?>)result.NotNull();
         dict["noticeId"].Should().Be("notice-abc123");
         dict["deliveredAt"].Should().Be("2026-03-08T19:45:27.771Z");
         dict["recipientId"].Should().Be("user-456");
@@ -359,26 +360,26 @@ public class JsonElementConverterTests
 
         var result = JsonElementConverter.ToObject(json);
 
-        var dict = (Dictionary<string, object?>)result!;
+        var dict = (Dictionary<string, object?>)result.NotNull();
         dict["duration"].Should().Be(3.5);
 
-        var combat = (Dictionary<string, object?>)dict["combatResult"]!;
+        var combat = (Dictionary<string, object?>)dict["combatResult"].NotNull();
         combat["winner"].Should().Be("player-1");
 
-        var rounds = (List<object?>)combat["rounds"]!;
+        var rounds = (List<object?>)combat["rounds"].NotNull();
         rounds.Should().HaveCount(2);
 
-        var round1 = (Dictionary<string, object?>)rounds[0]!;
+        var round1 = (Dictionary<string, object?>)rounds[0].NotNull();
         round1["round"].Should().Be(1L);
         round1["damage"].Should().Be(45L);
         round1["critical"].Should().Be(expected: false);
 
-        var round2 = (Dictionary<string, object?>)rounds[1]!;
+        var round2 = (Dictionary<string, object?>)rounds[1].NotNull();
         round2["critical"].Should().Be(expected: true);
 
-        var loot = (Dictionary<string, object?>)combat["loot"]!;
+        var loot = (Dictionary<string, object?>)combat["loot"].NotNull();
         loot["gold"].Should().Be(500L);
-        var items = (List<object?>)loot["items"]!;
+        var items = (List<object?>)loot["items"].NotNull();
         items.Should().ContainInOrder("sword", "shield");
     }
 
@@ -392,7 +393,7 @@ public class JsonElementConverterTests
         var json = """{"emoji":"🚂","japanese":"新幹線"}""";
         var result = JsonElementConverter.ToObject(json);
 
-        var dict = (Dictionary<string, object?>)result!;
+        var dict = (Dictionary<string, object?>)result.NotNull();
         dict["emoji"].Should().Be("🚂");
         dict["japanese"].Should().Be("新幹線");
     }
@@ -403,7 +404,7 @@ public class JsonElementConverterTests
         var json = """{"path":"C:\\Users\\test","quote":"He said \"hi\""}""";
         var result = JsonElementConverter.ToObject(json);
 
-        var dict = (Dictionary<string, object?>)result!;
+        var dict = (Dictionary<string, object?>)result.NotNull();
         dict["path"].Should().Be("C:\\Users\\test");
         dict["quote"].Should().Be("He said \"hi\"");
     }
@@ -419,7 +420,7 @@ public class JsonElementConverterTests
 
         var result = JsonElementConverter.ToObject(json);
 
-        var dict = (Dictionary<string, object?>)result!;
+        var dict = (Dictionary<string, object?>)result.NotNull();
         dict.Should().HaveCount(1000);
         dict["key0"].Should().Be(0L);
         dict["key999"].Should().Be(999L);
@@ -431,7 +432,7 @@ public class JsonElementConverterTests
         var json = """{"value":1.5e10}""";
         var result = JsonElementConverter.ToObject(json);
 
-        var dict = (Dictionary<string, object?>)result!;
+        var dict = (Dictionary<string, object?>)result.NotNull();
         dict["value"].Should().BeOfType<double>();
         dict["value"].Should().Be(1.5e10);
     }
@@ -459,7 +460,7 @@ public class JsonElementConverterTests
         var json = """{"z":"last","a":"first","m":"middle"}""";
         var result = JsonElementConverter.ToObject(json);
 
-        var dict = (Dictionary<string, object?>)result!;
+        var dict = (Dictionary<string, object?>)result.NotNull();
         dict.Keys.Should().ContainInOrder("z", "a", "m");
     }
 

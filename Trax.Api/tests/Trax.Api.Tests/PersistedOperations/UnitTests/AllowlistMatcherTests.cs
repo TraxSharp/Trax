@@ -119,7 +119,10 @@ public class AllowlistMatcherTests
     [Test]
     public void Constructor_NullOptions_Throws()
     {
-        Action act = () => _ = new AllowlistMatcher(null!);
+        Action act = () =>
+            _ = new AllowlistMatcher(
+                Null.Of<Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsOptions>()
+            );
         act.Should().Throw<ArgumentNullException>();
     }
 }

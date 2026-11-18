@@ -14,6 +14,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Trax.Api.Auth;
 using Trax.Api.GraphQL.Audit;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Audit;
 
@@ -78,7 +79,7 @@ public class TraxGraphQLAuditListenerTests
         var entries = host.DrainEntries();
         entries.Should().HaveCount(1);
         entries[0].Variables.Should().NotBeNull();
-        entries[0].Variables!["s"]!.GetValue<string>().Should().Be("hi");
+        entries[0].Variables.NotNull()["s"].NotNull().GetValue<string>().Should().Be("hi");
     }
 
     [Test]
@@ -113,13 +114,22 @@ public class TraxGraphQLAuditListenerTests
         entries.Should().HaveCount(1);
         var captured = entries[0].Variables;
         captured.Should().NotBeNull();
-        captured!.Select(p => p.Key).Should().BeEquivalentTo(["s", "i", "e", "list", "obj"]);
-        captured["s"]!.GetValue<string>().Should().Be("hello");
-        captured["i"]!.GetValue<int>().Should().Be(42);
-        captured["e"]!.GetValue<string>().Should().Be("HAPPY");
-        captured["list"]!.AsArray().Select(n => n!.GetValue<int>()).Should().Equal(1, 2, 3);
-        captured["obj"]!["name"]!.GetValue<string>().Should().Be("bob");
-        captured["obj"]!["count"]!.GetValue<int>().Should().Be(7);
+        captured
+            .NotNull()
+            .Select(p => p.Key)
+            .Should()
+            .BeEquivalentTo(["s", "i", "e", "list", "obj"]);
+        captured["s"].NotNull().GetValue<string>().Should().Be("hello");
+        captured["i"].NotNull().GetValue<int>().Should().Be(42);
+        captured["e"].NotNull().GetValue<string>().Should().Be("HAPPY");
+        captured["list"]
+            .NotNull()
+            .AsArray()
+            .Select(n => n.NotNull().GetValue<int>())
+            .Should()
+            .Equal(1, 2, 3);
+        captured["obj"].NotNull()["name"].NotNull().GetValue<string>().Should().Be("bob");
+        captured["obj"].NotNull()["count"].NotNull().GetValue<int>().Should().Be(7);
     }
 
     [Test]
@@ -144,11 +154,11 @@ public class TraxGraphQLAuditListenerTests
         );
         AssertNoErrors(result);
 
-        var captured = host.DrainEntries().Should().ContainSingle().Subject.Variables!;
-        captured["f"]!.GetValue<decimal>().Should().Be(3.25m);
+        var captured = host.DrainEntries().Should().ContainSingle().Subject.Variables.NotNull();
+        captured["f"].NotNull().GetValue<decimal>().Should().Be(3.25m);
         captured.ContainsKey("n").Should().BeTrue();
         captured["n"].Should().BeNull();
-        captured["b"]!.GetValue<bool>().Should().BeTrue();
+        captured["b"].NotNull().GetValue<bool>().Should().BeTrue();
     }
 
     [Test]
@@ -184,11 +194,11 @@ public class TraxGraphQLAuditListenerTests
     {
         await using var host = await TestHost.BuildAsync();
 
-        var before = DateTimeOffset.UtcNow.AddSeconds(-1);
+        var before = TimeProvider.System.GetUtcNow().AddSeconds(-1);
         var result = await host.Executor.ExecuteAsync(
             QueryRequestBuilder("query Ping { ping }").SetOperationName("Ping").Build()
         );
-        var after = DateTimeOffset.UtcNow.AddSeconds(1);
+        var after = TimeProvider.System.GetUtcNow().AddSeconds(1);
         AssertNoErrors(result);
 
         var entries = host.DrainEntries();
@@ -244,7 +254,7 @@ public class TraxGraphQLAuditListenerTests
         await using var host = await TestHost.BuildAsync();
 
         var result = await host.Executor.ExecuteAsync("{ notARealField }");
-        (result as OperationResult)!.Errors.Should().NotBeNullOrEmpty();
+        (result as OperationResult).NotNull().Errors.Should().NotBeNullOrEmpty();
 
         var entries = host.DrainEntries();
         entries.Should().HaveCount(1);
@@ -258,7 +268,7 @@ public class TraxGraphQLAuditListenerTests
         await using var host = await TestHost.BuildAsync();
 
         var result = await host.Executor.ExecuteAsync("{ throws }");
-        (result as OperationResult)!.Errors.Should().NotBeNullOrEmpty();
+        (result as OperationResult).NotNull().Errors.Should().NotBeNullOrEmpty();
 
         var entries = host.DrainEntries();
         entries.Should().HaveCount(1);
@@ -408,8 +418,8 @@ public class TraxGraphQLAuditListenerTests
         var entries = host.DrainEntries();
         entries.Should().HaveCount(1);
         entries[0].Variables.Should().NotBeNull();
-        entries[0].Variables!.ContainsKey("u").Should().BeTrue();
-        entries[0].Variables!.ContainsKey("password").Should().BeFalse();
+        entries[0].Variables.NotNull().ContainsKey("u").Should().BeTrue();
+        entries[0].Variables.NotNull().ContainsKey("password").Should().BeFalse();
     }
 
     [Test]
@@ -436,10 +446,23 @@ public class TraxGraphQLAuditListenerTests
         AssertNoErrors(result);
 
         var entry = host.DrainEntries().Should().ContainSingle().Subject;
-        entry.Variables!["input"]!["user"]!.GetValue<string>().Should().Be("bob");
-        entry.Variables!["input"]!.AsObject().ContainsKey("password").Should().BeFalse();
         entry
-            .Variables!.ToJsonString()
+            .Variables.NotNull()["input"]
+            .NotNull()["user"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("bob");
+        entry
+            .Variables.NotNull()["input"]
+            .NotNull()
+            .AsObject()
+            .ContainsKey("password")
+            .Should()
+            .BeFalse();
+        entry
+            .Variables.NotNull()
+            .ToJsonString()
             .Should()
             .NotContain("hunter2", $"a redactor reaches a nested input field ({Adr})");
     }
@@ -637,15 +660,19 @@ public class TraxGraphQLAuditListenerTests
             .Be(1, "an entry that could not be built is counted in trax.audit.dropped");
     }
 
-    /// <summary>Reads the clock once, for the start of the request, and fails every read after it.</summary>
+    /// <summary>
+    /// Reads the clock once, for the start of the request, and fails the second read, the one the
+    /// entry's duration is built from. Later reads answer again: the channel reads the same clock to
+    /// throttle its warning about the drop.
+    /// </summary>
     private sealed class FailingClock : TimeProvider
     {
         private int _reads;
 
         public override long GetTimestamp() =>
-            Interlocked.Increment(ref _reads) == 1
-                ? 0
-                : throw new InvalidOperationException("clock unavailable");
+            Interlocked.Increment(ref _reads) == 2
+                ? throw new InvalidOperationException("clock unavailable")
+                : 0;
     }
 
     private sealed class ThrowingHttpContextAccessor : IHttpContextAccessor
@@ -669,7 +696,8 @@ public class TraxGraphQLAuditListenerTests
         var result = await host.Executor.ExecuteAsync("{ checkPassword(password: \"hunter2\") }");
         result
             .ExpectOperationResult()
-            .Errors!.Single()
+            .Errors.NotNull()
+            .Single()
             .Message.Should()
             .Contain("hunter2", "the resolver quotes the input");
 
@@ -870,7 +898,7 @@ public class TraxGraphQLAuditListenerTests
 
         var entry = host.DrainEntries().Should().ContainSingle().Subject;
         entry.OperationName.Should().StartWith("Qxxx").And.EndWith("...[truncated]");
-        entry.OperationName!.Length.Should().Be(64 + "...[truncated]".Length);
+        entry.OperationName.NotNull().Length.Should().Be(64 + "...[truncated]".Length);
     }
 
     [Test]
@@ -906,7 +934,7 @@ public class TraxGraphQLAuditListenerTests
         var entry = host.DrainEntries().Should().ContainSingle().Subject;
         entry.Success.Should().BeFalse();
         entry.ErrorText.Should().EndWith("...[truncated]");
-        entry.ErrorText!.Length.Should().Be(128 + "...[truncated]".Length);
+        entry.ErrorText.NotNull().Length.Should().Be(128 + "...[truncated]".Length);
     }
 
     #endregion
@@ -1133,7 +1161,7 @@ public class TraxGraphQLAuditListenerTests
     {
         var op = result as OperationResult;
         op.Should().NotBeNull();
-        op!.Errors.Should().BeNullOrEmpty();
+        op.NotNull().Errors.Should().BeNullOrEmpty();
     }
 
     /// <summary>The redactor the docs show: removes a named field at any depth.</summary>

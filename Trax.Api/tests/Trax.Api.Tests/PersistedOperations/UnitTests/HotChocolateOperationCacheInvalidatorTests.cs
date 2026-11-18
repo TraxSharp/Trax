@@ -104,21 +104,21 @@ public class HotChocolateOperationCacheInvalidatorTests
 
         var nullServices = () =>
             new HotChocolateOperationCacheInvalidator(
-                null!,
+                Null.Of<IServiceProvider>(),
                 new PersistedOperationCacheGeneration(),
                 NullLogger<HotChocolateOperationCacheInvalidator>.Instance
             );
         var nullGeneration = () =>
             new HotChocolateOperationCacheInvalidator(
                 services,
-                null!,
+                Null.Of<Trax.Api.GraphQL.PersistedOperations.Storage.PersistedOperationCacheGeneration>(),
                 NullLogger<HotChocolateOperationCacheInvalidator>.Instance
             );
         var nullLogger = () =>
             new HotChocolateOperationCacheInvalidator(
                 services,
                 new PersistedOperationCacheGeneration(),
-                null!
+                Null.Of<Microsoft.Extensions.Logging.ILogger<Trax.Api.GraphQL.PersistedOperations.Storage.HotChocolateOperationCacheInvalidator>>()
             );
 
         nullServices.Should().Throw<ArgumentNullException>();

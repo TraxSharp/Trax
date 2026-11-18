@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Persistence;
@@ -23,7 +24,7 @@ public class IrMachineViewRowLimitE2ETests
 {
     private const string Database = "trax_sm_machine_view_limit";
 
-    private IHost _host = null!;
+    private IHost? _host;
 
     [OneTimeSetUp]
     public async Task Up()
@@ -50,7 +51,7 @@ public class IrMachineViewRowLimitE2ETests
     [OneTimeTearDown]
     public async Task Down()
     {
-        _host.Dispose();
+        _host?.Dispose();
         await E2EHost.DropDatabaseAsync(Database);
     }
 
@@ -61,10 +62,9 @@ public class IrMachineViewRowLimitE2ETests
         for (var i = 0; i < 4; i++)
             started.Add(await Start());
 
-        using var doc = await _host.PostAsync(
-            "{ views { orders { vOrder { id } } } }",
-            apiKey: E2EHost.AliceKey
-        );
+        using var doc = await _host
+            .NotNull()
+            .PostAsync("{ views { orders { vOrder { id } } } }", apiKey: E2EHost.AliceKey);
         doc.RootElement.GetProperty("data")
             .GetProperty("views")
             .GetProperty("orders")
@@ -78,6 +78,7 @@ public class IrMachineViewRowLimitE2ETests
     private async Task<string> Start()
     {
         using var doc = await _host
+            .NotNull()
             .PostAsync(
                 $$"""mutation { machines { vOrder { start(requestId: "s-{{Guid.NewGuid():N}}") { id } } } }""",
                 apiKey: E2EHost.AliceKey
@@ -89,6 +90,7 @@ public class IrMachineViewRowLimitE2ETests
             .GetProperty("vOrder")
             .GetProperty("start")
             .GetProperty("id")
-            .GetString()!;
+            .GetString()
+            .NotNull();
     }
 }

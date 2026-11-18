@@ -111,7 +111,9 @@ public sealed class TraxCallerProbeMutations
         using (scope.BeginTrusted("test.hold"))
         {
             hold.Entered.TrySetResult();
-            await hold.Released.Task.WaitAsync(TimeSpan.FromSeconds(30), ct).ConfigureAwait(false);
+            await hold
+                .Released.Task.WaitAsync(TimeSpan.FromSeconds(30), TimeProvider.System, ct)
+                .ConfigureAwait(false);
             return caller.IsTrusted;
         }
     }

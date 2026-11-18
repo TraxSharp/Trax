@@ -16,6 +16,7 @@ using Trax.Api.GraphQL.Authorization;
 using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Projection;
 using Trax.Api.GraphQL.Queries;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 
 namespace Trax.Api.GraphQL.TypeModules;
@@ -52,10 +53,8 @@ internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) :
                 var objectType = (ITypeSystemMember)
                     CreateObjectTypeMethod
                         .MakeGenericMethod(reg.EntityType)
-                        .Invoke(
-                            null,
-                            [reg.Attribute, reg.AuthorizeAttributes, reg.AllowAnonymous]
-                        )!;
+                        .Invoke(null, [reg.Attribute, reg.AuthorizeAttributes, reg.AllowAnonymous])
+                        .NotNull();
                 types.Add(objectType);
             }
         }
@@ -101,17 +100,13 @@ internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) :
         return new(types);
     }
 
-    private static readonly MethodInfo CreateObjectTypeMethod =
-        typeof(QueryModelTypeModule).GetMethod(
-            nameof(CreateObjectType),
-            BindingFlags.NonPublic | BindingFlags.Static
-        )!;
+    private static readonly MethodInfo CreateObjectTypeMethod = typeof(QueryModelTypeModule)
+        .GetMethod(nameof(CreateObjectType), BindingFlags.NonPublic | BindingFlags.Static)
+        .NotNull();
 
-    private static readonly MethodInfo ConfigureFieldMethod =
-        typeof(QueryModelTypeModule).GetMethod(
-            nameof(ConfigureField),
-            BindingFlags.NonPublic | BindingFlags.Static
-        )!;
+    private static readonly MethodInfo ConfigureFieldMethod = typeof(QueryModelTypeModule)
+        .GetMethod(nameof(ConfigureField), BindingFlags.NonPublic | BindingFlags.Static)
+        .NotNull();
 
     private static void AddModelQueryField(
         IObjectTypeDescriptor descriptor,

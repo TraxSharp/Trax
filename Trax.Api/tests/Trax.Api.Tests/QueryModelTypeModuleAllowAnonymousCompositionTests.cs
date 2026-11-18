@@ -41,7 +41,7 @@ public class QueryModelTypeModuleAllowAnonymousCompositionTests
     private sealed class AnonDefaultDbContext(DbContextOptions<AnonDefaultDbContext> options)
         : DbContext(options)
     {
-        public DbSet<AnonDefaultRow> Rows { get; set; } = null!;
+        public DbSet<AnonDefaultRow> Rows => Set<AnonDefaultRow>();
     }
 
     [Test]
@@ -102,7 +102,7 @@ public class QueryModelTypeModuleAllowAnonymousCompositionTests
     private sealed class AnonExplicitDbContext(DbContextOptions<AnonExplicitDbContext> options)
         : DbContext(options)
     {
-        public DbSet<AnonExplicitRow> Rows { get; set; } = null!;
+        public DbSet<AnonExplicitRow> Rows => Set<AnonExplicitRow>();
     }
 
     [Test]
@@ -159,7 +159,7 @@ public class QueryModelTypeModuleAllowAnonymousCompositionTests
     private sealed class AnonExposedDbContext(DbContextOptions<AnonExposedDbContext> options)
         : DbContext(options)
     {
-        public DbSet<AnonExposedRow> Rows { get; set; } = null!;
+        public DbSet<AnonExposedRow> Rows => Set<AnonExposedRow>();
     }
 
     [Test]

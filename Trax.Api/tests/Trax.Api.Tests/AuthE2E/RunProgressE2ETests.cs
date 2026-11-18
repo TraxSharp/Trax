@@ -14,6 +14,7 @@ using Trax.Api.Auth.ApiKey;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.TypeModules;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.Extensions;
@@ -60,7 +61,7 @@ public class RunProgressE2ETests
     private const string EventFields =
         "sequence state failure step { name state } problem { code }";
 
-    private IHost _host = null!;
+    private IHost? _host;
 
     [OneTimeSetUp]
     public async Task StartHost()
@@ -104,15 +105,15 @@ public class RunProgressE2ETests
             )
             .Build();
 
-        await _host.StartAsync();
+        await _host.NotNull().StartAsync();
     }
 
     [OneTimeTearDown]
     public async Task StopHost()
     {
         ProgressMarkerTrain.Gate.TrySetResult();
-        await _host.StopAsync();
-        _host.Dispose();
+        await _host.NotNull().StopAsync();
+        _host?.Dispose();
     }
 
     [SetUp]
@@ -195,14 +196,16 @@ public class RunProgressE2ETests
         var runId = await RunAsync(AliceKey, fail: false);
         var alicePrincipalId = TraxPrincipalId.Qualify(ApiKeyDefaults.SchemeName, "alice");
 
-        using var bob = await _host.PostGraphQLAsync(
-            $$"""{ runProgress(runId: "{{runId}}") { {{Fields}} } }""",
-            r =>
-            {
-                r.Headers.Add("X-Api-Key", BobKey);
-                r.Headers.Add(HeaderUserKey.Header, alicePrincipalId);
-            }
-        );
+        using var bob = await _host
+            .NotNull()
+            .PostGraphQLAsync(
+                $$"""{ runProgress(runId: "{{runId}}") { {{Fields}} } }""",
+                r =>
+                {
+                    r.Headers.Add("X-Api-Key", BobKey);
+                    r.Headers.Add(HeaderUserKey.Header, alicePrincipalId);
+                }
+            );
 
         Answer(bob)
             .GetProperty("problem")
@@ -220,9 +223,11 @@ public class RunProgressE2ETests
     [Test]
     public async Task An_anonymous_caller_is_refused()
     {
-        using var anonymous = await _host.PostGraphQLAsync(
-            $$"""{ runProgress(runId: "{{new string('0', 32)}}") { {{Fields}} } }"""
-        );
+        using var anonymous = await _host
+            .NotNull()
+            .PostGraphQLAsync(
+                $$"""{ runProgress(runId: "{{new string('0', 32)}}") { {{Fields}} } }"""
+            );
 
         anonymous.RootElement.TryGetProperty("errors", out _).Should().BeTrue();
     }
@@ -238,7 +243,7 @@ public class RunProgressE2ETests
         var running = RunAsync(AliceKey, fail: false);
         var runId = await RunningIdAsync();
 
-        var alice = await Socket.ConnectAsync(_host, AliceKey);
+        var alice = await Socket.ConnectAsync(_host.NotNull(), AliceKey);
         await using var aliceDisposal = alice.ConfigureAwait(false);
         await alice.SubscribeAsync(
             $$"""subscription { runProgress(runId: "{{runId}}") { {{EventFields}} } }"""
@@ -265,7 +270,7 @@ public class RunProgressE2ETests
     {
         var runId = await RunAsync(AliceKey, fail: false);
 
-        var alice = await Socket.ConnectAsync(_host, AliceKey);
+        var alice = await Socket.ConnectAsync(_host.NotNull(), AliceKey);
         await using var aliceDisposal = alice.ConfigureAwait(false);
         await alice.SubscribeAsync(
             $$"""subscription { runProgress(runId: "{{runId}}") { {{EventFields}} } }"""
@@ -289,7 +294,7 @@ public class RunProgressE2ETests
         RunProgressStream.QueuedPoll = TimeSpan.FromMilliseconds(100);
         try
         {
-            var alice = await Socket.ConnectAsync(_host, AliceKey);
+            var alice = await Socket.ConnectAsync(_host.NotNull(), AliceKey);
             await using var aliceDisposal = alice.ConfigureAwait(false);
             await alice.SubscribeAsync(
                 $$"""subscription { runProgress(runId: "{{runId}}") { {{EventFields}} } }"""
@@ -298,6 +303,7 @@ public class RunProgressE2ETests
 
             // As leaving an invoking state or the operations surface cancels it: the entry, and no lifecycle event.
             var db = await _host
+                .NotNull()
                 .Services.GetRequiredService<IDataContextProviderFactory>()
                 .CreateDbContextAsync(CancellationToken.None);
             await using (db.ConfigureAwait(false))
@@ -329,7 +335,7 @@ public class RunProgressE2ETests
         var running = RunAsync(AliceKey, fail: false);
         var runId = await RunningIdAsync();
 
-        var bob = await Socket.ConnectAsync(_host, BobKey);
+        var bob = await Socket.ConnectAsync(_host.NotNull(), BobKey);
         await using var bobDisposal = bob.ConfigureAwait(false);
         await bob.SubscribeAsync(
             $$"""subscription { runProgress(runId: "{{runId}}") { {{EventFields}} } }"""
@@ -365,7 +371,7 @@ public class RunProgressE2ETests
             .Should()
             .Be(retry, "the starter follows a manifest's retries run by run, per " + Adr);
 
-        var socket = await Socket.ConnectAsync(_host, AliceKey);
+        var socket = await Socket.ConnectAsync(_host.NotNull(), AliceKey);
         await using var socketDisposal = socket.ConfigureAwait(false);
         await socket.SubscribeAsync(
             $$"""subscription { runProgress(runId: "{{failed}}") { sequence state retriedAs } }"""
@@ -392,6 +398,7 @@ public class RunProgressE2ETests
     private async Task OfOneManifestAsync(params string[] runIds)
     {
         var db = await _host
+            .NotNull()
             .Services.GetRequiredService<IDataContextProviderFactory>()
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
@@ -401,8 +408,8 @@ public class RunProgressE2ETests
             {
                 Name = $"progress-{Guid.NewGuid():N}",
                 IsEnabled = true,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
+                CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+                UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
             };
             await db.Track(group).ConfigureAwait(false);
             await db.SaveChanges(default).ConfigureAwait(false);
@@ -438,13 +445,13 @@ public class RunProgressE2ETests
     // The steps are written to the database after the run, in the background; read until they are there.
     private async Task<JsonDocument> ReadWithStepsAsync(string runId, string key)
     {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(10);
         while (true)
         {
             var response = await ReadAsync(runId, key).ConfigureAwait(false);
             if (
                 Answer(response).GetProperty("steps").GetArrayLength() >= 2
-                || DateTime.UtcNow > deadline
+                || TimeProvider.System.GetUtcNow().UtcDateTime > deadline
             )
                 return response;
             response.Dispose();
@@ -454,14 +461,17 @@ public class RunProgressE2ETests
     }
 
     private Task<JsonDocument> ReadAsync(string runId, string key) =>
-        _host.PostGraphQLAsync(
-            $$"""{ runProgress(runId: "{{runId}}") { {{Fields}} } }""",
-            r => r.Headers.Add("X-Api-Key", key)
-        );
+        _host
+            .NotNull()
+            .PostGraphQLAsync(
+                $$"""{ runProgress(runId: "{{runId}}") { {{Fields}} } }""",
+                r => r.Headers.Add("X-Api-Key", key)
+            );
 
     private async Task<string> QueueAsync(string key)
     {
         using var response = await _host
+            .NotNull()
             .PostGraphQLAsync(
                 $$"""mutation { dispatch { progressMarker(input: { note: "{{Marker}}", fail: false }, mode: QUEUE) { externalId } } }""",
                 r => r.Headers.Add("X-Api-Key", key)
@@ -473,6 +483,7 @@ public class RunProgressE2ETests
     private async Task<string> RunAsync(string key, bool fail)
     {
         using var response = await _host
+            .NotNull()
             .PostGraphQLAsync(
                 $$"""mutation { dispatch { progressMarker(input: { note: "{{Marker}}", fail: {{(fail ? "true" : "false")}} }, mode: RUN) { externalId } } }""",
                 r => r.Headers.Add("X-Api-Key", key)
@@ -483,6 +494,7 @@ public class RunProgressE2ETests
 
         // A failed run answers an error rather than its handle; its id is on its row.
         var db = await _host
+            .NotNull()
             .Services.GetRequiredService<IDataContextProviderFactory>()
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
@@ -505,16 +517,18 @@ public class RunProgressE2ETests
         return data.GetProperty("dispatch")
             .GetProperty("progressMarker")
             .GetProperty("externalId")
-            .GetString()!;
+            .GetString()
+            .NotNull();
     }
 
     // The external id of the run waiting at the gate, read from its row.
     private async Task<string> RunningIdAsync()
     {
         await ProgressMarkerTrain
-            .Waiting.Task.WaitAsync(TimeSpan.FromSeconds(30))
+            .Waiting.Task.WaitAsync(TimeSpan.FromSeconds(30), TimeProvider.System)
             .ConfigureAwait(false);
         var db = await _host
+            .NotNull()
             .Services.GetRequiredService<IDataContextProviderFactory>()
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);

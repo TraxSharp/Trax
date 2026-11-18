@@ -6,6 +6,7 @@ using HotChocolate.Execution;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
 using Trax.Api.Tests.PersistedOperations.Fixtures;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.PersistedOperations.IntegrationTests;
 
@@ -20,9 +21,9 @@ namespace Trax.Api.Tests.PersistedOperations.IntegrationTests;
 [Category("Integration")]
 public class PersistedOperationQueryTests
 {
-    private ServiceProvider _sp = null!;
-    private IRequestExecutor _executor = null!;
-    private IPersistedOperationStore _store = null!;
+    private ServiceProvider? _sp;
+    private IRequestExecutor? _executor;
+    private IPersistedOperationStore? _store;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -31,15 +32,16 @@ public class PersistedOperationQueryTests
             Assert.Ignore("Postgres not reachable; skipping integration tests.");
 
         _sp = await GraphQLFixture.BuildAsync();
-        _executor = await GraphQLFixture.GetExecutorAsync(_sp);
-        _store = _sp.GetRequiredService<IPersistedOperationStore>();
+        _executor = await GraphQLFixture.GetExecutorAsync(_sp.NotNull());
+        _store = _sp.NotNull().GetRequiredService<IPersistedOperationStore>();
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
         if (_sp is not null)
-            await _sp.DisposeAsync();
+            if (_sp is not null)
+                await _sp.DisposeAsync();
     }
 
     [SetUp]
@@ -50,16 +52,24 @@ public class PersistedOperationQueryTests
     {
         // Seed three rows in order; ordering of the returned page must
         // reflect UpdatedAt descending, not insertion order.
-        await _store.UpsertAsync("a_v1", GraphQLFixture.ValidDocument, options: null, default);
-        await _store.UpsertAsync("b_v1", GraphQLFixture.ValidDocument, options: null, default);
-        await _store.UpsertAsync("c_v1", GraphQLFixture.ValidDocument, options: null, default);
+        await _store
+            .NotNull()
+            .UpsertAsync("a_v1", GraphQLFixture.ValidDocument, options: null, default);
+        await _store
+            .NotNull()
+            .UpsertAsync("b_v1", GraphQLFixture.ValidDocument, options: null, default);
+        await _store
+            .NotNull()
+            .UpsertAsync("c_v1", GraphQLFixture.ValidDocument, options: null, default);
         // Touch a_v1 so its UpdatedAt moves to the top.
-        await _store.UpsertAsync(
-            "a_v1",
-            GraphQLFixture.ValidDocument,
-            new UpsertOptions { Description = "touched" },
-            default
-        );
+        await _store
+            .NotNull()
+            .UpsertAsync(
+                "a_v1",
+                GraphQLFixture.ValidDocument,
+                new UpsertOptions { Description = "touched" },
+                default
+            );
 
         var page = await ListAsync(filter: null);
 
@@ -75,14 +85,13 @@ public class PersistedOperationQueryTests
     [Test]
     public async Task List_FilterByActiveFalse_ReturnsOnlyDeactivated()
     {
-        await _store.UpsertAsync("active_v1", GraphQLFixture.ValidDocument, options: null, default);
-        await _store.UpsertAsync(
-            "inactive_v1",
-            GraphQLFixture.ValidDocument,
-            options: null,
-            default
-        );
-        await _store.DeactivateAsync("inactive_v1", tenantKey: null, "test", default);
+        await _store
+            .NotNull()
+            .UpsertAsync("active_v1", GraphQLFixture.ValidDocument, options: null, default);
+        await _store
+            .NotNull()
+            .UpsertAsync("inactive_v1", GraphQLFixture.ValidDocument, options: null, default);
+        await _store.NotNull().DeactivateAsync("inactive_v1", tenantKey: null, "test", default);
 
         var page = await ListAsync(
             filter: new Dictionary<string, object?>(StringComparer.Ordinal) { ["isActive"] = false }
@@ -96,9 +105,15 @@ public class PersistedOperationQueryTests
     [Test]
     public async Task List_FilterByIdPrefix_ReturnsOnlyMatching()
     {
-        await _store.UpsertAsync("greet_v1", GraphQLFixture.ValidDocument, options: null, default);
-        await _store.UpsertAsync("greet_v2", GraphQLFixture.ValidDocument, options: null, default);
-        await _store.UpsertAsync("lookup_v1", GraphQLFixture.ValidDocument, options: null, default);
+        await _store
+            .NotNull()
+            .UpsertAsync("greet_v1", GraphQLFixture.ValidDocument, options: null, default);
+        await _store
+            .NotNull()
+            .UpsertAsync("greet_v2", GraphQLFixture.ValidDocument, options: null, default);
+        await _store
+            .NotNull()
+            .UpsertAsync("lookup_v1", GraphQLFixture.ValidDocument, options: null, default);
 
         var page = await ListAsync(
             filter: new Dictionary<string, object?>(StringComparer.Ordinal)
@@ -119,12 +134,14 @@ public class PersistedOperationQueryTests
     public async Task List_Pagination_TakeAndSkipReturnTheCorrectWindow()
     {
         for (var i = 0; i < 5; i++)
-            await _store.UpsertAsync(
-                string.Create(CultureInfo.InvariantCulture, $"op_{i}_v1"),
-                GraphQLFixture.ValidDocument,
-                options: null,
-                default
-            );
+            await _store
+                .NotNull()
+                .UpsertAsync(
+                    string.Create(CultureInfo.InvariantCulture, $"op_{i}_v1"),
+                    GraphQLFixture.ValidDocument,
+                    options: null,
+                    default
+                );
 
         var page = await ListAsync(filter: null, take: 2, skip: 1);
 
@@ -136,12 +153,14 @@ public class PersistedOperationQueryTests
     [Test]
     public async Task Single_ExistingId_ReturnsRowWithEveryColumn()
     {
-        await _store.UpsertAsync(
-            "single_v1",
-            GraphQLFixture.ValidDocument,
-            new UpsertOptions { Description = "first upload" },
-            default
-        );
+        await _store
+            .NotNull()
+            .UpsertAsync(
+                "single_v1",
+                GraphQLFixture.ValidDocument,
+                new UpsertOptions { Description = "first upload" },
+                default
+            );
 
         var row = await SingleAsync("single_v1");
 
@@ -166,19 +185,18 @@ public class PersistedOperationQueryTests
     [Test]
     public async Task History_ReturnsOneRowPerUpsertAndDeactivate_NewestFirst()
     {
-        await _store.UpsertAsync(
-            "history_v1",
-            GraphQLFixture.ValidDocument,
-            options: null,
-            default
-        );
-        await _store.UpsertAsync(
-            "history_v1",
-            GraphQLFixture.ValidDocument,
-            new UpsertOptions { Description = "second upsert" },
-            default
-        );
-        await _store.DeactivateAsync("history_v1", tenantKey: null, "rotating", default);
+        await _store
+            .NotNull()
+            .UpsertAsync("history_v1", GraphQLFixture.ValidDocument, options: null, default);
+        await _store
+            .NotNull()
+            .UpsertAsync(
+                "history_v1",
+                GraphQLFixture.ValidDocument,
+                new UpsertOptions { Description = "second upsert" },
+                default
+            );
+        await _store.NotNull().DeactivateAsync("history_v1", tenantKey: null, "rotating", default);
 
         var entries = await HistoryAsync("history_v1");
 
@@ -297,10 +315,10 @@ public class PersistedOperationQueryTests
             )
             .AsManager()
             .Build();
-        var result = await _executor.ExecuteAsync(request).ConfigureAwait(false);
+        var result = await _executor.NotNull().ExecuteAsync(request).ConfigureAwait(false);
         var op = result as OperationResult;
         op.Should().NotBeNull();
-        op!.Errors.Should().BeNullOrEmpty();
+        op.NotNull().Errors.Should().BeNullOrEmpty();
         return JsonDocument.Parse(op.ToJson());
     }
 }

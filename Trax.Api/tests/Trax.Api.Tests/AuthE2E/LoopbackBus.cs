@@ -10,6 +10,7 @@ using Microsoft.Extensions.Hosting;
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.BroadcasterBuilder;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.JunctionEvents;
@@ -95,7 +96,9 @@ internal sealed class LoopbackBus
                             .ConfigureAwait(false)
                     )
                     {
-                        var message = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(body)!;
+                        var message = JsonSerializer
+                            .Deserialize<TrainLifecycleEventMessage>(body)
+                            .NotNull();
                         await handler(message, CancellationToken.None).ConfigureAwait(false);
                     }
                 },

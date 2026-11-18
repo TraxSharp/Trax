@@ -9,6 +9,7 @@ using Trax.Api.Services.HealthCheck;
 using Trax.Api.Services.Lists;
 using Trax.Api.Services.Runs;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.JunctionEvents;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -112,7 +113,9 @@ public partial class OperationsQueries
         if (hideAdminTrains)
         {
             var adminNames = AdminTrains.FullNames.ToHashSet(StringComparer.Ordinal);
-            registrations = registrations.Where(r => !adminNames.Contains(r.ServiceType.FullName!));
+            registrations = registrations.Where(r =>
+                !adminNames.Contains(r.ServiceType.FullName.NotNull())
+            );
         }
 
         return registrations
@@ -131,7 +134,7 @@ public partial class OperationsQueries
                 r.IsBroadcastEnabled
             )
             {
-                FullName = r.ServiceType.FullName!,
+                FullName = r.ServiceType.FullName.NotNull(),
                 HasQueueSubjectKey = r.HasQueueSubjectKey,
             })
             .ToList();
@@ -394,7 +397,7 @@ public partial class OperationsQueries
                 m.ManifestGroupId,
                 m.DependsOnManifestId,
                 m.Priority,
-                m.ManifestGroup.Name
+                m.ManifestGroup == null ? null : m.ManifestGroup.Name
             )
             {
                 ReplayDecisionsOnRetry = m.ReplayDecisionsOnRetry,
@@ -447,7 +450,7 @@ public partial class OperationsQueries
                 m.TimeoutSeconds,
                 m.LastSuccessfulRun,
                 m.ManifestGroupId,
-                m.ManifestGroup.Name,
+                m.ManifestGroup == null ? "" : m.ManifestGroup.Name,
                 m.DependsOnManifestId,
                 m.Priority,
                 m.PropertyTypeName,
@@ -535,7 +538,7 @@ public partial class OperationsQueries
             .MaxAsync(m => (DateTime?)m.EndTime, ct)
             .ConfigureAwait(false);
         var avgMs = await completed
-            .Select(m => (double?)(m.EndTime!.Value - m.StartTime).TotalMilliseconds)
+            .Select(m => (double?)((m.EndTime ?? m.StartTime) - m.StartTime).TotalMilliseconds)
             .AverageAsync(ct)
             .ConfigureAwait(false);
 
@@ -588,9 +591,14 @@ public partial class OperationsQueries
                 && m.HostInstanceId != null
                 && ids.Contains(m.HostInstanceId)
             )
-            .GroupBy(m => m.HostInstanceId!)
+            .GroupBy(m => m.HostInstanceId)
             .Select(g => new { InstanceId = g.Key, Count = g.Count() })
-            .ToDictionaryAsync(r => r.InstanceId, r => r.Count, StringComparer.Ordinal, ct)
+            .ToDictionaryAsync(
+                r => r.InstanceId.NotNull(),
+                r => r.Count,
+                StringComparer.Ordinal,
+                ct
+            )
             .ConfigureAwait(false);
 
         return beats

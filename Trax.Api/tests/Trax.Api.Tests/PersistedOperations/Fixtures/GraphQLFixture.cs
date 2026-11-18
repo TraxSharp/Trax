@@ -138,7 +138,8 @@ public static class GraphQLFixture
         );
 
         /// <summary>Completes once the resolver is running.</summary>
-        public Task Entered => _entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        public Task Entered =>
+            _entered.Task.WaitAsync(TimeSpan.FromSeconds(30), TimeProvider.System);
 
         /// <summary>Lets the resolver return.</summary>
         public void Release() => _released.TrySetResult();
@@ -146,7 +147,9 @@ public static class GraphQLFixture
         internal async Task<string> RunAsync()
         {
             _entered.TrySetResult();
-            await _released.Task.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+            await _released
+                .Task.WaitAsync(TimeSpan.FromSeconds(30), TimeProvider.System)
+                .ConfigureAwait(false);
             return "held";
         }
     }

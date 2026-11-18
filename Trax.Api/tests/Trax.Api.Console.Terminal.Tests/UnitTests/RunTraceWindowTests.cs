@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Terminal.Gui.Input;
+using Trax.Api.Console.Terminal.Checks;
 using Trax.Api.Console.Terminal.Screens;
 using Trax.Api.Console.Terminal.Tests.Fakes;
 using Trax.Api.Console.Terminal.Trace;
@@ -104,7 +105,7 @@ public class RunTraceWindowTests
         await terminal.Press(Key.CursorDown);
         await terminal.Press(Key.O);
 
-        await terminal.Stopped.WaitAsync(TimeSpan.FromSeconds(15));
+        await terminal.Stopped.WaitAsync(TimeSpan.FromSeconds(15), TimeProvider.System);
         window
             .CodeToOpen.Should()
             .Be("ChargeCard", "o closes the trace naming the step's junction");
@@ -258,8 +259,8 @@ public class RunTraceWindowTests
 
         await terminal.Press(Key.Q);
 
-        await terminal.Stopped.WaitAsync(TimeSpan.FromSeconds(15));
-        await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(15));
+        await terminal.Stopped.WaitAsync(TimeSpan.FromSeconds(15), TimeProvider.System);
+        await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(15), TimeProvider.System);
         window.Entries.Should().BeEmpty();
     }
 
@@ -270,7 +271,7 @@ public class RunTraceWindowTests
             StringComparison.Ordinal
         );
 
-    private static JsonObject Parse(string data) => JsonNode.Parse(data)!.AsObject();
+    private static JsonObject Parse(string data) => JsonNode.Parse(data).NotNull().AsObject();
 
     private static Task<(TerminalHarness, RunTraceWindow)> Open(FakeHost host) =>
         TerminalHarness.StartAsync(app => new RunTraceWindow(

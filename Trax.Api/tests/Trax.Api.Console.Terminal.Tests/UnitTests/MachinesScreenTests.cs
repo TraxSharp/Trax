@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Terminal.Gui.Input;
 using Terminal.Gui.Views;
+using Trax.Api.Console.Terminal.Checks;
 using Trax.Api.Console.Terminal.Screens;
 using Trax.Api.Console.Terminal.Tests.Fakes;
 using Trax.Client;
@@ -28,14 +29,14 @@ public class MachinesScreenTests
                 "MachineInstancesAttention",
                 v =>
                     string.Equals(
-                        v["machine"]!.GetValue<string>(),
+                        v["machine"].NotNull().GetValue<string>(),
                         "alpha",
                         StringComparison.Ordinal
                     )
                         ? alpha.Task
                         : Task.FromResult(Instances("beta", "bbbbbbbb-0000-4000-8000-000000000002"))
             );
-        MachinesScreen screen = null!;
+        MachinesScreen screen = Null.Of<MachinesScreen>();
         var (terminal, _) = await TerminalHarness.StartAsync(app =>
         {
             screen = new MachinesScreen(
@@ -96,6 +97,7 @@ public class MachinesScreenTests
                     id,
                     StringComparison.Ordinal
                 )
-            )!
+            )
+            .NotNull()
             .AsObject();
 }

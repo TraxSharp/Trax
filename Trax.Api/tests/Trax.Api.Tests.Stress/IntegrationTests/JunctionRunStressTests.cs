@@ -5,6 +5,7 @@ using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.Services.Runs;
 using Trax.Api.Tests.Stress.Fixtures;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Mediator.Services.ChainVerification;
@@ -239,7 +240,7 @@ public class JunctionRunStressTests : StressTestSetup
                         ct
                     )
                     .ConfigureAwait(false);
-                graph!.HasGraph.Should().BeTrue();
+                graph.NotNull().HasGraph.Should().BeTrue();
                 graph.MoreSteps.Should().BeTrue();
                 (graph.Nodes.Sum(n => n.Steps.Count) + graph.UnmatchedSteps.Count)
                     .Should()
@@ -264,7 +265,7 @@ public class JunctionRunStressTests : StressTestSetup
                         ct
                     )
                     .ConfigureAwait(false);
-                graph!.MoreSteps.Should().BeFalse();
+                graph.NotNull().MoreSteps.Should().BeFalse();
                 (graph.Nodes.Sum(n => n.Steps.Count) + graph.UnmatchedSteps.Count)
                     .Should()
                     .Be(StepsPerRun);
@@ -288,7 +289,7 @@ public class JunctionRunStressTests : StressTestSetup
                         ct
                     )
                     .ConfigureAwait(false);
-                graph!.UnmatchedSteps.Should().BeEmpty();
+                graph.NotNull().UnmatchedSteps.Should().BeEmpty();
                 var fork = graph.Nodes.Should().ContainSingle().Subject;
                 fork.State.Should().Be(RunNodeState.Completed);
                 fork.Tracks.Should().HaveCount(Branches).And.OnlyContain(b => b.Taken);

@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Trax.Api.GraphQL.Subscriptions;
+using Trax.Core.Extensions;
 using static Trax.Api.Tests.Auth.SocketInterceptorTestHelpers;
 
 namespace Trax.Api.Tests.Auth;
@@ -44,7 +45,7 @@ public class ConnectionInitPayloadReaderTests
 
         var result = ConnectionInitPayloadReader.TryRead<Credentials>(payload);
 
-        result!.AuthToken.Should().Be("t");
+        result.NotNull().AuthToken.Should().Be("t");
         result.ApiKey.Should().BeNull();
     }
 
@@ -53,7 +54,11 @@ public class ConnectionInitPayloadReaderTests
     {
         var payload = RawPayload("""{"authToken":"t","somethingElse":42}""");
 
-        ConnectionInitPayloadReader.TryRead<Credentials>(payload)!.AuthToken.Should().Be("t");
+        ConnectionInitPayloadReader
+            .TryRead<Credentials>(payload)
+            .NotNull()
+            .AuthToken.Should()
+            .Be("t");
     }
 
     [Test]

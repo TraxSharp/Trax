@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Services;
+using Trax.Core.Extensions;
 using static Trax.Api.Tests.AuthE2E.AuthE2EHost;
 
 namespace Trax.Api.Tests.AuthE2E;
@@ -33,7 +34,7 @@ public class ClientDocumentsQueryModelE2ETests
         "query AdminBooks { discover { vault { ownedBooks { totalCount } } } }";
 
     private readonly List<string> _files = [];
-    private IHost _host = null!;
+    private IHost? _host;
 
     [OneTimeSetUp]
     public async Task Up()
@@ -46,7 +47,7 @@ public class ClientDocumentsQueryModelE2ETests
     [OneTimeTearDown]
     public void Down()
     {
-        _host.Dispose();
+        _host?.Dispose();
         foreach (var file in _files)
             File.Delete(file);
     }
@@ -168,7 +169,7 @@ public class ClientDocumentsQueryModelE2ETests
 
     private async Task<JsonDocument> PostIdAsync(string id, object variables, string apiKey)
     {
-        var client = _host.GetTestServer().CreateClient();
+        var client = _host.NotNull().GetTestServer().CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/trax/graphql")
         {
             Content = JsonContent.Create(new { id, variables }),

@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Persistence;
@@ -25,7 +26,7 @@ public class IrMachineViewsE2ETests
 {
     private const string Database = "trax_sm_machine_views";
 
-    private IHost _host = null!;
+    private IHost? _host;
 
     [OneTimeSetUp]
     public async Task Up()
@@ -51,7 +52,7 @@ public class IrMachineViewsE2ETests
     [OneTimeTearDown]
     public async Task Down()
     {
-        _host.Dispose();
+        _host?.Dispose();
         await E2EHost.DropDatabaseAsync(Database);
     }
 
@@ -145,11 +146,12 @@ public class IrMachineViewsE2ETests
             .GetProperty(machine)
             .GetProperty("start")
             .GetProperty("id")
-            .GetString()!;
+            .GetString()
+            .NotNull();
 
     private async Task<JsonElement> Post(string key, string query)
     {
-        using var doc = await _host.PostAsync(query, apiKey: key).ConfigureAwait(false);
+        using var doc = await _host.NotNull().PostAsync(query, apiKey: key).ConfigureAwait(false);
         return doc.RootElement.Clone();
     }
 
@@ -344,8 +346,8 @@ public class IrMachineViewsE2ETests
         };
         if (!receipts)
         {
-            file["machines"]!.AsObject().Remove("v-receipt");
-            file["views"]!.AsObject().Remove("my things");
+            file["machines"].NotNull().AsObject().Remove("v-receipt");
+            file["views"].NotNull().AsObject().Remove("my things");
             irs.Remove("v-receipt");
         }
         var host = HostFile.Read(file.ToJsonString());

@@ -5,6 +5,7 @@ using Trax.Api.GraphQL.Client;
 using Trax.Api.GraphQL.Client.Trax;
 using Trax.Api.Tests.GraphQLClient.Fixtures;
 using Trax.Api.Tests.GraphQLClient.IntegrationTests.Fakes;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 
@@ -110,7 +111,7 @@ public class AssemblySchemaProviderTests
         var result = await executor.Run(new GetNestedCustomerByEmailRequest { Email = "Aragorn" });
 
         result.Should().NotBeNull();
-        result!.Id.Should().Be("player-1");
+        result.NotNull().Id.Should().Be("player-1");
         result.Name.Should().Be("Aragorn");
     }
 
@@ -144,7 +145,10 @@ public class AssemblySchemaProviderTests
     [Test]
     public void Constructor_NullConfigurator_Throws()
     {
-        var act = () => new AssemblySchemaProvider(null!);
+        var act = () =>
+            new AssemblySchemaProvider(
+                Null.Of<Action<HotChocolate.Execution.Configuration.IRequestExecutorBuilder>>()
+            );
         act.Should().Throw<ArgumentNullException>();
     }
 

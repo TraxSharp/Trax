@@ -12,6 +12,7 @@ using Trax.Api.Auth.ApiKey;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -50,7 +51,7 @@ public class RunProgressInvokedRunE2ETests
 
     private const string EventFields = "sequence state problem { code }";
 
-    private IHost _host = null!;
+    private IHost? _host;
 
     [OneTimeSetUp]
     public async Task StartHost()
@@ -112,15 +113,15 @@ public class RunProgressInvokedRunE2ETests
                     })
             )
             .Build();
-        await _host.StartAsync();
+        await _host.NotNull().StartAsync();
     }
 
     [OneTimeTearDown]
     public async Task StopHost()
     {
         ProgressMarkerTrain.Gate.TrySetResult();
-        await _host.StopAsync();
-        _host.Dispose();
+        await _host.NotNull().StopAsync();
+        _host?.Dispose();
     }
 
     [Test]
@@ -129,11 +130,14 @@ public class RunProgressInvokedRunE2ETests
         ProgressMarkerTrain.Reset(open: false);
         var id = await StartAsync(AliceKey);
         var runId = await GoAsync(AliceKey, id);
-        await ProgressMarkerTrain.Waiting.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await ProgressMarkerTrain.Waiting.Task.WaitAsync(
+            TimeSpan.FromSeconds(30),
+            TimeProvider.System
+        );
 
         // Older than its lifetime, then swept: the draft goes, and its run is asked to cancel.
         await ExpireAsync(id);
-        await _host.Services.GetRequiredService<DraftSweeper>().SweepOnce();
+        await _host.NotNull().Services.GetRequiredService<DraftSweeper>().SweepOnce();
         (await DraftExistsAsync(id)).Should().BeFalse("the draft outlived its lifetime");
 
         (await ReadAsync(runId, AliceKey))
@@ -151,7 +155,10 @@ public class RunProgressInvokedRunE2ETests
             .Should()
             .Be("NOT_FOUND");
 
-        await using var alice = await RunProgressE2ETests.Socket.ConnectAsync(_host, AliceKey);
+        await using var alice = await RunProgressE2ETests.Socket.ConnectAsync(
+            _host.NotNull(),
+            AliceKey
+        );
         await alice.SubscribeAsync(
             $$"""subscription { runProgress(runId: "{{runId}}") { {{EventFields}} } }"""
         );
@@ -177,6 +184,7 @@ public class RunProgressInvokedRunE2ETests
     private async Task<Guid> StartAsync(string apiKey)
     {
         using var doc = await _host
+            .NotNull()
             .PostGraphQLAsync(
                 $$"""mutation { machines { errand { start(input: { note: "{{RunProgressE2ETests.Marker}}" }, requestId: "{{Guid.NewGuid():N}}") { id problem { code message } } } } }""",
                 r => r.Headers.Add("X-Api-Key", apiKey)
@@ -184,13 +192,14 @@ public class RunProgressInvokedRunE2ETests
             .ConfigureAwait(false);
         var start = Answer(doc, "start");
         start.GetProperty("problem").ValueKind.Should().Be(JsonValueKind.Null, start.GetRawText());
-        return Guid.Parse(start.GetProperty("id").GetString()!);
+        return Guid.Parse(start.GetProperty("id").GetString().NotNull());
     }
 
     // Enters the invoking state and answers the run it queued, as its owner reads it from the event's answer.
     private async Task<string> GoAsync(string apiKey, Guid id)
     {
         using var doc = await _host
+            .NotNull()
             .PostGraphQLAsync(
                 $$"""mutation { machines { errand { go(id: "{{id}}", requestId: "{{Guid.NewGuid():N}}") { state invokedRun { runId } problem { code message } } } } }""",
                 r => r.Headers.Add("X-Api-Key", apiKey)
@@ -198,7 +207,7 @@ public class RunProgressInvokedRunE2ETests
             .ConfigureAwait(false);
         var go = Answer(doc, "go");
         go.GetProperty("state").GetString().Should().Be("Running", go.GetRawText());
-        return go.GetProperty("invokedRun").GetProperty("runId").GetString()!;
+        return go.GetProperty("invokedRun").GetProperty("runId").GetString().NotNull();
     }
 
     private static JsonElement Answer(JsonDocument doc, string field)
@@ -217,6 +226,7 @@ public class RunProgressInvokedRunE2ETests
     private async Task<JsonElement> ReadAsync(string runId, string apiKey)
     {
         using var doc = await _host
+            .NotNull()
             .PostGraphQLAsync(
                 $$"""{ runProgress(runId: "{{runId}}") { runId state problem { code } } }""",
                 r => r.Headers.Add("X-Api-Key", apiKey)
@@ -231,8 +241,9 @@ public class RunProgressInvokedRunE2ETests
     // The store stamps every write with now; this makes the draft look created and last written an hour ago.
     private async Task ExpireAsync(Guid id)
     {
-        var past = DateTimeOffset.UtcNow.AddHours(-1);
+        var past = TimeProvider.System.GetUtcNow().AddHours(-1);
         var db = await _host
+            .NotNull()
             .Services.GetRequiredService<IDataContextProviderFactory>()
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
@@ -250,6 +261,7 @@ public class RunProgressInvokedRunE2ETests
     private async Task<bool> DraftExistsAsync(Guid id)
     {
         var db = await _host
+            .NotNull()
             .Services.GetRequiredService<IDataContextProviderFactory>()
             .CreateDbContextAsync(CancellationToken.None)
             .ConfigureAwait(false);
@@ -265,7 +277,8 @@ public class RunProgressInvokedRunE2ETests
     /// <summary>The snapshot user key is the authenticated caller's principal id.</summary>
     private sealed class CallerPrincipal(TraxCaller caller) : ISnapshotPrincipal
     {
-        public string? CurrentUserKey => caller.IsAuthenticated ? caller.Principal!.Id : null;
+        public string? CurrentUserKey =>
+            caller.IsAuthenticated ? caller.Principal.NotNull().Id : null;
     }
 
     #endregion

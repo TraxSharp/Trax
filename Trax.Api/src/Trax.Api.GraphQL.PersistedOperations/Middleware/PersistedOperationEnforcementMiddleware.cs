@@ -3,6 +3,7 @@ using HotChocolate;
 using HotChocolate.Execution;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.GraphQL.PersistedOperations.Middleware;
 
@@ -41,7 +42,7 @@ internal static class PersistedOperationEnforcementMiddleware
         var policy = factory.Services.GetRequiredService<PersistedOperationPolicy>();
         var logger = factory
             .Services.GetRequiredService<ILoggerFactory>()
-            .CreateLogger(typeof(PersistedOperationEnforcementMiddleware).FullName!);
+            .CreateLogger(typeof(PersistedOperationEnforcementMiddleware).FullName.NotNull());
 
         return context =>
         {

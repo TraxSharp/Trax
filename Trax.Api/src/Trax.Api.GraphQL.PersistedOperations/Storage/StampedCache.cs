@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using HotChocolate.Execution.Caching;
 using HotChocolate.Execution.Processing;
 using HotChocolate.Language;
@@ -27,7 +28,7 @@ internal sealed class StampedCache<TValue>(
 
     public int Count => _cache.Count;
 
-    public bool TryGet(string key, out TValue? value)
+    public bool TryGet(string key, [NotNullWhen(true)] out TValue? value)
     {
         value = null;
         if (!_cache.TryGet(key, out var entry))

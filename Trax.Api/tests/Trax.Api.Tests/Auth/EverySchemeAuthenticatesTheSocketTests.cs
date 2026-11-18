@@ -7,6 +7,7 @@ using Microsoft.IdentityModel.Tokens;
 using Trax.Api.Auth.Jwt;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Subscriptions;
+using Trax.Core.Extensions;
 using static Trax.Api.Tests.Auth.SocketInterceptorTestHelpers;
 
 namespace Trax.Api.Tests.Auth;
@@ -48,7 +49,7 @@ public class EverySchemeAuthenticatesTheSocketTests
 
     private static string Sign(string issuer, byte[] key, string sub = "alice")
     {
-        var now = DateTime.UtcNow;
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime;
         return new JwtSecurityTokenHandler().WriteToken(
             new JwtSecurityToken(
                 issuer,
@@ -87,7 +88,7 @@ public class EverySchemeAuthenticatesTheSocketTests
             );
 
         status.Accepted.Should().BeTrue();
-        http.User.Identity!.AuthenticationType.Should().Be("Customer");
+        http.User.Identity.NotNull().AuthenticationType.Should().Be("Customer");
     }
 
     [Test]
@@ -103,7 +104,7 @@ public class EverySchemeAuthenticatesTheSocketTests
             );
 
         status.Accepted.Should().BeTrue();
-        http.User.Identity!.AuthenticationType.Should().Be("Staff");
+        http.User.Identity.NotNull().AuthenticationType.Should().Be("Staff");
     }
 
     [Test]

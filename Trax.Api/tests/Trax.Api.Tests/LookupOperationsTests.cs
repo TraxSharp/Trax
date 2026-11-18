@@ -10,6 +10,7 @@ using Microsoft.Extensions.Hosting;
 using NSubstitute;
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -36,8 +37,8 @@ public class LookupOperationsTests
     private const string AdminKey = "lookup-admin-key-0123456789abcdefghijklm";
     private const string ReaderKey = "lookup-reader-key-0123456789abcdefghijkl";
 
-    private IHost _host = null!;
-    private IDataContextProviderFactory _factory = null!;
+    private IHost? _host;
+    private IDataContextProviderFactory? _factory;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -65,10 +66,10 @@ public class LookupOperationsTests
                             graphql.ExposeOperationQueries().GateOperations(roles: "Admin")
                         );
                         services.AddSingleton(Substitute.For<ITrainChainGraphs>());
-                        services.AddSingleton(_factory);
+                        services.AddSingleton(_factory.NotNull());
                         services.AddScoped<IOperationsService>(_ => new OperationsService(
                             discovery,
-                            _factory,
+                            _factory.NotNull(),
                             new SchedulerConfiguration(),
                             Substitute.For<ITrainExecutionService>()
                         ));
@@ -85,14 +86,14 @@ public class LookupOperationsTests
             )
             .Build();
 
-        await _host.StartAsync();
+        await _host.NotNull().StartAsync();
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await _host.StopAsync();
-        _host.Dispose();
+        await _host.NotNull().StopAsync();
+        _host?.Dispose();
     }
 
     [Test]
@@ -101,7 +102,7 @@ public class LookupOperationsTests
         var id = Guid.NewGuid();
         var userKey = "user-" + Guid.NewGuid().ToString("N");
         var secret = "secret-" + Guid.NewGuid().ToString("N");
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             db.SnapshotDrafts.Add(
                 new SnapshotDraft
@@ -114,8 +115,8 @@ public class LookupOperationsTests
                     State = "Building",
                     Context = JsonSerializer.Serialize(new { apiKey = secret }),
                     ConcurrencyToken = Guid.NewGuid(),
-                    CreatedAt = DateTimeOffset.UtcNow,
-                    UpdatedAt = DateTimeOffset.UtcNow,
+                    CreatedAt = TimeProvider.System.GetUtcNow(),
+                    UpdatedAt = TimeProvider.System.GetUtcNow(),
                 }
             );
             await db.SaveChanges(default);
@@ -159,7 +160,7 @@ public class LookupOperationsTests
 
     private async Task<JsonDocument> PostAsync(string query, string key)
     {
-        var client = _host.GetTestServer().CreateClient();
+        var client = _host.NotNull().GetTestServer().CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/trax/graphql")
         {
             Content = JsonContent.Create(new { query }),

@@ -27,10 +27,13 @@ public sealed class TestTokenIssuer
     public TestTokenIssuer(string issuer, string defaultAudience, SigningCredentials credentials);
     public TestTokenIssuer(string issuer, string defaultAudience, SigningCredentials credentials,
         IReadOnlyDictionary<string, SigningCredentials>? keyset);
+    public TestTokenIssuer(string issuer, string defaultAudience, SigningCredentials credentials,
+        IReadOnlyDictionary<string, SigningCredentials>? keyset, TimeProvider clock);
 
     public string Issuer { get; }
     public string DefaultAudience { get; }
     public SigningCredentials Credentials { get; }
+    public TimeProvider Clock { get; }
 
     public static TestTokenIssuer Symmetric(string issuer, string audience, byte[] key);
     public TestTokenIssuer WithSigningKey(string kid);
@@ -59,6 +62,7 @@ public sealed class TestTokenBuilder
 | `Issuer` | The `iss` of minted tokens. |
 | `DefaultAudience` | The `aud` of minted tokens unless `WithAudience` overrides it. |
 | `Credentials` | The credentials that sign. |
+| `Clock` | The clock a token's default `nbf` and `exp`, and `WithLifetime`, are read from. The system clock unless the constructor was given one. |
 | `Symmetric(issuer, audience, key)` | An HS256 issuer. Throws `ArgumentException` when `key` is shorter than 32 bytes. |
 | `WithSigningKey(kid)` | A new issuer that signs with the keyset's key `kid`. Throws `InvalidOperationException` for an issuer built without a keyset, and `ArgumentException` for an unknown `kid`. |
 | `Mint(configure)` | Builds and signs one token. |

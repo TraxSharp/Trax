@@ -1,6 +1,7 @@
 using System.Globalization;
 using AwesomeAssertions;
 using Trax.Api.GraphQL.TypeModules;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests;
 
@@ -55,7 +56,7 @@ public class RunProgressLimitsTests
         var limits = new RunProgressLimits();
         var held = Enumerable
             .Range(0, RunProgressLimits.PerRun)
-            .Select(_ => limits.TryAcquire("alice", "run")!)
+            .Select(_ => limits.TryAcquire("alice", "run").NotNull())
             .ToList();
 
         held[0].Dispose();

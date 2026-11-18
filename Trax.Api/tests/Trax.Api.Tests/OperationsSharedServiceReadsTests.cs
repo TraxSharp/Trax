@@ -75,7 +75,7 @@ public class OperationsSharedServiceReadsTests
             .Be("TRAX_TOO_MANY_IDS");
         await service
             .DidNotReceiveWithAnyArgs()
-            .GetManifestGroupExecutionStatsAsync(default!, default);
+            .GetManifestGroupExecutionStatsAsync(Null.Of<IReadOnlyCollection<long>>(), default);
     }
 
     [Test]

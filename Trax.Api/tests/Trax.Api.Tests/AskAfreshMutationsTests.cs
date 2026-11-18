@@ -14,6 +14,7 @@ using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.Tests.AuthE2E;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -56,8 +57,8 @@ public class AskAfreshMutationsTests
 {
     private const string Database = "trax_api_ask_afresh";
 
-    private ServiceProvider _provider = null!;
-    private IDataContextProviderFactory _factory = null!;
+    private ServiceProvider? _provider;
+    private IDataContextProviderFactory? _factory;
 
     [OneTimeSetUp]
     public void OneTimeSetUp()
@@ -69,20 +70,21 @@ public class AskAfreshMutationsTests
             t.AddEffects(e => e.UsePostgres(AuthE2EHost.ConnectionString(Database)))
         );
         _provider = services.BuildServiceProvider();
-        _factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        _factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await _provider.DisposeAsync();
+        if (_provider is not null)
+            await _provider.DisposeAsync();
         Npgsql.NpgsqlConnection.ClearAllPools();
     }
 
     [SetUp]
     public async Task SetUp()
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         await ((DbContext)db).Database.ExecuteSqlRawAsync(
             "TRUNCATE TABLE trax.dead_letter, trax.work_queue, trax.metadata, trax.manifest, trax.manifest_group RESTART IDENTITY CASCADE"
         );
@@ -128,7 +130,7 @@ public class AskAfreshMutationsTests
                 var jobs = JobsOver(Scheduler);
                 var job = await mutations.RequeueAllDeadLetters(jobs, default, askAfresh);
                 await FinishedAsync(jobs, job.Id);
-                jobs.Get(job.Id)!.Count.Should().Be(1);
+                jobs.Get(job.Id).NotNull().Count.Should().Be(1);
                 break;
         }
 
@@ -161,14 +163,14 @@ public class AskAfreshMutationsTests
                 manifest.ExternalId,
                 TimeSpan.FromMinutes(1),
                 Scheduler,
-                _factory,
+                _factory.NotNull(),
                 default,
                 askAfresh
             )
             : await mutations.TriggerManifest(
                 manifest.ExternalId,
                 Scheduler,
-                _factory,
+                _factory.NotNull(),
                 default,
                 askAfresh
             );
@@ -202,11 +204,17 @@ public class AskAfreshMutationsTests
                 "m",
                 TimeSpan.FromMinutes(1),
                 scheduler,
-                _factory,
+                _factory.NotNull(),
                 default,
                 askAfresh: true
             )
-            : await mutations.TriggerManifest("m", scheduler, _factory, default, askAfresh: true);
+            : await mutations.TriggerManifest(
+                "m",
+                scheduler,
+                _factory.NotNull(),
+                default,
+                askAfresh: true
+            );
 
         response.Success.Should().BeTrue();
         response
@@ -235,7 +243,7 @@ public class AskAfreshMutationsTests
         var response = await new OperationsMutations().TriggerManifest(
             "m",
             scheduler,
-            _factory,
+            _factory.NotNull(),
             default,
             askAfresh: true
         );
@@ -263,11 +271,12 @@ public class AskAfreshMutationsTests
         (
             await queries.GetManifestDetail(
                 manifest.Id,
-                _factory,
+                _factory.NotNull(),
                 Substitute.For<ITrainDiscoveryService>(),
                 default
             )
-        )!
+        )
+            .NotNull()
             .ReplayDecisionsOnRetry.Should()
             .BeFalse();
         (await QueuedEntryAsync(manifest.Id))
@@ -292,11 +301,12 @@ public class AskAfreshMutationsTests
         (
             await queries.GetManifestDetail(
                 manifest.Id,
-                _factory,
+                _factory.NotNull(),
                 Substitute.For<ITrainDiscoveryService>(),
                 default
             )
-        )!
+        )
+            .NotNull()
             .ReplayDecisionsOnRetry.Should()
             .BeTrue();
     }
@@ -333,12 +343,17 @@ public class AskAfreshMutationsTests
             .Returns(new BatchDeadLetterResult(1, "ok"));
 
         await SeedManifestAsync("m");
-        await new OperationsMutations().TriggerManifest("m", scheduler, _factory, default);
+        await new OperationsMutations().TriggerManifest(
+            "m",
+            scheduler,
+            _factory.NotNull(),
+            default
+        );
         await new OperationsMutations().TriggerManifestDelayed(
             "m",
             TimeSpan.FromMinutes(1),
             scheduler,
-            _factory,
+            _factory.NotNull(),
             default
         );
         await new DeadLetterMutations().RequeueDeadLetter(1, scheduler, default);
@@ -613,7 +628,7 @@ public class AskAfreshMutationsTests
                         discovery.DiscoverTrains().Returns([]);
                         services.AddSingleton(discovery);
                         services.AddSingleton(Substitute.For<IEffectRegistry>());
-                        services.AddSingleton(_factory);
+                        services.AddSingleton(_factory.NotNull());
                         services.AddTraxGraphQL(graphql =>
                             graphql
                                 .ExposeOperationQueries()
@@ -662,7 +677,7 @@ public class AskAfreshMutationsTests
 
     private ITraxScheduler Scheduler =>
         new TraxScheduler(
-            _factory,
+            _factory.NotNull(),
             Substitute.For<Trax.Mediator.Services.TrainRegistry.ITrainRegistry>(),
             Substitute.For<ICancellationRegistry>(),
             NullLogger<TraxScheduler>.Instance
@@ -671,7 +686,7 @@ public class AskAfreshMutationsTests
     private IOperationsService Operations =>
         new OperationsService(
             Substitute.For<ITrainDiscoveryService>(),
-            _factory,
+            _factory.NotNull(),
             new SchedulerConfiguration(),
             Substitute.For<ITrainExecutionService>(),
             new ServiceCollection()
@@ -688,7 +703,7 @@ public class AskAfreshMutationsTests
     {
         var services = new ServiceCollection();
         services.AddSingleton(scheduler);
-        services.AddSingleton(_factory);
+        services.AddSingleton(_factory.NotNull());
         return new DeadLetterRequeueJobs(
             services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
             NullLogger<DeadLetterRequeueJobs>.Instance,
@@ -727,15 +742,15 @@ public class AskAfreshMutationsTests
     /// <summary>A manifest with this external id, so a trigger for it is not refused as unknown.</summary>
     private async Task SeedManifestAsync(string externalId)
     {
-        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             var group = new ManifestGroup
             {
                 Name = $"group-{Guid.NewGuid():N}",
                 IsEnabled = true,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
+                CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+                UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
             };
             await db.Track(group).ConfigureAwait(false);
             await db.SaveChanges(default).ConfigureAwait(false);
@@ -750,15 +765,15 @@ public class AskAfreshMutationsTests
 
     private async Task<(Manifest Manifest, long FailedRun)> SeedFailedManifestAsync()
     {
-        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             var group = new ManifestGroup
             {
                 Name = $"group-{Guid.NewGuid():N}",
                 IsEnabled = true,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
+                CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+                UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
             };
             await db.Track(group).ConfigureAwait(false);
             await db.SaveChanges(default).ConfigureAwait(false);
@@ -776,12 +791,13 @@ public class AskAfreshMutationsTests
                     Name = manifest.Name,
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
-                }
+                },
+                TimeProvider.System
             );
             run.ManifestId = manifest.Id;
             run.TrainState = TrainState.Failed;
             run.DecisionsRecorded = true;
-            run.StartTime = DateTime.UtcNow.AddMinutes(-5);
+            run.StartTime = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5);
             await db.Track(run).ConfigureAwait(false);
             await db.SaveChanges(default).ConfigureAwait(false);
 
@@ -792,7 +808,8 @@ public class AskAfreshMutationsTests
                     Input = manifest.Properties,
                     InputTypeName = manifest.PropertyTypeName,
                     ManifestId = manifest.Id,
-                }
+                },
+                TimeProvider.System
             );
             ranFrom.Status = WorkQueueStatus.Dispatched;
             ranFrom.MetadataId = run.Id;
@@ -808,7 +825,7 @@ public class AskAfreshMutationsTests
                     Question = """{"text":"Which lane?"}""",
                     Answer = """{"choice":"Fast"}""",
                     Fingerprint = "fingerprint",
-                    DecidedAt = DateTime.UtcNow.AddMinutes(-5),
+                    DecidedAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5),
                 }
             );
             await db.SaveChanges(default).ConfigureAwait(false);
@@ -818,7 +835,7 @@ public class AskAfreshMutationsTests
 
     private async Task<long> SeedDeadLetterAsync(Manifest manifest)
     {
-        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             var deadLetter = DeadLetter.Create(
@@ -827,7 +844,8 @@ public class AskAfreshMutationsTests
                     Manifest = manifest,
                     Reason = "failed",
                     RetryCount = 0,
-                }
+                },
+                TimeProvider.System
             );
             await db.Track(deadLetter).ConfigureAwait(false);
             await db.SaveChanges(default).ConfigureAwait(false);
@@ -837,7 +855,7 @@ public class AskAfreshMutationsTests
 
     private async Task SeedQueuedRetryAsync(Manifest manifest, long failedRun)
     {
-        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             var retry = WorkQueue.Create(
@@ -847,8 +865,9 @@ public class AskAfreshMutationsTests
                     Input = manifest.Properties,
                     InputTypeName = manifest.PropertyTypeName,
                     ManifestId = manifest.Id,
-                    ScheduledAt = DateTime.UtcNow.AddHours(1),
-                }
+                    ScheduledAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(1),
+                },
+                TimeProvider.System
             );
             retry.ReplayDecisionsOf = failedRun;
             await db.Track(retry).ConfigureAwait(false);
@@ -858,7 +877,7 @@ public class AskAfreshMutationsTests
 
     private async Task<WorkQueue> QueuedEntryAsync(long manifestId)
     {
-        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             return await db

@@ -12,6 +12,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
@@ -99,7 +100,8 @@ public class SubscriptionUpgradeOrderingE2ETests
     private static Uri BaseUri(WebApplication app) =>
         new(
             app.Services.GetRequiredService<IServer>()
-                .Features.Get<IServerAddressesFeature>()!
+                .Features.Get<IServerAddressesFeature>()
+                .NotNull()
                 .Addresses.First()
         );
 

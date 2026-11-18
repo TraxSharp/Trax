@@ -8,6 +8,7 @@ using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.GraphQL.Validation;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
@@ -81,16 +82,18 @@ public partial class TrainTypeModule(
             if (HasTypedInput(reg) && usedInputTypes.Add(reg.InputType))
             {
                 var inputObjectType = (ITypeSystemMember)
-                    Activator.CreateInstance(
-                        typeof(InputObjectType<>).MakeGenericType(reg.InputType)
-                    )!;
+                    Activator
+                        .CreateInstance(typeof(InputObjectType<>).MakeGenericType(reg.InputType))
+                        .NotNull();
                 types.Add(inputObjectType);
             }
 
             if (HasTypedOutput(reg) && usedOutputTypes.Add(reg.OutputType))
             {
                 var outputObjectType = (ITypeSystemMember)
-                    Activator.CreateInstance(typeof(ObjectType<>).MakeGenericType(reg.OutputType))!;
+                    Activator
+                        .CreateInstance(typeof(ObjectType<>).MakeGenericType(reg.OutputType))
+                        .NotNull();
                 types.Add(outputObjectType);
             }
 

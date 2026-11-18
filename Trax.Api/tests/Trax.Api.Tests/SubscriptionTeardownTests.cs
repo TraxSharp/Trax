@@ -14,6 +14,7 @@ using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Subscriptions;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Enums;
 using Trax.Effect.Services.EffectRegistry;
@@ -98,7 +99,7 @@ public class SubscriptionTeardownTests
             .Should()
             .BeTrue("disposing the response stream unsubscribes from the topic");
         // allowed-delay: an upper bound on the reader, which wins the race as soon as it ends.
-        (await Task.WhenAny(reader, Task.Delay(Deadline)))
+        (await Task.WhenAny(reader, Task.Delay(Deadline, TimeProvider.System)))
             .Should()
             .BeSameAs(reader, "the running enumeration ends with its subscription");
     }
@@ -142,7 +143,7 @@ public class SubscriptionTeardownTests
                     "ext",
                     "Some.Train",
                     TrainState.Completed,
-                    DateTime.UtcNow,
+                    TimeProvider.System.GetUtcNow().UtcDateTime,
                     FailureJunction: null,
                     FailureReason: null,
                     Output: null
@@ -150,17 +151,18 @@ public class SubscriptionTeardownTests
                 default
             );
         // allowed-delay: an upper bound on the delivery, which wins the race as soon as it lands.
-        (await Task.WhenAny(first.Task, Task.Delay(Deadline)))
+        (await Task.WhenAny(first.Task, Task.Delay(Deadline, TimeProvider.System)))
             .Should()
             .BeSameAs(first.Task);
-        var data = (IReadOnlyDictionary<string, object?>)(await first.Task).DataMap()[field]!;
+        var data =
+            (IReadOnlyDictionary<string, object?>)(await first.Task).DataMap()[field].NotNull();
         data["trainName"].Should().Be("Some.Train");
         data["sequence"].Should().Be(1L);
 
         await stream.DisposeAsync();
         (await WaitForAsync(() => topics.Open == 0)).Should().BeTrue();
         // allowed-delay: an upper bound on the reader, which wins the race as soon as it ends.
-        (await Task.WhenAny(reader, Task.Delay(Deadline)))
+        (await Task.WhenAny(reader, Task.Delay(Deadline, TimeProvider.System)))
             .Should()
             .BeSameAs(reader);
     }
@@ -225,7 +227,7 @@ public class SubscriptionTeardownTests
             .Should()
             .BeTrue("disposing the step feed's response stream unsubscribes from its topic");
         // allowed-delay: an upper bound on the reader, which wins the race as soon as it ends.
-        (await Task.WhenAny(reader, Task.Delay(Deadline)))
+        (await Task.WhenAny(reader, Task.Delay(Deadline, TimeProvider.System)))
             .Should()
             .BeSameAs(reader, "the running enumeration ends with its subscription");
     }
@@ -301,7 +303,7 @@ public class SubscriptionTeardownTests
         var original = services.Single(d => d.ServiceType == typeof(ITopicEventReceiver));
         services.Remove(original);
         services.AddSingleton<ITopicEventReceiver>(sp => new CountingTopicReceiver(
-            (ITopicEventReceiver)original.ImplementationFactory!(sp),
+            (ITopicEventReceiver)original.ImplementationFactory.NotNull()(sp),
             topics
         ));
         return services;
@@ -325,7 +327,8 @@ public class SubscriptionTeardownTests
     {
         var address = new Uri(
             app.Services.GetRequiredService<IServer>()
-                .Features.Get<IServerAddressesFeature>()!
+                .Features.Get<IServerAddressesFeature>()
+                .NotNull()
                 .Addresses.First()
         );
         var client = new ClientWebSocket();
@@ -368,10 +371,10 @@ public class SubscriptionTeardownTests
 
     private static async Task<bool> WaitForAsync(Func<bool> condition)
     {
-        var until = DateTime.UtcNow + Deadline;
+        var until = TimeProvider.System.GetUtcNow().UtcDateTime + Deadline;
         while (!condition())
         {
-            if (DateTime.UtcNow > until)
+            if (TimeProvider.System.GetUtcNow().UtcDateTime > until)
                 return false;
             // allowed-delay: poll interval for a condition, bounded by Deadline.
             await Task.Delay(20).ConfigureAwait(false);

@@ -13,7 +13,7 @@ namespace Trax.Api.Tests;
 
 public class SecondDbContext : DbContext
 {
-    public DbSet<TestItem> Items { get; set; } = null!;
+    public DbSet<TestItem> Items => Set<TestItem>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
         optionsBuilder.UseInMemoryDatabase("SecondDb_" + Guid.NewGuid());

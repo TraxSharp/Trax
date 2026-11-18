@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Trax.Api.GraphQL.Client;
 using Trax.Api.GraphQL.Client.Typed;
 using Trax.Api.Tests.GraphQLClient.TypedSelectionProbes;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 
@@ -39,8 +40,8 @@ public class TypedSelectionNamingTests
         }
         """;
 
-    private string _path = null!;
-    private GraphQLClientValidator _validator = null!;
+    private string? _path;
+    private GraphQLClientValidator? _validator;
 
     [SetUp]
     public async Task SetUp()
@@ -49,12 +50,12 @@ public class TypedSelectionNamingTests
             System.IO.Path.GetTempPath(),
             $"typed-{Guid.NewGuid():N}.graphql"
         );
-        await File.WriteAllTextAsync(_path, Sdl);
-        _validator = new GraphQLClientValidator(new FileSchemaProvider(_path));
+        await File.WriteAllTextAsync(_path.NotNull(), Sdl);
+        _validator = new GraphQLClientValidator(new FileSchemaProvider(_path.NotNull()));
     }
 
     [TearDown]
-    public void TearDown() => File.Delete(_path);
+    public void TearDown() => File.Delete(_path.NotNull());
 
     [Test]
     public async Task Acronym_property_names_are_camel_cased_as_the_server_names_them()
@@ -62,7 +63,9 @@ public class TypedSelectionNamingTests
         var query = new AssetRequest { Id = "a1" }.Query;
 
         query.Should().Contain(" id\n").And.Contain(" urlPath\n").And.NotContain("iD");
-        (await _validator.ValidateAsync(query)).Should().Be(GraphQLParser.AST.OperationType.Query);
+        (await _validator.NotNull().ValidateAsync(query))
+            .Should()
+            .Be(GraphQLParser.AST.OperationType.Query);
     }
 
     [Test]
@@ -71,7 +74,9 @@ public class TypedSelectionNamingTests
         var query = new AssetsByURLPathRequest { URLPath = "/a" }.Query;
 
         query.Should().Contain("$urlPath: String!").And.Contain("assets(urlPath: $urlPath)");
-        (await _validator.ValidateAsync(query)).Should().Be(GraphQLParser.AST.OperationType.Query);
+        (await _validator.NotNull().ValidateAsync(query))
+            .Should()
+            .Be(GraphQLParser.AST.OperationType.Query);
     }
 
     [Test]
@@ -83,7 +88,9 @@ public class TypedSelectionNamingTests
             .Should()
             .Contain("($urlPath: String!, $ownerID: ID)")
             .And.Contain("assets(urlPath: $urlPath, ownerID: $ownerID)");
-        (await _validator.ValidateAsync(query)).Should().Be(GraphQLParser.AST.OperationType.Query);
+        (await _validator.NotNull().ValidateAsync(query))
+            .Should()
+            .Be(GraphQLParser.AST.OperationType.Query);
     }
 
     [Test]
@@ -117,6 +124,7 @@ public class TypedSelectionNamingTests
     public async Task An_open_generic_request_type_is_left_out_of_assembly_validation()
     {
         await _validator
+            .NotNull()
             .Invoking(v =>
                 v.ValidateAssembliesAsync(
                     [typeof(PagedAssetRequest<>).Assembly],
@@ -127,6 +135,7 @@ public class TypedSelectionNamingTests
             .NotThrowAsync();
 
         _validator
+            .NotNull()
             .CachedQueries.Keys.Should()
             .ContainSingle("only the closed request deriving from it is validated")
             .Which.Should()

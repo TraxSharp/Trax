@@ -7,6 +7,7 @@ using NSubstitute;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Hooks;
 using Trax.Api.GraphQL.Subscriptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Enums;
 using Trax.Effect.Services.TrainEventBroadcaster;
@@ -242,7 +243,7 @@ public class GraphQLTrainEventHandlerTests
 
         var evt = sender.Events[0].Message as TrainLifecycleEvent;
         evt.Should().NotBeNull();
-        evt!.MetadataId.Should().Be(42);
+        evt.NotNull().MetadataId.Should().Be(42);
         evt.ExternalId.Should().Be("ext-123");
         evt.TrainName.Should().Be("My.Train");
         evt.TrainState.Should().Be(TrainState.Completed);
@@ -265,7 +266,7 @@ public class GraphQLTrainEventHandlerTests
         await handler.HandleAsync(message, CancellationToken.None);
 
         var evt = sender.Events[0].Message as TrainLifecycleEvent;
-        evt!.FailureJunction.Should().Be("ProcessData");
+        evt.NotNull().FailureJunction.Should().Be("ProcessData");
         evt.FailureReason.Should().Be("NullReferenceException");
     }
 
@@ -279,7 +280,7 @@ public class GraphQLTrainEventHandlerTests
         await handler.HandleAsync(message, CancellationToken.None);
 
         var evt = sender.Events[0].Message as TrainLifecycleEvent;
-        evt!.TrainState.Should().Be(TrainState.Pending);
+        evt.NotNull().TrainState.Should().Be(TrainState.Pending);
     }
 
     [Test]
@@ -293,7 +294,7 @@ public class GraphQLTrainEventHandlerTests
 
         var evt = sender.Events[0].Message as TrainLifecycleEvent;
         evt.Should().NotBeNull();
-        evt!.Output.Should().Be("{\"score\":42}");
+        evt.NotNull().Output.Should().Be("{\"score\":42}");
     }
 
     [Test]
@@ -307,7 +308,7 @@ public class GraphQLTrainEventHandlerTests
 
         var evt = sender.Events[0].Message as TrainLifecycleEvent;
         evt.Should().NotBeNull();
-        evt!.Output.Should().BeNull();
+        evt.NotNull().Output.Should().BeNull();
     }
 
     #endregion
@@ -395,17 +396,19 @@ public class GraphQLTrainEventHandlerTests
         // carry enough to do the same.
         var sender = new RecordingTopicEventSender();
         var handler = CreateHandler(sender, enabledTrainName: "My.Train");
-        var message = System.Text.Json.JsonSerializer.Deserialize<TrainLifecycleEventMessage>(
-            """
-            {
-              "metadataId": 42, "externalId": "ext-1", "trainName": "My.Train",
-              "trainState": "Failed", "timestamp": "2026-09-28T12:00:00Z",
-              "failureJunction": "ChargeCard", "failureReason": "The card was declined.",
-              "failureException": "TrainException",
-              "eventType": "Failed", "executor": "RemoteWorker", "output": null
-            }
-            """
-        )!;
+        var message = System
+            .Text.Json.JsonSerializer.Deserialize<TrainLifecycleEventMessage>(
+                """
+                {
+                  "metadataId": 42, "externalId": "ext-1", "trainName": "My.Train",
+                  "trainState": "Failed", "timestamp": "2026-09-28T12:00:00Z",
+                  "failureJunction": "ChargeCard", "failureReason": "The card was declined.",
+                  "failureException": "TrainException",
+                  "eventType": "Failed", "executor": "RemoteWorker", "output": null
+                }
+                """
+            )
+            .NotNull();
 
         await handler.HandleAsync(message, CancellationToken.None);
 
@@ -416,7 +419,8 @@ public class GraphQLTrainEventHandlerTests
         );
 
         broadcastView
-            .Present(forwarded)!
+            .Present(forwarded)
+            .NotNull()
             .FailureReason.Should()
             .Be(
                 "The card was declined.",
@@ -689,7 +693,7 @@ public class GraphQLTrainEventHandlerTests
             CancellationToken cancellationToken = default
         )
         {
-            Events.Add(new RecordedEvent(topicName, message!));
+            Events.Add(new RecordedEvent(topicName, message.NotNull()));
             return ValueTask.CompletedTask;
         }
 

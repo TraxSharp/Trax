@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
@@ -297,25 +298,26 @@ public class ScenarioDriverParityTests
         [("Kit", "payer")] = E2EHost.CarolKey,
     };
 
-    private IHost _host = null!;
-    private Glossary _glossary = null!;
-    private Dictionary<string, JsonObject> _irs = null!;
-    private HostFile _hostFile = null!;
-    private string _directory = null!;
+    private IHost? _host;
+    private Glossary? _glossary;
+    private Dictionary<string, JsonObject>? _irs;
+    private HostFile? _hostFile;
+    private string? _directory;
 
     [OneTimeSetUp]
     public async Task Up()
     {
         _glossary = Trax.StateMachine.Features.Glossary.Read(Glossary);
-        var derived = await FeatureDerivation.DeriveAsync(_glossary, Features);
+        var derived = await FeatureDerivation.DeriveAsync(_glossary.NotNull(), Features);
         derived.Problems.Should().BeEmpty();
         _irs = derived.Irs.ToDictionary(
             kv => kv.Key,
-            kv => JsonNode.Parse(kv.Value)!.AsObject(),
+            kv => JsonNode.Parse(kv.Value).NotNull().AsObject(),
             StringComparer.Ordinal
         );
-        _hostFile = HostFile.Read(derived.Host!);
+        _hostFile = HostFile.Read(derived.Host.NotNull());
         _hostFile
+            .NotNull()
             .Policies.Select(p => $"{p.Shape} {p.Id}")
             .Should()
             .BeEquivalentTo([
@@ -327,10 +329,13 @@ public class ScenarioDriverParityTests
 
         // Served as from-gherkin writes it, so the policies, the system instance and the views run as on a host.
         _directory = Directory.CreateTempSubdirectory("trax-parity-").FullName;
-        await File.WriteAllTextAsync(Path.Combine(_directory, "host.json"), derived.Host!)
+        await File.WriteAllTextAsync(
+                Path.Combine(_directory.NotNull(), "host.json"),
+                derived.Host.NotNull()
+            )
             .ConfigureAwait(false);
         foreach (var (id, ir) in derived.Irs)
-            await File.WriteAllTextAsync(Path.Combine(_directory, $"{id}.ir.json"), ir)
+            await File.WriteAllTextAsync(Path.Combine(_directory.NotNull(), $"{id}.ir.json"), ir)
                 .ConfigureAwait(false);
 
         await E2EHost.RecreateDatabaseAsync(Database).ConfigureAwait(false);
@@ -343,7 +348,7 @@ public class ScenarioDriverParityTests
                     // The sweep fires due timers; the default would let the shop's close outlast the driver's slack.
                     Machines = o =>
                     {
-                        o.ServeFeatures(_directory);
+                        o.ServeFeatures(_directory.NotNull());
                         o.InvokeOutcomeSweepInterval = TimeSpan.FromMilliseconds(500);
                         o.InvokeOutcomeSweepIntervalWhileListening = TimeSpan.FromMilliseconds(500);
                     },
@@ -355,9 +360,9 @@ public class ScenarioDriverParityTests
     [OneTimeTearDown]
     public async Task Down()
     {
-        _host.Dispose();
+        _host?.Dispose();
         await E2EHost.DropDatabaseAsync(Database);
-        Directory.Delete(_directory, recursive: true);
+        Directory.Delete(_directory.NotNull(), recursive: true);
     }
 
     [Test]
@@ -365,16 +370,20 @@ public class ScenarioDriverParityTests
     {
         var (scenarios, problems) = FeatureFiles.Parse(Features);
         problems.Should().BeEmpty();
-        var resolver = new StepResolver(_glossary);
+        var resolver = new StepResolver(_glossary.NotNull());
         foreach (var scenario in scenarios)
         {
-            var walk = Walk.Run(scenario, _glossary, resolver);
+            var walk = Walk.Run(scenario, _glossary.NotNull(), resolver);
             var memory = await ScenarioRunner.Run(
                 walk,
-                _glossary,
-                new MemoryDriver(_irs, _hostFile, _glossary)
+                _glossary.NotNull(),
+                new MemoryDriver(_irs.NotNull(), _hostFile.NotNull(), _glossary.NotNull())
             );
-            var host = await ScenarioRunner.Run(walk, _glossary, HostDriver(scenario.Name));
+            var host = await ScenarioRunner.Run(
+                walk,
+                _glossary.NotNull(),
+                HostDriver(scenario.Name)
+            );
 
             memory.Status.Should().Be(ScenarioStatus.Passed, Show(memory));
             host.Status.Should().Be(ScenarioStatus.Passed, Show(host));
@@ -388,21 +397,25 @@ public class ScenarioDriverParityTests
             ("not-the-cascade.feature", NotTheCascade),
         ]);
         problems.Should().BeEmpty();
-        var resolver = new StepResolver(_glossary);
+        var resolver = new StepResolver(_glossary.NotNull());
         foreach (var scenario in scenarios)
         {
-            var walk = Walk.Run(scenario, _glossary, resolver);
+            var walk = Walk.Run(scenario, _glossary.NotNull(), resolver);
             var memory = await ScenarioRunner.Run(
                 walk,
-                _glossary,
-                new MemoryDriver(_irs, _hostFile, _glossary)
+                _glossary.NotNull(),
+                new MemoryDriver(_irs.NotNull(), _hostFile.NotNull(), _glossary.NotNull())
             );
-            var host = await ScenarioRunner.Run(walk, _glossary, HostDriver(scenario.Name));
+            var host = await ScenarioRunner.Run(
+                walk,
+                _glossary.NotNull(),
+                HostDriver(scenario.Name)
+            );
 
             memory.Status.Should().Be(ScenarioStatus.Failed, Show(memory));
             host.Status.Should().Be(ScenarioStatus.Failed, Show(host));
-            host.Failure!.Step.Should().Be(memory.Failure!.Step, Show(host));
-            memory.Failure!.Step.Line.Should().Be(scenario.Steps[^1].Line, Show(memory));
+            host.Failure.NotNull().Step.Should().Be(memory.Failure.NotNull().Step, Show(host));
+            memory.Failure.NotNull().Step.Line.Should().Be(scenario.Steps[^1].Line, Show(memory));
         }
     }
 
@@ -418,7 +431,7 @@ public class ScenarioDriverParityTests
             {
                 Machines = o =>
                 {
-                    o.ServeFeatures(_directory);
+                    o.ServeFeatures(_directory.NotNull());
                     o.InvokeOutcomeSweepInterval = TimeSpan.FromMilliseconds(500);
                     o.InvokeOutcomeSweepIntervalWhileListening = TimeSpan.FromMilliseconds(500);
                 },
@@ -432,7 +445,7 @@ public class ScenarioDriverParityTests
             var manifest = ClientManifest.Read(await File.ReadAllTextAsync(path));
             var (scenarios, problems) = FeatureFiles.Parse(Features);
             problems.Should().BeEmpty();
-            var resolver = new StepResolver(_glossary);
+            var resolver = new StepResolver(_glossary.NotNull());
 
             // Without the manifest every operation is a hand-written document, which this host refuses: the step
             // throws, and never reads the refusal as the machine's.
@@ -449,8 +462,8 @@ public class ScenarioDriverParityTests
             foreach (var scenario in scenarios)
             {
                 var result = await ScenarioRunner.Run(
-                    Walk.Run(scenario, _glossary, resolver),
-                    _glossary,
+                    Walk.Run(scenario, _glossary.NotNull(), resolver),
+                    _glossary.NotNull(),
                     HostDriver(scenario.Name, host, manifest)
                 );
                 result.Status.Should().Be(ScenarioStatus.Passed, Show(result));
@@ -474,11 +487,11 @@ public class ScenarioDriverParityTests
     [Test]
     public async Task A_guard_refuses_with_the_same_code_and_message_on_both()
     {
-        var ada = new Person("Ada", _glossary.Actors["payer"]);
+        var ada = new Person("Ada", _glossary.NotNull().Actors["payer"]);
         var key = new InstanceKey("p-order", "Ada");
         IScenarioDriver[] drivers =
         [
-            new MemoryDriver(_irs, _hostFile, _glossary),
+            new MemoryDriver(_irs.NotNull(), _hostFile.NotNull(), _glossary.NotNull()),
             HostDriver("guard"),
         ];
         var answers = new List<Answer>();
@@ -502,7 +515,7 @@ public class ScenarioDriverParityTests
     [Test]
     public async Task A_trigger_no_one_is_served_is_not_served_on_the_host_either()
     {
-        var ada = new Person("Ada", _glossary.Actors["payer"]);
+        var ada = new Person("Ada", _glossary.NotNull().Actors["payer"]);
         var driver = HostDriver("rush");
         await driver.Start(ada, "p-order");
 
@@ -580,14 +593,17 @@ public class ScenarioDriverParityTests
 
     private static readonly InstanceKey Adas = new("p-order", "Ada");
 
-    private Person Payer(string name) => new(name, _glossary.Actors["payer"]);
+    private Person Payer(string name) => new(name, _glossary.NotNull().Actors["payer"]);
 
-    private Person Baker(string name) => new(name, _glossary.Actors["baker"]);
+    private Person Baker(string name) => new(name, _glossary.NotNull().Actors["baker"]);
 
     private static JsonObject Loaves(int loaves) => new() { ["loaves"] = loaves };
 
     private IScenarioDriver[] Drivers(string scenario) =>
-        [new MemoryDriver(_irs, _hostFile, _glossary), HostDriver(scenario)];
+        [
+            new MemoryDriver(_irs.NotNull(), _hostFile.NotNull(), _glossary.NotNull()),
+            HostDriver(scenario),
+        ];
 
     // What each driver answers, memory first, after the owner, when there is one, started their order.
     private async Task<List<Answer>> BothAnswer(
@@ -615,8 +631,8 @@ public class ScenarioDriverParityTests
         new(
             new TraxFeatureDriverOptions
             {
-                Host = (host ?? _host).Services,
-                Client = (host ?? _host).GetTestServer().CreateClient(),
+                Host = (host ?? _host.NotNull()).Services,
+                Client = (host ?? _host.NotNull()).GetTestServer().CreateClient(),
                 Manifest = manifest,
                 Glossary = FeatureGlossary.Read(Glossary),
                 Credential = (actor, person, _) =>
@@ -627,7 +643,7 @@ public class ScenarioDriverParityTests
                         }
                     ),
             },
-            _glossary,
+            _glossary.NotNull(),
             scenario
         );
 

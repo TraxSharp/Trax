@@ -22,7 +22,7 @@ public class JwtIssuerPeekTests
             issuer: issuer,
             audience: "aud",
             claims: new[] { new Claim("sub", "alice") },
-            expires: DateTime.UtcNow.AddMinutes(5),
+            expires: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(5),
             signingCredentials: creds
         );
         return new JwtSecurityTokenHandler().WriteToken(token);
@@ -74,7 +74,7 @@ public class JwtIssuerPeekTests
             issuer: null,
             audience: "aud",
             claims: new[] { new Claim("sub", "alice") },
-            expires: DateTime.UtcNow.AddMinutes(5),
+            expires: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(5),
             signingCredentials: creds
         );
         var raw = new JwtSecurityTokenHandler().WriteToken(token);

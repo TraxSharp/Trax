@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 
@@ -123,7 +124,7 @@ internal sealed class RabbitMqPersistedOperationBroadcaster
             {
                 var factory = new ConnectionFactory
                 {
-                    Uri = new Uri(_options.RabbitMqConnectionString!),
+                    Uri = new Uri(_options.RabbitMqConnectionString.NotNull()),
                 };
                 _connection = await factory.CreateConnectionAsync(ct).ConfigureAwait(false);
             }

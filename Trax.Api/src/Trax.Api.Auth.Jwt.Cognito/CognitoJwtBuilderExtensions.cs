@@ -40,9 +40,30 @@ public static class CognitoJwtBuilderExtensions
         string userPoolId,
         string clientId,
         CognitoTokenUse tokenUse = CognitoTokenUse.IdAndAccess
+    ) => builder.UseCognito(region, userPoolId, clientId, tokenUse, TimeProvider.System);
+
+    /// <summary>
+    /// Configures the JWT builder for an Amazon Cognito user pool, as
+    /// <see cref="UseCognito(JwtBuilder, string, string, string, CognitoTokenUse)"/> does, with the
+    /// token lifetime checked against <paramref name="clock"/>.
+    /// </summary>
+    /// <param name="builder">The JWT builder.</param>
+    /// <param name="region">AWS region of the user pool, e.g. <c>us-east-1</c>.</param>
+    /// <param name="userPoolId">User pool identifier, e.g. <c>us-east-1_AbCdEfGhI</c>.</param>
+    /// <param name="clientId">App client id registered on the pool.</param>
+    /// <param name="tokenUse">Which token shapes to accept.</param>
+    /// <param name="clock">The clock a token's <c>nbf</c> and <c>exp</c> are compared with.</param>
+    public static JwtBuilder UseCognito(
+        this JwtBuilder builder,
+        string region,
+        string userPoolId,
+        string clientId,
+        CognitoTokenUse tokenUse,
+        TimeProvider clock
     )
     {
         ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(clock);
         ArgumentException.ThrowIfNullOrWhiteSpace(region);
         ArgumentException.ThrowIfNullOrWhiteSpace(userPoolId);
         ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
@@ -153,7 +174,7 @@ public static class CognitoJwtBuilderExtensions
                 // Fall back to the default lifetime validator (exp/nbf check).
                 if (expires is null)
                     return false;
-                var now = DateTime.UtcNow;
+                var now = clock.GetUtcNow().UtcDateTime;
                 var skew = parameters.ClockSkew;
                 if (notBefore is { } nbf && nbf > now + skew)
                     return false;

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.StateMachine.E2E;
 
@@ -12,7 +13,7 @@ public sealed record MachineChange(JsonElement Raw)
             {
                 JsonValueKind.Number => revision.GetInt64(),
                 JsonValueKind.String => long.Parse(
-                    revision.GetString()!,
+                    revision.GetString().NotNull(),
                     System.Globalization.CultureInfo.InvariantCulture
                 ),
                 _ => 0,

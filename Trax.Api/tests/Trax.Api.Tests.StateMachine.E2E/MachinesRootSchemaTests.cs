@@ -3,6 +3,7 @@ using HotChocolate.Execution;
 using HotChocolate.Types;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 
 namespace Trax.Api.StateMachine.E2E;
@@ -28,8 +29,8 @@ public class MachinesRootSchemaTests
 
     private const string Database = "trax_sm_machines_schema";
 
-    private IHost _host = null!;
-    private IRequestExecutor _executor = null!;
+    private IHost? _host;
+    private IRequestExecutor? _executor;
 
     [OneTimeSetUp]
     public async Task Up()
@@ -47,28 +48,32 @@ public class MachinesRootSchemaTests
                 Services = E2EHostOptions.AddGenericPolicy,
             }
         );
-        _executor = await _host.ExecutorAsync();
+        _executor = await _host.NotNull().ExecutorAsync();
     }
 
     [OneTimeTearDown]
     public async Task Down()
     {
-        _host.Dispose();
+        _host?.Dispose();
         await E2EHost.DropDatabaseAsync(Database);
     }
 
     private ObjectType? WizardMutations =>
-        SchemaWalk.MachineType(_executor, SchemaWalk.RootMutation, WizardMachine.MachineId);
+        SchemaWalk.MachineType(
+            _executor.NotNull(),
+            SchemaWalk.RootMutation,
+            WizardMachine.MachineId
+        );
 
     private ObjectType? WizardQueries =>
-        SchemaWalk.MachineType(_executor, SchemaWalk.RootQuery, WizardMachine.MachineId);
+        SchemaWalk.MachineType(_executor.NotNull(), SchemaWalk.RootQuery, WizardMachine.MachineId);
 
     private ObjectType RequireWizardMutations()
     {
         WizardMutations
             .Should()
             .NotBeNull("an exposed machine has its own field under Mutation.machines, per " + Adr);
-        return WizardMutations!;
+        return WizardMutations.NotNull();
     }
 
     [Test]
@@ -97,7 +102,7 @@ public class MachinesRootSchemaTests
         WizardQueries
             .Should()
             .NotBeNull("an exposed machine has its own field under Query.machines");
-        var get = WizardQueries!.Fields["get"];
+        var get = WizardQueries.NotNull().Fields["get"];
         get.Arguments.Select(a => a.Name).Should().BeEquivalentTo(["id"]);
 
         var result = (ObjectType)start.Type.NamedType();
@@ -114,6 +119,7 @@ public class MachinesRootSchemaTests
             .NotContain("revision", "the revision is never inside the context");
 
         _executor
+            .NotNull()
             .Schema.ToString()
             .Should()
             .Contain("start(input: WizardStartInput!, requestId: String!)");
@@ -123,11 +129,12 @@ public class MachinesRootSchemaTests
     public async Task An_unexposed_declarative_machine_gets_no_field()
     {
         var mutations = SchemaWalk.FieldType(
-            SchemaWalk.ObjectTypeNamed(_executor, SchemaWalk.RootMutation),
+            SchemaWalk.ObjectTypeNamed(_executor.NotNull(), SchemaWalk.RootMutation),
             "machines"
         );
         mutations.Should().NotBeNull("the host exposes the wizard, so machines exists, per " + Adr);
-        mutations!
+        mutations
+            .NotNull()
             .Fields.Where(f => !f.IsIntrospectionField)
             .Select(f => f.Name)
             .Should()
@@ -138,23 +145,25 @@ public class MachinesRootSchemaTests
             );
 
         // The raw-delegate machines keep working through the generic mutations.
-        using var saved = await _host.PostAsync(
-            """
-            mutation Save($input: SaveSnapshotInput!) {
-              dispatch { stateMachine { saveSnapshot(input: $input) { output { snapshot } } } }
-            }
-            """,
-            new
-            {
-                input = new
+        using var saved = await _host
+            .NotNull()
+            .PostAsync(
+                """
+                mutation Save($input: SaveSnapshotInput!) {
+                  dispatch { stateMachine { saveSnapshot(input: $input) { output { snapshot } } } }
+                }
+                """,
+                new
                 {
-                    machine = "turnstile",
-                    id = Guid.NewGuid().ToString(),
-                    snapshot = TurnstileMachine.InitialJson,
+                    input = new
+                    {
+                        machine = "turnstile",
+                        id = Guid.NewGuid().ToString(),
+                        snapshot = TurnstileMachine.InitialJson,
+                    },
                 },
-            },
-            E2EHost.AdminApiKey
-        );
+                E2EHost.AdminApiKey
+            );
         saved.RootElement.TryGetProperty("errors", out _).Should().BeFalse();
     }
 
@@ -174,7 +183,11 @@ public class MachinesRootSchemaTests
             );
 
         foreach (
-            var root in new[] { WizardMutations!, WizardQueries ?? WizardMutations! }.Distinct()
+            var root in new[]
+            {
+                WizardMutations.NotNull(),
+                WizardQueries ?? WizardMutations.NotNull(),
+            }.Distinct()
         )
             SchemaWalk
                 .Reachable(root)
@@ -235,10 +248,10 @@ public class MachinesRootSchemaTests
     [Test]
     public void A_problem_code_is_the_RefusalCode_enum()
     {
-        var problem = (ObjectType)_executor.Schema.Types["SnapshotProblem"];
+        var problem = (ObjectType)_executor.NotNull().Schema.Types["SnapshotProblem"];
         problem.Fields["code"].Type.Print().Should().Be("RefusalCode!");
 
-        var codes = (EnumType)_executor.Schema.Types["RefusalCode"];
+        var codes = (EnumType)_executor.NotNull().Schema.Types["RefusalCode"];
         codes
             .Values.Select(v => v.Name)
             .Should()
@@ -251,19 +264,21 @@ public class MachinesRootSchemaTests
     [Test]
     public async Task A_misspelt_event_field_is_a_validation_error_not_a_runtime_problem()
     {
-        var started = await _host.StartWizardAsync(E2EHost.AliceKey);
+        var started = await _host.NotNull().StartWizardAsync(E2EHost.AliceKey);
         var runsBefore = await E2ESql.CountMachineRunsAsync(Database);
         var rowBefore = await E2ESql.DraftAsync(Database, WizardMachine.MachineId, started.Id);
 
-        using var doc = await _host.PostAsync(
-            WizardOps.Event(
-                "descrbe",
-                started.Id,
-                WizardOps.NewRequestId(),
-                WizardOps.DetailsInput()
-            ),
-            apiKey: E2EHost.AliceKey
-        );
+        using var doc = await _host
+            .NotNull()
+            .PostAsync(
+                WizardOps.Event(
+                    "descrbe",
+                    started.Id,
+                    WizardOps.NewRequestId(),
+                    WizardOps.DetailsInput()
+                ),
+                apiKey: E2EHost.AliceKey
+            );
 
         WizardOps
             .FirstErrorMessage(doc)

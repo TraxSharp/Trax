@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Trax.Api.Console.Terminal.Checks;
 using Trax.Api.Console.Terminal.Code;
 using Trax.Api.Console.Terminal.Connection;
 
@@ -11,7 +12,7 @@ namespace Trax.Api.Console.Terminal.Tests.UnitTests;
 [TestFixture]
 public class CodeFinderTests
 {
-    private DirectoryInfo _root = null!;
+    private DirectoryInfo? _root;
 
     [SetUp]
     public async Task Checkout()
@@ -33,30 +34,33 @@ public class CodeFinderTests
     }
 
     [TearDown]
-    public void Remove() => _root.Delete(recursive: true);
+    public void Remove() => _root.NotNull().Delete(recursive: true);
 
     [Test]
     public async Task A_train_named_by_its_interface_opens_at_its_class()
     {
-        var found = await CodeFinder.FindAsync(_root.FullName, "Shop.Trains.IShipOrderTrain");
+        var found = await CodeFinder.FindAsync(
+            _root.NotNull().FullName,
+            "Shop.Trains.IShipOrderTrain"
+        );
 
         found.Should().NotBeNull();
-        Path.GetFileName(found!.Path).Should().Be("ShipOrderTrain.cs");
+        Path.GetFileName(found.NotNull().Path).Should().Be("ShipOrderTrain.cs");
         found.Line.Should().Be(4);
     }
 
     [Test]
     public async Task A_junction_is_found_by_its_name_and_build_output_is_not_searched()
     {
-        var found = await CodeFinder.FindAsync(_root.FullName, "ChargeCard");
+        var found = await CodeFinder.FindAsync(_root.NotNull().FullName, "ChargeCard");
 
-        found!.Path.Should().EndWith(Path.Combine("Junctions", "ChargeCard.cs"));
+        found.NotNull().Path.Should().EndWith(Path.Combine("Junctions", "ChargeCard.cs"));
     }
 
     [TestCase("Missing")]
     [TestCase("not a name; rm -rf")]
     public async Task A_name_with_no_declaration_finds_nothing(string name) =>
-        (await CodeFinder.FindAsync(_root.FullName, name)).Should().BeNull();
+        (await CodeFinder.FindAsync(_root.NotNull().FullName, name)).Should().BeNull();
 
     [Test]
     public async Task A_link_to_a_file_or_a_directory_is_not_followed()
@@ -70,15 +74,15 @@ public class CodeFinderTests
                 )
                 .ConfigureAwait(false);
             File.CreateSymbolicLink(
-                Path.Combine(_root.FullName, "src", "Linked.cs"),
+                Path.Combine(_root.NotNull().FullName, "src", "Linked.cs"),
                 Path.Combine(outside.FullName, "Secret.cs")
             );
             Directory.CreateSymbolicLink(
-                Path.Combine(_root.FullName, "src", "away"),
+                Path.Combine(_root.NotNull().FullName, "src", "away"),
                 outside.FullName
             );
 
-            (await CodeFinder.FindAsync(_root.FullName, "Leaked").ConfigureAwait(false))
+            (await CodeFinder.FindAsync(_root.NotNull().FullName, "Leaked").ConfigureAwait(false))
                 .Should()
                 .BeNull();
         }
@@ -93,7 +97,7 @@ public class CodeFinderTests
         await FluentActions
             .Awaiting(() =>
                 CodeFinder.FindAsync(
-                    _root.FullName,
+                    _root.NotNull().FullName,
                     "Missing",
                     new CancellationToken(canceled: true)
                 )
@@ -104,9 +108,12 @@ public class CodeFinderTests
     [Test]
     public void The_search_starts_at_the_checkout_the_console_runs_in()
     {
-        Directory.CreateDirectory(Path.Combine(_root.FullName, ".git"));
+        Directory.CreateDirectory(Path.Combine(_root.NotNull().FullName, ".git"));
 
-        CodeFinder.Root(Path.Combine(_root.FullName, "src", "Shop")).Should().Be(_root.FullName);
+        CodeFinder
+            .Root(Path.Combine(_root.NotNull().FullName, "src", "Shop"))
+            .Should()
+            .Be(_root.NotNull().FullName);
     }
 
     [TestCase("nvim", new[] { "+4", "/x/A.cs" })]
@@ -215,13 +222,13 @@ public class CodeFinderTests
             Assert.Ignore("Unix file modes.");
             return;
         }
-        var planted = Path.Combine(_root.FullName, "vim");
+        var planted = Path.Combine(_root.NotNull().FullName, "vim");
         File.WriteAllText(planted, "#!/bin/sh\n");
         File.SetUnixFileMode(planted, UnixFileMode.UserRead | UnixFileMode.UserExecute);
         var previous = Directory.GetCurrentDirectory();
         try
         {
-            Directory.SetCurrentDirectory(_root.FullName);
+            Directory.SetCurrentDirectory(_root.NotNull().FullName);
 
             FluentActions
                 .Invoking(() =>
@@ -249,7 +256,7 @@ public class CodeFinderTests
             Assert.Ignore("Unix file modes.");
             return;
         }
-        var bin = Directory.CreateDirectory(Path.Combine(_root.FullName, "bin")).FullName;
+        var bin = Directory.CreateDirectory(Path.Combine(_root.NotNull().FullName, "bin")).FullName;
         var file = Path.Combine(bin, "vim");
         File.WriteAllText(file, "");
         File.SetUnixFileMode(file, UnixFileMode.UserRead | UnixFileMode.UserWrite);
@@ -367,8 +374,8 @@ public class CodeFinderTests
 
     private async Task WriteAsync(string path, string text)
     {
-        var full = Path.Combine(_root.FullName, path);
-        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        var full = Path.Combine(_root.NotNull().FullName, path);
+        Directory.CreateDirectory(Path.GetDirectoryName(full).NotNull());
         await File.WriteAllTextAsync(full, text).ConfigureAwait(false);
     }
 }

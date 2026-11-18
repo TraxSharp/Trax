@@ -11,6 +11,7 @@ using Npgsql;
 using Trax.Api.Extensions;
 using Trax.Api.Tests.Stress.Fakes.Trains;
 using Trax.Api.Tests.Stress.Utils;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
@@ -44,10 +45,10 @@ namespace Trax.Api.Tests.Stress.Fixtures;
 [Category("Stress")]
 public abstract class StressTestSetup
 {
-    private ServiceProvider _serviceProvider = null!;
+    private ServiceProvider? _serviceProvider;
 
     /// <summary>The provider the suite built, for a test that times its own loop.</summary>
-    protected IServiceProvider ServiceProvider => _serviceProvider;
+    protected IServiceProvider ServiceProvider => _serviceProvider.NotNull();
 
     protected static readonly StressProfile Profile = StressProfile.FromEnvironment();
 
@@ -115,7 +116,11 @@ public abstract class StressTestSetup
     }
 
     [OneTimeTearDown]
-    public async Task OneTimeTearDown() => await _serviceProvider.DisposeAsync();
+    public async Task OneTimeTearDown()
+    {
+        if (_serviceProvider is not null)
+            await _serviceProvider.DisposeAsync();
+    }
 
     /// <summary>
     /// Adds a fixture's own registrations to the container before it is built, for surfaces
@@ -124,7 +129,7 @@ public abstract class StressTestSetup
     protected virtual void ConfigureServices(IServiceCollection services) { }
 
     /// <summary>The fixture's container, for tests that drive a service directly.</summary>
-    protected IServiceProvider Services => _serviceProvider;
+    protected IServiceProvider Services => _serviceProvider.NotNull();
 
     /// <summary>The role <see cref="AddOperationsGraphQL"/> gates the operations namespace to.</summary>
     protected const string AdminRole = "Admin";
@@ -168,6 +173,7 @@ public abstract class StressTestSetup
     )
     {
         _executor ??= await _serviceProvider
+            .NotNull()
             .GetRequiredService<IRequestExecutorProvider>()
             .GetExecutorAsync("trax", ct)
             .ConfigureAwait(false);
@@ -240,7 +246,7 @@ public abstract class StressTestSetup
                 command.CommandTimeout = 1200;
                 return (T)
                     Convert.ChangeType(
-                        (await command.ExecuteScalarAsync().ConfigureAwait(false))!,
+                        (await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull(),
                         typeof(T),
                         System.Globalization.CultureInfo.InvariantCulture
                     );
@@ -266,22 +272,22 @@ public abstract class StressTestSetup
         await prepare().ConfigureAwait(false);
         try
         {
-            var warm = _serviceProvider.CreateAsyncScope();
+            var warm = _serviceProvider.NotNull().CreateAsyncScope();
             await using (warm.ConfigureAwait(false))
                 await action(warm.ServiceProvider, CancellationToken.None).ConfigureAwait(false);
             await prepare().ConfigureAwait(false);
 
-            var scope = _serviceProvider.CreateAsyncScope();
+            var scope = _serviceProvider.NotNull().CreateAsyncScope();
             await using var scopeDisposal = scope.ConfigureAwait(false);
-            var sw = Stopwatch.StartNew();
+            var sw = TimeProvider.System.GetTimestamp();
             await action(scope.ServiceProvider, CancellationToken.None).ConfigureAwait(false);
-            sw.Stop();
+            var swTook = TimeProvider.System.GetElapsedTime(sw);
 
             await TestContext
                 .Out.WriteLineAsync(
                     string.Create(
                         CultureInfo.InvariantCulture,
-                        $"{label}: {sw.Elapsed.TotalMilliseconds:F0}ms "
+                        $"{label}: {swTook.TotalMilliseconds:F0}ms "
                     )
                         + string.Create(
                             CultureInfo.InvariantCulture,
@@ -290,7 +296,8 @@ public abstract class StressTestSetup
                 )
                 .ConfigureAwait(false);
 
-            sw.Elapsed.Should()
+            swTook
+                .Should()
                 .BeLessThan(
                     budget,
                     string.Create(
@@ -306,7 +313,7 @@ public abstract class StressTestSetup
                             $"{Profile.DeadLetter:N0} dead letter rows"
                         )
                 );
-            return sw.Elapsed;
+            return swTook;
         }
         finally
         {
@@ -327,21 +334,21 @@ public abstract class StressTestSetup
     )
     {
         // Warm-up (untimed).
-        var warm = _serviceProvider.CreateAsyncScope();
+        var warm = _serviceProvider.NotNull().CreateAsyncScope();
         await using (warm.ConfigureAwait(false))
             await action(warm.ServiceProvider, CancellationToken.None).ConfigureAwait(false);
 
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
-        var sw = Stopwatch.StartNew();
+        var sw = TimeProvider.System.GetTimestamp();
         await action(scope.ServiceProvider, CancellationToken.None).ConfigureAwait(false);
-        sw.Stop();
+        var swTook = TimeProvider.System.GetElapsedTime(sw);
 
         await TestContext
             .Out.WriteLineAsync(
                 string.Create(
                     CultureInfo.InvariantCulture,
-                    $"{label}: {sw.Elapsed.TotalMilliseconds:F0}ms "
+                    $"{label}: {swTook.TotalMilliseconds:F0}ms "
                 )
                     + string.Create(
                         CultureInfo.InvariantCulture,
@@ -350,7 +357,8 @@ public abstract class StressTestSetup
             )
             .ConfigureAwait(false);
 
-        sw.Elapsed.Should()
+        swTook
+            .Should()
             .BeLessThan(
                 budget,
                 string.Create(
@@ -363,21 +371,21 @@ public abstract class StressTestSetup
                     )
             );
 
-        return sw.Elapsed;
+        return swTook;
     }
 
     /// <summary>Times <paramref name="action"/> once (warm-up + measure) without asserting a budget.</summary>
     protected async Task<TimeSpan> TimeAsync(Func<IServiceProvider, CancellationToken, Task> action)
     {
-        var warm = _serviceProvider.CreateAsyncScope();
+        var warm = _serviceProvider.NotNull().CreateAsyncScope();
         await using (warm.ConfigureAwait(false))
             await action(warm.ServiceProvider, CancellationToken.None).ConfigureAwait(false);
 
-        var scope = _serviceProvider.CreateAsyncScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
-        var sw = Stopwatch.StartNew();
+        var sw = TimeProvider.System.GetTimestamp();
         await action(scope.ServiceProvider, CancellationToken.None).ConfigureAwait(false);
-        sw.Stop();
-        return sw.Elapsed;
+        var swTook = TimeProvider.System.GetElapsedTime(sw);
+        return swTook;
     }
 }

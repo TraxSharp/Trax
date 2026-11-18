@@ -11,6 +11,7 @@ using Trax.Api.Auth.ApiKey;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Tests.AuthE2E;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
@@ -135,7 +136,7 @@ internal sealed class ResumeHost : IAsyncDisposable
             }
 
             await FlushJunctionEventsAsync().ConfigureAwait(false);
-            return ((ServiceTrain<ResumableInput, string>)(object)train).Metadata!.Id;
+            return ((ServiceTrain<ResumableInput, string>)(object)train).Metadata.NotNull().Id;
         }
         finally
         {
@@ -151,10 +152,12 @@ internal sealed class ResumeHost : IAsyncDisposable
     {
         // The writer and its flush are internal to Trax.Effect.Data, which this assembly cannot see.
         var writer = Services.GetRequiredService(
-            typeof(Effect.Data.Extensions.ServiceExtensions).Assembly.GetType(
-                "Trax.Effect.Data.JunctionEvents.JunctionRunWriter",
-                throwOnError: true
-            )!
+            typeof(Effect.Data.Extensions.ServiceExtensions)
+                .Assembly.GetType(
+                    "Trax.Effect.Data.JunctionEvents.JunctionRunWriter",
+                    throwOnError: true
+                )
+                .NotNull()
         );
         await (
             (Task)
@@ -164,10 +167,12 @@ internal sealed class ResumeHost : IAsyncDisposable
                         "FlushAsync",
                         System.Reflection.BindingFlags.Instance
                             | System.Reflection.BindingFlags.NonPublic
-                    )!
-                    .Invoke(writer, [CancellationToken.None])!
+                    )
+                    .NotNull()
+                    .Invoke(writer, [CancellationToken.None])
+                    .NotNull()
         )
-            .WaitAsync(TimeSpan.FromSeconds(30))
+            .WaitAsync(TimeSpan.FromSeconds(30), TimeProvider.System)
             .ConfigureAwait(false);
     }
 
@@ -193,23 +198,26 @@ internal sealed class ResumeHost : IAsyncDisposable
                 Input = null,
                 ResumeFrom = entry.ResumeFrom,
                 ResumeAt = entry.ResumeAt,
-            }
+            },
+            train.Clock
         );
         // Read as the dispatcher reads a queued input: its members are camelCase.
-        var input = JsonSerializer.Deserialize<ResumableInput>(
-            entry.Input!,
-            new JsonSerializerOptions
-            {
-                RespectNullableAnnotations = false,
-                RespectRequiredConstructorParameters = false,
-                PropertyNameCaseInsensitive = true,
-            }
-        )!;
+        var input = JsonSerializer
+            .Deserialize<ResumableInput>(
+                entry.Input.NotNull(),
+                new JsonSerializerOptions
+                {
+                    RespectNullableAnnotations = false,
+                    RespectRequiredConstructorParameters = false,
+                    PropertyNameCaseInsensitive = true,
+                }
+            )
+            .NotNull();
         await train
             .Run(input, metadata, cancellationToken: CancellationToken.None)
             .ConfigureAwait(false);
         await FlushJunctionEventsAsync().ConfigureAwait(false);
-        return train.Metadata!.Id;
+        return train.Metadata.NotNull().Id;
     }
 
     /// <summary>The GraphQL response to <paramref name="query"/>, sent with <paramref name="apiKey"/>.</summary>

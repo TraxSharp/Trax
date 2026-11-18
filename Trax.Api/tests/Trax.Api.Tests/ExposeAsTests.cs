@@ -11,6 +11,7 @@ using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.GraphQL.TypeModules;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 
 namespace Trax.Api.Tests;
@@ -259,7 +260,10 @@ public class ExposeAsTests
         );
         var module = new QueryModelTypeModule(config);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         types
             .Should()
@@ -446,7 +450,8 @@ public class ExposeAsTests
         var operationResult = result.ExpectOperationResult();
         operationResult.Errors.Should().NotBeNullOrEmpty();
         operationResult
-            .Errors!.Should()
+            .Errors.NotNull()
+            .Should()
             .Contain(e => e.Message.Contains("internalNotes") || e.Message.Contains("field"));
     }
 

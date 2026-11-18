@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.Client;
 using Trax.Api.Tests.GraphQLClient.Fixtures;
 using Trax.Api.Tests.GraphQLClient.IntegrationTests.Fakes;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 
@@ -15,9 +16,9 @@ namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 [TestFixture]
 public class TypedRequestTests
 {
-    private GraphQLTestServerFixture _fixture = null!;
-    private ServiceProvider _services = null!;
-    private IGraphQLClientExecutor _executor = null!;
+    private GraphQLTestServerFixture? _fixture;
+    private ServiceProvider? _services;
+    private IGraphQLClientExecutor? _executor;
 
     [SetUp]
     public void SetUp()
@@ -25,17 +26,17 @@ public class TypedRequestTests
         _fixture = new GraphQLTestServerFixture();
         var services = new ServiceCollection();
         services
-            .AddTraxGraphQLClient(_fixture.BaseAddress)
-            .ConfigureHttpClient(_fixture.CreateHttpClient());
+            .AddTraxGraphQLClient(_fixture.NotNull().BaseAddress)
+            .ConfigureHttpClient(_fixture.NotNull().CreateHttpClient());
         _services = services.BuildServiceProvider();
-        _executor = _services.GetRequiredService<IGraphQLClientExecutor>();
+        _executor = _services.NotNull().GetRequiredService<IGraphQLClientExecutor>();
     }
 
     [TearDown]
     public void TearDown()
     {
-        _services.Dispose();
-        _fixture.Dispose();
+        _services?.Dispose();
+        _fixture?.Dispose();
     }
 
     [Test]
@@ -74,14 +75,14 @@ public class TypedRequestTests
         var vars = request.Variables;
 
         vars.Should().BeOfType<Dictionary<string, object?>>();
-        var dict = (Dictionary<string, object?>)vars!;
+        var dict = (Dictionary<string, object?>)vars.NotNull();
         dict.Should().ContainKey("id").WhoseValue.Should().Be("player-7");
     }
 
     [Test]
     public async Task TypedRequest_ExecutesAgainstRealServer()
     {
-        var result = await _executor.Run(new GetPlayerByTypedRequest { Id = "player-1" });
+        var result = await _executor.NotNull().Run(new GetPlayerByTypedRequest { Id = "player-1" });
 
         result.Should().NotBeNull();
         result.Id.Should().Be("player-1");
@@ -89,14 +90,14 @@ public class TypedRequestTests
         result.Level.Should().Be(42);
         result.Rank.Should().Be("GOLD");
         result.Guild.Should().NotBeNull();
-        result.Guild!.Name.Should().Be("Dragonsworn");
+        result.Guild.NotNull().Name.Should().Be("Dragonsworn");
         result.Inventory.Should().HaveCount(2);
     }
 
     [Test]
     public async Task TypedRequest_NoArguments_ExecutesAgainstRealServer()
     {
-        var items = await _executor.Run(new AllItemsByTypedRequest());
+        var items = await _executor.NotNull().Run(new AllItemsByTypedRequest());
 
         items.Should().HaveCount(3);
         items.Select(i => i.Category).Should().BeEquivalentTo(["WEAPON", "ARMOR", "CONSUMABLE"]);
@@ -108,8 +109,10 @@ public class TypedRequestTests
         // The whole point of having three modes is that they converge on the same answer.
         // If this fails, the typed generator is selecting different fields than the raw
         // query, or projecting them differently.
-        var raw = await _executor.Run(new GetPlayerByRawStringRequest { Id = "player-1" });
-        var typed = await _executor.Run(new GetPlayerByTypedRequest { Id = "player-1" });
+        var raw = await _executor
+            .NotNull()
+            .Run(new GetPlayerByRawStringRequest { Id = "player-1" });
+        var typed = await _executor.NotNull().Run(new GetPlayerByTypedRequest { Id = "player-1" });
 
         typed.Id.Should().Be(raw.Id);
         typed.Name.Should().Be(raw.Name);
@@ -158,10 +161,12 @@ public class TypedRequestTests
         // exactly that nesting. A regression in either the generator or the extractor
         // surfaces here as a request that the server can't validate or a response the
         // client can't deserialize.
-        var result = await _executor.Run(new GetNestedCustomerByEmailRequest { Email = "Aragorn" });
+        var result = await _executor
+            .NotNull()
+            .Run(new GetNestedCustomerByEmailRequest { Email = "Aragorn" });
 
         result.Should().NotBeNull();
-        result!.Id.Should().Be("player-1");
+        result.NotNull().Id.Should().Be("player-1");
         result.Name.Should().Be("Aragorn");
         result.Rank.Should().Be("GOLD");
     }
@@ -169,7 +174,7 @@ public class TypedRequestTests
     [Test]
     public async Task NestedPath_NoArguments_ExecutesAgainstRealServer()
     {
-        var result = await _executor.Run(new GetNestedCustomersRequest());
+        var result = await _executor.NotNull().Run(new GetNestedCustomersRequest());
 
         result.Should().HaveCount(2);
         result.Select(i => i.Id).Should().BeEquivalentTo(["cust-1", "cust-2"]);
@@ -181,10 +186,12 @@ public class TypedRequestTests
         // Same client, different namespace under discover. Proves the generator doesn't
         // bake one specific namespace into the output and the executor handles each
         // request's Path independently.
-        var result = await _executor.Run(new GetNestedPlayerByRankRequest { Rank = "GOLD" });
+        var result = await _executor
+            .NotNull()
+            .Run(new GetNestedPlayerByRankRequest { Rank = "GOLD" });
 
         result.Should().NotBeNull();
-        result!.Rank.Should().Be("GOLD");
+        result.NotNull().Rank.Should().Be("GOLD");
     }
 
     [Test]
@@ -192,9 +199,9 @@ public class TypedRequestTests
     {
         // The schema returns null when no customer matches. The extractor must propagate
         // null through the nested envelope rather than throwing.
-        var result = await _executor.Run(
-            new GetNestedCustomerByEmailRequest { Email = "no-such-name" }
-        );
+        var result = await _executor
+            .NotNull()
+            .Run(new GetNestedCustomerByEmailRequest { Email = "no-such-name" });
 
         result.Should().BeNull();
     }
@@ -237,12 +244,14 @@ public class TypedRequestTests
         // Same end-to-end path as a nested query, but exercising the mutation branch of
         // every component: generator (mutation keyword), HotChocolate routing (RootMutation
         // vs RootQuery), and the executor's mutation HTTP path.
-        var result = await _executor.Run(
-            new RenameNestedCustomerRequest
-            {
-                Input = new RenamePlayerInput("player-2", "Bilbo Baggins"),
-            }
-        );
+        var result = await _executor
+            .NotNull()
+            .Run(
+                new RenameNestedCustomerRequest
+                {
+                    Input = new RenamePlayerInput("player-2", "Bilbo Baggins"),
+                }
+            );
 
         result.Should().NotBeNull();
         result.Id.Should().Be("player-2");

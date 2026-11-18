@@ -11,6 +11,7 @@ using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Trax.Api.Auth.Jwt;
 using Trax.Api.Auth.Jwt.Cognito;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Auth.Cognito;
 
@@ -35,7 +36,14 @@ public class CognitoJwtBuilderExtensionsTests
     public void UseCognito_NullBuilder_Throws()
     {
         Action act = () =>
-            CognitoJwtBuilderExtensions.UseCognito(null!, Region, UserPoolId, ClientId);
+            CognitoJwtBuilderExtensions.UseCognito(
+                Null.Of<Trax.Api.Auth.Jwt.JwtBuilder>(),
+                Region,
+                UserPoolId,
+                ClientId,
+                CognitoTokenUse.IdAndAccess,
+                TimeProvider.System
+            );
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -45,7 +53,14 @@ public class CognitoJwtBuilderExtensionsTests
     {
         var builder = new JwtBuilder();
 
-        Action act = () => builder.UseCognito("", UserPoolId, ClientId);
+        Action act = () =>
+            builder.UseCognito(
+                "",
+                UserPoolId,
+                ClientId,
+                CognitoTokenUse.IdAndAccess,
+                TimeProvider.System
+            );
 
         act.Should().Throw<ArgumentException>();
     }
@@ -55,7 +70,14 @@ public class CognitoJwtBuilderExtensionsTests
     {
         var builder = new JwtBuilder();
 
-        Action act = () => builder.UseCognito(Region, "", ClientId);
+        Action act = () =>
+            builder.UseCognito(
+                Region,
+                "",
+                ClientId,
+                CognitoTokenUse.IdAndAccess,
+                TimeProvider.System
+            );
 
         act.Should().Throw<ArgumentException>();
     }
@@ -65,7 +87,14 @@ public class CognitoJwtBuilderExtensionsTests
     {
         var builder = new JwtBuilder();
 
-        Action act = () => builder.UseCognito(Region, UserPoolId, "");
+        Action act = () =>
+            builder.UseCognito(
+                Region,
+                UserPoolId,
+                "",
+                CognitoTokenUse.IdAndAccess,
+                TimeProvider.System
+            );
 
         act.Should().Throw<ArgumentException>();
     }
@@ -74,7 +103,13 @@ public class CognitoJwtBuilderExtensionsTests
     public void UseCognito_BuildsAuthorityAndAudience()
     {
         var builder = new JwtBuilder();
-        builder.UseCognito(Region, UserPoolId, ClientId);
+        builder.UseCognito(
+            Region,
+            UserPoolId,
+            ClientId,
+            CognitoTokenUse.IdAndAccess,
+            TimeProvider.System
+        );
 
         builder.Authority.Should().Be(ExpectedAuthority);
         builder.Audience.Should().Be(ClientId);
@@ -84,7 +119,15 @@ public class CognitoJwtBuilderExtensionsTests
     public void UseCognito_FlowsThroughToBearerOptions()
     {
         var services = NewServices();
-        services.AddTraxJwtAuth(jwt => jwt.UseCognito(Region, UserPoolId, ClientId));
+        services.AddTraxJwtAuth(jwt =>
+            jwt.UseCognito(
+                Region,
+                UserPoolId,
+                ClientId,
+                CognitoTokenUse.IdAndAccess,
+                TimeProvider.System
+            )
+        );
         using var sp = services.BuildServiceProvider();
 
         var opts = sp.GetRequiredService<IOptionsMonitor<JwtBearerOptions>>()
@@ -187,8 +230,8 @@ public class CognitoJwtBuilderExtensionsTests
         );
 
         validator(
-                DateTime.UtcNow.AddMinutes(-1),
-                DateTime.UtcNow.AddMinutes(5),
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-1),
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(5),
                 token,
                 MakeParams()
             )
@@ -206,8 +249,8 @@ public class CognitoJwtBuilderExtensionsTests
         );
 
         validator(
-                DateTime.UtcNow.AddMinutes(-1),
-                DateTime.UtcNow.AddMinutes(5),
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-1),
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(5),
                 token,
                 MakeParams()
             )
@@ -231,12 +274,17 @@ public class CognitoJwtBuilderExtensionsTests
             }
         );
 
-        validator(DateTime.UtcNow.AddMinutes(-1), DateTime.UtcNow.AddMinutes(5), id, MakeParams())
+        validator(
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-1),
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(5),
+                id,
+                MakeParams()
+            )
             .Should()
             .BeTrue();
         validator(
-                DateTime.UtcNow.AddMinutes(-1),
-                DateTime.UtcNow.AddMinutes(5),
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-1),
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(5),
                 access,
                 MakeParams()
             )
@@ -251,8 +299,8 @@ public class CognitoJwtBuilderExtensionsTests
         var token = MakeJwt(audience: ClientId);
 
         validator(
-                DateTime.UtcNow.AddMinutes(-1),
-                DateTime.UtcNow.AddMinutes(5),
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-1),
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(5),
                 token,
                 MakeParams()
             )
@@ -275,8 +323,8 @@ public class CognitoJwtBuilderExtensionsTests
         var token = MakeJwt(extraClaims: new[] { new Claim(CognitoDefaults.ClientId, ClientId) });
 
         validator(
-                DateTime.UtcNow.AddMinutes(-1),
-                DateTime.UtcNow.AddMinutes(5),
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-1),
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(5),
                 token,
                 MakeParams()
             )
@@ -299,8 +347,8 @@ public class CognitoJwtBuilderExtensionsTests
         var token = MakeJwt();
 
         validator(
-                DateTime.UtcNow.AddMinutes(-1),
-                DateTime.UtcNow.AddMinutes(5),
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-1),
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(5),
                 token,
                 MakeParams()
             )
@@ -318,8 +366,8 @@ public class CognitoJwtBuilderExtensionsTests
         var token = MakeJwt(audience: ClientId);
 
         validator(
-                DateTime.UtcNow.AddMinutes(-10),
-                DateTime.UtcNow.AddMinutes(-5),
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10),
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5),
                 token,
                 MakeParams()
             )
@@ -334,8 +382,8 @@ public class CognitoJwtBuilderExtensionsTests
         var token = MakeJwt(audience: ClientId);
 
         validator(
-                DateTime.UtcNow.AddMinutes(10),
-                DateTime.UtcNow.AddMinutes(20),
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(10),
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(20),
                 token,
                 MakeParams()
             )
@@ -349,7 +397,12 @@ public class CognitoJwtBuilderExtensionsTests
         var validator = GetLifetimeValidator(CognitoTokenUse.IdAndAccess);
         var token = MakeJwt(audience: ClientId);
 
-        validator(DateTime.UtcNow.AddMinutes(-1), expires: null, token, MakeParams())
+        validator(
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-1),
+                expires: null,
+                token,
+                MakeParams()
+            )
             .Should()
             .BeFalse();
     }
@@ -360,7 +413,12 @@ public class CognitoJwtBuilderExtensionsTests
         var validator = GetLifetimeValidator(CognitoTokenUse.IdAndAccess);
         var token = MakeJwt(audience: ClientId);
 
-        validator(notBefore: null, DateTime.UtcNow.AddMinutes(5), token, MakeParams())
+        validator(
+                notBefore: null,
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(5),
+                token,
+                MakeParams()
+            )
             .Should()
             .BeTrue();
     }
@@ -369,22 +427,40 @@ public class CognitoJwtBuilderExtensionsTests
     public void LifetimeValidator_ExistingValidatorFalse_ShortCircuits()
     {
         var builder = new JwtBuilder();
-        builder.UseCognito(Region, UserPoolId, ClientId);
+        builder.UseCognito(
+            Region,
+            UserPoolId,
+            ClientId,
+            CognitoTokenUse.IdAndAccess,
+            TimeProvider.System
+        );
         // The Cognito helper installs the validator. Pre-installing one
         // (via CustomizeTokenValidation chained) lets us prove existing
         // validators run first; here we install another that always returns
         // false, then invoke through a TokenValidationParameters built from
         // a fresh setup.
         var tvp = new TokenValidationParameters();
-        builder.UseCognito(Region, UserPoolId, ClientId);
+        builder.UseCognito(
+            Region,
+            UserPoolId,
+            ClientId,
+            CognitoTokenUse.IdAndAccess,
+            TimeProvider.System
+        );
         // We can't easily compose this without rebuilding; instead, test
         // composition by checking the customizer registers two validators
         // when called twice. Each call appends a customizer.
         var customizerCount = 0;
         var b2 = new JwtBuilder();
         b2.CustomizeTokenValidation(_ => customizerCount++);
-        b2.UseCognito(Region, UserPoolId, ClientId);
-        b2.TokenValidationCustomizer!(tvp);
+        b2.UseCognito(
+            Region,
+            UserPoolId,
+            ClientId,
+            CognitoTokenUse.IdAndAccess,
+            TimeProvider.System
+        );
+        b2.TokenValidationCustomizer.NotNull()(tvp);
 
         customizerCount.Should().Be(1);
         tvp.LifetimeValidator.Should().NotBeNull();
@@ -393,19 +469,19 @@ public class CognitoJwtBuilderExtensionsTests
     private static AudienceValidator GetAudienceValidator(CognitoTokenUse use)
     {
         var builder = new JwtBuilder();
-        builder.UseCognito(Region, UserPoolId, ClientId, use);
+        builder.UseCognito(Region, UserPoolId, ClientId, use, TimeProvider.System);
         var tvp = new TokenValidationParameters();
-        builder.TokenValidationCustomizer!(tvp);
-        return tvp.AudienceValidator!;
+        builder.TokenValidationCustomizer.NotNull()(tvp);
+        return tvp.AudienceValidator.NotNull();
     }
 
     private static LifetimeValidator GetLifetimeValidator(CognitoTokenUse use)
     {
         var builder = new JwtBuilder();
-        builder.UseCognito(Region, UserPoolId, ClientId, use);
+        builder.UseCognito(Region, UserPoolId, ClientId, use, TimeProvider.System);
         var tvp = new TokenValidationParameters();
-        builder.TokenValidationCustomizer!(tvp);
-        return tvp.LifetimeValidator!;
+        builder.TokenValidationCustomizer.NotNull()(tvp);
+        return tvp.LifetimeValidator.NotNull();
     }
 
     private static TokenValidationParameters MakeParams() =>
@@ -425,7 +501,7 @@ public class CognitoJwtBuilderExtensionsTests
             issuer: ExpectedAuthority,
             audience: audience,
             claims: claims,
-            expires: DateTime.UtcNow.AddMinutes(5),
+            expires: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(5),
             signingCredentials: creds
         );
         var raw = new JwtSecurityTokenHandler().WriteToken(token);
@@ -434,12 +510,14 @@ public class CognitoJwtBuilderExtensionsTests
 
     private sealed class FakeSecurityToken : SecurityToken
     {
+        private static readonly DateTime Issued = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
         public override string Id { get; } = Guid.NewGuid().ToString();
         public override string Issuer => "fake";
-        public override SecurityKey SecurityKey => null!;
-        public override SecurityKey SigningKey { get; set; } = null!;
-        public override DateTime ValidFrom => DateTime.UtcNow;
-        public override DateTime ValidTo => DateTime.UtcNow.AddHours(1);
+        public override SecurityKey SecurityKey => Null.Of<SecurityKey>();
+        public override SecurityKey SigningKey { get; set; } = Null.Of<SecurityKey>();
+        public override DateTime ValidFrom => Issued;
+        public override DateTime ValidTo => Issued.AddHours(1);
     }
 
     private sealed class TestHostEnvironment : IHostEnvironment

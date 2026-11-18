@@ -223,10 +223,10 @@ public class MachineDocumentRegistryTests
     )
     {
         var verdict = MachineDocumentVerdict.ServerOutdated;
-        var deadline = Stopwatch.StartNew();
+        var deadline = TimeProvider.System.GetTimestamp();
         while (
             verdict == MachineDocumentVerdict.ServerOutdated
-            && deadline.Elapsed < TimeSpan.FromSeconds(10)
+            && TimeProvider.System.GetElapsedTime(deadline) < TimeSpan.FromSeconds(10)
         )
         {
             // allowed-delay: polls the answer until the background read has run.
@@ -295,7 +295,8 @@ public class MachineDocumentRegistryTests
         );
         // Bounded: misses that queue behind the read would wait for it forever, since it is released only after.
         // allowed-delay: a bound, not a wait; the misses either finish well inside it or queue forever.
-        var finished = await Task.WhenAny(all, Task.Delay(TimeSpan.FromSeconds(5))) == all;
+        var finished =
+            await Task.WhenAny(all, Task.Delay(TimeSpan.FromSeconds(5), registry.Clock)) == all;
         release.SetResult();
         finished
             .Should()
@@ -331,10 +332,10 @@ public class MachineDocumentRegistryTests
             .Be(MachineDocumentVerdict.ServerOutdated, "the store has not been read since");
 
         var verdict = MachineDocumentVerdict.ServerOutdated;
-        var deadline = Stopwatch.StartNew();
+        var deadline = TimeProvider.System.GetTimestamp();
         while (
             verdict == MachineDocumentVerdict.ServerOutdated
-            && deadline.Elapsed < TimeSpan.FromSeconds(10)
+            && TimeProvider.System.GetElapsedTime(deadline) < TimeSpan.FromSeconds(10)
         )
         {
             // allowed-delay: polls the answer until the background read has run.
@@ -360,10 +361,10 @@ public class MachineDocumentRegistryTests
         var store = Store(() => Stored((OwnGet, 2), (OldGet, 1), (newer, 3)));
 
         await registry.ClassifyAsync(newer, store, CancellationToken.None);
-        var deadline = Stopwatch.StartNew();
+        var deadline = TimeProvider.System.GetTimestamp();
         while (
             registry.IsNewer("wizard", NewHash) != true
-            && deadline.Elapsed < TimeSpan.FromSeconds(10)
+            && TimeProvider.System.GetElapsedTime(deadline) < TimeSpan.FromSeconds(10)
         )
         {
             (await registry.ClassifyAsync(newer, store, CancellationToken.None))
@@ -391,9 +392,9 @@ public class MachineDocumentRegistryTests
         var reads = 0;
         var store = Store(() => Empty(), () => Interlocked.Increment(ref reads));
 
-        var clock = Stopwatch.StartNew();
+        var clock = TimeProvider.System.GetTimestamp();
         var i = 0;
-        while (clock.Elapsed < TimeSpan.FromSeconds(1.5))
+        while (TimeProvider.System.GetElapsedTime(clock) < TimeSpan.FromSeconds(1.5))
         {
             await registry.ClassifyAsync(
                 Id("wizard", "get", $"{i++:x8}".PadLeft(MachineDocuments.IrHashLength, 'e')),

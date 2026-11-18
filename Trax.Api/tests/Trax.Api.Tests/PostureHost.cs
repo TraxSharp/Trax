@@ -10,6 +10,7 @@ using Trax.Api.Auth.ApiKey;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;
@@ -102,7 +103,7 @@ internal static class PostureHost
     {
         public async Task StartAsync(CancellationToken cancellationToken)
         {
-            var context = (TContext)Activator.CreateInstance(typeof(TContext), options)!;
+            var context = (TContext)Activator.CreateInstance(typeof(TContext), options).NotNull();
             await using var contextDisposal = context.ConfigureAwait(false);
             seed(context);
             await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

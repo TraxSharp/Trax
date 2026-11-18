@@ -4,6 +4,7 @@ using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using System.Text.RegularExpressions;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Dashboard;
 
@@ -18,7 +19,7 @@ namespace Trax.Api.Tests.Dashboard;
 /// </summary>
 public partial class ApiDashboardPackageTests
 {
-    private string _root = null!;
+    private string? _root;
 
     [SetUp]
     public async Task SetUp()
@@ -32,7 +33,7 @@ public partial class ApiDashboardPackageTests
             );
 
         _root = Path.Combine(Path.GetTempPath(), $"trax-api-dashboard-pack-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(_root);
+        Directory.CreateDirectory(_root.NotNull());
     }
 
     // Skips on a developer's machine; fails under CI, which installs node and the app's packages
@@ -47,8 +48,8 @@ public partial class ApiDashboardPackageTests
     [TearDown]
     public void TearDown()
     {
-        if (_root is not null && Directory.Exists(_root))
-            Directory.Delete(_root, recursive: true);
+        if (_root is not null && Directory.Exists(_root.NotNull()))
+            Directory.Delete(_root.NotNull(), recursive: true);
     }
 
     [Test]
@@ -115,10 +116,10 @@ public partial class ApiDashboardPackageTests
             "Trax.Api.Dashboard",
             "Trax.Api.Dashboard.csproj"
         );
-        var packages = Path.Combine(_root, "packages");
+        var packages = Path.Combine(_root.NotNull(), "packages");
         var (exitCode, output) = await RunAsync(
                 "dotnet",
-                _root,
+                _root.NotNull(),
                 "pack",
                 project,
                 "--no-build",
@@ -131,7 +132,7 @@ public partial class ApiDashboardPackageTests
             .ConfigureAwait(false);
         exitCode.Should().Be(0, output);
 
-        var unpacked = Path.Combine(_root, "package");
+        var unpacked = Path.Combine(_root.NotNull(), "package");
         await ZipFile
             .ExtractToDirectoryAsync(
                 Directory.GetFiles(packages, "*.nupkg").Single(),
@@ -148,7 +149,7 @@ public partial class ApiDashboardPackageTests
     // bin/<Configuration>/<tfm>/: the configuration this test run built, which pack --no-build must match.
     private static string BuildConfiguration() =>
         new DirectoryInfo(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar))
-            .Parent!
+            .Parent.NotNull()
             .Name;
 
     private static string RepoFolder(string name)
@@ -193,7 +194,7 @@ public partial class ApiDashboardPackageTests
         psi.Environment.Remove("MSBUILD_EXE_PATH");
         try
         {
-            using var process = Process.Start(psi)!;
+            using var process = Process.Start(psi).NotNull();
             var stdout = process.StandardOutput.ReadToEndAsync();
             var stderr = process.StandardError.ReadToEndAsync();
             // Under the blame collector's five minutes, so a hung child fails this test with what

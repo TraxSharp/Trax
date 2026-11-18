@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Trax.Api.DTOs;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Utils;
 using Trax.Effect.Models.DeadLetter;
@@ -75,7 +76,7 @@ internal static class ListFilters
         // ix_metadata_failure_reason_trgm is built over, so a rare term reads only its matches.
         if (HasFailureText(filter))
         {
-            var pattern = LikePattern.Contains(filter.FailureReasonContains!);
+            var pattern = LikePattern.Contains(filter.FailureReasonContains.NotNull());
             runs = WhereLoweredLike(runs, m => m.FailureReason, pattern);
         }
         if (filter.ManifestGroupId.HasValue)

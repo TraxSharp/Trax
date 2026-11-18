@@ -11,6 +11,7 @@ using NUnit.Framework;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.Services.HealthCheck;
 using Trax.Api.Tests.Fakes;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.SqlDialect;
@@ -42,13 +43,13 @@ public class LogQueriesTests
         + "Maximum Pool Size=8;Minimum Pool Size=0;Connection Idle Lifetime=30;"
         + "Timeout=30;Tcp Keepalive=true";
 
-    private ServiceProvider _provider = null!;
-    private IDataContextProviderFactory _factory = null!;
+    private ServiceProvider? _provider;
+    private IDataContextProviderFactory? _factory;
 
     private IOperationsService Operations =>
         new OperationsService(
             Substitute.For<ITrainDiscoveryService>(),
-            _factory,
+            _factory.NotNull(),
             new SchedulerConfiguration(),
             Substitute.For<ITrainExecutionService>()
         );
@@ -60,20 +61,21 @@ public class LogQueriesTests
         services.AddLogging();
         services.AddTrax(t => t.AddEffects(e => e.UsePostgres(ConnectionString)));
         _provider = services.BuildServiceProvider();
-        _factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        _factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await _provider.DisposeAsync();
+        if (_provider is not null)
+            await _provider.DisposeAsync();
         Npgsql.NpgsqlConnection.ClearAllPools();
     }
 
     [SetUp]
     public async Task SetUp()
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         var ctx = (DbContext)db;
         await ctx.Database.ExecuteSqlRawAsync(
             "TRUNCATE TABLE trax.log, trax.metadata, trax.manifest, trax.manifest_group RESTART IDENTITY CASCADE"
@@ -82,7 +84,7 @@ public class LogQueriesTests
 
     private async Task<long> SeedMetadata()
     {
-        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             var meta = Metadata.Create(
@@ -91,7 +93,8 @@ public class LogQueriesTests
                     Name = "Trax.Tests.IFakeTrain",
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
-                }
+                },
+                TimeProvider.System
             );
             await db.Track(meta).ConfigureAwait(false);
             await db.SaveChanges(default).ConfigureAwait(false);
@@ -109,7 +112,7 @@ public class LogQueriesTests
         // MetadataId on Log has a private setter, so we insert via raw SQL. This matches
         // how production code populates the table (the framework writes logs through a
         // logger provider that sets metadata_id directly).
-        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
         // MetadataId on Log has a private setter, so we insert via raw SQL. This matches
         // how production code populates the table (the framework writes logs through a
         // logger provider that sets metadata_id directly).
@@ -134,7 +137,7 @@ public class LogQueriesTests
     {
         var queries = new LogQueries();
 
-        var result = await queries.GetLogs(Operations, _factory, default);
+        var result = await queries.GetLogs(Operations, _factory.NotNull(), default);
 
         result.Items.Should().BeEmpty();
         result.TotalCount.Should().Be(0);
@@ -146,14 +149,14 @@ public class LogQueriesTests
     {
         // A row written by hand or by another tool names no run. The column defaults to 0, the
         // value the log writer itself stores, so the page reads it rather than failing on a null.
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
             await ((DbContext)db).Database.ExecuteSqlRawAsync(
                 "INSERT INTO trax.log (event_id, level, message, category) "
                     + "VALUES (0, 'warning'::trax.log_level, 'no run named', 'External')"
             );
         var queries = new LogQueries();
 
-        var result = await queries.GetLogs(Operations, _factory, default);
+        var result = await queries.GetLogs(Operations, _factory.NotNull(), default);
 
         result.Items.Should().ContainSingle().Which.MetadataId.Should().Be(0);
     }
@@ -165,7 +168,7 @@ public class LogQueriesTests
         await SeedLogs(metaId, 5);
         var queries = new LogQueries();
 
-        var result = await queries.GetLogs(Operations, _factory, default, take: 2);
+        var result = await queries.GetLogs(Operations, _factory.NotNull(), default, take: 2);
 
         result.Items.Should().HaveCount(2);
         result.NextCursor.Should().NotBeNull();
@@ -177,11 +180,11 @@ public class LogQueriesTests
         var metaId = await SeedMetadata();
         await SeedLogs(metaId, 5);
         var queries = new LogQueries();
-        var first = await queries.GetLogs(Operations, _factory, default, take: 2);
+        var first = await queries.GetLogs(Operations, _factory.NotNull(), default, take: 2);
 
         var page2 = await queries.GetLogs(
             Operations,
-            _factory,
+            _factory.NotNull(),
             default,
             take: 2,
             afterId: first.NextCursor
@@ -191,7 +194,7 @@ public class LogQueriesTests
         page2
             .Items.Select(l => l.Id)
             .Should()
-            .AllSatisfy(id => id.Should().BeLessThan(first.NextCursor!.Value));
+            .AllSatisfy(id => id.Should().BeLessThan(first.NextCursor.NotNull().Value));
         page2.IsEstimatedCount.Should().BeFalse();
     }
 
@@ -202,7 +205,13 @@ public class LogQueriesTests
         await SeedLogs(metaId, 5);
         var queries = new LogQueries();
 
-        var result = await queries.GetLogs(Operations, _factory, default, skip: 2, take: 2);
+        var result = await queries.GetLogs(
+            Operations,
+            _factory.NotNull(),
+            default,
+            skip: 2,
+            take: 2
+        );
 
         result.Items.Should().HaveCount(2);
         result.Skip.Should().Be(2);
@@ -217,8 +226,18 @@ public class LogQueriesTests
         await SeedLogs(meta2, 3);
         var queries = new LogQueries();
 
-        var meta1Logs = await queries.GetLogs(Operations, _factory, default, metadataId: meta1);
-        var meta2Logs = await queries.GetLogs(Operations, _factory, default, metadataId: meta2);
+        var meta1Logs = await queries.GetLogs(
+            Operations,
+            _factory.NotNull(),
+            default,
+            metadataId: meta1
+        );
+        var meta2Logs = await queries.GetLogs(
+            Operations,
+            _factory.NotNull(),
+            default,
+            metadataId: meta2
+        );
 
         meta1Logs.Items.Should().HaveCount(2);
         meta1Logs.Items.Should().OnlyContain(l => l.MetadataId == meta1);
@@ -236,7 +255,7 @@ public class LogQueriesTests
 
         var warningOrAbove = await queries.GetLogs(
             Operations,
-            _factory,
+            _factory.NotNull(),
             default,
             minimumLevel: LogLevel.Warning
         );
@@ -253,7 +272,12 @@ public class LogQueriesTests
         await SeedLogs(metaId, 3, category: "Beta");
         var queries = new LogQueries();
 
-        var alpha = await queries.GetLogs(Operations, _factory, default, category: "Alpha");
+        var alpha = await queries.GetLogs(
+            Operations,
+            _factory.NotNull(),
+            default,
+            category: "Alpha"
+        );
 
         alpha.Items.Should().HaveCount(2);
         alpha.Items.Should().OnlyContain(l => l.Category == "Alpha");
@@ -266,7 +290,12 @@ public class LogQueriesTests
         await SeedLogs(metaId, 3);
         var queries = new LogQueries();
 
-        var result = await queries.GetLogs(Operations, _factory, default, category: "   ");
+        var result = await queries.GetLogs(
+            Operations,
+            _factory.NotNull(),
+            default,
+            category: "   "
+        );
 
         result.Items.Should().HaveCount(3);
     }
@@ -278,7 +307,7 @@ public class LogQueriesTests
         await SeedLogs(metaId, 1, LogLevel.Error, "MyCat");
         var queries = new LogQueries();
 
-        var result = await queries.GetLogs(Operations, _factory, default);
+        var result = await queries.GetLogs(Operations, _factory.NotNull(), default);
 
         var entry = result.Items.Single();
         entry.MetadataId.Should().Be(metaId);
@@ -295,7 +324,7 @@ public class LogQueriesTests
 
     private async Task SeedLargeAnalyzedLogTable(long metadataId)
     {
-        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             var ctx = (DbContext)db;
@@ -314,19 +343,19 @@ public class LogQueriesTests
     {
         var metaId = await SeedMetadata();
         await SeedLargeAnalyzedLogTable(metaId);
-        var dialect = _provider.GetRequiredService<ISqlDialect>();
+        var dialect = _provider.NotNull().GetRequiredService<ISqlDialect>();
         var queries = new LogQueries();
 
         var first = await queries.GetLogs(
             Operations,
-            _factory,
+            _factory.NotNull(),
             default,
             take: 10,
             sqlDialect: dialect
         );
         var second = await queries.GetLogs(
             Operations,
-            _factory,
+            _factory.NotNull(),
             default,
             take: 10,
             afterId: first.NextCursor,
@@ -346,11 +375,11 @@ public class LogQueriesTests
     {
         var metaId = await SeedMetadata();
         await SeedLargeAnalyzedLogTable(metaId);
-        var dialect = _provider.GetRequiredService<ISqlDialect>();
+        var dialect = _provider.NotNull().GetRequiredService<ISqlDialect>();
 
         var result = await new LogQueries().GetLogs(
             Operations,
-            _factory,
+            _factory.NotNull(),
             default,
             metadataId: metaId,
             sqlDialect: dialect
@@ -371,11 +400,15 @@ public class LogQueriesTests
 
         var withoutEstimate = await new LogQueries().GetLogs(
             Operations,
-            _factory,
+            _factory.NotNull(),
             default,
             sqlDialect: noEstimate
         );
-        var withoutDialect = await new LogQueries().GetLogs(Operations, _factory, default);
+        var withoutDialect = await new LogQueries().GetLogs(
+            Operations,
+            _factory.NotNull(),
+            default
+        );
 
         withoutEstimate.IsEstimatedCount.Should().BeFalse();
         withoutEstimate.TotalCount.Should().Be(LargeTableRows);
@@ -395,8 +428,8 @@ public class LogQueriesTests
         services.AddSingleton<Trax.Effect.Configuration.TraxBuilder.TraxMarker>();
         services.AddSingleton(discovery);
         services.AddSingleton(Substitute.For<IEffectRegistry>());
-        services.AddSingleton(_factory);
-        services.AddSingleton(_provider.GetRequiredService<ISqlDialect>());
+        services.AddSingleton(_factory.NotNull());
+        services.AddSingleton(_provider.NotNull().GetRequiredService<ISqlDialect>());
         Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
             services,
             graphql => graphql.ExposeOperationQueries().AllowAnonymousOperations()

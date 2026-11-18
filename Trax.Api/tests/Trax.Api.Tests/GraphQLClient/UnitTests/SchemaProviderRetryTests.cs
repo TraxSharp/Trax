@@ -123,6 +123,7 @@ public class SchemaProviderRetryTests
                 .Awaiting(() =>
                     cancelled.WaitAsync(
                         TimeSpan.FromSeconds(10),
+                        TimeProvider.System,
                         cancellationToken: CancellationToken.None
                     )
                 )
@@ -136,6 +137,7 @@ public class SchemaProviderRetryTests
 
         var schema = await patient.WaitAsync(
             TimeSpan.FromSeconds(10),
+            TimeProvider.System,
             cancellationToken: CancellationToken.None
         );
 

@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Dashboard.Serving;
 
@@ -185,7 +186,13 @@ internal sealed partial class DashboardEndpoint(
     {
         var graphQL = context.Request.PathBase.Add(new PathString(graphQLPath())).ToUriComponent();
         var html = Encoding.UTF8.GetBytes(
-            RenderIndex(assets.IndexTemplate!, basePath, graphQL, documentIds(), hostAuthenticates)
+            RenderIndex(
+                assets.IndexTemplate.NotNull(),
+                basePath,
+                graphQL,
+                documentIds(),
+                hostAuthenticates
+            )
         );
         await WriteAsync(
                 context,

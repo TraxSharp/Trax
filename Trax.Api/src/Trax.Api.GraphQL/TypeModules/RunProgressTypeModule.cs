@@ -193,8 +193,9 @@ internal sealed class RunProgressTypeModule(ITrainDiscoveryService discovery) : 
                 .Take(500)
                 .ToListAsync(ctx.RequestAborted)
                 .ConfigureAwait(false);
+            var clock = ctx.Services.GetService<TimeProvider>() ?? TimeProvider.System;
             foreach (var row in rows)
-                if (run.Visibility.Present(Wrap(run, JunctionStep.From(row))) is { } shown)
+                if (run.Visibility.Present(Wrap(run, JunctionStep.From(row), clock)) is { } shown)
                     steps.Add(shown.Junction);
         }
         return new RunProgressAnswer(
@@ -304,6 +305,7 @@ internal sealed class RunProgressTypeModule(ITrainDiscoveryService discovery) : 
                             is not null
                 ),
                 Logger = services.GetService<ILoggerFactory>()?.CreateLogger<RunProgressStream>(),
+                Clock = services.GetService<TimeProvider>() ?? TimeProvider.System,
             };
         }
         catch
@@ -317,13 +319,13 @@ internal sealed class RunProgressTypeModule(ITrainDiscoveryService discovery) : 
         }
     }
 
-    internal static JunctionEvent Wrap(RunProgressRun run, JunctionStep step) =>
+    internal static JunctionEvent Wrap(RunProgressRun run, JunctionStep step, TimeProvider clock) =>
         new(
             run.MetadataId ?? 0,
             run.RunId,
             run.TrainName,
             JunctionEventType.JunctionCompleted,
-            DateTime.UtcNow,
+            clock.GetUtcNow().UtcDateTime,
             step
         );
 

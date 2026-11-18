@@ -21,6 +21,7 @@ using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Subscriptions;
 using Trax.Api.Tests.Auth;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Enums;
@@ -147,7 +148,10 @@ public class SubscriptionRecheckTests
         var executor = await BuildAsync(g => g, MembersBroadcast());
         var stream = await SubscribeAsync(executor, LifecycleQuery);
         var results = Collect(stream);
-        await FirstAsync(results, () => PublishCompletedAsync(typeof(IMembersTrain).FullName!));
+        await FirstAsync(
+            results,
+            () => PublishCompletedAsync(typeof(IMembersTrain).FullName.NotNull())
+        );
 
         _membersOpen = false;
 
@@ -200,7 +204,10 @@ public class SubscriptionRecheckTests
             () =>
                 SendToTopicAsync(
                     nameof(LifecycleSubscriptions.OnDataChanged),
-                    new DataChangedEvent(ChangeDomain.WorkQueue, DateTime.UtcNow)
+                    new DataChangedEvent(
+                        ChangeDomain.WorkQueue,
+                        TimeProvider.System.GetUtcNow().UtcDateTime
+                    )
                 )
         );
 
@@ -277,7 +284,10 @@ public class SubscriptionRecheckTests
         var executor = await BuildGatedAsync(UnmarkedBroadcast());
         var stream = await SubscribeAsync(executor, LifecycleQuery);
         var results = Collect(stream);
-        await FirstAsync(results, () => PublishCompletedAsync(typeof(IUnmarkedTrain).FullName!));
+        await FirstAsync(
+            results,
+            () => PublishCompletedAsync(typeof(IUnmarkedTrain).FullName.NotNull())
+        );
 
         _accounts.Suspended = true;
 
@@ -298,7 +308,10 @@ public class SubscriptionRecheckTests
         var executor = await BuildGatedAsync(UnmarkedBroadcast());
         var stream = await SubscribeAsync(executor, LifecycleQuery);
         var results = Collect(stream);
-        await FirstAsync(results, () => PublishCompletedAsync(typeof(IUnmarkedTrain).FullName!));
+        await FirstAsync(
+            results,
+            () => PublishCompletedAsync(typeof(IUnmarkedTrain).FullName.NotNull())
+        );
 
         for (var i = 0; i < 3; i++)
             _time.Advance(Interval);
@@ -306,7 +319,7 @@ public class SubscriptionRecheckTests
         var before = results.Received;
         await FirstAsync(
             results,
-            () => PublishCompletedAsync(typeof(IUnmarkedTrain).FullName!),
+            () => PublishCompletedAsync(typeof(IUnmarkedTrain).FullName.NotNull()),
             after: before
         );
         results.Ended.Should().BeFalse("a subscriber the endpoint policy still admits goes on");
@@ -389,7 +402,7 @@ public class SubscriptionRecheckTests
         // server may send a keep-alive. The re-check's error is the stream's last result, a
         // `next` frame carrying only errors, and the operation then completes.
         var frames = new List<JsonElement>();
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(15);
         while (
             frames.Count == 0
             || !string.Equals(
@@ -399,8 +412,9 @@ public class SubscriptionRecheckTests
             )
         )
         {
-            DateTime
-                .UtcNow.Should()
+            TimeProvider
+                .System.GetUtcNow()
+                .UtcDateTime.Should()
                 .BeBefore(deadline, "the re-check ends the subscription within a few intervals");
             var frame = await ReceiveAsync(socket);
             if (frame.GetProperty("type").GetString() is not ("ping" or "pong"))
@@ -442,13 +456,13 @@ public class SubscriptionRecheckTests
     {
         var sender = host.Services.GetRequiredService<ITopicEventSender>();
         var first = ReceiveAsync(socket);
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-        while (!first.IsCompleted && DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(10);
+        while (!first.IsCompleted && TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             await sender
                 .SendAsync(
                     nameof(LifecycleSubscriptions.OnTrainCompleted),
-                    Completed(typeof(IMembersTrain).FullName!)
+                    Completed(typeof(IMembersTrain).FullName.NotNull())
                 )
                 .ConfigureAwait(false);
             // allowed-delay: re-publish interval, bounded by the 10s deadline; WhenAny wakes the
@@ -640,8 +654,8 @@ public class SubscriptionRecheckTests
             InputType = typeof(object),
             OutputType = typeof(object),
             Lifetime = ServiceLifetime.Transient,
-            ServiceTypeName = typeof(IMembersTrain).FullName!,
-            ImplementationTypeName = typeof(IMembersTrain).FullName!,
+            ServiceTypeName = typeof(IMembersTrain).FullName.NotNull(),
+            ImplementationTypeName = typeof(IMembersTrain).FullName.NotNull(),
             InputTypeName = "Object",
             OutputTypeName = "Object",
             RequiredPolicies = [MembersPolicy],
@@ -666,8 +680,8 @@ public class SubscriptionRecheckTests
             InputType = typeof(object),
             OutputType = typeof(object),
             Lifetime = ServiceLifetime.Transient,
-            ServiceTypeName = typeof(IUnmarkedTrain).FullName!,
-            ImplementationTypeName = typeof(IUnmarkedTrain).FullName!,
+            ServiceTypeName = typeof(IUnmarkedTrain).FullName.NotNull(),
+            ImplementationTypeName = typeof(IUnmarkedTrain).FullName.NotNull(),
             InputTypeName = "Object",
             OutputTypeName = "Object",
             RequiredPolicies = [],
@@ -707,8 +721,8 @@ public class SubscriptionRecheckTests
             Id: Guid.NewGuid(),
             State: "Naming",
             Version: 1,
-            CreatedAt: DateTimeOffset.UtcNow,
-            UpdatedAt: DateTimeOffset.UtcNow,
+            CreatedAt: TimeProvider.System.GetUtcNow(),
+            UpdatedAt: TimeProvider.System.GetUtcNow(),
             HasLiveInvokedRun: false
         );
 
@@ -721,7 +735,7 @@ public class SubscriptionRecheckTests
             ExternalId: "ext",
             TrainName: trainName,
             TrainState: TrainState.Completed,
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TimeProvider.System.GetUtcNow().UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             Output: null,
@@ -730,7 +744,8 @@ public class SubscriptionRecheckTests
         );
 
     private async Task SendToTopicAsync<T>(string topic, T message) =>
-        await _provider!
+        await _provider
+            .NotNull()
             .GetRequiredService<ITopicEventSender>()
             .SendAsync(topic, message)
             .AsTask()
@@ -816,8 +831,12 @@ public class SubscriptionRecheckTests
     /// <summary>Publishes with <paramref name="publish"/> until a result past <paramref name="after"/> arrives.</summary>
     private static async Task FirstAsync(Results results, Func<Task> publish, int after = 0)
     {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-        while (results.Received <= after && !results.Ended && DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(10);
+        while (
+            results.Received <= after
+            && !results.Ended
+            && TimeProvider.System.GetUtcNow().UtcDateTime < deadline
+        )
         {
             await publish().ConfigureAwait(false);
             // allowed-delay: re-publish interval, bounded by the 10s deadline; ExecuteAsync can
@@ -834,8 +853,8 @@ public class SubscriptionRecheckTests
     /// </summary>
     private async Task<string?> EndAsync(Results results)
     {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-        while (!results.Ended && DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(10);
+        while (!results.Ended && TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             _time.Advance(Interval);
             // allowed-delay: lets the re-check run, bounded by the 10s deadline; WhenAny wakes the

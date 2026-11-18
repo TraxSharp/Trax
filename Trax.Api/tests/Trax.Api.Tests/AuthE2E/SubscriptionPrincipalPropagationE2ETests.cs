@@ -407,8 +407,8 @@ public class SubscriptionPrincipalPropagationE2ETests
     )
     {
         var received = Task.WhenAll(subscribers.Select(s => ReceiveNextAsync(s.Ws, s.SubId)));
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-        while (!received.IsCompleted && DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(10);
+        while (!received.IsCompleted && TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             await PokeAsync(host, tag, credential, scheme).ConfigureAwait(false);
             // allowed-delay: re-publish interval, bounded by the 10s deadline; WhenAny wakes the

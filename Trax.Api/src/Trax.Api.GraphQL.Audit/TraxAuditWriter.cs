@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -228,7 +229,9 @@ public sealed class TraxAuditWriter(
             maxDelay.TotalMilliseconds
         );
         var half = ceiling / 2;
-        return TimeSpan.FromMilliseconds(half + Random.Shared.NextDouble() * half);
+        return TimeSpan.FromMilliseconds(
+            half + RandomNumberGenerator.GetInt32(int.MaxValue) / (double)int.MaxValue * half
+        );
     }
 
     /// <summary>

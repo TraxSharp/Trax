@@ -103,6 +103,7 @@ internal static class HeadlessCommands
         ActionOptions options,
         bool dryRun,
         TextWriter output,
+        TimeProvider clock,
         CancellationToken ct
     )
     {
@@ -147,7 +148,7 @@ internal static class HeadlessCommands
         // Its progress until it ends: the host runs it whether this process stays or not.
         for (; ; )
         {
-            await Task.Delay(BulkPollInterval, ct).ConfigureAwait(false);
+            await Task.Delay(BulkPollInterval, clock, ct).ConfigureAwait(false);
             var progress = await session
                 .Client.BulkOperationAsync(
                     new BulkOperationVariables { Id = id, FailuresTake = 0 },

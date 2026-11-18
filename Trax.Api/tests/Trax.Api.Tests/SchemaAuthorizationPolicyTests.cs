@@ -10,6 +10,7 @@ using NSubstitute;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
@@ -40,7 +41,7 @@ public class SchemaAuthorizationPolicyTests
         var ex = await StartAsync(g => g.AddTypeExtension<UnregisteredPolicyOnPublicThing>());
 
         ex.Should().NotBeNull("a field no caller could ever pass must not ship, per " + Adr);
-        ex!
+        ex.NotNull()
             .ToString()
             .Should()
             .Contain("NoSuchResolverPolicy")
@@ -55,7 +56,7 @@ public class SchemaAuthorizationPolicyTests
         );
 
         ex.Should().NotBeNull();
-        ex!.ToString().Should().Contain("NoSuchOpsPolicy").And.Contain(".operations");
+        ex.NotNull().ToString().Should().Contain("NoSuchOpsPolicy").And.Contain(".operations");
     }
 
     [Test]
@@ -109,7 +110,7 @@ public class SchemaAuthorizationPolicyTests
         var ex = await StartAsync(_ => { }, trains: [GatedTrain("NoSuchTrainPolicy")]);
 
         ex.Should().NotBeNull("a train no caller could ever pass must not ship, per " + Adr);
-        ex!
+        ex.NotNull()
             .ToString()
             .Should()
             .Contain("NoSuchTrainPolicy")

@@ -208,9 +208,9 @@ public class PersistedOperationStressTests : StressTestSetup
             var samples = new double[Rounds];
             for (var i = 0; i < Rounds; i++)
             {
-                var sw = System.Diagnostics.Stopwatch.StartNew();
+                var sw = TimeProvider.System.GetTimestamp();
                 await run(i);
-                samples[i] = sw.Elapsed.TotalMilliseconds;
+                samples[i] = TimeProvider.System.GetElapsedTime(sw).TotalMilliseconds;
             }
             Array.Sort(samples);
             await TestContext

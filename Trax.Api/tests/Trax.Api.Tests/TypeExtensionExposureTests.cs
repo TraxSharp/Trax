@@ -11,6 +11,7 @@ using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Startup;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
@@ -123,7 +124,7 @@ public class TypeExtensionExposureTests
                 "a field on an anonymous parent inherits no gate, per "
                     + "docs/adr/0003-a-type-extension-field-declares-its-own-posture.md"
             );
-        ex!.Message.Should().Contain("PublicThing.undeclared");
+        ex.NotNull().Message.Should().Contain("PublicThing.undeclared");
         ex.Message.Should().Contain(nameof(UndeclaredOnPublicThing));
         ex.Message.Should().Contain("[TraxAllowAnonymous]");
     }
@@ -146,7 +147,7 @@ public class TypeExtensionExposureTests
         var ex = await StartAsync(g => g.AddTypeExtension<ConflictedOnPublicThing>());
 
         ex.Should().BeOfType<InvalidOperationException>();
-        ex!.Message.Should().Contain("PublicThing.conflicted");
+        ex.NotNull().Message.Should().Contain("PublicThing.conflicted");
         ex.Message.Should().Contain("Pick one");
     }
 
@@ -212,7 +213,7 @@ public class TypeExtensionExposureTests
                 "docs/adr/0003-a-type-extension-field-declares-its-own-posture.md: every exposed "
                     + "parent type's extension fields declare their posture"
             );
-        ex!.Message.Should().Contain("OperationsMutations.undeclaredOperationsField");
+        ex.NotNull().Message.Should().Contain("OperationsMutations.undeclaredOperationsField");
         ex.Message.Should().Contain("AllowAnonymousOperations()");
     }
 
@@ -258,7 +259,7 @@ public class TypeExtensionExposureTests
                 "a field on a [TraxAllowAnonymous] navigation target inherits no gate, per "
                     + "docs/adr/0003-a-type-extension-field-declares-its-own-posture.md"
             );
-        ex!.Message.Should().Contain("CensusAuthor.undeclaredAuthorField");
+        ex.NotNull().Message.Should().Contain("CensusAuthor.undeclaredAuthorField");
         ex.Message.Should().Contain("[TraxAllowAnonymous]");
     }
 
@@ -282,7 +283,7 @@ public class TypeExtensionExposureTests
         var ex = await StartAsync(g => g.AddTypeExtension<UndeclaredOnRootQuery>());
 
         ex.Should().BeOfType<InvalidOperationException>();
-        ex!.Message.Should().Contain("RootQuery.undeclaredRootQueryField");
+        ex.NotNull().Message.Should().Contain("RootQuery.undeclaredRootQueryField");
         ex.Message.Should().Contain("schema root type");
     }
 
@@ -297,7 +298,7 @@ public class TypeExtensionExposureTests
             .BeOfType<InvalidOperationException>(
                 "DiscoverQueries is reached straight from the root on an ungated endpoint"
             );
-        ex!.Message.Should().Contain("undeclaredDiscoverField");
+        ex.NotNull().Message.Should().Contain("undeclaredDiscoverField");
     }
 
     [Test]
@@ -309,7 +310,7 @@ public class TypeExtensionExposureTests
         );
 
         ex.Should().BeOfType<InvalidOperationException>();
-        ex!.Message.Should().Contain("RootMutation.undeclaredRootMutationField");
+        ex.NotNull().Message.Should().Contain("RootMutation.undeclaredRootMutationField");
     }
 
     /// <summary>
@@ -324,7 +325,7 @@ public class TypeExtensionExposureTests
         var ex = await StartAsync(g => g.AddTypeExtension<UndeclaredSubscription>());
 
         ex.Should().BeOfType<InvalidOperationException>();
-        ex!.Message.Should().Contain("LifecycleSubscriptions.undeclaredStream");
+        ex.NotNull().Message.Should().Contain("LifecycleSubscriptions.undeclaredStream");
         ex.Message.Should().Contain("schema root type");
     }
 
@@ -347,7 +348,7 @@ public class TypeExtensionExposureTests
         var ex = await StartAsync(g => g.AddTypeExtension<ForeignGatedOnPublicThing>());
 
         ex.Should().BeOfType<InvalidOperationException>();
-        ex!.Message.Should().Contain("PublicThing.foreignGated");
+        ex.NotNull().Message.Should().Contain("PublicThing.foreignGated");
         ex.Message.Should().Contain("[Authorize]");
         ex.Message.Should().Contain("[TraxAuthorize]");
     }
@@ -358,7 +359,7 @@ public class TypeExtensionExposureTests
         var ex = await StartAsync(g => g.AddTypeExtension<ForeignAnonymousOnPublicThing>());
 
         ex.Should().BeOfType<InvalidOperationException>();
-        ex!.Message.Should().Contain("[TraxAllowAnonymous]");
+        ex.NotNull().Message.Should().Contain("[TraxAllowAnonymous]");
     }
 
     /// <summary>
@@ -372,7 +373,7 @@ public class TypeExtensionExposureTests
         var ex = await StartAsync(g => g.AddTypeExtension<ForeignGatedOnGatedThing>());
 
         ex.Should().BeOfType<InvalidOperationException>();
-        ex!.Message.Should().Contain("which Trax does not read");
+        ex.NotNull().Message.Should().Contain("which Trax does not read");
     }
 
     // ── Endpoint posture ─────────────────────────────────────────────────
@@ -403,7 +404,7 @@ public class TypeExtensionExposureTests
         );
 
         ex.Should().BeOfType<InvalidOperationException>();
-        ex!.Message.Should().Contain("Pick one");
+        ex.NotNull().Message.Should().Contain("Pick one");
     }
 
     // ── Completeness ─────────────────────────────────────────────────────
@@ -421,7 +422,7 @@ public class TypeExtensionExposureTests
         );
 
         ex.Should().BeOfType<InvalidOperationException>();
-        ex!.Message.Should().Contain("PublicThing.viaConfigureSchema");
+        ex.NotNull().Message.Should().Contain("PublicThing.viaConfigureSchema");
     }
 
     [Test]
@@ -434,7 +435,7 @@ public class TypeExtensionExposureTests
         );
 
         ex.Should().BeOfType<InvalidOperationException>();
-        ex!.Message.Should().Contain("3 GraphQL field(s)");
+        ex.NotNull().Message.Should().Contain("3 GraphQL field(s)");
         ex.Message.Should().Contain("PublicThing.undeclared");
         ex.Message.Should().Contain("PublicThing.secondUndeclared");
         ex.Message.Should().Contain("RootQuery.undeclaredRootQueryField");

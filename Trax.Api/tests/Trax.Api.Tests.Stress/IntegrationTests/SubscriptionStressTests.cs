@@ -12,6 +12,7 @@ using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Subscriptions;
 using Trax.Api.Tests.Stress.Fakes.Trains;
 using Trax.Api.Tests.Stress.Fixtures;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
@@ -70,9 +71,9 @@ public class SubscriptionStressTests
     /// <summary>Upper bound on waiting for subscribers to attach or for delivery to finish.</summary>
     private static readonly TimeSpan Deadline = TimeSpan.FromSeconds(60);
 
-    private ServiceProvider _provider = null!;
-    private IRequestExecutor _executor = null!;
-    private ChangeSignalCoalescer _coalescer = null!;
+    private ServiceProvider? _provider;
+    private IRequestExecutor? _executor;
+    private ChangeSignalCoalescer? _coalescer;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -106,23 +107,26 @@ public class SubscriptionStressTests
 
         _provider = services.BuildServiceProvider();
         _executor = await _provider
+            .NotNull()
             .GetRequiredService<IRequestExecutorProvider>()
             .GetExecutorAsync("trax");
 
         // A plain ServiceProvider starts no hosted services, so the coalescer is started here.
         _coalescer = _provider
+            .NotNull()
             .GetServices<IHostedService>()
             .OfType<ChangeSignalCoalescer>()
             .Single();
-        await _coalescer.StartAsync(CancellationToken.None);
+        await _coalescer.NotNull().StartAsync(CancellationToken.None);
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await _coalescer.StopAsync(CancellationToken.None);
-        _coalescer.Dispose();
-        await _provider.DisposeAsync();
+        await _coalescer.NotNull().StopAsync(CancellationToken.None);
+        _coalescer?.Dispose();
+        if (_provider is not null)
+            await _provider.DisposeAsync();
     }
 
     [Test]
@@ -136,23 +140,27 @@ public class SubscriptionStressTests
         var domains = Enum.GetValues<ChangeDomain>();
 
         var subscribers = await Subscribers<ChangeDomain>.AttachAsync(
-            _executor,
+            _executor.NotNull(),
             "subscription { onDataChanged { domain timestamp } }",
             SubscriberCount,
             json => Enum.Parse<ChangeDomain>(Pascal(StringField(json, "domain"))),
             prime: () =>
                 _provider
+                    .NotNull()
                     .GetRequiredService<ITopicEventSender>()
                     .SendAsync(
                         nameof(LifecycleSubscriptions.OnDataChanged),
-                        new DataChangedEvent(ChangeDomain.WorkQueue, DateTime.UtcNow)
+                        new DataChangedEvent(
+                            ChangeDomain.WorkQueue,
+                            TimeProvider.System.GetUtcNow().UtcDateTime
+                        )
                     )
                     .AsTask()
         );
         await using var subscribersDisposal = subscribers.ConfigureAwait(false);
 
-        var signal = _provider.GetRequiredService<ITraxChangeSignal>();
-        var sw = Stopwatch.StartNew();
+        var signal = _provider.NotNull().GetRequiredService<ITraxChangeSignal>();
+        var sw = TimeProvider.System.GetTimestamp();
         await Task.WhenAll(
             Enumerable
                 .Range(0, Writers)
@@ -164,13 +172,13 @@ public class SubscriptionStressTests
                     })
                 )
         );
-        var notified = sw.Elapsed;
+        var notified = TimeProvider.System.GetElapsedTime(sw);
 
         var delivered = await subscribers.WaitUntilAsync(
             received => domains.All(received.Contains),
             Deadline
         );
-        sw.Stop();
+        var swTook = TimeProvider.System.GetElapsedTime(sw);
 
         var events = subscribers.EventCounts();
         await TestContext
@@ -185,7 +193,7 @@ public class SubscriptionStressTests
                     )
                     + string.Create(
                         CultureInfo.InvariantCulture,
-                        $"all {domains.Length} domains after {sw.Elapsed.TotalMilliseconds:F0}ms; events "
+                        $"all {domains.Length} domains after {swTook.TotalMilliseconds:F0}ms; events "
                     )
                     + string.Create(
                         CultureInfo.InvariantCulture,
@@ -193,7 +201,7 @@ public class SubscriptionStressTests
                     )
                     + string.Create(
                         CultureInfo.InvariantCulture,
-                        $"{_provider.GetRequiredService<TraxChangeSignal>().TotalDropped:N0} signals "
+                        $"{_provider.NotNull().GetRequiredService<TraxChangeSignal>().TotalDropped:N0} signals "
                     )
                     + "dropped at the full channel"
             )
@@ -206,7 +214,7 @@ public class SubscriptionStressTests
                 TimeSpan.FromSeconds(1),
                 "Notify must never block a write path, however full the channel is"
             );
-        sw.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(3));
+        swTook.Should().BeLessThan(TimeSpan.FromSeconds(3));
         events
             .Max()
             .Should()
@@ -237,20 +245,20 @@ public class SubscriptionStressTests
         var subscribers = await AttachLifecycleSubscribersAsync();
         await using var subscribersDisposal = subscribers.ConfigureAwait(false);
 
-        var sw = Stopwatch.StartNew();
+        var sw = TimeProvider.System.GetTimestamp();
         for (var i = 1; i <= Events; i++)
         {
             await Publish(i);
             if (i % PerTick == 0)
                 await PaceAsync(sw, i, TargetPerSecond);
         }
-        var published = sw.Elapsed;
+        var published = TimeProvider.System.GetElapsedTime(sw);
 
         var delivered = await subscribers.WaitUntilAsync(
             received => received.Any(e => e.MetadataId == Events),
             Deadline
         );
-        var drained = sw.Elapsed - published;
+        var drained = TimeProvider.System.GetElapsedTime(sw) - published;
 
         var outcomes = subscribers.Streams().Select(Outcome).ToArray();
         var complete = outcomes.Count(o => o.Received == Events);
@@ -322,7 +330,7 @@ public class SubscriptionStressTests
                 var metadataId = run;
                 subscribers.Add(
                     await Subscribers<RunChange>.AttachAsync(
-                        _executor,
+                        _executor.NotNull(),
                         "subscription { onTrainStateChanged(externalId: \""
                             + metadataId.ToString(
                                 "D32",
@@ -350,7 +358,7 @@ public class SubscriptionStressTests
                 );
             }
 
-            var sw = Stopwatch.StartNew();
+            var sw = TimeProvider.System.GetTimestamp();
             var sent = 0;
             for (var change = 1; change <= ChangesPerRun; change++)
             for (var run = 1; run <= Runs; run++)
@@ -362,7 +370,7 @@ public class SubscriptionStressTests
                 if (++sent % PerTick == 0)
                     await PaceAsync(sw, sent, TargetPerSecond);
             }
-            var published = sw.Elapsed;
+            var published = TimeProvider.System.GetElapsedTime(sw);
 
             var delivered = true;
             foreach (var group in subscribers)
@@ -370,7 +378,7 @@ public class SubscriptionStressTests
                     received => received.Any(e => e.Last),
                     Deadline
                 );
-            var drained = sw.Elapsed - published;
+            var drained = TimeProvider.System.GetElapsedTime(sw) - published;
 
             var outcomes = subscribers
                 .SelectMany((g, index) => g.Streams().Select(s => (Run: index + 1L, s)))
@@ -448,14 +456,14 @@ public class SubscriptionStressTests
     /// <paramref name="perSecond"/>. A publisher already behind that schedule is not delayed, so
     /// the rate is a ceiling and the time spent publishing is never added to on top of it.
     /// </summary>
-    private static async Task PaceAsync(Stopwatch clock, int sent, int perSecond)
+    private static async Task PaceAsync(long started, int sent, int perSecond)
     {
         var due = TimeSpan.FromSeconds((double)sent / perSecond);
-        var ahead = due - clock.Elapsed;
+        var ahead = due - TimeProvider.System.GetElapsedTime(started);
         if (ahead > TimeSpan.Zero)
             // allowed-delay: paces the publisher to a ceiling rate; this is the load shape under
             // test, not a wait for a condition.
-            await Task.Delay(ahead).ConfigureAwait(false);
+            await Task.Delay(ahead, TimeProvider.System).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -483,16 +491,16 @@ public class SubscriptionStressTests
         var subscribers = await AttachLifecycleSubscribersAsync();
         await using var subscribersDisposal = subscribers.ConfigureAwait(false);
 
-        var sw = Stopwatch.StartNew();
+        var sw = TimeProvider.System.GetTimestamp();
         for (var i = 1; i <= Events; i++)
             await Publish(i);
-        var published = sw.Elapsed;
+        var published = TimeProvider.System.GetElapsedTime(sw);
 
         var delivered = await subscribers.WaitUntilAsync(
             received => received.Any(e => e.MetadataId == Events),
             Deadline
         );
-        sw.Stop();
+        var swTook = TimeProvider.System.GetElapsedTime(sw);
 
         var events = subscribers.EventCounts();
         await TestContext
@@ -507,7 +515,7 @@ public class SubscriptionStressTests
                     )
                     + string.Create(
                         CultureInfo.InvariantCulture,
-                        $"subscribers after {sw.Elapsed.TotalMilliseconds:F0}ms; events kept per "
+                        $"subscribers after {swTook.TotalMilliseconds:F0}ms; events kept per "
                     )
                     + string.Create(
                         CultureInfo.InvariantCulture,
@@ -517,7 +525,7 @@ public class SubscriptionStressTests
             .ConfigureAwait(false);
 
         delivered.Should().BeTrue("the last run's state change should reach every subscriber");
-        sw.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(5));
+        swTook.Should().BeLessThan(TimeSpan.FromSeconds(5));
     }
 
     [Test]
@@ -534,7 +542,7 @@ public class SubscriptionStressTests
         const int PerTick = 50;
         const int TargetPerSecond = 500;
 
-        var handler = _provider.GetServices<IJunctionEventHandler>().Single();
+        var handler = _provider.NotNull().GetServices<IJunctionEventHandler>().Single();
         var subscribers = new List<Subscribers<Step>>();
         try
         {
@@ -543,7 +551,7 @@ public class SubscriptionStressTests
                 var metadataId = run;
                 subscribers.Add(
                     await Subscribers<Step>.AttachAsync(
-                        _executor,
+                        _executor.NotNull(),
                         string.Create(
                             CultureInfo.InvariantCulture,
                             $"subscription {{ onJunctionEvent(metadataId: {metadataId}) "
@@ -565,19 +573,19 @@ public class SubscriptionStressTests
             }
 
             var slowest = TimeSpan.Zero;
-            var sw = Stopwatch.StartNew();
+            var sw = TimeProvider.System.GetTimestamp();
             var sent = 0;
             for (var position = 1; position <= StepsPerRun; position++)
             for (var run = 1; run <= Runs; run++)
             {
-                var publish = Stopwatch.StartNew();
+                var publish = TimeProvider.System.GetTimestamp();
                 await HandleStep(handler, run, position);
-                if (publish.Elapsed > slowest)
-                    slowest = publish.Elapsed;
+                if (TimeProvider.System.GetElapsedTime(publish) > slowest)
+                    slowest = TimeProvider.System.GetElapsedTime(publish);
                 if (++sent % PerTick == 0)
                     await PaceAsync(sw, sent, TargetPerSecond);
             }
-            var published = sw.Elapsed;
+            var published = TimeProvider.System.GetElapsedTime(sw);
 
             var delivered = true;
             foreach (var group in subscribers)
@@ -585,7 +593,7 @@ public class SubscriptionStressTests
                     received => received.Any(e => e.Position == StepsPerRun),
                     Deadline
                 );
-            var drained = sw.Elapsed - published;
+            var drained = TimeProvider.System.GetElapsedTime(sw) - published;
 
             var outcomes = subscribers
                 .SelectMany(g => g.Streams())
@@ -669,9 +677,9 @@ public class SubscriptionStressTests
                     "D32",
                     System.Globalization.CultureInfo.InvariantCulture
                 ),
-                TrainName: typeof(IStressProbeTrain).FullName!,
+                TrainName: typeof(IStressProbeTrain).FullName.NotNull(),
                 TrainState: nameof(TrainState.InProgress),
-                Timestamp: DateTime.UtcNow,
+                Timestamp: TimeProvider.System.GetUtcNow().UtcDateTime,
                 FailureJunction: null,
                 FailureReason: null,
                 EventType: TrainLifecycleEventMessage.JunctionStartedEventType,
@@ -684,7 +692,7 @@ public class SubscriptionStressTests
                     JunctionRunKind.Junction,
                     "Step" + position.ToString(CultureInfo.InvariantCulture),
                     JunctionRunState.InProgress,
-                    DateTime.UtcNow
+                    TimeProvider.System.GetUtcNow().UtcDateTime
                 ),
             },
             CancellationToken.None
@@ -695,7 +703,7 @@ public class SubscriptionStressTests
 
     private Task<Subscribers<Lifecycle>> AttachLifecycleSubscribersAsync() =>
         Subscribers<Lifecycle>.AttachAsync(
-            _executor,
+            _executor.NotNull(),
             "subscription { onTrainStateChanged { sequence metadataId trainName trainState } }",
             SubscriberCount,
             json => new Lifecycle(
@@ -714,15 +722,15 @@ public class SubscriptionStressTests
     // Through the publisher the lifecycle hooks use, which numbers each event on its topic.
     private Task Publish(long metadataId, TrainState state = TrainState.Completed) =>
         LifecycleEventPublisher
-            .For(_provider.GetRequiredService<ITopicEventSender>())
+            .For(_provider.NotNull().GetRequiredService<ITopicEventSender>())
             .PublishAsync(
                 nameof(LifecycleSubscriptions.OnTrainStateChanged),
                 new TrainLifecycleEvent(
                     metadataId,
                     metadataId.ToString("D32", System.Globalization.CultureInfo.InvariantCulture),
-                    typeof(IStressProbeTrain).FullName!,
+                    typeof(IStressProbeTrain).FullName.NotNull(),
                     state,
-                    DateTime.UtcNow,
+                    TimeProvider.System.GetUtcNow().UtcDateTime,
                     FailureJunction: null,
                     FailureReason: null,
                     Output: null
@@ -821,8 +829,11 @@ public class SubscriptionStressTests
             }
 
             // Publish primers until every subscriber has one, then start clean.
-            var deadline = Stopwatch.StartNew();
-            while (subscribers._received.Values.Any(q => q.IsEmpty) && deadline.Elapsed < Deadline)
+            var deadline = TimeProvider.System.GetTimestamp();
+            while (
+                subscribers._received.Values.Any(q => q.IsEmpty)
+                && TimeProvider.System.GetElapsedTime(deadline) < Deadline
+            )
             {
                 await prime().ConfigureAwait(false);
                 // allowed-delay: poll interval while subscriptions register, bounded by Deadline.
@@ -869,8 +880,8 @@ public class SubscriptionStressTests
             TimeSpan timeout
         )
         {
-            var sw = Stopwatch.StartNew();
-            while (sw.Elapsed < timeout)
+            var sw = TimeProvider.System.GetTimestamp();
+            while (TimeProvider.System.GetElapsedTime(sw) < timeout)
             {
                 if (_received.Values.All(q => done(q)))
                     return true;

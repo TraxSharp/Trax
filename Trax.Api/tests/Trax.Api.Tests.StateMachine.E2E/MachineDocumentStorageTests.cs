@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 
 namespace Trax.Api.StateMachine.E2E;
@@ -45,7 +46,7 @@ public class MachineDocumentStorageTests
     [Test]
     public async Task A_newer_shape_no_node_registers_turns_client_outdated_after_grace()
     {
-        var clock = new ManualClock(DateTimeOffset.UtcNow);
+        var clock = new ManualClock(TimeProvider.System.GetUtcNow());
         await ShelfHosts.StopAsync(await ShelfHosts.StartAsync(Database, ShelfShape.V1, "rb_v1"));
         var v1 = await ShelfIdsAsync();
         await ShelfHosts.StopAsync(await ShelfHosts.StartAsync(Database, ShelfShape.V2, "rb_v2"));
@@ -90,7 +91,7 @@ public class MachineDocumentStorageTests
     [Test]
     public async Task Two_hosts_registering_one_slot_keep_both_documents_runnable()
     {
-        var clock = new ManualClock(DateTimeOffset.UtcNow);
+        var clock = new ManualClock(TimeProvider.System.GetUtcNow());
         var first = Track(
             await ShelfHosts.StartAsync(Database, ShelfShape.V1, "two_v1", Collecting(clock))
         );
@@ -131,7 +132,7 @@ public class MachineDocumentStorageTests
     [Test]
     public async Task A_preexisting_row_under_a_new_prefix_is_not_collected()
     {
-        var clock = new ManualClock(DateTimeOffset.UtcNow);
+        var clock = new ManualClock(TimeProvider.System.GetUtcNow());
         await ShelfHosts.StopAsync(await ShelfHosts.StartAsync(Database, ShelfShape.V1, "pre_v1"));
         var v1 = await ShelfIdsAsync();
 
@@ -167,7 +168,7 @@ public class MachineDocumentStorageTests
         v2.Should().NotBeEmpty();
         clock.Advance(TimeSpan.FromDays(400));
         // negative-wait: the host registers several times past the grace period, and leaves the uploaded rows alone.
-        await Task.Delay(TimeSpan.FromSeconds(2));
+        await Task.Delay(TimeSpan.FromSeconds(2), clock);
 
         foreach (var id in uploaded)
             (
@@ -197,7 +198,7 @@ public class MachineDocumentStorageTests
     [Test]
     public async Task A_redeployed_version_still_gives_a_node_that_does_not_restamp_the_grace_period()
     {
-        var clock = new ManualClock(DateTimeOffset.UtcNow);
+        var clock = new ManualClock(TimeProvider.System.GetUtcNow());
         await ShelfHosts.StopAsync(await ShelfHosts.StartAsync(Database, ShelfShape.V1, "re_v1"));
         var v1 = await ShelfIdsAsync();
         await ShelfHosts.StopAsync(await ShelfHosts.StartAsync(Database, ShelfShape.V2, "re_v2"));
@@ -235,7 +236,7 @@ public class MachineDocumentStorageTests
             .Should()
             .BeTrue("the redeployed node restores its documents");
         // negative-wait: the node registers several times, and must leave the older shape's documents alone.
-        await Task.Delay(TimeSpan.FromSeconds(2));
+        await Task.Delay(TimeSpan.FromSeconds(2), clock);
         (await ActiveAsync(v1))
             .Should()
             .Be(
@@ -247,7 +248,7 @@ public class MachineDocumentStorageTests
 
         Track(await ShelfHosts.StartAsync(Database, ShelfShape.V2, "re_v2_b", Collecting(clock)));
         // negative-wait: a second node of the redeployed version finds its documents already restored.
-        await Task.Delay(TimeSpan.FromSeconds(2));
+        await Task.Delay(TimeSpan.FromSeconds(2), clock);
         (await ActiveAsync(v1))
             .Should()
             .Be(v1.Count, "a second node counts from the restore too, per " + Adr);
@@ -270,7 +271,7 @@ public class MachineDocumentStorageTests
                 var options = (PersistedOperationsOptions)
                     services
                         .Last(d => d.ServiceType == typeof(PersistedOperationsOptions))
-                        .ImplementationInstance!;
+                        .ImplementationInstance.NotNull();
                 options.MachineDocumentCollectionInterval = TimeSpan.FromMilliseconds(200);
             },
         };

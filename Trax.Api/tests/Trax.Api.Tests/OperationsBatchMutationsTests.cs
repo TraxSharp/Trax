@@ -11,6 +11,7 @@ using Trax.Api.GraphQL.Audit;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.Services.BulkOperations;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -51,9 +52,9 @@ public class OperationsBatchMutationsTests
         + "Maximum Pool Size=8;Minimum Pool Size=0;Connection Idle Lifetime=30;"
         + "Timeout=30;Tcp Keepalive=true";
 
-    private ServiceProvider _provider = null!;
-    private IDataContextProviderFactory _factory = null!;
-    private ICancellationRegistry _registry = null!;
+    private ServiceProvider? _provider;
+    private IDataContextProviderFactory? _factory;
+    private ICancellationRegistry? _registry;
 
     [OneTimeSetUp]
     public void OneTimeSetUp()
@@ -62,13 +63,14 @@ public class OperationsBatchMutationsTests
         services.AddLogging();
         services.AddTrax(t => t.AddEffects(e => e.UsePostgres(ConnectionString)));
         _provider = services.BuildServiceProvider();
-        _factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        _factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await _provider.DisposeAsync();
+        if (_provider is not null)
+            await _provider.DisposeAsync();
         Npgsql.NpgsqlConnection.ClearAllPools();
     }
 
@@ -76,7 +78,7 @@ public class OperationsBatchMutationsTests
     public async Task SetUp()
     {
         _registry = Substitute.For<ICancellationRegistry>();
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         await ((DbContext)db).Database.ExecuteSqlRawAsync(
             "TRUNCATE TABLE trax.dead_letter, trax.work_queue, trax.metadata, trax.manifest, trax.manifest_group RESTART IDENTITY CASCADE"
         );
@@ -87,10 +89,12 @@ public class OperationsBatchMutationsTests
     {
         get
         {
-            var scope = new ServiceCollection().AddSingleton(_registry).BuildServiceProvider();
+            var scope = new ServiceCollection()
+                .AddSingleton(_registry.NotNull())
+                .BuildServiceProvider();
             return new OperationsService(
                 Substitute.For<ITrainDiscoveryService>(),
-                _factory,
+                _factory.NotNull(),
                 new SchedulerConfiguration(),
                 Substitute.For<ITrainExecutionService>(),
                 scope
@@ -100,7 +104,7 @@ public class OperationsBatchMutationsTests
 
     private async Task<long> SeedRun(TrainState state)
     {
-        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             var meta = Metadata.Create(
@@ -109,7 +113,8 @@ public class OperationsBatchMutationsTests
                     Name = "Trax.X.Batch",
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
-                }
+                },
+                TimeProvider.System
             );
             meta.TrainState = state;
             await db.Track(meta).ConfigureAwait(false);
@@ -120,15 +125,15 @@ public class OperationsBatchMutationsTests
 
     private async Task<long> SeedGroup(bool enabled)
     {
-        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             var group = new ManifestGroup
             {
                 Name = $"group-{Guid.NewGuid():N}",
                 IsEnabled = enabled,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
+                CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+                UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
             };
             await db.Track(group).ConfigureAwait(false);
             await db.SaveChanges(default).ConfigureAwait(false);
@@ -138,7 +143,7 @@ public class OperationsBatchMutationsTests
 
     private async Task<long> SeedManifest(long groupId, bool enabled)
     {
-        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             var manifest = Manifest.Create(new CreateManifest { Name = typeof(BatchFakeTrain) });
@@ -159,7 +164,7 @@ public class OperationsBatchMutationsTests
 
         response.Success.Should().BeTrue(response.Message);
         response.Count.Should().Be(1);
-        _registry.Received(1).TryCancel(id);
+        _registry.NotNull().Received(1).TryCancel(id);
     }
 
     [Test]
@@ -172,7 +177,7 @@ public class OperationsBatchMutationsTests
         response.Success.Should().BeFalse();
         response.Count.Should().Be(0);
         response.Message.Should().Contain("not cancellable");
-        _registry.DidNotReceiveWithAnyArgs().TryCancel(default);
+        _registry.NotNull().DidNotReceiveWithAnyArgs().TryCancel(default);
     }
 
     [Test]
@@ -190,7 +195,7 @@ public class OperationsBatchMutationsTests
 
         response.Success.Should().BeTrue(response.Message);
         response.Count.Should().Be(2);
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         (await db.Metadatas.Where(m => m.CancellationRequested).Select(m => m.Id).ToListAsync())
             .Should()
             .BeEquivalentTo([pending, running]);
@@ -222,7 +227,7 @@ public class OperationsBatchMutationsTests
         var response = await new OperationsMutations().CancelExecutions(ids, Operations, default);
 
         response.Success.Should().BeFalse();
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         (await db.Metadatas.AnyAsync(m => m.CancellationRequested)).Should().BeFalse();
     }
 
@@ -242,7 +247,7 @@ public class OperationsBatchMutationsTests
 
         response.Success.Should().BeTrue(response.Message);
         response.Count.Should().Be(1);
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         (await db.Manifests.AnyAsync(m => m.IsEnabled)).Should().BeFalse();
     }
 
@@ -265,7 +270,7 @@ public class OperationsBatchMutationsTests
                 "an empty batch is a refusal, returned in the payload (docs/adr/0028-an-operations-mutation-returns-a-refusal-and-throws-a-failure.md)"
             );
         response.Message.Should().Be("No ids were given.");
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         (await db.Manifests.AllAsync(m => m.IsEnabled)).Should().BeTrue();
     }
 
@@ -289,7 +294,7 @@ public class OperationsBatchMutationsTests
 
         response.Success.Should().BeFalse();
         response.Count.Should().Be(0);
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         (await db.Manifests.SingleAsync(m => m.Id == id)).IsEnabled.Should().BeTrue();
     }
 
@@ -308,7 +313,7 @@ public class OperationsBatchMutationsTests
 
         response.Success.Should().BeTrue(response.Message);
         response.Count.Should().Be(1);
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         (await db.ManifestGroups.SingleAsync(g => g.Id == listed)).IsEnabled.Should().BeFalse();
         (await db.ManifestGroups.SingleAsync(g => g.Id == other)).IsEnabled.Should().BeTrue();
     }
@@ -326,7 +331,7 @@ public class OperationsBatchMutationsTests
         );
 
         response.Success.Should().BeFalse();
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         (await db.ManifestGroups.AllAsync(g => g.IsEnabled)).Should().BeTrue();
     }
 
@@ -345,7 +350,7 @@ public class OperationsBatchMutationsTests
 
         response.Success.Should().BeTrue(response.Message);
         response.Count.Should().Be(2);
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         (await db.ManifestGroups.AnyAsync(g => g.IsEnabled)).Should().BeFalse();
     }
 
@@ -368,7 +373,7 @@ public class OperationsBatchMutationsTests
         response.AlreadyQueued.Should().Be(0);
         response.Skipped.Should().Be(1);
         response.Notes.Should().ContainSingle().Which.Id.Should().Be(999_999);
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         (
             await db
                 .WorkQueues.Where(q => q.Status == WorkQueueStatus.Queued)
@@ -396,7 +401,7 @@ public class OperationsBatchMutationsTests
         response.Success.Should().BeTrue(response.Message);
         response.Queued.Should().Be(0);
         response.AlreadyQueued.Should().Be(1);
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         (await db.WorkQueues.CountAsync(q => q.ManifestId == manifest)).Should().Be(1);
     }
 
@@ -424,7 +429,7 @@ public class OperationsBatchMutationsTests
         var response = await new OperationsMutations().TriggerManifests(ids, Operations, default);
 
         response.Success.Should().BeFalse();
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         (await db.WorkQueues.AnyAsync()).Should().BeFalse();
     }
 
@@ -480,7 +485,7 @@ public class OperationsBatchMutationsTests
 
         response.Success.Should().BeTrue(response.Message);
         response.Count.Should().Be(2);
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         (await db.Metadatas.Where(m => m.CancellationRequested).Select(m => m.Id).ToListAsync())
             .Should()
             .BeEquivalentTo([inA, inB]);
@@ -521,7 +526,7 @@ public class OperationsBatchMutationsTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton(_factory);
+        services.AddSingleton(_factory.NotNull());
         services.AddScoped(_ => Operations);
         services.AddSingleton(Options.Create(new TraxAuditOptions()));
         services.AddSingleton<TraxAuditChannel>();
@@ -534,7 +539,7 @@ public class OperationsBatchMutationsTests
 
     private async Task<long[]> SeedRuns(int count, TrainState state)
     {
-        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             var runs = new List<Metadata>();
@@ -546,7 +551,8 @@ public class OperationsBatchMutationsTests
                         Name = BulkTrain,
                         ExternalId = Guid.NewGuid().ToString("N"),
                         Input = null,
-                    }
+                    },
+                    TimeProvider.System
                 );
                 meta.TrainState = state;
                 await db.Track(meta).ConfigureAwait(false);
@@ -581,7 +587,7 @@ public class OperationsBatchMutationsTests
         // The three end between the snapshot and their batch, as a run finishing on its own does.
         jobs.BeforeFirstBatch = async ct =>
         {
-            var db = await _factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            var db = await _factory.NotNull().CreateDbContextAsync(ct).ConfigureAwait(false);
             await using (db.ConfigureAwait(false))
             {
                 await ((DbContext)db)
@@ -604,10 +610,10 @@ public class OperationsBatchMutationsTests
             default
         );
         started.Success.Should().BeTrue(started.Message);
-        started.Operation!.Status.Should().Be(BulkOperationStatus.Running);
+        started.Operation.NotNull().Status.Should().Be(BulkOperationStatus.Running);
         await jobs.Current;
 
-        var operation = jobs.Get(started.Operation.Id)!;
+        var operation = jobs.Get(started.Operation.Id).NotNull();
         operation.Status.Should().Be(BulkOperationStatus.Finished, operation.Message);
         operation.Total.Should().Be(250);
         operation.Done.Should().Be(247);
@@ -628,17 +634,17 @@ public class OperationsBatchMutationsTests
             .Which.Should()
             .Be(new BulkOperationFailureReason("It had already ended (completed).", 3));
 
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
             (await db.Metadatas.CountAsync(m => m.CancellationRequested)).Should().Be(247);
 
         channel
             .Reader.TryRead(out var entry)
             .Should()
             .BeTrue($"the outcome is audited ({BulkAdr})");
-        entry!.PrincipalId.Should().Be("apikey:ops-1");
+        entry.NotNull().PrincipalId.Should().Be("apikey:ops-1");
         entry.OperationName.Should().Be("bulkOperation");
         entry.Success.Should().BeTrue();
-        entry.Metadata!["done"].Should().Be("247");
+        entry.Metadata.NotNull()["done"].Should().Be("247");
         entry.Metadata["failed"].Should().Be("3");
         entry.Document.Should().BeEmpty("the filter is a value the caller sent");
     }
@@ -665,7 +671,7 @@ public class OperationsBatchMutationsTests
         response.Operation.Should().BeNull();
         response.Message.Should().Contain("matches 5 run(s) now, not the 4 confirmed");
         host.GetRequiredService<BulkOperationJobs>().List().Should().BeEmpty();
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         (await db.Metadatas.AnyAsync(m => m.CancellationRequested)).Should().BeFalse();
     }
 
@@ -687,7 +693,7 @@ public class OperationsBatchMutationsTests
         };
 
         var first = Start(host, expectedCount: 3);
-        await inSnapshot.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await inSnapshot.Task.WaitAsync(TimeSpan.FromSeconds(30), TimeProvider.System);
         var second = await Start(host, expectedCount: 3);
         release.SetResult();
         var started = await first;
@@ -777,11 +783,11 @@ public class OperationsBatchMutationsTests
         started.Success.Should().BeTrue(started.Message);
         await jobs.Current;
 
-        var operation = jobs.Get(started.Operation!.Id)!;
+        var operation = jobs.Get(started.Operation.NotNull().Id).NotNull();
         operation.Done.Should().Be(2, "a manifest already disabled is in the state asked for");
         operation.Failed.Should().Be(0);
         operation.Actor.Should().Be("<anonymous>");
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         (await db.Manifests.Where(m => m.IsEnabled).Select(m => m.Id).ToListAsync())
             .Should()
             .BeEquivalentTo([outside]);
@@ -810,7 +816,7 @@ public class OperationsBatchMutationsTests
 
     private async Task<long> SeedRunOf(long manifestId, TrainState state)
     {
-        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             var meta = Metadata.Create(
@@ -820,7 +826,8 @@ public class OperationsBatchMutationsTests
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
                     ManifestId = manifestId,
-                }
+                },
+                TimeProvider.System
             );
             meta.TrainState = state;
             await db.Track(meta).ConfigureAwait(false);

@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using HotChocolate.Types;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 
@@ -19,9 +20,9 @@ internal sealed class MachineEnumType<TEnum>() : EnumType<TEnum>(Describe)
         d.BindValuesExplicitly();
         foreach (var value in Enum.GetValues<TEnum>())
         {
-            var name = JsonSerializer.Deserialize<string>(
-                JsonSerializer.Serialize(value, MachineSurface.Json)
-            )!;
+            var name = JsonSerializer
+                .Deserialize<string>(JsonSerializer.Serialize(value, MachineSurface.Json))
+                .NotNull();
             if (MachineEnums.ValueNameProblem(typeof(TEnum), name) is { } problem)
                 throw new InvalidOperationException(problem);
             d.Value(value).Name(name);

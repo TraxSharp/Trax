@@ -6,6 +6,7 @@ using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.Tests.Stress.Fixtures;
 using Trax.Api.Tests.Stress.Utils;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Scheduler.Services.Operations;
@@ -684,7 +685,7 @@ public class ParityEndpointStressTests : StressTestSetup
                     afterId: page.NextCursor,
                     take: 500
                 );
-            cursor = page.NextCursor!.Value;
+            cursor = page.NextCursor.NotNull().Value;
         }
 
         await MeasureAsync(

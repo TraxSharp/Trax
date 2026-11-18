@@ -3,6 +3,7 @@ using System.Globalization;
 using Terminal.Gui.Input;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
+using Trax.Api.Console.Terminal.Checks;
 using Trax.Api.Console.Terminal.Lists;
 using Trax.Api.Console.Terminal.Operations;
 using Trax.Client;
@@ -124,7 +125,7 @@ internal sealed class MainWindow : Window
     private void MoveTab(int? by, int? to)
     {
         var tabs = TabViews;
-        var at = Math.Max(0, tabs.ToList().IndexOf(_tabs.Value!));
+        var at = Math.Max(0, tabs.ToList().IndexOf(_tabs.Value.NotNull()));
         var next = to is { } number ? number - 1 : (at + (by ?? 0) + tabs.Count) % tabs.Count;
         if (next < 0 || next >= tabs.Count)
             return;

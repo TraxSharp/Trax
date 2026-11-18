@@ -5,6 +5,7 @@ using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.Tests.Stress.Fakes.Trains;
 using Trax.Api.Tests.Stress.Fixtures;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Mediator.Configuration;
 using Trax.Scheduler.Services.Operations;
@@ -25,7 +26,7 @@ namespace Trax.Api.Tests.Stress.IntegrationTests;
 )]
 public class RequeueInputSizeStressTests : StressTestSetup
 {
-    private static readonly string ProbeTrainName = typeof(IStressProbeTrain).FullName!;
+    private static readonly string ProbeTrainName = typeof(IStressProbeTrain).FullName.NotNull();
 
     // {"Value":"xxx…"}: 12 bytes of JSON around the value.
     private const int JsonOverhead = 12;
@@ -90,7 +91,7 @@ public class RequeueInputSizeStressTests : StressTestSetup
         var input = $"{{\"Value\":\"{new string('x', inputBytes - JsonOverhead)}\"}}";
         input.Length.Should().Be(inputBytes);
 
-        OperationResponse response = null!;
+        OperationResponse response = Null.Of<OperationResponse>();
         long queuedInputLength = 0;
         await MeasureWriteAsync(
                 string.Create(

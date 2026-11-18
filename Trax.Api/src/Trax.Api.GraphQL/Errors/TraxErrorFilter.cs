@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using HotChocolate;
 using HotChocolate.Execution;
@@ -193,9 +194,12 @@ internal sealed class TraxErrorFilter(ILogger<TraxErrorFilter>? logger = null) :
         return message;
     }
 
-    private static bool TryReadCarried(string message, out TrainExceptionData carried)
+    private static bool TryReadCarried(
+        string message,
+        [NotNullWhen(true)] out TrainExceptionData? carried
+    )
     {
-        carried = null!;
+        carried = null;
         if (!message.AsSpan().TrimStart().StartsWith("{"))
             return false;
 

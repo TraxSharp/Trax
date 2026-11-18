@@ -5,6 +5,7 @@ using AwesomeAssertions;
 using Microsoft.IdentityModel.Tokens;
 using Trax.Api.Auth.Jwt.Cognito;
 using Trax.Api.Auth.Jwt.Cognito.Issuer;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Auth.CognitoIssuer;
 
@@ -14,39 +15,43 @@ public class CognitoTokenIssuerTests
     private const string Issuer = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_TestPool";
     private const string ClientId = "abc123clientid";
 
-    private RSA _rsa = null!;
-    private RsaSecurityKey _key = null!;
+    private RSA? _rsa;
+    private RsaSecurityKey? _key;
 
     [SetUp]
     public void SetUp()
     {
         _rsa = RSA.Create(2048);
-        _key = new RsaSecurityKey(_rsa) { KeyId = "test-kid-1" };
+        _key = new RsaSecurityKey(_rsa.NotNull()) { KeyId = "test-kid-1" };
     }
 
     [TearDown]
-    public void TearDown() => _rsa.Dispose();
+    public void TearDown() => _rsa?.Dispose();
 
     #region Construction
 
     [Test]
     public void Ctor_NullIssuer_Throws()
     {
-        Action act = () => new CognitoTokenIssuer(null!, _key);
+        Action act = () => new CognitoTokenIssuer(Null.Of<string>(), _key.NotNull());
         act.Should().Throw<ArgumentException>();
     }
 
     [Test]
     public void Ctor_EmptyIssuer_Throws()
     {
-        Action act = () => new CognitoTokenIssuer("   ", _key);
+        Action act = () => new CognitoTokenIssuer("   ", _key.NotNull());
         act.Should().Throw<ArgumentException>();
     }
 
     [Test]
     public void Ctor_NullKey_Throws()
     {
-        Action act = () => new CognitoTokenIssuer(Issuer, null!);
+        Action act = () =>
+            new CognitoTokenIssuer(
+                Issuer,
+                Null.Of<Microsoft.IdentityModel.Tokens.RsaSecurityKey>()
+            );
         act.Should().Throw<ArgumentNullException>();
     }
 
@@ -67,15 +72,18 @@ public class CognitoTokenIssuerTests
     [Test]
     public void MintAccessToken_NullRequest_Throws()
     {
-        var issuer = new CognitoTokenIssuer(Issuer, _key);
-        Action act = () => issuer.MintAccessToken(null!);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull());
+        Action act = () =>
+            issuer.MintAccessToken(
+                Null.Of<Trax.Api.Auth.Jwt.Cognito.Issuer.CognitoAccessTokenRequest>()
+            );
         act.Should().Throw<ArgumentNullException>();
     }
 
     [Test]
     public void MintAccessToken_EmptyClientId_Throws()
     {
-        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull());
         Action act = () =>
             issuer.MintAccessToken(
                 new CognitoAccessTokenRequest
@@ -91,7 +99,7 @@ public class CognitoTokenIssuerTests
     [Test]
     public void MintAccessToken_ZeroLifetime_Throws()
     {
-        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull());
         Action act = () =>
             issuer.MintAccessToken(
                 new CognitoAccessTokenRequest
@@ -107,7 +115,7 @@ public class CognitoTokenIssuerTests
     [Test]
     public void MintAccessToken_NegativeLifetime_Throws()
     {
-        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull());
         Action act = () =>
             issuer.MintAccessToken(
                 new CognitoAccessTokenRequest
@@ -124,7 +132,7 @@ public class CognitoTokenIssuerTests
     public void MintAccessToken_SetsClaimsAndHeader()
     {
         var clock = new FakeTimeProvider(DateTimeOffset.UnixEpoch.AddSeconds(1_700_000_000));
-        var issuer = new CognitoTokenIssuer(Issuer, _key, clock);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull(), clock);
         var sub = Guid.NewGuid();
 
         var token = issuer.MintAccessToken(
@@ -141,7 +149,7 @@ public class CognitoTokenIssuerTests
 
         var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token);
         jwt.Header.Alg.Should().Be(SecurityAlgorithms.RsaSha256);
-        jwt.Header.Kid.Should().Be(_key.KeyId);
+        jwt.Header.Kid.Should().Be(_key.NotNull().KeyId);
         jwt.Issuer.Should().Be(Issuer);
         jwt.Subject.Should().Be(sub.ToString());
         jwt.Audiences.Should().BeEmpty("access tokens use client_id, not aud");
@@ -171,7 +179,7 @@ public class CognitoTokenIssuerTests
     [Test]
     public void MintAccessToken_NoUsername_DefaultsToSub()
     {
-        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull());
         var sub = Guid.NewGuid();
 
         var token = issuer.MintAccessToken(
@@ -193,7 +201,7 @@ public class CognitoTokenIssuerTests
     public void MintAccessToken_AuthTime_OverridesIat()
     {
         var clock = new FakeTimeProvider(DateTimeOffset.UnixEpoch.AddSeconds(1_700_000_000));
-        var issuer = new CognitoTokenIssuer(Issuer, _key, clock);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull(), clock);
         var authenticatedAt = DateTimeOffset.UnixEpoch.AddSeconds(1_699_990_000);
 
         var token = issuer.MintAccessToken(
@@ -218,7 +226,7 @@ public class CognitoTokenIssuerTests
     [Test]
     public void MintAccessToken_NoGroups_OmitsClaim()
     {
-        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull());
         var token = issuer.MintAccessToken(
             new CognitoAccessTokenRequest
             {
@@ -235,7 +243,7 @@ public class CognitoTokenIssuerTests
     [Test]
     public void MintAccessToken_NoScopes_OmitsClaim()
     {
-        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull());
         var token = issuer.MintAccessToken(
             new CognitoAccessTokenRequest
             {
@@ -252,7 +260,7 @@ public class CognitoTokenIssuerTests
     [Test]
     public void MintAccessToken_AdditionalClaims_Added()
     {
-        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull());
         var token = issuer.MintAccessToken(
             new CognitoAccessTokenRequest
             {
@@ -279,7 +287,7 @@ public class CognitoTokenIssuerTests
     [Test]
     public void MintAccessToken_ProfileClaims_WrittenWhenSet()
     {
-        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull());
         var token = issuer.MintAccessToken(
             new CognitoAccessTokenRequest
             {
@@ -303,7 +311,7 @@ public class CognitoTokenIssuerTests
     [Test]
     public void MintAccessToken_EmailVerifiedFalse_WrittenAsFalse()
     {
-        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull());
         var token = issuer.MintAccessToken(
             new CognitoAccessTokenRequest
             {
@@ -322,7 +330,7 @@ public class CognitoTokenIssuerTests
     [TestCase("   ")]
     public void MintAccessToken_BlankEmail_Throws(string email)
     {
-        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull());
         Action act = () =>
             issuer.MintAccessToken(
                 new CognitoAccessTokenRequest
@@ -340,7 +348,7 @@ public class CognitoTokenIssuerTests
     [Test]
     public void MintAccessToken_NoProfileClaims_OmitsThem()
     {
-        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull());
         var token = issuer.MintAccessToken(
             new CognitoAccessTokenRequest
             {
@@ -398,7 +406,7 @@ public class CognitoTokenIssuerTests
     [TestCaseSource(nameof(ReservedClaimNames))]
     public void MintAccessToken_AdditionalClaim_ReservedName_Throws(string name)
     {
-        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull());
         Action act = () =>
             issuer.MintAccessToken(
                 new CognitoAccessTokenRequest
@@ -419,7 +427,7 @@ public class CognitoTokenIssuerTests
     [TestCaseSource(nameof(ReservedClaimNames))]
     public void MintIdToken_AdditionalClaim_ReservedName_Throws(string name)
     {
-        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull());
         Action act = () =>
             issuer.MintIdToken(
                 new CognitoIdTokenRequest
@@ -442,7 +450,7 @@ public class CognitoTokenIssuerTests
     [Test]
     public void MintAccessToken_AdditionalClaim_EmptyKey_Skipped()
     {
-        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull());
         var token = issuer.MintAccessToken(
             new CognitoAccessTokenRequest
             {
@@ -463,7 +471,7 @@ public class CognitoTokenIssuerTests
     [Test]
     public void MintAccessToken_GeneratesUniqueJti()
     {
-        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull());
         var request = new CognitoAccessTokenRequest
         {
             Sub = Guid.NewGuid(),
@@ -492,7 +500,7 @@ public class CognitoTokenIssuerTests
     [Test]
     public void MintIdToken_EmptyEmail_Throws()
     {
-        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull());
         Action act = () =>
             issuer.MintIdToken(
                 new CognitoIdTokenRequest
@@ -510,7 +518,7 @@ public class CognitoTokenIssuerTests
     [Test]
     public void MintIdToken_EmptyClientId_Throws()
     {
-        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull());
         Action act = () =>
             issuer.MintIdToken(
                 new CognitoIdTokenRequest
@@ -528,7 +536,7 @@ public class CognitoTokenIssuerTests
     [Test]
     public void MintIdToken_ZeroLifetime_Throws()
     {
-        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull());
         Action act = () =>
             issuer.MintIdToken(
                 new CognitoIdTokenRequest
@@ -547,7 +555,7 @@ public class CognitoTokenIssuerTests
     public void MintIdToken_SetsClaimsAndAudience()
     {
         var clock = new FakeTimeProvider(DateTimeOffset.UnixEpoch.AddSeconds(1_700_000_000));
-        var issuer = new CognitoTokenIssuer(Issuer, _key, clock);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull(), clock);
         var sub = Guid.NewGuid();
 
         var token = issuer.MintIdToken(
@@ -566,7 +574,7 @@ public class CognitoTokenIssuerTests
         );
 
         var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token);
-        jwt.Header.Kid.Should().Be(_key.KeyId);
+        jwt.Header.Kid.Should().Be(_key.NotNull().KeyId);
         jwt.Audiences.Should().ContainSingle(a => a == ClientId);
         jwt.Claims.Should().ContainSingle(c => c.Type == "token_use" && c.Value == "id");
         jwt.Claims.Should().ContainSingle(c => c.Type == "email" && c.Value == "alice@example.com");
@@ -581,7 +589,7 @@ public class CognitoTokenIssuerTests
     [Test]
     public void MintIdToken_EmailVerifiedFalse_SerializesAsFalse()
     {
-        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull());
         var token = issuer.MintIdToken(
             new CognitoIdTokenRequest
             {
@@ -602,7 +610,7 @@ public class CognitoTokenIssuerTests
     [Test]
     public void MintIdToken_NoGivenName_OmitsClaim()
     {
-        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull());
         var token = issuer.MintIdToken(
             new CognitoIdTokenRequest
             {
@@ -622,7 +630,7 @@ public class CognitoTokenIssuerTests
     [Test]
     public void MintIdToken_NoUsername_DefaultsToSub()
     {
-        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull());
         var sub = Guid.NewGuid();
         var token = issuer.MintIdToken(
             new CognitoIdTokenRequest
@@ -644,7 +652,7 @@ public class CognitoTokenIssuerTests
     [Test]
     public void MintIdToken_Identities_SerializedAsJsonArrayString()
     {
-        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull());
         var created = DateTimeOffset.UnixEpoch.AddSeconds(1_700_000_000);
         var token = issuer.MintIdToken(
             new CognitoIdTokenRequest
@@ -695,7 +703,7 @@ public class CognitoTokenIssuerTests
     [Test]
     public void MintIdToken_NoIdentities_OmitsClaim()
     {
-        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull());
         var token = issuer.MintIdToken(
             new CognitoIdTokenRequest
             {
@@ -715,7 +723,7 @@ public class CognitoTokenIssuerTests
     public void MintIdToken_AuthTime_OverridesIat()
     {
         var clock = new FakeTimeProvider(DateTimeOffset.UnixEpoch.AddSeconds(1_700_000_000));
-        var issuer = new CognitoTokenIssuer(Issuer, _key, clock);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull(), clock);
         var authenticatedAt = DateTimeOffset.UnixEpoch.AddSeconds(1_699_990_000);
 
         var token = issuer.MintIdToken(
@@ -743,7 +751,7 @@ public class CognitoTokenIssuerTests
     [Test]
     public void MintAccessToken_SignatureValidatesAgainstPublicKey()
     {
-        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull());
         var token = issuer.MintAccessToken(
             new CognitoAccessTokenRequest
             {
@@ -760,7 +768,7 @@ public class CognitoTokenIssuerTests
             ValidIssuer = Issuer,
             ValidateAudience = false,
             ValidateLifetime = true,
-            IssuerSigningKey = _key,
+            IssuerSigningKey = _key.NotNull(),
             ValidateIssuerSigningKey = true,
         };
         var act = () => handler.ValidateToken(token, tvp, out _);
@@ -770,7 +778,7 @@ public class CognitoTokenIssuerTests
     [Test]
     public void MintIdToken_SignatureValidatesAgainstPublicKey()
     {
-        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull());
         var token = issuer.MintIdToken(
             new CognitoIdTokenRequest
             {
@@ -790,7 +798,7 @@ public class CognitoTokenIssuerTests
             ValidateAudience = true,
             ValidAudience = ClientId,
             ValidateLifetime = true,
-            IssuerSigningKey = _key,
+            IssuerSigningKey = _key.NotNull(),
             ValidateIssuerSigningKey = true,
         };
         var act = () => handler.ValidateToken(token, tvp, out _);
@@ -800,7 +808,7 @@ public class CognitoTokenIssuerTests
     [Test]
     public void MintAccessToken_TamperedSignature_FailsValidation()
     {
-        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var issuer = new CognitoTokenIssuer(Issuer, _key.NotNull());
         var token = issuer.MintAccessToken(
             new CognitoAccessTokenRequest
             {
@@ -829,7 +837,7 @@ public class CognitoTokenIssuerTests
             ValidateIssuer = false,
             ValidateAudience = false,
             ValidateLifetime = false,
-            IssuerSigningKey = _key,
+            IssuerSigningKey = _key.NotNull(),
             ValidateIssuerSigningKey = true,
         };
         var act = () => handler.ValidateToken(tampered, tvp, out _);

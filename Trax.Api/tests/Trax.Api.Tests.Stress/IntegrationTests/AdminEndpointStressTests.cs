@@ -9,6 +9,7 @@ using Trax.Api.Services.HealthCheck;
 using Trax.Api.Services.Metrics;
 using Trax.Api.Tests.Stress.Fixtures;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
@@ -289,7 +290,7 @@ public class AdminEndpointStressTests : StressTestSetup
         // and a few hundred more that ran nothing, as a large autoscaled cluster would have.
         await using (var db = await Factory(Services).CreateDbContextAsync(default))
         {
-            var now = DateTime.UtcNow;
+            var now = TimeProvider.System.GetUtcNow().UtcDateTime;
             var ids = Enumerable
                 .Range(0, 4)
                 .Select(i => string.Create(CultureInfo.InvariantCulture, $"stress-instance-{i}"))
@@ -326,7 +327,7 @@ public class AdminEndpointStressTests : StressTestSetup
             async (sp, ct) =>
             {
                 var hosts = await new OperationsQueries()
-                    .GetHosts(Factory(sp), ct)
+                    .GetHosts(Factory(sp), ct, TimeProvider.System)
                     .ConfigureAwait(false);
                 hosts.Should().HaveCountGreaterThanOrEqualTo(304);
             }
@@ -683,7 +684,7 @@ public class AdminEndpointStressTests : StressTestSetup
                     .GetGraph(1, Operations(sp), ct)
                     .ConfigureAwait(false);
                 graph.Should().NotBeNull();
-                graph!.Nodes.Should().NotBeEmpty();
+                graph.NotNull().Nodes.Should().NotBeEmpty();
             }
         );
     }
@@ -872,7 +873,7 @@ public class AdminEndpointStressTests : StressTestSetup
                         Factory(sp),
                         ct,
                         take: 25,
-                        startedAfter: DateTime.UtcNow.AddHours(-24),
+                        startedAfter: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-24),
                         sqlDialect: Dialect(sp)
                     )
                     .ConfigureAwait(false);
@@ -966,7 +967,7 @@ public class AdminEndpointStressTests : StressTestSetup
                     .GetExecutionDetail(1, Factory(sp), ct)
                     .ConfigureAwait(false);
                 detail.Should().NotBeNull();
-                detail!.ChildCount.Should().BeGreaterThan(0);
+                detail.NotNull().ChildCount.Should().BeGreaterThan(0);
             }
         );
     }

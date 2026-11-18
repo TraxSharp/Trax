@@ -11,8 +11,11 @@ namespace Trax.Api.Services.HealthCheck;
 /// Replace it through <see cref="ITraxHealthService"/>.
 /// </summary>
 /// <param name="dataContextFactory">Opens the data context the counts are read from.</param>
-internal sealed class TraxHealthService(IDataContextProviderFactory dataContextFactory)
-    : ITraxHealthService
+/// <param name="clock">The clock the last hour is counted back from.</param>
+internal sealed class TraxHealthService(
+    IDataContextProviderFactory dataContextFactory,
+    TimeProvider clock
+) : ITraxHealthService
 {
     /// <inheritdoc/>
     public async Task<HealthStatus> GetHealthAsync(CancellationToken ct = default)
@@ -20,7 +23,7 @@ internal sealed class TraxHealthService(IDataContextProviderFactory dataContextF
         var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
         await using var dbDisposal = db.ConfigureAwait(false);
 
-        var cutoff = DateTime.UtcNow.AddHours(-1);
+        var cutoff = clock.GetUtcNow().UtcDateTime.AddHours(-1);
 
         // Single round-trip: project all four counts from a constant source row.
         var counts = await db

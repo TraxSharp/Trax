@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.DTOs;
 using Trax.Api.Services.BulkOperations;
 using Trax.Api.Tests.Stress.Fixtures;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Stress.IntegrationTests;
 
@@ -116,7 +117,7 @@ public class BulkOperationStressTests : StressTestSetup
     {
         var jobs = Services.GetRequiredService<BulkOperationJobs>();
 
-        var answer = Stopwatch.StartNew();
+        var answer = TimeProvider.System.GetTimestamp();
         var started = await OperationsFieldAsync(
                 $"mutation {{ operations {{ startBulkOperation(kind: {kind}, filter: {filter}, "
                     + string.Create(
@@ -125,7 +126,7 @@ public class BulkOperationStressTests : StressTestSetup
                     )
             )
             .ConfigureAwait(false);
-        answer.Stop();
+        var answerTook = TimeProvider.System.GetElapsedTime(answer);
         await TestContext
             .Out.WriteLineAsync(
                 string.Create(
@@ -134,7 +135,7 @@ public class BulkOperationStressTests : StressTestSetup
                 )
                     + string.Create(
                         CultureInfo.InvariantCulture,
-                        $"{answer.Elapsed.TotalMilliseconds:F0}ms"
+                        $"{answerTook.TotalMilliseconds:F0}ms"
                     )
             )
             .ConfigureAwait(false);
@@ -144,30 +145,31 @@ public class BulkOperationStressTests : StressTestSetup
             .GetBoolean()
             .Should()
             .BeTrue(started.GetProperty("message").GetString());
-        answer
-            .Elapsed.Should()
-            .BeLessThan(StartBudget, $"the snapshot is read in short pages ({Adr})");
-        var id = Guid.Parse(started.GetProperty("operation").GetProperty("id").GetString()!);
+        answerTook.Should().BeLessThan(StartBudget, $"the snapshot is read in short pages ({Adr})");
+        var id = Guid.Parse(
+            started.GetProperty("operation").GetProperty("id").GetString().NotNull()
+        );
 
-        var finish = Stopwatch.StartNew();
+        var finish = TimeProvider.System.GetTimestamp();
         var reads = new List<TimeSpan>();
         while (jobs.Get(id)?.Status == BulkOperationStatus.Running)
         {
-            var read = Stopwatch.StartNew();
+            var read = TimeProvider.System.GetTimestamp();
             await OperationsFieldAsync(
                     "{ operations { executions(take: 500) { totalCount items { id } } } }"
                 )
                 .ConfigureAwait(false);
-            read.Stop();
-            reads.Add(read.Elapsed);
-            finish
-                .Elapsed.Should()
+            var readTook = TimeProvider.System.GetElapsedTime(read);
+            reads.Add(readTook);
+            TimeProvider
+                .System.GetElapsedTime(finish)
+                .Should()
                 .BeLessThan(FinishBudget, $"the operation over every match finishes ({Adr})");
         }
-        finish.Stop();
+        var finishTook = TimeProvider.System.GetElapsedTime(finish);
 
-        var operation = jobs.Get(id)!;
-        var run = jobs.Run(id)!;
+        var operation = jobs.Get(id).NotNull();
+        var run = jobs.Run(id).NotNull();
         await TestContext
             .Out.WriteLineAsync(
                 string.Create(
@@ -176,7 +178,7 @@ public class BulkOperationStressTests : StressTestSetup
                 )
                     + string.Create(
                         CultureInfo.InvariantCulture,
-                        $"{finish.Elapsed.TotalSeconds:F1}s over {run.Batches} batches; longest batch "
+                        $"{finishTook.TotalSeconds:F1}s over {run.Batches} batches; longest batch "
                     )
                     + string.Create(
                         CultureInfo.InvariantCulture,

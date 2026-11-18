@@ -36,7 +36,7 @@ public sealed class TestTokenIssuer
     /// Construct an issuer that signs with <paramref name="credentials"/> by
     /// default but can switch to any other entry in <paramref name="keyset"/>
     /// via <see cref="WithSigningKey"/>. Used by
-    /// <see cref="TestJwksServer.CreateIssuer"/> to enable kid rotation in
+    /// <see cref="TestJwksServer.CreateIssuer(string)"/> to enable kid rotation in
     /// tests.
     /// </summary>
     public TestTokenIssuer(
@@ -45,21 +45,39 @@ public sealed class TestTokenIssuer
         SigningCredentials credentials,
         IReadOnlyDictionary<string, SigningCredentials>? keyset
     )
+        : this(issuer, defaultAudience, credentials, keyset, TimeProvider.System) { }
+
+    /// <summary>
+    /// Construct an issuer as the constructor without <paramref name="clock"/> does, whose
+    /// tokens' default <c>nbf</c> and <c>exp</c> are read from <paramref name="clock"/>.
+    /// </summary>
+    public TestTokenIssuer(
+        string issuer,
+        string defaultAudience,
+        SigningCredentials credentials,
+        IReadOnlyDictionary<string, SigningCredentials>? keyset,
+        TimeProvider clock
+    )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(issuer);
         ArgumentException.ThrowIfNullOrWhiteSpace(defaultAudience);
         ArgumentNullException.ThrowIfNull(credentials);
+        ArgumentNullException.ThrowIfNull(clock);
         Issuer = issuer;
         DefaultAudience = defaultAudience;
         _credentials = credentials;
         _keyset = keyset;
+        Clock = clock;
     }
+
+    /// <summary>The clock a token's default <c>nbf</c> and <c>exp</c> are read from.</summary>
+    public TimeProvider Clock { get; }
 
     /// <summary>
     /// Return a new issuer that signs with the key identified by
     /// <paramref name="kid"/>. Throws if no key with that kid is in the
     /// issuer's keyset (only issuers minted via
-    /// <see cref="TestJwksServer.CreateIssuer"/> have a populated keyset).
+    /// <see cref="TestJwksServer.CreateIssuer(string)"/> have a populated keyset).
     /// </summary>
     public TestTokenIssuer WithSigningKey(string kid)
     {
@@ -75,7 +93,7 @@ public sealed class TestTokenIssuer
                     + $"Known kids: [{string.Join(", ", _keyset.Keys)}]",
                 nameof(kid)
             );
-        return new TestTokenIssuer(Issuer, DefaultAudience, creds, _keyset);
+        return new TestTokenIssuer(Issuer, DefaultAudience, creds, _keyset, Clock);
     }
 
     /// <summary>
@@ -105,7 +123,7 @@ public sealed class TestTokenIssuer
     /// </summary>
     public string Mint(Action<TestTokenBuilder>? configure = null)
     {
-        var builder = new TestTokenBuilder(Issuer, DefaultAudience);
+        var builder = new TestTokenBuilder(Issuer, DefaultAudience, Clock);
         configure?.Invoke(builder);
 
         var token = new JwtSecurityToken(

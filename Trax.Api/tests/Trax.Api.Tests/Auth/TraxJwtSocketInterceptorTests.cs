@@ -14,6 +14,7 @@ using Trax.Api.Auth;
 using Trax.Api.Auth.Jwt;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Subscriptions;
+using Trax.Core.Extensions;
 using static Trax.Api.Tests.Auth.SocketInterceptorTestHelpers;
 
 namespace Trax.Api.Tests.Auth;
@@ -72,7 +73,7 @@ public class TraxJwtSocketInterceptorTests
     {
         var key = new SymmetricSecurityKey(keyBytes ?? KeyBytes);
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-        var effectiveExpires = expires ?? DateTime.UtcNow.AddMinutes(5);
+        var effectiveExpires = expires ?? TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(5);
         // notBefore must be <= expires; back it off so expired-token tests pass.
         var notBefore = effectiveExpires.AddMinutes(-10);
         var token = new JwtSecurityToken(
@@ -185,7 +186,10 @@ public class TraxJwtSocketInterceptorTests
         var interceptor = NewInterceptor();
         var (session, _) = NewSession();
 
-        var token = SignToken([new Claim("sub", "alice")], expires: DateTime.UtcNow.AddMinutes(-5));
+        var token = SignToken(
+            [new Claim("sub", "alice")],
+            expires: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5)
+        );
         var payload = Payload(
             new TraxJwtSocketInterceptor.ConnectionInitPayload(token, Bearer: null)
         );
@@ -287,9 +291,12 @@ public class TraxJwtSocketInterceptorTests
 
         result.Accepted.Should().BeTrue();
         http.User.Should().NotBeNull();
-        http.User.Identity!.IsAuthenticated.Should().BeTrue();
+        http.User.Identity.NotNull().IsAuthenticated.Should().BeTrue();
         http.User.Identity.AuthenticationType.Should().Be(JwtDefaults.SchemeName);
-        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)!.Value.Should().Be("TraxJwt:alice");
+        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)
+            .NotNull()
+            .Value.Should()
+            .Be("TraxJwt:alice");
         http.User.IsInRole("Player").Should().BeTrue();
     }
 
@@ -308,7 +315,10 @@ public class TraxJwtSocketInterceptorTests
         var result = await interceptor.OnConnectAsync(session, payload, CancellationToken.None);
 
         result.Accepted.Should().BeTrue();
-        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)!.Value.Should().Be("TraxJwt:alice");
+        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)
+            .NotNull()
+            .Value.Should()
+            .Be("TraxJwt:alice");
     }
 
     [Test]
@@ -323,7 +333,8 @@ public class TraxJwtSocketInterceptorTests
         );
         await interceptor.OnConnectAsync(session, payload, CancellationToken.None);
 
-        http.User.FindFirst(TraxAuthClaimTypes.PrincipalType)!
+        http.User.FindFirst(TraxAuthClaimTypes.PrincipalType)
+            .NotNull()
             .Value.Should()
             .Be(JwtDefaults.PrincipalType);
     }
@@ -354,7 +365,8 @@ public class TraxJwtSocketInterceptorTests
         );
         await interceptor.OnConnectAsync(session, payload, CancellationToken.None);
 
-        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)!
+        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)
+            .NotNull()
             .Value.Should()
             .Be("TraxJwt:override-id");
         http.User.IsInRole("Admin").Should().BeTrue();
@@ -391,7 +403,11 @@ public class TraxJwtSocketInterceptorTests
             .ResolveAsync(
                 // The bearer handler maps "sub" to NameIdentifier, on the socket as over HTTP.
                 Arg.Is<JwtTokenInput>(i =>
-                    i!.Principal!.FindFirst(ClaimTypes.NameIdentifier)!.Value == "alice"
+                    i.NotNull()
+                        .Principal.NotNull()
+                        .FindFirst(ClaimTypes.NameIdentifier)
+                        .NotNull()
+                        .Value == "alice"
                     && i.SecurityToken != null
                 ),
                 Arg.Any<CancellationToken>()
@@ -410,7 +426,7 @@ public class TraxJwtSocketInterceptorTests
 
         var token = SignToken(
             [new Claim("sub", "alice"), new Claim("name", "Alice")],
-            expires: DateTime.UtcNow.AddSeconds(-10)
+            expires: TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(-10)
         );
         var payload = Payload(
             new TraxJwtSocketInterceptor.ConnectionInitPayload(token, Bearer: null)

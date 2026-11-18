@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Hosting;
 using Npgsql;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.StateMachine.E2E;
 
@@ -96,7 +97,7 @@ public sealed class TwoNodes : IAsyncDisposable
             {
                 terminate.Parameters.AddWithValue("name", ApplicationNameOf(node));
                 var terminated = (long)
-                    (await terminate.ExecuteScalarAsync().ConfigureAwait(false))!;
+                    (await terminate.ExecuteScalarAsync().ConfigureAwait(false)).NotNull();
 
                 // The pool still holds the dead connections; the next command must open a fresh one.
                 NpgsqlConnection.ClearAllPools();

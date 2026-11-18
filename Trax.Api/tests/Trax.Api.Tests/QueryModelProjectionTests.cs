@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
@@ -258,8 +259,8 @@ public class QueryModelProjectionTests
         var op = result.ExpectOperationResult();
         op.Errors.Should().BeNullOrEmpty();
 
-        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"]!;
-        var widgets = (IReadOnlyDictionary<string, object?>)discover["widgets"]!;
+        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"].NotNull();
+        var widgets = (IReadOnlyDictionary<string, object?>)discover["widgets"].NotNull();
         Convert
             .ToInt32(widgets["totalCount"], System.Globalization.CultureInfo.InvariantCulture)
             .Should()
@@ -292,16 +293,16 @@ public class QueryModelProjectionTests
         var op = result.ExpectOperationResult();
         op.Errors.Should().BeNullOrEmpty();
 
-        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"]!;
-        var widgets = (IReadOnlyDictionary<string, object?>)discover["widgets"]!;
-        var edges = (IReadOnlyList<object?>)widgets["edges"]!;
+        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"].NotNull();
+        var widgets = (IReadOnlyDictionary<string, object?>)discover["widgets"].NotNull();
+        var edges = (IReadOnlyList<object?>)widgets["edges"].NotNull();
 
         edges
             .Select(e =>
             {
                 var node =
                     (IReadOnlyDictionary<string, object?>)
-                        ((IReadOnlyDictionary<string, object?>)e!)["node"]!;
+                        ((IReadOnlyDictionary<string, object?>)e.NotNull())["node"].NotNull();
                 return Convert.ToInt32(
                     node["echoId"],
                     System.Globalization.CultureInfo.InvariantCulture
@@ -323,7 +324,9 @@ public class QueryModelProjectionTests
         var nodes = await NodesAsync(executor, "widgets", "slug gadget { title }");
 
         nodes
-            .Select(n => (string?)((IReadOnlyDictionary<string, object?>)n["gadget"]!)["title"])
+            .Select(n =>
+                (string?)((IReadOnlyDictionary<string, object?>)n["gadget"].NotNull())["title"]
+            )
             .Should()
             .Equal("G-Alpha", "G-Beta");
     }
@@ -346,9 +349,9 @@ public class QueryModelProjectionTests
         var op = result.ExpectOperationResult();
         op.Errors.Should().BeNullOrEmpty();
 
-        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"]!;
-        var connection = (IReadOnlyDictionary<string, object?>)discover[field]!;
-        var nodes = (IReadOnlyList<object?>)connection["nodes"]!;
+        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"].NotNull();
+        var connection = (IReadOnlyDictionary<string, object?>)discover[field].NotNull();
+        var nodes = (IReadOnlyList<object?>)connection["nodes"].NotNull();
 
         return [.. nodes.Cast<IReadOnlyDictionary<string, object?>>()];
     }

@@ -13,6 +13,7 @@ using Trax.Api.Auth.ApiKey;
 using Trax.Api.GraphQL.Audit;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
@@ -135,7 +136,7 @@ public class AuditRefusedRequestTests
         refusal.PrincipalId.Should().Be("<anonymous>");
         refusal.Document.Should().BeEmpty();
         refusal.ErrorText.Should().StartWith("TRAX_SOCKET_REFUSED at connection_init");
-        refusal.Metadata!["stage"].Should().Be("connection_init");
+        refusal.Metadata.NotNull()["stage"].Should().Be("connection_init");
         // The host's one scheme judges every connection, a credential or none.
         refusal.Metadata["scheme"].Should().Be("ApiKey");
         refusal
@@ -181,7 +182,7 @@ public class AuditRefusedRequestTests
         entry.OperationName.Should().Be("Ticks");
         entry.Document.Should().Contain("auditTick");
         entry.ErrorText.Should().EndWith("at auditTick").And.NotContain("secret-detail");
-        entry.Metadata!["subscriptionEvent"].Should().Be("error");
+        entry.Metadata.NotNull()["subscriptionEvent"].Should().Be("error");
     }
 
     [Test]
@@ -214,11 +215,12 @@ public class AuditRefusedRequestTests
         {
             entry.Success.Should().BeFalse();
             entry.OperationName.Should().Be("Probes");
-            entry.Metadata!["subscriptionEvent"].Should().Be("error");
+            entry.Metadata.NotNull()["subscriptionEvent"].Should().Be("error");
             entry.Metadata["subscriptionEventErrors"].Should().Be("200");
             entry.ErrorText.Should().Contain(" at ").And.NotContain("secret-detail");
             entry
-                .ErrorText!.Length.Should()
+                .ErrorText.NotNull()
+                .Length.Should()
                 .BeLessThanOrEqualTo(
                     new TraxAuditOptions().MaxErrorTextLength + "...[truncated]".Length
                 );
@@ -228,8 +230,8 @@ public class AuditRefusedRequestTests
     private static async Task<bool> WaitForEntriesAsync(int count)
     {
         // The writer drains the channel on a 10 ms flush interval; the ceiling only bounds a slow runner.
-        var deadline = DateTime.UtcNow.AddSeconds(10);
-        while (DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(10);
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             if (CapturingSink.Entries.Count >= count)
                 return true;

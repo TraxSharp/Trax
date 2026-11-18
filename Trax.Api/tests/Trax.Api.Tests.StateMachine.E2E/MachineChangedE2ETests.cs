@@ -15,6 +15,7 @@ using Trax.Api.Auth;
 using Trax.Api.Auth.Jwt;
 using Trax.Api.Auth.Jwt.Testing;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
@@ -67,11 +68,11 @@ public class MachineChangedE2ETests
         JwtKey
     );
 
-    private TwoNodes _nodes = null!;
+    private TwoNodes? _nodes;
 
-    private IHost A => _nodes.A;
+    private IHost A => _nodes.NotNull().A;
 
-    private IHost B => _nodes.B;
+    private IHost B => _nodes.NotNull().B;
 
     [OneTimeSetUp]
     public async Task Up()
@@ -104,7 +105,11 @@ public class MachineChangedE2ETests
     }
 
     [OneTimeTearDown]
-    public async Task Down() => await _nodes.DisposeAsync();
+    public async Task Down()
+    {
+        if (_nodes is not null)
+            await _nodes.DisposeAsync();
+    }
 
     // Each test starts from an empty table, so the instances one test leaves behind never count against the next.
     [SetUp]
@@ -147,7 +152,7 @@ public class MachineChangedE2ETests
 
         first
             .Revision.Should()
-            .Be(started.Revision!.Value, "the first event is the current snapshot");
+            .Be(started.Revision.NotNull().Value, "the first event is the current snapshot");
         first.StateIs(nameof(WizardState.Naming)).Should().BeTrue(first.Raw.GetRawText());
     }
 
@@ -171,7 +176,7 @@ public class MachineChangedE2ETests
         events[0]
             .Revision.Should()
             .BeGreaterThanOrEqualTo(
-                started.Revision!.Value,
+                started.Revision.NotNull().Value,
                 "the first event is a current snapshot"
             );
         events[^1]
@@ -386,9 +391,9 @@ public class MachineChangedE2ETests
     public async Task A_recreate_under_the_same_id_does_not_reach_a_stream_on_the_old_incarnation()
     {
         var started = await A.StartWizardAsync(E2EHost.AliceKey);
-        var userKey = (
-            await E2ESql.DraftAsync(Database, WizardMachine.MachineId, started.Id)
-        )!.UserKey;
+        var userKey = (await E2ESql.DraftAsync(Database, WizardMachine.MachineId, started.Id))
+            .NotNull()
+            .UserKey;
         var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
         await using var wsDisposal = ws.ConfigureAwait(false);
         await ws.SubscribeAsync("old", MachineChangedOps.Subscribe(started.Id));
@@ -444,7 +449,8 @@ public class MachineChangedE2ETests
         var subject = $"expiring-{Guid.NewGuid():N}";
         var started = await StartAsJwtAsync(subject);
         var shortLived = Tokens.Mint(b =>
-            b.WithSubject(subject).WithExpires(DateTime.UtcNow.AddSeconds(5))
+            b.WithSubject(subject)
+                .WithExpires(TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(5))
         );
         var ws = await GraphQLWs.ConnectWithPayloadAsync(A, new { authToken = shortLived });
         await using var wsDisposal = ws.ConfigureAwait(false);
@@ -452,7 +458,7 @@ public class MachineChangedE2ETests
         await ws.NextChangeAsync("1");
 
         var ended = false;
-        var clock = Stopwatch.StartNew();
+        var clock = TimeProvider.System.GetTimestamp();
         try
         {
             while (!ended)
@@ -473,7 +479,7 @@ public class MachineChangedE2ETests
                     + "mid-stream, per "
                     + Adr
             );
-        clock.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(30));
+        TimeProvider.System.GetElapsedTime(clock).Should().BeLessThan(TimeSpan.FromSeconds(30));
     }
 
     [Test]
@@ -482,11 +488,14 @@ public class MachineChangedE2ETests
         var executor = await A.ExecutorAsync();
         var subscriptions = executor.Schema.SubscriptionType;
         subscriptions.Should().NotBeNull("the host serves subscriptions");
-        var field = subscriptions!.Fields.FirstOrDefault(f =>
-            string.Equals(f.Name, "wizardChanged", StringComparison.Ordinal)
-        );
+        var field = subscriptions
+            .NotNull()
+            .Fields.FirstOrDefault(f =>
+                string.Equals(f.Name, "wizardChanged", StringComparison.Ordinal)
+            );
         field.Should().NotBeNull("each machine's push is a subscription, per " + Adr);
-        field!
+        field
+            .NotNull()
             .Arguments.Select(a => a.Name)
             .Should()
             .NotContain(
@@ -629,7 +638,8 @@ public class MachineChangedE2ETests
             refusal
                 .Should()
                 .NotBeNull("one principal's subscriptions to one instance are capped, per " + Adr);
-            refusal!
+            refusal
+                .NotNull()
                 .Should()
                 .NotContain(SocketLimitCode)
                 .And.NotBeEmpty("the refusal carries its own code");
@@ -668,10 +678,12 @@ public class MachineChangedE2ETests
         // One instance started through the API, and the rest written beside it for the same user: the test is about
         // the socket's operations, not about starting.
         var first = (await A.StartWizardAsync(E2EHost.AliceKey)).Id;
-        var userKey = (await E2ESql.DraftAsync(Database, WizardMachine.MachineId, first))!.UserKey;
+        var userKey = (await E2ESql.DraftAsync(Database, WizardMachine.MachineId, first))
+            .NotNull()
+            .UserKey;
         var instances = new List<Guid> { first };
         for (var i = 0; i < 100; i++)
-            instances.Add(await InsertUserInstanceAsync(userKey!));
+            instances.Add(await InsertUserInstanceAsync(userKey.NotNull()));
         var ws = await GraphQLWs.ConnectAsync(A, E2EHost.AliceKey);
         await using var wsDisposal = ws.ConfigureAwait(false);
 
@@ -1026,11 +1038,12 @@ public class MachineChangedE2ETests
                     ExternalId = entry.ExternalId,
                     Input = null,
                     InvokedBy = new InvokedBy(
-                        entry.InvokingMachine!,
+                        entry.InvokingMachine.NotNull(),
                         instance,
-                        entry.InvokingOwnerKind!.Value
+                        entry.InvokingOwnerKind.NotNull().Value
                     ),
-                }
+                },
+                Tokens.Clock
             );
             run.TrainState = TrainState.InProgress;
             await db.Track(run).ConfigureAwait(false);

@@ -12,6 +12,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Trax.Api.Auth;
 using Trax.Api.Auth.Oidc;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Auth;
 
@@ -104,7 +105,7 @@ public class AddTraxOidcAuthTests
         var policy = await policyProvider.GetPolicyAsync(OidcDefaults.PolicyName);
 
         policy.Should().NotBeNull();
-        policy!.AuthenticationSchemes.Should().Contain(OidcDefaults.CookieSchemeName);
+        policy.NotNull().AuthenticationSchemes.Should().Contain(OidcDefaults.CookieSchemeName);
         policy.AuthenticationSchemes.Should().NotContain(OidcDefaults.SchemeName);
     }
 
@@ -121,7 +122,7 @@ public class AddTraxOidcAuthTests
         var policy = await policyProvider.GetPolicyAsync(TraxAuthClaimTypes.TraxAuthPolicy);
 
         policy.Should().NotBeNull();
-        policy!.AuthenticationSchemes.Should().Contain(OidcDefaults.CookieSchemeName);
+        policy.NotNull().AuthenticationSchemes.Should().Contain(OidcDefaults.CookieSchemeName);
     }
 
     [Test]
@@ -139,7 +140,7 @@ public class AddTraxOidcAuthTests
     {
         var services = NewServices();
 
-        var act = () => services.AddTraxOidcAuth((Action<OidcBuilder>)null!);
+        var act = () => services.AddTraxOidcAuth((Action<OidcBuilder>)Null.Of<object>());
 
         act.Should().Throw<ArgumentNullException>();
     }

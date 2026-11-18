@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
@@ -35,10 +36,10 @@ public class MachineRequestIdE2ETests
 
     private const string Database = "trax_sm_machine_request_id";
 
-    private TwoNodes _nodes = null!;
-    private CountingCharge _charge = null!;
+    private TwoNodes? _nodes;
+    private CountingCharge? _charge;
 
-    private IHost A => _nodes.A;
+    private IHost A => _nodes.NotNull().A;
 
     [OneTimeSetUp]
     public async Task Up()
@@ -46,7 +47,7 @@ public class MachineRequestIdE2ETests
         _charge = new CountingCharge();
         _nodes = await TwoNodes.StartAsync(
             Database,
-            _charge,
+            _charge.NotNull(),
             new E2EHostOptions
             {
                 // The outcome of a run ended on the database reaches the instance within a sweep.
@@ -60,7 +61,11 @@ public class MachineRequestIdE2ETests
     }
 
     [OneTimeTearDown]
-    public async Task Down() => await _nodes.DisposeAsync();
+    public async Task Down()
+    {
+        if (_nodes is not null)
+            await _nodes.DisposeAsync();
+    }
 
     [Test]
     public async Task RequestId_is_required_on_every_event_start_and_discard()
@@ -72,7 +77,7 @@ public class MachineRequestIdE2ETests
             WizardMachine.MachineId
         );
         wizard.Should().NotBeNull("the wizard is exposed, per " + Adr);
-        foreach (var field in wizard!.Fields.Where(f => !f.IsIntrospectionField))
+        foreach (var field in wizard.NotNull().Fields.Where(f => !f.IsIntrospectionField))
             field
                 .Arguments.TryGetField("requestId", out var requestId)
                 .Should()
@@ -115,7 +120,7 @@ public class MachineRequestIdE2ETests
         var paying = await A.WizardInPayingAsync(E2EHost.AliceKey);
         var before = await E2ESql.DraftAsync(Database, WizardMachine.MachineId, paying.Id);
         var drafts = await E2ESql.CountDraftsAsync(Database, WizardMachine.MachineId);
-        var callsBefore = _charge.Calls;
+        var callsBefore = _charge.NotNull().Calls;
 
         foreach (
             var (operation, field) in new[]
@@ -137,7 +142,7 @@ public class MachineRequestIdE2ETests
                 );
         }
 
-        _charge.Calls.Should().Be(callsBefore, "a refused send delivers nothing");
+        _charge.NotNull().Calls.Should().Be(callsBefore, "a refused send delivers nothing");
         (await E2ESql.DraftAsync(Database, WizardMachine.MachineId, paying.Id))
             .Should()
             .Be(before, "a refused request id writes nothing");
@@ -151,7 +156,7 @@ public class MachineRequestIdE2ETests
     {
         var paying = await A.WizardInPayingAsync(E2EHost.AliceKey);
         var requestId = WizardOps.NewRequestId();
-        var callsBefore = _charge.Calls;
+        var callsBefore = _charge.NotNull().Calls;
 
         var answers = await Task.WhenAll(
             Enumerable
@@ -161,7 +166,7 @@ public class MachineRequestIdE2ETests
                 )
         );
 
-        (_charge.Calls - callsBefore)
+        (_charge.NotNull().Calls - callsBefore)
             .Should()
             .Be(1, "twenty retries of one request run the irreversible effect once, per " + Adr);
         answers
@@ -182,7 +187,7 @@ public class MachineRequestIdE2ETests
             Enumerable
                 .Range(0, 20)
                 .Select(i =>
-                    (i % 2 == 0 ? A : _nodes.B).SendWizardEventAsync(
+                    (i % 2 == 0 ? A : _nodes.NotNull().B).SendWizardEventAsync(
                         E2EHost.AliceKey,
                         "approve",
                         approving.Id,
@@ -254,7 +259,7 @@ public class MachineRequestIdE2ETests
         (await E2ESql.CountInvokedRunsAsync(Database, approving.Id)).Should().Be(1);
 
         // The server writes the row from the other node: the build's run fails, and its outcome moves the draft.
-        await FailQueuedRunsAsync(_nodes.B, approving.Id);
+        await FailQueuedRunsAsync(_nodes.NotNull().B, approving.Id);
         (
             await E2EWait.UntilAsync(async () =>
                 string.Equals(
@@ -316,7 +321,7 @@ public class MachineRequestIdE2ETests
             .Should()
             .BeNull("another caller reads no instance, and no run of it");
 
-        await FailQueuedRunsAsync(_nodes.B, approving.Id);
+        await FailQueuedRunsAsync(_nodes.NotNull().B, approving.Id);
         (
             await E2EWait.UntilAsync(async () =>
                 string.Equals(
@@ -370,7 +375,7 @@ public class MachineRequestIdE2ETests
             Enumerable
                 .Range(0, 20)
                 .Select(i =>
-                    (i % 2 == 0 ? A : _nodes.B).StartWizardAsync(
+                    (i % 2 == 0 ? A : _nodes.NotNull().B).StartWizardAsync(
                         E2EHost.AliceKey,
                         title: "Atlas",
                         requestId: requestId
@@ -434,11 +439,12 @@ public class MachineRequestIdE2ETests
                     ExternalId = entry.ExternalId,
                     Input = null,
                     InvokedBy = new InvokedBy(
-                        entry.InvokingMachine!,
+                        entry.InvokingMachine.NotNull(),
                         instance,
-                        entry.InvokingOwnerKind!.Value
+                        entry.InvokingOwnerKind.NotNull().Value
                     ),
-                }
+                },
+                TimeProvider.System
             );
             run.TrainState = TrainState.InProgress;
             await db.Track(run).ConfigureAwait(false);

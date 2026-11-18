@@ -16,6 +16,7 @@ using Trax.Api.GraphQL.Filtering.ListElements;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.GraphQL.TypeModules;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
@@ -104,8 +105,8 @@ public partial class ListElementFilterTests
     [Test]
     public async Task Schema_ListBackedByListOfT_IsRestrictedToo()
     {
-        // The trap is the same whether the property is Badge[] or List<Badge>; both bind
-        // to the restricted element input.
+        // The trap is the same whether the property is Badge[] or a list (IList<Badge>); both
+        // bind to the restricted element input.
         var schema = await BuildSchemaAsync();
 
         var field = schema
@@ -284,7 +285,7 @@ public partial class ListElementFilterTests
 
         var op = result.ExpectOperationResult();
         op.Errors.Should().NotBeNullOrEmpty();
-        op.Errors!.Should().Contain(e => e.Message.Contains("neq"));
+        op.Errors.NotNull().Should().Contain(e => e.Message.Contains("neq"));
         // Rejected outright rather than reaching a resolver, so `data` is absent.
         op.Data.Should().BeNull();
     }
@@ -407,7 +408,7 @@ public partial class ListElementFilterTests
         errors.Should().BeNullOrEmpty();
         sql.Should().Contain("@>");
         Containment
-            .Matches(sql!)
+            .Matches(sql.NotNull())
             .Count.Should()
             .Be(2, "each membership test contributes its own containment predicate");
     }
@@ -468,7 +469,7 @@ public partial class ListElementFilterTests
         var (sql, errors) = await NpgsqlFilterAsync("badges: { some: { neq: CHAMPION } }");
 
         errors.Should().NotBeNullOrEmpty();
-        errors!.Should().Contain(e => e.Message.Contains("neq"));
+        errors.NotNull().Should().Contain(e => e.Message.Contains("neq"));
         // Rejected during validation, so no query was ever compiled.
         sql.Should().BeNull();
         errors.Should().NotContain(e => e.Message.Contains("could not be translated"));
@@ -550,7 +551,7 @@ public partial class ListElementFilterTests
         bindings
             .Select(b => b.Key)
             .Should()
-            .Contain([typeof(Badge[]), typeof(string[]), typeof(int[]), typeof(List<Badge>)]);
+            .Contain([typeof(Badge[]), typeof(string[]), typeof(int[]), typeof(IList<Badge>)]);
     }
 
     [Test]
@@ -746,14 +747,14 @@ public partial class ListElementFilterTests
                 string.Join(" | ", op.Errors?.Select(e => e.Message) ?? [])
             );
 
-        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"]!;
-        var players = (IReadOnlyDictionary<string, object?>)discover["players"]!;
-        var nodes = (IReadOnlyList<object?>)players["nodes"]!;
+        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"].NotNull();
+        var players = (IReadOnlyDictionary<string, object?>)discover["players"].NotNull();
+        var nodes = (IReadOnlyList<object?>)players["nodes"].NotNull();
 
         return nodes
             .Select(n =>
                 Convert.ToInt32(
-                    ((IReadOnlyDictionary<string, object?>)n!)["id"],
+                    ((IReadOnlyDictionary<string, object?>)n.NotNull())["id"],
                     System.Globalization.CultureInfo.InvariantCulture
                 )
             )

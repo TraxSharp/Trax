@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Api.Console.Terminal.Checks;
 using Trax.Api.Console.Terminal.Connection;
 using Trax.Api.Console.Terminal.Lists;
 using Trax.Api.Console.Terminal.Operations;
@@ -94,7 +95,8 @@ public class CommandLineTests
                 _ => null,
                 _ => throw new AssertionException("nothing to open"),
                 output: null,
-                error
+                error,
+                TimeProvider.System
             )
             .Parse(["list", "runs"])
             .InvokeAsync();
@@ -110,7 +112,11 @@ public class CommandLineTests
 
         var (exit, _, _) = await Hosts
             .RunAsync(new SilentHost(), interrupt.Token, "list", "runs")
-            .WaitAsync(TimeSpan.FromSeconds(10), cancellationToken: CancellationToken.None);
+            .WaitAsync(
+                TimeSpan.FromSeconds(10),
+                TimeProvider.System,
+                cancellationToken: CancellationToken.None
+            );
 
         exit.Should().Be(ConsoleCommandLine.Interrupted);
     }
@@ -127,9 +133,9 @@ public class CommandLineTests
         var (exit, output, _) = await Hosts.RunAsync(host, "check");
 
         exit.Should().Be(ConsoleCommandLine.Refused);
-        var line = JsonNode.Parse(output)!;
-        line["serves"]!.GetValue<bool>().Should().BeFalse();
-        line["code"]!.GetValue<string>().Should().Be("AUTH_NOT_AUTHORIZED");
+        var line = JsonNode.Parse(output).NotNull();
+        line["serves"].NotNull().GetValue<bool>().Should().BeFalse();
+        line["code"].NotNull().GetValue<string>().Should().Be("AUTH_NOT_AUTHORIZED");
     }
 
     [Test]
@@ -141,9 +147,9 @@ public class CommandLineTests
         );
 
         exit.Should().Be(ConsoleCommandLine.Refused);
-        var line = JsonNode.Parse(output)!;
-        line["hostVersion"]!.GetValue<string>().Should().Be(Other);
-        line["message"]!.GetValue<string>().Should().Contain($"--version {Other}");
+        var line = JsonNode.Parse(output).NotNull();
+        line["hostVersion"].NotNull().GetValue<string>().Should().Be(Other);
+        line["message"].NotNull().GetValue<string>().Should().Contain($"--version {Other}");
     }
 
     [Test]
@@ -152,7 +158,7 @@ public class CommandLineTests
         var (exit, output, _) = await Hosts.RunAsync(Hosts.Same(), "check");
 
         exit.Should().Be(0);
-        JsonNode.Parse(output)!["serves"]!.GetValue<bool>().Should().BeTrue();
+        JsonNode.Parse(output).NotNull()["serves"].NotNull().GetValue<bool>().Should().BeTrue();
     }
 
     [Test]
@@ -161,9 +167,10 @@ public class CommandLineTests
         var (exit, _, error) = await Hosts.RunAsync(Deployed(), "list", "runs");
 
         exit.Should().Be(ConsoleCommandLine.Refused);
-        var refusal = JsonNode.Parse(error)!;
-        refusal["code"]!.GetValue<string>().Should().Be(OutdatedTransport.Code);
-        refusal["error"]!
+        var refusal = JsonNode.Parse(error).NotNull();
+        refusal["code"].NotNull().GetValue<string>().Should().Be(OutdatedTransport.Code);
+        refusal["error"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .StartWith("CLIENT_OUTDATED: ")
@@ -213,7 +220,7 @@ public class CommandLineTests
                 },
             ])
         );
-        var over = await ended.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var over = await ended.Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
 
         over.Errors.Should()
             .ContainSingle()
@@ -234,13 +241,15 @@ public class CommandLineTests
                     "ServerVersion",
                     _ =>
                         (JsonObject)
-                            JsonNode.Parse(
-                                Hosts.Version(
-                                    Interlocked.Increment(ref asked) == 1
-                                        ? ConsoleSession.ToolVersion
-                                        : Other
+                            JsonNode
+                                .Parse(
+                                    Hosts.Version(
+                                        Interlocked.Increment(ref asked) == 1
+                                            ? ConsoleSession.ToolVersion
+                                            : Other
+                                    )
                                 )
-                            )!
+                                .NotNull()
                 )
         )
             .Refuse("Executions", "Unknown document.", OutdatedTransport.Code)

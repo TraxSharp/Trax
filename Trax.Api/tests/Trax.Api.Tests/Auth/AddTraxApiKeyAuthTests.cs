@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Api.Auth;
 using Trax.Api.Auth.ApiKey;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Auth;
 
@@ -65,7 +66,7 @@ public class AddTraxApiKeyAuthTests
         var policy = await policyProvider.GetPolicyAsync(ApiKeyDefaults.PolicyName);
 
         policy.Should().NotBeNull();
-        policy!.AuthenticationSchemes.Should().Contain(ApiKeyDefaults.SchemeName);
+        policy.NotNull().AuthenticationSchemes.Should().Contain(ApiKeyDefaults.SchemeName);
     }
 
     [Test]
@@ -81,7 +82,7 @@ public class AddTraxApiKeyAuthTests
         var policy = await policyProvider.GetPolicyAsync(TraxAuthClaimTypes.TraxAuthPolicy);
 
         policy.Should().NotBeNull();
-        policy!.AuthenticationSchemes.Should().Contain(ApiKeyDefaults.SchemeName);
+        policy.NotNull().AuthenticationSchemes.Should().Contain(ApiKeyDefaults.SchemeName);
     }
 
     [Test]
@@ -127,7 +128,7 @@ public class AddTraxApiKeyAuthTests
         var result = await resolver.ResolveAsync("admin-key", CancellationToken.None);
 
         result.Should().NotBeNull();
-        result!.Id.Should().Be("admin");
+        result.NotNull().Id.Should().Be("admin");
         result.DisplayName.Should().Be("admin");
         result.Roles.Should().BeEquivalentTo("Admin", "Player");
         result.PrincipalType.Should().Be("apikey");
@@ -165,7 +166,7 @@ public class AddTraxApiKeyAuthTests
     {
         var services = NewServices();
 
-        var act = () => services.AddTraxApiKeyAuth((Action<ApiKeyBuilder>)null!);
+        var act = () => services.AddTraxApiKeyAuth((Action<ApiKeyBuilder>)Null.Of<object>());
 
         act.Should().Throw<ArgumentNullException>();
     }

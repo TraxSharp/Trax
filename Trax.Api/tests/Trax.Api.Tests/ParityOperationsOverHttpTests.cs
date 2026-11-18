@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
@@ -118,16 +119,17 @@ public class ParityOperationsOverHttpTests
         []
     );
 
-    private IHost _host = null!;
-    private IOperationsService _operations = null!;
-    private IEffectSettingsService _effects = null!;
-    private ILogLevelService _logLevels = null!;
+    private IHost? _host;
+    private IOperationsService? _operations;
+    private IEffectSettingsService? _effects;
+    private ILogLevelService? _logLevels;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
     {
         _operations = Substitute.For<IOperationsService>();
         _operations
+            .NotNull()
             .TriggerManifestsAsync(
                 Arg.Any<IReadOnlyCollection<long>>(),
                 Arg.Any<bool>(),
@@ -146,18 +148,21 @@ public class ParityOperationsOverHttpTests
                 )
             );
         _operations
+            .NotNull()
             .TriggerManifestGroupsAsync(
                 Arg.Any<IReadOnlyCollection<long>>(),
                 Arg.Any<CancellationToken>()
             )
             .Returns(new BatchTriggerResult(Success: true, 1, 4, 0, 0, 0, "4 queued", []));
         _operations
+            .NotNull()
             .CancelManifestGroupsAsync(
                 Arg.Any<IReadOnlyCollection<long>>(),
                 Arg.Any<CancellationToken>()
             )
             .Returns(new OperationResult(Success: true, Count: 5, Message: "5 flagged"));
         _operations
+            .NotNull()
             .GetRecordedDecisionsAsync(
                 Arg.Any<long>(),
                 Arg.Any<long?>(),
@@ -184,7 +189,7 @@ public class ParityOperationsOverHttpTests
                             Shadows: null,
                             Routes: null,
                             StateHash: null,
-                            DateTime.UtcNow,
+                            TimeProvider.System.GetUtcNow().UtcDateTime,
                             AnswerWithheld: false,
                             TrackWithheld: false
                         ),
@@ -196,6 +201,7 @@ public class ParityOperationsOverHttpTests
 
         _effects = Substitute.For<IEffectSettingsService>();
         _effects
+            .NotNull()
             .GetEffects()
             .Returns([
                 new EffectSettings(
@@ -223,6 +229,7 @@ public class ParityOperationsOverHttpTests
                 ),
             ]);
         _effects
+            .NotNull()
             .ConfigureEffect(Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string?>>())
             .Returns(
                 new EffectConfigurationResult(
@@ -238,6 +245,7 @@ public class ParityOperationsOverHttpTests
 
         _logLevels = Substitute.For<ILogLevelService>();
         _logLevels
+            .NotNull()
             .GetLogLevels()
             .Returns([
                 new CategoryLogLevel(
@@ -248,6 +256,7 @@ public class ParityOperationsOverHttpTests
                 ),
             ]);
         _logLevels
+            .NotNull()
             .SetLogLevels(Arg.Any<IReadOnlyList<LogLevelChange>>())
             .Returns(new LogLevelUpdateResult(Success: true, 1, [], "1 set"));
 
@@ -278,9 +287,9 @@ public class ParityOperationsOverHttpTests
                         graphs.Find(RoutedTrain).Returns(RoutedGraph);
                         services.AddSingleton(graphs);
 
-                        services.AddScoped(_ => _operations);
-                        services.AddScoped(_ => _effects);
-                        services.AddSingleton(_logLevels);
+                        services.AddScoped(_ => _operations.NotNull());
+                        services.AddScoped(_ => _effects.NotNull());
+                        services.AddSingleton(_logLevels.NotNull());
                         services.AddScoped(_ => Substitute.For<ITraxScheduler>());
                         services.AddScoped(_ => Substitute.For<ITrainExecutionService>());
                         services.AddScoped(_ =>
@@ -297,14 +306,14 @@ public class ParityOperationsOverHttpTests
             )
             .Build();
 
-        await _host.StartAsync();
+        await _host.NotNull().StartAsync();
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await _host.StopAsync();
-        _host.Dispose();
+        await _host.NotNull().StopAsync();
+        _host?.Dispose();
     }
 
     private static IEnumerable<TestCaseData> Documents()
@@ -353,6 +362,7 @@ public class ParityOperationsOverHttpTests
         payload.GetProperty("skipped").GetInt32().Should().Be(1);
         payload.GetProperty("notes")[0].GetProperty("id").GetInt64().Should().Be(2);
         await _operations
+            .NotNull()
             .Received()
             .TriggerManifestsAsync(
                 Arg.Is<IReadOnlyCollection<long>>(ids =>
@@ -371,6 +381,7 @@ public class ParityOperationsOverHttpTests
         payload.GetProperty("success").GetBoolean().Should().BeFalse();
         payload.GetProperty("errors")[0].GetProperty("field").GetString().Should().Be("BatchSize");
         _effects
+            .NotNull()
             .Received()
             .ConfigureEffect(
                 "Sink",
@@ -411,6 +422,7 @@ public class ParityOperationsOverHttpTests
         await PostAsync(SetLogLevels, AdminKey);
 
         _logLevels
+            .NotNull()
             .Received()
             .SetLogLevels(
                 Arg.Is<IReadOnlyList<LogLevelChange>>(l =>
@@ -439,7 +451,7 @@ public class ParityOperationsOverHttpTests
 
     private async Task<JsonDocument> PostAsync(string query, string? apiKey)
     {
-        var client = _host.GetTestServer().CreateClient();
+        var client = _host.NotNull().GetTestServer().CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/trax/graphql")
         {
             Content = JsonContent.Create(new { query }),

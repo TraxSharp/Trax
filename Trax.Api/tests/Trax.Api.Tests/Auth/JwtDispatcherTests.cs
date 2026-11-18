@@ -15,6 +15,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 using Trax.Api.Auth;
 using Trax.Api.Auth.Jwt;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Auth;
 
@@ -47,7 +48,10 @@ public class JwtDispatcherTests
     {
         var services = NewServices();
 
-        Action act = () => services.AddTraxJwtDispatcher(null!);
+        Action act = () =>
+            services.AddTraxJwtDispatcher(
+                Null.Of<Action<Trax.Api.Auth.Jwt.JwtDispatcherBuilder>>()
+            );
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -141,7 +145,7 @@ public class JwtDispatcherTests
                 .GetPolicyAsync(JwtDefaults.DispatcherSchemeName + "-JwtPolicy");
 
         policy.Should().NotBeNull();
-        policy!.AuthenticationSchemes.Should().Contain(JwtDefaults.DispatcherSchemeName);
+        policy.NotNull().AuthenticationSchemes.Should().Contain(JwtDefaults.DispatcherSchemeName);
     }
 
     [Test]
@@ -161,7 +165,7 @@ public class JwtDispatcherTests
                 .GetAwaiter()
                 .GetResult();
 
-        policy!.AuthenticationSchemes.Should().Contain(JwtDefaults.DispatcherSchemeName);
+        policy.NotNull().AuthenticationSchemes.Should().Contain(JwtDefaults.DispatcherSchemeName);
     }
 
     [Test]
@@ -174,7 +178,7 @@ public class JwtDispatcherTests
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var response = await client.GetFromJsonAsync<EndpointResponse>("/dispatched");
-        response!.PrincipalId.Should().Be("alpha:alice");
+        response.NotNull().PrincipalId.Should().Be("alpha:alice");
     }
 
     [Test]
@@ -187,7 +191,7 @@ public class JwtDispatcherTests
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var response = await client.GetFromJsonAsync<EndpointResponse>("/dispatched");
-        response!.PrincipalId.Should().Be("beta:bob");
+        response.NotNull().PrincipalId.Should().Be("beta:bob");
     }
 
     [Test]
@@ -305,7 +309,7 @@ public class JwtDispatcherTests
             issuer: issuer,
             audience: audience,
             claims: new[] { new Claim("sub", sub) },
-            expires: DateTime.UtcNow.AddMinutes(5),
+            expires: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(5),
             signingCredentials: creds
         );
         return new JwtSecurityTokenHandler().WriteToken(token);

@@ -17,6 +17,7 @@ using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Api.Tests.Stress.Fixtures;
 using Trax.Api.Tests.Stress.Utils;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -70,8 +71,8 @@ public class MachineEventStressTests
             $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_stress;Username=trax;Password=trax123;"
         ) + "Maximum Pool Size=16;Timeout=30;Command Timeout=1200;Include Error Detail=true";
 
-    private IHost _host = null!;
-    private IRequestExecutor _executor = null!;
+    private IHost? _host;
+    private IRequestExecutor? _executor;
 
     [OneTimeSetUp]
     public async Task Up()
@@ -121,9 +122,10 @@ public class MachineEventStressTests
                 );
             })
             .Build();
-        await _host.StartAsync();
+        await _host.NotNull().StartAsync();
         await ClearToggleDraftsAsync(ConnectionString);
         _executor = await _host
+            .NotNull()
             .Services.GetRequiredService<IRequestExecutorProvider>()
             .GetExecutorAsync("trax");
     }
@@ -131,8 +133,8 @@ public class MachineEventStressTests
     [OneTimeTearDown]
     public async Task Down()
     {
-        await _host.StopAsync();
-        _host.Dispose();
+        await _host.NotNull().StopAsync();
+        _host?.Dispose();
     }
 
     [Test]
@@ -161,10 +163,10 @@ public class MachineEventStressTests
         var runsBefore = await AdvanceRunsAsync();
         var auditsBefore = CountingAuditSink.Entries;
 
-        var clock = Stopwatch.StartNew();
+        var clock = TimeProvider.System.GetTimestamp();
         for (var i = 0; i < Events; i++)
             await EventAsync(id, i % 2 == 0 ? "close" : "open");
-        clock.Stop();
+        var clockTook = TimeProvider.System.GetElapsedTime(clock);
 
         // Notices arrive on the listening connection only while it waits on the server.
         (
@@ -184,13 +186,13 @@ public class MachineEventStressTests
             .Should()
             .BeTrue("each event's request is audited once");
 
-        var perEvent = clock.Elapsed / Events;
+        var perEvent = clockTook / Events;
         var runsSince = await AdvanceRunsAsync() - runsBefore;
         await TestContext
             .Out.WriteLineAsync(
                 string.Create(
                     CultureInfo.InvariantCulture,
-                    $"{Events} events: {clock.Elapsed.TotalMilliseconds:F0} ms, {perEvent.TotalMilliseconds:F2} ms each; "
+                    $"{Events} events: {clockTook.TotalMilliseconds:F0} ms, {perEvent.TotalMilliseconds:F2} ms each; "
                 )
                     + string.Create(
                         CultureInfo.InvariantCulture,
@@ -231,7 +233,7 @@ public class MachineEventStressTests
         for (var i = 0; i < ConcurrentInstances; i++)
             ids.Add(await StartAsync());
 
-        var clock = Stopwatch.StartNew();
+        var clock = TimeProvider.System.GetTimestamp();
         await Task.WhenAll(
                 ids.Select(id =>
                     Task.Run(async () =>
@@ -242,14 +244,14 @@ public class MachineEventStressTests
                     })
                 )
             )
-            .WaitAsync(TimeSpan.FromMinutes(5));
-        clock.Stop();
-        var perEvent = clock.Elapsed / (ConcurrentInstances * EventsPerInstance);
+            .WaitAsync(TimeSpan.FromMinutes(5), TimeProvider.System);
+        var clockTook = TimeProvider.System.GetElapsedTime(clock);
+        var perEvent = clockTook / (ConcurrentInstances * EventsPerInstance);
 
-        var read = Stopwatch.StartNew();
+        var read = TimeProvider.System.GetTimestamp();
         foreach (var id in ids)
         {
-            var scope = _host.Services.CreateAsyncScope();
+            var scope = _host.NotNull().Services.CreateAsyncScope();
             await using var scopeDisposal = scope.ConfigureAwait(false);
             var page = await scope
                 .ServiceProvider.GetRequiredService<IOperationsService>()
@@ -264,7 +266,7 @@ public class MachineEventStressTests
                     100,
                     CancellationToken.None
                 );
-            var oldestFirst = page!.Items.Reverse().ToList();
+            var oldestFirst = page.NotNull().Items.Reverse().ToList();
             oldestFirst
                 .Select(t => t.Revision)
                 .Should()
@@ -284,13 +286,13 @@ public class MachineEventStressTests
                         .Select(e => e % 2 == 0 ? "Close" : "Open")
                 );
         }
-        read.Stop();
+        var readTook = TimeProvider.System.GetElapsedTime(read);
 
         await TestContext
             .Out.WriteLineAsync(
                 string.Create(
                     CultureInfo.InvariantCulture,
-                    $"{ConcurrentInstances} instances x {EventsPerInstance} events at once: {clock.Elapsed.TotalMilliseconds:F0} ms, "
+                    $"{ConcurrentInstances} instances x {EventsPerInstance} events at once: {clockTook.TotalMilliseconds:F0} ms, "
                 )
                     + string.Create(
                         CultureInfo.InvariantCulture,
@@ -298,7 +300,7 @@ public class MachineEventStressTests
                     )
                     + string.Create(
                         CultureInfo.InvariantCulture,
-                        $"{read.Elapsed.TotalMilliseconds:F0} ms"
+                        $"{readTook.TotalMilliseconds:F0} ms"
                     )
             )
             .ConfigureAwait(false);
@@ -320,7 +322,7 @@ public class MachineEventStressTests
             await using (command.ConfigureAwait(false))
             {
                 command.Parameters.AddWithValue("id", id);
-                return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
+                return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull();
             }
         }
     }
@@ -334,7 +336,7 @@ public class MachineEventStressTests
         var start = data.GetProperty("machines").GetProperty("stressToggle").GetProperty("start");
         if (start.GetProperty("problem").ValueKind == JsonValueKind.Object)
             Assert.Fail($"start was refused: {start.GetProperty("problem").GetRawText()}");
-        return Guid.Parse(start.GetProperty("id").GetString()!);
+        return Guid.Parse(start.GetProperty("id").GetString().NotNull());
     }
 
     private Task<JsonElement> EventAsync(Guid id, string field) =>
@@ -345,6 +347,7 @@ public class MachineEventStressTests
     private async Task<JsonElement> ExecuteAsync(string document)
     {
         var result = await _executor
+            .NotNull()
             .ExecuteAsync(
                 OperationRequestBuilder
                     .New()
@@ -397,8 +400,11 @@ public class MachineEventStressTests
             );
             await using (command.ConfigureAwait(false))
             {
-                command.Parameters.AddWithValue("name", typeof(IAdvanceSnapshot).FullName!);
-                return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
+                command.Parameters.AddWithValue(
+                    "name",
+                    typeof(IAdvanceSnapshot).FullName.NotNull()
+                );
+                return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull();
             }
         }
     }

@@ -68,7 +68,7 @@ public class TestJwksServerMultiKeyTests
         var firstKid = server.SigningKey.KeyId;
         var secondKid = server.AddSigningKey();
 
-        var issuer = server.CreateIssuer("trax-aud");
+        var issuer = server.CreateIssuer("trax-aud", TimeProvider.System);
         var firstToken = issuer.WithSigningKey(firstKid).Mint(b => b.WithSubject("user1"));
         var secondToken = issuer.WithSigningKey(secondKid).Mint(b => b.WithSubject("user2"));
 
@@ -213,7 +213,7 @@ public class TestJwksServerMultiKeyTests
     public async Task WithSigningKey_UnknownKid_Throws()
     {
         await using var server = await TestJwksServer.StartAsync();
-        var issuer = server.CreateIssuer("aud");
+        var issuer = server.CreateIssuer("aud", TimeProvider.System);
 
         Action act = () => issuer.WithSigningKey("nope");
         act.Should().Throw<ArgumentException>().WithMessage("*kid 'nope'*");
@@ -223,7 +223,7 @@ public class TestJwksServerMultiKeyTests
     public async Task WithSigningKey_EmptyKid_Throws()
     {
         await using var server = await TestJwksServer.StartAsync();
-        var issuer = server.CreateIssuer("aud");
+        var issuer = server.CreateIssuer("aud", TimeProvider.System);
 
         Action act = () => issuer.WithSigningKey("  ");
         act.Should().Throw<ArgumentException>();

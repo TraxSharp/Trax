@@ -15,6 +15,7 @@ using Trax.Api.GraphQL.Filtering;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.GraphQL.TypeModules;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
@@ -231,7 +232,7 @@ public class CaseInsensitiveFilterTests
         var op = result.ExpectOperationResult();
         op.Errors.Should().NotBeNullOrEmpty();
         // The field errors out instead of matching every row.
-        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"]!;
+        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"].NotNull();
         discover["people"].Should().BeNull();
     }
 
@@ -246,7 +247,7 @@ public class CaseInsensitiveFilterTests
 
         var op = result.ExpectOperationResult();
         op.Errors.Should().NotBeNullOrEmpty();
-        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"]!;
+        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"].NotNull();
         discover["people"].Should().BeNull();
     }
 
@@ -390,14 +391,14 @@ public class CaseInsensitiveFilterTests
         var op = result.ExpectOperationResult();
         op.Errors.Should().BeNullOrEmpty();
 
-        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"]!;
-        var people = (IReadOnlyDictionary<string, object?>)discover["people"]!;
-        var nodes = (IReadOnlyList<object?>)people["nodes"]!;
+        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"].NotNull();
+        var people = (IReadOnlyDictionary<string, object?>)discover["people"].NotNull();
+        var nodes = (IReadOnlyList<object?>)people["nodes"].NotNull();
 
         return nodes
             .Select(n =>
                 Convert.ToInt32(
-                    ((IReadOnlyDictionary<string, object?>)n!)["id"],
+                    ((IReadOnlyDictionary<string, object?>)n.NotNull())["id"],
                     System.Globalization.CultureInfo.InvariantCulture
                 )
             )
@@ -407,8 +408,8 @@ public class CaseInsensitiveFilterTests
 
     private static int TotalCount(OperationResult op, string field)
     {
-        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"]!;
-        var connection = (IReadOnlyDictionary<string, object?>)discover[field]!;
+        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"].NotNull();
+        var connection = (IReadOnlyDictionary<string, object?>)discover[field].NotNull();
         return Convert.ToInt32(
             connection["totalCount"],
             System.Globalization.CultureInfo.InvariantCulture

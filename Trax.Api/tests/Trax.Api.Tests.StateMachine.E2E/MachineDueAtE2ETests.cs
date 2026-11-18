@@ -3,6 +3,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.StateMachine.E2E;
 
@@ -32,7 +33,7 @@ public class MachineDueAtE2ETests
     private const string WizardFields =
         $"id revision state dueAt dueAtKnown {WizardOps.ContextFields} problem {{ code message }}";
 
-    private IHost _host = null!;
+    private IHost? _host;
 
     [OneTimeSetUp]
     public async Task Up()
@@ -48,7 +49,7 @@ public class MachineDueAtE2ETests
     [OneTimeTearDown]
     public async Task Down()
     {
-        _host.Dispose();
+        _host?.Dispose();
         await E2EHost.DropDatabaseAsync(Database);
     }
 
@@ -104,8 +105,8 @@ public class MachineDueAtE2ETests
     [Test]
     public async Task A_push_carries_the_due_time_and_leaving_the_timed_state_pushes_null()
     {
-        var paying = await _host.WizardInPayingAsync(E2EHost.AliceKey);
-        await using var ws = await GraphQLWs.ConnectAsync(_host, E2EHost.AliceKey);
+        var paying = await _host.NotNull().WizardInPayingAsync(E2EHost.AliceKey);
+        await using var ws = await GraphQLWs.ConnectAsync(_host.NotNull(), E2EHost.AliceKey);
         await ws.SubscribeAsync(
             "1",
             $"subscription {{ wizardChanged(id: {WizardOps.Literal(paying.Id.ToString())}) {{ revision state dueAt gone problem {{ code message }} }} }}"
@@ -114,21 +115,23 @@ public class MachineDueAtE2ETests
         DueAt(first.GetProperty("wizardChanged")).Should().BeNull("Paying has no timer");
 
         // Another connection moves the instance into the timed state.
-        var paid = await _host.AdvanceWizardAsync(E2EHost.AliceKey, "pay", paying.Id);
-        var pushed = await NextAtLeast(ws, paid.Revision!.Value);
+        var paid = await _host.NotNull().AdvanceWizardAsync(E2EHost.AliceKey, "pay", paying.Id);
+        var pushed = await NextAtLeast(ws, paid.Revision.NotNull().Value);
         var row = await RowDueAt(WizardMachine.MachineId, paying.Id);
         row.Should().NotBeNull();
         SameInstant(DueAt(pushed), row, "the push carries the due time the row holds, per " + Adr);
 
-        var approved = await _host.AdvanceWizardAsync(E2EHost.AliceKey, "approve", paying.Id);
-        var left = await NextAtLeast(ws, approved.Revision!.Value);
+        var approved = await _host
+            .NotNull()
+            .AdvanceWizardAsync(E2EHost.AliceKey, "approve", paying.Id);
+        var left = await NextAtLeast(ws, approved.Revision.NotNull().Value);
         DueAt(left).Should().BeNull("leaving the timed state pushes no due time");
     }
 
     [Test]
     public async Task A_replay_the_instance_has_moved_past_says_its_due_time_is_unknown()
     {
-        var paying = await _host.WizardInPayingAsync(E2EHost.AliceKey);
+        var paying = await _host.NotNull().WizardInPayingAsync(E2EHost.AliceKey);
         var id = paying.Id;
         var pay = WizardOps.NewRequestId();
         var paid = await Wizard(
@@ -227,9 +230,10 @@ public class MachineDueAtE2ETests
             await RowDueAt(SnoozeMachine.MachineId, id),
             "the event answers the due time it armed"
         );
-        DueAt(snoozed)!
+        DueAt(snoozed)
+            .NotNull()
             .Value.Should()
-            .BeCloseTo(DateTimeOffset.UtcNow.AddMinutes(10), TimeSpan.FromMinutes(1));
+            .BeCloseTo(TimeProvider.System.GetUtcNow().AddMinutes(10), TimeSpan.FromMinutes(1));
     }
 
     [Test]
@@ -258,6 +262,7 @@ public class MachineDueAtE2ETests
     private async Task<JsonElement> Answer(string document, string machine, string field)
     {
         using var doc = await _host
+            .NotNull()
             .PostAsync(document, apiKey: E2EHost.AliceKey)
             .ConfigureAwait(false);
         WizardOps.FailOnErrors(doc, field);
@@ -278,6 +283,7 @@ public class MachineDueAtE2ETests
     private async Task<JsonElement> Get(string machine, string field, Guid id, string fields)
     {
         using var doc = await _host
+            .NotNull()
             .PostAsync(
                 $"{{ machines {{ {field} {{ get(id: {WizardOps.Literal(id.ToString())}) {{ {fields} }} }} }} }}",
                 apiKey: E2EHost.AliceKey
@@ -308,7 +314,7 @@ public class MachineDueAtE2ETests
 
     private static DateTimeOffset? DueAt(JsonElement answer) =>
         answer.GetProperty("dueAt") is { ValueKind: JsonValueKind.String } due
-            ? DateTimeOffset.Parse(due.GetString()!, CultureInfo.InvariantCulture)
+            ? DateTimeOffset.Parse(due.GetString().NotNull(), CultureInfo.InvariantCulture)
             : null;
 
     // The answer's due time is the row's, to the millisecond the DateTime scalar writes.
@@ -316,7 +322,10 @@ public class MachineDueAtE2ETests
     {
         row.Should().NotBeNull();
         actual.Should().NotBeNull(because);
-        actual!.Value.Should().BeCloseTo(row!.Value, TimeSpan.FromMilliseconds(1), because);
+        actual
+            .NotNull()
+            .Value.Should()
+            .BeCloseTo(row.NotNull().Value, TimeSpan.FromMilliseconds(1), because);
     }
 
     private static string? Problem(JsonElement answer) =>

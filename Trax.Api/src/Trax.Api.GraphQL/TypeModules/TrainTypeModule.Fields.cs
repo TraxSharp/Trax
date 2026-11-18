@@ -7,6 +7,7 @@ using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Authorization;
 using Trax.Api.GraphQL.Startup;
 using Trax.Api.GraphQL.Subscriptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
@@ -148,7 +149,7 @@ public partial class TrainTypeModule
         // as the run's starter, so only they may follow its progress (Trax.Docs/adr/0051-only-the-caller-who-started-a-run-may-follow-its-progress.md).
         return await executionService
             .RunAsync(
-                registration.ServiceType.FullName!,
+                registration.ServiceType.FullName.NotNull(),
                 inputJson,
                 new RunTrainOptions { RecordCaller = true },
                 ctx.RequestAborted
@@ -191,14 +192,18 @@ public partial class TrainTypeModule
         )
         {
             await executionService
-                .PrepareAsync(registration.ServiceType.FullName!, inputJson, ctx.RequestAborted)
+                .PrepareAsync(
+                    registration.ServiceType.FullName.NotNull(),
+                    inputJson,
+                    ctx.RequestAborted
+                )
                 .ConfigureAwait(false);
             throw QueueDispatch.Unavailable();
         }
 
         return await executionService
             .QueueAsync(
-                registration.ServiceType.FullName!,
+                registration.ServiceType.FullName.NotNull(),
                 inputJson,
                 new QueueTrainOptions { Priority = priority, RecordCaller = true },
                 ctx.RequestAborted

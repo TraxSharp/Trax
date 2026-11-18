@@ -5,6 +5,7 @@ using HotChocolate.Execution;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
 using Trax.Api.Tests.PersistedOperations.Fixtures;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.PersistedOperations.IntegrationTests;
 
@@ -17,9 +18,9 @@ namespace Trax.Api.Tests.PersistedOperations.IntegrationTests;
 [Category("Integration")]
 public class PersistedOperationMutationTests
 {
-    private ServiceProvider _sp = null!;
-    private IRequestExecutor _executor = null!;
-    private IPersistedOperationStore _store = null!;
+    private ServiceProvider? _sp;
+    private IRequestExecutor? _executor;
+    private IPersistedOperationStore? _store;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -28,15 +29,16 @@ public class PersistedOperationMutationTests
             Assert.Ignore("Postgres not reachable; skipping integration tests.");
 
         _sp = await GraphQLFixture.BuildAsync();
-        _executor = await GraphQLFixture.GetExecutorAsync(_sp);
-        _store = _sp.GetRequiredService<IPersistedOperationStore>();
+        _executor = await GraphQLFixture.GetExecutorAsync(_sp.NotNull());
+        _store = _sp.NotNull().GetRequiredService<IPersistedOperationStore>();
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
         if (_sp is not null)
-            await _sp.DisposeAsync();
+            if (_sp is not null)
+                await _sp.DisposeAsync();
     }
 
     [SetUp]
@@ -59,9 +61,11 @@ public class PersistedOperationMutationTests
             .Should()
             .BeTrue();
 
-        var row = await _store.GetAsync("upload_v1", tenantKey: null, CancellationToken.None);
+        var row = await _store
+            .NotNull()
+            .GetAsync("upload_v1", tenantKey: null, CancellationToken.None);
         row.Should().NotBeNull();
-        row!.Document.Should().Be(GraphQLFixture.ValidDocument);
+        row.NotNull().Document.Should().Be(GraphQLFixture.ValidDocument);
         row.Description.Should().Be("first upload");
     }
 
@@ -78,7 +82,7 @@ public class PersistedOperationMutationTests
         errors.GetArrayLength().Should().BeGreaterThan(0);
         errors[0].GetProperty("code").GetString().Should().Be("PARSE_FAILED");
 
-        (await _store.GetAsync("syntax_v1", tenantKey: null, CancellationToken.None))
+        (await _store.NotNull().GetAsync("syntax_v1", tenantKey: null, CancellationToken.None))
             .Should()
             .BeNull();
     }
@@ -101,7 +105,7 @@ public class PersistedOperationMutationTests
         errors[0].GetProperty("code").GetString().Should().Be("INVALID_INPUT");
         errors[0].GetProperty("message").GetString().Should().Contain("exactly one operation");
 
-        (await _store.GetAsync("two_ops_v1", tenantKey: null, CancellationToken.None))
+        (await _store.NotNull().GetAsync("two_ops_v1", tenantKey: null, CancellationToken.None))
             .Should()
             .BeNull();
     }
@@ -120,7 +124,7 @@ public class PersistedOperationMutationTests
         errors[0].GetProperty("code").GetString().Should().Be("SCHEMA_VALIDATION_FAILED");
         errors[0].GetProperty("message").GetString().Should().NotBeNullOrEmpty();
 
-        (await _store.GetAsync("schema_v1", tenantKey: null, CancellationToken.None))
+        (await _store.NotNull().GetAsync("schema_v1", tenantKey: null, CancellationToken.None))
             .Should()
             .BeNull();
     }
@@ -129,12 +133,14 @@ public class PersistedOperationMutationTests
     public async Task Upload_ShapeDiffWithoutBypass_ReturnsShapeDiffError_WithFingerprints()
     {
         // Seed.
-        await _store.UpsertAsync(
-            "shape_v1",
-            GraphQLFixture.ValidDocument,
-            options: null,
-            CancellationToken.None
-        );
+        await _store
+            .NotNull()
+            .UpsertAsync(
+                "shape_v1",
+                GraphQLFixture.ValidDocument,
+                options: null,
+                CancellationToken.None
+            );
 
         var json = await ExecuteMutationAsync("shape_v1", GraphQLFixture.ShapeChangingDocument);
 
@@ -156,19 +162,23 @@ public class PersistedOperationMutationTests
             .And.NotContain("UpsertOptions");
 
         // Row unchanged.
-        var row = await _store.GetAsync("shape_v1", tenantKey: null, CancellationToken.None);
-        row!.Document.Should().Be(GraphQLFixture.ValidDocument);
+        var row = await _store
+            .NotNull()
+            .GetAsync("shape_v1", tenantKey: null, CancellationToken.None);
+        row.NotNull().Document.Should().Be(GraphQLFixture.ValidDocument);
     }
 
     [Test]
     public async Task Upload_ShapeDiffWithBypass_Succeeds()
     {
-        await _store.UpsertAsync(
-            "bypass_v1",
-            GraphQLFixture.ValidDocument,
-            options: null,
-            CancellationToken.None
-        );
+        await _store
+            .NotNull()
+            .UpsertAsync(
+                "bypass_v1",
+                GraphQLFixture.ValidDocument,
+                options: null,
+                CancellationToken.None
+            );
 
         var json = await ExecuteMutationAsync(
             "bypass_v1",
@@ -184,19 +194,23 @@ public class PersistedOperationMutationTests
             .Should()
             .BeTrue();
 
-        var row = await _store.GetAsync("bypass_v1", tenantKey: null, CancellationToken.None);
-        row!.Document.Should().Be(GraphQLFixture.ShapeChangingDocument);
+        var row = await _store
+            .NotNull()
+            .GetAsync("bypass_v1", tenantKey: null, CancellationToken.None);
+        row.NotNull().Document.Should().Be(GraphQLFixture.ShapeChangingDocument);
     }
 
     [Test]
     public async Task Deactivate_ExistingId_MarksInactive()
     {
-        await _store.UpsertAsync(
-            "deact_v1",
-            GraphQLFixture.ValidDocument,
-            options: null,
-            CancellationToken.None
-        );
+        await _store
+            .NotNull()
+            .UpsertAsync(
+                "deact_v1",
+                GraphQLFixture.ValidDocument,
+                options: null,
+                CancellationToken.None
+            );
 
         var json = await Execute(
             """
@@ -227,7 +241,7 @@ public class PersistedOperationMutationTests
             .Should()
             .BeTrue();
 
-        (await _store.GetAsync("deact_v1", tenantKey: null, CancellationToken.None))
+        (await _store.NotNull().GetAsync("deact_v1", tenantKey: null, CancellationToken.None))
             .Should()
             .BeNull("because GetAsync filters by IsActive");
     }
@@ -268,13 +282,17 @@ public class PersistedOperationMutationTests
     [Test]
     public async Task Restore_ReactivatesDeactivatedRow()
     {
-        await _store.UpsertAsync(
-            "restore_v1",
-            GraphQLFixture.ValidDocument,
-            options: null,
-            CancellationToken.None
-        );
-        await _store.DeactivateAsync("restore_v1", tenantKey: null, "test", CancellationToken.None);
+        await _store
+            .NotNull()
+            .UpsertAsync(
+                "restore_v1",
+                GraphQLFixture.ValidDocument,
+                options: null,
+                CancellationToken.None
+            );
+        await _store
+            .NotNull()
+            .DeactivateAsync("restore_v1", tenantKey: null, "test", CancellationToken.None);
 
         var json = await Execute(
             """
@@ -304,9 +322,11 @@ public class PersistedOperationMutationTests
             .Should()
             .BeTrue();
 
-        var row = await _store.GetAsync("restore_v1", tenantKey: null, CancellationToken.None);
+        var row = await _store
+            .NotNull()
+            .GetAsync("restore_v1", tenantKey: null, CancellationToken.None);
         row.Should().NotBeNull();
-        row!.IsActive.Should().BeTrue();
+        row.NotNull().IsActive.Should().BeTrue();
     }
 
     [Test]
@@ -354,7 +374,9 @@ public class PersistedOperationMutationTests
             .Should()
             .Contain("document");
 
-        (await _store.GetAsync("ok_v1", tenantKey: null, CancellationToken.None)).Should().BeNull();
+        (await _store.NotNull().GetAsync("ok_v1", tenantKey: null, CancellationToken.None))
+            .Should()
+            .BeNull();
     }
 
     [Test]
@@ -363,12 +385,14 @@ public class PersistedOperationMutationTests
         // Reason is required for audit accountability; passing an empty
         // string must be rejected rather than silently writing "" to the
         // deprecation_reason column.
-        await _store.UpsertAsync(
-            "deact_noreason_v1",
-            GraphQLFixture.ValidDocument,
-            options: null,
-            CancellationToken.None
-        );
+        await _store
+            .NotNull()
+            .UpsertAsync(
+                "deact_noreason_v1",
+                GraphQLFixture.ValidDocument,
+                options: null,
+                CancellationToken.None
+            );
 
         var json = await Execute(
             """
@@ -403,13 +427,11 @@ public class PersistedOperationMutationTests
             .Should()
             .Be("INVALID_INPUT");
 
-        var row = await _store.GetAsync(
-            "deact_noreason_v1",
-            tenantKey: null,
-            CancellationToken.None
-        );
+        var row = await _store
+            .NotNull()
+            .GetAsync("deact_noreason_v1", tenantKey: null, CancellationToken.None);
         row.Should().NotBeNull("the rejected deactivate must not have run");
-        row!.IsActive.Should().BeTrue();
+        row.NotNull().IsActive.Should().BeTrue();
     }
 
     [Test]
@@ -530,7 +552,7 @@ public class PersistedOperationMutationTests
             .GetProperty("persistedOperations")
             .GetProperty("uploadPersistedOperation");
         upload.GetProperty("success").GetBoolean().Should().BeFalse(Because);
-        (await _store.GetAsync(uploaded, tenantKey: null, CancellationToken.None))
+        (await _store.NotNull().GetAsync(uploaded, tenantKey: null, CancellationToken.None))
             .Should()
             .BeNull();
 
@@ -560,7 +582,7 @@ public class PersistedOperationMutationTests
             )
         ).RootElement.GetProperty("data").GetProperty("persistedOperations").GetProperty("deactivatePersistedOperation");
         deactivate.GetProperty("success").GetBoolean().Should().BeFalse(Because);
-        (await _store.GetAsync(stored, tenantKey: null, CancellationToken.None))
+        (await _store.NotNull().GetAsync(stored, tenantKey: null, CancellationToken.None))
             .Should()
             .NotBeNull("the generated document stays active");
 
@@ -585,7 +607,7 @@ public class PersistedOperationMutationTests
             )
         ).RootElement.GetProperty("data").GetProperty("persistedOperations").GetProperty("restorePersistedOperation");
         restore.GetProperty("success").GetBoolean().Should().BeFalse(Because);
-        (await _store.GetAsync(stored, tenantKey: null, CancellationToken.None))
+        (await _store.NotNull().GetAsync(stored, tenantKey: null, CancellationToken.None))
             .Should()
             .BeNull("a deactivated generated document is the host's to bring back");
     }
@@ -660,10 +682,10 @@ public class PersistedOperationMutationTests
             )
             .AsManager()
             .Build();
-        var result = await _executor.ExecuteAsync(request).ConfigureAwait(false);
+        var result = await _executor.NotNull().ExecuteAsync(request).ConfigureAwait(false);
         var op = result as OperationResult;
         op.Should().NotBeNull("expected OperationResult");
-        op!.Errors.Should().BeNullOrEmpty();
+        op.NotNull().Errors.Should().BeNullOrEmpty();
         return JsonDocument.Parse(op.ToJson());
     }
 }

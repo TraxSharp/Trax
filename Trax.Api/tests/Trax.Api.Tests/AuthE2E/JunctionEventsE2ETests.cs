@@ -19,6 +19,7 @@ using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Services.Runs;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Monad;
 using Trax.Effect.Attributes;
@@ -89,7 +90,7 @@ public class JunctionEventsE2ETests
             $"{{ operations {{ executionDetail(id: {metadataId}) {{ id }} }} }}"
         );
 
-    private IHost _host = null!;
+    private IHost? _host;
 
     [OneTimeSetUp]
     public async Task StartHost()
@@ -140,14 +141,14 @@ public class JunctionEventsE2ETests
             )
             .Build();
 
-        await _host.StartAsync();
+        await _host.NotNull().StartAsync();
     }
 
     [OneTimeTearDown]
     public async Task StopHost()
     {
-        await _host.StopAsync();
-        _host.Dispose();
+        await _host.NotNull().StopAsync();
+        _host?.Dispose();
     }
 
     #region Live steps
@@ -155,7 +156,7 @@ public class JunctionEventsE2ETests
     [Test]
     public async Task Admin_FollowsARunsSteps_WithoutItsDataAndWithTheSensitiveAnswerWithheld()
     {
-        var admin = await Subscriber.ConnectAsync(_host, AdminKey);
+        var admin = await Subscriber.ConnectAsync(_host.NotNull(), AdminKey);
         await using var adminDisposal = admin.ConfigureAwait(false);
         var run = await StartRunAsync<IHiddenMarkerTrain>(fail: true);
         await using var runDisposal = run.ConfigureAwait(false);
@@ -232,9 +233,9 @@ public class JunctionEventsE2ETests
     [Test]
     public async Task Player_ReceivesNoneOfTheStepsOfARunWhoseTrainItCannotSee()
     {
-        var admin = await Subscriber.ConnectAsync(_host, AdminKey);
+        var admin = await Subscriber.ConnectAsync(_host.NotNull(), AdminKey);
         await using var adminDisposal = admin.ConfigureAwait(false);
-        var player = await Subscriber.ConnectAsync(_host, PlayerKey);
+        var player = await Subscriber.ConnectAsync(_host.NotNull(), PlayerKey);
         await using var playerDisposal = player.ConfigureAwait(false);
         var run = await StartRunAsync<IHiddenMarkerTrain>(fail: false);
         await using var runDisposal = run.ConfigureAwait(false);
@@ -270,7 +271,7 @@ public class JunctionEventsE2ETests
     [Test]
     public async Task Player_FollowsABroadcastRun_WithHostDetailWithheld()
     {
-        var player = await Subscriber.ConnectAsync(_host, PlayerKey);
+        var player = await Subscriber.ConnectAsync(_host.NotNull(), PlayerKey);
         await using var playerDisposal = player.ConfigureAwait(false);
         var run = await StartRunAsync<IBroadcastMarkerTrain>(fail: true);
         await using var runDisposal = run.ConfigureAwait(false);
@@ -313,7 +314,7 @@ public class JunctionEventsE2ETests
     [Test]
     public async Task Guest_WhoCouldSeeNoTrain_IsRefused()
     {
-        var guest = await Subscriber.ConnectAsync(_host, GuestKey);
+        var guest = await Subscriber.ConnectAsync(_host.NotNull(), GuestKey);
         await using var guestDisposal = guest.ConfigureAwait(false);
 
         (await guest.SubscribeRefusedAsync(Subscription(1)))
@@ -452,7 +453,7 @@ public class JunctionEventsE2ETests
     [Test]
     public async Task Timeline_OverGet_IsRefusedLikeEveryOtherQuery()
     {
-        var client = _host.GetTestServer().CreateClient();
+        var client = _host.NotNull().GetTestServer().CreateClient();
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             "/trax/graphql?query=" + Uri.EscapeDataString(TimelineQuery(1))
@@ -482,8 +483,15 @@ public class JunctionEventsE2ETests
     [Test]
     public async Task TheDeclaredGraph_OfANameNoTrainIsRegisteredUnder_IsNull()
     {
-        var graphs = _host.Services.GetRequiredService<ITrainChainGraphs>();
-        foreach (var name in new[] { "System.String", typeof(MarkerTrainBase).FullName!, "Nope" })
+        var graphs = _host.NotNull().Services.GetRequiredService<ITrainChainGraphs>();
+        foreach (
+            var name in new[]
+            {
+                "System.String",
+                typeof(MarkerTrainBase).FullName.NotNull(),
+                "Nope",
+            }
+        )
             graphs.Find(name).Should().BeNull(name);
     }
 
@@ -531,7 +539,7 @@ public class JunctionEventsE2ETests
             .Equal("Fast", "Slow");
         var byId = nodes
             .EnumerateArray()
-            .ToDictionary(n => n.GetProperty("id").GetString()!, StringComparer.Ordinal);
+            .ToDictionary(n => n.GetProperty("id").GetString().NotNull(), StringComparer.Ordinal);
         byId["Seed<IDecider>#0"].GetProperty("state").GetString().Should().Be("NOT_RECORDED");
         byId[nameof(HoldForRelease) + "#0"]
             .GetProperty("state")
@@ -632,8 +640,10 @@ public class JunctionEventsE2ETests
     public void TheDeclaredGraph_OfAParallelTrain_HasTheStep_WithEveryBranchAsATrack()
     {
         var nodes = _host
+            .NotNull()
             .Services.GetRequiredService<ITrainChainGraphs>()
-            .Find(typeof(IParallelMarkerTrain).FullName!)!
+            .Find(typeof(IParallelMarkerTrain).FullName.NotNull())
+            .NotNull()
             .Nodes;
 
         var fork = nodes.Single(n => string.Equals(n.Id, Fork, StringComparison.Ordinal));
@@ -675,11 +685,11 @@ public class JunctionEventsE2ETests
 
         // The dashboard's run page places the steps it reads through RunGraphs.Match, against the
         // graph the host's registry holds: the same read, done its way, must agree node for node.
-        var train = typeof(IParallelMarkerTrain).FullName!;
+        var train = typeof(IParallelMarkerTrain).FullName.NotNull();
         var dashboard = RunGraphs.Match(
             run.MetadataId,
             train,
-            _host.Services.GetRequiredService<ITrainChainGraphs>().Find(train),
+            _host.NotNull().Services.GetRequiredService<ITrainChainGraphs>().Find(train),
             rows
         );
         NodeStates(graph.GetProperty("nodes"))
@@ -728,8 +738,8 @@ public class JunctionEventsE2ETests
     /// </summary>
     private async Task<List<JunctionStep>> StableStepsAsync(long metadataId, int atLeast)
     {
-        var factory = _host.Services.GetRequiredService<IDataContextProviderFactory>();
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+        var factory = _host.NotNull().Services.GetRequiredService<IDataContextProviderFactory>();
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(15);
         List<JunctionStep>? last = null;
         while (true)
         {
@@ -758,7 +768,7 @@ public class JunctionEventsE2ETests
                 return steps;
             last = settled ? steps : null;
 
-            if (DateTime.UtcNow > deadline)
+            if (TimeProvider.System.GetUtcNow().UtcDateTime > deadline)
                 Assert.Fail(
                     string.Create(
                         CultureInfo.InvariantCulture,
@@ -777,7 +787,10 @@ public class JunctionEventsE2ETests
             .SelectMany(n =>
                 new[]
                 {
-                    (n.GetProperty("id").GetString()!, n.GetProperty("state").GetString()!),
+                    (
+                        n.GetProperty("id").GetString().NotNull(),
+                        n.GetProperty("state").GetString().NotNull()
+                    ),
                 }.Concat(
                     n.GetProperty("tracks")
                         .EnumerateArray()
@@ -820,7 +833,7 @@ public class JunctionEventsE2ETests
     private async Task<List<JsonElement>> TimelineWhenCompleteAsync(long metadataId)
     {
         // The rows are written off the run's path and trail it by moments.
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(15);
         while (true)
         {
             using var doc = await PostAsync(TimelineQuery(metadataId), AdminKey)
@@ -847,7 +860,7 @@ public class JunctionEventsE2ETests
             )
                 return steps;
 
-            if (DateTime.UtcNow > deadline)
+            if (TimeProvider.System.GetUtcNow().UtcDateTime > deadline)
                 Assert.Fail(
                     string.Create(
                         CultureInfo.InvariantCulture,
@@ -862,7 +875,7 @@ public class JunctionEventsE2ETests
 
     private async Task<JsonDocument> PostAsync(string query, string? apiKey)
     {
-        var client = _host.GetTestServer().CreateClient();
+        var client = _host.NotNull().GetTestServer().CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/trax/graphql")
         {
             Content = JsonContent.Create(new { query }),
@@ -883,9 +896,9 @@ public class JunctionEventsE2ETests
         var message = new TrainLifecycleEventMessage(
             MetadataId: metadataId,
             ExternalId: "probe",
-            TrainName: train.FullName!,
+            TrainName: train.FullName.NotNull(),
             TrainState: nameof(TrainState.InProgress),
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TimeProvider.System.GetUtcNow().UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             EventType: TrainLifecycleEventMessage.JunctionStartedEventType,
@@ -898,11 +911,11 @@ public class JunctionEventsE2ETests
                 Kind: JunctionRunKind.Junction,
                 Name: name,
                 State: JunctionRunState.InProgress,
-                StartedAt: DateTime.UtcNow
+                StartedAt: TimeProvider.System.GetUtcNow().UtcDateTime
             ),
         };
 
-        foreach (var handler in _host.Services.GetServices<IJunctionEventHandler>())
+        foreach (var handler in _host.NotNull().Services.GetServices<IJunctionEventHandler>())
             await handler.HandleAsync(message, default).ConfigureAwait(false);
     }
 
@@ -911,7 +924,7 @@ public class JunctionEventsE2ETests
     {
         var key = Guid.NewGuid().ToString("N");
         var gate = MarkerGates.Hold(key);
-        var scope = _host.Services.CreateAsyncScope();
+        var scope = _host.NotNull().Services.CreateAsyncScope();
         var train = scope.ServiceProvider.GetRequiredService<TTrain>();
         var finished = Task.Run(async () =>
         {
@@ -926,10 +939,10 @@ public class JunctionEventsE2ETests
         });
 
         var concrete = (ServiceTrain<MarkerInput, string>)(object)train;
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(15);
         while (concrete.Metadata is not { Id: > 0 })
         {
-            if (DateTime.UtcNow > deadline || finished.IsCompleted)
+            if (TimeProvider.System.GetUtcNow().UtcDateTime > deadline || finished.IsCompleted)
             {
                 gate.TrySetResult();
                 await finished.ConfigureAwait(false);
@@ -952,7 +965,7 @@ public class JunctionEventsE2ETests
     {
         public long MetadataId => metadataId;
 
-        public Task Finished => finished.WaitAsync(TimeSpan.FromSeconds(30));
+        public Task Finished => finished.WaitAsync(TimeSpan.FromSeconds(30), TimeProvider.System);
 
         public void Release() => gate.TrySetResult();
 
@@ -1044,9 +1057,9 @@ public class JunctionEventsE2ETests
         /// </summary>
         public async Task WaitUntilListeningAsync(Func<Task> probe)
         {
-            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+            var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(10);
             var next = ReceiveStepAsync();
-            while (DateTime.UtcNow < deadline)
+            while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
             {
                 if (next.IsCompleted)
                 {
@@ -1102,8 +1115,8 @@ public class JunctionEventsE2ETests
                 var e = payload.GetProperty("data").GetProperty("onJunctionEvent");
                 var step = e.GetProperty("junction");
                 return new Step(
-                    e.GetProperty("eventType").GetString()!,
-                    step.GetProperty("name").GetString()!,
+                    e.GetProperty("eventType").GetString().NotNull(),
+                    step.GetProperty("name").GetString().NotNull(),
                     step.Clone()
                 );
             }

@@ -46,7 +46,7 @@ public class QueryModelTypeModuleAuthorizeCompositionTests
     private sealed class LegacyDbContext(DbContextOptions<LegacyDbContext> options)
         : DbContext(options)
     {
-        public DbSet<LegacyThing> Things { get; set; } = null!;
+        public DbSet<LegacyThing> Things => Set<LegacyThing>();
     }
 
     [Test]
@@ -89,7 +89,7 @@ public class QueryModelTypeModuleAuthorizeCompositionTests
     private sealed class AuditDbContext(DbContextOptions<AuditDbContext> options)
         : DbContext(options)
     {
-        public DbSet<AuditRow> Rows { get; set; } = null!;
+        public DbSet<AuditRow> Rows => Set<AuditRow>();
     }
 
     [Test]

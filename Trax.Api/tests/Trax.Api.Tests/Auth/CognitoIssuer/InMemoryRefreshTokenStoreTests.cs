@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Trax.Api.Auth.Jwt.Cognito.Issuer;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Auth.CognitoIssuer;
 
@@ -63,7 +64,7 @@ public class InMemoryRefreshTokenStoreTests
         var claims = await store.ValidateAsync(handle.Token, CancellationToken.None);
 
         claims.Should().NotBeNull();
-        claims!.Sub.Should().Be(sub);
+        claims.NotNull().Sub.Should().Be(sub);
         claims.ClientId.Should().Be(ClientId);
         claims.ExpiresAt.Should().Be(handle.ExpiresAt);
     }
@@ -117,7 +118,7 @@ public class InMemoryRefreshTokenStoreTests
         var rotated = await store.RotateAsync(first.Token, CancellationToken.None);
 
         rotated.Should().NotBeNull();
-        rotated!.Token.Should().NotBe(first.Token);
+        rotated.NotNull().Token.Should().NotBe(first.Token);
         rotated.ExpiresAt.Should().Be(first.ExpiresAt, "rotation does not extend session length");
 
         var oldClaims = await store.ValidateAsync(first.Token, CancellationToken.None);
@@ -125,7 +126,7 @@ public class InMemoryRefreshTokenStoreTests
 
         var newClaims = await store.ValidateAsync(rotated.Token, CancellationToken.None);
         newClaims.Should().NotBeNull();
-        newClaims!.Sub.Should().Be(sub);
+        newClaims.NotNull().Sub.Should().Be(sub);
     }
 
     [Test]
@@ -174,7 +175,9 @@ public class InMemoryRefreshTokenStoreTests
         var replay = await store.RotateAsync(handle.Token, CancellationToken.None);
         replay.Should().BeNull();
 
-        (await store.ValidateAsync(legitimate!.Token, CancellationToken.None)).Should().BeNull();
+        (await store.ValidateAsync(legitimate.NotNull().Token, CancellationToken.None))
+            .Should()
+            .BeNull();
         (await store.RotateAsync(legitimate.Token, CancellationToken.None)).Should().BeNull();
     }
 
@@ -224,7 +227,9 @@ public class InMemoryRefreshTokenStoreTests
         );
 
         var winner = results.Single(r => r is not null);
-        (await store.ValidateAsync(winner!.Token, CancellationToken.None)).Should().BeNull();
+        (await store.ValidateAsync(winner.NotNull().Token, CancellationToken.None))
+            .Should()
+            .BeNull();
     }
 
     [Test]
@@ -263,7 +268,7 @@ public class InMemoryRefreshTokenStoreTests
         );
         var rotated = await store.RotateAsync(handle.Token, CancellationToken.None);
 
-        await store.RevokeAsync(rotated!.Token, CancellationToken.None);
+        await store.RevokeAsync(rotated.NotNull().Token, CancellationToken.None);
 
         var stillValid = await store.ValidateAsync(rotated.Token, CancellationToken.None);
         stillValid.Should().BeNull();
@@ -289,10 +294,10 @@ public class InMemoryRefreshTokenStoreTests
             CancellationToken.None
         );
         var second = await store.RotateAsync(first.Token, CancellationToken.None);
-        var third = await store.RotateAsync(second!.Token, CancellationToken.None);
+        var third = await store.RotateAsync(second.NotNull().Token, CancellationToken.None);
 
         // Revoke any link in the chain; every token in the chain (past + present) is invalidated.
-        await store.RevokeAsync(third!.Token, CancellationToken.None);
+        await store.RevokeAsync(third.NotNull().Token, CancellationToken.None);
 
         (await store.ValidateAsync(third.Token, CancellationToken.None)).Should().BeNull();
         // first and second were already consumed via rotation, so still null;

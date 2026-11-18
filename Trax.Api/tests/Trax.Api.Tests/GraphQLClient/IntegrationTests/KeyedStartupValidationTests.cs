@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Trax.Api.GraphQL.Client;
 using Trax.Api.GraphQL.Client.Trax;
 using Trax.Api.Tests.GraphQLClient.Fixtures;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 
@@ -23,8 +24,8 @@ public class KeyedStartupValidationTests
     private const string PlayersKey = "keyed-players";
     private const string TraxKey = "keyed-trax";
 
-    private GraphQLTestServerFixture _players = null!;
-    private TraxServerFixture _trax = null!;
+    private GraphQLTestServerFixture? _players;
+    private TraxServerFixture? _trax;
 
     [SetUp]
     public void SetUp()
@@ -36,8 +37,8 @@ public class KeyedStartupValidationTests
     [TearDown]
     public void TearDown()
     {
-        _trax.Dispose();
-        _players.Dispose();
+        _trax?.Dispose();
+        _players?.Dispose();
     }
 
     [Test]
@@ -45,16 +46,16 @@ public class KeyedStartupValidationTests
     {
         var services = new ServiceCollection();
         services
-            .AddKeyedTraxGraphQLClient(PlayersKey, _players.BaseAddress)
-            .ConfigureHttpClient(_players.CreateHttpClient())
+            .AddKeyedTraxGraphQLClient(PlayersKey, _players.NotNull().BaseAddress)
+            .ConfigureHttpClient(_players.NotNull().CreateHttpClient())
             .UseStartupValidation(typeof(KeyedStartupValidationTests).Assembly);
         services
-            .AddKeyedTraxGraphQLClient(TraxKey, _trax.BaseAddress)
-            .ConfigureHttpClient(_trax.CreateHttpClient())
+            .AddKeyedTraxGraphQLClient(TraxKey, _trax.NotNull().BaseAddress)
+            .ConfigureHttpClient(_trax.NotNull().CreateHttpClient())
             .UseStartupValidation(typeof(KeyedStartupValidationTests).Assembly);
         // The test assembly also holds a request marked for this key; every key a request is
         // marked with needs a registered client.
-        services.AddKeyedTraxGraphQLClient(ProbeServer.Billing, _players.BaseAddress);
+        services.AddKeyedTraxGraphQLClient(ProbeServer.Billing, _players.NotNull().BaseAddress);
         await using var sp = services.BuildServiceProvider();
 
         foreach (var hosted in sp.GetServices<IHostedService>())
@@ -71,8 +72,8 @@ public class KeyedStartupValidationTests
     {
         var services = new ServiceCollection();
         services
-            .AddKeyedTraxGraphQLClient("nobody-marks-this", _players.BaseAddress)
-            .ConfigureHttpClient(_players.CreateHttpClient())
+            .AddKeyedTraxGraphQLClient("nobody-marks-this", _players.NotNull().BaseAddress)
+            .ConfigureHttpClient(_players.NotNull().CreateHttpClient())
             .UseStartupValidation(typeof(KeyedStartupValidationTests).Assembly);
         await using var sp = services.BuildServiceProvider();
         var hosted = sp.GetServices<IHostedService>().Single();
@@ -91,11 +92,11 @@ public class KeyedStartupValidationTests
     {
         var services = new ServiceCollection();
         services
-            .AddKeyedTraxGraphQLClient(PlayersKey, _players.BaseAddress)
-            .ConfigureHttpClient(_players.CreateHttpClient());
+            .AddKeyedTraxGraphQLClient(PlayersKey, _players.NotNull().BaseAddress)
+            .ConfigureHttpClient(_players.NotNull().CreateHttpClient());
         // The other keys the test assembly's requests are marked with.
-        services.AddKeyedTraxGraphQLClient(TraxKey, _trax.BaseAddress);
-        services.AddKeyedTraxGraphQLClient(ProbeServer.Billing, _players.BaseAddress);
+        services.AddKeyedTraxGraphQLClient(TraxKey, _trax.NotNull().BaseAddress);
+        services.AddKeyedTraxGraphQLClient(ProbeServer.Billing, _players.NotNull().BaseAddress);
         await using var sp = services.BuildServiceProvider();
 
         await sp.Invoking(p =>

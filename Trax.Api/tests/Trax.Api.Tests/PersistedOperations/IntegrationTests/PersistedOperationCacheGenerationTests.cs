@@ -5,6 +5,7 @@ using HotChocolate.Language;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
 using Trax.Api.Tests.PersistedOperations.Fixtures;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.PersistedOperations.IntegrationTests;
 
@@ -27,8 +28,8 @@ public class PersistedOperationCacheGenerationTests
         "a cached persisted operation is never older than the last change "
         + "(Trax.Api docs/adr/0034-a-cached-persisted-operation-is-never-older-than-the-last-change-or-its-maximum-age.md)";
 
-    private ServiceProvider _sp = null!;
-    private IPersistedOperationStore _store = null!;
+    private ServiceProvider? _sp;
+    private IPersistedOperationStore? _store;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -37,14 +38,15 @@ public class PersistedOperationCacheGenerationTests
             Assert.Ignore("Postgres not reachable.");
 
         _sp = await GraphQLFixture.BuildAsync();
-        _store = _sp.GetRequiredService<IPersistedOperationStore>();
+        _store = _sp.NotNull().GetRequiredService<IPersistedOperationStore>();
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
         if (_sp is not null)
-            await _sp.DisposeAsync();
+            if (_sp is not null)
+                await _sp.DisposeAsync();
     }
 
     [SetUp]
@@ -55,20 +57,24 @@ public class PersistedOperationCacheGenerationTests
     {
         var id = $"held_deactivate_{Guid.NewGuid():N}";
         var held = GraphQLFixture.Hold(id);
-        await _store.UpsertAsync(
-            id,
-            GraphQLFixture.HeldDocument(id),
-            options: null,
-            CancellationToken.None
-        );
+        await _store
+            .NotNull()
+            .UpsertAsync(
+                id,
+                GraphQLFixture.HeldDocument(id),
+                options: null,
+                CancellationToken.None
+            );
 
-        var running = ExecuteByIdAsync(_sp, id);
+        var running = ExecuteByIdAsync(_sp.NotNull(), id);
         await held.Entered;
-        await _store.DeactivateAsync(id, tenantKey: null, "retired", CancellationToken.None);
+        await _store
+            .NotNull()
+            .DeactivateAsync(id, tenantKey: null, "retired", CancellationToken.None);
         held.Release();
         (await running).Should().Contain("\"held\"", "the request had already started");
 
-        var after = await ExecuteByIdAsync(_sp, id);
+        var after = await ExecuteByIdAsync(_sp.NotNull(), id);
 
         after.Should().Contain("HC0020", AdrHint);
         after.Should().NotContain("\"held\"", AdrHint);
@@ -79,25 +85,29 @@ public class PersistedOperationCacheGenerationTests
     {
         var id = $"held_reupload_{Guid.NewGuid():N}";
         var held = GraphQLFixture.Hold(id);
-        await _store.UpsertAsync(
-            id,
-            GraphQLFixture.HeldDocument(id),
-            options: null,
-            CancellationToken.None
-        );
+        await _store
+            .NotNull()
+            .UpsertAsync(
+                id,
+                GraphQLFixture.HeldDocument(id),
+                options: null,
+                CancellationToken.None
+            );
 
-        var running = ExecuteByIdAsync(_sp, id);
+        var running = ExecuteByIdAsync(_sp.NotNull(), id);
         await held.Entered;
-        await _store.UpsertAsync(
-            id,
-            "query Held { version }",
-            new UpsertOptions { BypassShapeDiff = true },
-            CancellationToken.None
-        );
+        await _store
+            .NotNull()
+            .UpsertAsync(
+                id,
+                "query Held { version }",
+                new UpsertOptions { BypassShapeDiff = true },
+                CancellationToken.None
+            );
         held.Release();
         await running;
 
-        var after = await ExecuteByIdAsync(_sp, id);
+        var after = await ExecuteByIdAsync(_sp.NotNull(), id);
 
         after.Should().Contain("\"version\"", AdrHint);
     }

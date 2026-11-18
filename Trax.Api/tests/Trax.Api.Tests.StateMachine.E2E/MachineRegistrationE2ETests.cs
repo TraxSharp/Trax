@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence;
 
 namespace Trax.Api.StateMachine.E2E;
@@ -66,8 +67,8 @@ public class MachineRegistrationE2ETests
         )
             .Which.Message.Should()
             .Contain($"'{ShelfMachine.MachineId}'")
-            .And.Contain(typeof(ShelfMachine).FullName!)
-            .And.Contain(typeof(ServedShelfMachine).FullName!)
+            .And.Contain(typeof(ShelfMachine).FullName.NotNull())
+            .And.Contain(typeof(ServedShelfMachine).FullName.NotNull())
             .And.Contain($"Register only {typeof(ServedShelfMachine).FullName}");
     }
 

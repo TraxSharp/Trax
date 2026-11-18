@@ -1,5 +1,6 @@
 using GreenDonut;
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.GraphQL.DataLoaders.CrossSchema;
 
@@ -58,7 +59,7 @@ public sealed class CrossSchemaLoader<TContext, TEntity>(
                         + "Id primary key on the target entity."
                 );
 
-            return rows.ToDictionary(row => (int)idProperty.GetValue(row)!);
+            return rows.ToDictionary(row => (int)idProperty.GetValue(row).NotNull());
         }
     }
 }

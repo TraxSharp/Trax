@@ -94,7 +94,8 @@ public class ApplicationServiceBridgeTests
     [Test]
     public void Bridge_NullBuilder_Throws()
     {
-        var act = () => ((IRequestExecutorBuilder)null!).BridgeApplicationService<IProbe>();
+        var act = () =>
+            ((IRequestExecutorBuilder)Null.Of<object>()).BridgeApplicationService<IProbe>();
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -143,7 +144,7 @@ public class ApplicationServiceBridgeTests
     [Test]
     public void TraxApplicationServices_NullProvider_Throws()
     {
-        var act = () => new TraxApplicationServices(null!);
+        var act = () => new TraxApplicationServices(Null.Of<IServiceProvider>());
 
         act.Should().Throw<ArgumentNullException>();
     }

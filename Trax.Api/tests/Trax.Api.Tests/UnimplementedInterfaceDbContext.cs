@@ -17,7 +17,7 @@ namespace Trax.Api.Tests;
 
 public class UnimplementedInterfaceDbContext : DbContext
 {
-    public DbSet<MisconfiguredBook> Books { get; set; } = null!;
+    public DbSet<MisconfiguredBook> Books => Set<MisconfiguredBook>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
         optionsBuilder.UseInMemoryDatabase("MisconfDb_" + Guid.NewGuid());

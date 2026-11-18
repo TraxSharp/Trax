@@ -7,6 +7,7 @@ using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.Tests.AuthE2E;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -40,8 +41,8 @@ public class InvokedRunOperationsTests
 
     private const string Database = "trax_api_invoked_runs";
 
-    private ServiceProvider _provider = null!;
-    private IDataContextProviderFactory _factory = null!;
+    private ServiceProvider? _provider;
+    private IDataContextProviderFactory? _factory;
 
     [OneTimeSetUp]
     public void OneTimeSetUp()
@@ -53,13 +54,14 @@ public class InvokedRunOperationsTests
             t.AddEffects(e => e.UsePostgres(AuthE2EHost.ConnectionString(Database)))
         );
         _provider = services.BuildServiceProvider();
-        _factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        _factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await _provider.DisposeAsync();
+        if (_provider is not null)
+            await _provider.DisposeAsync();
         Npgsql.NpgsqlConnection.ClearAllPools();
     }
 
@@ -86,7 +88,7 @@ public class InvokedRunOperationsTests
         dashboard.Success.Should().BeFalse();
         dashboard.Message.Should().Be(expected, "the dashboard refuses with the same reason");
 
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         (await db.WorkQueues.AsNoTracking().CountAsync(w => w.TrainName == "Ingest.IFetchTrain"))
             .Should()
             .Be(0, "nothing was queued");
@@ -101,17 +103,26 @@ public class InvokedRunOperationsTests
         var live = await SeedInvokedRunAsync(machine, instance.Id, SnapshotOwnerKind.System, token);
         var earlier = await SeedInvokedRunAsync(machine, instance.Id, SnapshotOwnerKind.System);
 
-        var detail = await new OperationsQueries().GetExecutionDetail(live, _factory, default);
+        var detail = await new OperationsQueries().GetExecutionDetail(
+            live,
+            _factory.NotNull(),
+            default
+        );
 
-        detail!
+        detail
+            .NotNull()
             .InvokedBy.Should()
             .Be(
                 new RunInvoker(machine, instance.Id, SnapshotOwnerKind.System, instance.RowId),
                 "the run names the instance whose state queued it, and its row while it waits"
             );
 
-        var past = await new OperationsQueries().GetExecutionDetail(earlier, _factory, default);
-        past!
+        var past = await new OperationsQueries().GetExecutionDetail(
+            earlier,
+            _factory.NotNull(),
+            default
+        );
+        past.NotNull()
             .InvokedBy.Should()
             .Be(
                 new RunInvoker(machine, instance.Id, SnapshotOwnerKind.System, RowId: null),
@@ -128,14 +139,22 @@ public class InvokedRunOperationsTests
         var draft = await SeedDraftAsync(machine, SnapshotOwnerKind.User, secret, token);
         var run = await SeedInvokedRunAsync(machine, draft.Id, SnapshotOwnerKind.User, token);
 
-        var detail = await new OperationsQueries().GetExecutionDetail(run, _factory, default);
+        var detail = await new OperationsQueries().GetExecutionDetail(
+            run,
+            _factory.NotNull(),
+            default
+        );
 
-        detail!
+        detail
+            .NotNull()
             .InvokedBy.Should()
             .Be(new RunInvoker(machine, draft.Id, SnapshotOwnerKind.User, draft.RowId));
         var json = JsonSerializer.Serialize(detail);
         json.Should()
-            .NotContain(draft.UserKey!, $"an operator is not shown whose a draft is. See {Adr}");
+            .NotContain(
+                draft.UserKey.NotNull(),
+                $"an operator is not shown whose a draft is. See {Adr}"
+            );
         json.Should().NotContain(secret, "nor anything of the draft's context");
     }
 
@@ -144,9 +163,13 @@ public class InvokedRunOperationsTests
     {
         var run = await SeedRunAsync(TrainState.Completed);
 
-        var detail = await new OperationsQueries().GetExecutionDetail(run, _factory, default);
+        var detail = await new OperationsQueries().GetExecutionDetail(
+            run,
+            _factory.NotNull(),
+            default
+        );
 
-        detail!.InvokedBy.Should().BeNull();
+        detail.NotNull().InvokedBy.Should().BeNull();
     }
 
     [Test]
@@ -157,7 +180,7 @@ public class InvokedRunOperationsTests
         var token = Guid.NewGuid().ToString("N");
         var system = await SeedDraftAsync(machine, SnapshotOwnerKind.System, secret, token);
         var run = await SeedInvokedRunAsync(machine, system.Id, SnapshotOwnerKind.System, token);
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
             await ((DbContext)db).Database.ExecuteSqlInterpolatedAsync(
                 $"UPDATE trax.metadata SET invoke_output = {secret} WHERE id = {run}"
             );
@@ -187,7 +210,7 @@ public class InvokedRunOperationsTests
         };
 
         views.Should().AllSatisfy(v => v.Should().NotBeNull());
-        var detail = (MachineInstanceDetail)views[0]!;
+        var detail = (MachineInstanceDetail)views[0].NotNull();
         detail
             .InvokedRuns.Should()
             .ContainSingle("the run the instance invoked is listed")
@@ -221,13 +244,13 @@ public class InvokedRunOperationsTests
                 operations,
                 default
             )
-        )!;
+        ).NotNull();
         var dashboard = (
             await operations.GetMachineInstanceRunsAsync(
                 new MachineInstanceKey(machine, SnapshotOwnerKind.System, system.Id),
                 default
             )
-        )!;
+        ).NotNull();
 
         graphQl.InvokedRuns.Select(r => r.Id).Should().Equal(live, older);
         graphQl
@@ -327,7 +350,7 @@ public class InvokedRunOperationsTests
                 )
             );
 
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         (
             await db
                 .WorkQueues.AsNoTracking()
@@ -449,7 +472,7 @@ public class InvokedRunOperationsTests
             .Message.Should()
             .Be(bulk.Message, "the dashboard's bulk cancel says the same");
 
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         var statuses = await db
             .WorkQueues.AsNoTracking()
             .Where(w => w.Id == users || w.Id == systems || w.Id == plain)
@@ -494,7 +517,7 @@ public class InvokedRunOperationsTests
             rowId: other.RowId
         );
 
-        right!.RowId.Should().Be(system.RowId);
+        right.NotNull().RowId.Should().Be(system.RowId);
         wrong.Should().BeNull("a row id names one row, and this one is another instance's");
     }
 
@@ -506,7 +529,7 @@ public class InvokedRunOperationsTests
 
     private async Task<long> SeedRunAsync(TrainState state)
     {
-        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             var run = Metadata.Create(
@@ -515,7 +538,8 @@ public class InvokedRunOperationsTests
                     Name = "Ingest.IFetchTrain",
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
-                }
+                },
+                TimeProvider.System
             );
             run.TrainState = state;
             await db.Track(run).ConfigureAwait(false);
@@ -526,7 +550,7 @@ public class InvokedRunOperationsTests
 
     private async Task<long> SeedQueuedEntryAsync(string machine, SnapshotOwnerKind? owner)
     {
-        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             var entry = WorkQueue.Create(
@@ -536,7 +560,8 @@ public class InvokedRunOperationsTests
                     InvokedBy = owner is { } kind
                         ? new InvokedBy(machine, Guid.NewGuid(), kind)
                         : null,
-                }
+                },
+                TimeProvider.System
             );
             await db.Track(entry).ConfigureAwait(false);
             await db.SaveChanges(default).ConfigureAwait(false);
@@ -546,7 +571,7 @@ public class InvokedRunOperationsTests
 
     private async Task<bool> IsFlaggedAsync(long id)
     {
-        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             return (
@@ -563,7 +588,7 @@ public class InvokedRunOperationsTests
         Guid? id = null
     )
     {
-        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             var row = new SnapshotDraft
@@ -578,8 +603,8 @@ public class InvokedRunOperationsTests
                     ? secretOrContext
                     : JsonSerializer.Serialize(new { apiKey = secretOrContext }),
                 ConcurrencyToken = Guid.NewGuid(),
-                CreatedAt = DateTimeOffset.UtcNow,
-                UpdatedAt = DateTimeOffset.UtcNow,
+                CreatedAt = TimeProvider.System.GetUtcNow(),
+                UpdatedAt = TimeProvider.System.GetUtcNow(),
                 InvokeToken = invokeToken,
             };
             db.SnapshotDrafts.Add(row);
@@ -591,7 +616,7 @@ public class InvokedRunOperationsTests
     private async Task<SnapshotDraft> SeedQueuedInstanceAsync(string machine)
     {
         var id = Guid.NewGuid();
-        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             var entry = WorkQueue.Create(
@@ -599,7 +624,8 @@ public class InvokedRunOperationsTests
                 {
                     TrainName = "Ingest.IStageTrain",
                     InvokedBy = new InvokedBy(machine, id, SnapshotOwnerKind.System),
-                }
+                },
+                TimeProvider.System
             );
             await db.Track(entry).ConfigureAwait(false);
             await db.SaveChanges(default).ConfigureAwait(false);
@@ -617,7 +643,7 @@ public class InvokedRunOperationsTests
     private IOperationsService Operations() =>
         new OperationsService(
             Substitute.For<ITrainDiscoveryService>(),
-            _factory,
+            _factory.NotNull(),
             new SchedulerConfiguration(),
             Substitute.For<ITrainExecutionService>(),
             new ServiceCollection()
@@ -636,7 +662,7 @@ public class InvokedRunOperationsTests
         TrainState state = TrainState.Failed
     )
     {
-        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             var run = Metadata.Create(
@@ -646,11 +672,12 @@ public class InvokedRunOperationsTests
                     ExternalId = externalId ?? Guid.NewGuid().ToString("N"),
                     Input = null,
                     InvokedBy = new InvokedBy(machine, instance, owner),
-                }
+                },
+                TimeProvider.System
             );
             run.TrainState = state;
             if (state is TrainState.Completed or TrainState.Failed or TrainState.Cancelled)
-                run.EndTime = DateTime.UtcNow;
+                run.EndTime = TimeProvider.System.GetUtcNow().UtcDateTime;
             await db.Track(run).ConfigureAwait(false);
             await db.SaveChanges(default).ConfigureAwait(false);
             return run.Id;

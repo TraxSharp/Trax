@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Api.Auth;
+using Trax.Core.Extensions;
 using Trax.Mediator.Services.TrustedExecution;
 
 namespace Trax.Api.Tests;
@@ -108,7 +109,7 @@ public class TraxCallerTests
         sut.IsAuthenticated.Should().BeTrue();
         sut.IsTrusted.Should().BeFalse();
         sut.Principal.Should().NotBeNull();
-        sut.Principal!.Id.Should().Be("test:user-123");
+        sut.Principal.NotNull().Id.Should().Be("test:user-123");
         sut.Principal.DisplayName.Should().Be("Alice");
         sut.Principal.Roles.Should().ContainSingle().Which.Should().Be("Admin");
     }
@@ -130,7 +131,7 @@ public class TraxCallerTests
         {
             sut.IsAuthenticated.Should().BeTrue();
             sut.IsTrusted.Should().BeTrue();
-            sut.Principal!.Id.Should().Be("test:user-99");
+            sut.Principal.NotNull().Id.Should().Be("test:user-99");
         }
     }
 
@@ -155,7 +156,7 @@ public class TraxCallerTests
         ctx.User = BuildTraxClaimsPrincipal(id: "late-auth", "Late Alice", roles: ["Player"]);
 
         sut.IsAuthenticated.Should().BeTrue();
-        sut.Principal!.Id.Should().Be("test:late-auth");
+        sut.Principal.NotNull().Id.Should().Be("test:late-auth");
     }
 
     [Test]

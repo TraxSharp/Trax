@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using NUnit.Framework;
 using Trax.Api.Auth.Oidc;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Auth.Oidc;
 
@@ -18,7 +19,8 @@ public class OidcBuilderTests
                     "Validate",
                     System.Reflection.BindingFlags.Instance
                         | System.Reflection.BindingFlags.NonPublic
-                )!
+                )
+                .NotNull()
                 .Invoke(builder, parameters: null);
 
         act.Should()
@@ -32,7 +34,7 @@ public class OidcBuilderTests
     {
         var builder = new OidcBuilder();
 
-        Action act = () => builder.UseAuthority(null!, "client");
+        Action act = () => builder.UseAuthority(Null.Of<string>(), "client");
 
         act.Should().Throw<ArgumentException>();
     }
@@ -42,7 +44,7 @@ public class OidcBuilderTests
     {
         var builder = new OidcBuilder();
 
-        Action act = () => builder.UseAuthority("https://x", null!);
+        Action act = () => builder.UseAuthority("https://x", Null.Of<string>());
 
         act.Should().Throw<ArgumentException>();
     }
@@ -82,8 +84,10 @@ public class OidcBuilderTests
                         "Scopes",
                         System.Reflection.BindingFlags.Instance
                             | System.Reflection.BindingFlags.NonPublic
-                    )!
-                    .GetValue(builder)!;
+                    )
+                    .NotNull()
+                    .GetValue(builder)
+                    .NotNull();
 
         scopes.Count(s => string.Equals(s, "custom", StringComparison.Ordinal)).Should().Be(1);
     }
@@ -130,8 +134,10 @@ public class OidcBuilderTests
                     "RequireHttpsMetadata",
                     System.Reflection.BindingFlags.Instance
                         | System.Reflection.BindingFlags.NonPublic
-                )!
-                .GetValue(builder)!;
+                )
+                .NotNull()
+                .GetValue(builder)
+                .NotNull();
 
         requireHttps.Should().BeFalse();
     }
@@ -147,8 +153,10 @@ public class OidcBuilderTests
                     "SaveTokens",
                     System.Reflection.BindingFlags.Instance
                         | System.Reflection.BindingFlags.NonPublic
-                )!
-                .GetValue(builder)!;
+                )
+                .NotNull()
+                .GetValue(builder)
+                .NotNull();
 
         save.Should().BeFalse();
     }
@@ -158,7 +166,12 @@ public class OidcBuilderTests
     {
         var builder = new OidcBuilder();
 
-        Action act = () => builder.CustomizeOidcOptions(null!);
+        Action act = () =>
+            builder.CustomizeOidcOptions(
+                Null.Of<
+                    Action<Microsoft.AspNetCore.Authentication.OpenIdConnect.OpenIdConnectOptions>
+                >()
+            );
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -168,7 +181,12 @@ public class OidcBuilderTests
     {
         var builder = new OidcBuilder();
 
-        Action act = () => builder.CustomizeCookieOptions(null!);
+        Action act = () =>
+            builder.CustomizeCookieOptions(
+                Null.Of<
+                    Action<Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationOptions>
+                >()
+            );
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -183,8 +201,10 @@ public class OidcBuilderTests
                     "CallbackPath",
                     System.Reflection.BindingFlags.Instance
                         | System.Reflection.BindingFlags.NonPublic
-                )!
-                .GetValue(builder)!;
+                )
+                .NotNull()
+                .GetValue(builder)
+                .NotNull();
         path.Should().Be("/cb");
     }
 
@@ -200,8 +220,10 @@ public class OidcBuilderTests
                     "SignedOutCallbackPath",
                     System.Reflection.BindingFlags.Instance
                         | System.Reflection.BindingFlags.NonPublic
-                )!
-                .GetValue(builder)!;
+                )
+                .NotNull()
+                .GetValue(builder)
+                .NotNull();
         path.Should().Be("/signed-out");
     }
 
@@ -217,12 +239,13 @@ public class OidcBuilderTests
             .GetProperty(
                 "OidcOptionsCustomizer",
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic
-            )!
+            )
+            .NotNull()
             .GetValue(builder);
         customizer.Should().NotBeNull();
         (
             (Action<Microsoft.AspNetCore.Authentication.OpenIdConnect.OpenIdConnectOptions>)
-                customizer!
+                customizer.NotNull()
         ).Invoke(new Microsoft.AspNetCore.Authentication.OpenIdConnect.OpenIdConnectOptions());
         called.Should().BeTrue();
     }
@@ -239,12 +262,13 @@ public class OidcBuilderTests
             .GetProperty(
                 "CookieOptionsCustomizer",
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic
-            )!
+            )
+            .NotNull()
             .GetValue(builder);
         customizer.Should().NotBeNull();
         (
             (Action<Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationOptions>)
-                customizer!
+                customizer.NotNull()
         ).Invoke(new Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationOptions());
         called.Should().BeTrue();
     }
@@ -260,7 +284,8 @@ public class OidcBuilderTests
                     "Validate",
                     System.Reflection.BindingFlags.Instance
                         | System.Reflection.BindingFlags.NonPublic
-                )!
+                )
+                .NotNull()
                 .Invoke(builder, parameters: null);
 
         act.Should().NotThrow();

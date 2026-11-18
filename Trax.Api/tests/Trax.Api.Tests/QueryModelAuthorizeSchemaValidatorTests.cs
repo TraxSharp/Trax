@@ -38,7 +38,7 @@ public class QueryModelAuthorizeSchemaValidatorTests
     private sealed class GatedDbContext(DbContextOptions<GatedDbContext> options)
         : DbContext(options)
     {
-        public DbSet<GatedThing> Things { get; set; } = null!;
+        public DbSet<GatedThing> Things => Set<GatedThing>();
     }
 
     [Test]
@@ -304,7 +304,7 @@ public class QueryModelAuthorizeSchemaValidatorTests
     private sealed class UngatedDbContext(DbContextOptions<UngatedDbContext> options)
         : DbContext(options)
     {
-        public DbSet<UngatedThing> Things { get; set; } = null!;
+        public DbSet<UngatedThing> Things => Set<UngatedThing>();
     }
 
     /// <summary>
@@ -542,7 +542,7 @@ public class QueryModelAuthorizeSchemaValidatorTests
         DbContextOptions<NamespacedGatedDbContext> options
     ) : DbContext(options)
     {
-        public DbSet<NamespacedGatedThing> Things { get; set; } = null!;
+        public DbSet<NamespacedGatedThing> Things => Set<NamespacedGatedThing>();
     }
 
     private sealed class DiscoverObjectType : ObjectType

@@ -15,6 +15,7 @@ using NSubstitute;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
@@ -43,7 +44,7 @@ public class QueryModelNavigationPostureTests
 
         var ex = (await act.Should().ThrowAsync<InvalidOperationException>()).Which;
         ex.Message.Should()
-            .Contain(typeof(NavAccount).FullName!, Adr)
+            .Contain(typeof(NavAccount).FullName.NotNull(), Adr)
             .And.Contain("'NavPost.account'")
             .And.Contain("'NavPostFilterInput.account'")
             .And.Contain("'NavPostSortInput.account'")
@@ -167,7 +168,9 @@ public class QueryModelNavigationPostureTests
         var act = () => StartAsync<ConflictedTargetContext>();
 
         var ex = (await act.Should().ThrowAsync<InvalidOperationException>()).Which;
-        ex.Message.Should().Contain(typeof(ConflictedAccount).FullName!).And.Contain("Pick one");
+        ex.Message.Should()
+            .Contain(typeof(ConflictedAccount).FullName.NotNull())
+            .And.Contain("Pick one");
     }
 
     [Test]
@@ -208,7 +211,7 @@ public class QueryModelNavigationPostureTests
 
         var ex = (await act.Should().ThrowAsync<InvalidOperationException>()).Which;
         ex.Message.Should()
-            .Contain(typeof(NavAccount).FullName!, Adr)
+            .Contain(typeof(NavAccount).FullName.NotNull(), Adr)
             .And.Contain("'MethodPost.primaryAccount'");
     }
 
@@ -235,8 +238,8 @@ public class QueryModelNavigationPostureTests
         var ex = (await act.Should().ThrowAsync<InvalidOperationException>()).Which;
         ex.Message.Should()
             .StartWith("2 entities", Adr)
-            .And.Contain(typeof(NavAccount).FullName!)
-            .And.Contain(typeof(SecondAccount).FullName!);
+            .And.Contain(typeof(NavAccount).FullName.NotNull())
+            .And.Contain(typeof(SecondAccount).FullName.NotNull());
     }
 
     /// <summary>
@@ -259,7 +262,7 @@ public class QueryModelNavigationPostureTests
 
         (await act.Should().ThrowAsync<InvalidOperationException>())
             .Which.Message.Should()
-            .Contain(typeof(Place).FullName!, Adr);
+            .Contain(typeof(Place).FullName.NotNull(), Adr);
     }
 
     [Test]
@@ -272,7 +275,7 @@ public class QueryModelNavigationPostureTests
 
         (await act.Should().ThrowAsync<InvalidOperationException>())
             .Which.Message.Should()
-            .Contain(typeof(GatedOwner).FullName!, Adr)
+            .Contain(typeof(GatedOwner).FullName.NotNull(), Adr)
             .And.Contain("carries no @authorize directive");
     }
 
@@ -284,7 +287,7 @@ public class QueryModelNavigationPostureTests
         (await act.Should().ThrowAsync<InvalidOperationException>())
             .Which.Message.Should()
             .Contain("NoSuchPostureTargetPolicy", Adr)
-            .And.Contain(typeof(UnknownPolicyOwner).FullName!);
+            .And.Contain(typeof(UnknownPolicyOwner).FullName.NotNull());
     }
 
     /// <summary>A provider, and every scope it creates, that cannot resolve one service.</summary>
@@ -594,9 +597,9 @@ public class QueryModelNavigationPostureTests
     public class TwoUndeclaredContext(DbContextOptions<TwoUndeclaredContext> options)
         : NavContextBase(options)
     {
-        public DbSet<TwoNavPost> Posts { get; set; } = null!;
-        public DbSet<NavAccount> Accounts { get; set; } = null!;
-        public DbSet<SecondAccount> Seconds { get; set; } = null!;
+        public DbSet<TwoNavPost> Posts => Set<TwoNavPost>();
+        public DbSet<NavAccount> Accounts => Set<NavAccount>();
+        public DbSet<SecondAccount> Seconds => Set<SecondAccount>();
 
         public override Task SeedAsync() => Task.CompletedTask;
     }
@@ -604,8 +607,8 @@ public class QueryModelNavigationPostureTests
     public class UnknownPolicyTargetContext(DbContextOptions<UnknownPolicyTargetContext> options)
         : NavContextBase(options)
     {
-        public DbSet<UnknownPolicyPost> Posts { get; set; } = null!;
-        public DbSet<UnknownPolicyOwner> Owners { get; set; } = null!;
+        public DbSet<UnknownPolicyPost> Posts => Set<UnknownPolicyPost>();
+        public DbSet<UnknownPolicyOwner> Owners => Set<UnknownPolicyOwner>();
 
         public override Task SeedAsync() => Task.CompletedTask;
     }
@@ -613,8 +616,8 @@ public class QueryModelNavigationPostureTests
     public class MethodUndeclaredContext(DbContextOptions<MethodUndeclaredContext> options)
         : NavContextBase(options)
     {
-        public DbSet<MethodPost> Posts { get; set; } = null!;
-        public DbSet<NavAccount> Accounts { get; set; } = null!;
+        public DbSet<MethodPost> Posts => Set<MethodPost>();
+        public DbSet<NavAccount> Accounts => Set<NavAccount>();
 
         public override Task SeedAsync() => Task.CompletedTask;
     }
@@ -622,8 +625,8 @@ public class QueryModelNavigationPostureTests
     public class MethodGatedContext(DbContextOptions<MethodGatedContext> options)
         : NavContextBase(options)
     {
-        public DbSet<MethodGatedPost> Posts { get; set; } = null!;
-        public DbSet<MethodOwner> Owners { get; set; } = null!;
+        public DbSet<MethodGatedPost> Posts => Set<MethodGatedPost>();
+        public DbSet<MethodOwner> Owners => Set<MethodOwner>();
 
         public override async Task SeedAsync()
         {
@@ -640,8 +643,8 @@ public class QueryModelNavigationPostureTests
     public class UndeclaredContext(DbContextOptions<UndeclaredContext> options)
         : NavContextBase(options)
     {
-        public DbSet<NavPost> Posts { get; set; } = null!;
-        public DbSet<NavAccount> Accounts { get; set; } = null!;
+        public DbSet<NavPost> Posts => Set<NavPost>();
+        public DbSet<NavAccount> Accounts => Set<NavAccount>();
 
         public override Task SeedAsync() => Task.CompletedTask;
     }
@@ -649,8 +652,8 @@ public class QueryModelNavigationPostureTests
     public class GatedEndpointContext(DbContextOptions<GatedEndpointContext> options)
         : NavContextBase(options)
     {
-        public DbSet<GatedEndpointPost> Posts { get; set; } = null!;
-        public DbSet<NavAccount> Accounts { get; set; } = null!;
+        public DbSet<GatedEndpointPost> Posts => Set<GatedEndpointPost>();
+        public DbSet<NavAccount> Accounts => Set<NavAccount>();
 
         public override Task SeedAsync() => Task.CompletedTask;
     }
@@ -658,8 +661,8 @@ public class QueryModelNavigationPostureTests
     public class OpenTargetContext(DbContextOptions<OpenTargetContext> options)
         : NavContextBase(options)
     {
-        public DbSet<OpenPost> Posts { get; set; } = null!;
-        public DbSet<OpenAuthor> Authors { get; set; } = null!;
+        public DbSet<OpenPost> Posts => Set<OpenPost>();
+        public DbSet<OpenAuthor> Authors => Set<OpenAuthor>();
 
         public override async Task SeedAsync()
         {
@@ -681,8 +684,8 @@ public class QueryModelNavigationPostureTests
     public class GatedTargetContext(DbContextOptions<GatedTargetContext> options)
         : NavContextBase(options)
     {
-        public DbSet<GatedPost> Posts { get; set; } = null!;
-        public DbSet<GatedOwner> Owners { get; set; } = null!;
+        public DbSet<GatedPost> Posts => Set<GatedPost>();
+        public DbSet<GatedOwner> Owners => Set<GatedOwner>();
 
         public override async Task SeedAsync()
         {
@@ -704,8 +707,8 @@ public class QueryModelNavigationPostureTests
     public class ConflictedTargetContext(DbContextOptions<ConflictedTargetContext> options)
         : NavContextBase(options)
     {
-        public DbSet<ConflictedPost> Posts { get; set; } = null!;
-        public DbSet<ConflictedAccount> Accounts { get; set; } = null!;
+        public DbSet<ConflictedPost> Posts => Set<ConflictedPost>();
+        public DbSet<ConflictedAccount> Accounts => Set<ConflictedAccount>();
 
         public override Task SeedAsync() => Task.CompletedTask;
     }
@@ -713,8 +716,8 @@ public class QueryModelNavigationPostureTests
     public class HiddenNavigationContext(DbContextOptions<HiddenNavigationContext> options)
         : NavContextBase(options)
     {
-        public DbSet<HiddenNavPost> Posts { get; set; } = null!;
-        public DbSet<NavAccount> Accounts { get; set; } = null!;
+        public DbSet<HiddenNavPost> Posts => Set<HiddenNavPost>();
+        public DbSet<NavAccount> Accounts => Set<NavAccount>();
 
         public override async Task SeedAsync()
         {
@@ -726,7 +729,7 @@ public class QueryModelNavigationPostureTests
     public class OwnedValueContext(DbContextOptions<OwnedValueContext> options)
         : NavContextBase(options)
     {
-        public DbSet<OwnedValuePost> Posts { get; set; } = null!;
+        public DbSet<OwnedValuePost> Posts => Set<OwnedValuePost>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder) =>
             modelBuilder.Entity<OwnedValuePost>().OwnsOne(p => p.Place);

@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.Tests.Stress.Fixtures;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
@@ -188,7 +189,7 @@ public class ReadFieldStressTests : StressTestSetup
                     .GetManifestDetail(Profile.Manifests / 2, Factory(sp), Discovery(sp), ct)
                     .ConfigureAwait(false);
                 detail.Should().NotBeNull();
-                detail!.ManifestGroupName.Should().StartWith("stress-group-");
+                detail.NotNull().ManifestGroupName.Should().StartWith("stress-group-");
             }
         );
     }
@@ -208,7 +209,7 @@ public class ReadFieldStressTests : StressTestSetup
                     .GetDetail(id, Operations(sp), ct)
                     .ConfigureAwait(false);
                 detail.Should().NotBeNull();
-                detail!.SubjectKey.Should().Be("subject-7");
+                detail.NotNull().SubjectKey.Should().Be("subject-7");
             }
         );
         await TestContext
@@ -245,7 +246,8 @@ public class ReadFieldStressTests : StressTestSetup
                             TrainName = "Trax.Stress.Trains.IStressTrain1",
                             SubjectKey = "subject-alone-" + Guid.NewGuid().ToString("N"),
                             Priority = 0,
-                        }
+                        },
+                        TimeProvider.System
                     );
                     await db.Track(entry).ConfigureAwait(false);
                     await db.SaveChanges(ct).ConfigureAwait(false);
@@ -254,7 +256,7 @@ public class ReadFieldStressTests : StressTestSetup
                 var detail = await new WorkQueueQueries()
                     .GetDetail(id, Operations(sp), ct)
                     .ConfigureAwait(false);
-                detail!.SubjectQueuedBehind.Should().BeNull();
+                detail.NotNull().SubjectQueuedBehind.Should().BeNull();
                 detail.SubjectHeldBy.Should().BeNull();
             }
         );

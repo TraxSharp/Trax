@@ -1,13 +1,14 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 
 namespace Trax.Api.Tests.AuthE2E;
 
 public class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(options)
 {
-    public DbSet<BookRecord> Books { get; set; } = null!;
+    public DbSet<BookRecord> Books => Set<BookRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -28,7 +29,7 @@ public class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(
     public static void EnsureSeeded(string connectionString)
     {
         AuthE2EHost.EnsureDatabaseExists(
-            new Npgsql.NpgsqlConnectionStringBuilder(connectionString).Database!
+            new Npgsql.NpgsqlConnectionStringBuilder(connectionString).Database.NotNull()
         );
 
         var opts = new DbContextOptionsBuilder<TestDbContext>().UseNpgsql(connectionString).Options;

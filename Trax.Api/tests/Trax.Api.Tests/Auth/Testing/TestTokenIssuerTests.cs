@@ -19,7 +19,7 @@ public class TestTokenIssuerTests
             new SymmetricSecurityKey(Key),
             SecurityAlgorithms.HmacSha256
         );
-        Action act = () => new TestTokenIssuer(null!, "aud", creds);
+        Action act = () => new TestTokenIssuer(Null.Of<string>(), "aud", creds);
 
         act.Should().Throw<ArgumentException>();
     }
@@ -31,7 +31,7 @@ public class TestTokenIssuerTests
             new SymmetricSecurityKey(Key),
             SecurityAlgorithms.HmacSha256
         );
-        Action act = () => new TestTokenIssuer("iss", null!, creds);
+        Action act = () => new TestTokenIssuer("iss", Null.Of<string>(), creds);
 
         act.Should().Throw<ArgumentException>();
     }
@@ -39,7 +39,12 @@ public class TestTokenIssuerTests
     [Test]
     public void Constructor_NullCredentials_Throws()
     {
-        Action act = () => new TestTokenIssuer("iss", "aud", null!);
+        Action act = () =>
+            new TestTokenIssuer(
+                "iss",
+                "aud",
+                Null.Of<Microsoft.IdentityModel.Tokens.SigningCredentials>()
+            );
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -55,7 +60,7 @@ public class TestTokenIssuerTests
     [Test]
     public void Symmetric_NullKey_Throws()
     {
-        Action act = () => TestTokenIssuer.Symmetric("iss", "aud", null!);
+        Action act = () => TestTokenIssuer.Symmetric("iss", "aud", Null.Of<byte[]>());
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -88,7 +93,11 @@ public class TestTokenIssuerTests
         var raw = issuer.Mint();
 
         var jwt = new JwtSecurityTokenHandler().ReadJwtToken(raw);
-        jwt.ValidTo.Should().BeCloseTo(DateTime.UtcNow.AddMinutes(5), TimeSpan.FromSeconds(10));
+        jwt.ValidTo.Should()
+            .BeCloseTo(
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(5),
+                TimeSpan.FromSeconds(10)
+            );
     }
 
     [Test]
@@ -98,7 +107,11 @@ public class TestTokenIssuerTests
         var raw = issuer.Mint();
 
         var jwt = new JwtSecurityTokenHandler().ReadJwtToken(raw);
-        jwt.ValidFrom.Should().BeCloseTo(DateTime.UtcNow.AddMinutes(-1), TimeSpan.FromSeconds(10));
+        jwt.ValidFrom.Should()
+            .BeCloseTo(
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-1),
+                TimeSpan.FromSeconds(10)
+            );
     }
 
     // ── Builder ──────────────────────────────────────────────────────────
@@ -168,7 +181,7 @@ public class TestTokenIssuerTests
     {
         var issuer = TestTokenIssuer.Symmetric("iss", "aud", Key);
 
-        Action act = () => issuer.Mint(b => b.WithClaim("t", null!));
+        Action act = () => issuer.Mint(b => b.WithClaim("t", Null.Of<string>()));
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -236,8 +249,8 @@ public class TestTokenIssuerTests
     [Test]
     public void Builder_WithNotBeforeAndExpires_HonoredOnToken()
     {
-        var nbf = DateTime.UtcNow.AddDays(-1);
-        var exp = DateTime.UtcNow.AddDays(1);
+        var nbf = TimeProvider.System.GetUtcNow().UtcDateTime.AddDays(-1);
+        var exp = TimeProvider.System.GetUtcNow().UtcDateTime.AddDays(1);
         var issuer = TestTokenIssuer.Symmetric("iss", "aud", Key);
         var raw = issuer.Mint(b => b.WithNotBefore(nbf).WithExpires(exp));
 
@@ -253,8 +266,16 @@ public class TestTokenIssuerTests
         var raw = issuer.Mint(b => b.WithLifetime(TimeSpan.FromHours(2)));
 
         var jwt = new JwtSecurityTokenHandler().ReadJwtToken(raw);
-        jwt.ValidTo.Should().BeCloseTo(DateTime.UtcNow.AddHours(2), TimeSpan.FromSeconds(10));
-        jwt.ValidFrom.Should().BeCloseTo(DateTime.UtcNow.AddMinutes(-1), TimeSpan.FromSeconds(10));
+        jwt.ValidTo.Should()
+            .BeCloseTo(
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(2),
+                TimeSpan.FromSeconds(10)
+            );
+        jwt.ValidFrom.Should()
+            .BeCloseTo(
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-1),
+                TimeSpan.FromSeconds(10)
+            );
     }
 
     [Test]

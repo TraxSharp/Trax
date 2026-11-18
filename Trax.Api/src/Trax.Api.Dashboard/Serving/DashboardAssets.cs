@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.StaticFiles;
@@ -59,7 +60,8 @@ internal sealed class DashboardAssets
     /// <summary>The entry page as built, or <see langword="null"/> when the build carries no app.</summary>
     internal string? IndexTemplate { get; }
 
-    internal bool TryGet(string path, out Asset asset) => _files.TryGetValue(path, out asset!);
+    internal bool TryGet(string path, [MaybeNullWhen(false)] out Asset asset) =>
+        _files.TryGetValue(path, out asset);
 
     /// <summary>
     /// Whether a file at <paramref name="path"/> is named by its content: Vite writes every file

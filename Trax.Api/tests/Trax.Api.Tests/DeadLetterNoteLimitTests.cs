@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Trax.Api.GraphQL.Mutations;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Mediator.Services.TrainRegistry;
 using Trax.Scheduler.Services.CancellationRegistry;
@@ -24,15 +25,15 @@ public class DeadLetterNoteLimitTests
         $"The note is {DeadLetterMutations.MaxNoteLength + 1} characters; it may be at most "
         + $"{DeadLetterMutations.MaxNoteLength} characters.";
 
-    private IDataContextProviderFactory _database = null!;
-    private TraxScheduler _scheduler = null!;
+    private IDataContextProviderFactory? _database;
+    private TraxScheduler? _scheduler;
 
     [SetUp]
     public void SetUp()
     {
         _database = Substitute.For<IDataContextProviderFactory>();
         _scheduler = new TraxScheduler(
-            _database,
+            _database.NotNull(),
             Substitute.For<ITrainRegistry>(),
             Substitute.For<ICancellationRegistry>(),
             NullLogger<TraxScheduler>.Instance
@@ -51,14 +52,14 @@ public class DeadLetterNoteLimitTests
         var result = await new DeadLetterMutations().AcknowledgeDeadLetter(
             7,
             OverTheCap,
-            _scheduler,
+            _scheduler.NotNull(),
             default
         );
 
         result.Success.Should().BeFalse();
         result.WorkQueueId.Should().BeNull();
         result.Message.Should().Be(Refusal);
-        _database.ReceivedCalls().Should().BeEmpty();
+        _database.NotNull().ReceivedCalls().Should().BeEmpty();
     }
 
     [Test]
@@ -67,13 +68,13 @@ public class DeadLetterNoteLimitTests
         var result = await new DeadLetterMutations().AcknowledgeDeadLetters(
             [1, 2],
             OverTheCap,
-            _scheduler,
+            _scheduler.NotNull(),
             default
         );
 
         result.Count.Should().Be(0);
         result.Message.Should().Be(Refusal);
-        _database.ReceivedCalls().Should().BeEmpty();
+        _database.NotNull().ReceivedCalls().Should().BeEmpty();
     }
 
     [Test]
@@ -81,13 +82,13 @@ public class DeadLetterNoteLimitTests
     {
         var result = await new DeadLetterMutations().AcknowledgeAllDeadLetters(
             OverTheCap,
-            _scheduler,
+            _scheduler.NotNull(),
             default
         );
 
         result.Count.Should().Be(0);
         result.Message.Should().Be(Refusal);
-        _database.ReceivedCalls().Should().BeEmpty();
+        _database.NotNull().ReceivedCalls().Should().BeEmpty();
     }
 
     [Test]

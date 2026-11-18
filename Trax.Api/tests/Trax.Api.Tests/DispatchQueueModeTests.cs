@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
@@ -24,21 +25,26 @@ namespace Trax.Api.Tests;
 [TestFixture]
 public class DispatchQueueModeTests
 {
-    private ITrainExecutionService _execution = null!;
-    private ServiceProvider _services = null!;
+    private ITrainExecutionService? _execution;
+    private ServiceProvider? _services;
 
     [SetUp]
     public void SetUp() => _execution = Substitute.For<ITrainExecutionService>();
 
     [TearDown]
-    public async Task TearDown() => await _services.DisposeAsync();
+    public async Task TearDown()
+    {
+        if (_services is not null)
+            await _services.DisposeAsync();
+    }
 
     [Test]
     public async Task ModeQueue_EnqueuesUnderTheFullName_WithTheInputAndPriority()
     {
         _execution
+            .NotNull()
             .QueueAsync(
-                typeof(IReportTrain).FullName!,
+                typeof(IReportTrain).FullName.NotNull(),
                 Arg.Any<string?>(),
                 Arg.Is<QueueTrainOptions>(o => o.Priority == 7 && o.RecordCaller),
                 Arg.Any<CancellationToken>()
@@ -54,14 +60,16 @@ public class DispatchQueueModeTests
         data.GetProperty("workQueueId").GetInt64().Should().Be(42);
         data.GetProperty("externalId").GetString().Should().Be("ext-42");
         await _execution
+            .NotNull()
             .Received(1)
             .QueueAsync(
-                typeof(IReportTrain).FullName!,
+                typeof(IReportTrain).FullName.NotNull(),
                 Arg.Is<string?>(json => json != null && json.Contains("q3")),
                 Arg.Is<QueueTrainOptions>(o => o.Priority == 7 && o.RecordCaller),
                 Arg.Any<CancellationToken>()
             );
         await _execution
+            .NotNull()
             .DidNotReceiveWithAnyArgs()
             .RunAsync(
                 Arg.Any<string>(),
@@ -75,6 +83,7 @@ public class DispatchQueueModeTests
     public async Task QueueOnlyTrain_EnqueuesWithPriorityZeroWhenNoneIsGiven()
     {
         _execution
+            .NotNull()
             .QueueAsync(
                 Arg.Any<string>(),
                 Arg.Any<string?>(),
@@ -91,9 +100,10 @@ public class DispatchQueueModeTests
 
         data.GetProperty("workQueueId").GetInt64().Should().Be(5);
         await _execution
+            .NotNull()
             .Received(1)
             .QueueAsync(
-                typeof(IReportTrain).FullName!,
+                typeof(IReportTrain).FullName.NotNull(),
                 Arg.Any<string?>(),
                 Arg.Is<QueueTrainOptions>(o => o.Priority == 0 && o.RecordCaller),
                 Arg.Any<CancellationToken>()
@@ -116,14 +126,16 @@ public class DispatchQueueModeTests
 
         body.Should().Contain("TRAX_AUTHORIZATION");
         await _execution
+            .NotNull()
             .DidNotReceiveWithAnyArgs()
-            .QueueAsync(default!, default, default!, default);
+            .QueueAsync(Null.Of<string>(), default, Null.Of<QueueTrainOptions>(), default);
     }
 
     [Test]
     public async Task Priority_FromAnOperator_IsQueued()
     {
         _execution
+            .NotNull()
             .QueueAsync(
                 Arg.Any<string>(),
                 Arg.Any<string?>(),
@@ -144,9 +156,10 @@ public class DispatchQueueModeTests
 
         body.Should().NotContain("errors");
         await _execution
+            .NotNull()
             .Received(1)
             .QueueAsync(
-                typeof(IReportTrain).FullName!,
+                typeof(IReportTrain).FullName.NotNull(),
                 Arg.Any<string?>(),
                 Arg.Is<QueueTrainOptions>(o => o.Priority == 31),
                 Arg.Any<CancellationToken>()
@@ -157,6 +170,7 @@ public class DispatchQueueModeTests
     public async Task NoPriority_FromACallerWhoDoesNotSatisfyTheOperationsGate_IsQueuedAtTheDefault()
     {
         _execution
+            .NotNull()
             .QueueAsync(
                 Arg.Any<string>(),
                 Arg.Any<string?>(),
@@ -177,9 +191,10 @@ public class DispatchQueueModeTests
 
         body.Should().NotContain("errors");
         await _execution
+            .NotNull()
             .Received(1)
             .QueueAsync(
-                typeof(IReportTrain).FullName!,
+                typeof(IReportTrain).FullName.NotNull(),
                 Arg.Any<string?>(),
                 Arg.Is<QueueTrainOptions>(o => o.Priority == 0),
                 Arg.Any<CancellationToken>()
@@ -244,10 +259,11 @@ public class DispatchQueueModeTests
         );
         services.AddScoped(_ => Substitute.For<ITraxHealthService>());
         services.AddScoped(_ => Substitute.For<IOperationsService>());
-        services.AddScoped(_ => _execution);
+        services.AddScoped(_ => _execution.NotNull());
         services.AddScoped(_ => Substitute.For<ITraxScheduler>());
         _services = services.BuildServiceProvider();
         return await _services
+            .NotNull()
             .GetRequiredService<IRequestExecutorProvider>()
             .GetExecutorAsync("trax")
             .ConfigureAwait(false);
@@ -261,7 +277,7 @@ public class DispatchQueueModeTests
             InputType = typeof(ReportInput),
             OutputType = typeof(Trax.Core.Functional.Unit),
             Lifetime = ServiceLifetime.Scoped,
-            ServiceTypeName = typeof(IReportTrain).FullName!,
+            ServiceTypeName = typeof(IReportTrain).FullName.NotNull(),
             ImplementationTypeName = nameof(ReportTrain),
             InputTypeName = nameof(ReportInput),
             OutputTypeName = nameof(Trax.Core.Functional.Unit),

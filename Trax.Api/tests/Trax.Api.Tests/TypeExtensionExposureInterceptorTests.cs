@@ -34,7 +34,10 @@ public class TypeExtensionExposureInterceptorTests
             new ObjectFieldConfiguration("probe") { Member = typeof(object).GetMethod("ToString") }
         );
 
-        interceptor.OnBeforeCompleteType(null!, subscription);
+        interceptor.OnBeforeCompleteType(
+            Null.Of<HotChocolate.Configuration.ITypeCompletionContext>(),
+            subscription
+        );
 
         report
             .Violations.Should()
@@ -55,7 +58,10 @@ public class TypeExtensionExposureInterceptorTests
         // A field built in code has no member to carry an attribute; its builder gates it.
         subscription.Fields.Add(new ObjectFieldConfiguration("built"));
 
-        interceptor.OnBeforeCompleteType(null!, subscription);
+        interceptor.OnBeforeCompleteType(
+            Null.Of<HotChocolate.Configuration.ITypeCompletionContext>(),
+            subscription
+        );
 
         report.Violations.Should().BeEmpty();
     }
@@ -80,7 +86,10 @@ public class TypeExtensionExposureInterceptorTests
             }
         );
 
-        interceptor.OnBeforeCompleteType(null!, root);
+        interceptor.OnBeforeCompleteType(
+            Null.Of<HotChocolate.Configuration.ITypeCompletionContext>(),
+            root
+        );
 
         report
             .Violations.Should()

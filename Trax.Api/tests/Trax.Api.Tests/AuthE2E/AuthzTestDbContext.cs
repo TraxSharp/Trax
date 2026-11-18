@@ -1,18 +1,19 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 
 namespace Trax.Api.Tests.AuthE2E;
 
 public class AuthzTestDbContext(DbContextOptions<AuthzTestDbContext> options) : DbContext(options)
 {
-    public DbSet<Owner> Owners { get; set; } = null!;
-    public DbSet<OwnedBook> OwnedBooks { get; set; } = null!;
-    public DbSet<Memo> Memos { get; set; } = null!;
-    public DbSet<RestrictedDoc> RestrictedDocs { get; set; } = null!;
-    public DbSet<MemberArea> MemberAreas { get; set; } = null!;
-    public DbSet<PublicBook> PublicBooks { get; set; } = null!;
+    public DbSet<Owner> Owners => Set<Owner>();
+    public DbSet<OwnedBook> OwnedBooks => Set<OwnedBook>();
+    public DbSet<Memo> Memos => Set<Memo>();
+    public DbSet<RestrictedDoc> RestrictedDocs => Set<RestrictedDoc>();
+    public DbSet<MemberArea> MemberAreas => Set<MemberArea>();
+    public DbSet<PublicBook> PublicBooks => Set<PublicBook>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -73,7 +74,7 @@ public class AuthzTestDbContext(DbContextOptions<AuthzTestDbContext> options) : 
     public static void EnsureSeeded(string connectionString)
     {
         AuthE2EHost.EnsureDatabaseExists(
-            new Npgsql.NpgsqlConnectionStringBuilder(connectionString).Database!
+            new Npgsql.NpgsqlConnectionStringBuilder(connectionString).Database.NotNull()
         );
 
         var opts = new DbContextOptionsBuilder<AuthzTestDbContext>()

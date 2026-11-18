@@ -3,6 +3,7 @@ using HotChocolate;
 using HotChocolate.Execution;
 using HotChocolate.Language;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.GraphQL.PersistedOperations.Middleware;
 
@@ -65,7 +66,7 @@ internal static class PersistedOperationIdBindingMiddleware
         // hash provider. A request built in process may not carry one, so compute it from the
         // document as given.
         var hash = request.DocumentHash.IsEmpty
-            ? hashProvider.ComputeHash(request.Document!.AsSpan())
+            ? hashProvider.ComputeHash(request.Document.NotNull().AsSpan())
             : request.DocumentHash;
 
         return string.Equals(hash.Value, request.DocumentId.Value, StringComparison.Ordinal);

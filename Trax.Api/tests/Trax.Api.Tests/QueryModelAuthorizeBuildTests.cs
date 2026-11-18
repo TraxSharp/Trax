@@ -37,13 +37,13 @@ public class QueryModelAuthorizeBuildTests
     private sealed class PolicyDbContext(DbContextOptions<PolicyDbContext> options)
         : DbContext(options)
     {
-        public DbSet<PolicyGatedEntity> Items { get; set; } = null!;
+        public DbSet<PolicyGatedEntity> Items => Set<PolicyGatedEntity>();
     }
 
     private sealed class RolesOnlyDbContext(DbContextOptions<RolesOnlyDbContext> options)
         : DbContext(options)
     {
-        public DbSet<RoleOnlyEntity> Items { get; set; } = null!;
+        public DbSet<RoleOnlyEntity> Items => Set<RoleOnlyEntity>();
     }
 
     [Test]
@@ -123,8 +123,8 @@ public class QueryModelAuthorizeBuildTests
     private sealed class DupPolicyDbContext(DbContextOptions<DupPolicyDbContext> options)
         : DbContext(options)
     {
-        public DbSet<DupPolicyA> A { get; set; } = null!;
-        public DbSet<DupPolicyB> B { get; set; } = null!;
+        public DbSet<DupPolicyA> A => Set<DupPolicyA>();
+        public DbSet<DupPolicyB> B => Set<DupPolicyB>();
     }
 
     [Test]

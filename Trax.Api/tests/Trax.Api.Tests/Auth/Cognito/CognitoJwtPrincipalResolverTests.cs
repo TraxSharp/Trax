@@ -4,6 +4,7 @@ using Microsoft.IdentityModel.Tokens;
 using Trax.Api.Auth;
 using Trax.Api.Auth.Jwt;
 using Trax.Api.Auth.Jwt.Cognito;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Auth.Cognito;
 
@@ -33,7 +34,7 @@ public class CognitoJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.Id.Should().Be("e4b8f1a2-9d4b-4f3c-a1e2-7d8b9c3d1a2e");
+        result.NotNull().Id.Should().Be("e4b8f1a2-9d4b-4f3c-a1e2-7d8b9c3d1a2e");
     }
 
     [Test]
@@ -46,7 +47,7 @@ public class CognitoJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.Id.Should().Be("alt-sub");
+        result.NotNull().Id.Should().Be("alt-sub");
     }
 
     [Test]
@@ -59,7 +60,7 @@ public class CognitoJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.PrincipalType.Should().Be(CognitoDefaults.PrincipalType);
+        result.NotNull().PrincipalType.Should().Be(CognitoDefaults.PrincipalType);
     }
 
     [Test]
@@ -76,7 +77,7 @@ public class CognitoJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.Roles.Should().BeEquivalentTo("admin", "billing");
+        result.NotNull().Roles.Should().BeEquivalentTo("admin", "billing");
     }
 
     [Test]
@@ -94,7 +95,7 @@ public class CognitoJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.Roles.Should().BeEquivalentTo("admin", "editor");
+        result.NotNull().Roles.Should().BeEquivalentTo("admin", "editor");
     }
 
     [Test]
@@ -112,7 +113,7 @@ public class CognitoJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.DisplayName.Should().Be("Alice");
+        result.NotNull().DisplayName.Should().Be("Alice");
     }
 
     [Test]
@@ -125,7 +126,7 @@ public class CognitoJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.DisplayName.Should().Be("alice123");
+        result.NotNull().DisplayName.Should().Be("alice123");
     }
 
     [Test]
@@ -138,7 +139,7 @@ public class CognitoJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.DisplayName.Should().Be("alice@example.com");
+        result.NotNull().DisplayName.Should().Be("alice@example.com");
     }
 
     [Test]
@@ -151,7 +152,7 @@ public class CognitoJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.DisplayName.Should().Be("u-final");
+        result.NotNull().DisplayName.Should().Be("u-final");
     }
 
     [Test]
@@ -164,8 +165,9 @@ public class CognitoJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!
-            .Claims![CognitoDefaults.IdentityProvider]
+        result
+            .NotNull()
+            .Claims.NotNull()[CognitoDefaults.IdentityProvider]
             .Should()
             .Be(CognitoDefaults.PrincipalType);
     }
@@ -196,7 +198,7 @@ public class CognitoJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.Claims![CognitoDefaults.IdentityProvider].Should().Be("Google");
+        result.NotNull().Claims.NotNull()[CognitoDefaults.IdentityProvider].Should().Be("Google");
     }
 
     [Test]
@@ -223,8 +225,12 @@ public class CognitoJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.Claims![CognitoDefaults.IdentityProvider].Should().Be("SignInWithApple");
-        result.Claims["email"].Should().Be("x7k9q2@privaterelay.appleid.com");
+        result
+            .NotNull()
+            .Claims.NotNull()[CognitoDefaults.IdentityProvider]
+            .Should()
+            .Be("SignInWithApple");
+        result.Claims.NotNull()["email"].Should().Be("x7k9q2@privaterelay.appleid.com");
     }
 
     [Test]
@@ -238,9 +244,9 @@ public class CognitoJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.Id.Should().Be("u-stable");
+        result.NotNull().Id.Should().Be("u-stable");
         result.DisplayName.Should().Be("u-stable");
-        result.Claims![CognitoDefaults.IdentityProvider].Should().Be("SignInWithApple");
+        result.Claims.NotNull()[CognitoDefaults.IdentityProvider].Should().Be("SignInWithApple");
     }
 
     [Test]
@@ -260,7 +266,11 @@ public class CognitoJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.Claims![CognitoDefaults.IdentityProvider].Should().Be("SignInWithApple");
+        result
+            .NotNull()
+            .Claims.NotNull()[CognitoDefaults.IdentityProvider]
+            .Should()
+            .Be("SignInWithApple");
     }
 
     [Test]
@@ -280,7 +290,7 @@ public class CognitoJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.Claims![CognitoDefaults.IdentityProvider].Should().Be("Google");
+        result.NotNull().Claims.NotNull()[CognitoDefaults.IdentityProvider].Should().Be("Google");
     }
 
     [Test]
@@ -300,7 +310,11 @@ public class CognitoJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.Claims![CognitoDefaults.IdentityProvider].Should().Be("SignInWithApple");
+        result
+            .NotNull()
+            .Claims.NotNull()[CognitoDefaults.IdentityProvider]
+            .Should()
+            .Be("SignInWithApple");
     }
 
     [Test]
@@ -315,7 +329,7 @@ public class CognitoJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.Claims![CognitoDefaults.IdentityProvider].Should().Be("Google");
+        result.NotNull().Claims.NotNull()[CognitoDefaults.IdentityProvider].Should().Be("Google");
     }
 
     [Test]
@@ -328,8 +342,9 @@ public class CognitoJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!
-            .Claims![CognitoDefaults.IdentityProvider]
+        result
+            .NotNull()
+            .Claims.NotNull()[CognitoDefaults.IdentityProvider]
             .Should()
             .Be(CognitoDefaults.PrincipalType);
     }
@@ -344,8 +359,9 @@ public class CognitoJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!
-            .Claims![CognitoDefaults.IdentityProvider]
+        result
+            .NotNull()
+            .Claims.NotNull()[CognitoDefaults.IdentityProvider]
             .Should()
             .Be(CognitoDefaults.PrincipalType);
     }
@@ -365,8 +381,9 @@ public class CognitoJwtPrincipalResolverTests
 
         // Wrapping logic wraps in [...], producing an array of one object
         // that has no providerName, so it defaults.
-        result!
-            .Claims![CognitoDefaults.IdentityProvider]
+        result
+            .NotNull()
+            .Claims.NotNull()[CognitoDefaults.IdentityProvider]
             .Should()
             .Be(CognitoDefaults.PrincipalType);
     }
@@ -384,8 +401,9 @@ public class CognitoJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!
-            .Claims![CognitoDefaults.IdentityProvider]
+        result
+            .NotNull()
+            .Claims.NotNull()[CognitoDefaults.IdentityProvider]
             .Should()
             .Be(CognitoDefaults.PrincipalType);
     }
@@ -403,8 +421,9 @@ public class CognitoJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!
-            .Claims![CognitoDefaults.IdentityProvider]
+        result
+            .NotNull()
+            .Claims.NotNull()[CognitoDefaults.IdentityProvider]
             .Should()
             .Be(CognitoDefaults.PrincipalType);
     }
@@ -422,8 +441,9 @@ public class CognitoJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!
-            .Claims![CognitoDefaults.IdentityProvider]
+        result
+            .NotNull()
+            .Claims.NotNull()[CognitoDefaults.IdentityProvider]
             .Should()
             .Be(CognitoDefaults.PrincipalType);
     }
@@ -444,7 +464,7 @@ public class CognitoJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.Claims.Should().ContainKey("tenant").WhoseValue.Should().Be("acme");
+        result.NotNull().Claims.Should().ContainKey("tenant").WhoseValue.Should().Be("acme");
         // identity_provider is always synthesized.
         result.Claims.Should().ContainKey(CognitoDefaults.IdentityProvider);
         result.Claims.Should().NotContainKey("name");
@@ -467,7 +487,7 @@ public class CognitoJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.Claims!["custom"].Should().Be("first");
+        result.NotNull().Claims.NotNull()["custom"].Should().Be("first");
     }
 
     [Test]
@@ -484,7 +504,7 @@ public class CognitoJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.Roles.Should().BeEquivalentTo("admin");
+        result.NotNull().Roles.Should().BeEquivalentTo("admin");
     }
 
     [Test]
@@ -497,8 +517,10 @@ public class CognitoJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!
-            .Claims!.Should()
+        result
+            .NotNull()
+            .Claims.NotNull()
+            .Should()
             .Contain(new KeyValuePair<string, string>("email_verified", "true"));
     }
 
@@ -515,8 +537,10 @@ public class CognitoJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!
-            .Claims!.Should()
+        result
+            .NotNull()
+            .Claims.NotNull()
+            .Should()
             .Contain(
                 new KeyValuePair<string, string>(
                     CognitoDefaults.TokenUse,
@@ -531,7 +555,9 @@ public class CognitoJwtPrincipalResolverTests
         var resolver = new CognitoJwtPrincipalResolver();
 
         var act = async () =>
-            await resolver.ResolveAsync(null!, CancellationToken.None).ConfigureAwait(false);
+            await resolver
+                .ResolveAsync(Null.Of<Trax.Api.Auth.Jwt.JwtTokenInput>(), CancellationToken.None)
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<ArgumentNullException>();
     }
@@ -548,11 +574,13 @@ public class CognitoJwtPrincipalResolverTests
 
     private sealed class FakeSecurityToken : SecurityToken
     {
+        private static readonly DateTime Issued = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
         public override string Id { get; } = Guid.NewGuid().ToString();
         public override string Issuer => "fake";
-        public override SecurityKey SecurityKey => null!;
-        public override SecurityKey SigningKey { get; set; } = null!;
-        public override DateTime ValidFrom => DateTime.UtcNow;
-        public override DateTime ValidTo => DateTime.UtcNow.AddHours(1);
+        public override SecurityKey SecurityKey => Null.Of<SecurityKey>();
+        public override SecurityKey SigningKey { get; set; } = Null.Of<SecurityKey>();
+        public override DateTime ValidFrom => Issued;
+        public override DateTime ValidTo => Issued.AddHours(1);
     }
 }

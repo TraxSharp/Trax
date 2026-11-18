@@ -197,16 +197,17 @@ public class QueryModelAllowAnonymousDiscoveryTests
 
     public class DiscoveryContext(DbContextOptions<DiscoveryContext> options) : DbContext(options)
     {
-        public DbSet<AnonRow> AnonRows { get; set; } = null!;
-        public DbSet<InheritedAnonRow> InheritedAnonRows { get; set; } = null!;
-        public DbSet<ImplementsAnonInterfaceRow> ImplementsAnonInterfaceRows { get; set; } = null!;
+        public DbSet<AnonRow> AnonRows => Set<AnonRow>();
+        public DbSet<InheritedAnonRow> InheritedAnonRows => Set<InheritedAnonRow>();
+        public DbSet<ImplementsAnonInterfaceRow> ImplementsAnonInterfaceRows =>
+            Set<ImplementsAnonInterfaceRow>();
     }
 
     // BareRow lives in its own context: a no-marker entity trips the exposure
     // rule on an open endpoint, so tests that need it build a gated endpoint.
     public class BareContext(DbContextOptions<BareContext> options) : DbContext(options)
     {
-        public DbSet<BareRow> BareRows { get; set; } = null!;
+        public DbSet<BareRow> BareRows => Set<BareRow>();
     }
 
     [TraxQueryModel(Name = "conflictedRows")]
@@ -221,7 +222,7 @@ public class QueryModelAllowAnonymousDiscoveryTests
 
     public class ConflictContext(DbContextOptions<ConflictContext> options) : DbContext(options)
     {
-        public DbSet<ConflictedRow> Rows { get; set; } = null!;
+        public DbSet<ConflictedRow> Rows => Set<ConflictedRow>();
     }
 
     [TraxAllowAnonymous]
@@ -239,7 +240,7 @@ public class QueryModelAllowAnonymousDiscoveryTests
     public class MixedSourceContext(DbContextOptions<MixedSourceContext> options)
         : DbContext(options)
     {
-        public DbSet<MixedSourceRow> Rows { get; set; } = null!;
+        public DbSet<MixedSourceRow> Rows => Set<MixedSourceRow>();
     }
 
     [TraxAllowAnonymous]
@@ -257,7 +258,7 @@ public class QueryModelAllowAnonymousDiscoveryTests
     public class MixedInheritanceContext(DbContextOptions<MixedInheritanceContext> options)
         : DbContext(options)
     {
-        public DbSet<MixedInheritanceRow> Rows { get; set; } = null!;
+        public DbSet<MixedInheritanceRow> Rows => Set<MixedInheritanceRow>();
     }
 
     public interface IExposedAnonRow
@@ -284,6 +285,6 @@ public class QueryModelAllowAnonymousDiscoveryTests
     public class ExposeAsAnonContext(DbContextOptions<ExposeAsAnonContext> options)
         : DbContext(options)
     {
-        public DbSet<ExposedAnonRow> Rows { get; set; } = null!;
+        public DbSet<ExposedAnonRow> Rows => Set<ExposedAnonRow>();
     }
 }

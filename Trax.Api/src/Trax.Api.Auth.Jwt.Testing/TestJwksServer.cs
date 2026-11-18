@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Auth.Jwt.Testing;
 
@@ -70,6 +71,13 @@ public sealed class TestJwksServer : IAsyncDisposable
     /// </summary>
     public TestTokenIssuer CreateIssuer(string audience) =>
         new(Issuer, audience, SigningCredentials, BuildKeysetSnapshot());
+
+    /// <summary>
+    /// Mint a token issuer as <see cref="CreateIssuer(string)"/> does, whose tokens' default
+    /// <c>nbf</c> and <c>exp</c> are read from <paramref name="clock"/>.
+    /// </summary>
+    public TestTokenIssuer CreateIssuer(string audience, TimeProvider clock) =>
+        new(Issuer, audience, SigningCredentials, BuildKeysetSnapshot(), clock);
 
     /// <summary>
     /// Snapshot of every published signing credential, keyed by <c>kid</c>.
@@ -150,7 +158,8 @@ public sealed class TestJwksServer : IAsyncDisposable
 
         var addresses = app
             .Services.GetRequiredService<IServer>()
-            .Features.Get<IServerAddressesFeature>()!
+            .Features.Get<IServerAddressesFeature>()
+            .NotNull()
             .Addresses;
         var authority = addresses.First().TrimEnd('/');
         var resolvedIssuer = options.IssuerOverride ?? $"{authority}{prefix}";
@@ -251,8 +260,8 @@ public sealed class TestJwksServer : IAsyncDisposable
                     use = "sig",
                     kid = k.Kid,
                     alg = "RS256",
-                    n = Base64UrlEncoder.Encode(p.Modulus!),
-                    e = Base64UrlEncoder.Encode(p.Exponent!),
+                    n = Base64UrlEncoder.Encode(p.Modulus.NotNull()),
+                    e = Base64UrlEncoder.Encode(p.Exponent.NotNull()),
                 };
             })
             .ToArray();
@@ -268,8 +277,8 @@ public sealed class TestJwksServer : IAsyncDisposable
             use = "sig",
             kid = entry.Kid,
             alg = "RS256",
-            n = Base64UrlEncoder.Encode(p.Modulus!),
-            e = Base64UrlEncoder.Encode(p.Exponent!),
+            n = Base64UrlEncoder.Encode(p.Modulus.NotNull()),
+            e = Base64UrlEncoder.Encode(p.Exponent.NotNull()),
         };
         return JsonSerializer.Serialize(new { keys = new[] { key } });
     }

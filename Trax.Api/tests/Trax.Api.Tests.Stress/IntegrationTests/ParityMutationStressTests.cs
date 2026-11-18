@@ -4,6 +4,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.Tests.Stress.Fixtures;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Services.Effects;
 using Trax.Scheduler.Services.Operations;
 
@@ -351,7 +352,7 @@ public class ParityMutationStressTests : StressTestSetup
                 levels.GetArrayLength().Should().BeGreaterThan(0);
 
                 var category = levels[0].GetProperty("category").GetString();
-                var level = levels[0].GetProperty("level").GetString()!.ToUpperInvariant();
+                var level = levels[0].GetProperty("level").GetString().NotNull().ToUpperInvariant();
                 foreach (var target in new[] { "DEBUG", level })
                 {
                     var payload = await Mutate(

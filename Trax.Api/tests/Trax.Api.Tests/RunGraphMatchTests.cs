@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using NSubstitute;
 using Trax.Api.DTOs;
 using Trax.Api.Services.Runs;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -195,7 +196,7 @@ public class RunGraphMatchTests
 
         var graph = await RunGraphs.ReadAsync(db, graphs, run, default);
 
-        graph!.Nodes[0].State.Should().Be(RunNodeState.Interrupted);
+        graph.NotNull().Nodes[0].State.Should().Be(RunNodeState.Interrupted);
         graph.Nodes[0].Steps.Should().ContainSingle();
     }
 
@@ -208,7 +209,7 @@ public class RunGraphMatchTests
 
         var graph = await RunGraphs.ReadAsync(db, graphs, run, default);
 
-        graph!.Nodes[0].State.Should().Be(RunNodeState.InProgress);
+        graph.NotNull().Nodes[0].State.Should().Be(RunNodeState.InProgress);
     }
 
     [Test]
@@ -252,7 +253,8 @@ public class RunGraphMatchTests
                     Name = "Acme.IRoutedTrain",
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
-                }
+                },
+                TimeProvider.System
             );
             run.TrainState = runState;
             await db.Track(run).ConfigureAwait(false);
@@ -265,7 +267,7 @@ public class RunGraphMatchTests
                     Kind = JunctionRunKind.Junction,
                     Name = "Fetch",
                     State = stepState,
-                    StartedAt = DateTime.UtcNow,
+                    StartedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                     NodeId = "Fetch#0",
                 }
             );
@@ -321,7 +323,7 @@ public class RunGraphMatchTests
             Kind = JunctionRunKind.Junction,
             Name = "Ship",
             State = JunctionRunState.Completed,
-            StartedAt = DateTime.UtcNow,
+            StartedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
             NodeId = FastShip,
         };
 
@@ -351,7 +353,7 @@ public class RunGraphMatchTests
             kind,
             nodeId ?? "Old",
             state,
-            DateTime.UtcNow,
+            TimeProvider.System.GetUtcNow().UtcDateTime,
             EndedAt: null,
             DurationMs: null,
             FailureClass: null,

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Services.PostgresContext;
 
 namespace Trax.Api.StateMachine.E2E;
@@ -35,7 +36,10 @@ public sealed class CountingDataContexts
                     (IDbContextFactory<PostgresContext>)(
                         contexts.ImplementationInstance
                         ?? contexts.ImplementationFactory?.Invoke(sp)
-                        ?? ActivatorUtilities.CreateInstance(sp, contexts.ImplementationType!)
+                        ?? ActivatorUtilities.CreateInstance(
+                            sp,
+                            contexts.ImplementationType.NotNull()
+                        )
                     ),
                     counter
                 ),

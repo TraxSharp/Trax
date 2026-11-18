@@ -6,6 +6,7 @@ using Trax.Api.Auth.ApiKey;
 using Trax.Api.Auth.Jwt;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Subscriptions;
+using Trax.Core.Extensions;
 using static Trax.Api.Tests.Auth.SocketInterceptorTestHelpers;
 
 namespace Trax.Api.Tests.Auth;
@@ -117,7 +118,7 @@ public class SocketInterceptorScopeTests
         );
 
         result.Accepted.Should().BeTrue();
-        http.User.Identity!.IsAuthenticated.Should().BeTrue();
+        http.User.Identity.NotNull().IsAuthenticated.Should().BeTrue();
     }
 
     /// <summary>
@@ -196,7 +197,7 @@ public class SocketInterceptorScopeTests
             CancellationToken.None
         );
 
-        created!.Disposed.Should().BeTrue();
+        created.NotNull().Disposed.Should().BeTrue();
     }
 
     /// <summary>
@@ -230,7 +231,7 @@ public class SocketInterceptorScopeTests
         );
 
         result.Accepted.Should().BeFalse();
-        created!.Disposed.Should().BeTrue();
+        created.NotNull().Disposed.Should().BeTrue();
     }
 
     private sealed class CountingResolver : ITraxPrincipalResolver<string>

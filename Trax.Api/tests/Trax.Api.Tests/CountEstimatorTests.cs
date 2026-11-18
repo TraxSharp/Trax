@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Queries;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.SqlDialect;
@@ -37,9 +38,9 @@ public class CountEstimatorTests
     // estimate is close, but the tolerance keeps the test from pinning the planner's arithmetic.
     private const int Tolerance = 500;
 
-    private ServiceProvider _provider = null!;
-    private IDataContextProviderFactory _factory = null!;
-    private ISqlDialect _dialect = null!;
+    private ServiceProvider? _provider;
+    private IDataContextProviderFactory? _factory;
+    private ISqlDialect? _dialect;
 
     [OneTimeSetUp]
     public void OneTimeSetUp()
@@ -48,14 +49,15 @@ public class CountEstimatorTests
         services.AddLogging();
         services.AddTrax(t => t.AddEffects(e => e.UsePostgres(ConnectionString)));
         _provider = services.BuildServiceProvider();
-        _factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        _dialect = _provider.GetRequiredService<ISqlDialect>();
+        _factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
+        _dialect = _provider.NotNull().GetRequiredService<ISqlDialect>();
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await _provider.DisposeAsync();
+        if (_provider is not null)
+            await _provider.DisposeAsync();
         Npgsql.NpgsqlConnection.ClearAllPools();
     }
 
@@ -68,7 +70,7 @@ public class CountEstimatorTests
 
     private async Task ExecAsync(string sql)
     {
-        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             await ((DbContext)db).Database.ExecuteSqlRawAsync(sql).ConfigureAwait(false);
@@ -133,13 +135,18 @@ public class CountEstimatorTests
         await AnalyzeAsync("metadata");
         var queries = new OperationsQueries();
 
-        var first = await queries.GetExecutions(_factory, default, take: 10, sqlDialect: _dialect);
+        var first = await queries.GetExecutions(
+            _factory.NotNull(),
+            default,
+            take: 10,
+            sqlDialect: _dialect.NotNull()
+        );
         var second = await queries.GetExecutions(
-            _factory,
+            _factory.NotNull(),
             default,
             take: 10,
             afterId: first.NextCursor,
-            sqlDialect: _dialect
+            sqlDialect: _dialect.NotNull()
         );
 
         ShouldBeTheEstimateOnEveryPage(first, second);
@@ -152,10 +159,10 @@ public class CountEstimatorTests
         await AnalyzeAsync("metadata");
 
         var result = await new OperationsQueries().GetExecutions(
-            _factory,
+            _factory.NotNull(),
             default,
             trainState: TrainState.Failed,
-            sqlDialect: _dialect
+            sqlDialect: _dialect.NotNull()
         );
 
         result.IsEstimatedCount.Should().BeFalse();
@@ -169,13 +176,18 @@ public class CountEstimatorTests
         await AnalyzeAsync("manifest");
         var queries = new OperationsQueries();
 
-        var first = await queries.GetManifests(_factory, default, take: 10, sqlDialect: _dialect);
+        var first = await queries.GetManifests(
+            _factory.NotNull(),
+            default,
+            take: 10,
+            sqlDialect: _dialect.NotNull()
+        );
         var second = await queries.GetManifests(
-            _factory,
+            _factory.NotNull(),
             default,
             take: 10,
             afterId: first.NextCursor,
-            sqlDialect: _dialect
+            sqlDialect: _dialect.NotNull()
         );
 
         ShouldBeTheEstimateOnEveryPage(first, second);
@@ -188,10 +200,10 @@ public class CountEstimatorTests
         await AnalyzeAsync("manifest");
 
         var result = await new OperationsQueries().GetManifests(
-            _factory,
+            _factory.NotNull(),
             default,
             isEnabled: true,
-            sqlDialect: _dialect
+            sqlDialect: _dialect.NotNull()
         );
 
         result.IsEstimatedCount.Should().BeFalse();
@@ -205,13 +217,18 @@ public class CountEstimatorTests
         await AnalyzeAsync("work_queue");
         var queries = new WorkQueueQueries();
 
-        var first = await queries.GetWorkQueues(_factory, default, take: 10, sqlDialect: _dialect);
+        var first = await queries.GetWorkQueues(
+            _factory.NotNull(),
+            default,
+            take: 10,
+            sqlDialect: _dialect.NotNull()
+        );
         var second = await queries.GetWorkQueues(
-            _factory,
+            _factory.NotNull(),
             default,
             take: 10,
             afterId: first.NextCursor,
-            sqlDialect: _dialect
+            sqlDialect: _dialect.NotNull()
         );
 
         ShouldBeTheEstimateOnEveryPage(first, second);
@@ -224,10 +241,10 @@ public class CountEstimatorTests
         await AnalyzeAsync("work_queue");
 
         var result = await new WorkQueueQueries().GetWorkQueues(
-            _factory,
+            _factory.NotNull(),
             default,
             status: WorkQueueStatus.Cancelled,
-            sqlDialect: _dialect
+            sqlDialect: _dialect.NotNull()
         );
 
         result.IsEstimatedCount.Should().BeFalse();
@@ -241,13 +258,18 @@ public class CountEstimatorTests
         await AnalyzeAsync("manifest_group");
         var queries = new ManifestGroupQueries();
 
-        var first = await queries.GetGroups(_factory, default, take: 10, sqlDialect: _dialect);
+        var first = await queries.GetGroups(
+            _factory.NotNull(),
+            default,
+            take: 10,
+            sqlDialect: _dialect.NotNull()
+        );
         var second = await queries.GetGroups(
-            _factory,
+            _factory.NotNull(),
             default,
             take: 10,
             afterId: first.NextCursor,
-            sqlDialect: _dialect
+            sqlDialect: _dialect.NotNull()
         );
 
         ShouldBeTheEstimateOnEveryPage(first, second);
@@ -260,10 +282,10 @@ public class CountEstimatorTests
         await AnalyzeAsync("manifest_group");
 
         var result = await new ManifestGroupQueries().GetGroups(
-            _factory,
+            _factory.NotNull(),
             default,
             nameContains: "group-1",
-            sqlDialect: _dialect
+            sqlDialect: _dialect.NotNull()
         );
 
         result.IsEstimatedCount.Should().BeFalse();
@@ -286,9 +308,9 @@ public class CountEstimatorTests
         await AnalyzeAsync("manifest_group");
 
         var result = await new ManifestGroupQueries().GetGroups(
-            _factory,
+            _factory.NotNull(),
             default,
-            sqlDialect: _dialect
+            sqlDialect: _dialect.NotNull()
         );
 
         result
@@ -309,9 +331,9 @@ public class CountEstimatorTests
             await SeedGroupsAsync(LargeTableRows);
 
             var result = await new ManifestGroupQueries().GetGroups(
-                _factory,
+                _factory.NotNull(),
                 default,
-                sqlDialect: _dialect
+                sqlDialect: _dialect.NotNull()
             );
 
             result.IsEstimatedCount.Should().BeFalse();

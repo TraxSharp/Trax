@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.Tests.Stress.Fakes.Trains;
 using Trax.Api.Tests.Stress.Fixtures;
+using Trax.Core.Extensions;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Scheduler.Services.Operations;
 
@@ -51,7 +52,7 @@ public class AdminMutationStressTests : StressTestSetup
     /// <summary>The seed gives work queue row <c>g</c> the status queued when <c>g % 4 == 3</c>.</summary>
     private const long QueuedWorkQueueId = 750_003;
 
-    private static readonly string ProbeTrainName = typeof(IStressProbeTrain).FullName!;
+    private static readonly string ProbeTrainName = typeof(IStressProbeTrain).FullName.NotNull();
 
     private static IOperationsService Operations(IServiceProvider sp) =>
         sp.GetRequiredService<IOperationsService>();
@@ -112,7 +113,7 @@ public class AdminMutationStressTests : StressTestSetup
             .GetRequiredService<IEffectRegistry>()
             .GetToggleable()
             .Keys.First()
-            .FullName!;
+            .FullName.NotNull();
 
         await MeasureAsync(
             "operations.setEffectEnabled",

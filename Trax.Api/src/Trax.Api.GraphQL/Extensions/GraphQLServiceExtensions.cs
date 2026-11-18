@@ -35,6 +35,7 @@ using Trax.Api.GraphQL.TypeModules;
 using Trax.Api.GraphQL.Types;
 using Trax.Api.GraphQL.Validation;
 using Trax.Api.Services.BulkOperations;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.ChangeSignal;
@@ -229,6 +230,7 @@ public static class GraphQLServiceExtensions
         // by the host shutting down. See
         // docs/adr/0045-a-bulk-operation-applies-to-a-confirmed-snapshot-of-a-filter.md.
         services.TryAddSingleton<BulkOperationJobs>();
+        services.TryAddSingleton(TimeProvider.System);
         services.AddTransient<GraphQLSubscriptionHook>();
         services
             .AddSingleton<LifecycleHookFactory<GraphQLSubscriptionHook>>()
@@ -962,7 +964,7 @@ public static class GraphQLServiceExtensions
                         reg.IsQuery || reg.IsMutation
                             ? "GraphQL-exposed train"
                             : "[TraxBroadcast] train",
-                        reg.ServiceType.FullName!,
+                        reg.ServiceType.FullName.NotNull(),
                         violation
                     )
                 );

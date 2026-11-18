@@ -15,6 +15,7 @@ using NSubstitute;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;
@@ -258,7 +259,8 @@ public class IntrospectionPerRequestTests
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         response.Headers.CacheControl.Should().NotBeNull();
         response
-            .Headers.CacheControl!.Public.Should()
+            .Headers.CacheControl.NotNull()
+            .Public.Should()
             .BeFalse("a download decided per caller is not a shared-cache response, per " + Adr);
         response.Headers.CacheControl.Private.Should().BeTrue();
     }

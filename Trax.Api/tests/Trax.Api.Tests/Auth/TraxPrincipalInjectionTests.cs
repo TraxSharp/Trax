@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.Auth;
 using Trax.Api.Auth.ApiKey;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Auth;
 
@@ -119,7 +120,7 @@ public class TraxPrincipalInjectionTests
         var response = await client.GetFromJsonAsync<JunctionResponse>("/junction");
 
         response.Should().NotBeNull();
-        response!.Greeting.Should().Be("Alice Liddell (TraxApiKey:alice)");
+        response.NotNull().Greeting.Should().Be("Alice Liddell (TraxApiKey:alice)");
         response.Roles.Should().BeEquivalentTo(["User", "Tenant.Admin"]);
         response.Tenant.Should().Be("acme");
     }
@@ -136,7 +137,7 @@ public class TraxPrincipalInjectionTests
 
         var response = await client.GetFromJsonAsync<JunctionResponse>("/direct");
 
-        response!.Greeting.Should().Be("Bob (TraxApiKey:bob)");
+        response.NotNull().Greeting.Should().Be("Bob (TraxApiKey:bob)");
         response.Roles.Should().BeEquivalentTo(["Admin"]);
     }
 

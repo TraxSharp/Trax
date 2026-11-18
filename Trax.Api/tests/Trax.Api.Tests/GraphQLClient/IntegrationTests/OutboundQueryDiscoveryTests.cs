@@ -69,14 +69,14 @@ public class OutboundQueryDiscoveryTests
     [Test]
     public void Discover_NullAssemblies_Throws()
     {
-        var act = () => OutboundQueryDiscovery.Discover(null!);
+        var act = () => OutboundQueryDiscovery.Discover(Null.Of<System.Reflection.Assembly[]>());
         act.Should().Throw<ArgumentNullException>();
     }
 
     [Test]
     public void Attribute_NullOrWhitespaceEndpoint_Throws()
     {
-        var actNull = () => new TraxOutboundQueryAttribute(null!);
+        var actNull = () => new TraxOutboundQueryAttribute(Null.Of<string>());
         actNull.Should().Throw<ArgumentException>();
         var actEmpty = () => new TraxOutboundQueryAttribute("  ");
         actEmpty.Should().Throw<ArgumentException>();

@@ -27,14 +27,24 @@ public sealed class ProcessCpuSampler
 
     /// <summary>Creates a sampler that reads this process's total CPU time and the machine's logical core count.</summary>
     public ProcessCpuSampler()
+        : this(TimeProvider.System) { }
+
+    /// <summary>
+    /// Creates a sampler that reads this process's total CPU time and the machine's logical core
+    /// count, and measures the time between two samples on <paramref name="clock"/>.
+    /// </summary>
+    public ProcessCpuSampler(TimeProvider clock)
         : this(
             () =>
             {
                 using var proc = Process.GetCurrentProcess();
-                return (proc.TotalProcessorTime, DateTime.UtcNow);
+                return (proc.TotalProcessorTime, clock.GetUtcNow().UtcDateTime);
             },
             Environment.ProcessorCount
-        ) { }
+        )
+    {
+        ArgumentNullException.ThrowIfNull(clock);
+    }
 
     // Seam for deterministic tests: inject the CPU-time/clock reader and core count.
     internal ProcessCpuSampler(Func<(TimeSpan Cpu, DateTime At)> read, int cores)

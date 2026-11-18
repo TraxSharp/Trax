@@ -39,7 +39,7 @@ public class QueryModelAllowAnonymousSchemaValidatorTests
 
     private sealed class AnonDbContext(DbContextOptions<AnonDbContext> options) : DbContext(options)
     {
-        public DbSet<AnonThing> Things { get; set; } = null!;
+        public DbSet<AnonThing> Things => Set<AnonThing>();
     }
 
     [Test]

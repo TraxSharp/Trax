@@ -18,6 +18,7 @@ namespace Trax.Api.GraphQL.Audit
         public const string DroppedCounterName = "trax.audit.dropped";
         public const string MeterName = "Trax.Audit";
         public TraxAuditChannel(Microsoft.Extensions.Options.IOptions<Trax.Api.GraphQL.Audit.TraxAuditOptions> options, Microsoft.Extensions.Logging.ILogger<Trax.Api.GraphQL.Audit.TraxAuditChannel> logger) { }
+        public TraxAuditChannel(Microsoft.Extensions.Options.IOptions<Trax.Api.GraphQL.Audit.TraxAuditOptions> options, Microsoft.Extensions.Logging.ILogger<Trax.Api.GraphQL.Audit.TraxAuditChannel> logger, System.TimeProvider clock) { }
         public long TotalDropped { get; }
         public void Dispose() { }
     }

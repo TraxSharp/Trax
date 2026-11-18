@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence;
 
 namespace Trax.Api.StateMachine.E2E;
@@ -93,7 +94,8 @@ public static class ShelfHosts
                 .GetProperty("shelf")
                 .GetProperty(field)
                 .GetProperty("id")
-                .GetString()!
+                .GetString()
+                .NotNull()
         );
     }
 

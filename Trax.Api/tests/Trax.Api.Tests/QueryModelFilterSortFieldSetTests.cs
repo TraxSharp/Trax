@@ -241,8 +241,8 @@ public class QueryModelFilterSortFieldSetTests
 
     public class FieldSetDbContext(DbContextOptions<FieldSetDbContext> options) : DbContext(options)
     {
-        public DbSet<FieldSetAccount> Accounts { get; set; } = null!;
-        public DbSet<FieldSetAssignee> Assignees { get; set; } = null!;
-        public DbSet<FieldSetTicket> Tickets { get; set; } = null!;
+        public DbSet<FieldSetAccount> Accounts => Set<FieldSetAccount>();
+        public DbSet<FieldSetAssignee> Assignees => Set<FieldSetAssignee>();
+        public DbSet<FieldSetTicket> Tickets => Set<FieldSetTicket>();
     }
 }

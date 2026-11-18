@@ -17,6 +17,7 @@ using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Authorization;
 using Trax.Api.GraphQL.Subscriptions;
 using Trax.Api.GraphQL.Types;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.JunctionEvents;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -50,7 +51,7 @@ internal sealed class RunProgressAccess(
         return trains
             .Where(t => t.IsRunProgressEnabled)
             .ToDictionary(
-                t => t.ServiceType.FullName!,
+                t => t.ServiceType.FullName.NotNull(),
                 t =>
                     (
                         t,
@@ -113,7 +114,7 @@ internal sealed class RunProgressAccess(
                 string.Equals(ran.FailureException, "TrainException", StringComparison.Ordinal)
                     ? ran.FailureReason
                     : null,
-                ran.StarterHash!
+                ran.StarterHash.NotNull()
             ) with
             {
                 ManifestId = ran.ManifestId,
@@ -147,7 +148,7 @@ internal sealed class RunProgressAccess(
                 metadataId: null,
                 RunProgressState.Queued,
                 failure: null,
-                queued.StarterHash!
+                queued.StarterHash.NotNull()
             );
     }
 
@@ -289,8 +290,7 @@ internal sealed class RunProgressAccess(
         var principalId = services.GetService<ICurrentPrincipalProvider>()?.GetCurrentPrincipalId();
         var userKey = services.GetService<ISnapshotPrincipal>()?.CurrentUserKey;
         return new[] { RunStarter.OfPrincipal(principalId), RunStarter.OfUserKey(userKey) }
-            .Where(h => h is not null)
-            .Select(h => h!)
+            .OfType<string>()
             .Distinct(StringComparer.Ordinal)
             .ToList();
     }

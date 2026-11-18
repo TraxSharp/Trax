@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.EffectRegistry;
@@ -289,7 +290,7 @@ public class TypeExtensionRegistrationTests
         // Assert
         var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
-        operationResult!.Errors.Should().BeNullOrEmpty();
+        operationResult.NotNull().Errors.Should().BeNullOrEmpty();
 
         var data = operationResult.Data;
         data.Should().NotBeNull();
@@ -353,7 +354,7 @@ public class TypeExtensionRegistrationTests
         // Assert
         var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
-        operationResult!.Errors.Should().BeNullOrEmpty();
+        operationResult.NotNull().Errors.Should().BeNullOrEmpty();
     }
 
     #endregion

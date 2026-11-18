@@ -10,6 +10,7 @@ using Trax.Api.Auth.Jwt;
 using Trax.Api.Auth.Jwt.Testing;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Subscriptions;
+using Trax.Core.Extensions;
 using static Trax.Api.Tests.Auth.SocketInterceptorTestHelpers;
 
 namespace Trax.Api.Tests.Auth;
@@ -69,7 +70,7 @@ public class PrincipalIdIsQualifiedBySchemeTests
                 .AuthenticateAsync(context, scheme)
                 .ConfigureAwait(false);
             result.Succeeded.Should().BeTrue(result.Failure?.Message);
-            return result.Principal!.TryGetPrincipalId(out var id) ? id : null;
+            return result.Principal.NotNull().TryGetPrincipalId(out var id) ? id : null;
         }
     }
 
@@ -150,7 +151,10 @@ public class PrincipalIdIsQualifiedBySchemeTests
         var claims = new TraxPrincipal("abc", "Abc", []).ToClaimsPrincipal("Customer");
 
         claims.TryGetTraxPrincipal(out var principal).Should().BeTrue();
-        principal!.Id.Should().Be("Customer:abc", "the claim carries the qualified id, per " + Adr);
+        principal
+            .NotNull()
+            .Id.Should()
+            .Be("Customer:abc", "the claim carries the qualified id, per " + Adr);
         TraxPrincipalId.Qualify("Customer", "abc").Should().Be("Customer:abc");
     }
 

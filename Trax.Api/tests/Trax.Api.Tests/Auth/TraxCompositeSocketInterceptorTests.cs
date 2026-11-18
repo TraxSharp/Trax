@@ -77,7 +77,7 @@ public class TraxCompositeSocketInterceptorTests
             new SymmetricSecurityKey(key ?? Key),
             SecurityAlgorithms.HmacSha256
         );
-        var now = DateTime.UtcNow;
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime;
         return new JwtSecurityTokenHandler().WriteToken(
             new JwtSecurityToken(
                 issuer: issuer,

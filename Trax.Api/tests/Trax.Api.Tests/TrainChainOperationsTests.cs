@@ -11,6 +11,7 @@ using Microsoft.Extensions.Hosting;
 using NSubstitute;
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
@@ -37,12 +38,12 @@ public class TrainChainOperationsTests
 {
     private const string Key = "train-chain-admin-key-0123456789abcdefgh";
 
-    private IHost _host = null!;
-    private IDataContextProviderFactory _factory = null!;
+    private IHost? _host;
+    private IDataContextProviderFactory? _factory;
 
-    private static readonly string Gated = typeof(IGatedChainTrain).FullName!;
-    private static readonly string Plain = typeof(IPlainChainTrain).FullName!;
-    private static readonly string Unread = typeof(IUnreadChainTrain).FullName!;
+    private static readonly string Gated = typeof(IGatedChainTrain).FullName.NotNull();
+    private static readonly string Plain = typeof(IPlainChainTrain).FullName.NotNull();
+    private static readonly string Unread = typeof(IUnreadChainTrain).FullName.NotNull();
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -77,7 +78,7 @@ public class TrainChainOperationsTests
                         graphs.Find(Plain).Returns(PlainGraph());
                         graphs.Find(Unread).Returns((ChainGraph?)null);
                         services.AddSingleton(graphs);
-                        services.AddSingleton(_factory);
+                        services.AddSingleton(_factory.NotNull());
                         services.AddScoped(_ => Substitute.For<IOperationsService>());
                         services.AddScoped(_ => Substitute.For<ITraxScheduler>());
                         services.AddScoped(_ => Substitute.For<ITrainExecutionService>());
@@ -92,14 +93,14 @@ public class TrainChainOperationsTests
             )
             .Build();
 
-        await _host.StartAsync();
+        await _host.NotNull().StartAsync();
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await _host.StopAsync();
-        _host.Dispose();
+        await _host.NotNull().StopAsync();
+        _host?.Dispose();
     }
 
     [Test]
@@ -275,7 +276,7 @@ public class TrainChainOperationsTests
 
     private async Task<long> SeedRunAsync(string train)
     {
-        var db = await _factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             var run = Metadata.Create(
@@ -284,10 +285,11 @@ public class TrainChainOperationsTests
                     Name = train,
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
-                }
+                },
+                TimeProvider.System
             );
             run.TrainState = TrainState.Completed;
-            run.EndTime = DateTime.UtcNow;
+            run.EndTime = TimeProvider.System.GetUtcNow().UtcDateTime;
             await db.Track(run).ConfigureAwait(false);
             await db.SaveChanges(default).ConfigureAwait(false);
             return run.Id;
@@ -304,7 +306,7 @@ public class TrainChainOperationsTests
 
     private async Task<JsonDocument> PostAsync(string query)
     {
-        var client = _host.GetTestServer().CreateClient();
+        var client = _host.NotNull().GetTestServer().CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/trax/graphql")
         {
             Content = JsonContent.Create(new { query }),

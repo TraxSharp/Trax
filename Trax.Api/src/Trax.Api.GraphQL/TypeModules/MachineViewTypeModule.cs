@@ -9,6 +9,7 @@ using HotChocolate.Resolvers;
 using HotChocolate.Types;
 using HotChocolate.Types.Descriptors;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Persistence;
@@ -108,8 +109,8 @@ internal sealed partial class MachineViewTypeModule(
                                     )
                                 )
                                 .Resolve(ctx =>
-                                    ((JsonArray)ctx.Parent<JsonObject>()[read.Machine]!)
-                                        .Select(n => n!.AsObject())
+                                    ((JsonArray)ctx.Parent<JsonObject>()[read.Machine].NotNull())
+                                        .Select(n => n.NotNull().AsObject())
                                         .ToList()
                                 );
                         else
@@ -156,7 +157,9 @@ internal sealed partial class MachineViewTypeModule(
             d.Description($"One instance of '{read.Machine}' as the view '{view.Name}' shows it.");
             d.Field("id")
                 .Type<NonNullType<UuidType>>()
-                .Resolve(ctx => Guid.Parse(ctx.Parent<JsonObject>()["id"]!.GetValue<string>()));
+                .Resolve(ctx =>
+                    Guid.Parse(ctx.Parent<JsonObject>()["id"].NotNull().GetValue<string>())
+                );
             foreach (
                 var field in view.Fields.Where(f =>
                     string.Equals(f.Machine, read.Machine, StringComparison.Ordinal)

@@ -1,7 +1,8 @@
 using System.Collections.Concurrent;
-using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics.Metrics;
 using Trax.Api.GraphQL.TypeModules;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.GraphQL.PersistedOperations.Services;
 
@@ -33,7 +34,7 @@ namespace Trax.Api.GraphQL.PersistedOperations.Services;
 /// </para>
 /// <para>See <c>Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md</c>.</para>
 /// </remarks>
-internal sealed class MachineDocumentRegistry : IMachineIrOrder
+internal sealed class MachineDocumentRegistry(TimeProvider? clock = null) : IMachineIrOrder
 {
     /// <summary>The default shortest time between two reads of the stored versions that requests can cause.</summary>
     internal static readonly TimeSpan MinRefreshInterval = TimeSpan.FromSeconds(1);
@@ -42,6 +43,9 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
     internal const int MissCapacity = 4096;
 
     private readonly ConcurrentDictionary<string, long> _misses = new(StringComparer.Ordinal);
+
+    /// <summary>The clock the read and miss times are timestamps of.</summary>
+    internal TimeProvider Clock { get; } = clock ?? TimeProvider.System;
 
     // What this node decided about each stored client document it was asked for: whether its stored text passes this
     // node's checks. Only ids the store holds active get here, so it holds no more than the store does.
@@ -75,20 +79,20 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
     public IReadOnlyList<GeneratedDocument> Documents => _state?.Documents ?? [];
 
     /// <summary>This node's document under <paramref name="id"/>, if it is one of its own.</summary>
-    public bool TryGetOwn(string id, out GeneratedDocument document)
+    public bool TryGetOwn(string id, [NotNullWhen(true)] out GeneratedDocument? document)
     {
         if (_state is { } state && state.Own.TryGetValue(id, out var own))
         {
             document = own;
             return true;
         }
-        document = null!;
+        document = null;
         return false;
     }
 
     /// <summary>
     /// Records the documents this node registered, its version of each machine, and every stored id's version, as read
-    /// by a read of the store that began at <paramref name="readStartedAt"/> (a <see cref="Stopwatch"/> timestamp; now
+    /// by a read of the store that began at <paramref name="readStartedAt"/> (a timestamp of <see cref="Clock"/>; now
     /// when omitted).
     /// </summary>
     public void Publish(
@@ -98,14 +102,14 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
         long? readStartedAt = null
     )
     {
-        var readAt = readStartedAt ?? Stopwatch.GetTimestamp();
+        var readAt = readStartedAt ?? Clock.GetTimestamp();
         _state = new State(
             documents,
             documents.ToDictionary(d => d.Id, StringComparer.Ordinal),
             ownVersions,
             stored,
             readAt,
-            Stopwatch.GetTimestamp()
+            Clock.GetTimestamp()
         );
     }
 
@@ -179,7 +183,7 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
     // about within the interval still turns client-outdated after the next read.
     private void Remember(string id)
     {
-        var firstAsked = Stopwatch.GetTimestamp();
+        var firstAsked = Clock.GetTimestamp();
         if (!_misses.TryAdd(id, firstAsked))
             return;
         _missOrder.Enqueue((id, firstAsked));
@@ -264,11 +268,11 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
             {
                 if (_state is not { } before || _readStored is not { } read)
                     return;
-                var since = Stopwatch.GetElapsedTime(before.ReadFinishedAt);
+                var since = Clock.GetElapsedTime(before.ReadFinishedAt);
                 if (since < RefreshInterval)
-                    await Task.Delay(RefreshInterval - since).ConfigureAwait(false);
+                    await Task.Delay(RefreshInterval - since, Clock).ConfigureAwait(false);
 
-                var startedAt = Stopwatch.GetTimestamp();
+                var startedAt = Clock.GetTimestamp();
                 IReadOnlyDictionary<string, StoredMachineDocument> stored;
                 try
                 {
@@ -278,17 +282,17 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
                 {
                     // The store could not be read: the ids stay unseen, answered as retryable, and the next miss asks
                     // again no sooner than the interval.
-                    _state = _state! with
+                    _state = _state.NotNull() with
                     {
-                        ReadFinishedAt = Stopwatch.GetTimestamp(),
+                        ReadFinishedAt = Clock.GetTimestamp(),
                     };
                     continue;
                 }
-                _state = _state! with
+                _state = _state.NotNull() with
                 {
                     Stored = stored,
                     ReadStartedAt = startedAt,
-                    ReadFinishedAt = Stopwatch.GetTimestamp(),
+                    ReadFinishedAt = Clock.GetTimestamp(),
                 };
             }
         }

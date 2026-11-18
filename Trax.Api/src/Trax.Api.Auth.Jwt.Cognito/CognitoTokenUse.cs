@@ -1,7 +1,7 @@
 namespace Trax.Api.Auth.Jwt.Cognito;
 
 /// <summary>
-/// Selects which Cognito token shapes <see cref="CognitoJwtBuilderExtensions.UseCognito"/>
+/// Selects which Cognito token shapes <see cref="CognitoJwtBuilderExtensions.UseCognito(JwtBuilder, string, string, string, CognitoTokenUse)"/>
 /// configures the validator to accept.
 /// </summary>
 /// <remarks>

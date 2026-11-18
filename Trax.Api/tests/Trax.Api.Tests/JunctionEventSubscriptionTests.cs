@@ -12,6 +12,7 @@ using Trax.Api.GraphQL.Hooks;
 using Trax.Api.GraphQL.Subscriptions;
 using Trax.Api.GraphQL.Validation;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Enums;
@@ -206,9 +207,9 @@ public class JunctionEventSubscriptionTests
         // receives must be the public one.
         var received = await sub.NextAsync(async () =>
         {
-            await HandleAsync(Started(typeof(IAdminOnlyTrain).FullName!, Run, position: 0))
+            await HandleAsync(Started(typeof(IAdminOnlyTrain).FullName.NotNull(), Run, position: 0))
                 .ConfigureAwait(false);
-            await HandleAsync(Started(typeof(IPublicTrain).FullName!, Run, position: 1))
+            await HandleAsync(Started(typeof(IPublicTrain).FullName.NotNull(), Run, position: 1))
                 .ConfigureAwait(false);
         });
 
@@ -227,7 +228,9 @@ public class JunctionEventSubscriptionTests
         await using var sub = await SubscribeAsync(executor, OnJunctionEvent(Run), Anonymous());
 
         var received = await sub.NextAsync(() =>
-            HandleAsync(Failed(typeof(IPublicTrain).FullName!, Run, exception: "NpgsqlException"))
+            HandleAsync(
+                Failed(typeof(IPublicTrain).FullName.NotNull(), Run, exception: "NpgsqlException")
+            )
         );
 
         var step = Step(received);
@@ -249,7 +252,9 @@ public class JunctionEventSubscriptionTests
         await using var sub = await SubscribeAsync(executor, OnJunctionEvent(Run), Anonymous());
 
         var received = await sub.NextAsync(() =>
-            HandleAsync(Failed(typeof(IPublicTrain).FullName!, Run, exception: "TrainException"))
+            HandleAsync(
+                Failed(typeof(IPublicTrain).FullName.NotNull(), Run, exception: "TrainException")
+            )
         );
 
         Step(received)["failureException"].Should().Be("TrainException");
@@ -262,7 +267,7 @@ public class JunctionEventSubscriptionTests
         await using var sub = await SubscribeAsync(executor, OnJunctionEvent(Run), Anonymous());
 
         var received = await sub.NextAsync(() =>
-            HandleAsync(Decided(typeof(IPublicTrain).FullName!, withheld: false))
+            HandleAsync(Decided(typeof(IPublicTrain).FullName.NotNull(), withheld: false))
         );
 
         var step = Step(received);
@@ -287,7 +292,7 @@ public class JunctionEventSubscriptionTests
         await using var sub = await SubscribeAsync(executor, OnJunctionEvent(Run), Anonymous());
 
         var received = await sub.NextAsync(() =>
-            HandleAsync(Decided(typeof(IPublicTrain).FullName!, withheld: false))
+            HandleAsync(Decided(typeof(IPublicTrain).FullName.NotNull(), withheld: false))
         );
 
         var step = Step(received);
@@ -306,7 +311,7 @@ public class JunctionEventSubscriptionTests
         await using var sub = await SubscribeAsync(executor, OnJunctionEvent(Run), Anonymous());
 
         var received = await sub.NextAsync(() =>
-            HandleAsync(Decided(typeof(IPublicTrain).FullName!, withheld: true))
+            HandleAsync(Decided(typeof(IPublicTrain).FullName.NotNull(), withheld: true))
         );
 
         var step = Step(received);
@@ -322,7 +327,7 @@ public class JunctionEventSubscriptionTests
         await using var sub = await SubscribeAsync(executor, OnJunctionEvent(Run), Anonymous());
 
         var received = await sub.NextAsync(() =>
-            HandleAsync(OnTrack(typeof(IPublicTrain).FullName!, nameWithheld: false))
+            HandleAsync(OnTrack(typeof(IPublicTrain).FullName.NotNull(), nameWithheld: false))
         );
 
         var step = Step(received);
@@ -344,7 +349,7 @@ public class JunctionEventSubscriptionTests
         await using var sub = await SubscribeAsync(executor, OnJunctionEvent(Run), Anonymous());
 
         var received = await sub.NextAsync(() =>
-            HandleAsync(Started(typeof(IPublicTrain).FullName!, Run, position: 0))
+            HandleAsync(Started(typeof(IPublicTrain).FullName.NotNull(), Run, position: 0))
         );
 
         Step(received)["name"].Should().Be("Step");
@@ -361,7 +366,7 @@ public class JunctionEventSubscriptionTests
         await using var sub = await SubscribeAsync(executor, OnJunctionEvent(Run), Anonymous());
 
         var received = await sub.NextAsync(() =>
-            HandleAsync(OnTrack(typeof(IPublicTrain).FullName!, nameWithheld: false))
+            HandleAsync(OnTrack(typeof(IPublicTrain).FullName.NotNull(), nameWithheld: false))
         );
 
         Step(received)["name"].Should().Be("ChargeCard");
@@ -386,7 +391,7 @@ public class JunctionEventSubscriptionTests
         await using var sub = await SubscribeAsync(executor, OnJunctionEvent(Run), Anonymous());
 
         var received = await sub.NextAsync(() =>
-            HandleAsync(QuestionOnTrack(typeof(IPublicTrain).FullName!, kind, eventType))
+            HandleAsync(QuestionOnTrack(typeof(IPublicTrain).FullName.NotNull(), kind, eventType))
         );
 
         var step = Step(received);
@@ -417,7 +422,7 @@ public class JunctionEventSubscriptionTests
         await using var sub = await SubscribeAsync(executor, OnJunctionEvent(Run), Anonymous());
 
         var received = await sub.NextAsync(() =>
-            HandleAsync(QuestionOnTrack(typeof(IPublicTrain).FullName!, kind, eventType))
+            HandleAsync(QuestionOnTrack(typeof(IPublicTrain).FullName.NotNull(), kind, eventType))
         );
 
         var step = Step(received);
@@ -464,7 +469,7 @@ public class JunctionEventSubscriptionTests
                 Kind = kind,
                 Name = "Region",
                 State = JunctionRunState.Completed,
-                StartedAt = DateTime.UtcNow,
+                StartedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                 QuestionKey = "Region",
                 Answer = "North",
                 Confidence = 0.7,
@@ -508,7 +513,7 @@ public class JunctionEventSubscriptionTests
                 Kind = JunctionRunKind.Junction,
                 Name = "ChargeCard",
                 State = JunctionRunState.Completed,
-                StartedAt = DateTime.UtcNow,
+                StartedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                 NameWithheld = true,
                 TrackPosition = 2,
             }
@@ -529,7 +534,7 @@ public class JunctionEventSubscriptionTests
                 JunctionRunKind.Junction,
                 "ChargeCard",
                 JunctionRunState.InProgress,
-                DateTime.UtcNow,
+                TimeProvider.System.GetUtcNow().UtcDateTime,
                 NameWithheld: true,
                 TrackPosition: 2
             )
@@ -574,7 +579,7 @@ public class JunctionEventSubscriptionTests
                         Kind: JunctionRunKind.Choice,
                         Name: "Tier",
                         State: JunctionRunState.Completed,
-                        StartedAt: DateTime.UtcNow,
+                        StartedAt: TimeProvider.System.GetUtcNow().UtcDateTime,
                         QuestionKey: "Tier",
                         Answer: "Red",
                         Confidence: 0.9,
@@ -605,11 +610,14 @@ public class JunctionEventSubscriptionTests
             new LifecycleStreamRule(discovery, new TrainLifecycleStreamOptions())
         );
 
-        await handler.HandleAsync(Started(typeof(IUnbroadcastTrain).FullName!, Run, 0), default);
+        await handler.HandleAsync(
+            Started(typeof(IUnbroadcastTrain).FullName.NotNull(), Run, 0),
+            default
+        );
 
         await sender
             .DidNotReceiveWithAnyArgs()
-            .SendAsync(default(string)!, default(JunctionEvent)!, default);
+            .SendAsync(Null.Of<string>(), Null.Of<JunctionEvent>(), default);
     }
 
     [Test]
@@ -623,7 +631,10 @@ public class JunctionEventSubscriptionTests
             new LifecycleStreamRule(discovery, new TrainLifecycleStreamOptions())
         );
 
-        await handler.HandleAsync(Started(typeof(IPublicTrain).FullName!, Run, 0), default);
+        await handler.HandleAsync(
+            Started(typeof(IPublicTrain).FullName.NotNull(), Run, 0),
+            default
+        );
 
         await sender
             .Received(1)
@@ -646,13 +657,13 @@ public class JunctionEventSubscriptionTests
         );
 
         await handler.HandleAsync(
-            Message(typeof(IPublicTrain).FullName!, Run, "Completed", junction: null),
+            Message(typeof(IPublicTrain).FullName.NotNull(), Run, "Completed", junction: null),
             default
         );
 
         await sender
             .DidNotReceiveWithAnyArgs()
-            .SendAsync(default(string)!, default(JunctionEvent)!, default);
+            .SendAsync(Null.Of<string>(), Null.Of<JunctionEvent>(), default);
     }
 
     [Test]
@@ -714,7 +725,9 @@ public class JunctionEventSubscriptionTests
 
         var received = await sub.NextAsync(() =>
             receiver.DeliverAsync(
-                FromAnotherHost(OnTrack(typeof(IPublicTrain).FullName!, nameWithheld: false))
+                FromAnotherHost(
+                    OnTrack(typeof(IPublicTrain).FullName.NotNull(), nameWithheld: false)
+                )
             )
         );
 
@@ -741,9 +754,11 @@ public class JunctionEventSubscriptionTests
     private async Task<RunningReceiver> StartReceiverAsync()
     {
         var transport = new CapturingReceiver();
-        var service = new TrainEventReceiverService(transport, _provider!);
+        var service = new TrainEventReceiverService(transport, _provider.NotNull());
         await service.StartAsync(default).ConfigureAwait(false);
-        await transport.Started.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+        await transport
+            .Started.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System)
+            .ConfigureAwait(false);
         return new RunningReceiver(service, transport);
     }
 
@@ -794,7 +809,7 @@ public class JunctionEventSubscriptionTests
 
     private static IReadOnlyDictionary<string, object?> Step(
         IReadOnlyDictionary<string, object?> received
-    ) => (IReadOnlyDictionary<string, object?>)received["junction"]!;
+    ) => (IReadOnlyDictionary<string, object?>)received["junction"].NotNull();
 
     private static ClaimsPrincipal User(string role) =>
         new(
@@ -814,8 +829,8 @@ public class JunctionEventSubscriptionTests
             InputType = typeof(object),
             OutputType = typeof(object),
             Lifetime = ServiceLifetime.Transient,
-            ServiceTypeName = typeof(T).FullName!,
-            ImplementationTypeName = typeof(T).FullName!,
+            ServiceTypeName = typeof(T).FullName.NotNull(),
+            ImplementationTypeName = typeof(T).FullName.NotNull(),
             InputTypeName = "Object",
             OutputTypeName = "Object",
             RequiredPolicies = [],
@@ -839,7 +854,7 @@ public class JunctionEventSubscriptionTests
                 JunctionRunKind.Junction,
                 "Step",
                 JunctionRunState.InProgress,
-                DateTime.UtcNow
+                TimeProvider.System.GetUtcNow().UtcDateTime
             )
         );
 
@@ -853,7 +868,7 @@ public class JunctionEventSubscriptionTests
                 Kind: JunctionRunKind.Junction,
                 Name: "ChargeCard",
                 State: JunctionRunState.InProgress,
-                StartedAt: DateTime.UtcNow,
+                StartedAt: TimeProvider.System.GetUtcNow().UtcDateTime,
                 NameWithheld: nameWithheld,
                 TrackPosition: 2
             )
@@ -873,7 +888,7 @@ public class JunctionEventSubscriptionTests
                 Kind: kind,
                 Name: "Region",
                 State: JunctionRunState.Completed,
-                StartedAt: DateTime.UtcNow,
+                StartedAt: TimeProvider.System.GetUtcNow().UtcDateTime,
                 QuestionKey: "Region",
                 Answer: "North",
                 Confidence: 0.7,
@@ -891,7 +906,7 @@ public class JunctionEventSubscriptionTests
                 Kind: JunctionRunKind.Choice,
                 Name: "Lane",
                 State: JunctionRunState.Completed,
-                StartedAt: DateTime.UtcNow,
+                StartedAt: TimeProvider.System.GetUtcNow().UtcDateTime,
                 QuestionKey: "Lane",
                 Answer: "Fast",
                 Confidence: 0.8,
@@ -910,8 +925,8 @@ public class JunctionEventSubscriptionTests
                 Kind: JunctionRunKind.Junction,
                 Name: "Charge",
                 State: JunctionRunState.Failed,
-                StartedAt: DateTime.UtcNow,
-                EndedAt: DateTime.UtcNow,
+                StartedAt: TimeProvider.System.GetUtcNow().UtcDateTime,
+                EndedAt: TimeProvider.System.GetUtcNow().UtcDateTime,
                 DurationMs: 3,
                 FailureClass: FailureClass.Transient,
                 FailureException: exception,
@@ -931,7 +946,7 @@ public class JunctionEventSubscriptionTests
             ExternalId: "ext-" + run.ToString(CultureInfo.InvariantCulture),
             TrainName: train,
             TrainState: nameof(TrainState.InProgress),
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TimeProvider.System.GetUtcNow().UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             EventType: eventType,
@@ -946,7 +961,7 @@ public class JunctionEventSubscriptionTests
 
     private async Task HandleAsync(TrainLifecycleEventMessage message)
     {
-        foreach (var handler in _provider!.GetServices<IJunctionEventHandler>())
+        foreach (var handler in _provider.NotNull().GetServices<IJunctionEventHandler>())
             await handler.HandleAsync(message, default).ConfigureAwait(false);
     }
 
@@ -1016,7 +1031,9 @@ public class JunctionEventSubscriptionTests
             );
             var reader = Task.Run(async () =>
             {
-                await foreach (var item in stream!.ReadResultsAsync().ConfigureAwait(false))
+                await foreach (
+                    var item in stream.NotNull().ReadResultsAsync().ConfigureAwait(false)
+                )
                 {
                     received.TrySetResult(item);
                     break;
@@ -1025,8 +1042,10 @@ public class JunctionEventSubscriptionTests
 
             // Publish until the subscriber picks one up: ExecuteAsync can return before the topic
             // subscription is registered, so a single publish can race ahead of it.
-            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-            while (!received.Task.IsCompleted && DateTime.UtcNow < deadline)
+            var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(10);
+            while (
+                !received.Task.IsCompleted && TimeProvider.System.GetUtcNow().UtcDateTime < deadline
+            )
             {
                 await publish().ConfigureAwait(false);
                 // allowed-delay: re-publish interval, bounded by the 10s deadline; WhenAny wakes
@@ -1038,7 +1057,8 @@ public class JunctionEventSubscriptionTests
             var payload = await received.Task.ConfigureAwait(false);
             payload.Errors.Should().BeNullOrEmpty();
             await reader.ConfigureAwait(false);
-            return (IReadOnlyDictionary<string, object?>)payload.DataMap()["onJunctionEvent"]!;
+            return (IReadOnlyDictionary<string, object?>)
+                payload.DataMap()["onJunctionEvent"].NotNull();
         }
 
         public async ValueTask DisposeAsync()

@@ -6,6 +6,7 @@ using Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
 using Trax.Api.Tests.PersistedOperations.Fixtures;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.PersistedOperations.IntegrationTests;
 
@@ -48,7 +49,7 @@ public class RabbitMqBroadcasterTests
                     TestInvalidationKey.Value,
                     _exchange,
                     body,
-                    DateTimeOffset.UtcNow
+                    TimeProvider.System.GetUtcNow()
                 ),
             },
         };
@@ -108,7 +109,7 @@ public class RabbitMqBroadcasterTests
                     TenantKey: null,
                     receivedKey,
                     PersistedOperationChangeType.Upsert,
-                    DateTime.UtcNow
+                    TimeProvider.System.GetUtcNow().UtcDateTime
                 ),
                 cts.Token
             );
@@ -149,13 +150,13 @@ public class RabbitMqBroadcasterTests
                 TenantKey: null,
                 $"confirm_{Guid.NewGuid():N}",
                 PersistedOperationChangeType.Upsert,
-                DateTime.UtcNow
+                TimeProvider.System.GetUtcNow().UtcDateTime
             ),
             CancellationToken.None
         );
 
         // A channel numbers its publishes only in publisher-confirm mode; otherwise this is 0.
-        (await publisher.Channel!.GetNextPublishSequenceNumberAsync())
+        (await publisher.Channel.NotNull().GetNextPublishSequenceNumberAsync())
             .Should()
             .BeGreaterThan(1UL);
     }
@@ -176,16 +177,16 @@ public class RabbitMqBroadcasterTests
             TenantKey: null,
             $"reopen_{Guid.NewGuid():N}",
             PersistedOperationChangeType.Upsert,
-            DateTime.UtcNow
+            TimeProvider.System.GetUtcNow().UtcDateTime
         );
         await publisher.PublishAsync(message, CancellationToken.None);
-        var first = publisher.Channel!;
+        var first = publisher.Channel.NotNull();
         await first.CloseAsync(cancellationToken: CancellationToken.None);
 
         await publisher.PublishAsync(message, CancellationToken.None);
 
         publisher.Channel.Should().NotBeSameAs(first);
-        publisher.Channel!.IsOpen.Should().BeTrue();
+        publisher.Channel.NotNull().IsOpen.Should().BeTrue();
     }
 
     [Test]
@@ -205,7 +206,7 @@ public class RabbitMqBroadcasterTests
                     TenantKey: null,
                     "unreachable",
                     PersistedOperationChangeType.Upsert,
-                    DateTime.UtcNow
+                    TimeProvider.System.GetUtcNow().UtcDateTime
                 ),
                 CancellationToken.None
             );
@@ -254,7 +255,7 @@ public class RabbitMqBroadcasterTests
                     TenantKey: null,
                     key,
                     PersistedOperationChangeType.Upsert,
-                    DateTime.UtcNow
+                    TimeProvider.System.GetUtcNow().UtcDateTime
                 ),
                 cts.Token
             );
@@ -337,7 +338,7 @@ public class RabbitMqBroadcasterTests
                                     otherKey,
                                     options.RabbitMqExchange,
                                     Body(forged),
-                                    DateTimeOffset.UtcNow
+                                    TimeProvider.System.GetUtcNow()
                                 ),
                         },
                     },
@@ -377,7 +378,12 @@ public class RabbitMqBroadcasterTests
         }
 
         static PersistedOperationChangedMessage Change(string id) =>
-            new(TenantKey: null, id, PersistedOperationChangeType.Upsert, DateTime.UtcNow);
+            new(
+                TenantKey: null,
+                id,
+                PersistedOperationChangeType.Upsert,
+                TimeProvider.System.GetUtcNow().UtcDateTime
+            );
 
         static byte[] Body(string id) =>
             System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(Change(id));
@@ -431,7 +437,7 @@ public class RabbitMqBroadcasterTests
                         TenantKey: null,
                         id,
                         PersistedOperationChangeType.Upsert,
-                        DateTime.UtcNow
+                        TimeProvider.System.GetUtcNow().UtcDateTime
                     ),
                     CancellationToken.None
                 );
@@ -496,7 +502,7 @@ public class RabbitMqBroadcasterTests
 
             // Acknowledging a delivery the channel never had is a channel-level error: the broker
             // closes that channel and leaves the connection up.
-            await svc.Channel!.BasicAckAsync(deliveryTag: 9_999, multiple: false);
+            await svc.Channel.NotNull().BasicAckAsync(deliveryTag: 9_999, multiple: false);
 
             (await WaitUntilAsync(() => generation.Current > before, TimeSpan.FromSeconds(10)))
                 .Should()
@@ -514,7 +520,7 @@ public class RabbitMqBroadcasterTests
                                     TenantKey: null,
                                     id,
                                     PersistedOperationChangeType.Upsert,
-                                    DateTime.UtcNow
+                                    TimeProvider.System.GetUtcNow().UtcDateTime
                                 ),
                                 CancellationToken.None
                             )
@@ -615,7 +621,7 @@ public class RabbitMqBroadcasterTests
                 TenantKey: null,
                 sentinel,
                 PersistedOperationChangeType.Upsert,
-                DateTime.UtcNow
+                TimeProvider.System.GetUtcNow().UtcDateTime
             )
         );
         await channel.BasicPublishAsync(
@@ -679,8 +685,8 @@ public class RabbitMqBroadcasterTests
 
     private static async Task<bool> WaitUntilAsync(Func<Task<bool>> condition, TimeSpan timeout)
     {
-        var deadline = DateTimeOffset.UtcNow + timeout;
-        while (DateTimeOffset.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow() + timeout;
+        while (TimeProvider.System.GetUtcNow() < deadline)
         {
             if (await condition().ConfigureAwait(false))
                 return true;

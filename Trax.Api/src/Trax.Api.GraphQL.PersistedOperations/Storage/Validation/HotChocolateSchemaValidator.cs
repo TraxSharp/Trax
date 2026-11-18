@@ -7,6 +7,7 @@ using HotChocolate.Language;
 using HotChocolate.Validation;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.PersistedOperations.Storage.Exceptions;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.GraphQL.PersistedOperations.Storage.Validation;
 
@@ -124,7 +125,7 @@ public sealed class HotChocolateSchemaValidator : IPersistedOperationValidator
             : Array.Empty<ValidationFailureLocation>();
 
         var path =
-            error.Path?.ToList()?.Where(p => p is not null).Select(p => p!).ToArray()
+            error.Path?.ToList()?.Where(p => p is not null).Select(p => p.NotNull()).ToArray()
             ?? Array.Empty<object>();
 
         return new ValidationFailure(error.Message, locations, path);

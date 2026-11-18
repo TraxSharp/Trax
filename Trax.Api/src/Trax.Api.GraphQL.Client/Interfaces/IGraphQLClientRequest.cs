@@ -48,8 +48,10 @@ public interface IGraphQLClientRequest<out TResponse> : IGenericGraphQLClientReq
         // response types get default-of-T, which is what the GraphQL spec implies if the
         // server returns null on a non-nullable field (the field would have errored out
         // anyway and we'd have thrown via Errors before reaching here).
+        // A new array's element is default(TResponse), which the annotations cannot express for
+        // an unconstrained TResponse any other way.
         if (element.ValueKind == JsonValueKind.Null)
-            return default!;
+            return (new TResponse[1])[0];
 
         return element.Deserialize<TResponse>(options)
             ?? throw new GraphQLExecutionException(

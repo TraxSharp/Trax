@@ -30,7 +30,7 @@ public class RedirectTests
         );
         await using var session = ConsoleSession.Open(await TargetAsync(host.Port));
 
-        var version = await session.CheckVersionAsync().WaitAsync(Deadline);
+        var version = await session.CheckVersionAsync().WaitAsync(Deadline, TimeProvider.System);
 
         version
             .Should()
@@ -74,7 +74,7 @@ public class RedirectTests
             )
                 stopped.TrySetResult();
         });
-        await stopped.Task.WaitAsync(Deadline);
+        await stopped.Task.WaitAsync(Deadline, TimeProvider.System);
 
         host.Requests.Should().NotBeEmpty();
         // negative-wait: a followed redirect would reach elsewhere within this window.

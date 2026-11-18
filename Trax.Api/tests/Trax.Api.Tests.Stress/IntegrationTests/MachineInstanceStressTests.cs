@@ -6,6 +6,7 @@ using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.Tests.Stress.Fixtures;
 using Trax.Api.Tests.Stress.Utils;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Scheduler.Services.Operations;
 
@@ -166,7 +167,7 @@ public class MachineInstanceStressTests : StressTestSetup
                         ct
                     )
                     .ConfigureAwait(false);
-                instance!.RowId.Should().Be(first.RowId);
+                instance.NotNull().RowId.Should().Be(first.RowId);
             }
         );
     }
@@ -338,7 +339,7 @@ public class MachineInstanceStressTests : StressTestSetup
                     CancellationToken.None
                 )
                 .ConfigureAwait(false)
-        )!;
+        ).NotNull();
     }
 
     [Test]

@@ -1,4 +1,5 @@
 using System.Globalization;
+using Trax.Api.Console.Terminal.Checks;
 using Trax.Api.Console.Terminal.Operations;
 using Trax.Client;
 
@@ -582,7 +583,7 @@ internal static class Catalog
         TraxAnswer<TResult> answer,
         Func<TResult, ListPage<TRow>?> read
     ) =>
-        answer.Succeeded && read(answer.Data!) is { } page
+        answer.Succeeded && read(answer.Data.NotNull()) is { } page
             ? new TraxAnswer<ListPage<TRow>> { Data = page }
             : new TraxAnswer<ListPage<TRow>>
             {
@@ -603,7 +604,7 @@ internal static class Catalog
         Func<TResult, TDetail?> read
     )
         where TDetail : class =>
-        answer.Succeeded && read(answer.Data!) is { } detail
+        answer.Succeeded && read(answer.Data.NotNull()) is { } detail
             ? new() { Data = Wire.Fields(detail) }
             : new()
             {

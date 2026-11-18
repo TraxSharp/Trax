@@ -8,6 +8,7 @@ using Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 
@@ -341,7 +342,7 @@ public class MachineDocumentCrossNodeTests
     [Test]
     public async Task Old_ids_are_collected_only_after_the_grace_period()
     {
-        var clock = new ManualClock(DateTimeOffset.UtcNow);
+        var clock = new ManualClock(TimeProvider.System.GetUtcNow());
         var withClock = new E2EHostOptions
         {
             Services = services => services.AddSingleton<TimeProvider>(clock),
@@ -375,7 +376,7 @@ public class MachineDocumentCrossNodeTests
     [Test]
     public async Task A_running_node_collects_old_ids_after_the_grace_period_without_a_restart()
     {
-        var clock = new ManualClock(DateTimeOffset.UtcNow);
+        var clock = new ManualClock(TimeProvider.System.GetUtcNow());
         var running = new E2EHostOptions
         {
             Services = services =>
@@ -384,7 +385,7 @@ public class MachineDocumentCrossNodeTests
                 var options = (PersistedOperationsOptions)
                     services
                         .Last(d => d.ServiceType == typeof(PersistedOperationsOptions))
-                        .ImplementationInstance!;
+                        .ImplementationInstance.NotNull();
                 options.MachineDocumentCollectionInterval = TimeSpan.FromMilliseconds(200);
             },
         };
@@ -396,7 +397,7 @@ public class MachineDocumentCrossNodeTests
         Track(await ShelfHosts.StartAsync(Database, ShelfShape.V2, "timer_collect_v2", running));
 
         // negative-wait: several collection intervals pass inside the grace period, and nothing may be collected.
-        await Task.Delay(TimeSpan.FromSeconds(1));
+        await Task.Delay(TimeSpan.FromSeconds(1), clock);
         (await ActiveAsync(v1))
             .Should()
             .Be(v1.Count, "within the grace period an older client may still be running");
@@ -462,7 +463,7 @@ public class MachineDocumentCrossNodeTests
     [Test]
     public async Task A_machine_a_newer_deploy_stopped_exposing_is_client_outdated_once_its_documents_are_collected()
     {
-        var clock = new ManualClock(DateTimeOffset.UtcNow);
+        var clock = new ManualClock(TimeProvider.System.GetUtcNow());
         await ShelfHosts.StopAsync(
             await ShelfHosts.StartAsync(Database, ShelfShape.V1, "dropped_older")
         );
@@ -484,7 +485,7 @@ public class MachineDocumentCrossNodeTests
         var get = Pick(shelf, "get");
 
         // negative-wait: several collection intervals pass inside the grace period, and nothing may be collected.
-        await Task.Delay(TimeSpan.FromSeconds(1));
+        await Task.Delay(TimeSpan.FromSeconds(1), clock);
         (await ActiveAsync(shelf))
             .Should()
             .Be(shelf.Count, "within the grace period an older node may still serve the shelf");
@@ -520,7 +521,7 @@ public class MachineDocumentCrossNodeTests
     [Test]
     public async Task A_deploy_that_serves_no_machine_still_collects_the_old_documents_and_old_ids_turn_client_outdated()
     {
-        var clock = new ManualClock(DateTimeOffset.UtcNow);
+        var clock = new ManualClock(TimeProvider.System.GetUtcNow());
         await ShelfHosts.StopAsync(
             await ShelfHosts.StartAsync(Database, ShelfShape.V1, "last_served")
         );
@@ -572,7 +573,7 @@ public class MachineDocumentCrossNodeTests
     [Test]
     public async Task A_machine_a_newer_node_serves_is_never_collected_by_an_older_node_that_does_not()
     {
-        var clock = new ManualClock(DateTimeOffset.UtcNow);
+        var clock = new ManualClock(TimeProvider.System.GetUtcNow());
         // The older node was built before the shelf was exposed; the newer one serves it.
         var older = Track(
             await ShelfHosts.StartAsync(
@@ -598,7 +599,7 @@ public class MachineDocumentCrossNodeTests
 
         clock.Advance(TimeSpan.FromDays(400));
         // negative-wait: both nodes register several times past the grace period, and nothing may be collected.
-        await Task.Delay(TimeSpan.FromSeconds(2));
+        await Task.Delay(TimeSpan.FromSeconds(2), clock);
 
         (await ActiveAsync(shelf))
             .Should()
@@ -615,7 +616,7 @@ public class MachineDocumentCrossNodeTests
     [Test]
     public async Task An_older_node_still_registering_keeps_its_documents_past_the_grace_period()
     {
-        var clock = new ManualClock(DateTimeOffset.UtcNow);
+        var clock = new ManualClock(TimeProvider.System.GetUtcNow());
         var older = Track(
             await ShelfHosts.StartAsync(Database, ShelfShape.V1, "lingering_v1", Collecting(clock))
         );
@@ -667,7 +668,7 @@ public class MachineDocumentCrossNodeTests
     [Test]
     public async Task An_older_version_no_node_registers_is_collected_after_the_grace_period()
     {
-        var clock = new ManualClock(DateTimeOffset.UtcNow);
+        var clock = new ManualClock(TimeProvider.System.GetUtcNow());
         var older = Track(
             await ShelfHosts.StartAsync(Database, ShelfShape.V1, "gone_v1", Collecting(clock))
         );
@@ -682,7 +683,7 @@ public class MachineDocumentCrossNodeTests
 
         clock.Advance(TimeSpan.FromDays(1));
         // negative-wait: the newer node registers several times inside the grace period, and nothing may be collected.
-        await Task.Delay(TimeSpan.FromSeconds(1));
+        await Task.Delay(TimeSpan.FromSeconds(1), clock);
         (await ActiveAsync(v1))
             .Should()
             .Be(v1.Count, "within the grace period a node of the older version may still run");
@@ -720,7 +721,7 @@ public class MachineDocumentCrossNodeTests
             )
         );
         // negative-wait: both nodes register several times; the newer one may not collect what the older registers.
-        await Task.Delay(TimeSpan.FromSeconds(1));
+        await Task.Delay(TimeSpan.FromSeconds(1), clock);
         (await ActiveAsync(v1))
             .Should()
             .Be(v1.Count, "a node on the older version serves them again");
@@ -736,7 +737,7 @@ public class MachineDocumentCrossNodeTests
                 var options = (PersistedOperationsOptions)
                     services
                         .Last(d => d.ServiceType == typeof(PersistedOperationsOptions))
-                        .ImplementationInstance!;
+                        .ImplementationInstance.NotNull();
                 options.MachineDocumentCollectionInterval = TimeSpan.FromMilliseconds(200);
             },
         };

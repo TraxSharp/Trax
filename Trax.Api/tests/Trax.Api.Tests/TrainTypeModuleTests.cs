@@ -8,6 +8,7 @@ using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.GraphQL.TypeModules;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Mediator.Services.TrainDiscovery;
@@ -33,7 +34,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         GetGenericObjectTypes(types).Should().BeEmpty();
     }
@@ -46,7 +50,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         GetGenericObjectTypes(types).Should().BeEmpty();
     }
@@ -59,7 +66,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         var outputTypes = GetGenericObjectTypes(types);
         outputTypes.Should().HaveCount(1);
@@ -79,7 +89,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         var inputTypes = types
             .Where(t =>
@@ -109,7 +122,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         var outputTypes = types
             .Where(t =>
@@ -139,7 +155,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         var outputTypes = GetGenericObjectTypes(types);
         outputTypes.Should().HaveCount(2);
@@ -162,7 +181,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // DispatchMutations field extension + RootMutation dispatch extension
         types.OfType<ObjectTypeExtension>().Should().HaveCount(2);
@@ -181,7 +203,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // DispatchMutations field extension + RootMutation dispatch extension
         types.OfType<ObjectTypeExtension>().Should().HaveCount(2);
@@ -212,7 +237,10 @@ public class TrainTypeModuleTests
         var discovery = new StubDiscoveryService([reg]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         types.Should().BeEmpty();
     }
@@ -223,7 +251,10 @@ public class TrainTypeModuleTests
         var discovery = new StubDiscoveryService([]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         types.Should().BeEmpty();
     }
@@ -241,7 +272,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // DispatchMutations field extension + RootMutation dispatch extension
         types.OfType<ObjectTypeExtension>().Should().HaveCount(2);
@@ -262,7 +296,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         types.Should().HaveCount(6);
         types.OfType<ObjectTypeExtension>().Should().HaveCount(2);
@@ -288,7 +325,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         types.Should().HaveCount(7);
         types.OfType<ObjectTypeExtension>().Should().HaveCount(2);
@@ -322,7 +362,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         types.Should().HaveCount(9);
     }
@@ -340,7 +383,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         types.OfType<EnumType>().Should().BeEmpty();
     }
@@ -358,7 +404,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         types.OfType<EnumType>().Should().BeEmpty();
     }
@@ -376,7 +425,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         types.OfType<EnumType>().Should().HaveCount(1);
     }
@@ -398,7 +450,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
         types.Should().NotBeEmpty();
     }
 
@@ -415,7 +470,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
         types.Should().NotBeEmpty();
     }
 
@@ -433,7 +491,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
         types.Should().NotBeEmpty();
     }
 
@@ -458,7 +519,12 @@ public class TrainTypeModuleTests
         var module = new TrainTypeModule(discovery);
 
         var act = async () =>
-            await module.CreateTypesAsync(null!, CancellationToken.None).ConfigureAwait(false);
+            await module
+                .CreateTypesAsync(
+                    Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
             .WithMessage("*both map to the field 'dupe' under dispatch*Set Name*");
@@ -490,7 +556,10 @@ public class TrainTypeModuleTests
 
         var act = async () =>
             await new TrainTypeModule(discovery)
-                .CreateTypesAsync(null!, CancellationToken.None)
+                .CreateTypesAsync(
+                    Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+                    CancellationToken.None
+                )
                 .ConfigureAwait(false);
 
         await act.Should().NotThrowAsync();
@@ -520,7 +589,10 @@ public class TrainTypeModuleTests
 
         var act = async () =>
             await new TrainTypeModule(discovery)
-                .CreateTypesAsync(null!, CancellationToken.None)
+                .CreateTypesAsync(
+                    Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+                    CancellationToken.None
+                )
                 .ConfigureAwait(false);
 
         await act.Should()
@@ -549,7 +621,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         var outputTypes = GetGenericObjectTypes(types);
         outputTypes.Should().HaveCount(2);
@@ -578,7 +653,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // Each mutation train gets its own response ObjectType
         GetNonGenericObjectTypes(types).Should().HaveCount(2);
@@ -596,7 +674,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         GetNonGenericObjectTypes(types).Should().HaveCount(1);
     }
@@ -610,7 +691,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         GetNonGenericObjectTypes(types).Should().HaveCount(1);
     }
@@ -629,7 +713,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         GetNonGenericObjectTypes(types).Should().HaveCount(1);
     }
@@ -648,7 +735,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         GetNonGenericObjectTypes(types).Should().HaveCount(1);
     }
@@ -679,7 +769,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // Both types should still be present: the output ObjectType<AddressValidationResponse>
         // (HC-named "AddressValidationResponse") AND the renamed wrapper ObjectType
@@ -827,11 +920,12 @@ public class TrainTypeModuleTests
         operation.Errors.Should().BeNullOrEmpty();
         var field =
             (IReadOnlyDictionary<string, object?>)
-                ((IReadOnlyDictionary<string, object?>)operation.DataMap()["dispatch"]!)[
+                ((IReadOnlyDictionary<string, object?>)operation.DataMap()["dispatch"].NotNull())[
                     "addressValidation"
-                ]!;
+                ]
+                    .NotNull();
         field["externalId"].Should().Be("ext-7");
-        ((IReadOnlyDictionary<string, object?>)field["output"]!)["isValid"]
+        ((IReadOnlyDictionary<string, object?>)field["output"].NotNull())["isValid"]
             .Should()
             .Be(expected: true);
     }
@@ -926,7 +1020,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // DiscoverQueries field extension + RootQuery discover extension
         types.OfType<ObjectTypeExtension>().Should().HaveCount(2);
@@ -947,7 +1044,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         GetNonGenericObjectTypes(types).Should().BeEmpty();
     }
@@ -974,7 +1074,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // DiscoverQueries fields + RootQuery discover + DispatchMutations fields + RootMutation dispatch
         types.OfType<ObjectTypeExtension>().Should().HaveCount(4);
@@ -998,7 +1101,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         types.Should().HaveCount(5);
     }
@@ -1020,7 +1126,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // Should have ObjectType<DispatchMutations> but not ObjectType<DiscoverQueries>
         types
@@ -1053,7 +1162,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // Should have ObjectType<DiscoverQueries> but not ObjectType<DispatchMutations>
         types
@@ -1094,7 +1206,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         types
             .Should()
@@ -1118,7 +1233,10 @@ public class TrainTypeModuleTests
         var discovery = new StubDiscoveryService([]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         types.Should().BeEmpty();
         types
@@ -1149,7 +1267,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery, config);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // Should have a non-generic ObjectType for the namespace (PlayersDispatchMutations)
         var nsTypes = types.Where(t => t.GetType() == typeof(ObjectType)).ToList();
@@ -1177,7 +1298,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery, config);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // Should have ObjectType<DiscoverQueries> + ObjectType for namespace (PlayersDiscoverQueries)
         // + InputObjectType<TypedInput> + ObjectType<TypedOutput>
@@ -1214,7 +1338,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery, config);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // Only one namespace base type should be registered
         types.Count(t => t.GetType() == typeof(ObjectType)).Should().Be(1);
@@ -1246,7 +1373,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery, config);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // One namespace base type each (PlayersDiscoverQueries, AlertsDiscoverQueries)
         types.Count(t => t.GetType() == typeof(ObjectType)).Should().Be(2);
@@ -1277,7 +1407,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery, config);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // Should have extensions for:
         // - RootQuery (discover)
@@ -1333,7 +1466,7 @@ public class TrainTypeModuleTests
         ]);
 
         var types = await new TrainTypeModule(discovery, config).CreateTypesAsync(
-            null!,
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
             CancellationToken.None
         );
 
@@ -1358,7 +1491,7 @@ public class TrainTypeModuleTests
         ]);
 
         var types = await new TrainTypeModule(discovery).CreateTypesAsync(
-            null!,
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
             CancellationToken.None
         );
 
@@ -1381,7 +1514,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery, config);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // No namespace types should be registered
         types.Count(t => t.GetType() == typeof(ObjectType)).Should().Be(0);
@@ -1415,7 +1551,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery, config);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // Separate namespace types for queries and mutations (AlertsDiscoverQueries,
         // AlertsDispatchMutations), plus the CreateAlert response type
@@ -1468,7 +1607,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // EmptyOutput has no properties, so ObjectType<EmptyOutput> should NOT be registered
         GetGenericObjectTypes(types).Should().BeEmpty();
@@ -1487,7 +1629,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // Mutation response type is always created (externalId, metadataId, workQueueId)
         GetNonGenericObjectTypes(types).Should().HaveCount(1);
@@ -1506,7 +1651,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         types.OfType<ObjectTypeExtension>().Should().HaveCount(2);
     }
@@ -1532,7 +1680,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         var outputTypes = GetGenericObjectTypes(types);
         outputTypes.Should().HaveCount(1);
@@ -1554,7 +1705,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // No ObjectType<EmptyOutput> should be registered
         GetGenericObjectTypes(types).Should().BeEmpty();
@@ -1576,7 +1730,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         GetGenericObjectTypes(types).Should().BeEmpty();
     }
@@ -1594,7 +1751,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         GetNonGenericObjectTypes(types).Should().HaveCount(1);
     }
@@ -1613,7 +1773,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         GetGenericObjectTypes(types).Should().HaveCount(1);
         GetGenericObjectTypes(types)[0]
@@ -1641,7 +1804,12 @@ public class TrainTypeModuleTests
         var module = new TrainTypeModule(discovery);
 
         var act = async () =>
-            await module.CreateTypesAsync(null!, CancellationToken.None).ConfigureAwait(false);
+            await module
+                .CreateTypesAsync(
+                    Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -1663,7 +1831,12 @@ public class TrainTypeModuleTests
         var module = new TrainTypeModule(discovery);
 
         var act = async () =>
-            await module.CreateTypesAsync(null!, CancellationToken.None).ConfigureAwait(false);
+            await module
+                .CreateTypesAsync(
+                    Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -1684,7 +1857,12 @@ public class TrainTypeModuleTests
         var module = new TrainTypeModule(discovery);
 
         var act = async () =>
-            await module.CreateTypesAsync(null!, CancellationToken.None).ConfigureAwait(false);
+            await module
+                .CreateTypesAsync(
+                    Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -1713,7 +1891,12 @@ public class TrainTypeModuleTests
         var module = new TrainTypeModule(discovery);
 
         var act = async () =>
-            await module.CreateTypesAsync(null!, CancellationToken.None).ConfigureAwait(false);
+            await module
+                .CreateTypesAsync(
+                    Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
@@ -1735,7 +1918,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         types
             .Where(t =>
@@ -1759,7 +1945,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         GetNonGenericObjectTypes(types).Should().HaveCount(1);
     }
@@ -1777,7 +1966,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         types.OfType<ObjectTypeExtension>().Should().HaveCount(2);
     }
@@ -1795,7 +1987,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         GetGenericObjectTypes(types).Should().HaveCount(1);
         GetGenericObjectTypes(types)[0]
@@ -1834,7 +2029,10 @@ public class TrainTypeModuleTests
         ]);
         var module = new TrainTypeModule(discovery);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         var inputTypes = types
             .Where(t =>

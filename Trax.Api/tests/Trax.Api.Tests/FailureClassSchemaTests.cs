@@ -8,6 +8,7 @@ using NSubstitute;
 using Trax.Api.Services.HealthCheck;
 using Trax.Api.Tests.Fakes;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -124,7 +125,8 @@ public class FailureClassSchemaTests
                     Name = "Trax.X.Classified",
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
-                }
+                },
+                TimeProvider.System
             );
             meta.TrainState = state;
             if (failureClass is { } recorded)
@@ -179,7 +181,7 @@ public class FailureClassSchemaTests
 
         var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
-        operationResult!.Errors.Should().BeNullOrEmpty();
+        operationResult.NotNull().Errors.Should().BeNullOrEmpty();
 
         using var document = JsonDocument.Parse(operationResult.ToJson());
         return document.RootElement.GetProperty("data").Clone();

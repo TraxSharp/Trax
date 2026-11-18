@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore.Storage;
 using NSubstitute;
 using Trax.Api.Services.Runs;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -45,7 +46,10 @@ public class RunGraphTests
 
         var graph = await RunGraphs.ReadAsync(db, GraphsServing(After), run, default);
 
-        graph!.ChainChanged.Should().BeTrue("the run recorded a chain the host no longer declares");
+        graph
+            .NotNull()
+            .ChainChanged.Should()
+            .BeTrue("the run recorded a chain the host no longer declares");
         graph.Hash.Should().Be(After.Hash, "the graph is still the chain as declared now");
         graph.Nodes.Select(n => n.Id).Should().Equal("Ship#0", "Fetch#0");
         graph.UnmatchedSteps.Should().BeEmpty("every step's node id still names a node");
@@ -59,7 +63,7 @@ public class RunGraphTests
 
         var graph = await RunGraphs.ReadAsync(db, GraphsServing(After), run, default);
 
-        graph!.ChainChanged.Should().BeFalse();
+        graph.NotNull().ChainChanged.Should().BeFalse();
     }
 
     [Test]
@@ -70,7 +74,8 @@ public class RunGraphTests
 
         var graph = await RunGraphs.ReadAsync(db, GraphsServing(After), run, default);
 
-        graph!
+        graph
+            .NotNull()
             .ChainChanged.Should()
             .BeFalse("a run from before hashes were recorded cannot tell, and is not flagged");
     }
@@ -88,7 +93,7 @@ public class RunGraphTests
             default
         );
 
-        graph!.HasGraph.Should().BeFalse();
+        graph.NotNull().HasGraph.Should().BeFalse();
         graph.ChainChanged.Should().BeFalse("nothing is drawn, so nothing is drawn wrongly");
     }
 
@@ -113,10 +118,11 @@ public class RunGraphTests
                     Name = Train,
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
-                }
+                },
+                TimeProvider.System
             );
             run.TrainState = TrainState.Completed;
-            run.EndTime = DateTime.UtcNow;
+            run.EndTime = TimeProvider.System.GetUtcNow().UtcDateTime;
             run.ChainHash = chainHash;
             await db.Track(run).ConfigureAwait(false);
             await db.SaveChanges(default).ConfigureAwait(false);
@@ -131,7 +137,7 @@ public class RunGraphTests
                         Kind = JunctionRunKind.Junction,
                         Name = name,
                         State = JunctionRunState.Completed,
-                        StartedAt = DateTime.UtcNow,
+                        StartedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                         NodeId = node,
                     }
                 );

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 
@@ -37,7 +38,7 @@ public class MachineChangedRecheckE2ETests
 
     private static readonly TimeSpan Interval = TimeSpan.FromSeconds(1);
 
-    private IHost _host = null!;
+    private IHost? _host;
     private volatile bool _watchers = true;
     private volatile bool _active = true;
 
@@ -78,7 +79,7 @@ public class MachineChangedRecheckE2ETests
     [OneTimeTearDown]
     public async Task Down()
     {
-        await ShelfHosts.StopAsync(_host);
+        await ShelfHosts.StopAsync(_host.NotNull());
         await E2EHost.DropDatabaseAsync(Database);
     }
 
@@ -93,7 +94,7 @@ public class MachineChangedRecheckE2ETests
     public async Task A_stream_whose_caller_no_longer_satisfies_the_watch_rule_ends_not_found()
     {
         var id = await IssueAsync("Issued");
-        await using var ws = await GraphQLWs.ConnectAsync(_host, E2EHost.AliceKey);
+        await using var ws = await GraphQLWs.ConnectAsync(_host.NotNull(), E2EHost.AliceKey);
         await ws.SubscribeAsync("1", MachineChangedOps.Subscribe(id, BadgeMachine.MachineId));
         (await ws.NextChangeAsync("1")).State.Should().NotBeNull("the owner may watch");
 
@@ -119,13 +120,13 @@ public class MachineChangedRecheckE2ETests
     public async Task A_stream_whose_caller_still_satisfies_the_watch_rule_goes_on()
     {
         var id = await IssueAsync("Issued");
-        await using var ws = await GraphQLWs.ConnectAsync(_host, E2EHost.AliceKey);
+        await using var ws = await GraphQLWs.ConnectAsync(_host.NotNull(), E2EHost.AliceKey);
         await ws.SubscribeAsync("1", MachineChangedOps.Subscribe(id, BadgeMachine.MachineId));
         await ws.NextChangeAsync("1");
 
         // allowed-delay: lets three re-checks pass on the real clock the socket runs on; the
         // write after them is what the test waits for.
-        await Task.Delay(Interval * 3);
+        await Task.Delay(Interval * 3, TimeProvider.System);
         await IssueAsync("Returned", id);
 
         var next = await ws.NextChangeAsync("1");
@@ -137,7 +138,7 @@ public class MachineChangedRecheckE2ETests
     public async Task A_stream_whose_caller_no_longer_satisfies_the_endpoint_policy_ends_not_found()
     {
         var id = await IssueAsync("Issued");
-        await using var ws = await GraphQLWs.ConnectAsync(_host, E2EHost.AliceKey);
+        await using var ws = await GraphQLWs.ConnectAsync(_host.NotNull(), E2EHost.AliceKey);
         await ws.SubscribeAsync("1", MachineChangedOps.Subscribe(id, BadgeMachine.MachineId));
         (await ws.NextChangeAsync("1")).State.Should().NotBeNull("the owner may watch");
 
@@ -158,6 +159,7 @@ public class MachineChangedRecheckE2ETests
     {
         var instance = id ?? Guid.NewGuid();
         await _host
+            .NotNull()
             .SeedDraftAsync(
                 "TraxApiKey:alice",
                 instance,

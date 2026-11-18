@@ -17,7 +17,7 @@ namespace Trax.Api.Tests;
 
 public class BookDbContext : DbContext
 {
-    public DbSet<BookRef> Books { get; set; } = null!;
+    public DbSet<BookRef> Books => Set<BookRef>();
 
     public BookDbContext(DbContextOptions<BookDbContext> options)
         : base(options) { }

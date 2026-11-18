@@ -11,7 +11,7 @@ namespace Trax.Api.Tests;
 
 public class DuplicatePlayerDbContext : DbContext
 {
-    public DbSet<TestPlayer> Players { get; set; } = null!;
+    public DbSet<TestPlayer> Players => Set<TestPlayer>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
         optionsBuilder.UseInMemoryDatabase("DuplicatePlayerDb_" + Guid.NewGuid());

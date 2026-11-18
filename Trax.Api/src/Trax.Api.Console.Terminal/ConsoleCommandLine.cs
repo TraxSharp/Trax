@@ -1,4 +1,5 @@
 using System.CommandLine;
+using Trax.Api.Console.Terminal.Checks;
 using Trax.Api.Console.Terminal.Connection;
 using Trax.Api.Console.Terminal.Headless;
 using Trax.Api.Console.Terminal.Lists;
@@ -20,13 +21,16 @@ internal static class ConsoleCommandLine
         Func<string, string?>? environment = null,
         Func<ConsoleTarget, ConsoleSession>? open = null,
         TextWriter? output = null,
-        TextWriter? error = null
+        TextWriter? error = null,
+        TimeProvider? clock = null
     )
     {
         environment ??= Environment.GetEnvironmentVariable;
+        var time = clock ?? TimeProvider.System;
         open ??= target => ConsoleSession.Open(target);
-        var stdout = output ?? System.Console.Out;
-        var stderr = error ?? System.Console.Error;
+        // Standard output and error are System.CommandLine's, which owns the process's console.
+        TextWriter Stdout(ParseResult p) => output ?? p.InvocationConfiguration.Output;
+        TextWriter Stderr(ParseResult p) => error ?? p.InvocationConfiguration.Error;
         var host = new Option<string?>("--host")
         {
             Description =
@@ -99,12 +103,12 @@ internal static class ConsoleCommandLine
             (p, ct) =>
                 Run(
                     open,
-                    stderr,
+                    Stderr(p),
                     c => Target(p, c),
                     p.GetValue(anyVersion),
                     async (session, version) =>
                         await ConsoleApp
-                            .RunAsync(session, version, p.GetValue(verticalGraphs), ct)
+                            .RunAsync(session, version, p.GetValue(verticalGraphs), time, ct)
                             .ConfigureAwait(false),
                     ct
                 )
@@ -140,18 +144,18 @@ internal static class ConsoleCommandLine
             (p, ct) =>
                 Run(
                     open,
-                    stderr,
+                    Stderr(p),
                     c => Target(p, c),
                     p.GetValue(anyVersion),
                     (session, _) =>
                         HeadlessCommands.ListAsync(
                             session,
-                            p.GetValue(listName)!,
+                            p.GetValue(listName).NotNull(),
                             Filters(p.GetValue(where)),
                             p.GetValue(take),
                             p.GetValue(after),
-                            stdout,
-                            stderr,
+                            Stdout(p),
+                            Stderr(p),
                             ct
                         ),
                     ct
@@ -193,18 +197,18 @@ internal static class ConsoleCommandLine
             (p, ct) =>
                 Run(
                     open,
-                    stderr,
+                    Stderr(p),
                     c => Target(p, c),
                     p.GetValue(anyVersion),
                     (session, _) =>
                         HeadlessCommands.DoAsync(
                             session,
-                            p.GetValue(listName)!,
-                            p.GetValue(action)!,
-                            p.GetValue(ids)!,
+                            p.GetValue(listName).NotNull(),
+                            p.GetValue(action).NotNull(),
+                            p.GetValue(ids).NotNull(),
                             new ActionOptions(p.GetValue(note), p.GetValue(askAfresh)),
                             p.GetValue(dryRun),
-                            stdout,
+                            Stdout(p),
                             ct
                         ),
                     ct
@@ -234,19 +238,20 @@ internal static class ConsoleCommandLine
             (p, ct) =>
                 Run(
                     open,
-                    stderr,
+                    Stderr(p),
                     c => Target(p, c),
                     p.GetValue(anyVersion),
                     (session, _) =>
                         HeadlessCommands.BulkAsync(
                             session,
-                            p.GetValue(listName)!,
-                            p.GetValue(action)!,
+                            p.GetValue(listName).NotNull(),
+                            p.GetValue(action).NotNull(),
                             Filters(p.GetValue(where)),
                             p.GetValue(expect),
                             new ActionOptions(p.GetValue(note), p.GetValue(askAfresh)),
                             p.GetValue(dryRun),
-                            stdout,
+                            Stdout(p),
+                            time,
                             ct
                         ),
                     ct
@@ -272,16 +277,16 @@ internal static class ConsoleCommandLine
             (p, ct) =>
                 Run(
                     open,
-                    stderr,
+                    Stderr(p),
                     c => Target(p, c),
                     p.GetValue(anyVersion),
                     (session, _) =>
                         HeadlessCommands.WatchAsync(
                             session,
-                            p.GetValue(stream)!,
+                            p.GetValue(stream).NotNull(),
                             p.GetValue(id),
-                            stdout,
-                            stderr,
+                            Stdout(p),
+                            Stderr(p),
                             ct
                         ),
                     ct
@@ -297,11 +302,17 @@ internal static class ConsoleCommandLine
             (p, ct) =>
                 Run(
                     open,
-                    stderr,
+                    Stderr(p),
                     c => Target(p, c),
                     p.GetValue(anyVersion),
                     (session, _) =>
-                        HeadlessCommands.TraceAsync(session, p.GetValue(run), stdout, stderr, ct),
+                        HeadlessCommands.TraceAsync(
+                            session,
+                            p.GetValue(run),
+                            Stdout(p),
+                            Stderr(p),
+                            ct
+                        ),
                     ct
                 )
         );
@@ -322,7 +333,7 @@ internal static class ConsoleCommandLine
             (p, ct) =>
                 Run(
                     open,
-                    stderr,
+                    Stderr(p),
                     c => Target(p, c),
                     p.GetValue(anyVersion),
                     (session, _) =>
@@ -330,8 +341,8 @@ internal static class ConsoleCommandLine
                             session,
                             p.GetValue(machineName),
                             p.GetValue(verticalGraphs),
-                            stdout,
-                            stderr,
+                            Stdout(p),
+                            Stderr(p),
                             ct
                         ),
                     ct
@@ -346,10 +357,10 @@ internal static class ConsoleCommandLine
             (p, ct) =>
                 Run(
                     open,
-                    stderr,
+                    Stderr(p),
                     c => Target(p, c),
                     anyVersion: true,
-                    (session, version) => HeadlessCommands.CheckAsync(session, version, stdout),
+                    (session, version) => HeadlessCommands.CheckAsync(session, version, Stdout(p)),
                     ct,
                     reports: true
                 )

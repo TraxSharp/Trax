@@ -8,9 +8,13 @@ internal sealed class ConsoleContext(
     IApplication app,
     TraxClient client,
     Uri endpoint,
-    IPrompts? prompts = null
+    IPrompts? prompts = null,
+    TimeProvider? clock = null
 )
 {
+    /// <summary>The clock the screens wait on.</summary>
+    public TimeProvider Clock { get; } = clock ?? TimeProvider.System;
+
     public IApplication App { get; } = app;
 
     public TraxClient Client { get; } = client;

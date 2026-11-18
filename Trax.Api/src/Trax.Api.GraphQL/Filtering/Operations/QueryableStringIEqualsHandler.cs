@@ -3,6 +3,7 @@ using HotChocolate.Data.Filters;
 using HotChocolate.Data.Filters.Expressions;
 using HotChocolate.Language;
 using HotChocolate.Types;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.GraphQL.Filtering.Operations;
 
@@ -32,7 +33,7 @@ internal sealed class QueryableStringIEqualsHandler : QueryableStringOperationHa
     )
     {
         var property = context.GetInstance();
-        var term = (string)parsedValue!;
+        var term = (string)parsedValue.NotNull();
 
         var equal = Expression.Equal(
             CaseInsensitiveExpression.Lower(property),

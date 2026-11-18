@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using AwesomeAssertions;
 using Trax.Api.Auth;
 using Trax.Api.Auth.ApiKey;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Auth;
 
@@ -22,7 +23,7 @@ public class HashedApiKeyResolverTests
         var result = await resolver.ResolveAsync("secret-key-value", CancellationToken.None);
 
         result.Should().NotBeNull();
-        result!.Id.Should().Be("alice");
+        result.NotNull().Id.Should().Be("alice");
         result.DisplayName.Should().Be("Alice");
     }
 
@@ -84,7 +85,7 @@ public class HashedApiKeyResolverTests
         var result = await resolver.ResolveAsync("bob-key", CancellationToken.None);
 
         result.Should().NotBeNull();
-        result!.Id.Should().Be("bob");
+        result.NotNull().Id.Should().Be("bob");
     }
 
     [Test]
@@ -177,19 +178,16 @@ public class HashedApiKeyResolverTests
             .ToArray();
         var resolver = new HashedApiKeyResolver(entries);
 
-        var sw = new Stopwatch();
-
         async Task<double> AverageMicros(string input, int iters = 2000)
         {
             // Warm-up
             for (var i = 0; i < 200; i++)
                 await resolver.ResolveAsync(input, CancellationToken.None).ConfigureAwait(false);
 
-            sw.Restart();
+            var started = TimeProvider.System.GetTimestamp();
             for (var i = 0; i < iters; i++)
                 await resolver.ResolveAsync(input, CancellationToken.None).ConfigureAwait(false);
-            sw.Stop();
-            return sw.Elapsed.TotalMicroseconds / iters;
+            return TimeProvider.System.GetElapsedTime(started).TotalMicroseconds / iters;
         }
 
         var first = await AverageMicros("key-0");

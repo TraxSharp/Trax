@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Api.Console.Terminal.Checks;
 using Trax.Client;
 
 namespace Trax.Api.Console.Terminal.Tests.Fakes;
@@ -18,7 +19,7 @@ internal sealed class FakeHost : ITraxTransport
 
     /// <summary>Answers <paramref name="operation"/> with <paramref name="data"/>, whatever its variables.</summary>
     public FakeHost Answer(string operation, string data) =>
-        Answer(operation, _ => (JsonObject)JsonNode.Parse(data)!);
+        Answer(operation, _ => (JsonObject)JsonNode.Parse(data).NotNull());
 
     /// <summary>Answers <paramref name="operation"/> with the data <paramref name="answer"/> builds from its variables.</summary>
     public FakeHost Answer(string operation, Func<JsonObject, JsonObject> answer) =>

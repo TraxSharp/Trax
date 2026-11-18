@@ -1,5 +1,6 @@
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 
 namespace Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
@@ -289,7 +290,7 @@ public partial class TraxGraphQLBuilder
         throw new InvalidOperationException(
             ExposureAuthorizationRule.BuildMessage(
                 "[TraxQueryModel] entity",
-                entityType.FullName!,
+                entityType.FullName.NotNull(),
                 violation
             )
         );

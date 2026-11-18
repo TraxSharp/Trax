@@ -49,7 +49,13 @@ public partial class NoForeignAuthorizationAttributesTests
             "reads directives off the built schema",
         // The tests that pin the refusal have to write the thing being refused.
         ["tests/Trax.Api.Tests/TypeExtensionExposureTests.cs"] =
-            "fixtures proving the foreign attributes are refused",
+            "tests proving the foreign attributes are refused",
+        ["tests/Trax.Api.Tests/ForeignAnonymousOnPublicThing.cs"] =
+            "fixture proving the foreign attributes are refused",
+        ["tests/Trax.Api.Tests/ForeignGatedOnGatedThing.cs"] =
+            "fixture proving the foreign attributes are refused",
+        ["tests/Trax.Api.Tests/ForeignGatedOnPublicThing.cs"] =
+            "fixture proving the foreign attributes are refused",
         ["tests/Trax.Api.Tests/QueryModelAllowAnonymousSchemaValidatorTests.cs"] =
             "builds schemas directly to drive the schema validator",
         // Builds a raw AddGraphQLServer schema to exercise HotChocolate's own validator. Trax's

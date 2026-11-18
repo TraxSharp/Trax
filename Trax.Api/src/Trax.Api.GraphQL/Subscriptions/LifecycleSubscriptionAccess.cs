@@ -1,9 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Configuration;
 using Trax.Api.Services.Authorization;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Mediator.Services.TrainDiscovery;
 
@@ -64,7 +66,7 @@ internal sealed class LifecycleSubscriptionAccess(
         var trains = new HashSet<string>(StringComparer.Ordinal);
         foreach (var train in _broadcastTrains.Value)
             if (await SatisfiesTrainAsync(user, train).ConfigureAwait(false))
-                trains.Add(train.ServiceType.FullName!);
+                trains.Add(train.ServiceType.FullName.NotNull());
 
         return new LifecycleVisibility(All: false, trains)
         {
@@ -133,14 +135,12 @@ internal sealed class LifecycleSubscriptionAccess(
 
         AuthorizeDirectives.ExtractRules(gate, out var policies, out var roleSets);
         foreach (var policy in policies)
-            if (
-                !(await authorization.AuthorizeAsync(user!, policy).ConfigureAwait(false)).Succeeded
-            )
+            if (!(await authorization.AuthorizeAsync(user, policy).ConfigureAwait(false)).Succeeded)
                 return false;
 
         // Each @authorize(roles:) on the operations field is an IsInRole check, and the field
         // carries one per GateOperations(roles:) call, all of which must pass.
-        return roleSets.All(roles => roles.Any(user!.IsInRole));
+        return roleSets.All(roles => roles.Any(user.IsInRole));
     }
 
     private async ValueTask<bool> SatisfiesTrainAsync(
@@ -160,17 +160,15 @@ internal sealed class LifecycleSubscriptionAccess(
             return false;
 
         foreach (var policy in train.RequiredPolicies)
-            if (
-                !(await authorization.AuthorizeAsync(user!, policy).ConfigureAwait(false)).Succeeded
-            )
+            if (!(await authorization.AuthorizeAsync(user, policy).ConfigureAwait(false)).Succeeded)
                 return false;
 
         // Exact, as TrainAuthorizationService and @authorize compare roles (Trax.Docs
         // adr/0026-train-roles-match-exactly-like-authorize.md), and one requirement per
         // attribute that names roles, as TrainAuthorizationService applies them.
-        return TrainRoleRequirements.For(train).All(roles => roles.Any(user!.IsInRole));
+        return TrainRoleRequirements.For(train).All(roles => roles.Any(user.IsInRole));
     }
 
-    private static bool IsAuthenticated(ClaimsPrincipal? user) =>
+    private static bool IsAuthenticated([NotNullWhen(true)] ClaimsPrincipal? user) =>
         user?.Identity?.IsAuthenticated == true;
 }

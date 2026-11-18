@@ -8,6 +8,7 @@ using NSubstitute;
 using Trax.Api.DTOs;
 using Trax.Api.Extensions;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 
 namespace Trax.Api.Tests;
@@ -20,7 +21,7 @@ public class CoverageGapTests
     [Test]
     public void DeadLetterSummary_Constructs_AndCarriesValues()
     {
-        var now = DateTime.UtcNow;
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime;
         var dto = new DeadLetterSummary(
             Id: 1,
             ManifestId: 2,
@@ -55,7 +56,7 @@ public class CoverageGapTests
             ExternalId: "ext-7",
             Name: "n",
             TrainState: TrainState.InProgress,
-            StartTime: DateTime.UtcNow,
+            StartTime: TimeProvider.System.GetUtcNow().UtcDateTime,
             EndTime: null,
             FailureJunction: null,
             FailureClass: Trax.Core.Exceptions.FailureClass.Unclassified,
@@ -92,8 +93,8 @@ public class CoverageGapTests
             MaxActiveJobs: 4,
             Priority: 1,
             IsEnabled: true,
-            CreatedAt: DateTime.UtcNow,
-            UpdatedAt: DateTime.UtcNow
+            CreatedAt: TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt: TimeProvider.System.GetUtcNow().UtcDateTime
         );
 
         dto.Id.Should().Be(1);
@@ -119,7 +120,7 @@ public class CoverageGapTests
             IntervalSeconds: null,
             MaxRetries: 3,
             TimeoutSeconds: 60,
-            LastSuccessfulRun: DateTime.UtcNow,
+            LastSuccessfulRun: TimeProvider.System.GetUtcNow().UtcDateTime,
             ManifestGroupId: 5,
             DependsOnManifestId: null,
             Priority: 0
@@ -272,7 +273,7 @@ public class CoverageGapTests
             string.Equals(r.Name, "custom-name", StringComparison.Ordinal)
         );
         reg.Should().NotBeNull();
-        reg!.Tags.Should().Contain("tag1");
+        reg.NotNull().Tags.Should().Contain("tag1");
     }
 
     #endregion
@@ -346,7 +347,7 @@ public class CoverageGapTests
         );
         providerType.Should().NotBeNull();
         return (Trax.Mediator.Services.Principal.ICurrentPrincipalProvider)
-            Activator.CreateInstance(providerType!, accessor)!;
+            Activator.CreateInstance(providerType.NotNull(), accessor).NotNull();
     }
 
     #endregion
@@ -362,7 +363,7 @@ public class CoverageGapTests
             ExternalId: "ext",
             TrainName: "T",
             TrainState: TrainState.InProgress,
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TimeProvider.System.GetUtcNow().UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             Output: null

@@ -3,6 +3,7 @@ using HotChocolate.Execution.Configuration;
 using Microsoft.AspNetCore.Http;
 using Trax.Api.GraphQL.Filtering;
 using Trax.Api.GraphQL.Subscriptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Mediator.Services.TrainDiscovery;
 
@@ -231,7 +232,7 @@ public sealed class GraphQLConfiguration
                         + "its events and the call does nothing. Add [TraxBroadcast] to the train, "
                         + "or remove the call."
                 );
-            names.Add(registration.ServiceType.FullName!);
+            names.Add(registration.ServiceType.FullName.NotNull());
         }
         BroadcastOutputTrains = names;
     }

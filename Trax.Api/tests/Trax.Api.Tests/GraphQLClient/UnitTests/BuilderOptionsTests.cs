@@ -57,7 +57,7 @@ public class BuilderOptionsTests
         var services = new ServiceCollection();
         var builder = services.AddTraxGraphQLClient(new Uri("http://stub/graphql"));
 
-        var act = () => builder.ConfigureHttpClient(null!);
+        var act = () => builder.ConfigureHttpClient(Null.Of<System.Net.Http.HttpClient>());
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -115,7 +115,7 @@ public class BuilderOptionsTests
         var services = new ServiceCollection();
         var builder = services.AddTraxGraphQLClient(new Uri("http://stub/graphql"));
 
-        var act = () => builder.ConfigureJson(null!);
+        var act = () => builder.ConfigureJson(Null.Of<System.Text.Json.JsonSerializerOptions>());
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -139,7 +139,10 @@ public class BuilderOptionsTests
         var services = new ServiceCollection();
         var builder = services.AddTraxGraphQLClient(new Uri("http://stub/graphql"));
 
-        var act = () => builder.Configure(null!);
+        var act = () =>
+            builder.Configure(
+                Null.Of<Action<Trax.Api.GraphQL.Client.GraphQLClientConfigurationBuilder>>()
+            );
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -161,7 +164,7 @@ public class BuilderOptionsTests
     [Test]
     public void AddTraxGraphQLClient_NullServices_Throws()
     {
-        IServiceCollection services = null!;
+        IServiceCollection services = Null.Of<IServiceCollection>();
         var act = () => services.AddTraxGraphQLClient(new Uri("http://stub/graphql"));
         act.Should().Throw<ArgumentNullException>();
     }
@@ -170,7 +173,7 @@ public class BuilderOptionsTests
     public void AddTraxGraphQLClient_NullUri_Throws()
     {
         var services = new ServiceCollection();
-        var act = () => services.AddTraxGraphQLClient(null!);
+        var act = () => services.AddTraxGraphQLClient(Null.Of<Uri>());
         act.Should().Throw<ArgumentNullException>();
     }
 }

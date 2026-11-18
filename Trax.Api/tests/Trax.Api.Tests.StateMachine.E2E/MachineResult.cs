@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.StateMachine.E2E;
 
@@ -11,7 +12,7 @@ public sealed record MachineResult(JsonElement Raw)
     /// <summary>The instance's id.</summary>
     public Guid Id =>
         Raw.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String
-            ? Guid.Parse(id.GetString()!)
+            ? Guid.Parse(id.GetString().NotNull())
             : Guid.Empty;
 
     /// <summary>The revision the server recorded, or null when the answer carries none.</summary>
@@ -21,7 +22,7 @@ public sealed record MachineResult(JsonElement Raw)
             {
                 JsonValueKind.Number => revision.GetInt64(),
                 JsonValueKind.String => long.Parse(
-                    revision.GetString()!,
+                    revision.GetString().NotNull(),
                     System.Globalization.CultureInfo.InvariantCulture
                 ),
                 _ => null,
