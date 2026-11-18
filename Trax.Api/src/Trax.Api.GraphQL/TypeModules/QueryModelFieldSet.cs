@@ -94,24 +94,3 @@ internal static class QueryModelFieldSet
         return Expression.Lambda(funcType, body, param);
     }
 }
-
-/// <summary>
-/// The filter input for a <c>[TraxQueryModel]</c> entity, built from its exposed field set.
-/// Bound to the entity in the filter convention, so the same input is used on the model's own
-/// entry field and wherever another model's filter reaches it through a navigation.
-/// </summary>
-internal sealed class QueryModelFilterInputType<TEntity> : FilterInputType<TEntity>
-{
-    protected override void Configure(IFilterInputTypeDescriptor<TEntity> descriptor) =>
-        QueryModelFieldSet.BindFilterFields(descriptor);
-}
-
-/// <summary>
-/// The sort input for a <c>[TraxQueryModel]</c> entity, built from its exposed field set. See
-/// <see cref="QueryModelFilterInputType{TEntity}"/>.
-/// </summary>
-internal sealed class QueryModelSortInputType<TEntity> : SortInputType<TEntity>
-{
-    protected override void Configure(ISortInputTypeDescriptor<TEntity> descriptor) =>
-        QueryModelFieldSet.BindSortFields(descriptor);
-}

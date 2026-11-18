@@ -218,17 +218,3 @@ public class SchemaAuthorizationPolicyTests
         return services;
     }
 }
-
-[ExtendObjectType(typeof(PublicThing))]
-public sealed class UnregisteredPolicyOnPublicThing
-{
-    [TraxAuthorize(Policy = "NoSuchResolverPolicy")]
-    public string UnregisteredPolicyField([Parent] PublicThing thing) => thing.Name;
-}
-
-[ExtendObjectType(typeof(PublicThing))]
-public sealed class RegisteredPolicyOnPublicThing
-{
-    [TraxAuthorize(Policy = "RegisteredResolverPolicy")]
-    public string RegisteredPolicyField([Parent] PublicThing thing) => thing.Name;
-}

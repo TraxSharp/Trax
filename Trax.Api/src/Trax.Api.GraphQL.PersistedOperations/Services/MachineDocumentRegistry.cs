@@ -5,31 +5,6 @@ using Trax.Api.GraphQL.TypeModules;
 
 namespace Trax.Api.GraphQL.PersistedOperations.Services;
 
-/// <summary>What the store holds for one machine document id: the version it registered under, and whether it is active.</summary>
-internal readonly record struct StoredMachineDocument(int Version, bool IsActive);
-
-/// <summary>What a node does with a request naming a machine document by id.</summary>
-internal enum MachineDocumentVerdict
-{
-    /// <summary>One of this node's own documents: look it up and run it.</summary>
-    Own,
-
-    /// <summary>A document of an older version of the machine, or one no version generated: the client reloads.</summary>
-    ClientOutdated,
-
-    /// <summary>
-    /// A document of a newer version of the machine than this node runs, or one of a machine this node does not serve
-    /// that the store holds active: the client retries.
-    /// </summary>
-    ServerOutdated,
-
-    /// <summary>
-    /// A client document another node registered that the store holds active: it runs here if its stored text passes
-    /// this node's checks, and answers <see cref="ClientOutdated"/> if not.
-    /// </summary>
-    Stored,
-}
-
 /// <summary>
 /// This node's machine documents, and what it knows of the others stored beside them: the order in which each version
 /// of a machine registered its documents. A node serves only its own documents; any other id under the reserved
@@ -333,29 +308,5 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
         IReadOnlyDictionary<string, StoredMachineDocument> Stored,
         long ReadStartedAt,
         long ReadFinishedAt
-    );
-}
-
-/// <summary>
-/// The instruments that alert on a machine document whose stored body does not match its id: a lookup refused, and a
-/// row startup wrote back.
-/// </summary>
-internal static class MachineDocumentInstruments
-{
-    /// <summary>The meter both instruments belong to.</summary>
-    public const string MeterName = "Trax.Api.PersistedOperations";
-
-    private static readonly Meter Meter = new(MeterName);
-
-    /// <summary>A lookup refused because the stored body does not hash to its id.</summary>
-    public static readonly Counter<long> Mismatches = Meter.CreateCounter<long>(
-        "trax.persisted_operations.machine_document_mismatches",
-        description: "Lookups of a machine document refused because the stored body does not match its id."
-    );
-
-    /// <summary>A stored machine document startup wrote back because its body did not match its id.</summary>
-    public static readonly Counter<long> Repairs = Meter.CreateCounter<long>(
-        "trax.persisted_operations.machine_document_repairs",
-        description: "Machine documents written back at startup because the stored body did not match its id."
     );
 }

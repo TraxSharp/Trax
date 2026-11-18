@@ -5,40 +5,6 @@ using Trax.Scheduler.Services.Operations;
 namespace Trax.Api.Services.BulkOperations;
 
 /// <summary>
-/// Who started a bulk operation. <paramref name="Display"/> is what <c>actor</c> reads;
-/// <paramref name="PrincipalId"/> and <paramref name="PrincipalType"/> are the caller's Trax
-/// principal claims, when it carried them, for the audit entry.
-/// </summary>
-internal sealed record BulkOperationActor(
-    string Display,
-    string? PrincipalId,
-    string? PrincipalType
-)
-{
-    /// <summary>What <c>actor</c> reads for a caller with no identity.</summary>
-    public const string Anonymous = "<anonymous>";
-}
-
-/// <summary>What a bulk operation was asked to do, once its request has been checked.</summary>
-internal sealed record BulkOperationRequest(
-    BulkOperationKind Kind,
-    BulkOperationFilter Filter,
-    int ExpectedCount,
-    bool AskAfresh,
-    string? Note
-);
-
-/// <summary>The moving part of a bulk operation, read together under its lock.</summary>
-internal sealed record BulkOperationProgress(
-    BulkOperationStatus Status,
-    int Done,
-    int Failed,
-    DateTime? FinishedAt,
-    string Message,
-    IReadOnlyList<BulkOperationFailureReason> Reasons
-);
-
-/// <summary>
 /// One bulk operation's state on the node running it: the ids it snapshot, how far it has got,
 /// and what did not take. <see cref="BulkOperationJobs"/> writes it from the batch loop; every
 /// read takes a consistent copy under its lock.
@@ -249,28 +215,4 @@ internal sealed class BulkOperationRun
             BulkOperationKind.Requeue or BulkOperationKind.Acknowledge => "dead letter(s)",
             _ => "manifest(s)",
         };
-}
-
-/// <summary>How a bulk operation ended, as an observer such as the audit sees it.</summary>
-internal sealed record BulkOperationOutcome(
-    Guid Id,
-    BulkOperationKind Kind,
-    BulkOperationStatus Status,
-    BulkOperationActor Actor,
-    DateTime StartedAt,
-    DateTime FinishedAt,
-    int Total,
-    int Done,
-    int Failed,
-    string Message
-);
-
-/// <summary>
-/// Told when a bulk operation on this node stops. The API's audit registers one when the host
-/// calls <c>AddAudit</c>, so the outcome lands in the audit trail beside the request that started
-/// it. An observer must not throw or block; one that throws is logged and skipped.
-/// </summary>
-internal interface IBulkOperationObserver
-{
-    void Finished(BulkOperationOutcome outcome);
 }

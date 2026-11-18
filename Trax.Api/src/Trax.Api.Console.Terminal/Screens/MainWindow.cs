@@ -305,6 +305,3 @@ internal sealed class MainWindow : Window
         base.Dispose(disposing);
     }
 }
-
-/// <summary>Where the console was: its tab and each list's page and filters.</summary>
-internal sealed record ConsoleState(int Tab, IReadOnlyDictionary<string, ListState> Lists);

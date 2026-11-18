@@ -2,52 +2,6 @@ using Trax.Api.Services.BulkOperations;
 
 namespace Trax.Api.DTOs;
 
-/// <summary>What a bulk operation does to each id it matched.</summary>
-/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/mutations/bulk-operations">SDK reference</seealso>
-public enum BulkOperationKind
-{
-    /// <summary>Requests cancellation of each run, as <c>cancelExecutions</c> does.</summary>
-    Cancel,
-
-    /// <summary>Requeues each dead letter, as <c>requeueDeadLetters</c> does.</summary>
-    Requeue,
-
-    /// <summary>Acknowledges each dead letter with the operation's note, as <c>acknowledgeDeadLetters</c> does.</summary>
-    Acknowledge,
-
-    /// <summary>Triggers each manifest, as <c>triggerManifests</c> does.</summary>
-    Trigger,
-
-    /// <summary>Enables each manifest, as <c>setManifestsEnabled(enabled: true)</c> does.</summary>
-    Enable,
-
-    /// <summary>Disables each manifest, as <c>setManifestsEnabled(enabled: false)</c> does.</summary>
-    Disable,
-}
-
-/// <summary>Where a bulk operation is.</summary>
-/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/mutations/bulk-operations">SDK reference</seealso>
-public enum BulkOperationStatus
-{
-    /// <summary>Batches are still running.</summary>
-    Running,
-
-    /// <summary>
-    /// Every id it matched was attempted. <c>failed</c> counts the ones that
-    /// did not take, each with its reason.
-    /// </summary>
-    Finished,
-
-    /// <summary>
-    /// It stopped before the end: the server refused a batch (the message says why) or failed
-    /// (the detail is in the server's log). The ids it had not reached were not attempted.
-    /// </summary>
-    Failed,
-
-    /// <summary>The server was shutting down, so it stopped between batches.</summary>
-    Canceled,
-}
-
 /// <summary>
 /// One action applied to every id a filter matched, run in the background in batches on the node
 /// that started it. <c>startBulkOperation</c> returns one at once, and
@@ -135,34 +89,3 @@ public sealed class BulkOperation
     public IReadOnlyList<BulkOperationFailure> GetFailures(int take = 100, long? afterId = null) =>
         _run.Failures(take, afterId);
 }
-
-/// <summary>One id a bulk operation did not apply to, and why.</summary>
-/// <param name="Id">The run, dead letter or manifest id.</param>
-/// <param name="Reason">Why it did not take, in the operator's words.</param>
-/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/mutations/bulk-operations">SDK reference</seealso>
-public sealed record BulkOperationFailure(long Id, string Reason);
-
-/// <summary>One reason a bulk operation's ids did not take, and how many.</summary>
-/// <param name="Reason">The reason.</param>
-/// <param name="Count">How many ids failed for it.</param>
-/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/mutations/bulk-operations">SDK reference</seealso>
-public sealed record BulkOperationFailureReason(string Reason, int Count);
-
-/// <summary>
-/// The answer to <c>startBulkOperation</c>. A refusal starts nothing: <c>success</c> is
-/// <see langword="false"/> and <c>message</c> says why. When the filter matched a different number of
-/// ids than the caller confirmed, <c>matched</c> is the number it matches now, to confirm
-/// and start again. While another bulk operation runs on this node, <c>operation</c> is
-/// that one.
-/// </summary>
-/// <param name="Success">Whether an operation was started.</param>
-/// <param name="Message">What happened, for an operator.</param>
-/// <param name="Matched">How many ids the filter matched, or <see langword="null"/> when it was not read.</param>
-/// <param name="Operation">The started operation, or the one already running; else <see langword="null"/>.</param>
-/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/mutations/bulk-operations">SDK reference</seealso>
-public sealed record StartBulkOperationResponse(
-    bool Success,
-    string Message,
-    int? Matched,
-    BulkOperation? Operation
-);

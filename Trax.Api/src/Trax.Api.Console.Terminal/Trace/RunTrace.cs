@@ -6,43 +6,6 @@ using Trax.Client;
 
 namespace Trax.Api.Console.Terminal.Trace;
 
-/// <summary>What one line of a run's trace is.</summary>
-internal enum TraceKind
-{
-    /// <summary>A step: a junction, a decision point or a route, as it started and ended.</summary>
-    Step,
-
-    /// <summary>A decision the run recorded: the question, the answer, who answered.</summary>
-    Decision,
-
-    /// <summary>A line the run logged.</summary>
-    Log,
-}
-
-/// <summary>One line of a run's trace.</summary>
-/// <param name="Kind">A step, a decision or a log line.</param>
-/// <param name="Key">What makes it this line: a step's position, a decision's or log's id. A step that changes keeps its key.</param>
-/// <param name="At">When it happened; null for a log line, which the host records without a time.</param>
-/// <param name="Text">The line as the terminal shows it.</param>
-/// <param name="Json">What the host answered for it.</param>
-/// <param name="Ended">For a step, whether it had ended (completed, failed or cancelled) when it was read.</param>
-internal sealed record TraceEntry(
-    TraceKind Kind,
-    string Key,
-    DateTimeOffset? At,
-    string Text,
-    JsonNode? Json,
-    bool Ended = false
-)
-{
-    /// <summary>
-    /// Of two readings of one line, the one to keep: a step that had ended is newer than one still running, and of two
-    /// equally far along, <paramref name="later"/>, the one read last.
-    /// </summary>
-    public static TraceEntry Newest(TraceEntry earlier, TraceEntry later) =>
-        earlier.Ended && !later.Ended ? earlier : later;
-}
-
 /// <summary>
 /// A run's steps, decisions and log, read with the browser console's documents and told as one timeline: steps and
 /// decisions in time order, then the log in the order it was written.

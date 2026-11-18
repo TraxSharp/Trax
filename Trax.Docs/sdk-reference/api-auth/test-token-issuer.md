@@ -10,6 +10,7 @@ package: Trax.Api.Auth.Jwt.Testing
 namespace: Trax.Api.Auth.Jwt.Testing
 source:
   - Trax.Api/src/Trax.Api.Auth.Jwt.Testing/TestTokenIssuer.cs
+  - Trax.Api/src/Trax.Api.Auth.Jwt.Testing/TestTokenBuilder.cs
 ---
 
 # TestTokenIssuer

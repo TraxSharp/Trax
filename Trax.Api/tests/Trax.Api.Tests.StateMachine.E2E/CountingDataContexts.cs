@@ -56,14 +56,3 @@ public sealed class CountingDataContexts
         }
     }
 }
-
-/// <summary>A clock a test moves by hand.</summary>
-public sealed class ManualClock(DateTimeOffset start) : TimeProvider
-{
-    private long _ticks = start.UtcTicks;
-
-    public override DateTimeOffset GetUtcNow() => new(Interlocked.Read(ref _ticks), TimeSpan.Zero);
-
-    /// <summary>Moves the clock forward.</summary>
-    public void Advance(TimeSpan by) => Interlocked.Add(ref _ticks, by.Ticks);
-}

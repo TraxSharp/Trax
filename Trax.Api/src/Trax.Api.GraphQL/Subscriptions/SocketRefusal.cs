@@ -20,13 +20,3 @@ internal sealed record SocketRefusal(string Scheme, string Reason, ClaimsPrincip
     /// <summary>The credential was accepted and the endpoint policy refused its principal.</summary>
     public const string ReasonEndpointPolicy = "endpoint policy";
 }
-
-/// <summary>
-/// Told of every socket connection refused at <c>connection_init</c>. The audit package registers
-/// one, so credential probing over a socket, which never reaches the executor, is recorded.
-/// </summary>
-internal interface ISocketRefusalObserver
-{
-    /// <summary>Records <paramref name="refusal"/>. Must not throw or block.</summary>
-    void Refused(SocketRefusal refusal);
-}

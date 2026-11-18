@@ -148,9 +148,3 @@ public class UnregisteredClientKeyTests
         return assembly;
     }
 }
-
-/// <summary>The base each generated probe request derives from.</summary>
-public class PingProbeRequest : IGraphQLClientRequest<object>
-{
-    public string Query => "query Ping { ping }";
-}

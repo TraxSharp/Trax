@@ -98,7 +98,8 @@ internal static class MachineInstanceFeed
         public IAsyncEnumerable<MachineInstanceChange> ReadEventsAsync() =>
             Read<MachineInstanceChange>(CancellationToken.None);
 
-        IAsyncEnumerable<object?> ISourceStream.ReadEventsAsync() => Read<object?>(CancellationToken.None);
+        IAsyncEnumerable<object?> ISourceStream.ReadEventsAsync() =>
+            Read<object?>(CancellationToken.None);
 
         public ValueTask DisposeAsync()
         {

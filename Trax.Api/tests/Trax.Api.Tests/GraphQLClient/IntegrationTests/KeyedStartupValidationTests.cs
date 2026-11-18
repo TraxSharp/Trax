@@ -146,31 +146,3 @@ public class KeyedStartupValidationTests
             .BeFalse();
     }
 }
-
-public enum ProbeServer
-{
-    Billing,
-}
-
-[GraphQLClient("keyed-players")]
-public sealed class KeyedPlayersProbeRequest : IGraphQLClientRequest<object>
-{
-    public string Query => "query KeyedPlayersProbe { allItems { id } }";
-}
-
-[GraphQLClient("keyed-trax")]
-public sealed class KeyedTraxProbeRequest : IGraphQLClientRequest<object>
-{
-    public string Query => "query KeyedTraxProbe { discover { netsuiteClient { __typename } } }";
-}
-
-[GraphQLClient(ProbeServer.Billing)]
-public sealed class EnumKeyedProbeRequest : IGraphQLClientRequest<object>
-{
-    public string Query => "query EnumKeyedProbe { __typename }";
-}
-
-public sealed class UnmarkedProbeRequest : IGraphQLClientRequest<object>
-{
-    public string Query => "query UnmarkedProbe { __typename }";
-}

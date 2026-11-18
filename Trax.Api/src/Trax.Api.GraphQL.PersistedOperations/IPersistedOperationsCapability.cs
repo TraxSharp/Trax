@@ -9,5 +9,3 @@ namespace Trax.Api.GraphQL.PersistedOperations;
 /// management GraphQL mutations/queries are all wired in.
 /// </summary>
 public interface IPersistedOperationsCapability;
-
-internal sealed class PersistedOperationsCapability : IPersistedOperationsCapability;

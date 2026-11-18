@@ -243,36 +243,3 @@ internal static partial class MachineEnums
     [GeneratedRegex("^[_A-Za-z][_0-9A-Za-z]*$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     private static partial Regex GraphQLName { get; }
 }
-
-/// <summary>
-/// A machine enum's GraphQL type: its values named as the server stores them. Its own class so a type the host binds
-/// to the same CLR enum can be told apart from it (<see cref="MachineEnumBindingInterceptor"/>).
-/// </summary>
-internal sealed class MachineEnumType<TEnum>() : EnumType<TEnum>(Describe)
-    where TEnum : struct, Enum
-{
-    private static void Describe(IEnumTypeDescriptor<TEnum> d)
-    {
-        d.BindValuesExplicitly();
-        foreach (var value in Enum.GetValues<TEnum>())
-        {
-            var name = JsonSerializer.Deserialize<string>(
-                JsonSerializer.Serialize(value, MachineSurface.Json)
-            )!;
-            if (MachineEnums.ValueNameProblem(typeof(TEnum), name) is { } problem)
-                throw new InvalidOperationException(problem);
-            d.Value(value).Name(name);
-        }
-    }
-}
-
-/// <summary>
-/// The other surfaces of the schema a machine enum could also reach (each exposed train's input and output, each query
-/// model's entity), and the enums the host accepted the machine's spelling for.
-/// </summary>
-/// <param name="Surfaces">How a refusal names the surface, and the CLR type it starts from.</param>
-/// <param name="Accepted">The enums <c>ShareEnumWithMachines</c> named.</param>
-internal sealed record MachineEnumNeighbours(
-    IReadOnlyList<(string Surface, Type Root)> Surfaces,
-    IReadOnlySet<Type> Accepted
-);

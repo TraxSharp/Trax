@@ -10,7 +10,15 @@ grand_parent: SDK Reference
 nav_order: 13
 source:
   - Trax.Effect/src/Trax.Effect/Attributes/TraxRunProgressAttribute.cs
-  - Trax.Api/src/Trax.Api.GraphQL/TypeModules/RunProgress.cs
+  - Trax.Api/src/Trax.Api.GraphQL/TypeModules/RunProgressState.cs
+  - Trax.Api/src/Trax.Api.GraphQL/TypeModules/RunProgressAnswer.cs
+  - Trax.Api/src/Trax.Api.GraphQL/TypeModules/RunProgressEvent.cs
+  - Trax.Api/src/Trax.Api.GraphQL/TypeModules/RunProgressTypeModule.cs
+  - Trax.Api/src/Trax.Api.GraphQL/TypeModules/QueuedFate.cs
+  - Trax.Api/src/Trax.Api.GraphQL/TypeModules/RunProgressRun.cs
+  - Trax.Api/src/Trax.Api.GraphQL/TypeModules/RunProgressAccess.cs
+  - Trax.Api/src/Trax.Api.GraphQL/TypeModules/RunProgressLimits.cs
+  - Trax.Api/src/Trax.Api.GraphQL/TypeModules/RunProgressStream.cs
 ---
 
 # Run progress

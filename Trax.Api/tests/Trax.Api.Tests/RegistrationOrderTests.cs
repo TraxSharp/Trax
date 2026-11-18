@@ -505,30 +505,3 @@ public class RegistrationOrderTests
 
     #endregion
 }
-
-public class OrderTestDbContext(DbContextOptions<OrderTestDbContext> options) : DbContext(options)
-{
-    public DbSet<OrderTestWidget> Widgets => Set<OrderTestWidget>();
-}
-
-public class GatedOrderTestDbContext(DbContextOptions<GatedOrderTestDbContext> options)
-    : DbContext(options)
-{
-    public DbSet<GatedOrderTestWidget> Widgets => Set<GatedOrderTestWidget>();
-}
-
-[TraxAllowAnonymous]
-[TraxQueryModel(Name = "orderTestWidgets")]
-public class OrderTestWidget
-{
-    public int Id { get; set; }
-    public string Name { get; set; } = "";
-}
-
-[TraxAuthorize]
-[TraxQueryModel(Name = "gatedOrderTestWidgets")]
-public class GatedOrderTestWidget
-{
-    public int Id { get; set; }
-    public string Name { get; set; } = "";
-}

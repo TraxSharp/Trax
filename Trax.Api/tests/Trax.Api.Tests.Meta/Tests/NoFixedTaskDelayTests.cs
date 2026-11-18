@@ -23,7 +23,7 @@ public partial class NoFixedTaskDelayTests
         int
     >(StringComparer.Ordinal)
     {
-        ["tests/Trax.Api.Tests/AuthE2E/TraxCallerProbe.cs"] = 1,
+        ["tests/Trax.Api.Tests/AuthE2E/TraxCallerProbeMutations.cs"] = 1,
     };
 
     [Test]

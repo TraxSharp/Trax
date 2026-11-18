@@ -314,11 +314,3 @@ public class TrainChainOperationsTests
         return JsonDocument.Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
     }
 }
-
-public interface IGatedChainTrain;
-
-public interface IPlainChainTrain;
-
-public interface IUnreadChainTrain;
-
-public sealed record ChainInput(string Id);

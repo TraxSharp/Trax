@@ -56,17 +56,3 @@ public class TypedQueryGeneratorConditionalIgnoreTests
         result.Level.Should().Be(42, "the server has a level for player-1 and STJ reads it");
     }
 }
-
-[GraphQLType("Player")]
-public sealed record ConditionallyIgnoredPlayer(
-    string Id,
-    string Name,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Level
-);
-
-[GraphQLOperation(OperationType.Query, Name = "ConditionallyIgnoredPlayer", RootField = "player")]
-public sealed class ConditionallyIgnoredPlayerRequest : TypedRequest<ConditionallyIgnoredPlayer>
-{
-    [GraphQLArgument("String!", VariableName = "id")]
-    public required string Id { get; init; }
-}

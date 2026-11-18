@@ -13,6 +13,7 @@ source:
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/FromIr/MachineViewCatalog.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/FromIr/MachineViewReader.cs
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Services/ViewDocuments.cs
+  - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Services/ViewDocument.cs
 ---
 
 # Views root

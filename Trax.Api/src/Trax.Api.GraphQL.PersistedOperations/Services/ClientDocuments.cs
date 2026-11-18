@@ -337,25 +337,3 @@ internal static class ClientDocuments
         public string? Text { get; init; }
     }
 }
-
-/// <summary>One client document, as <see cref="ClientDocuments.Load"/> reads it.</summary>
-/// <param name="Id">The persisted id.</param>
-/// <param name="Text">The GraphQL document text, exactly as the file holds it.</param>
-/// <param name="Name">The operation's name.</param>
-/// <param name="OwnerText">What it is, for a refusal or a log line (<c>client document 'OrderCard' (src/...)</c>).</param>
-internal sealed record ClientDocument(string Id, string Text, string Name, string OwnerText)
-    : GeneratedDocument(Id, Text)
-{
-    /// <inheritdoc />
-    public override string Slot => ClientDocuments.SlotOf(Name);
-
-    /// <inheritdoc />
-    public override string Owner => OwnerText;
-
-    /// <inheritdoc />
-    public override string Description => $"Written by the frontend: the {OwnerText}.";
-
-    /// <inheritdoc />
-    public override bool Matches(string stored) =>
-        string.Equals(ClientDocuments.IdOf(Name, stored), Id, StringComparison.Ordinal);
-}

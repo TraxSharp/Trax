@@ -551,10 +551,3 @@ internal sealed class ListScreen : View
                 : TerminalText.Line(rows[row].Cells[col - 1]);
     }
 }
-
-/// <summary>Where a list screen is: its filters, the page it is on and the pages before it.</summary>
-internal sealed record ListState(
-    IReadOnlyDictionary<string, string> Filters,
-    long? After,
-    IReadOnlyList<long?> Back
-);

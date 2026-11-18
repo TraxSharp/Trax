@@ -281,30 +281,3 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
                 .ToList()
             : [];
 }
-
-public record PlaceOrderInput : IManifestProperties
-{
-    public required string Sku { get; init; }
-}
-
-public record PlaceOrderOutput
-{
-    public required string OrderId { get; init; }
-}
-
-public interface IPlaceOrderTrain : IServiceTrain<PlaceOrderInput, PlaceOrderOutput>;
-
-/// <summary>Placed only by a customer, and it always fails, so there is a run to requeue.</summary>
-[TraxAuthorize(Roles = "Customer")]
-[TraxMutation(GraphQLOperation.Run, Namespace = "shop")]
-public class PlaceOrderTrain : ServiceTrain<PlaceOrderInput, PlaceOrderOutput>, IPlaceOrderTrain
-{
-    protected override Task<Either<Exception, PlaceOrderOutput>> Junctions() =>
-        Chain<RejectOrderJunction>().Resolve();
-}
-
-internal sealed class RejectOrderJunction : Junction<PlaceOrderInput, PlaceOrderOutput>
-{
-    public override Task<PlaceOrderOutput> Run(PlaceOrderInput input) =>
-        throw new InvalidOperationException("Out of stock.");
-}

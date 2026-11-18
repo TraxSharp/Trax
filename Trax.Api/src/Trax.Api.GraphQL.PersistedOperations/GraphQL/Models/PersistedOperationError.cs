@@ -102,7 +102,3 @@ public sealed record PersistedOperationError(
             NewFingerprint: null
         );
 }
-
-/// <summary>1-based location in the candidate document.</summary>
-[EditorBrowsable(EditorBrowsableState.Never)]
-public sealed record PersistedOperationErrorLocation(int Line, int Column);

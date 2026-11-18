@@ -286,17 +286,3 @@ public class AddAuditTests
         ) => null;
     }
 }
-
-public class AuditWiringDbContext(DbContextOptions<AuditWiringDbContext> options)
-    : DbContext(options)
-{
-    public DbSet<AuditWiringWidget> Widgets => Set<AuditWiringWidget>();
-}
-
-[TraxAllowAnonymous]
-[TraxQueryModel(Name = "auditWiringWidgets")]
-public class AuditWiringWidget
-{
-    public int Id { get; set; }
-    public string Name { get; set; } = "";
-}

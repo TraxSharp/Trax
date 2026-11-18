@@ -5,9 +5,6 @@ using Trax.Api.Console.Terminal.Connection;
 
 namespace Trax.Api.Console.Terminal.Code;
 
-/// <summary>Where a type's source is: the file and the line its declaration starts on.</summary>
-internal sealed record SourceLocation(string Path, int Line);
-
 /// <summary>
 /// Finds the source of a type the host names (a train's interface, a junction) in the checkout the console runs in,
 /// by its name alone: the host sends no paths, and none is added for this. A train named by its interface

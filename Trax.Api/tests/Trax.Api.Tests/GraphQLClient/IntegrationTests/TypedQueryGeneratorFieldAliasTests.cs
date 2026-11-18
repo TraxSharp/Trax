@@ -64,34 +64,3 @@ public class TypedQueryGeneratorFieldAliasTests
         act.Should().Throw<InvalidOperationException>().WithMessage("*DisplayName*display-name*");
     }
 }
-
-[GraphQLType("Player")]
-public sealed record AliasedPlayer(
-    string Id,
-    [property: GraphQLField("name")] string DisplayName,
-    int? Level
-);
-
-[GraphQLOperation(OperationType.Query, Name = "AliasedPlayer", RootField = "player")]
-public sealed class AliasedPlayerRequest : TypedRequest<AliasedPlayer>
-{
-    [GraphQLArgument("String!", VariableName = "id")]
-    public required string Id { get; init; }
-}
-
-[GraphQLType("Player")]
-public sealed record BadAliasPlayer(
-    string Id,
-    [property:
-        GraphQLField("name"),
-        System.Text.Json.Serialization.JsonPropertyName("display-name")
-    ]
-        string DisplayName
-);
-
-[GraphQLOperation(OperationType.Query, Name = "BadAliasPlayer", RootField = "player")]
-public sealed class BadAliasPlayerRequest : TypedRequest<BadAliasPlayer>
-{
-    [GraphQLArgument("String!", VariableName = "id")]
-    public required string Id { get; init; }
-}

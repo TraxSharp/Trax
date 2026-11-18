@@ -4,13 +4,6 @@ using Trax.Mediator.Services.TrainDiscovery;
 namespace Trax.Api.GraphQL.TypeModules;
 
 /// <summary>
-/// Who puts a field on a type, or names a type, that Trax builds.
-/// </summary>
-/// <param name="Key">Identifies the owner, so one owner contributing a name twice is not a clash.</param>
-/// <param name="Description">How the refusal names it.</param>
-internal sealed record SchemaNameOwner(string Key, string Description);
-
-/// <summary>
 /// The fields Trax places on its root and namespace types, and the types it generates, with the
 /// surface that owns each. Built from the configuration before any schema exists, so two surfaces
 /// claiming one name refuse the host, naming both, instead of HotChocolate merging two fields of

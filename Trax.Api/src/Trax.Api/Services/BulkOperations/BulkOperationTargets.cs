@@ -417,9 +417,3 @@ internal static class BulkOperationTargets
             _ => state.ToString().ToLowerInvariant(),
         };
 }
-
-/// <summary>
-/// The ids a bulk operation will attempt, in the order it attempts them, and the exclusive end
-/// index of each batch.
-/// </summary>
-internal sealed record BulkOperationSnapshot(long[] Ids, int[] BatchEnds);
