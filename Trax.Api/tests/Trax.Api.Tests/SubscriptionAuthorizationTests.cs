@@ -329,7 +329,7 @@ public class SubscriptionAuthorizationTests
     public async Task OutputOptIn_ForATrainThatIsNotRegistered_FailsAtStartup()
     {
         var act = async () =>
-            BuildAsync(
+            await BuildAsync(
                     g => g.AllowOutputForBroadcastSubscribers<IPublicTrain>(),
                     Broadcast<IAdminOnlyTrain>(roles: "Admin")
                 )
@@ -379,7 +379,7 @@ public class SubscriptionAuthorizationTests
     public async Task BroadcastTrainWithoutPosture_OnAnOpenEndpoint_FailsAtStartup()
     {
         var act = async () =>
-            BuildAsync(g => g, Undeclared<IUndeclaredTrain>()).ConfigureAwait(false);
+            await BuildAsync(g => g, Undeclared<IUndeclaredTrain>()).ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()

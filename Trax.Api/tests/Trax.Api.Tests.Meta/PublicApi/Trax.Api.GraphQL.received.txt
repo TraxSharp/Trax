@@ -126,7 +126,6 @@ namespace Trax.Api.GraphQL.Hooks
     public class GraphQLSubscriptionHook : Trax.Effect.Services.TrainLifecycleHook.ITrainLifecycleHook
     {
         public GraphQLSubscriptionHook(HotChocolate.Subscriptions.ITopicEventSender eventSender, Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService discoveryService, Trax.Api.GraphQL.Subscriptions.TrainLifecycleStreamOptions options) { }
-        [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
         public GraphQLSubscriptionHook(HotChocolate.Subscriptions.ITopicEventSender eventSender, Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService discoveryService, Trax.Api.GraphQL.Subscriptions.TrainLifecycleStreamOptions options, System.TimeProvider clock) { }
         public System.Threading.Tasks.Task OnCancelled(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task OnCompleted(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
