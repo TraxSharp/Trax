@@ -4,21 +4,6 @@ using Trax.StateMachine.Persistence;
 
 namespace Trax.Cli.Tests.Fakes;
 
-public enum ReminderState
-{
-    Idle,
-    Review,
-    Expired,
-    Done,
-}
-
-public enum ReminderTrigger
-{
-    Open,
-    Approve,
-    Extend,
-}
-
 /// <summary>
 /// A user-owned machine with a timer: <c>Review</c> is held for ten minutes, then the server moves it to
 /// <c>Expired</c>. <c>Extend</c> re-enters <c>Review</c>, which starts the timer again. The CLI's artifacts and

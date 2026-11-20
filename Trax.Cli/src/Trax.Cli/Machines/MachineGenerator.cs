@@ -2,45 +2,6 @@ using System.Globalization;
 
 namespace Trax.Cli.Machines;
 
-/// <summary>What to generate, and where. Each artifact has its own output root because a real consumer splits
-/// them across trees (the IR and corpus in a shared machines dir, the twin next to the frontend).
-/// <see cref="ImportStyle"/> left null is <c>relative</c> with <see cref="EngineSrc"/> and <c>specifier</c>
-/// without it.</summary>
-internal sealed record MachineGenerateOptions(
-    MachineIr Machine,
-    string? IrOut = null,
-    string? TwinOut = null,
-    string? CorpusOut = null,
-    string? EngineSrc = null,
-    string? ImportStyle = null,
-    string? Specifier = null,
-    string? ToolsDir = null,
-    string? Lang = null,
-    string? Namespace = null
-);
-
-/// <summary>An artifact written by <c>generate</c>: its kind and final path.</summary>
-internal sealed record GeneratedArtifact(string Kind, string Path);
-
-/// <summary>The outcome of <c>generate</c>: every file placed on disk.</summary>
-internal sealed record GenerateResult(IReadOnlyList<GeneratedArtifact> Written);
-
-internal enum DriftStatus
-{
-    UpToDate,
-    Drifted,
-    Missing,
-}
-
-/// <summary>The drift verdict for one artifact under <c>check</c>.</summary>
-internal sealed record ArtifactCheck(string Kind, string Path, DriftStatus Status);
-
-/// <summary>The outcome of <c>check</c>: per-artifact drift; clean iff every artifact is up to date.</summary>
-internal sealed record CheckResult(IReadOnlyList<ArtifactCheck> Checks)
-{
-    public bool IsClean => Checks.All(c => c.Status == DriftStatus.UpToDate);
-}
-
 /// <summary>
 /// Orchestrates <c>trax machine generate</c> / <c>check</c>. The IR is exported in-process (C#), or read from a
 /// host's client manifest; the twin and
@@ -591,24 +552,4 @@ internal sealed partial class MachineGenerator
     }
 
     private sealed record PlannedArtifact(string Kind, string StagedPath, string FinalPath);
-}
-
-/// <summary>The file operations <c>generate</c> places artifacts with; a seam so a failure part-way can be tested.</summary>
-internal class PlacementFiles
-{
-    public virtual void Copy(string source, string destination) =>
-        File.Copy(source, destination, overwrite: true);
-
-    public virtual void Move(string source, string destination) => File.Move(source, destination);
-
-    public virtual void Delete(string path) => File.Delete(path);
-
-    public virtual void CreateDirectory(string path) => Directory.CreateDirectory(path);
-
-    /// <summary>Removes <paramref name="path"/> only when it is empty.</summary>
-    public virtual void DeleteEmptyDirectory(string path)
-    {
-        if (Directory.Exists(path) && !Directory.EnumerateFileSystemEntries(path).Any())
-            Directory.Delete(path);
-    }
 }

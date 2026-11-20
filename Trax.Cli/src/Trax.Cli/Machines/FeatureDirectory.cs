@@ -288,6 +288,3 @@ internal static class FeatureDirectory
         name is HostFileName or AccessFileName or GlossaryFileName
         || (name.EndsWith(IrSuffix, StringComparison.Ordinal) && name.Length > IrSuffix.Length);
 }
-
-/// <summary>A path or input <see cref="FeatureDirectory"/> cannot use, worded for the terminal.</summary>
-internal sealed class FeatureMachinesException(string message) : Exception(message);

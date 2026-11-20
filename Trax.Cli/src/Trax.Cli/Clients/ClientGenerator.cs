@@ -9,26 +9,6 @@ using Trax.StateMachine;
 
 namespace Trax.Cli.Clients;
 
-/// <summary>What <c>trax client</c> generates from, and how.</summary>
-/// <param name="Manifest">The host's client manifest.</param>
-/// <param name="Specifier">The module the generated code imports the runtime from.</param>
-/// <param name="ToolsDir">The engine's <c>tools/</c>, when the bundled twin generator is not used.</param>
-/// <param name="Documents">The <c>.graphql</c> files the frontend wrote, when <c>--documents</c> names any.</param>
-/// <param name="DocumentGlobs">The globs that found them, relative to the output directory, for the editor's config.</param>
-internal sealed record ClientGenerateOptions(
-    ClientManifest Manifest,
-    string Specifier = ClientGenerator.DefaultSpecifier,
-    string? ToolsDir = null,
-    IReadOnlyList<ClientDocumentFile>? Documents = null,
-    IReadOnlyList<string>? DocumentGlobs = null
-);
-
-/// <summary>One file of a generated client: its path under the output directory, and its text.</summary>
-internal sealed record ClientFile(string Path, string Text);
-
-/// <summary>A file that differs between a generated client and the one on disk.</summary>
-internal sealed record ClientDrift(string Path, DriftStatus Status);
-
 /// <summary>
 /// Generates a frontend's client from a host's <see cref="ClientManifest"/>: for each machine its twin, its
 /// persisted documents and a typed hook; for each train a typed function sending its persisted id; the GraphQL types

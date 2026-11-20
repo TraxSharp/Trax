@@ -8,31 +8,6 @@ using Trax.StateMachine;
 
 namespace Trax.Cli.Clients;
 
-/// <summary>One <c>.graphql</c> file a frontend wrote, by the path it is named under and its text.</summary>
-internal sealed record ClientDocumentFile(string Source, string Text);
-
-/// <summary>
-/// A train or query model a client document selects: its manifest entry (a query model's written as a train's, under
-/// the query root), its field, the path to its value, and whether it is a query model.
-/// </summary>
-internal sealed record ClientTrainUse(
-    ClientManifestTrain Train,
-    GraphQLField Field,
-    IReadOnlyList<string> Path,
-    bool QueryModel = false
-);
-
-/// <summary>One operation a frontend wrote, checked, with the text and id its host registers it under.</summary>
-internal sealed record ClientOperation(
-    string Name,
-    string Source,
-    GraphQLOperationDefinition Operation,
-    string Root,
-    IReadOnlyList<ClientTrainUse> Trains,
-    string Text,
-    string Id
-);
-
 /// <summary>
 /// The <c>.graphql</c> files a frontend wrote, read and checked against the host's client manifest the way the host
 /// checks them again at startup: one named query or mutation per file, its root <c>discover</c> or <c>dispatch</c>,

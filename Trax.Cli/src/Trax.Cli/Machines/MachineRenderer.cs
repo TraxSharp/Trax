@@ -4,14 +4,6 @@ using Trax.StateMachine.Persistence;
 
 namespace Trax.Cli.Machines;
 
-/// <summary>How <c>trax machine show</c> draws a machine.</summary>
-internal enum MachineFormat
-{
-    Text,
-    Mermaid,
-    Dot,
-}
-
 /// <summary>
 /// Renders a machine's IR (<c>Machine.ExportIr()</c>) for <c>trax machine show</c>: a plain-text block per state
 /// for a terminal, or a Mermaid <c>stateDiagram-v2</c> or Graphviz source for docs and PRs. Pure, so it is tested
