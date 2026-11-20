@@ -60,8 +60,8 @@ public class TwinLanguagesTests
     {
         var lang = MachineCommand
             .Create()
-            .Subcommands.Single(c => c.Name == subcommand)
-            .Options.Single(o => o.Name == "--lang");
+            .Subcommands.Single(c => string.Equals(c.Name, subcommand, StringComparison.Ordinal))
+            .Options.Single(o => string.Equals(o.Name, "--lang", StringComparison.Ordinal));
 
         lang.Description.Should().Be(TwinLanguages.Help());
     }

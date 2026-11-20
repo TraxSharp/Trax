@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Trax.Effect.Configuration.Deploy;
 
@@ -115,14 +116,20 @@ internal static class ComposeTarget
                 // Loopback only: whatever puts the app in front of people (a reverse proxy, tailscale serve)
                 // decides who reaches it, not the machine's network.
                 y.AppendLine("    ports:");
-                y.AppendLine($"      - \"127.0.0.1:{service.Port ?? port}:8080\"");
+                y.AppendLine(
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    $"      - \"127.0.0.1:{service.Port ?? port}:8080\""
+                );
                 port = (service.Port ?? port) + 1;
             }
             Hardened(y);
             if (service.Count > 1)
             {
                 y.AppendLine("    deploy:");
-                y.AppendLine($"      replicas: {service.Count}");
+                y.AppendLine(
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    $"      replicas: {service.Count}"
+                );
             }
             y.AppendLine("    depends_on:");
             y.AppendLine("      migrate:");
@@ -204,11 +211,16 @@ internal static class ComposeTarget
                             + "with that connection string when it is set."
                     );
             }
-            var single = export.Roles.Intersect(["api", "scheduler"]).ToList();
+            var single = export
+                .Roles.Intersect(["api", "scheduler"], StringComparer.Ordinal)
+                .ToList();
             if (copies > 1 && single.Count > 0)
                 throw new InvalidOperationException(
                     $"Service '{name}' runs the {string.Join(" and ", single)} role and has count "
-                        + $"{copies}. It runs as one until hosts hold leases on their runs: a second copy "
+                        + string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{copies}. It runs as one until hosts hold leases on their runs: a second copy "
+                        )
                         + "restarting fails the runs live on the first. Scale its workers instead."
                 );
         }

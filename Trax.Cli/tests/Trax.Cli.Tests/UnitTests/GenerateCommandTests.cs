@@ -49,7 +49,7 @@ public class GenerateCommandTests
         var output = new DirectoryInfo(Path.Combine(_tempDir, "out"));
 
         var stderr = CaptureStderr(() =>
-            GenerateCommand.Handle(schema, output, "Proj", null, false)
+            GenerateCommand.Handle(schema, output, "Proj", type: null, force: false)
         );
 
         Environment.ExitCode.Should().Be(1);
@@ -65,7 +65,7 @@ public class GenerateCommandTests
         Directory.CreateDirectory(output.FullName);
 
         var stderr = CaptureStderr(() =>
-            GenerateCommand.Handle(schema, output, "Proj", null, false)
+            GenerateCommand.Handle(schema, output, "Proj", type: null, force: false)
         );
 
         Environment.ExitCode.Should().Be(1);
@@ -82,7 +82,7 @@ public class GenerateCommandTests
 
         var exitCode = 0;
         var stderr = CaptureStderr(() =>
-            exitCode = GenerateCommand.Handle(schema, output, "Proj", "swagger", false)
+            exitCode = GenerateCommand.Handle(schema, output, "Proj", "swagger", force: false)
         );
 
         exitCode.Should().Be(1);
@@ -99,7 +99,7 @@ public class GenerateCommandTests
 
         var exitCode = 0;
         var stderr = CaptureStderr(() =>
-            exitCode = GenerateCommand.Handle(schema, output, "Proj", null, false)
+            exitCode = GenerateCommand.Handle(schema, output, "Proj", type: null, force: false)
         );
 
         exitCode.Should().Be(1);
@@ -127,7 +127,7 @@ public class GenerateCommandTests
 
         var exitCode = 0;
         var stderr = CaptureStderr(() =>
-            exitCode = GenerateCommand.Handle(schema, output, "Proj", null, false)
+            exitCode = GenerateCommand.Handle(schema, output, "Proj", type: null, force: false)
         );
 
         exitCode.Should().Be(1);
@@ -168,7 +168,7 @@ public class GenerateCommandTests
 
         var exitCode = 0;
         var stderr = CaptureStderr(() =>
-            exitCode = GenerateCommand.Handle(schema, output, "Proj", null, false)
+            exitCode = GenerateCommand.Handle(schema, output, "Proj", type: null, force: false)
         );
 
         exitCode.Should().Be(1);
@@ -202,7 +202,14 @@ public class GenerateCommandTests
         var output = new DirectoryInfo(Path.Combine(_tempDir, "happy-graphql"));
 
         var stdout = CaptureStdout(() =>
-            GenerateCommand.Handle(schema, output, "HappyGraphQL", null, false, hive.Generator())
+            GenerateCommand.Handle(
+                schema,
+                output,
+                "HappyGraphQL",
+                type: null,
+                force: false,
+                hive.Generator()
+            )
         );
 
         Environment.ExitCode.Should().Be(0);
@@ -222,7 +229,14 @@ public class GenerateCommandTests
         var output = new DirectoryInfo(Path.Combine(_tempDir, "happy-openapi"));
 
         var stdout = CaptureStdout(() =>
-            GenerateCommand.Handle(schema, output, "HappyOpenApi", null, false, hive.Generator())
+            GenerateCommand.Handle(
+                schema,
+                output,
+                "HappyOpenApi",
+                type: null,
+                force: false,
+                hive.Generator()
+            )
         );
 
         Environment.ExitCode.Should().Be(0);

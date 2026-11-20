@@ -55,7 +55,9 @@ public class OpenApiParserFixTests
 
         var schema = parser.Parse(FixturePath("non-fatal-errors.yaml"));
 
-        var item = schema.Types.Single(t => t.Name == "Item");
+        var item = schema.Types.Single(t =>
+            string.Equals(t.Name, "Item", StringComparison.Ordinal)
+        );
         item.Fields.Should().Contain(f => f.Name == "Id");
         item.Fields.Should().Contain(f => f.Name == "Name");
     }
@@ -81,8 +83,12 @@ public class OpenApiParserFixTests
 
         var schema = parser.Parse(FixturePath("inline-enums.json"));
 
-        var listItems = schema.Operations.Single(o => o.Name == "ListItems");
-        var statusField = listItems.InputType.Fields.Single(f => f.Name == "Status");
+        var listItems = schema.Operations.Single(o =>
+            string.Equals(o.Name, "ListItems", StringComparison.Ordinal)
+        );
+        var statusField = listItems.InputType.Fields.Single(f =>
+            string.Equals(f.Name, "Status", StringComparison.Ordinal)
+        );
 
         // Should be named "Status" (from param name), not "UnnamedEnum"
         statusField.TypeName.Should().Be("Status");
@@ -95,9 +101,15 @@ public class OpenApiParserFixTests
 
         var schema = parser.Parse(FixturePath("inline-enums.json"));
 
-        var listItems = schema.Operations.Single(o => o.Name == "ListItems");
-        var statusField = listItems.InputType.Fields.Single(f => f.Name == "Status");
-        var sortByField = listItems.InputType.Fields.Single(f => f.Name == "SortBy");
+        var listItems = schema.Operations.Single(o =>
+            string.Equals(o.Name, "ListItems", StringComparison.Ordinal)
+        );
+        var statusField = listItems.InputType.Fields.Single(f =>
+            string.Equals(f.Name, "Status", StringComparison.Ordinal)
+        );
+        var sortByField = listItems.InputType.Fields.Single(f =>
+            string.Equals(f.Name, "SortBy", StringComparison.Ordinal)
+        );
 
         statusField.TypeName.Should().Be("Status");
         sortByField.TypeName.Should().Be("SortBy");
@@ -111,8 +123,12 @@ public class OpenApiParserFixTests
 
         var schema = parser.Parse(FixturePath("inline-enums.json"));
 
-        var createItem = schema.Operations.Single(o => o.Name == "CreateItem");
-        var priorityField = createItem.InputType.Fields.Single(f => f.Name == "Priority");
+        var createItem = schema.Operations.Single(o =>
+            string.Equals(o.Name, "CreateItem", StringComparison.Ordinal)
+        );
+        var priorityField = createItem.InputType.Fields.Single(f =>
+            string.Equals(f.Name, "Priority", StringComparison.Ordinal)
+        );
 
         priorityField.TypeName.Should().Be("Priority");
     }
@@ -124,8 +140,12 @@ public class OpenApiParserFixTests
 
         var schema = parser.Parse(FixturePath("inline-enums.json"));
 
-        var itemType = schema.Types.Single(t => t.Name == "Item");
-        var categoryField = itemType.Fields.Single(f => f.Name == "Category");
+        var itemType = schema.Types.Single(t =>
+            string.Equals(t.Name, "Item", StringComparison.Ordinal)
+        );
+        var categoryField = itemType.Fields.Single(f =>
+            string.Equals(f.Name, "Category", StringComparison.Ordinal)
+        );
 
         categoryField.TypeName.Should().Be("Category");
     }
@@ -137,7 +157,9 @@ public class OpenApiParserFixTests
 
         var schema = parser.Parse(FixturePath("inline-enums.json"));
 
-        var statusEnum = schema.Enums.SingleOrDefault(e => e.Name == "Status");
+        var statusEnum = schema.Enums.SingleOrDefault(e =>
+            string.Equals(e.Name, "Status", StringComparison.Ordinal)
+        );
         statusEnum.Should().NotBeNull();
         statusEnum!.Values.Should().BeEquivalentTo("Active", "Inactive", "Archived");
     }
@@ -149,7 +171,9 @@ public class OpenApiParserFixTests
 
         var schema = parser.Parse(FixturePath("inline-enums.json"));
 
-        var priorityEnum = schema.Enums.SingleOrDefault(e => e.Name == "Priority");
+        var priorityEnum = schema.Enums.SingleOrDefault(e =>
+            string.Equals(e.Name, "Priority", StringComparison.Ordinal)
+        );
         priorityEnum.Should().NotBeNull();
         priorityEnum!.Values.Should().BeEquivalentTo("Low", "Medium", "High", "Critical");
     }
@@ -171,8 +195,12 @@ public class OpenApiParserFixTests
 
         var schema = parser.Parse(FixturePath("inline-enums.json"));
 
-        var listItems = schema.Operations.Single(o => o.Name == "ListItems");
-        var limitField = listItems.InputType.Fields.Single(f => f.Name == "Limit");
+        var listItems = schema.Operations.Single(o =>
+            string.Equals(o.Name, "ListItems", StringComparison.Ordinal)
+        );
+        var limitField = listItems.InputType.Fields.Single(f =>
+            string.Equals(f.Name, "Limit", StringComparison.Ordinal)
+        );
 
         limitField.TypeName.Should().Be("int");
     }
@@ -186,11 +214,19 @@ public class OpenApiParserFixTests
 
         // Both the "status" query parameter and the Item.status property use
         // enum [active, inactive, archived] — they should resolve to the same enum name
-        var listItems = schema.Operations.Single(o => o.Name == "ListItems");
-        var paramStatusType = listItems.InputType.Fields.Single(f => f.Name == "Status").TypeName;
+        var listItems = schema.Operations.Single(o =>
+            string.Equals(o.Name, "ListItems", StringComparison.Ordinal)
+        );
+        var paramStatusType = listItems
+            .InputType.Fields.Single(f => string.Equals(f.Name, "Status", StringComparison.Ordinal))
+            .TypeName;
 
-        var itemType = schema.Types.Single(t => t.Name == "Item");
-        var schemaStatusType = itemType.Fields.Single(f => f.Name == "Status").TypeName;
+        var itemType = schema.Types.Single(t =>
+            string.Equals(t.Name, "Item", StringComparison.Ordinal)
+        );
+        var schemaStatusType = itemType
+            .Fields.Single(f => string.Equals(f.Name, "Status", StringComparison.Ordinal))
+            .TypeName;
 
         paramStatusType.Should().Be(schemaStatusType);
     }
@@ -206,7 +242,9 @@ public class OpenApiParserFixTests
 
         var schema = parser.Parse(InvalidFixturePath("property-collision.json"));
 
-        var notificationType = schema.Types.Single(t => t.Name == "Notification");
+        var notificationType = schema.Types.Single(t =>
+            string.Equals(t.Name, "Notification", StringComparison.Ordinal)
+        );
         // "notification" on Notification converts to the type's own name and is kept, not renamed:
         // renaming it would rewrite the generated contract, which the refusal in SchemaNames.Validate exists to avoid
         notificationType.Fields.Should().Contain(f => f.Name == "Notification");
@@ -219,7 +257,9 @@ public class OpenApiParserFixTests
 
         var schema = parser.Parse(InvalidFixturePath("property-collision.json"));
 
-        var testimonialType = schema.Types.Single(t => t.Name == "Testimonial");
+        var testimonialType = schema.Types.Single(t =>
+            string.Equals(t.Name, "Testimonial", StringComparison.Ordinal)
+        );
         testimonialType.Fields.Should().Contain(f => f.Name == "Testimonial");
     }
 
@@ -230,7 +270,9 @@ public class OpenApiParserFixTests
 
         var schema = parser.Parse(InvalidFixturePath("property-collision.json"));
 
-        var notificationType = schema.Types.Single(t => t.Name == "Notification");
+        var notificationType = schema.Types.Single(t =>
+            string.Equals(t.Name, "Notification", StringComparison.Ordinal)
+        );
         // "title" does not collide with "Notification" — should remain "Title"
         notificationType.Fields.Should().Contain(f => f.Name == "Title");
         notificationType.Fields.Should().Contain(f => f.Name == "Id");
@@ -244,7 +286,9 @@ public class OpenApiParserFixTests
 
         var schema = parser.Parse(InvalidFixturePath("property-collision.json"));
 
-        var testimonialType = schema.Types.Single(t => t.Name == "Testimonial");
+        var testimonialType = schema.Types.Single(t =>
+            string.Equals(t.Name, "Testimonial", StringComparison.Ordinal)
+        );
         testimonialType.Fields.Should().Contain(f => f.Name == "Id");
         testimonialType.Fields.Should().Contain(f => f.Name == "Author");
     }
@@ -260,7 +304,9 @@ public class OpenApiParserFixTests
 
         var schema = parser.Parse(FixturePath("array-component.json"));
 
-        var voteTally = schema.Types.SingleOrDefault(t => t.Name == "VoteTallyResponse");
+        var voteTally = schema.Types.SingleOrDefault(t =>
+            string.Equals(t.Name, "VoteTallyResponse", StringComparison.Ordinal)
+        );
         voteTally.Should().NotBeNull();
         voteTally!.Fields.Should().HaveCount(1);
         voteTally.Fields[0].Name.Should().Be("Items");
@@ -274,7 +320,9 @@ public class OpenApiParserFixTests
 
         var schema = parser.Parse(FixturePath("array-component.json"));
 
-        var voteTally = schema.Types.Single(t => t.Name == "VoteTallyResponse");
+        var voteTally = schema.Types.Single(t =>
+            string.Equals(t.Name, "VoteTallyResponse", StringComparison.Ordinal)
+        );
         voteTally.IsBuiltIn.Should().BeFalse();
     }
 
@@ -285,7 +333,9 @@ public class OpenApiParserFixTests
 
         var schema = parser.Parse(FixturePath("array-component.json"));
 
-        var scoreboard = schema.Types.SingleOrDefault(t => t.Name == "Scoreboard");
+        var scoreboard = schema.Types.SingleOrDefault(t =>
+            string.Equals(t.Name, "Scoreboard", StringComparison.Ordinal)
+        );
         scoreboard.Should().NotBeNull();
         scoreboard!.Fields.Should().HaveCount(1);
         scoreboard.Fields[0].Name.Should().Be("Items");
@@ -299,7 +349,9 @@ public class OpenApiParserFixTests
 
         var schema = parser.Parse(FixturePath("array-component.json"));
 
-        var voteTally = schema.Operations.Single(o => o.Name == "VoteTally");
+        var voteTally = schema.Operations.Single(o =>
+            string.Equals(o.Name, "VoteTally", StringComparison.Ordinal)
+        );
         // The response $ref to VoteTallyResponse should use the type name
         voteTally.OutputType.Name.Should().Be("VoteTallyResponse");
     }
@@ -312,7 +364,9 @@ public class OpenApiParserFixTests
         var schema = parser.Parse(FixturePath("array-component.json"));
 
         // VoteTallyResponse has inline object items with properties — should be promoted
-        var voteTally = schema.Types.Single(t => t.Name == "VoteTallyResponse");
+        var voteTally = schema.Types.Single(t =>
+            string.Equals(t.Name, "VoteTallyResponse", StringComparison.Ordinal)
+        );
         voteTally.Fields[0].TypeName.Should().Be("List<VoteTallyResponseItem>");
     }
 
@@ -323,7 +377,9 @@ public class OpenApiParserFixTests
 
         var schema = parser.Parse(FixturePath("array-component.json"));
 
-        var itemType = schema.Types.SingleOrDefault(t => t.Name == "VoteTallyResponseItem");
+        var itemType = schema.Types.SingleOrDefault(t =>
+            string.Equals(t.Name, "VoteTallyResponseItem", StringComparison.Ordinal)
+        );
         itemType.Should().NotBeNull();
         itemType!.Fields.Should().Contain(f => f.Name == "RepId");
         itemType.Fields.Should().Contain(f => f.Name == "Name");
@@ -336,8 +392,12 @@ public class OpenApiParserFixTests
 
         var schema = parser.Parse(FixturePath("array-component.json"));
 
-        var itemType = schema.Types.Single(t => t.Name == "VoteTallyResponseItem");
-        var legVotedField = itemType.Fields.Single(f => f.Name == "LegVoted");
+        var itemType = schema.Types.Single(t =>
+            string.Equals(t.Name, "VoteTallyResponseItem", StringComparison.Ordinal)
+        );
+        var legVotedField = itemType.Fields.Single(f =>
+            string.Equals(f.Name, "LegVoted", StringComparison.Ordinal)
+        );
         legVotedField.TypeName.Should().Be("LegVoted");
 
         schema.Enums.Should().Contain(e => e.Name == "LegVoted");
@@ -350,7 +410,9 @@ public class OpenApiParserFixTests
 
         var schema = parser.Parse(FixturePath("array-component.json"));
 
-        var scoreEntry = schema.Types.SingleOrDefault(t => t.Name == "ScoreEntry");
+        var scoreEntry = schema.Types.SingleOrDefault(t =>
+            string.Equals(t.Name, "ScoreEntry", StringComparison.Ordinal)
+        );
         scoreEntry.Should().NotBeNull();
         scoreEntry!.Fields.Should().Contain(f => f.Name == "Player");
         scoreEntry.Fields.Should().Contain(f => f.Name == "Score");
@@ -367,7 +429,9 @@ public class OpenApiParserFixTests
 
         var schema = parser.Parse(FixturePath("inline-object-array.json"));
 
-        var listEvents = schema.Operations.Single(o => o.Name == "ListEvents");
+        var listEvents = schema.Operations.Single(o =>
+            string.Equals(o.Name, "ListEvents", StringComparison.Ordinal)
+        );
         listEvents.OutputType.Fields[0].TypeName.Should().Be("List<ListEventsItem>");
     }
 
@@ -378,7 +442,9 @@ public class OpenApiParserFixTests
 
         var schema = parser.Parse(FixturePath("inline-object-array.json"));
 
-        var itemType = schema.Types.SingleOrDefault(t => t.Name == "ListEventsItem");
+        var itemType = schema.Types.SingleOrDefault(t =>
+            string.Equals(t.Name, "ListEventsItem", StringComparison.Ordinal)
+        );
         itemType.Should().NotBeNull();
         itemType!.Fields.Should().Contain(f => f.Name == "Id");
         itemType.Fields.Should().Contain(f => f.Name == "Title");
@@ -392,10 +458,21 @@ public class OpenApiParserFixTests
 
         var schema = parser.Parse(FixturePath("inline-object-array.json"));
 
-        var itemType = schema.Types.Single(t => t.Name == "ListEventsItem");
-        itemType.Fields.Single(f => f.Name == "Id").TypeName.Should().Be("int");
-        itemType.Fields.Single(f => f.Name == "Title").TypeName.Should().Be("string");
-        itemType.Fields.Single(f => f.Name == "StartDate").TypeName.Should().Be("DateTime");
+        var itemType = schema.Types.Single(t =>
+            string.Equals(t.Name, "ListEventsItem", StringComparison.Ordinal)
+        );
+        itemType
+            .Fields.Single(f => string.Equals(f.Name, "Id", StringComparison.Ordinal))
+            .TypeName.Should()
+            .Be("int");
+        itemType
+            .Fields.Single(f => string.Equals(f.Name, "Title", StringComparison.Ordinal))
+            .TypeName.Should()
+            .Be("string");
+        itemType
+            .Fields.Single(f => string.Equals(f.Name, "StartDate", StringComparison.Ordinal))
+            .TypeName.Should()
+            .Be("DateTime");
     }
 
     [Test]
@@ -406,10 +483,14 @@ public class OpenApiParserFixTests
         var schema = parser.Parse(FixturePath("inline-object-array.json"));
 
         // The "metadata" property on Event is an inline object
-        var eventType = schema.Types.SingleOrDefault(t => t.Name == "Event");
+        var eventType = schema.Types.SingleOrDefault(t =>
+            string.Equals(t.Name, "Event", StringComparison.Ordinal)
+        );
         if (eventType != null)
         {
-            var metadataField = eventType.Fields.SingleOrDefault(f => f.Name == "Metadata");
+            var metadataField = eventType.Fields.SingleOrDefault(f =>
+                string.Equals(f.Name, "Metadata", StringComparison.Ordinal)
+            );
             if (metadataField != null)
             {
                 metadataField.TypeName.Should().NotBe("object");
@@ -424,7 +505,9 @@ public class OpenApiParserFixTests
 
         var schema = parser.Parse(FixturePath("inline-object-array.json"));
 
-        var listSpeakers = schema.Operations.Single(o => o.Name == "ListSpeakers");
+        var listSpeakers = schema.Operations.Single(o =>
+            string.Equals(o.Name, "ListSpeakers", StringComparison.Ordinal)
+        );
         listSpeakers.OutputType.Fields[0].TypeName.Should().Be("List<Speaker>");
     }
 
@@ -436,7 +519,9 @@ public class OpenApiParserFixTests
         var schema = parser.Parse(FixturePath("inline-object-array.json"));
 
         // RawData returns array of bare objects (no properties) — should remain List<object>
-        var getRaw = schema.Operations.Single(o => o.Name == "RawData");
+        var getRaw = schema.Operations.Single(o =>
+            string.Equals(o.Name, "RawData", StringComparison.Ordinal)
+        );
         getRaw.OutputType.Fields[0].TypeName.Should().Be("List<object>");
     }
 
@@ -449,8 +534,12 @@ public class OpenApiParserFixTests
 
         // SearchResult.hit has only bare object properties (_source: type: object)
         // Should NOT be promoted — remains as "object"
-        var searchResult = schema.Types.Single(t => t.Name == "SearchResult");
-        var hitField = searchResult.Fields.Single(f => f.Name == "Hit");
+        var searchResult = schema.Types.Single(t =>
+            string.Equals(t.Name, "SearchResult", StringComparison.Ordinal)
+        );
+        var hitField = searchResult.Fields.Single(f =>
+            string.Equals(f.Name, "Hit", StringComparison.Ordinal)
+        );
         hitField.TypeName.Should().Be("object");
     }
 
@@ -474,8 +563,12 @@ public class OpenApiParserFixTests
 
         // SearchResult.mixed has { name: string, data: object } — not all bare objects
         // Should be promoted to a named type
-        var searchResult = schema.Types.Single(t => t.Name == "SearchResult");
-        var mixedField = searchResult.Fields.Single(f => f.Name == "Mixed");
+        var searchResult = schema.Types.Single(t =>
+            string.Equals(t.Name, "SearchResult", StringComparison.Ordinal)
+        );
+        var mixedField = searchResult.Fields.Single(f =>
+            string.Equals(f.Name, "Mixed", StringComparison.Ordinal)
+        );
         mixedField.TypeName.Should().NotBe("object");
     }
 
@@ -486,9 +579,15 @@ public class OpenApiParserFixTests
 
         var schema = parser.Parse(FixturePath("bare-object-properties.json"));
 
-        var searchResult = schema.Types.Single(t => t.Name == "SearchResult");
-        var mixedField = searchResult.Fields.Single(f => f.Name == "Mixed");
-        var mixedType = schema.Types.SingleOrDefault(t => t.Name == mixedField.TypeName);
+        var searchResult = schema.Types.Single(t =>
+            string.Equals(t.Name, "SearchResult", StringComparison.Ordinal)
+        );
+        var mixedField = searchResult.Fields.Single(f =>
+            string.Equals(f.Name, "Mixed", StringComparison.Ordinal)
+        );
+        var mixedType = schema.Types.SingleOrDefault(t =>
+            string.Equals(t.Name, mixedField.TypeName, StringComparison.Ordinal)
+        );
         mixedType.Should().NotBeNull();
         mixedType!.Fields.Should().Contain(f => f.Name == "Name" && f.TypeName == "string");
     }
@@ -643,10 +742,14 @@ public class OpenApiParserFixTests
         var schema = parser.Parse(FixturePath("duplicate-names.json"));
 
         // Even though names keep prefixes, each operation keeps its original path
-        var getUsers = schema.Operations.Single(o => o.Name == "GetUsers");
+        var getUsers = schema.Operations.Single(o =>
+            string.Equals(o.Name, "GetUsers", StringComparison.Ordinal)
+        );
         getUsers.HttpPath.Should().Be("/users");
 
-        var getUsersById = schema.Operations.Single(o => o.Name == "GetUsersByUserId");
+        var getUsersById = schema.Operations.Single(o =>
+            string.Equals(o.Name, "GetUsersByUserId", StringComparison.Ordinal)
+        );
         getUsersById.HttpPath.Should().Be("/users/{userId}");
     }
 
@@ -696,8 +799,12 @@ public class OpenApiParserFixTests
 
         var schema = parser.Parse(FixturePath("dotted-names.json"));
 
-        var userListType = schema.Types.Single(t => t.Name == "UserListDto");
-        var usersField = userListType.Fields.Single(f => f.Name == "Users");
+        var userListType = schema.Types.Single(t =>
+            string.Equals(t.Name, "UserListDto", StringComparison.Ordinal)
+        );
+        var usersField = userListType.Fields.Single(f =>
+            string.Equals(f.Name, "Users", StringComparison.Ordinal)
+        );
         usersField.TypeName.Should().Be("List<UserDto>");
     }
 
@@ -719,7 +826,9 @@ public class OpenApiParserFixTests
 
         var schema = parser.Parse(FixturePath("dotted-names.json"));
 
-        var rootOp = schema.Operations.SingleOrDefault(o => o.HttpPath == "/");
+        var rootOp = schema.Operations.SingleOrDefault(o =>
+            string.Equals(o.HttpPath, "/", StringComparison.Ordinal)
+        );
         rootOp.Should().NotBeNull();
         rootOp!.Name.Should().Be("Root");
     }
@@ -732,7 +841,7 @@ public class OpenApiParserFixTests
         var schema = parser.Parse(FixturePath("dotted-names.json"));
 
         var calendarOp = schema.Operations.SingleOrDefault(o =>
-            o.HttpPath == "/events/calendar.ics"
+            string.Equals(o.HttpPath, "/events/calendar.ics", StringComparison.Ordinal)
         );
         calendarOp.Should().NotBeNull();
         calendarOp!.Name.Should().NotContain(".");
@@ -745,7 +854,9 @@ public class OpenApiParserFixTests
 
         var schema = parser.Parse(FixturePath("dotted-names.json"));
 
-        var reportsOp = schema.Operations.Single(o => o.HttpPath == "/reports");
+        var reportsOp = schema.Operations.Single(o =>
+            string.Equals(o.HttpPath, "/reports", StringComparison.Ordinal)
+        );
         reportsOp.Group.Should().NotContain(",");
         reportsOp.Group.Should().Be("MeetingsReports");
     }
@@ -757,9 +868,13 @@ public class OpenApiParserFixTests
 
         var schema = parser.Parse(FixturePath("dotted-names.json"));
 
-        var searchOp = schema.Operations.Single(o => o.HttpPath == "/search");
+        var searchOp = schema.Operations.Single(o =>
+            string.Equals(o.HttpPath, "/search", StringComparison.Ordinal)
+        );
         // "filters" param references an empty schema — resolved to "object" not the empty type name
-        var filtersField = searchOp.InputType.Fields.Single(f => f.Name == "Filters");
+        var filtersField = searchOp.InputType.Fields.Single(f =>
+            string.Equals(f.Name, "Filters", StringComparison.Ordinal)
+        );
         filtersField.TypeName.Should().Be("object");
     }
 
@@ -771,7 +886,9 @@ public class OpenApiParserFixTests
         var schema = parser.Parse(FixturePath("dotted-names.json"));
 
         // The notes POST has a multiline summary — verify it's captured
-        var notesOp = schema.Operations.Single(o => o.HttpPath == "/notes");
+        var notesOp = schema.Operations.Single(o =>
+            string.Equals(o.HttpPath, "/notes", StringComparison.Ordinal)
+        );
         notesOp.Description.Should().NotBeNull();
     }
 

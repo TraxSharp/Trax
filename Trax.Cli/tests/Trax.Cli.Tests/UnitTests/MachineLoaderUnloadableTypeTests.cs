@@ -39,7 +39,7 @@ public class MachineLoaderUnloadableTypeTests
     public void DiscoverMachines_finds_a_machine_beside_a_type_whose_base_cannot_load()
     {
         var path = EmitConsumer(withMachine: true);
-        var assembly = new AssemblyLoadContext(null).LoadFromAssemblyPath(path);
+        var assembly = new AssemblyLoadContext(name: null).LoadFromAssemblyPath(path);
 
         var machines = MachineLoader.DiscoverMachines(assembly);
 
@@ -51,7 +51,7 @@ public class MachineLoaderUnloadableTypeTests
     {
         var path = EmitConsumer(withMachine: false);
 
-        var act = () => MachineLoader.Load(path, null);
+        var act = () => MachineLoader.Load(path, machineFullName: null);
 
         act.Should()
             .Throw<InvalidOperationException>()

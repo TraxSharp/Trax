@@ -155,7 +155,7 @@ public class MachineGeneratorTests
             .BeEquivalentTo(["contexts", "machine", "corpus"]);
 
         // The twin call forwarded --import-style specifier to the entrypoint.
-        var twinCall = node.Calls.Single(c => c.Script.Contains("twin"));
+        var twinCall = node.Calls.Single(c => c.Script.Contains("twin", StringComparison.Ordinal));
         twinCall.Args.Should().ContainInOrder("--import-style", "specifier");
     }
 
@@ -177,7 +177,7 @@ public class MachineGeneratorTests
         File.ReadAllText(Path.Combine(twinOut, "Turnstile.g.cs")).Should().Be("// view\n");
         Directory.EnumerateFiles(twinOut).Should().ContainSingle();
         result.Written.Select(w => w.Kind).Should().BeEquivalentTo(["view"]);
-        var twinCall = node.Calls.Single(c => c.Script.Contains("twin"));
+        var twinCall = node.Calls.Single(c => c.Script.Contains("twin", StringComparison.Ordinal));
         twinCall.Args.Should().ContainInOrder("--lang", "csharp", "--namespace", "Shop.Machines");
         twinCall.Args.Should().NotContain("--import-style");
     }
@@ -194,7 +194,7 @@ public class MachineGeneratorTests
 
         new MachineGenerator(node).Generate(
             new MachineGenerateOptions(
-                MachineCommand.Source(null, path, "checkout"),
+                MachineCommand.Source(assemblyPath: null, path, "checkout"),
                 IrOut: irOut,
                 TwinOut: twinOut,
                 ToolsDir: _tools,
@@ -208,7 +208,11 @@ public class MachineGeneratorTests
         Convert
             .ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(ir)))
             .Should()
-            .Be(manifest.Machines.Single(m => m.Id == "checkout").IrHash);
+            .Be(
+                manifest
+                    .Machines.Single(m => string.Equals(m.Id, "checkout", StringComparison.Ordinal))
+                    .IrHash
+            );
     }
 
     [TestCase(true, true, null, "*pass one of them*")]
@@ -246,7 +250,7 @@ public class MachineGeneratorTests
         var path = Path.Combine(_root, "trax-client-manifest.json");
         File.WriteAllText(path, ClientManifest.Write(tampered));
 
-        var act = () => MachineCommand.Source(null, path, null);
+        var act = () => MachineCommand.Source(assemblyPath: null, path, machineName: null);
 
         act.Should()
             .Throw<InvalidOperationException>()
@@ -258,12 +262,14 @@ public class MachineGeneratorTests
     public void A_manifest_that_lists_a_machine_twice_is_refused(string? machine)
     {
         var sample = ClientManifests.Sample();
-        var checkout = sample.Machines.Single(m => m.Id == "checkout");
+        var checkout = sample.Machines.Single(m =>
+            string.Equals(m.Id, "checkout", StringComparison.Ordinal)
+        );
         var twice = sample with { Machines = [checkout, checkout] };
         var path = Path.Combine(_root, "trax-client-manifest.json");
         File.WriteAllText(path, ClientManifest.Write(twice));
 
-        var act = () => MachineCommand.Source(null, path, machine);
+        var act = () => MachineCommand.Source(assemblyPath: null, path, machine);
 
         act.Should()
             .Throw<InvalidOperationException>()

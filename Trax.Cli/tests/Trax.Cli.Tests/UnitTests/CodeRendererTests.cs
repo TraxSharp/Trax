@@ -340,7 +340,7 @@ public class CodeRendererTests
             ],
         };
 
-        var result = _renderer.RenderTypeRecord(type, "MyApi", null);
+        var result = _renderer.RenderTypeRecord(type, "MyApi", group: null);
 
         result.Should().Contain("namespace MyApi.Trains.Models;");
     }

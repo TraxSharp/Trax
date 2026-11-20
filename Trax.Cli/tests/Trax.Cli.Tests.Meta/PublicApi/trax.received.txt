@@ -14,7 +14,7 @@ namespace Trax.Cli.Generator
         public string RenderGraphQLNamespaces(System.Collections.Generic.IEnumerable<string> groups, string projectName) { }
         public string RenderInput(Trax.Cli.Models.ApiOperation operation, string projectName) { }
         public string RenderJunction(Trax.Cli.Models.ApiOperation operation, string projectName) { }
-        public string RenderManifestNames(System.Collections.Generic.List<Trax.Cli.Models.ApiOperation> operations, string projectName) { }
+        public string RenderManifestNames(System.Collections.Generic.IList<Trax.Cli.Models.ApiOperation> operations, string projectName) { }
         public string RenderOutput(Trax.Cli.Models.ApiOperation operation, string projectName) { }
         public string RenderTrainImplementation(Trax.Cli.Models.ApiOperation operation, string projectName) { }
         public string RenderTrainInterface(Trax.Cli.Models.ApiOperation operation, string projectName) { }
@@ -46,7 +46,7 @@ namespace Trax.Cli.Models
         public ApiEnum() { }
         public string? Description { get; init; }
         public required string Name { get; init; }
-        public required System.Collections.Generic.List<string> Values { get; init; }
+        public required System.Collections.Generic.IList<string> Values { get; init; }
     }
     public class ApiField
     {
@@ -72,16 +72,16 @@ namespace Trax.Cli.Models
     public class ApiSchema
     {
         public ApiSchema() { }
-        public System.Collections.Generic.List<Trax.Cli.Models.ApiEnum> Enums { get; init; }
-        public System.Collections.Generic.List<Trax.Cli.Models.ApiOperation> Operations { get; init; }
+        public System.Collections.Generic.IList<Trax.Cli.Models.ApiEnum> Enums { get; init; }
+        public System.Collections.Generic.IList<Trax.Cli.Models.ApiOperation> Operations { get; init; }
         public required string SchemaType { get; init; }
         public required string SourceFile { get; init; }
-        public System.Collections.Generic.List<Trax.Cli.Models.ApiType> Types { get; init; }
+        public System.Collections.Generic.IList<Trax.Cli.Models.ApiType> Types { get; init; }
     }
     public class ApiType
     {
         public ApiType() { }
-        public System.Collections.Generic.List<Trax.Cli.Models.ApiField> Fields { get; init; }
+        public System.Collections.Generic.IList<Trax.Cli.Models.ApiField> Fields { get; init; }
         public bool IsBuiltIn { get; init; }
         public required string Name { get; init; }
     }

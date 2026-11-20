@@ -20,7 +20,8 @@ internal static class TwinLanguages
 
     public static string Default => All[0].Lang;
 
-    public static bool Contains(string lang) => All.Any(l => l.Lang == lang);
+    public static bool Contains(string lang) =>
+        All.Any(l => string.Equals(l.Lang, lang, StringComparison.Ordinal));
 
     /// <summary><c>'a' or 'b'</c>, <c>'a', 'b' or 'c'</c>: as generate-twin.mjs's <c>oneOf</c> writes it.</summary>
     public static string OneOf(IReadOnlyList<string> names) => Or([.. names.Select(n => $"'{n}'")]);

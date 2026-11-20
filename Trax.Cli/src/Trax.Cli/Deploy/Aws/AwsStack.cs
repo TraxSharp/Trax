@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Trax.Effect.Configuration.Deploy;
@@ -61,7 +62,11 @@ internal static class AwsStack
         var env = file.Environment(environmentName);
         Check(file, env, exports);
         var stack = file.StackName(environmentName);
-        var production = env.Profile == DeployEnvironment.Production;
+        var production = string.Equals(
+            env.Profile,
+            DeployEnvironment.Production,
+            StringComparison.Ordinal
+        );
         var api = file.Services.Keys.FirstOrDefault(s => exports[s].Roles.Contains("api"));
         if (!production && api is not null && cloudFrontPrefixList is null)
             throw new InvalidOperationException(
@@ -151,7 +156,7 @@ internal static class AwsStack
                 stack,
                 vpc,
                 "The Postgres database",
-                [Rule("-1", null, null, cidr: "127.0.0.1/32", description: "No egress")]
+                [Rule("-1", from: null, to: null, cidr: "127.0.0.1/32", description: "No egress")]
             );
             resources["TaskToDatabase"] = Resource(
                 "AWS::EC2::SecurityGroupEgress",
@@ -293,7 +298,7 @@ internal static class AwsStack
         var serving = environment.Append((TraxMigrate.Variable, TraxMigrate.SkipValue)).ToList();
         foreach (var service in file.Services.Keys)
         {
-            var isApi = service == api;
+            var isApi = string.Equals(service, api, StringComparison.Ordinal);
             AddTask(
                 resources,
                 stack,
@@ -380,7 +385,14 @@ internal static class AwsStack
 
     /// <summary>The template as <c>trax deploy plan</c> writes it, for reading and diffing.</summary>
     public static string Indented(JsonObject template) =>
-        template.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n";
+        template.ToJsonString(
+            new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                RespectNullableAnnotations = false,
+                RespectRequiredConstructorParameters = false,
+            }
+        ) + "\n";
 
     /// <summary>Refuses what this stack cannot give the hosts.</summary>
     internal static void Check(
@@ -488,7 +500,7 @@ internal static class AwsStack
         {
             resources[$"PublicSubnet{letter}"] = Subnet(
                 stack,
-                $"10.0.{index * 16}.0/20",
+                string.Create(CultureInfo.InvariantCulture, $"10.0.{index * 16}.0/20"),
                 index,
                 "public"
             );
@@ -535,7 +547,7 @@ internal static class AwsStack
         {
             resources[$"PrivateSubnet{letter}"] = Subnet(
                 stack,
-                $"10.0.{128 + index * 16}.0/20",
+                string.Create(CultureInfo.InvariantCulture, $"10.0.{128 + index * 16}.0/20"),
                 index,
                 "private"
             );
@@ -593,8 +605,8 @@ internal static class AwsStack
         ((JsonObject)albGroup["Properties"]!)["SecurityGroupEgress"] = new JsonArray(
             Rule(
                 "-1",
-                null,
-                null,
+                from: null,
+                to: null,
                 cidr: "127.0.0.1/32",
                 description: "Replaced by the rule to the services"
             )
@@ -854,7 +866,7 @@ internal static class AwsStack
                 ["VPCSecurityGroups"] = new JsonArray(Ref("DatabaseSecurityGroup")),
                 ["BackupRetentionPeriod"] = production ? 7 : 1,
                 ["DeletionProtection"] = production
-                    ? If("Protected", true, false)
+                    ? If("Protected", whenTrue: true, whenFalse: false)
                     : (JsonNode)false,
                 ["AutoMinorVersionUpgrade"] = true,
                 ["CopyTagsToSnapshot"] = true,

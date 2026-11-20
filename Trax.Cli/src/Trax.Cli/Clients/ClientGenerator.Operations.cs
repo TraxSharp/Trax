@@ -204,11 +204,13 @@ internal sealed partial class ClientGenerator
             .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal)
             .ToList();
-        var required = variables.Any(v => v.Type is GraphQLNonNullType && v.DefaultValue is null);
+        var required = variables.Exists(v =>
+            v.Type is GraphQLNonNullType && v.DefaultValue is null
+        );
 
         var sb = new StringBuilder(OperationsHeader);
         sb.Append(
-            kind == "subscription"
+            string.Equals(kind, "subscription", StringComparison.Ordinal)
                 ? "import { subscribe, type TraxDocument, type TraxSink } from \"../client.g\";\n"
                 : "import { send, type TraxDocument } from \"../client.g\";\n"
         );
@@ -231,19 +233,19 @@ internal sealed partial class ClientGenerator
                 : $"/** The {kind} '{EscapeDocText(operation.Name)}' ({EscapeDocText(operation.Source)}), and the id a host that serves the console registers it under. */\n"
         );
         sb.Append(
-            $"export const {document}: TraxDocument<{variablesType}, {resultType}> = {{\n"
-                + $"  name: {TypeScript.Literal(operation.Name)},\n"
-                + $"  kind: {TypeScript.Literal(kind)},\n"
-                + $"  id: {(operation.Id.Length == 0 ? "null" : TypeScript.Literal(operation.Id))},\n"
-                + $"  text: {TypeScript.Literal(operation.Text)},\n"
-                + "};\n\n"
-        );
+                $"export const {document}: TraxDocument<{variablesType}, {resultType}> = {{\n"
+                    + $"  name: {TypeScript.Literal(operation.Name)},\n"
+                    + $"  kind: {TypeScript.Literal(kind)},\n"
+                    + $"  id: {(operation.Id.Length == 0 ? "null" : TypeScript.Literal(operation.Id))},\n"
+                    + $"  text: {TypeScript.Literal(operation.Text)},\n"
+            )
+            .Append("};\n\n");
         var parameter =
             variables.Count == 0 ? ""
             : required ? $"variables: {variablesType}"
             : $"variables: {variablesType} = {{}}";
         var value = variables.Count == 0 ? "{}" : "variables";
-        if (kind == "subscription")
+        if (string.Equals(kind, "subscription", StringComparison.Ordinal))
         {
             sb.Append(
                 "/** Follows the stream until the function it returns is called. Each frame goes to `sink.next`. */\n"
@@ -281,9 +283,11 @@ internal sealed partial class ClientGenerator
                 {
                     WriteIndented = true,
                     Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+                    RespectNullableAnnotations = false,
+                    RespectRequiredConstructorParameters = false,
                 }
             )
-            .Replace("\r\n", "\n") + "\n";
+            .Replace("\r\n", "\n", StringComparison.Ordinal) + "\n";
 
     private const string OperationsClient =
         OperationsHeader

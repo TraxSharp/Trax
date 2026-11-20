@@ -49,7 +49,7 @@ internal sealed partial class ClientGenerator
         // In Trax.Client a record named like one of its types (an input TraxClient) takes that type's full name and
         // wins over it (CS0436), global:: or not; below it, the runtime's names and the generated ones mix in every lookup.
         if (
-            @namespace == "Trax.Client"
+            string.Equals(@namespace, "Trax.Client", StringComparison.Ordinal)
             || @namespace.StartsWith("Trax.Client.", StringComparison.Ordinal)
         )
             throw new InvalidOperationException(
@@ -339,7 +339,7 @@ internal sealed partial class ClientGenerator
             }
 
             var subscription = definition.Operation == OperationType.Subscription;
-            var required = variables.Any(v =>
+            var required = variables.Exists(v =>
                 v.Type is GraphQLNonNullType && v.DefaultValue is null
             );
             var idText = operation.Id.Length == 0 ? "null" : Literal(operation.Id);
@@ -381,12 +381,14 @@ internal sealed partial class ClientGenerator
                     $"{Indent}/// <summary>Follows {Doc(operation.Name)} until the returned handle is disposed.</summary>\n"
                 );
                 sb.Append(
-                    $"{Indent}public static global::System.IDisposable {method}(\n"
-                        + $"{Indent}{Indent}this {Client}TraxClient client,\n"
-                        + (parameter.Length == 0 ? "" : $"{Indent}{Indent}{parameter},\n")
-                        + $"{Indent}{Indent}global::System.Action<{Client}TraxStreamEvent<{resultType}>> onEvent\n"
-                        + $"{Indent}) => client.Subscribe({document}, {value}, onEvent);\n"
-                );
+                        $"{Indent}public static global::System.IDisposable {method}(\n"
+                            + $"{Indent}{Indent}this {Client}TraxClient client,\n"
+                    )
+                    .Append(parameter.Length == 0 ? "" : $"{Indent}{Indent}{parameter},\n")
+                    .Append(
+                        $"{Indent}{Indent}global::System.Action<{Client}TraxStreamEvent<{resultType}>> onEvent\n"
+                    )
+                    .Append($"{Indent}) => client.Subscribe({document}, {value}, onEvent);\n");
             }
             else
             {
@@ -394,12 +396,16 @@ internal sealed partial class ClientGenerator
                     $"{Indent}/// <summary>Sends {Doc(operation.Name)}; a refusal or a transport failure is in the answer.</summary>\n"
                 );
                 sb.Append(
-                    $"{Indent}public static global::System.Threading.Tasks.Task<{Client}TraxAnswer<{resultType}>> {method}(\n"
-                        + $"{Indent}{Indent}this {Client}TraxClient client,\n"
-                        + (parameter.Length == 0 ? "" : $"{Indent}{Indent}{parameter},\n")
-                        + $"{Indent}{Indent}global::System.Threading.CancellationToken cancellationToken = default\n"
-                        + $"{Indent}) => client.SendAsync({document}, {value}, cancellationToken);\n"
-                );
+                        $"{Indent}public static global::System.Threading.Tasks.Task<{Client}TraxAnswer<{resultType}>> {method}(\n"
+                            + $"{Indent}{Indent}this {Client}TraxClient client,\n"
+                    )
+                    .Append(parameter.Length == 0 ? "" : $"{Indent}{Indent}{parameter},\n")
+                    .Append(
+                        $"{Indent}{Indent}global::System.Threading.CancellationToken cancellationToken = default\n"
+                    )
+                    .Append(
+                        $"{Indent}) => client.SendAsync({document}, {value}, cancellationToken);\n"
+                    );
             }
             sb.Append("}\n");
             return sb.ToString();
@@ -433,7 +439,7 @@ internal sealed partial class ClientGenerator
                     CSharp.Member(key, name),
                     $"the key {key} {owner} selects on {typeName}"
                 );
-                if (field.Name.StringValue == "__typename")
+                if (string.Equals(field.Name.StringValue, "__typename", StringComparison.Ordinal))
                 {
                     body.Append($"{Indent}/// <summary>The value's type, {typeName}.</summary>\n");
                     body.Append($"{Indent}[{Serialization}JsonPropertyName({Literal(key)})]\n");
@@ -442,7 +448,11 @@ internal sealed partial class ClientGenerator
                 }
                 var definition =
                     objectType.Fields?.Items.FirstOrDefault(f =>
-                        f.Name.StringValue == field.Name.StringValue
+                        string.Equals(
+                            f.Name.StringValue,
+                            field.Name.StringValue,
+                            StringComparison.Ordinal
+                        )
                     )
                     ?? throw new InvalidOperationException(
                         $"{owner} selects {typeName}.{field.Name.StringValue}, which the operations schema does not hold."
@@ -734,7 +744,11 @@ internal sealed partial class ClientGenerator
         public static string Member(string key, string record)
         {
             var name = TypeName(key);
-            return name == record || RecordMembers.Contains(name) ? name + "Value" : name;
+            return
+                string.Equals(name, record, StringComparison.Ordinal)
+                || RecordMembers.Contains(name)
+                ? name + "Value"
+                : name;
         }
 
         // An enum member: SCREAMING_CASE as PascalCase (LAST24_HOURS is Last24Hours), anything else as a type name.

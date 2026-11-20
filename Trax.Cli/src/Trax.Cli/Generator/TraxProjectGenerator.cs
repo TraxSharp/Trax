@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using Trax.Cli.Machines;
 using Trax.Cli.Models;
 
@@ -114,8 +115,12 @@ public partial class TraxProjectGenerator
         if (
             string.Equals(target, current, comparison)
             || current.StartsWith(target + Path.DirectorySeparatorChar, comparison)
-            || Path.GetPathRoot(target) == target + Path.DirectorySeparatorChar
-            || Path.GetPathRoot(target) == target
+            || string.Equals(
+                Path.GetPathRoot(target),
+                target + Path.DirectorySeparatorChar,
+                StringComparison.Ordinal
+            )
+            || string.Equals(Path.GetPathRoot(target), target, StringComparison.Ordinal)
         )
             throw new InvalidOperationException(
                 $"Refusing to replace {outputDir}: it is the current directory or one of its parents. "
@@ -205,11 +210,15 @@ public partial class TraxProjectGenerator
                     + ", which is not a NuGet version or version range, so it cannot be written into the "
                     + "trains library's csproj. Fix the pin in the hub."
             );
-        return CodeRenderer.TrainsPackages.ToDictionary(p => p, p => versions[p]);
+        return CodeRenderer.TrainsPackages.ToDictionary(
+            p => p,
+            p => versions[p],
+            StringComparer.Ordinal
+        );
     }
 
     /// <summary>A NuGet version (<c>1.2.3</c>, <c>1.2.3-beta.1</c>, a float such as <c>1.*</c>) or a range (<c>[1.0,2.0)</c>).</summary>
-    internal static bool IsNuGetVersion(string version) => NuGetVersion().IsMatch(version.Trim());
+    internal static bool IsNuGetVersion(string version) => NuGetVersion.IsMatch(version.Trim());
 
     private const string VersionPattern =
         @"(\*|\d+(\.(\d+|\*)){0,3}(-[0-9A-Za-z.*-]+)?(\+[0-9A-Za-z.-]+)?)";
@@ -221,9 +230,11 @@ public partial class TraxProjectGenerator
             + VersionPattern
             + @"?\s*(,\s*"
             + VersionPattern
-            + @"?\s*)?[\])])\z"
+            + @"?\s*)?[\])])\z",
+        System.Text.RegularExpressions.RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
     )]
-    private static partial System.Text.RegularExpressions.Regex NuGetVersion();
+    private static partial System.Text.RegularExpressions.Regex NuGetVersion { get; }
 
     private static void ReadVersions(
         string path,
@@ -243,7 +254,11 @@ public partial class TraxProjectGenerator
         {
             throw new InvalidOperationException($"Cannot read {path}: {ex.Message}", ex);
         }
-        foreach (var item in document.Descendants().Where(e => e.Name.LocalName == element))
+        foreach (
+            var item in document
+                .Descendants()
+                .Where(e => string.Equals(e.Name.LocalName, element, StringComparison.Ordinal))
+        )
         {
             var include = (string?)item.Attribute("Include");
             var version = (string?)item.Attribute("Version");
@@ -320,7 +335,7 @@ public partial class TraxProjectGenerator
             Directory.CreateDirectory(modelsDir);
             WriteFile(
                 Path.Combine(modelsDir, $"{apiType.Name}.cs"),
-                _renderer.RenderTypeRecord(apiType, projectName, null)
+                _renderer.RenderTypeRecord(apiType, projectName, group: null)
             );
         }
 
@@ -390,7 +405,8 @@ public partial class TraxProjectGenerator
                 <ProjectReference Include="..\{trainsProjectName}\{trainsProjectName}.csproj" />
               </ItemGroup>
             </Project>
-            """
+            """,
+            StringComparison.Ordinal
         );
 
         File.WriteAllText(csprojPath, content);
@@ -440,6 +456,7 @@ public partial class TraxProjectGenerator
                         "'dotnet' was not found on PATH. Install the .NET SDK."
                     ),
                 ArgumentList = { "new", "trax-hub", "-n", name, "-o", outputDir },
+                UseShellExecute = false,
             }
         );
 
@@ -451,7 +468,10 @@ public partial class TraxProjectGenerator
     internal static string DotnetNewFailure(int exitCode, string stderr) =>
         stderr.Contains("No templates or subcommands found", StringComparison.Ordinal)
             ? "The 'trax-hub' template is not installed. Run: dotnet new install Trax.Samples.Templates"
-            : $"dotnet new failed (exit code {exitCode}): {stderr}";
+            : string.Create(
+                CultureInfo.InvariantCulture,
+                $"dotnet new failed (exit code {exitCode}): {stderr}"
+            );
 
     /// <summary>
     /// The full path of the <c>dotnet</c> to run, or null when there is none. <c>DOTNET_HOST_PATH</c>, which

@@ -139,9 +139,9 @@ public class FromGherkinCommandTests
         var stderr = new StringWriter();
         var exit = MachineCommand.RunFromGherkin(
             Features,
-            null,
+            glossaryPath: null,
             Out,
-            false,
+            check: false,
             new StringWriter(),
             stderr,
             [Path.Combine(_dir, "Missing.dll")]
@@ -172,11 +172,17 @@ public class FromGherkinCommandTests
         var without = new StringWriter();
         var withTrains = new StringWriter();
 
-        var refused = MachineCommand.RunUsage(Features, null, false, new StringWriter(), without);
+        var refused = MachineCommand.RunUsage(
+            Features,
+            glossaryPath: null,
+            unusedOnly: false,
+            new StringWriter(),
+            without
+        );
         var read = MachineCommand.RunUsage(
             Features,
-            null,
-            false,
+            glossaryPath: null,
+            unusedOnly: false,
             new StringWriter(),
             withTrains,
             [typeof(LexiconTrains.ICheckRefundTrain).Assembly.Location]
@@ -223,7 +229,9 @@ public class FromGherkinCommandTests
     {
         UseLexicon();
         FromLexicon();
-        UseLexicon(Lexicon.Replace("\"is a draft\"", "\"is still a draft\""));
+        UseLexicon(
+            Lexicon.Replace("\"is a draft\"", "\"is still a draft\"", StringComparison.Ordinal)
+        );
 
         var check = FromLexicon(check: true);
 
@@ -258,7 +266,13 @@ public class FromGherkinCommandTests
     [Test]
     public void A_lexicon_problem_names_its_line_and_writes_nothing()
     {
-        UseLexicon(Lexicon.Replace("Trigger: Place", "Trigger: Place\n    Stores: x"));
+        UseLexicon(
+            Lexicon.Replace(
+                "Trigger: Place",
+                "Trigger: Place\n    Stores: x",
+                StringComparison.Ordinal
+            )
+        );
 
         var (exit, _, err) = FromLexicon();
 
@@ -286,11 +300,23 @@ public class FromGherkinCommandTests
         FromLexicon();
         var usage = new StringWriter();
 
-        RunFeatures(new MachineCommand.RunArguments(Features, null, Out, [])).Exit.Should().Be(0);
-        MachineCommand.RunUsage(Features, null, false, usage, new StringWriter()).Should().Be(0);
+        RunFeatures(new MachineCommand.RunArguments(Features, GlossaryPath: null, Out, []))
+            .Exit.Should()
+            .Be(0);
+        MachineCommand
+            .RunUsage(Features, glossaryPath: null, unusedOnly: false, usage, new StringWriter())
+            .Should()
+            .Be(0);
         usage.ToString().Should().Contain("order trigger Place \"places {subject}\": 1");
         MachineCommand
-            .RunMissing(Features, null, [], null, new StringWriter(), new StringWriter())
+            .RunMissing(
+                Features,
+                glossaryPath: null,
+                [],
+                outPath: null,
+                new StringWriter(),
+                new StringWriter()
+            )
             .Should()
             .Be(0);
     }
@@ -333,7 +359,11 @@ public class FromGherkinCommandTests
         File.WriteAllText(
             glossary,
             File.ReadAllText(glossary)
-                .Replace("\"roles\": [\"customer\"]", "\"roles\": [\"shopper\"]")
+                .Replace(
+                    "\"roles\": [\"customer\"]",
+                    "\"roles\": [\"shopper\"]",
+                    StringComparison.Ordinal
+                )
         );
 
         var check = Run(check: true);
@@ -525,7 +555,10 @@ public class FromGherkinCommandTests
     {
         Run();
         var ir = Path.Combine(Out, "order.ir.json");
-        File.WriteAllText(ir, File.ReadAllText(ir).Replace("\"Placed\"", "\"Sent\""));
+        File.WriteAllText(
+            ir,
+            File.ReadAllText(ir).Replace("\"Placed\"", "\"Sent\"", StringComparison.Ordinal)
+        );
 
         var (exit, _, err) = RunFeatures();
 
@@ -613,7 +646,11 @@ public class FromGherkinCommandTests
     {
         File.WriteAllText(
             Path.Combine(Features, "opening.feature"),
-            Opening.Replace("Scenario: The shop opens", "Scenario: " + new string('a', 40) + "!")
+            Opening.Replace(
+                "Scenario: The shop opens",
+                "Scenario: " + new string('a', 40) + "!",
+                StringComparison.Ordinal
+            )
         );
         Run();
 
@@ -636,7 +673,10 @@ public class FromGherkinCommandTests
     {
         Run();
         foreach (var path in Directory.EnumerateFiles(Out))
-            File.WriteAllText(path, File.ReadAllText(path).Replace("\n", "\r\n"));
+            File.WriteAllText(
+                path,
+                File.ReadAllText(path).Replace("\n", "\r\n", StringComparison.Ordinal)
+            );
 
         var check = Run(check: true);
         var write = Run();
@@ -653,7 +693,8 @@ public class FromGherkinCommandTests
             Path.Combine(Features, "glossary.json"),
             Glossary.Replace(
                 "\"Place\": { \"phrase\": \"places {subject}\" }",
-                "\"Place\": { \"phrase\": \"places {subject}\" }, \"Cancel\": { \"phrase\": \"cancels {subject}\" }"
+                "\"Place\": { \"phrase\": \"places {subject}\" }, \"Cancel\": { \"phrase\": \"cancels {subject}\" }",
+                StringComparison.Ordinal
             )
         );
         var stubs = Path.Combine(_dir, "missing.feature");
@@ -689,7 +730,7 @@ public class FromGherkinCommandTests
         var exit = MachineCommand.RunUsage(
             Features,
             Path.Combine(Features, "glossary.json"),
-            false,
+            unusedOnly: false,
             stdout,
             new StringWriter()
         );
@@ -717,7 +758,7 @@ public class FromGherkinCommandTests
             var exit = MachineCommand.RunUsage(
                 Features,
                 Path.Combine(Features, "glossary.json"),
-                false,
+                unusedOnly: false,
                 new StringWriter(),
                 stderr
             );
@@ -739,13 +780,19 @@ public class FromGherkinCommandTests
         Run();
         var stdout = new StringWriter();
 
-        var exit = MachineCommand.RunDiagram(Out, format, null, stdout, new StringWriter());
+        var exit = MachineCommand.RunDiagram(
+            Out,
+            format,
+            outPath: null,
+            stdout,
+            new StringWriter()
+        );
 
         exit.Should().Be(0);
         stdout.ToString().Should().Contain("Place");
-        if (format != "html")
+        if (!string.Equals(format, "html", StringComparison.Ordinal))
             stdout.ToString().Should().Contain("Draft → Placed");
-        if (format != "mermaid")
+        if (!string.Equals(format, "mermaid", StringComparison.Ordinal))
             stdout.ToString().Should().Contain("Ada places her order");
     }
 
@@ -756,13 +803,17 @@ public class FromGherkinCommandTests
             Path.Combine(Features, "ordering.feature"),
             Ordering.Replace(
                 "Scenario: Ada places her order",
-                "Scenario: Ada places </script><b>x</b>"
+                "Scenario: Ada places </script><b>x</b>",
+                StringComparison.Ordinal
             )
         );
         Run();
         var stdout = new StringWriter();
 
-        MachineCommand.RunDiagram(Out, "html", null, stdout, new StringWriter()).Should().Be(0);
+        MachineCommand
+            .RunDiagram(Out, "html", outPath: null, stdout, new StringWriter())
+            .Should()
+            .Be(0);
 
         var html = stdout.ToString();
         html.Should().NotContain("</script><b>").And.NotContain("innerHTML");
@@ -775,16 +826,23 @@ public class FromGherkinCommandTests
         File.WriteAllText(
             Path.Combine(Features, "glossary.json"),
             Glossary
-                .Replace("\"shop\": {", "\"end\": {")
-                .Replace("shop/main", "end/main")
-                .Replace("\"order\": {", "\"n0\": {")
-                .Replace("\"roles\": [\"customer\"]", "\"roles\": [\"cus\\ntomer#1\"]")
+                .Replace("\"shop\": {", "\"end\": {", StringComparison.Ordinal)
+                .Replace("shop/main", "end/main", StringComparison.Ordinal)
+                .Replace("\"order\": {", "\"n0\": {", StringComparison.Ordinal)
+                .Replace(
+                    "\"roles\": [\"customer\"]",
+                    "\"roles\": [\"cus\\ntomer#1\"]",
+                    StringComparison.Ordinal
+                )
         );
         var derived = Run();
         derived.Exit.Should().Be(0, derived.Err);
         var stdout = new StringWriter();
 
-        MachineCommand.RunDiagram(Out, "mermaid", null, stdout, new StringWriter()).Should().Be(0);
+        MachineCommand
+            .RunDiagram(Out, "mermaid", outPath: null, stdout, new StringWriter())
+            .Should()
+            .Be(0);
 
         var lines = stdout.ToString().Split('\n');
         lines
@@ -807,7 +865,7 @@ public class FromGherkinCommandTests
         var stderr = new StringWriter();
 
         MachineCommand
-            .RunDiagram(Features, "json", null, new StringWriter(), stderr)
+            .RunDiagram(Features, "json", outPath: null, new StringWriter(), stderr)
             .Should()
             .Be(1);
         stderr.ToString().Should().Contain("has no host.json");
@@ -950,7 +1008,7 @@ public class FromGherkinCommandTests
         var exit = MachineCommand.RunExplain(
             Features,
             Path.Combine(Features, "glossary.json"),
-            null,
+            scenario: null,
             stdout,
             stderr
         );
@@ -1017,7 +1075,14 @@ public class FromGherkinCommandTests
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var exit = MachineCommand.RunFromGherkin(Features, null, Out, check, stdout, stderr);
+        var exit = MachineCommand.RunFromGherkin(
+            Features,
+            glossaryPath: null,
+            Out,
+            check,
+            stdout,
+            stderr
+        );
         return (exit, stdout.ToString(), stderr.ToString());
     }
 

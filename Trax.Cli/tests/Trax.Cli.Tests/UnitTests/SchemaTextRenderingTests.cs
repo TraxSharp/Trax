@@ -130,7 +130,13 @@ public class SchemaTextRenderingTests
             .BeFalse("the rendered train must parse ({0}):\n{1}", Adr, source);
         var argument = root.DescendantNodes()
             .OfType<AttributeArgumentSyntax>()
-            .Single(a => a.NameEquals?.Name.Identifier.Text == "Description");
+            .Single(a =>
+                string.Equals(
+                    a.NameEquals?.Name.Identifier.Text,
+                    "Description",
+                    StringComparison.Ordinal
+                )
+            );
         argument
             .Expression.Should()
             .BeOfType<LiteralExpressionSyntax>()
@@ -152,7 +158,13 @@ public class SchemaTextRenderingTests
             .GetRoot()
             .DescendantNodes()
             .OfType<AttributeArgumentSyntax>()
-            .Single(a => a.NameEquals?.Name.Identifier.Text == "Description");
+            .Single(a =>
+                string.Equals(
+                    a.NameEquals?.Name.Identifier.Text,
+                    "Description",
+                    StringComparison.Ordinal
+                )
+            );
         ((LiteralExpressionSyntax)argument.Expression).Token.ValueText.Should().Be(Collapsed);
     }
 

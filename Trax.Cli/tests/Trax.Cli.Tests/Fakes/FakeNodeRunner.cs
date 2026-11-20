@@ -42,7 +42,9 @@ internal sealed class FakeNodeRunner : INodeRunner
         {
             var outDir = flags["--out-dir"];
             var id = ReadIrId(flags["--ir"]);
-            if (flags.GetValueOrDefault("--lang") == "csharp")
+            if (
+                string.Equals(flags.GetValueOrDefault("--lang"), "csharp", StringComparison.Ordinal)
+            )
             {
                 File.WriteAllText(
                     Path.Combine(outDir, $"{MachineScaffolder.Pascal(id)}.g.cs"),

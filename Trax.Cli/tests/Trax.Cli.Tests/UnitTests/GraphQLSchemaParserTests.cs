@@ -54,7 +54,9 @@ public class GraphQLSchemaParserTests
         var schema = _parser.Parse(FixturePath("simple.graphql"));
 
         schema.Types.Should().Contain(t => t.Name == "Player");
-        var player = schema.Types.First(t => t.Name == "Player");
+        var player = schema.Types.First(t =>
+            string.Equals(t.Name, "Player", StringComparison.Ordinal)
+        );
         player.Fields.Should().HaveCount(3);
     }
 
@@ -129,7 +131,9 @@ public class GraphQLSchemaParserTests
     {
         var schema = _parser.Parse(FixturePath("nullable.graphql"));
 
-        var search = schema.Operations.First(o => o.Name == "Search");
+        var search = schema.Operations.First(o =>
+            string.Equals(o.Name, "Search", StringComparison.Ordinal)
+        );
         search.InputType.Fields.Should().HaveCount(3);
         search.InputType.Fields.Should().AllSatisfy(f => f.IsNullable.Should().BeTrue());
     }
@@ -139,12 +143,18 @@ public class GraphQLSchemaParserTests
     {
         var schema = _parser.Parse(FixturePath("nullable.graphql"));
 
-        var searchResult = schema.Types.First(t => t.Name == "SearchResult");
+        var searchResult = schema.Types.First(t =>
+            string.Equals(t.Name, "SearchResult", StringComparison.Ordinal)
+        );
 
-        var items = searchResult.Fields.First(f => f.Name == "Items");
+        var items = searchResult.Fields.First(f =>
+            string.Equals(f.Name, "Items", StringComparison.Ordinal)
+        );
         items.IsNullable.Should().BeTrue();
 
-        var nextCursor = searchResult.Fields.First(f => f.Name == "NextCursor");
+        var nextCursor = searchResult.Fields.First(f =>
+            string.Equals(f.Name, "NextCursor", StringComparison.Ordinal)
+        );
         nextCursor.IsNullable.Should().BeTrue();
     }
 
@@ -184,7 +194,9 @@ public class GraphQLSchemaParserTests
     {
         var schema = _parser.Parse(FixturePath("type-collision.graphql"));
 
-        var allChats = schema.Operations.First(o => o.Name == "AllChatsQuery");
+        var allChats = schema.Operations.First(o =>
+            string.Equals(o.Name, "AllChatsQuery", StringComparison.Ordinal)
+        );
         // Output references the AllChats type (built-in ref since it's a known object type)
         allChats.OutputType.Name.Should().Be("AllChats");
         allChats.OutputType.IsBuiltIn.Should().BeTrue();

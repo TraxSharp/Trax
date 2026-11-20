@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Globalization;
 using Trax.Cli.Machines;
 using Trax.StateMachine.Gherkin;
 
@@ -112,7 +113,7 @@ internal static class MachineCommand
         var version = typeof(Trax.StateMachine.Persistence.IMachine)
             .Assembly.GetCustomAttributes(
                 typeof(System.Reflection.AssemblyInformationalVersionAttribute),
-                false
+                inherit: false
             )
             .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
             .FirstOrDefault()
@@ -572,7 +573,15 @@ internal static class MachineCommand
             foreach (var location in args.Locations)
             {
                 var colon = location.LastIndexOf(':');
-                if (colon <= 0 || !long.TryParse(location[(colon + 1)..], out var line) || line < 1)
+                if (
+                    colon <= 0
+                    || !long.TryParse(
+                        location[(colon + 1)..],
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        out var line
+                    )
+                    || line < 1
+                )
                 {
                     stderr.WriteLine(
                         $"'{location}' is not file:line, such as ordering.feature:12."
@@ -585,7 +594,11 @@ internal static class MachineCommand
                 foreach (var name in names)
                     try
                     {
-                        _ = new System.Text.RegularExpressions.Regex(name);
+                        _ = new System.Text.RegularExpressions.Regex(
+                            name,
+                            System.Text.RegularExpressions.RegexOptions.None,
+                            TimeSpan.FromSeconds(1)
+                        );
                     }
                     catch (ArgumentException ex)
                     {
@@ -621,7 +634,11 @@ internal static class MachineCommand
                 stderr.WriteLine(problem);
             var text = RunReportWriter.Write(report, args.Format);
             if (args.ReportPath is { } path)
-                File.WriteAllText(path, text, new System.Text.UTF8Encoding(false));
+                File.WriteAllText(
+                    path,
+                    text,
+                    new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
+                );
             else
                 stdout.Write(text);
 
@@ -634,7 +651,12 @@ internal static class MachineCommand
                 && ran
                 && report.Scenarios.All(s =>
                     (s.Status is ScenarioStatus.Passed or ScenarioStatus.Skipped)
-                    && (!args.Strict || !s.Skipped.Any(x => x.Message != "not run"))
+                    && (
+                        !args.Strict
+                        || !s.Skipped.Any(x =>
+                            !string.Equals(x.Message, "not run", StringComparison.Ordinal)
+                        )
+                    )
                 );
             if (report.Scenarios.Count == 0)
                 stderr.WriteLine("No scenario matched.");
@@ -647,7 +669,10 @@ internal static class MachineCommand
         catch (System.Text.RegularExpressions.RegexMatchTimeoutException ex)
         {
             stderr.WriteLine(
-                $"--name '{ex.Pattern}' took longer than {ex.MatchTimeout.TotalSeconds:0.#} s to match a scenario's name; give a simpler expression."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"--name '{ex.Pattern}' took longer than {ex.MatchTimeout.TotalSeconds:0.#} s to match a scenario's name; give a simpler expression."
+                )
             );
             return 1;
         }
@@ -802,7 +827,11 @@ internal static class MachineCommand
                 var file = new System.Text.StringBuilder("Feature: Missing scenarios\n");
                 foreach (var gap in wanted.Where(g => g.Stub is not null))
                     file.Append($"\n  # {gap.Message}\n").Append(gap.Stub);
-                File.WriteAllText(outPath, file.ToString(), new System.Text.UTF8Encoding(false));
+                File.WriteAllText(
+                    outPath,
+                    file.ToString(),
+                    new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
+                );
             }
             return 0;
         }
@@ -871,7 +900,9 @@ internal static class MachineCommand
             {
                 stdout.WriteLine($"{use.Part} \"{use.Phrase}\": {use.Steps.Count}");
                 foreach (var (file, line) in use.Steps)
-                    stdout.WriteLine($"  {file}:{line}");
+                    stdout.WriteLine(
+                        string.Create(CultureInfo.InvariantCulture, $"  {file}:{line}")
+                    );
             }
             return problems.Count == 0 ? 0 : 1;
         }
@@ -951,7 +982,11 @@ internal static class MachineCommand
                 .Where(s =>
                     scenario is null
                     || s.Name.Contains(scenario, StringComparison.OrdinalIgnoreCase)
-                    || $"{s.File}:{s.Line}" == scenario
+                    || string.Equals(
+                        string.Create(CultureInfo.InvariantCulture, $"{s.File}:{s.Line}"),
+                        scenario,
+                        StringComparison.Ordinal
+                    )
                 )
                 .ToList();
             if (scenario is not null && shown.Count == 0)
@@ -961,7 +996,9 @@ internal static class MachineCommand
             }
             foreach (var s in shown)
             {
-                stdout.WriteLine($"{s.File}:{s.Line} {s.Name}");
+                stdout.WriteLine(
+                    string.Create(CultureInfo.InvariantCulture, $"{s.File}:{s.Line} {s.Name}")
+                );
                 foreach (var fact in s.Facts)
                     stdout.WriteLine($"  {fact}");
             }
@@ -1044,7 +1081,11 @@ internal static class MachineCommand
             if (outPath is null)
                 stdout.Write(text);
             else
-                File.WriteAllText(outPath, text, new System.Text.UTF8Encoding(false));
+                File.WriteAllText(
+                    outPath,
+                    text,
+                    new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
+                );
             return 0;
         }
         catch (InvalidOperationException ex)

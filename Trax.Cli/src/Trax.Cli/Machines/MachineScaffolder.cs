@@ -26,9 +26,9 @@ internal static class MachineScaffolder
             WithEffect = withEffect,
         };
 
-        var scriptObject = new ScriptObject();
+        var scriptObject = new ScriptObject(StringComparer.Ordinal);
         scriptObject.Import(model, renamer: member => member.Name);
-        var context = new TemplateContext();
+        var context = new TemplateContext(StringComparer.Ordinal);
         context.PushGlobal(scriptObject);
         return Template.Render(context);
     }

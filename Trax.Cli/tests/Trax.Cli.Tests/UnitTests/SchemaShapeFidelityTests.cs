@@ -62,7 +62,7 @@ public class SchemaShapeFidelityTests
             .Should()
             .BeEquivalentTo(["Players", "RenamePlayer", "PlayerCount", "DeletePlayer"]);
         schema
-            .Types.Single(t => t.Name == "Player")
+            .Types.Single(t => string.Equals(t.Name, "Player", StringComparison.Ordinal))
             .Fields.Select(f => f.Name)
             .Should()
             .Equal("Id", "Name", "Score");
@@ -93,12 +93,18 @@ public class SchemaShapeFidelityTests
             """
         );
 
-        var batch = schema.Operations.Single(o => o.Name == "CreatePlayers").InputType;
+        var batch = schema
+            .Operations.Single(o =>
+                string.Equals(o.Name, "CreatePlayers", StringComparison.Ordinal)
+            )
+            .InputType;
         batch
             .Fields.Select(f => (f.Name, f.TypeName))
             .Should()
             .Equal(("Inputs", "List<PlayerInput>"));
-        var single = schema.Operations.Single(o => o.Name == "CreatePlayer").InputType;
+        var single = schema
+            .Operations.Single(o => string.Equals(o.Name, "CreatePlayer", StringComparison.Ordinal))
+            .InputType;
         single.Fields.Select(f => (f.Name, f.TypeName)).Should().Equal(("Name", "string"));
     }
 
@@ -126,8 +132,14 @@ public class SchemaShapeFidelityTests
             """
         );
 
-        schema.Enums.Single(e => e.Name == "Status").Values.Should().Equal("Active", "Banned");
-        schema.Enums.Single(e => e.Name == "Mood").Values.Should().Equal("Happy");
+        schema
+            .Enums.Single(e => string.Equals(e.Name, "Status", StringComparison.Ordinal))
+            .Values.Should()
+            .Equal("Active", "Banned");
+        schema
+            .Enums.Single(e => string.Equals(e.Name, "Mood", StringComparison.Ordinal))
+            .Values.Should()
+            .Equal("Happy");
     }
 
     [Test]
@@ -190,7 +202,7 @@ public class SchemaShapeFidelityTests
             .Should()
             .Equal(("Value", "string"));
         schema
-            .Types.Single(t => t.Name == "Player")
+            .Types.Single(t => string.Equals(t.Name, "Player", StringComparison.Ordinal))
             .Fields.Select(f => f.TypeName)
             .Should()
             .Equal("Guid", "long");

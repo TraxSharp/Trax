@@ -280,19 +280,23 @@ public class SchemaNameValidationTests
     {
         var schema = new OpenApiSchemaParser().Parse(FixturePath("inline-name-reuse.json"));
 
-        var address = schema.Types.Single(t => t.Name == "Address");
+        var address = schema.Types.Single(t =>
+            string.Equals(t.Name, "Address", StringComparison.Ordinal)
+        );
         address
             .Fields.Select(f => f.Name)
             .Should()
             .BeEquivalentTo(["Street", "City"], "the component keeps its own fields");
         var customerAddress = schema
-            .Types.Single(t => t.Name == "Customer")
-            .Fields.Single(f => f.Name == "Address");
+            .Types.Single(t => string.Equals(t.Name, "Customer", StringComparison.Ordinal))
+            .Fields.Single(f => string.Equals(f.Name, "Address", StringComparison.Ordinal));
         customerAddress
             .TypeName.Should()
             .NotBe("Address", "the inline object is not the component");
         schema
-            .Types.Single(t => t.Name == customerAddress.TypeName)
+            .Types.Single(t =>
+                string.Equals(t.Name, customerAddress.TypeName, StringComparison.Ordinal)
+            )
             .Fields.Select(f => f.Name)
             .Should()
             .BeEquivalentTo(["Line1"]);
@@ -310,14 +314,20 @@ public class SchemaNameValidationTests
             .Should()
             .NotBe(ticketStatus, "two enums with different values are two enums; " + Adr);
         schema
-            .Enums.Single(e => e.Name == customerStatus)
+            .Enums.Single(e => string.Equals(e.Name, customerStatus, StringComparison.Ordinal))
             .Values.Should()
             .Equal("Active", "Suspended");
-        schema.Enums.Single(e => e.Name == ticketStatus).Values.Should().Equal("Open", "Closed");
+        schema
+            .Enums.Single(e => string.Equals(e.Name, ticketStatus, StringComparison.Ordinal))
+            .Values.Should()
+            .Equal("Open", "Closed");
     }
 
     private static string FieldType(ApiSchema schema, string type, string field) =>
-        schema.Types.Single(t => t.Name == type).Fields.Single(f => f.Name == field).TypeName;
+        schema
+            .Types.Single(t => string.Equals(t.Name, type, StringComparison.Ordinal))
+            .Fields.Single(f => string.Equals(f.Name, field, StringComparison.Ordinal))
+            .TypeName;
 
     [Test]
     public void OpenApi_parameters_that_become_one_input_property_are_refused()
@@ -343,7 +353,11 @@ public class SchemaNameValidationTests
             InvalidFixturePath("converging-input-names.json")
         );
 
-        var input = schema.Operations.Single(o => o.Name == "ReplacePlayer").InputType;
+        var input = schema
+            .Operations.Single(o =>
+                string.Equals(o.Name, "ReplacePlayer", StringComparison.Ordinal)
+            )
+            .InputType;
 
         input.Fields.Select(f => f.Name).Should().Equal(["Id", "Name"], Adr);
     }

@@ -91,7 +91,7 @@ public class LexiconFormatCommandTests
                     Outcome: "the payment goes through" when approved is true
                     Outcome: "it fails"                 when it fails
 
-                """.Replace("\r\n", "\n")
+                """.Replace("\r\n", "\n", StringComparison.Ordinal)
             );
     }
 
@@ -124,7 +124,7 @@ public class LexiconFormatCommandTests
     [Test]
     public void A_line_it_cannot_read_is_reported_at_its_line_and_the_file_is_left_alone()
     {
-        File.WriteAllText(File_, Untidy.Replace("Roles:", "Rolez:"));
+        File.WriteAllText(File_, Untidy.Replace("Roles:", "Rolez:", StringComparison.Ordinal));
 
         var (exit, _, err) = Format(File_);
 

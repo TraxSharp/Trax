@@ -17,7 +17,7 @@ namespace Trax.Cli.Tests.UnitTests;
 /// <para>Enforces <c>Trax.Docs/adr/0053-a-client-document-is-registered-by-the-host-at-boot.md</c>.</para>
 /// </summary>
 [Property("adr", "Trax.Docs/adr/0053-a-client-document-is-registered-by-the-host-at-boot.md")]
-public class ClientDocumentsGeneratorTests
+public partial class ClientDocumentsGeneratorTests
 {
     private const string Adr =
         "Trax.Docs/adr/0053-a-client-document-is-registered-by-the-host-at-boot.md";
@@ -113,7 +113,7 @@ public class ClientDocumentsGeneratorTests
         [
             Train(
                 "query",
-                null,
+                ns: null,
                 "findOrder",
                 "Order!",
                 "query FindOrder($input: FindInput!) { discover { findOrder(input: $input) { title } } }"
@@ -127,21 +127,21 @@ public class ClientDocumentsGeneratorTests
             ),
             Train(
                 "query",
-                null,
+                ns: null,
                 "search",
                 "[Found!]!",
                 "query Search($input: FindInput!) { discover { search(input: $input) { __typename } } }"
             ),
             Train(
                 "mutation",
-                null,
+                ns: null,
                 "recordNote",
                 "NoteResponse!",
                 "mutation RecordNote($input: NoteInput!, $priority: Int) { dispatch { recordNote(input: $input, priority: $priority) { externalId } } }"
             ),
             Train(
                 "mutation",
-                null,
+                ns: null,
                 "other",
                 "NoteResponse!",
                 "mutation Other($input: NoteInput!) { dispatch { other(input: $input) { externalId } } }"
@@ -286,10 +286,7 @@ public class ClientDocumentsGeneratorTests
     [TestCase("infer")]
     public void A_type_named_as_a_global_generic_is_refused(string name)
     {
-        var manifest = Manifest with
-        {
-            Types = System.Text.RegularExpressions.Regex.Replace(Types, @"\bLevel\b", name),
-        };
+        var manifest = Manifest with { Types = LevelWord.Replace(Types, name) };
 
         var render = () =>
             new ClientGenerator(new FakeNodeRunner()).Render(
@@ -384,8 +381,10 @@ public class ClientDocumentsGeneratorTests
     {
         var compact =
             "query OrderCard($input: FindInput!) { discover { findOrder(input: $input) { title customer { name } } } }";
-        var commented = "# the order card\n" + OrderCard.Replace("title", "title # heading");
-        var changed = compact.Replace("title", "level");
+        var commented =
+            "# the order card\n"
+            + OrderCard.Replace("title", "title # heading", StringComparison.Ordinal);
+        var changed = compact.Replace("title", "level", StringComparison.Ordinal);
 
         var a = Id(Render(("a.graphql", compact)));
         Id(Render(("a.graphql", OrderCard))).Should().Be(a);
@@ -909,7 +908,7 @@ public class ClientDocumentsGeneratorTests
                 )
             );
 
-        if (fragment == "StartRun")
+        if (string.Equals(fragment, "StartRun", StringComparison.Ordinal))
             render.Should().NotThrow("a fragment named like nothing else is fine");
         else
             render.Should().Throw<InvalidOperationException>().WithMessage(message);
@@ -968,8 +967,8 @@ public class ClientDocumentsGeneratorTests
                     manifest,
                     src,
                     check: false,
-                    null,
-                    null,
+                    specifier: null,
+                    toolsDir: null,
                     new FakeNodeRunner(),
                     ["src/**/*.graphql"]
                 )
@@ -988,8 +987,8 @@ public class ClientDocumentsGeneratorTests
                     manifest,
                     src,
                     check: true,
-                    null,
-                    null,
+                    specifier: null,
+                    toolsDir: null,
                     new FakeNodeRunner(),
                     ["src/**/*.graphql"]
                 )
@@ -998,7 +997,7 @@ public class ClientDocumentsGeneratorTests
 
             File.WriteAllText(
                 Path.Combine(src, "cards", "orderCard.graphql"),
-                OrderCard.Replace("title", "level")
+                OrderCard.Replace("title", "level", StringComparison.Ordinal)
             );
             ClientCommand
                 .Run(
@@ -1006,8 +1005,8 @@ public class ClientDocumentsGeneratorTests
                     manifest,
                     src,
                     check: true,
-                    null,
-                    null,
+                    specifier: null,
+                    toolsDir: null,
                     new FakeNodeRunner(),
                     ["src/**/*.graphql"]
                 )
@@ -1023,8 +1022,8 @@ public class ClientDocumentsGeneratorTests
                     manifest,
                     src,
                     check: false,
-                    null,
-                    null,
+                    specifier: null,
+                    toolsDir: null,
                     new FakeNodeRunner(),
                     ["nowhere/*.graphql"]
                 )
@@ -1059,8 +1058,8 @@ public class ClientDocumentsGeneratorTests
                 manifest,
                 outDir,
                 check,
-                null,
-                null,
+                specifier: null,
+                toolsDir: null,
                 new FakeNodeRunner(),
                 ["src/**/*.graphql"]
             );
@@ -1324,7 +1323,7 @@ public class ClientDocumentsGeneratorTests
         );
 
     private static string Text(IReadOnlyList<ClientFile> files, string path) =>
-        files.Single(f => f.Path == path).Text;
+        files.Single(f => string.Equals(f.Path, path, StringComparison.Ordinal)).Text;
 
     private static JsonElement Json(IReadOnlyList<ClientFile> files) =>
         JsonDocument.Parse(Text(files, "trax.documents.json")).RootElement;
@@ -1375,4 +1374,11 @@ public class ClientDocumentsGeneratorTests
     }
 
     #endregion
+
+    [System.Text.RegularExpressions.GeneratedRegex(
+        @"\bLevel\b",
+        System.Text.RegularExpressions.RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial System.Text.RegularExpressions.Regex LevelWord { get; }
 }

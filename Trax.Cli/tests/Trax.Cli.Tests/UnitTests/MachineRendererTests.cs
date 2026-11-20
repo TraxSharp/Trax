@@ -10,7 +10,7 @@ namespace Trax.Cli.Tests.UnitTests;
 /// <c>trax machine show</c> draws a machine from its IR. The renderer is pure, so these pin its output from IR
 /// text: the turnstile the other machine tests use, and a hand-written IR with every mark the text form has.
 /// </summary>
-public class MachineRendererTests
+public partial class MachineRendererTests
 {
     private static readonly string Turnstile = new DeclarativeTurnstileMachine().ExportIr();
 
@@ -151,10 +151,8 @@ public class MachineRendererTests
     private static readonly string Reminder = new DeclarativeReminderMachine().ExportIr();
 
     // The timer edge Review → Expired, labelled with its duration as the IR spells it or as a reader would.
-    private static readonly Regex TimerDuration = new(
-        @"\b(PT10M|10m|10 min)",
-        RegexOptions.Compiled
-    );
+    [GeneratedRegex(@"\b(?:PT10M|10m|10 min)", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex TimerDuration { get; }
 
     [Test]
     [Property(
@@ -265,7 +263,9 @@ public class MachineRendererTests
     [TestCase("dot", "\"Dealing\" -> \"Guessing\" [label=\"Dealing.done")]
     public void Diagrams_draw_outcome_edges(string name, string edge)
     {
-        var format = name == "dot" ? MachineFormat.Dot : MachineFormat.Mermaid;
+        var format = string.Equals(name, "dot", StringComparison.Ordinal)
+            ? MachineFormat.Dot
+            : MachineFormat.Mermaid;
 
         MachineRenderer.Render(Cards, format).Should().Contain(edge);
     }
@@ -364,8 +364,8 @@ public class MachineRendererTests
         var exit = MachineCommand.RunShow(
             typeof(DeclarativeTurnstileMachine).Assembly.Location,
             typeof(DeclarativeTurnstileMachine).FullName,
-            null,
-            false,
+            format: null,
+            ascii: false,
             output
         );
 
@@ -384,9 +384,9 @@ public class MachineRendererTests
         {
             exit = MachineCommand.RunShow(
                 typeof(DeclarativeTurnstileMachine).Assembly.Location,
-                null,
-                null,
-                false,
+                machineName: null,
+                format: null,
+                ascii: false,
                 new StringWriter()
             );
         }
@@ -412,7 +412,7 @@ public class MachineRendererTests
                     typeof(DeclarativeTurnstileMachine).Assembly.Location,
                     typeof(DeclarativeTurnstileMachine).FullName,
                     "svg",
-                    false,
+                    ascii: false,
                     new StringWriter()
                 )
                 .Should()
@@ -454,7 +454,9 @@ public class MachineRendererTests
     [TestCase("dot")]
     public void Diagram_sources_do_not_pass_control_characters_either(string name)
     {
-        var format = name == "dot" ? MachineFormat.Dot : MachineFormat.Mermaid;
+        var format = string.Equals(name, "dot", StringComparison.Ordinal)
+            ? MachineFormat.Dot
+            : MachineFormat.Mermaid;
         const string ir = """
             {
               "id": "evil", "version": 1, "initialState": "Start",

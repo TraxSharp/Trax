@@ -136,7 +136,7 @@ internal static class ClientCommand
     {
         try
         {
-            if (target != "react")
+            if (!string.Equals(target, "react", StringComparison.Ordinal))
                 throw new InvalidOperationException(
                     $"--target '{target}' is not one trax client generates. Use react."
                 );

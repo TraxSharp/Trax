@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using AwesomeAssertions;
 using CsCheck;
@@ -152,9 +153,9 @@ public partial class GeneratedNamesPropertyTests
 
                 type Run { id: ID! state: {{Enum}}! other: {{OtherEnum}} }
 
-                enum {{Enum}} { {{string.Join(" ", EnumValues)}} }
+                enum {{Enum}} { {{string.Join(' ', EnumValues)}} }
 
-                enum {{OtherEnum}} { {{string.Join(" ", OtherValues)}} }
+                enum {{OtherEnum}} { {{string.Join(' ', OtherValues)}} }
 
                 input {{Input}} { {{InputField}}: {{OtherEnum}} }
                 """;
@@ -263,9 +264,9 @@ public partial class GeneratedNamesPropertyTests
                     $$"""
                     type Started { externalId: String! mode: {{c.Enum}} other: {{c.OtherEnum}} }
 
-                    enum {{c.Enum}} { {{string.Join(" ", c.EnumValues)}} }
+                    enum {{c.Enum}} { {{string.Join(' ', c.EnumValues)}} }
 
-                    enum {{c.OtherEnum}} { {{string.Join(" ", c.OtherValues)}} }
+                    enum {{c.OtherEnum}} { {{string.Join(' ', c.OtherValues)}} }
 
                     input {{c.Input}} { {{c.InputField}}: {{c.OtherEnum}} }
                     """
@@ -402,14 +403,18 @@ public partial class GeneratedNamesPropertyTests
                 var fragment = Pick();
                 if (
                     operations < 40
-                    && TryWrite(root, $"operations-{i}", OperationsWithFragment(c, fragment))
+                    && TryWrite(
+                        root,
+                        string.Create(CultureInfo.InvariantCulture, $"operations-{i}"),
+                        OperationsWithFragment(c, fragment)
+                    )
                 )
                     operations++;
                 if (
                     manifests < 40
                     && TryWrite(
                         root,
-                        $"manifest-{i}",
+                        string.Create(CultureInfo.InvariantCulture, $"manifest-{i}"),
                         ManifestWithProgress(
                             c,
                             Pick(),
@@ -470,15 +475,15 @@ public partial class GeneratedNamesPropertyTests
                 "tsconfig.json"
             );
 
-            var failing = CaseFolder()
+            var failing = CaseFolder
                 .Matches(output)
-                .Select(m => m.Groups[1].Value)
-                .Distinct()
+                .Select(m => m.Groups["folder"].Value)
+                .Distinct(StringComparer.Ordinal)
                 .Select(folder =>
                     File.ReadAllText(Path.Combine(root.FullName, "cases", folder, "case.graphql"))
                 );
             code.Should()
-                .Be(0, $"every sampled client typechecks:\n{output}\n{string.Join("\n", failing)}");
+                .Be(0, $"every sampled client typechecks:\n{output}\n{string.Join('\n', failing)}");
         }
         finally
         {
@@ -580,8 +585,12 @@ public partial class GeneratedNamesPropertyTests
 
     private static string Json(string text) => System.Text.Json.JsonSerializer.Serialize(text);
 
-    [GeneratedRegex(@"cases/([^/(]+)/")]
-    private static partial Regex CaseFolder();
+    [GeneratedRegex(
+        @"cases/(?<folder>[^/(]+)/",
+        RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex CaseFolder { get; }
 
     // Trax.StateMachine/ts with its npm packages, whose TypeScript, graphql-ws and React the check compiles against.
     private static string TypeScriptEngine()
@@ -748,11 +757,11 @@ public partial class GeneratedNamesPropertyTests
     private static List<(string Name, bool IsType)> TypeScriptNames(string text)
     {
         var names = new List<(string, bool)>();
-        foreach (Match m in Declaration().Matches(text))
-            names.Add((m.Groups[2].Value, m.Groups[1].Value is "type" or "interface"));
-        foreach (Match m in ImportOrExport().Matches(text))
+        foreach (Match m in Declaration.Matches(text))
+            names.Add((m.Groups["name"].Value, m.Groups["kind"].Value is "type" or "interface"));
+        foreach (Match m in ImportOrExport.Matches(text))
         foreach (
-            var name in m.Groups[2]
+            var name in m.Groups["names"]
                 .Value.Split(
                     ',',
                     StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries
@@ -761,19 +770,24 @@ public partial class GeneratedNamesPropertyTests
             names.Add(
                 name.StartsWith("type ", StringComparison.Ordinal)
                     ? (name[5..], true)
-                    : (name, m.Groups[1].Value.Length > 0)
+                    : (name, m.Groups["type"].Value.Length > 0)
             );
         return names;
     }
 
     [GeneratedRegex(
-        @"^(?:export )?(?:declare )?(?:async )?(type|interface|const|let|function|class) (?!\* )([^\s<=:({]+)",
-        RegexOptions.Multiline
+        @"^(?:export )?(?:declare )?(?:async )?(?<kind>type|interface|const|let|function|class) (?!\* )(?<name>[^\s<=:({]+)",
+        RegexOptions.Multiline | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
     )]
-    private static partial Regex Declaration();
+    private static partial Regex Declaration { get; }
 
-    [GeneratedRegex(@"^(?:import|export)( type)? \{ ([^}]*) \} from", RegexOptions.Multiline)]
-    private static partial Regex ImportOrExport();
+    [GeneratedRegex(
+        @"^(?:import|export)(?<type> type)? \{ (?<names>[^}]*) \} from",
+        RegexOptions.Multiline | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ImportOrExport { get; }
 
     // Compiles a C# client against Trax.Client and everything deployed with the tests.
     private static IEnumerable<Diagnostic> Compile(IReadOnlyList<ClientFile> files) =>

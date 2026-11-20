@@ -105,8 +105,8 @@ public class AwsDeployerTests
         aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
         aws.Existing = new AwsStackState(
             "ROLLBACK_COMPLETE",
-            new Dictionary<string, string>(),
-            new Dictionary<string, string>()
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
         );
 
         var act = () => Deploy(deployer);
@@ -245,7 +245,7 @@ public class AwsDeployerTests
             new(
                 "UPDATE_COMPLETE",
                 Outputs(),
-                new Dictionary<string, string>
+                new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     [AwsStack.ScaleParameter] = "1",
                     [AwsStack.MigrateImageParameter] = "old",
@@ -256,7 +256,7 @@ public class AwsDeployerTests
             );
 
         private static Dictionary<string, string> Outputs() =>
-            new()
+            new(StringComparer.Ordinal)
             {
                 ["ClusterName"] = "orders-production",
                 ["MigrateTaskDefinition"] = "migrate-td",
@@ -290,7 +290,7 @@ public class AwsDeployerTests
                         ?? new AwsStackState(
                             "CREATE_COMPLETE",
                             Outputs(),
-                            new Dictionary<string, string>()
+                            new Dictionary<string, string>(StringComparer.Ordinal)
                         )
                     : Existing
             );
@@ -319,7 +319,7 @@ public class AwsDeployerTests
             Calls.Add("run-task");
             Task = request;
             return System.Threading.Tasks.Task.FromResult(
-                new AwsTaskResult(ExitCode, null, "migrate/migrate/1")
+                new AwsTaskResult(ExitCode, StoppedReason: null, "migrate/migrate/1")
             );
         }
 
@@ -359,7 +359,7 @@ public class AwsDeployerTests
             System.Threading.Tasks.Task.FromResult<IReadOnlyList<AwsSecret>>([
                 .. Secrets
                     .Where(s => s.StartsWith(prefix, StringComparison.Ordinal))
-                    .Select(s => new AwsSecret(s, null)),
+                    .Select(s => new AwsSecret(s, Changed: null)),
             ]);
 
         public Task<IReadOnlyList<AwsServiceState>> DescribeServicesAsync(
@@ -375,7 +375,7 @@ public class AwsDeployerTests
             [EnumeratorCancellation] CancellationToken ct
         )
         {
-            await System.Threading.Tasks.Task.CompletedTask;
+            await System.Threading.Tasks.Task.CompletedTask.ConfigureAwait(false);
             yield break;
         }
     }

@@ -44,7 +44,7 @@ public class ExecutableLookupTests
         // The empty entry and '.' are how a PATH says "the current directory".
         var runner = new NodeRunner(
             "node",
-            name => ExecutableLookup.Resolve(name, ":.:checkout", null, windows: false)
+            name => ExecutableLookup.Resolve(name, ":.:checkout", pathExt: null, windows: false)
         );
 
         runner.IsAvailable().Should().BeFalse("no absolute PATH entry holds a node");
@@ -69,7 +69,7 @@ public class ExecutableLookupTests
 
         var runner = new NodeRunner(
             "node",
-            name => ExecutableLookup.Resolve(name, $".:{bin}", null, windows: false)
+            name => ExecutableLookup.Resolve(name, $".:{bin}", pathExt: null, windows: false)
         );
 
         runner.IsAvailable().Should().BeTrue();
@@ -99,7 +99,7 @@ public class ExecutableLookupTests
         Script(Path.Combine(second, "node"), "exit 0");
 
         ExecutableLookup
-            .Resolve("node", $"{first}:{second}", null, windows: false)
+            .Resolve("node", $"{first}:{second}", pathExt: null, windows: false)
             .Should()
             .Be(Path.Combine(second, "node"));
     }
@@ -111,9 +111,9 @@ public class ExecutableLookupTests
         var node = Path.Combine(_root, "node");
         Script(node, "exit 0");
 
-        ExecutableLookup.Resolve(node, "", null, windows: false).Should().Be(node);
+        ExecutableLookup.Resolve(node, "", pathExt: null, windows: false).Should().Be(node);
         ExecutableLookup
-            .Resolve(Path.Combine(_root, "absent"), "", null, windows: false)
+            .Resolve(Path.Combine(_root, "absent"), "", pathExt: null, windows: false)
             .Should()
             .BeNull();
     }
@@ -125,7 +125,7 @@ public class ExecutableLookupTests
     [TestCase("C:node.exe", true)]
     public void A_relative_path_is_refused(string command, bool windows)
     {
-        var resolve = () => ExecutableLookup.Resolve(command, "/usr/bin", null, windows);
+        var resolve = () => ExecutableLookup.Resolve(command, "/usr/bin", pathExt: null, windows);
 
         resolve
             .Should()
@@ -137,7 +137,7 @@ public class ExecutableLookupTests
     public void A_name_not_on_PATH_is_not_found()
     {
         ExecutableLookup
-            .Resolve("trax-no-such-binary-zzz", _root, null, windows: false)
+            .Resolve("trax-no-such-binary-zzz", _root, pathExt: null, windows: false)
             .Should()
             .BeNull();
     }
@@ -167,7 +167,7 @@ public class ExecutableLookupTests
             .Should()
             .Equal("node.exe", "node.exe.CMD");
         ExecutableLookup
-            .Candidates("node", null, windows: true)
+            .Candidates("node", pathExt: null, windows: true)
             .Should()
             .Equal("node.COM", "node.EXE", "node.BAT", "node.CMD");
         ExecutableLookup.Candidates("node", ".EXE", windows: false).Should().Equal("node");
@@ -214,7 +214,7 @@ public class ExecutableLookupTests
             ExecutableLookup.Resolve(
                 "node",
                 @"C:\nvm",
-                null,
+                pathExt: null,
                 windows: true,
                 Files($@"C:\nvm\{shim}")
             );
@@ -234,7 +234,7 @@ public class ExecutableLookupTests
     public void On_Windows_a_node_option_naming_a_batch_file_is_refused(string node)
     {
         var resolve = () =>
-            ExecutableLookup.Resolve(node, @"C:\nvm", null, windows: true, Files(node));
+            ExecutableLookup.Resolve(node, @"C:\nvm", pathExt: null, windows: true, Files(node));
 
         resolve
             .Should()
@@ -246,7 +246,8 @@ public class ExecutableLookupTests
     [TestCase(@"C:\nodejs\node.ps1")]
     public void On_Windows_an_absolute_node_option_must_be_an_executable_image(string node)
     {
-        var resolve = () => ExecutableLookup.Resolve(node, "", null, windows: true, Files(node));
+        var resolve = () =>
+            ExecutableLookup.Resolve(node, "", pathExt: null, windows: true, Files(node));
 
         resolve
             .Should()
@@ -259,7 +260,10 @@ public class ExecutableLookupTests
     [TestCase(@"\\server\share\node.com")]
     public void On_Windows_an_absolute_executable_is_used_as_given(string node)
     {
-        ExecutableLookup.Resolve(node, "", null, windows: true, Files(node)).Should().Be(node);
+        ExecutableLookup
+            .Resolve(node, "", pathExt: null, windows: true, Files(node))
+            .Should()
+            .Be(node);
     }
 
     [Test]
@@ -284,7 +288,7 @@ public class ExecutableLookupTests
         Script(Path.Combine(_root, "node.cmd"), "exit 0");
 
         ExecutableLookup
-            .Resolve("node.cmd", _root, null, windows: false)
+            .Resolve("node.cmd", _root, pathExt: null, windows: false)
             .Should()
             .Be(Path.Combine(_root, "node.cmd"));
     }

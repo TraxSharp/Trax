@@ -95,7 +95,8 @@ public class MachineScaffolderTests
     {
         MachineScaffolder.Write("checkout", _dir, "MyApp", withEffect: false, force: false);
 
-        var write = () => MachineScaffolder.Write("checkout", _dir, "MyApp", false, force: false);
+        var write = () =>
+            MachineScaffolder.Write("checkout", _dir, "MyApp", withEffect: false, force: false);
 
         write.Should().Throw<InvalidOperationException>().WithMessage("*already exists*--force*");
     }
@@ -103,10 +104,16 @@ public class MachineScaffolderTests
     [Test]
     public void Write_overwrites_with_force()
     {
-        var path = MachineScaffolder.Write("checkout", _dir, "MyApp", false, force: false);
+        var path = MachineScaffolder.Write(
+            "checkout",
+            _dir,
+            "MyApp",
+            withEffect: false,
+            force: false
+        );
         File.WriteAllText(path, "// clobbered");
 
-        MachineScaffolder.Write("checkout", _dir, "MyApp", false, force: true);
+        MachineScaffolder.Write("checkout", _dir, "MyApp", withEffect: false, force: true);
 
         File.ReadAllText(path).Should().Contain("public sealed class CheckoutMachine");
     }
@@ -114,7 +121,8 @@ public class MachineScaffolderTests
     [Test]
     public void Write_rejects_an_empty_name()
     {
-        var write = () => MachineScaffolder.Write("   ", _dir, "MyApp", false, false);
+        var write = () =>
+            MachineScaffolder.Write("   ", _dir, "MyApp", withEffect: false, force: false);
 
         write.Should().Throw<InvalidOperationException>().WithMessage("*name is required*");
     }
@@ -124,7 +132,8 @@ public class MachineScaffolderTests
     [TestCase("1checkout")]
     public void Write_rejects_a_name_that_does_not_make_an_identifier(string name)
     {
-        var write = () => MachineScaffolder.Write(name, _dir, "MyApp", false, false);
+        var write = () =>
+            MachineScaffolder.Write(name, _dir, "MyApp", withEffect: false, force: false);
 
         write.Should().Throw<InvalidOperationException>().WithMessage("*machine name*");
         Directory.EnumerateFiles(_dir).Should().BeEmpty();
@@ -135,7 +144,8 @@ public class MachineScaffolderTests
     [TestCase("MyApp.")]
     public void Write_rejects_a_namespace_that_is_not_a_dotted_identifier(string @namespace)
     {
-        var write = () => MachineScaffolder.Write("checkout", _dir, @namespace, false, false);
+        var write = () =>
+            MachineScaffolder.Write("checkout", _dir, @namespace, withEffect: false, force: false);
 
         write.Should().Throw<InvalidOperationException>().WithMessage("*namespace*");
     }
@@ -183,7 +193,7 @@ public class MachineScaffolderTests
             .ToList();
         errors
             .Should()
-            .BeEmpty(because: "the scaffold must compile:\n" + string.Join("\n", errors));
+            .BeEmpty(because: "the scaffold must compile:\n" + string.Join('\n', errors));
     }
 
     // Referenced so the Trax.StateMachine.Persistence assembly is copied to the test output for the

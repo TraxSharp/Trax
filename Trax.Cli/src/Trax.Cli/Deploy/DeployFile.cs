@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -22,6 +23,8 @@ internal sealed partial class DeployFile
         WriteIndented = true,
         ReadCommentHandling = JsonCommentHandling.Skip,
         AllowTrailingCommas = true,
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
     };
 
     public int Version { get; set; } = CurrentVersion;
@@ -59,7 +62,7 @@ internal sealed partial class DeployFile
                     : $"{FileName} has no environment '{name}'. It has: {string.Join(", ", Environments.Keys)}."
             );
         string Problem(string what) => $"Environment '{name}': {what}";
-        if (!Name().IsMatch(name))
+        if (!Name.IsMatch(name))
             throw new InvalidOperationException(
                 Problem(
                     "its name must be lower case, a letter first, then letters, digits or dashes."
@@ -71,14 +74,20 @@ internal sealed partial class DeployFile
             );
         if (string.IsNullOrWhiteSpace(env.Region))
             throw new InvalidOperationException(Problem("it names no region (us-west-2)."));
-        if (env.Profile == DeployEnvironment.Production && string.IsNullOrWhiteSpace(env.Domain))
+        if (
+            string.Equals(env.Profile, DeployEnvironment.Production, StringComparison.Ordinal)
+            && string.IsNullOrWhiteSpace(env.Domain)
+        )
             throw new InvalidOperationException(
                 Problem(
                     "the production profile needs a domain: HTTPS needs a certificate, and a certificate needs a "
                         + "domain. Name one, or use the try profile, which serves on a CloudFront address."
                 )
             );
-        if (env.Profile == DeployEnvironment.Try && env.Domain is not null)
+        if (
+            string.Equals(env.Profile, DeployEnvironment.Try, StringComparison.Ordinal)
+            && env.Domain is not null
+        )
             throw new InvalidOperationException(
                 Problem("the try profile serves on a CloudFront address and takes no domain.")
             );
@@ -120,7 +129,10 @@ internal sealed partial class DeployFile
                     $"settings gives {string.Join(", ", unknown)}, which the app does not list under \"settings\"."
                 )
             );
-        if (env.Auth is { } a && a.Kind != DeployAuth.Cognito)
+        if (
+            env.Auth is { } a
+            && !string.Equals(a.Kind, DeployAuth.Cognito, StringComparison.Ordinal)
+        )
             throw new InvalidOperationException(
                 Problem(
                     $"auth kind '{a.Kind}' is not one trax creates. Use cognito, or leave auth out and give an "
@@ -171,10 +183,13 @@ internal sealed partial class DeployFile
         if (Version != CurrentVersion)
             throw new InvalidOperationException(
                 Problem(
-                    $"version {Version} is not one this trax reads ({CurrentVersion}). Update the trax tool."
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"version {Version} is not one this trax reads ({CurrentVersion}). Update the trax tool."
+                    )
                 )
             );
-        if (!Name().IsMatch(App))
+        if (!Name.IsMatch(App))
             throw new InvalidOperationException(
                 Problem(
                     $"app '{App}' must be lower case, start with a letter and hold only letters, digits and dashes."
@@ -187,7 +202,7 @@ internal sealed partial class DeployFile
         var dir = Path.GetDirectoryName(Path.GetFullPath(path))!;
         foreach (var (name, service) in Services)
         {
-            if (!Name().IsMatch(name) || name is "database" or "rabbitmq" or "migrate")
+            if (!Name.IsMatch(name) || name is "database" or "rabbitmq" or "migrate")
                 throw new InvalidOperationException(
                     Problem(
                         $"service '{name}' must be lower case, start with a letter, hold only letters, digits and "
@@ -202,7 +217,12 @@ internal sealed partial class DeployFile
                 );
             if (service.Port is < 1 or > 65535)
                 throw new InvalidOperationException(
-                    Problem($"service '{name}' has port {service.Port}, which is not a TCP port.")
+                    Problem(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"service '{name}' has port {service.Port}, which is not a TCP port."
+                        )
+                    )
                 );
             if (service.Count < 1)
                 throw new InvalidOperationException(
@@ -210,7 +230,7 @@ internal sealed partial class DeployFile
                 );
         }
         foreach (var setting in Settings.Concat(Secrets))
-            if (!Variable().IsMatch(setting))
+            if (!Variable.IsMatch(setting))
                 throw new InvalidOperationException(
                     Problem(
                         $"'{setting}' is not an environment name: use letters, digits and underscores, and __ for "
@@ -223,7 +243,7 @@ internal sealed partial class DeployFile
                 Problem($"'{both[0]}' is listed as both a setting and a secret.")
             );
         foreach (var connection in new[] { ConnectionStrings.Trax, ConnectionStrings.RabbitMq })
-            if (!Variable().IsMatch(connection))
+            if (!Variable.IsMatch(connection))
                 throw new InvalidOperationException(
                     Problem($"connection string name '{connection}' is not a configuration key.")
                 );
@@ -235,11 +255,11 @@ internal sealed partial class DeployFile
             Path.Combine(Path.GetDirectoryName(Path.GetFullPath(deployFilePath))!, service.Project)
         );
 
-    [GeneratedRegex("^[a-z][a-z0-9-]*$")]
-    internal static partial Regex Name();
+    [GeneratedRegex("^[a-z][a-z0-9-]*$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    internal static partial Regex Name { get; }
 
-    [GeneratedRegex("^[A-Za-z_][A-Za-z0-9_]*$")]
-    private static partial Regex Variable();
+    [GeneratedRegex("^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Variable { get; }
 }
 
 /// <summary>One cloud environment: a stack of its own.</summary>

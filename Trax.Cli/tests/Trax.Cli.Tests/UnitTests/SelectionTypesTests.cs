@@ -93,7 +93,9 @@ public class SelectionTypesTests
     public void No_output_type_is_declared_per_model()
     {
         var files = Render("Order!", "findOrder(input: $input) { title }");
-        var types = files.Single(f => f.Path == "types.g.ts").Text;
+        var types = files
+            .Single(f => string.Equals(f.Path, "types.g.ts", StringComparison.Ordinal))
+            .Text;
 
         types
             .Should()
@@ -256,7 +258,9 @@ public class SelectionTypesTests
         var files = new ClientGenerator(new FakeNodeRunner()).Render(
             new ClientGenerateOptions(ClientManifests.Sample() with { Machines = [] })
         );
-        var progress = files.Single(f => f.Path == "progress.g.ts").Text;
+        var progress = files
+            .Single(f => string.Equals(f.Path, "progress.g.ts", StringComparison.Ordinal))
+            .Text;
 
         progress
             .Should()
@@ -266,17 +270,21 @@ public class SelectionTypesTests
             .And.Contain("export type RunProgressEvent = {")
             .And.Contain("  sequence: number;");
         files
-            .Single(f => f.Path == "index.g.ts")
+            .Single(f => string.Equals(f.Path, "index.g.ts", StringComparison.Ordinal))
             .Text.Should()
             .Contain("type RunProgress, type RunProgressEvent, type RunProgressView");
         files
-            .Single(f => f.Path == "types.g.ts")
+            .Single(f => string.Equals(f.Path, "types.g.ts", StringComparison.Ordinal))
             .Text.Should()
             .NotContain("JunctionStep", "an answer's object types are not declared per model");
     }
 
     private static string Train(string answer, string selection) =>
-        Render(answer, selection).Single(f => f.Path == "documents/findOrder.g.ts").Text;
+        Render(answer, selection)
+            .Single(f =>
+                string.Equals(f.Path, "documents/findOrder.g.ts", StringComparison.Ordinal)
+            )
+            .Text;
 
     private static IReadOnlyList<ClientFile> Render(string answer, string selection) =>
         new ClientGenerator(new FakeNodeRunner()).Render(

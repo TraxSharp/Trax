@@ -172,7 +172,8 @@ public class MachineGeneratorPlacementTests
     }
 
     private static bool IsTwinSwap(string source, string destination) =>
-        source.EndsWith(".tmp") && destination.EndsWith("turnstile.machine.g.ts");
+        source.EndsWith(".tmp", StringComparison.Ordinal)
+        && destination.EndsWith("turnstile.machine.g.ts", StringComparison.Ordinal);
 
     [Test]
     public void Generate_that_fails_with_any_exception_while_swapping_still_puts_everything_back()
@@ -212,7 +213,10 @@ public class MachineGeneratorPlacementTests
         {
             FailMove = (source, destination) =>
                 IsTwinSwap(source, destination)
-                || (source.EndsWith(".bak") && destination == committedIr),
+                || (
+                    source.EndsWith(".bak", StringComparison.Ordinal)
+                    && string.Equals(destination, committedIr, StringComparison.Ordinal)
+                ),
         };
 
         var act = () =>

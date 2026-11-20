@@ -55,7 +55,9 @@ public class MachineCommandTests
                 "diagram",
             ]);
 
-        var generate = command.Subcommands.Single(c => c.Name == "generate");
+        var generate = command.Subcommands.Single(c =>
+            string.Equals(c.Name, "generate", StringComparison.Ordinal)
+        );
         generate
             .Options.Select(o => o.Name)
             .Should()
@@ -73,12 +75,12 @@ public class MachineCommandTests
                 ThisAssembly,
                 TurnstileName,
                 irOut,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
+                twinOut: null,
+                corpusOut: null,
+                engineSrc: null,
+                importStyle: null,
+                specifier: null,
+                toolsDir: null,
                 new FakeNodeRunner()
             )
         );
@@ -98,12 +100,12 @@ public class MachineCommandTests
                 ThisAssembly,
                 TurnstileName,
                 Path.Combine(_tempDir, "ir"),
-                null,
-                null,
-                null,
+                twinOut: null,
+                corpusOut: null,
+                engineSrc: null,
                 "package",
-                null,
-                null,
+                specifier: null,
+                toolsDir: null,
                 new FakeNodeRunner()
             );
         });
@@ -120,14 +122,14 @@ public class MachineCommandTests
         {
             exit = MachineCommand.RunGenerate(
                 Path.Combine(_tempDir, "missing.dll"),
-                null,
+                machineName: null,
                 Path.Combine(_tempDir, "ir"),
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
+                twinOut: null,
+                corpusOut: null,
+                engineSrc: null,
+                importStyle: null,
+                specifier: null,
+                toolsDir: null,
                 new FakeNodeRunner()
             );
         });
@@ -152,12 +154,12 @@ public class MachineCommandTests
                 ThisAssembly,
                 TurnstileName,
                 irOut,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
+                twinOut: null,
+                corpusOut: null,
+                engineSrc: null,
+                importStyle: null,
+                specifier: null,
+                toolsDir: null,
                 new FakeNodeRunner()
             )
         );
@@ -180,12 +182,12 @@ public class MachineCommandTests
                 ThisAssembly,
                 TurnstileName,
                 irOut,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
+                twinOut: null,
+                corpusOut: null,
+                engineSrc: null,
+                importStyle: null,
+                specifier: null,
+                toolsDir: null,
                 new FakeNodeRunner()
             );
         });
@@ -202,14 +204,14 @@ public class MachineCommandTests
         {
             exit = MachineCommand.RunCheck(
                 Path.Combine(_tempDir, "missing.dll"),
-                null,
+                machineName: null,
                 Path.Combine(_tempDir, "ir"),
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
+                twinOut: null,
+                corpusOut: null,
+                engineSrc: null,
+                importStyle: null,
+                specifier: null,
+                toolsDir: null,
                 new FakeNodeRunner()
             );
         });
@@ -251,7 +253,13 @@ public class MachineCommandTests
     {
         var exit = 99;
         var stdout = CaptureOut(() =>
-            exit = MachineCommand.RunNew("checkout", _tempDir, "MyApp.Machines", false, false)
+            exit = MachineCommand.RunNew(
+                "checkout",
+                _tempDir,
+                "MyApp.Machines",
+                withEffect: false,
+                force: false
+            )
         );
 
         exit.Should().Be(0);
@@ -263,7 +271,13 @@ public class MachineCommandTests
     public void New_names_the_package_and_the_prerequisites_of_generate()
     {
         var stdout = CaptureOut(() =>
-            MachineCommand.RunNew("checkout", _tempDir, "MyApp.Machines", false, false)
+            MachineCommand.RunNew(
+                "checkout",
+                _tempDir,
+                "MyApp.Machines",
+                withEffect: false,
+                force: false
+            )
         );
 
         stdout.Should().Contain("dotnet add package Trax.StateMachine.Persistence --version ");
@@ -273,12 +287,18 @@ public class MachineCommandTests
     [Test]
     public void New_returns_one_when_the_file_exists_without_force()
     {
-        MachineCommand.RunNew("checkout", _tempDir, "MyApp", false, false);
+        MachineCommand.RunNew("checkout", _tempDir, "MyApp", withEffect: false, force: false);
 
         var exit = 0;
         var stderr = CaptureErr(() =>
         {
-            exit = MachineCommand.RunNew("checkout", _tempDir, "MyApp", false, false);
+            exit = MachineCommand.RunNew(
+                "checkout",
+                _tempDir,
+                "MyApp",
+                withEffect: false,
+                force: false
+            );
         });
 
         exit.Should().Be(1);

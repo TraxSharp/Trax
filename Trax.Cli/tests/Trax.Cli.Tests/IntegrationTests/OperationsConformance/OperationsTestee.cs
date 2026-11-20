@@ -15,7 +15,7 @@ namespace Trax.Cli.Tests.IntegrationTests.OperationsConformance;
 /// </summary>
 internal sealed class OperationsTestee : IAsyncDisposable
 {
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private TraxClient? _client;
     private HttpClient? _http;
     private GraphQLSubscriptionSocket? _socket;
@@ -32,13 +32,14 @@ internal sealed class OperationsTestee : IAsyncDisposable
         {
             answer = request["op"]!.GetValue<string>() switch
             {
-                "open" => await OpenAsync(request),
-                "send" => await SendAsync(request),
+                "open" => await OpenAsync(request).ConfigureAwait(false),
+                "send" => await SendAsync(request).ConfigureAwait(false),
                 "subscribe" => Subscribe(request),
                 "events" => Events(),
                 "unsubscribe" => Unsubscribe(),
-                "dispose" => await CloseAsync(new JsonObject { ["disposed"] = true }),
-                "end" => await CloseAsync([]),
+                "dispose" => await CloseAsync(new JsonObject { ["disposed"] = true })
+                    .ConfigureAwait(false),
+                "end" => await CloseAsync([]).ConfigureAwait(false),
                 _ => new JsonObject { ["unsupported"] = true },
             };
         }
@@ -52,7 +53,7 @@ internal sealed class OperationsTestee : IAsyncDisposable
 
     private async Task<JsonObject> OpenAsync(JsonObject request)
     {
-        await CloseAsync([]);
+        await CloseAsync([]).ConfigureAwait(false);
         var http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false });
         if (request["requestTimeout"] is { } timeout)
             http.Timeout = TimeSpan.FromMilliseconds(timeout.GetValue<int>());
@@ -113,7 +114,7 @@ internal sealed class OperationsTestee : IAsyncDisposable
 
     private static async Task<JsonObject> Answer<T>(Task<TraxAnswer<T>> sending)
     {
-        var answer = await sending;
+        var answer = await sending.ConfigureAwait(false);
         if (answer.Failure is { } failure)
             return new JsonObject
             {
@@ -185,7 +186,7 @@ internal sealed class OperationsTestee : IAsyncDisposable
         Unsubscribe();
         _client = null;
         if (_socket is { } socket)
-            await socket.DisposeAsync();
+            await socket.DisposeAsync().ConfigureAwait(false);
         _socket = null;
         _http?.Dispose();
         _http = null;
@@ -199,5 +200,5 @@ internal sealed class OperationsTestee : IAsyncDisposable
     private static JsonNode? Write<T>(T value) =>
         JsonSerializer.SerializeToNode(value, TraxJson.Options);
 
-    public async ValueTask DisposeAsync() => await CloseAsync([]);
+    public async ValueTask DisposeAsync() => await CloseAsync([]).ConfigureAwait(false);
 }

@@ -49,7 +49,7 @@ public class GenerateForceTests
                 SchemaFile(),
                 new DirectoryInfo(output),
                 "Proj",
-                null,
+                type: null,
                 force: true,
                 new TraxProjectGenerator(FailingScaffold)
             )

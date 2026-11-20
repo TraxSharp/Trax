@@ -120,7 +120,11 @@ public class MachineExplainTests
     {
         File.WriteAllText(
             Path.Combine(Features, "glossary.json"),
-            Glossary.Replace("\"roles\": [\"baker\"]", "\"roles\": [\"baker\", \"staff\"]")
+            Glossary.Replace(
+                "\"roles\": [\"baker\"]",
+                "\"roles\": [\"baker\", \"staff\"]",
+                StringComparison.Ordinal
+            )
         );
 
         var (exit, output, err) = Run();

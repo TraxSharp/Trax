@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Globalization;
 using System.Text;
 using Trax.StateMachine.Gherkin;
 using Trax.StateMachine.Gherkin.Lexical;
@@ -117,11 +118,22 @@ internal static class LexiconCommand
             if (formatted is null)
             {
                 foreach (var problem in problems)
-                    stderr.WriteLine($"{file}:{problem.Line}: {problem.Message}");
+                    stderr.WriteLine(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{file}:{problem.Line}: {problem.Message}"
+                        )
+                    );
                 failed = true;
                 continue;
             }
-            if (formatted == text.Replace("\r\n", "\n", StringComparison.Ordinal))
+            if (
+                string.Equals(
+                    formatted,
+                    text.Replace("\r\n", "\n", StringComparison.Ordinal),
+                    StringComparison.Ordinal
+                )
+            )
                 continue;
             if (check)
             {
@@ -131,7 +143,11 @@ internal static class LexiconCommand
             }
             try
             {
-                File.WriteAllText(file, formatted, new UTF8Encoding(false));
+                File.WriteAllText(
+                    file,
+                    formatted,
+                    new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
+                );
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {

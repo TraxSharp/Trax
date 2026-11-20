@@ -1,3 +1,4 @@
+using System.Globalization;
 using GraphQLParser;
 using GraphQLParser.AST;
 using GraphQLParser.Exceptions;
@@ -22,7 +23,7 @@ public class GraphQLSchemaParser : ISchemaParser
         ["Decimal"] = "decimal",
     };
 
-    private static readonly HashSet<string> BuiltInTypes = new()
+    private static readonly HashSet<string> BuiltInTypes = new(StringComparer.Ordinal)
     {
         "__Schema",
         "__Type",
@@ -47,9 +48,15 @@ public class GraphQLSchemaParser : ISchemaParser
         var schema = new ApiSchema { SourceFile = filePath, SchemaType = "graphql" };
 
         // Collect all type definitions first for reference resolution
-        var typeDefinitions = new Dictionary<string, GraphQLObjectTypeDefinition>();
-        var inputDefinitions = new Dictionary<string, GraphQLInputObjectTypeDefinition>();
-        var enumDefinitions = new Dictionary<string, GraphQLEnumTypeDefinition>();
+        var typeDefinitions = new Dictionary<string, GraphQLObjectTypeDefinition>(
+            StringComparer.Ordinal
+        );
+        var inputDefinitions = new Dictionary<string, GraphQLInputObjectTypeDefinition>(
+            StringComparer.Ordinal
+        );
+        var enumDefinitions = new Dictionary<string, GraphQLEnumTypeDefinition>(
+            StringComparer.Ordinal
+        );
 
         string? queryTypeName = "Query";
         string? mutationTypeName = "Mutation";
@@ -179,7 +186,7 @@ public class GraphQLSchemaParser : ISchemaParser
             }
         );
 
-        foreach (var kind in skipped.Distinct())
+        foreach (var kind in skipped.Distinct(StringComparer.Ordinal))
             Console.WriteLine($"Warning: {kind} definitions are not supported and were skipped.");
 
         // Parse enums
@@ -197,7 +204,7 @@ public class GraphQLSchemaParser : ISchemaParser
         }
 
         // Collect shared types (non-Query/Mutation/Subscription object types)
-        var reservedTypeNames = new HashSet<string>
+        var reservedTypeNames = new HashSet<string>(StringComparer.Ordinal)
         {
             queryTypeName!,
             mutationTypeName!,
@@ -302,7 +309,10 @@ public class GraphQLSchemaParser : ISchemaParser
         {
             throw new InvalidOperationException(
                 $"{filePath} is not valid GraphQL SDL: {ex.Description} "
-                    + $"(line {ex.Location.Line}, column {ex.Location.Column}).",
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"(line {ex.Location.Line}, column {ex.Location.Column})."
+                    ),
                 ex
             );
         }
@@ -448,7 +458,7 @@ public class GraphQLSchemaParser : ISchemaParser
                         Name = "Value",
                         TypeName = csharpType,
                         IsRequired = true,
-                        Description = Describe(null, graphqlType),
+                        Description = Describe(description: null, graphqlType),
                     },
                 ],
                 IsBuiltIn = false,

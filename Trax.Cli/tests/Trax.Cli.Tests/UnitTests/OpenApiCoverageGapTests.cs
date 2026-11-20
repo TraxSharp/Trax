@@ -35,19 +35,25 @@ public class OpenApiCoverageGapTests
         var parser = new OpenApiSchemaParser();
         var schema = parser.Parse(FixturePath("inline-response-object.json"));
 
-        var listOp = schema.Operations.Single(o => o.Name == "ListWidgets");
+        var listOp = schema.Operations.Single(o =>
+            string.Equals(o.Name, "ListWidgets", StringComparison.Ordinal)
+        );
         listOp.OutputType.Should().NotBeNull();
         listOp.OutputType!.Name.Should().Be("ListWidgetsOutput");
         listOp.OutputType.Fields.Should().Contain(f => f.Name == "Count");
         listOp.OutputType.Fields.Should().Contain(f => f.Name == "Label");
 
         // No content => Unit output
-        var noContentOp = schema.Operations.Single(o => o.Name == "NoContent");
+        var noContentOp = schema.Operations.Single(o =>
+            string.Equals(o.Name, "NoContent", StringComparison.Ordinal)
+        );
         noContentOp.OutputType!.Name.Should().Be("Unit");
         noContentOp.OutputType.IsBuiltIn.Should().BeTrue();
 
         // Non-JSON (binary) => Unit output
-        var binaryOp = schema.Operations.Single(o => o.Name == "BinaryDownload");
+        var binaryOp = schema.Operations.Single(o =>
+            string.Equals(o.Name, "BinaryDownload", StringComparison.Ordinal)
+        );
         binaryOp.OutputType!.Name.Should().Be("Unit");
         binaryOp.OutputType.IsBuiltIn.Should().BeTrue();
     }
@@ -58,7 +64,9 @@ public class OpenApiCoverageGapTests
         var parser = new OpenApiSchemaParser();
         var schema = parser.Parse(FixturePath("refbody-input.json"));
 
-        var op = schema.Operations.Single(o => o.Name == "CreateThing");
+        var op = schema.Operations.Single(o =>
+            string.Equals(o.Name, "CreateThing", StringComparison.Ordinal)
+        );
         op.InputType.Should().NotBeNull();
         op.InputType!.Fields.Should().Contain(f => f.Name == "Name");
         op.InputType.Fields.Should().Contain(f => f.Name == "Color");

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.OpenApi.Models;
 using Microsoft.OpenApi.Readers;
 using Microsoft.OpenApi.Readers.Exceptions;
@@ -13,8 +14,8 @@ public partial class OpenApiSchemaParser : ISchemaParser
         "GET",
     };
 
-    private readonly Dictionary<string, ApiType> _resolvedTypes = new();
-    private readonly Dictionary<string, ApiEnum> _resolvedEnums = new();
+    private readonly Dictionary<string, ApiType> _resolvedTypes = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ApiEnum> _resolvedEnums = new(StringComparer.Ordinal);
 
     // Names the parser invents (promoted inline objects and enums) are made unique against these, and
     // component names are claimed up front, so an invented name never takes a component's. Ignoring
@@ -126,14 +127,21 @@ public partial class OpenApiSchemaParser : ISchemaParser
                 if (
                     componentSchema.Enum != null
                     && componentSchema.Enum.Count > 0
-                    && componentSchema.Type == "string"
+                    && string.Equals(componentSchema.Type, "string", StringComparison.Ordinal)
                 )
                 {
                     var apiEnum = ResolveEnum(name, componentSchema, rawName);
-                    if (!schema.Enums.Any(e => e.Name == apiEnum.Name))
+                    if (
+                        !schema.Enums.Any(e =>
+                            string.Equals(e.Name, apiEnum.Name, StringComparison.Ordinal)
+                        )
+                    )
                         schema.Enums.Add(apiEnum);
                 }
-                else if (componentSchema.Type == "array" && componentSchema.Items != null)
+                else if (
+                    string.Equals(componentSchema.Type, "array", StringComparison.Ordinal)
+                    && componentSchema.Items != null
+                )
                 {
                     // Array-type component schemas become wrapper types with an Items field
                     var pascalName = NamingConventions.ToPascalCase(name);
@@ -157,13 +165,22 @@ public partial class OpenApiSchemaParser : ISchemaParser
                         SourceName = rawName,
                     };
                     _resolvedTypes[pascalName] = apiType;
-                    if (!schema.Types.Any(t => t.Name == apiType.Name))
+                    if (
+                        !schema.Types.Any(t =>
+                            string.Equals(t.Name, apiType.Name, StringComparison.Ordinal)
+                        )
+                    )
                         schema.Types.Add(apiType);
                 }
                 else
                 {
                     var apiType = ResolveSchemaType(name, componentSchema, rawName);
-                    if (!apiType.IsBuiltIn && !schema.Types.Any(t => t.Name == apiType.Name))
+                    if (
+                        !apiType.IsBuiltIn
+                        && !schema.Types.Any(t =>
+                            string.Equals(t.Name, apiType.Name, StringComparison.Ordinal)
+                        )
+                    )
                         schema.Types.Add(apiType);
                 }
             }
@@ -203,10 +220,10 @@ public partial class OpenApiSchemaParser : ISchemaParser
 
         // Find stripped names that appear more than once — these need their prefix kept
         var strippedNameCounts = rawOperations
-            .GroupBy(o => o.strippedName)
-            .Where(g => g.Count() > 1)
+            .GroupBy(o => o.strippedName, StringComparer.Ordinal)
+            .Where(g => g.Skip(1).Any())
             .Select(g => g.Key)
-            .ToHashSet();
+            .ToHashSet(StringComparer.Ordinal);
 
         foreach (var raw in rawOperations)
         {
@@ -235,14 +252,23 @@ public partial class OpenApiSchemaParser : ISchemaParser
         // Add any enums discovered during type resolution
         foreach (var apiEnum in _resolvedEnums.Values)
         {
-            if (!schema.Enums.Any(e => e.Name == apiEnum.Name))
+            if (
+                !schema.Enums.Any(e =>
+                    string.Equals(e.Name, apiEnum.Name, StringComparison.Ordinal)
+                )
+            )
                 schema.Enums.Add(apiEnum);
         }
 
         // Add any types discovered during type resolution
         foreach (var apiType in _resolvedTypes.Values)
         {
-            if (!apiType.IsBuiltIn && !schema.Types.Any(t => t.Name == apiType.Name))
+            if (
+                !apiType.IsBuiltIn
+                && !schema.Types.Any(t =>
+                    string.Equals(t.Name, apiType.Name, StringComparison.Ordinal)
+                )
+            )
                 schema.Types.Add(apiType);
         }
 
@@ -278,7 +304,10 @@ public partial class OpenApiSchemaParser : ISchemaParser
         OpenApiSchema componentSchema
     )
     {
-        if (componentSchema.Enum is { Count: > 0 } && componentSchema.Type == "string")
+        if (
+            componentSchema.Enum is { Count: > 0 }
+            && string.Equals(componentSchema.Type, "string", StringComparison.Ordinal)
+        )
             schema.Enums.Add(
                 new ApiEnum
                 {
@@ -310,7 +339,7 @@ public partial class OpenApiSchemaParser : ISchemaParser
 
             // If stripping would collide with a known type/enum name, keep the original
             if (
-                stripped != pascal
+                !string.Equals(stripped, pascal, StringComparison.Ordinal)
                 && (_resolvedTypes.ContainsKey(stripped) || _resolvedEnums.ContainsKey(stripped))
             )
                 return (pascal, pascal);
@@ -366,7 +395,7 @@ public partial class OpenApiSchemaParser : ISchemaParser
         // Path and query parameters (from both path item and operation)
         var allParams = (pathItem.Parameters ?? [])
             .Concat(operation.Parameters ?? [])
-            .DistinctBy(p => p.Name);
+            .DistinctBy(p => p.Name, StringComparer.Ordinal);
 
         foreach (var param in allParams)
         {
@@ -478,17 +507,22 @@ public partial class OpenApiSchemaParser : ISchemaParser
         foreach (
             var source in new[] { body }.Concat(body.Reference == null ? body.AllOf ?? [] : [])
         )
-        foreach (var property in source.Properties ?? new Dictionary<string, OpenApiSchema>())
+        foreach (
+            var property in source.Properties
+                ?? new Dictionary<string, OpenApiSchema>(StringComparer.Ordinal)
+        )
             if (seen.Add(property.Key))
                 properties.Add(property);
         return properties;
     }
 
     private static HashSet<string> BodyRequired(OpenApiSchema body) =>
-        (body.Required ?? new HashSet<string>())
+        (body.Required ?? new HashSet<string>(StringComparer.Ordinal))
             .Concat(
                 body.Reference == null
-                    ? (body.AllOf ?? []).SelectMany(a => a.Required ?? new HashSet<string>())
+                    ? (body.AllOf ?? []).SelectMany(a =>
+                        a.Required ?? new HashSet<string>(StringComparer.Ordinal)
+                    )
                     : []
             )
             .ToHashSet(StringComparer.Ordinal);
@@ -619,7 +653,10 @@ public partial class OpenApiSchemaParser : ISchemaParser
         }
 
         // Array response
-        if (responseSchema.Type == "array" && responseSchema.Items != null)
+        if (
+            string.Equals(responseSchema.Type, "array", StringComparison.Ordinal)
+            && responseSchema.Items != null
+        )
         {
             var itemTypeName = ResolveOpenApiType(responseSchema.Items, operationName + "Item");
 
@@ -643,7 +680,8 @@ public partial class OpenApiSchemaParser : ISchemaParser
         if (responseSchema.Properties is { Count: > 0 })
         {
             var fields = new List<ApiField>();
-            var requiredProps = responseSchema.Required ?? new HashSet<string>();
+            var requiredProps =
+                responseSchema.Required ?? new HashSet<string>(StringComparer.Ordinal);
             foreach (var (propName, propSchema) in responseSchema.Properties)
             {
                 fields.Add(
@@ -706,7 +744,10 @@ public partial class OpenApiSchemaParser : ISchemaParser
         }
 
         // Enum
-        if (schema.Enum is { Count: > 0 } && schema.Type == "string")
+        if (
+            schema.Enum is { Count: > 0 }
+            && string.Equals(schema.Type, "string", StringComparison.Ordinal)
+        )
         {
             return ResolveInlineEnum(
                 NamingConventions.ToPascalCase(schema.Title ?? contextName ?? "UnnamedEnum"),
@@ -769,15 +810,20 @@ public partial class OpenApiSchemaParser : ISchemaParser
     private static string? MapPrimitive(OpenApiSchema schema) =>
         schema.Type switch
         {
-            "string" when schema.Format == "date-time" => "DateTime",
-            "string" when schema.Format == "date" => "DateOnly",
-            "string" when schema.Format == "uuid" => "Guid",
-            "string" when schema.Format == "uri" => "Uri",
-            "string" when schema.Format == "binary" => "byte[]",
+            "string" when string.Equals(schema.Format, "date-time", StringComparison.Ordinal) =>
+                "DateTime",
+            "string" when string.Equals(schema.Format, "date", StringComparison.Ordinal) =>
+                "DateOnly",
+            "string" when string.Equals(schema.Format, "uuid", StringComparison.Ordinal) => "Guid",
+            "string" when string.Equals(schema.Format, "uri", StringComparison.Ordinal) => "Uri",
+            "string" when string.Equals(schema.Format, "binary", StringComparison.Ordinal) =>
+                "byte[]",
             "string" => "string",
-            "integer" when schema.Format == "int64" => "long",
+            "integer" when string.Equals(schema.Format, "int64", StringComparison.Ordinal) =>
+                "long",
             "integer" => "int",
-            "number" when schema.Format == "float" => "float",
+            "number" when string.Equals(schema.Format, "float", StringComparison.Ordinal) =>
+                "float",
             "number" => "double",
             "boolean" => "bool",
             _ => null,
@@ -792,7 +838,10 @@ public partial class OpenApiSchemaParser : ISchemaParser
         || schema.AllOf is { Count: > 0 }
         || schema.OneOf is { Count: > 0 }
         || schema.AnyOf is { Count: > 0 }
-        || (schema.Type == "string" && schema.Enum is { Count: > 0 })
+        || (
+            string.Equals(schema.Type, "string", StringComparison.Ordinal)
+            && schema.Enum is { Count: > 0 }
+        )
             ? null
             : MapPrimitive(schema);
 
@@ -806,7 +855,8 @@ public partial class OpenApiSchemaParser : ISchemaParser
         var values = EnumValues(baseName, schema);
         for (var n = 1; ; n++)
         {
-            var candidate = n == 1 ? baseName : $"{baseName}{n}";
+            var candidate =
+                n == 1 ? baseName : string.Create(CultureInfo.InvariantCulture, $"{baseName}{n}");
             if (
                 _resolvedEnums.TryGetValue(candidate, out var existing)
                 && !_componentNames.Contains(candidate)
@@ -835,7 +885,7 @@ public partial class OpenApiSchemaParser : ISchemaParser
                     ? s.Value
                     : throw new InvalidOperationException(
                         $"The string enum '{name}' has a value that is not a string (found "
-                            + $"{e.GetType().Name.Replace("OpenApi", "").ToLowerInvariant()}). Make every "
+                            + $"{e.GetType().Name.Replace("OpenApi", "", StringComparison.Ordinal).ToLowerInvariant()}). Make every "
                             + "value a string."
                     )
             )
@@ -869,10 +919,11 @@ public partial class OpenApiSchemaParser : ISchemaParser
             return existing;
 
         var fields = new List<ApiField>();
-        var requiredProps = schema.Required ?? new HashSet<string>();
+        var requiredProps = schema.Required ?? new HashSet<string>(StringComparer.Ordinal);
 
         // Handle allOf by merging
-        var propertiesToProcess = schema.Properties ?? new Dictionary<string, OpenApiSchema>();
+        var propertiesToProcess =
+            schema.Properties ?? new Dictionary<string, OpenApiSchema>(StringComparer.Ordinal);
         if (schema.AllOf is { Count: > 0 })
         {
             foreach (var allOfSchema in schema.AllOf)
@@ -928,20 +979,21 @@ public partial class OpenApiSchemaParser : ISchemaParser
     /// generic, never a model.
     /// </summary>
     private static string ReplaceEmptyTypeRefs(string typeName, HashSet<string> emptyTypeNames) =>
-        TypeNameIdentifier()
-            .Replace(
-                typeName,
-                m =>
-                    emptyTypeNames.Contains(m.Value)
-                    && !(
-                        m.Index + m.Length < typeName.Length && typeName[m.Index + m.Length] == '<'
-                    )
-                        ? "object"
-                        : m.Value
-            );
+        TypeNameIdentifier.Replace(
+            typeName,
+            m =>
+                emptyTypeNames.Contains(m.Value)
+                && !(m.Index + m.Length < typeName.Length && typeName[m.Index + m.Length] == '<')
+                    ? "object"
+                    : m.Value
+        );
 
-    [System.Text.RegularExpressions.GeneratedRegex(SchemaNames.Pattern)]
-    private static partial System.Text.RegularExpressions.Regex TypeNameIdentifier();
+    [System.Text.RegularExpressions.GeneratedRegex(
+        SchemaNames.Pattern,
+        System.Text.RegularExpressions.RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial System.Text.RegularExpressions.Regex TypeNameIdentifier { get; }
 
     private string PromoteInlineObject(string contextName, OpenApiSchema schema)
     {
@@ -957,7 +1009,7 @@ public partial class OpenApiSchemaParser : ISchemaParser
     }
 
     private static bool IsBareObjectSchema(OpenApiSchema schema) =>
-        schema.Type == "object"
+        string.Equals(schema.Type, "object", StringComparison.Ordinal)
         && schema.Properties is not { Count: > 0 }
         && schema.Reference == null
         && schema.AdditionalProperties == null
@@ -987,7 +1039,7 @@ public partial class OpenApiSchemaParser : ISchemaParser
         // Fall back to numeric suffix
         for (var i = 2; ; i++)
         {
-            var candidate = $"{baseName}{i}";
+            var candidate = string.Create(CultureInfo.InvariantCulture, $"{baseName}{i}");
             if (_usedOperationNames.Add(candidate))
                 return candidate;
         }
@@ -1000,7 +1052,7 @@ public partial class OpenApiSchemaParser : ISchemaParser
 
         for (var i = 2; ; i++)
         {
-            var candidate = $"{baseName}{i}";
+            var candidate = string.Create(CultureInfo.InvariantCulture, $"{baseName}{i}");
             if (_usedTypeNames.Add(candidate))
                 return candidate;
         }

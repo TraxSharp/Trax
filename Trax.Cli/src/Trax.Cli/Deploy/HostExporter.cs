@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using Trax.Effect.Configuration.Deploy;
 
 namespace Trax.Cli.Deploy;
@@ -29,7 +30,10 @@ internal sealed class DotnetHostExporter : IHostExporter
             if (exit != 0 || !File.Exists(path))
                 throw new InvalidOperationException(
                     $"{Path.GetFileName(projectPath)} did not report what it needs from its deployment "
-                        + $"(exit {exit}). A host reports it from 'await app.RunTraxAsync(args)'; one that calls "
+                        + string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"(exit {exit}). A host reports it from 'await app.RunTraxAsync(args)'; one that calls "
+                        )
                         + $"app.Run() refuses. Its output:\n{stdout}{stderr}"
                 );
             return DeployManifest.Read(File.ReadAllText(path));
@@ -50,6 +54,7 @@ internal sealed class DotnetHostExporter : IHostExporter
         var psi = new ProcessStartInfo("dotnet")
         {
             WorkingDirectory = Path.GetDirectoryName(projectPath)!,
+            UseShellExecute = false,
         };
         foreach (
             var arg in new[]

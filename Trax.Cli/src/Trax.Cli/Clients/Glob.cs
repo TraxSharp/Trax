@@ -17,7 +17,11 @@ internal static class Glob
             return File.Exists(baseDir) && rest.Length == 0 ? [baseDir] : [];
         if (rest.Length == 0)
             return [];
-        var regex = new Regex(@"\A" + ToRegex(rest) + @"\z", RegexOptions.CultureInvariant);
+        var regex = new Regex(
+            @"\A" + ToRegex(rest) + @"\z",
+            RegexOptions.CultureInvariant,
+            TimeSpan.FromSeconds(1)
+        );
         var enumeration = new EnumerationOptions
         {
             RecurseSubdirectories = true,
@@ -42,7 +46,7 @@ internal static class Glob
         var (baseDir, rest) = Split(Path.GetFullPath(cwd), pattern);
         var relative = Path.GetRelativePath(Resolved(dir), Resolved(baseDir)).Replace('\\', '/');
         return rest.Length == 0 ? relative
-            : relative == "." ? rest
+            : string.Equals(relative, ".", StringComparison.Ordinal) ? rest
             : $"{relative}/{rest}";
     }
 
@@ -101,7 +105,7 @@ internal static class Glob
 
     private static readonly EnumerationOptions AllEntries = new()
     {
-        AttributesToSkip = 0,
+        AttributesToSkip = FileAttributes.None,
         IgnoreInaccessible = true,
     };
 

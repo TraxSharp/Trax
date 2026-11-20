@@ -82,7 +82,9 @@ internal sealed partial class ClientDocumentSet
             (file, operation, checker) =>
                 OperationsOperation(file, operation, types, roots, checker),
             (operation, text) =>
-                operation.Root == ManagementField ? "" : ConsoleIdOf(operation.Name, text)
+                string.Equals(operation.Root, ManagementField, StringComparison.Ordinal)
+                    ? ""
+                    : ConsoleIdOf(operation.Name, text)
         );
 
     private static ClientOperation? OperationsOperation(

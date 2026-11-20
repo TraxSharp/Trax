@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Trax.Cli.Clients;
@@ -17,7 +18,7 @@ namespace Trax.Cli.Tests.UnitTests;
     "adr",
     "Trax.Docs/adr/0057-the-operations-console-sends-only-documents-trax-client-generated.md"
 )]
-public class OperationsClientGeneratorTests
+public partial class OperationsClientGeneratorTests
 {
     private const string Adr =
         "Trax.Docs/adr/0057-the-operations-console-sends-only-documents-trax-client-generated.md";
@@ -383,7 +384,15 @@ public class OperationsClientGeneratorTests
 
             ClientGenerator.Check(options, dir).Should().BeEmpty();
             ClientGenerator
-                .Check(Options(("src/graphql/Runs.graphql", Runs.Replace("name\n", ""))), dir)
+                .Check(
+                    Options(
+                        (
+                            "src/graphql/Runs.graphql",
+                            Runs.Replace("name\n", "", StringComparison.Ordinal)
+                        )
+                    ),
+                    dir
+                )
                 .Select(d => d.Path)
                 .Should()
                 .Contain(["console-documents.json", "documents/runs.g.ts"]);
@@ -434,11 +443,17 @@ public class OperationsClientGeneratorTests
         try
         {
             ClientCommand
-                .RunOperations("manifest.json", "operations.graphql", "out", false, ["*.graphql"])
+                .RunOperations(
+                    "manifest.json",
+                    "operations.graphql",
+                    "out",
+                    check: false,
+                    ["*.graphql"]
+                )
                 .Should()
                 .Be(1);
             ClientCommand
-                .RunOperations(null, "operations.graphql", "out", false, [])
+                .RunOperations(manifestPath: null, "operations.graphql", "out", check: false, [])
                 .Should()
                 .Be(1);
         }
@@ -590,7 +605,8 @@ public class OperationsClientGeneratorTests
         var registered = Documents(ClientGenerator.Render(options))
             .ToDictionary(
                 d => d.GetProperty("name").GetString()!,
-                d => d.GetProperty("text").GetString()!
+                d => d.GetProperty("text").GetString()!,
+                StringComparer.Ordinal
             );
 
         CompileCSharp(files, out var assembly)
@@ -683,10 +699,15 @@ public class OperationsClientGeneratorTests
         ];
         var schema =
             Schema
-                .Replace("scalar Long", "scalar Long\nscalar UUID\nscalar DateTime\nscalar JSON")
+                .Replace(
+                    "scalar Long",
+                    "scalar Long\nscalar UUID\nscalar DateTime\nscalar JSON",
+                    StringComparison.Ordinal
+                )
                 .Replace(
                     "type CancelResponse {",
-                    "type CancelResponse {\n  at: DateTime\n  key: UUID\n  data: JSON"
+                    "type CancelResponse {\n  at: DateTime\n  key: UUID\n  data: JSON",
+                    StringComparison.Ordinal
                 ) + string.Concat(shadows.Select(name => $"\ninput {name} {{\n  value: Int\n}}\n"));
         var files = ClientGenerator.RenderCSharp(
             new OperationsGenerateOptions(
@@ -732,7 +753,10 @@ public class OperationsClientGeneratorTests
                 "src/graphql/TraxOperationsClient.graphql",
                 "query TraxOperationsClient { operations { run(id: 1) { id } } }"
             ),
-            ("src/graphql/Optional.graphql", Runs.Replace("query Runs", "query Optional"))
+            (
+                "src/graphql/Optional.graphql",
+                Runs.Replace("query Runs", "query Optional", StringComparison.Ordinal)
+            )
         );
 
         CompileCSharp(files, out _)
@@ -831,7 +855,7 @@ public class OperationsClientGeneratorTests
             + "\ninput Odd {\n"
             + string.Concat(members.Select(m => $"  {m}: Int\n"))
             + "}\n";
-        var selection = string.Join(" ", members.Select(m => $"{m}: id"));
+        var selection = string.Join(' ', members.Select(m => $"{m}: id"));
         var files = ClientGenerator.RenderCSharp(
             new OperationsGenerateOptions(
                 schema,
@@ -1151,7 +1175,7 @@ public class OperationsClientGeneratorTests
                 Console.SetError(error);
                 Directory.SetCurrentDirectory(dir.FullName);
                 exit = ClientCommand.RunOperations(
-                    null,
+                    manifestPath: null,
                     Path.Combine(dir.FullName, "operations.graphql"),
                     Path.Combine(dir.FullName, "out"),
                     check: false,
@@ -1451,7 +1475,7 @@ public class OperationsClientGeneratorTests
             .Be(
                 "Thing|9007199254740993|3f2504e0-4f89-11d3-9a0c-0305e82c3301|2026-10-23T10:00:00.0000000+02:00|00:00:00|{\"a\":[1,\"x\"]}|null|Last24Hours|2|True|True|3"
             );
-        Call("Refused", answer.Replace("\"id\":9007199254740993,", ""))
+        Call("Refused", answer.Replace("\"id\":9007199254740993,", "", StringComparison.Ordinal))
             .Should()
             .Be("refused", "a required field the answer lacks is an error, not a default");
     }
@@ -1486,7 +1510,7 @@ public class OperationsClientGeneratorTests
         string name
     )
     {
-        var schema = System.Text.RegularExpressions.Regex.Replace(Schema, @"\bRunState\b", name);
+        var schema = RunStateWord.Replace(Schema, name);
         var runs = Runs.Replace("RunState", name, StringComparison.Ordinal);
         var options = new OperationsGenerateOptions(
             schema,
@@ -1632,10 +1656,15 @@ public class OperationsClientGeneratorTests
         const string hostile = "ends </summary> here & <b>\nnext\u2028line\u2029*/ \"q\" \\ end";
         var schema =
             Schema
-                .Replace("type Run {\n  id: Long!", $"type Run {{\n  {Block(hostile)}\n  id: Long!")
+                .Replace(
+                    "type Run {\n  id: Long!",
+                    $"type Run {{\n  {Block(hostile)}\n  id: Long!",
+                    StringComparison.Ordinal
+                )
                 .Replace(
                     "enum RunState {\n  RUNNING",
-                    $"enum RunState {{\n  {Block(hostile)}\n  RUNNING"
+                    $"enum RunState {{\n  {Block(hostile)}\n  RUNNING",
+                    StringComparison.Ordinal
                 ) + $"\n{Block(hostile)}\ninput Odd {{\n  {Block(hostile)}\n  value: Int\n}}\n";
         const string mutation =
             "# ünïcode comment\nmutation Hostile { operations { cancel(id: 1, note: \"say \\\"hi\\\" \\\\ café ☃ \u2028 \\u00e9\") { success } } }";
@@ -1650,7 +1679,8 @@ public class OperationsClientGeneratorTests
         var registered = Documents(ClientGenerator.Render(options))
             .ToDictionary(
                 d => d.GetProperty("name").GetString()!,
-                d => d.GetProperty("text").GetString()!
+                d => d.GetProperty("text").GetString()!,
+                StringComparer.Ordinal
             );
 
         Text(files, "Types.g.cs")
@@ -1683,7 +1713,8 @@ public class OperationsClientGeneratorTests
         var schema =
             Schema.Replace(
                 "enum RunState {\n  RUNNING",
-                $"enum RunState {{\n  {Block(described)}\n  RUNNING"
+                $"enum RunState {{\n  {Block(described)}\n  RUNNING",
+                StringComparison.Ordinal
             ) + $"\n{Block(described)}\ninput Odd {{\n  {Block(described)}\n  value: Int\n}}\n";
         var files = ClientGenerator.Render(
             new OperationsGenerateOptions(schema, [new("src/graphql/Runs.graphql", Runs)])
@@ -1708,7 +1739,7 @@ public class OperationsClientGeneratorTests
 
     // A GraphQL block string holding text exactly.
     private static string Block(string text) =>
-        "\"\"\"" + text.Replace("\"\"\"", "\\\"\"\"") + "\"\"\"";
+        "\"\"\"" + text.Replace("\"\"\"", "\\\"\"\"", StringComparison.Ordinal) + "\"\"\"";
 
     [TestCase("")]
     [TestCase("1Abc")]
@@ -1748,7 +1779,7 @@ public class OperationsClientGeneratorTests
             Directory.SetCurrentDirectory(dir.FullName);
             int Run(bool check) =>
                 ClientCommand.RunOperations(
-                    null,
+                    manifestPath: null,
                     Path.Combine(dir.FullName, "operations.graphql"),
                     Path.Combine(dir.FullName, "Operations"),
                     check,
@@ -1761,7 +1792,7 @@ public class OperationsClientGeneratorTests
             var clean = Run(check: true);
             File.WriteAllText(
                 Path.Combine(dir.FullName, "Runs.graphql"),
-                Runs.Replace("name\n", "")
+                Runs.Replace("name\n", "", StringComparison.Ordinal)
             );
             var stale = Run(check: true);
 
@@ -1845,7 +1876,12 @@ public class OperationsClientGeneratorTests
             "OperationsClient" + Guid.NewGuid().ToString("N"),
             files
                 .Select(f => (f.Text, f.Path))
-                .Concat(callers.Select((text, i) => (text, $"Caller{i}.cs")))
+                .Concat(
+                    callers.Select(
+                        (text, i) =>
+                            (text, string.Create(CultureInfo.InvariantCulture, $"Caller{i}.cs"))
+                    )
+                )
                 .Select(f =>
                     Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(
                         f.Item1,
@@ -1902,7 +1938,7 @@ public class OperationsClientGeneratorTests
     }
 
     private static string Text(IReadOnlyList<ClientFile> files, string path) =>
-        files.Single(f => f.Path == path).Text;
+        files.Single(f => string.Equals(f.Path, path, StringComparison.Ordinal)).Text;
 
     private static List<JsonElement> Documents(IReadOnlyList<ClientFile> files)
     {
@@ -1954,4 +1990,11 @@ public class OperationsClientGeneratorTests
         Assert.Ignore("Trax.Api's console-document-ids.json not found (isolated build).");
         return [];
     }
+
+    [System.Text.RegularExpressions.GeneratedRegex(
+        @"\bRunState\b",
+        System.Text.RegularExpressions.RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial System.Text.RegularExpressions.Regex RunStateWord { get; }
 }

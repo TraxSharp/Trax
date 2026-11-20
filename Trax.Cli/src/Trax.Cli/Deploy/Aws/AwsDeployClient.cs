@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
 using Amazon;
@@ -35,25 +36,29 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
     public async Task<string> AccountIdAsync(CancellationToken ct)
     {
         using var sts = new AmazonSecurityTokenServiceClient(_region);
-        return (await sts.GetCallerIdentityAsync(new GetCallerIdentityRequest(), ct)).Account;
+        return (
+            await sts.GetCallerIdentityAsync(new GetCallerIdentityRequest(), ct)
+                .ConfigureAwait(false)
+        ).Account;
     }
 
     public async Task<string?> CloudFrontPrefixListAsync(CancellationToken ct)
     {
         using var ec2 = new AmazonEC2Client(_region);
         var lists = await ec2.DescribeManagedPrefixListsAsync(
-            new DescribeManagedPrefixListsRequest
-            {
-                Filters =
-                [
-                    new Amazon.EC2.Model.Filter(
-                        "prefix-list-name",
-                        ["com.amazonaws.global.cloudfront.origin-facing"]
-                    ),
-                ],
-            },
-            ct
-        );
+                new DescribeManagedPrefixListsRequest
+                {
+                    Filters =
+                    [
+                        new Amazon.EC2.Model.Filter(
+                            "prefix-list-name",
+                            ["com.amazonaws.global.cloudfront.origin-facing"]
+                        ),
+                    ],
+                },
+                ct
+            )
+            .ConfigureAwait(false);
         return lists.PrefixLists?.FirstOrDefault()?.PrefixListId;
     }
 
@@ -67,34 +72,36 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
         try
         {
             var found = await ecr.DescribeRepositoriesAsync(
-                new DescribeRepositoriesRequest { RepositoryNames = [name] },
-                ct
-            );
+                    new DescribeRepositoriesRequest { RepositoryNames = [name] },
+                    ct
+                )
+                .ConfigureAwait(false);
             return found.Repositories![0].RepositoryUri;
         }
         catch (RepositoryNotFoundException)
         {
             var created = await ecr.CreateRepositoryAsync(
-                new CreateRepositoryRequest
-                {
-                    RepositoryName = name,
-                    // Each deploy pushes a new tag, so no tag ever points at two images.
-                    ImageTagMutability = ImageTagMutability.IMMUTABLE,
-                    ImageScanningConfiguration = new ImageScanningConfiguration
+                    new CreateRepositoryRequest
                     {
-                        ScanOnPush = true,
-                    },
-                    Tags =
-                    [
-                        .. tags.Select(t => new Amazon.ECR.Model.Tag
+                        RepositoryName = name,
+                        // Each deploy pushes a new tag, so no tag ever points at two images.
+                        ImageTagMutability = ImageTagMutability.IMMUTABLE,
+                        ImageScanningConfiguration = new ImageScanningConfiguration
                         {
-                            Key = t.Key,
-                            Value = t.Value,
-                        }),
-                    ],
-                },
-                ct
-            );
+                            ScanOnPush = true,
+                        },
+                        Tags =
+                        [
+                            .. tags.Select(t => new Amazon.ECR.Model.Tag
+                            {
+                                Key = t.Key,
+                                Value = t.Value,
+                            }),
+                        ],
+                    },
+                    ct
+                )
+                .ConfigureAwait(false);
             return created.Repository.RepositoryUri;
         }
     }
@@ -104,11 +111,12 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
         using var ecr = new AmazonECRClient(_region);
         var data = (
             await ecr.GetAuthorizationTokenAsync(new GetAuthorizationTokenRequest(), ct)
+                .ConfigureAwait(false)
         ).AuthorizationData![0];
         var userAndPassword = Encoding.UTF8.GetString(
             Convert.FromBase64String(data.AuthorizationToken)
         );
-        var colon = userAndPassword.IndexOf(':');
+        var colon = userAndPassword.IndexOf(':', StringComparison.Ordinal);
         return new RegistryLogin(
             new Uri(data.ProxyEndpoint).Host,
             userAndPassword[..colon],
@@ -123,11 +131,20 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
         {
             var found = (
                 await cfn.DescribeStacksAsync(new DescribeStacksRequest { StackName = stack }, ct)
+                    .ConfigureAwait(false)
             ).Stacks![0];
             return new AwsStackState(
                 found.StackStatus.Value,
-                (found.Outputs ?? []).ToDictionary(o => o.OutputKey, o => o.OutputValue),
-                (found.Parameters ?? []).ToDictionary(p => p.ParameterKey, p => p.ParameterValue)
+                (found.Outputs ?? []).ToDictionary(
+                    o => o.OutputKey,
+                    o => o.OutputValue,
+                    StringComparer.Ordinal
+                ),
+                (found.Parameters ?? []).ToDictionary(
+                    p => p.ParameterKey,
+                    p => p.ParameterValue,
+                    StringComparer.Ordinal
+                )
             );
         }
         catch (AmazonCloudFormationException ex)
@@ -147,52 +164,58 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
     )
     {
         using var cfn = new AmazonCloudFormationClient(_region);
-        var existing = await DescribeStackAsync(stack, ct);
+        var existing = await DescribeStackAsync(stack, ct).ConfigureAwait(false);
         var started = DateTime.UtcNow;
         var changeSet = await cfn.CreateChangeSetAsync(
-            new CreateChangeSetRequest
-            {
-                StackName = stack,
-                ChangeSetName = $"trax-{started:yyyyMMddHHmmss}",
-                ChangeSetType = existing is null ? ChangeSetType.CREATE : ChangeSetType.UPDATE,
-                TemplateBody = template,
-                UsePreviousTemplate = template is null ? true : null,
-                Parameters =
-                [
-                    .. parameters.Select(p =>
-                        p.Value is null
-                            ? new Parameter { ParameterKey = p.Key, UsePreviousValue = true }
-                            : new Parameter { ParameterKey = p.Key, ParameterValue = p.Value }
+                new CreateChangeSetRequest
+                {
+                    StackName = stack,
+                    ChangeSetName = string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"trax-{started:yyyyMMddHHmmss}"
                     ),
-                ],
-                Capabilities = ["CAPABILITY_IAM"],
-                Tags =
-                [
-                    .. tags.Select(t => new Amazon.CloudFormation.Model.Tag
-                    {
-                        Key = t.Key,
-                        Value = t.Value,
-                    }),
-                ],
-            },
-            ct
-        );
+                    ChangeSetType = existing is null ? ChangeSetType.CREATE : ChangeSetType.UPDATE,
+                    TemplateBody = template,
+                    UsePreviousTemplate = template is null ? true : null,
+                    Parameters =
+                    [
+                        .. parameters.Select(p =>
+                            p.Value is null
+                                ? new Parameter { ParameterKey = p.Key, UsePreviousValue = true }
+                                : new Parameter { ParameterKey = p.Key, ParameterValue = p.Value }
+                        ),
+                    ],
+                    Capabilities = ["CAPABILITY_IAM"],
+                    Tags =
+                    [
+                        .. tags.Select(t => new Amazon.CloudFormation.Model.Tag
+                        {
+                            Key = t.Key,
+                            Value = t.Value,
+                        }),
+                    ],
+                },
+                ct
+            )
+            .ConfigureAwait(false);
 
         DescribeChangeSetResponse described;
         while (true)
         {
             described = await cfn.DescribeChangeSetAsync(
-                new DescribeChangeSetRequest { ChangeSetName = changeSet.Id },
-                ct
-            );
+                    new DescribeChangeSetRequest { ChangeSetName = changeSet.Id },
+                    ct
+                )
+                .ConfigureAwait(false);
             if (described.Status == ChangeSetStatus.CREATE_COMPLETE)
                 break;
             if (described.Status == ChangeSetStatus.FAILED)
             {
                 await cfn.DeleteChangeSetAsync(
-                    new DeleteChangeSetRequest { ChangeSetName = changeSet.Id },
-                    ct
-                );
+                        new DeleteChangeSetRequest { ChangeSetName = changeSet.Id },
+                        ct
+                    )
+                    .ConfigureAwait(false);
                 if (
                     described.StatusReason?.Contains(
                         "didn't contain changes",
@@ -207,22 +230,27 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
                     $"CloudFormation refused the change to {stack}: {described.StatusReason}"
                 );
             }
-            await Task.Delay(TimeSpan.FromSeconds(3), ct);
+            await Task.Delay(TimeSpan.FromSeconds(3), ct).ConfigureAwait(false);
         }
         foreach (var change in described.Changes ?? [])
         {
             var resource = change.ResourceChange;
             progress(
                 $"  {resource.Action?.Value, -8}{resource.LogicalResourceId} ({resource.ResourceType})"
-                    + (resource.Replacement?.Value == "True" ? ", replaced" : "")
+                    + (
+                        string.Equals(resource.Replacement?.Value, "True", StringComparison.Ordinal)
+                            ? ", replaced"
+                            : ""
+                    )
             );
         }
 
         await cfn.ExecuteChangeSetAsync(
-            new ExecuteChangeSetRequest { ChangeSetName = changeSet.Id },
-            ct
-        );
-        await WaitAsync(cfn, stack, started, progress, ct);
+                new ExecuteChangeSetRequest { ChangeSetName = changeSet.Id },
+                ct
+            )
+            .ConfigureAwait(false);
+        await WaitAsync(cfn, stack, started, progress, ct).ConfigureAwait(false);
         return true;
     }
 
@@ -237,13 +265,14 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
         var seen = new HashSet<string>(StringComparer.Ordinal);
         while (true)
         {
-            await Task.Delay(Poll, ct);
+            await Task.Delay(Poll, ct).ConfigureAwait(false);
             var events =
                 (
                     await cfn.DescribeStackEventsAsync(
-                        new DescribeStackEventsRequest { StackName = stack },
-                        ct
-                    )
+                            new DescribeStackEventsRequest { StackName = stack },
+                            ct
+                        )
+                        .ConfigureAwait(false)
                 ).StackEvents
                 ?? [];
             var fresh = events
@@ -265,9 +294,10 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
             {
                 current = (
                     await cfn.DescribeStacksAsync(
-                        new DescribeStacksRequest { StackName = stack },
-                        ct
-                    )
+                            new DescribeStacksRequest { StackName = stack },
+                            ct
+                        )
+                        .ConfigureAwait(false)
                 ).Stacks![0];
             }
             catch (AmazonCloudFormationException ex)
@@ -286,7 +316,7 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
                     && e.ResourceStatus?.Value.EndsWith("_FAILED", StringComparison.Ordinal) is true
                 )
                 .Select(e => $"{e.LogicalResourceId}: {e.ResourceStatusReason}")
-                .Distinct()
+                .Distinct(StringComparer.Ordinal)
                 .ToList();
             throw new InvalidOperationException(
                 $"Stack {stack} ended {status}."
@@ -303,27 +333,28 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
     {
         using var ecs = new AmazonECSClient(_region);
         var run = await ecs.RunTaskAsync(
-            new RunTaskRequest
-            {
-                Cluster = request.Cluster,
-                TaskDefinition = request.TaskDefinition,
-                LaunchType = LaunchType.FARGATE,
-                Count = 1,
-                StartedBy = "trax-deploy",
-                NetworkConfiguration = new NetworkConfiguration
+                new RunTaskRequest
                 {
-                    AwsvpcConfiguration = new AwsVpcConfiguration
+                    Cluster = request.Cluster,
+                    TaskDefinition = request.TaskDefinition,
+                    LaunchType = LaunchType.FARGATE,
+                    Count = 1,
+                    StartedBy = "trax-deploy",
+                    NetworkConfiguration = new NetworkConfiguration
                     {
-                        Subnets = [.. request.Subnets],
-                        SecurityGroups = [request.SecurityGroup],
-                        AssignPublicIp = request.AssignPublicIp
-                            ? AssignPublicIp.ENABLED
-                            : AssignPublicIp.DISABLED,
+                        AwsvpcConfiguration = new AwsVpcConfiguration
+                        {
+                            Subnets = [.. request.Subnets],
+                            SecurityGroups = [request.SecurityGroup],
+                            AssignPublicIp = request.AssignPublicIp
+                                ? AssignPublicIp.ENABLED
+                                : AssignPublicIp.DISABLED,
+                        },
                     },
                 },
-            },
-            ct
-        );
+                ct
+            )
+            .ConfigureAwait(false);
         var task =
             run.Tasks?.FirstOrDefault()
             ?? throw new InvalidOperationException(
@@ -335,19 +366,26 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
         var last = "";
         while (true)
         {
-            await Task.Delay(Poll, ct);
+            await Task.Delay(Poll, ct).ConfigureAwait(false);
             var current = (
                 await ecs.DescribeTasksAsync(
-                    new DescribeTasksRequest { Cluster = request.Cluster, Tasks = [task.TaskArn] },
-                    ct
-                )
+                        new DescribeTasksRequest
+                        {
+                            Cluster = request.Cluster,
+                            Tasks = [task.TaskArn],
+                        },
+                        ct
+                    )
+                    .ConfigureAwait(false)
             ).Tasks![0];
-            if (current.LastStatus != last)
+            if (!string.Equals(current.LastStatus, last, StringComparison.Ordinal))
                 progress($"  migrate task {current.LastStatus}");
             last = current.LastStatus;
-            if (current.LastStatus != "STOPPED")
+            if (!string.Equals(current.LastStatus, "STOPPED", StringComparison.Ordinal))
                 continue;
-            var container = current.Containers?.FirstOrDefault(c => c.Name == request.Container);
+            var container = current.Containers?.FirstOrDefault(c =>
+                string.Equals(c.Name, request.Container, StringComparison.Ordinal)
+            );
             return new AwsTaskResult(
                 container?.ExitCode,
                 current.StoppedReason ?? container?.Reason,
@@ -360,8 +398,9 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
     {
         using var cfn = new AmazonCloudFormationClient(_region);
         var started = DateTime.UtcNow;
-        await cfn.DeleteStackAsync(new DeleteStackRequest { StackName = stack }, ct);
-        await WaitAsync(cfn, stack, started, progress, ct);
+        await cfn.DeleteStackAsync(new DeleteStackRequest { StackName = stack }, ct)
+            .ConfigureAwait(false);
+        await WaitAsync(cfn, stack, started, progress, ct).ConfigureAwait(false);
     }
 
     public async Task DeleteRepositoryAsync(string name, CancellationToken ct)
@@ -370,9 +409,10 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
         try
         {
             await ecr.DeleteRepositoryAsync(
-                new DeleteRepositoryRequest { RepositoryName = name, Force = true },
-                ct
-            );
+                    new DeleteRepositoryRequest { RepositoryName = name, Force = true },
+                    ct
+                )
+                .ConfigureAwait(false);
         }
         catch (RepositoryNotFoundException) { }
     }
@@ -387,29 +427,33 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
         using var secrets = new AmazonSecretsManagerClient(_region);
         try
         {
-            await secrets.PutSecretValueAsync(
-                new PutSecretValueRequest { SecretId = name, SecretString = value },
-                ct
-            );
+            await secrets
+                .PutSecretValueAsync(
+                    new PutSecretValueRequest { SecretId = name, SecretString = value },
+                    ct
+                )
+                .ConfigureAwait(false);
         }
         catch (Amazon.SecretsManager.Model.ResourceNotFoundException)
         {
-            await secrets.CreateSecretAsync(
-                new CreateSecretRequest
-                {
-                    Name = name,
-                    SecretString = value,
-                    Tags =
-                    [
-                        .. tags.Select(t => new Amazon.SecretsManager.Model.Tag
-                        {
-                            Key = t.Key,
-                            Value = t.Value,
-                        }),
-                    ],
-                },
-                ct
-            );
+            await secrets
+                .CreateSecretAsync(
+                    new CreateSecretRequest
+                    {
+                        Name = name,
+                        SecretString = value,
+                        Tags =
+                        [
+                            .. tags.Select(t => new Amazon.SecretsManager.Model.Tag
+                            {
+                                Key = t.Key,
+                                Value = t.Value,
+                            }),
+                        ],
+                    },
+                    ct
+                )
+                .ConfigureAwait(false);
         }
     }
 
@@ -419,7 +463,9 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
         try
         {
             // Recoverable for seven days, as a deleted secret is by default.
-            await secrets.DeleteSecretAsync(new DeleteSecretRequest { SecretId = name }, ct);
+            await secrets
+                .DeleteSecretAsync(new DeleteSecretRequest { SecretId = name }, ct)
+                .ConfigureAwait(false);
         }
         catch (Amazon.SecretsManager.Model.ResourceNotFoundException) { }
     }
@@ -434,21 +480,23 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
         string? next = null;
         do
         {
-            var page = await secrets.ListSecretsAsync(
-                new ListSecretsRequest
-                {
-                    Filters =
-                    [
-                        new Amazon.SecretsManager.Model.Filter
-                        {
-                            Key = FilterNameStringType.Name,
-                            Values = [prefix],
-                        },
-                    ],
-                    NextToken = next,
-                },
-                ct
-            );
+            var page = await secrets
+                .ListSecretsAsync(
+                    new ListSecretsRequest
+                    {
+                        Filters =
+                        [
+                            new Amazon.SecretsManager.Model.Filter
+                            {
+                                Key = FilterNameStringType.Name,
+                                Values = [prefix],
+                            },
+                        ],
+                        NextToken = next,
+                    },
+                    ct
+                )
+                .ConfigureAwait(false);
             found.AddRange(
                 (page.SecretList ?? [])
                     .Where(s => s.Name.StartsWith(prefix, StringComparison.Ordinal))
@@ -467,9 +515,10 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
     {
         using var ecs = new AmazonECSClient(_region);
         var found = await ecs.DescribeServicesAsync(
-            new DescribeServicesRequest { Cluster = cluster, Services = [.. services] },
-            ct
-        );
+                new DescribeServicesRequest { Cluster = cluster, Services = [.. services] },
+                ct
+            )
+            .ConfigureAwait(false);
         return
         [
             .. (found.Services ?? []).Select(s => new AwsServiceState(
@@ -499,14 +548,15 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
             do
             {
                 var page = await logs.FilterLogEventsAsync(
-                    new FilterLogEventsRequest
-                    {
-                        LogGroupName = group,
-                        StartTime = start,
-                        NextToken = next,
-                    },
-                    ct
-                );
+                        new FilterLogEventsRequest
+                        {
+                            LogGroupName = group,
+                            StartTime = start,
+                            NextToken = next,
+                        },
+                        ct
+                    )
+                    .ConfigureAwait(false);
                 foreach (var e in page.Events ?? [])
                     if (seen.Add(e.EventId))
                     {
@@ -517,7 +567,7 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
             } while (next is not null);
             if (!follow)
                 yield break;
-            await Task.Delay(TimeSpan.FromSeconds(2), ct);
+            await Task.Delay(TimeSpan.FromSeconds(2), ct).ConfigureAwait(false);
         }
     }
 }

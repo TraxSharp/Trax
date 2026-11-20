@@ -37,8 +37,16 @@ public class AwsStackTemplateTests
         {
             Profile = profile,
             Region = "us-west-2",
-            Domain = profile == DeployEnvironment.Production ? "orders.example.com" : null,
-            HostedZoneId = profile == DeployEnvironment.Production ? "Z0123456789" : null,
+            Domain = string.Equals(profile, DeployEnvironment.Production, StringComparison.Ordinal)
+                ? "orders.example.com"
+                : null,
+            HostedZoneId = string.Equals(
+                profile,
+                DeployEnvironment.Production,
+                StringComparison.Ordinal
+            )
+                ? "Z0123456789"
+                : null,
             Auth = new DeployAuth(),
             Settings = { ["Storefront__Origin"] = "https://shop.example.com" },
             Counts = { ["worker"] = 3 },
@@ -47,7 +55,7 @@ public class AwsStackTemplateTests
     }
 
     internal static Dictionary<string, DeployManifest> Exports() =>
-        new()
+        new(StringComparer.Ordinal)
         {
             ["hub"] = new DeployManifest
             {
@@ -76,7 +84,7 @@ public class AwsStackTemplateTests
         string type
     ) =>
         ((JsonObject)template["Resources"]!)
-            .Where(r => (string)r.Value!["Type"]! == type)
+            .Where(r => string.Equals((string)r.Value!["Type"]!, type, StringComparison.Ordinal))
             .Select(r => (r.Key, (JsonObject)r.Value!));
 
     private static JsonObject Properties(JsonObject template, string id) =>
@@ -92,7 +100,8 @@ public class AwsStackTemplateTests
         foreach (var rule in group["Properties"]!["SecurityGroupIngress"]?.AsArray() ?? [])
         {
             var open =
-                (string?)rule!["CidrIp"] == "0.0.0.0/0" || (string?)rule["CidrIpv6"] == "::/0";
+                string.Equals((string?)rule!["CidrIp"], "0.0.0.0/0", StringComparison.Ordinal)
+                || string.Equals((string?)rule["CidrIpv6"], "::/0", StringComparison.Ordinal);
             if (!open)
                 continue;
             id.Should()
@@ -273,11 +282,15 @@ public class AwsStackTemplateTests
         ]!.AsArray();
 
         Resources(template, "AWS::Cognito::UserPool").Should().ContainSingle();
-        env.Single(e => (string)e!["Name"]! == "Auth__Authority")!["Value"]!
+        env.Single(e =>
+            string.Equals((string)e!["Name"]!, "Auth__Authority", StringComparison.Ordinal)
+        )!["Value"]!
             .ToJsonString()
             .Should()
             .Contain("cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}");
-        env.Single(e => (string)e!["Name"]! == "Auth__Audience")!["Value"]!
+        env.Single(e =>
+            string.Equals((string)e!["Name"]!, "Auth__Audience", StringComparison.Ordinal)
+        )!["Value"]!
             .ToJsonString()
             .Should()
             .Be("""{"Ref":"UserPoolClient"}""");
@@ -360,6 +373,6 @@ public class AwsStackTemplateTests
 
         lines[0].Should().StartWith("orders-production (production, us-west-2) has ");
         lines.Should().Contain(l => l.Contains("NAT gateway"));
-        lines.Last().Should().EndWith("a month");
+        lines[^1].Should().EndWith("a month");
     }
 }

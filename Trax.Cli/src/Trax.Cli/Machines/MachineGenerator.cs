@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Cli.Machines;
 
 /// <summary>What to generate, and where. Each artifact has its own output root because a real consumer splits
@@ -268,7 +270,7 @@ internal sealed partial class MachineGenerator
             args.AddRange(["--out-dir", twinStage]);
             var twinScript = ToolScript(o, "generate-twin.mjs", "the twin");
             PlannedArtifact[] twin;
-            if (o.Lang == "csharp")
+            if (string.Equals(o.Lang, "csharp", StringComparison.Ordinal))
             {
                 // The C# view is one file named after the machine's types, and imports no engine module.
                 args.AddRange(["--lang", "csharp"]);
@@ -350,7 +352,10 @@ internal sealed partial class MachineGenerator
         var result = _node.Run(script, args);
         if (result.ExitCode != 0)
             throw new InvalidOperationException(
-                $"node {Path.GetFileName(script)} failed (exit {result.ExitCode}): {result.StdErr.Trim()}"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"node {Path.GetFileName(script)} failed (exit {result.ExitCode}): {result.StdErr.Trim()}"
+                )
             );
     }
 
@@ -390,12 +395,15 @@ internal sealed partial class MachineGenerator
             throw new InvalidOperationException(
                 $"--lang must be {TwinLanguages.OneOf([.. TwinLanguages.All.Select(l => l.Lang)])}, got '{o.Lang}'."
             );
-        if (o.Lang == "csharp" && (o.ImportStyle is not null || o.Specifier is not null))
+        if (
+            string.Equals(o.Lang, "csharp", StringComparison.Ordinal)
+            && (o.ImportStyle is not null || o.Specifier is not null)
+        )
             throw new InvalidOperationException(
                 "--import-style and --specifier are how a TypeScript twin imports its engine; a C# view imports "
                     + "Trax.StateMachine.Client. Drop them, or pass --lang typescript."
             );
-        if (o.Namespace is not null && o.Lang != "csharp")
+        if (o.Namespace is not null && !string.Equals(o.Lang, "csharp", StringComparison.Ordinal))
             throw new InvalidOperationException(
                 "--namespace names the C# view's namespace and needs --lang csharp."
             );
@@ -416,7 +424,7 @@ internal sealed partial class MachineGenerator
             );
 
         var importStyle = o.ImportStyle ?? (o.EngineSrc is null ? "specifier" : "relative");
-        if (importStyle == "relative" && o.EngineSrc is null)
+        if (string.Equals(importStyle, "relative", StringComparison.Ordinal) && o.EngineSrc is null)
             throw new InvalidOperationException(
                 "--import-style relative imports the engine by paths into its own src/ (../../typed), which "
                     + "resolve only for a machine inside an engine checkout, so it needs --engine-src. Leave "
@@ -424,7 +432,7 @@ internal sealed partial class MachineGenerator
             );
         if (o.Specifier is not null)
         {
-            if (importStyle == "relative")
+            if (string.Equals(importStyle, "relative", StringComparison.Ordinal))
                 throw new InvalidOperationException(
                     "--specifier applies only to --import-style specifier; with relative imports it would be "
                         + "ignored. Pass --import-style specifier, or drop --specifier."
@@ -446,14 +454,16 @@ internal sealed partial class MachineGenerator
     /// </summary>
     internal static bool IsModuleSpecifier(string specifier)
     {
-        var match = ModuleSpecifier().Match(specifier);
+        var match = ModuleSpecifier.Match(specifier);
         return match.Success && match.Groups["name"].Length <= 214;
     }
 
     [System.Text.RegularExpressions.GeneratedRegex(
-        @"^(?<name>(?:@[a-z0-9~-][a-z0-9._~-]*/)?[a-z0-9~-][a-z0-9._~-]*)(?:/[A-Za-z0-9_~-][A-Za-z0-9._~-]*)*\z"
+        @"^(?<name>(?:@[a-z0-9~-][a-z0-9._~-]*/)?[a-z0-9~-][a-z0-9._~-]*)(?:/[A-Za-z0-9_~-][A-Za-z0-9._~-]*)*\z",
+        System.Text.RegularExpressions.RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
     )]
-    private static partial System.Text.RegularExpressions.Regex ModuleSpecifier();
+    private static partial System.Text.RegularExpressions.Regex ModuleSpecifier { get; }
 
     // The bundled generators carry their engine and take no --engine-src; an engine checkout's own tools need it.
     private static IEnumerable<string> EngineSrcArgs(MachineGenerateOptions o) =>
@@ -498,16 +508,23 @@ internal sealed partial class MachineGenerator
     /// hyphens, starting with a letter (<c>checkout</c>, <c>ship-to-store</c>). It names every
     /// artifact file, so nothing else may reach a path.
     /// </summary>
-    internal static bool IsMachineId(string id) => MachineId().IsMatch(id);
+    internal static bool IsMachineId(string id) => MachineId.IsMatch(id);
 
-    [System.Text.RegularExpressions.GeneratedRegex(@"^[a-z][a-z0-9]*(-[a-z0-9]+)*\z")]
-    private static partial System.Text.RegularExpressions.Regex MachineId();
+    [System.Text.RegularExpressions.GeneratedRegex(
+        @"^[a-z][a-z0-9]*(-[a-z0-9]+)*\z",
+        System.Text.RegularExpressions.RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial System.Text.RegularExpressions.Regex MachineId { get; }
 
     // Line endings aside: a checkout with core.autocrlf holds the committed artifacts with CRLF, and the generators
     // write LF. The client check compares the same way.
     private static bool FilesEqual(string a, string b) =>
-        File.ReadAllText(a).Replace("\r\n", "\n", StringComparison.Ordinal)
-        == File.ReadAllText(b).Replace("\r\n", "\n", StringComparison.Ordinal);
+        string.Equals(
+            File.ReadAllText(a).Replace("\r\n", "\n", StringComparison.Ordinal),
+            File.ReadAllText(b).Replace("\r\n", "\n", StringComparison.Ordinal),
+            StringComparison.Ordinal
+        );
 
     /// <summary>
     /// Refuses to write <paramref name="file"/> into <paramref name="twinOut"/> when a file there has the same name
@@ -525,8 +542,12 @@ internal sealed partial class MachineGenerator
             if (!name.Equals(file, StringComparison.OrdinalIgnoreCase))
                 continue;
             var head = string.Join('\n', File.ReadLines(path).Take(3));
-            var other = ViewHeader().Match(head).Groups[1];
-            if (other.Success ? other.Value == id : name == file)
+            var other = ViewHeader.Match(head).Groups["id"];
+            if (
+                other.Success
+                    ? string.Equals(other.Value, id, StringComparison.Ordinal)
+                    : string.Equals(name, file, StringComparison.Ordinal)
+            )
                 continue;
             throw new InvalidOperationException(
                 $"{name} in {twinOut} is "
@@ -542,10 +563,12 @@ internal sealed partial class MachineGenerator
     }
 
     [System.Text.RegularExpressions.GeneratedRegex(
-        @"^// AUTO-GENERATED from (.+)\.ir\.json by generateCSharpView\.",
+        @"^// AUTO-GENERATED from (?<id>.+)\.ir\.json by generateCSharpView\.",
         System.Text.RegularExpressions.RegexOptions.Multiline
+            | System.Text.RegularExpressions.RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
     )]
-    private static partial System.Text.RegularExpressions.Regex ViewHeader();
+    private static partial System.Text.RegularExpressions.Regex ViewHeader { get; }
 
     private static string CreateStagingDir()
     {

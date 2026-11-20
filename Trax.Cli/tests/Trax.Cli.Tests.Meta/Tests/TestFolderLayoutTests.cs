@@ -6,7 +6,7 @@ namespace Trax.Cli.Tests.Meta.Tests;
 /// <para>Not ADR-enforcing: it pins a folder convention that was adopted rather than chosen; the layout is documented at contributing/test-conventions and no alternative was weighed.</para>
 /// </summary>
 [TestFixture]
-public class TestFolderLayoutTests
+public partial class TestFolderLayoutTests
 {
     /// <summary>
     /// Folder names that are explicitly forbidden as direct children of a test project.
@@ -33,11 +33,6 @@ public class TestFolderLayoutTests
         "TestResults",
         "coverage",
     };
-
-    private static readonly Regex PascalCaseFolder = new(
-        @"^[A-Z][A-Za-z0-9]*$",
-        RegexOptions.Compiled
-    );
 
     private static readonly HashSet<string> LowercaseExceptions = new(StringComparer.Ordinal)
     {
@@ -117,9 +112,7 @@ public class TestFolderLayoutTests
 
         // Accept either explicit 'TestResults' or the [Tt]est[Rr]esult glob form
         // (both are recognised by gitignore and produced by `dotnet new gitignore`).
-        var hasTestResults =
-            Regex.IsMatch(content, @"\bTestResults\b", RegexOptions.IgnoreCase)
-            || Regex.IsMatch(content, @"\[Tt\]est\[Rr\]esult");
+        var hasTestResults = TestResultsWord.IsMatch(content) || TestResultMarker.IsMatch(content);
 
         hasTestResults
             .Should()
@@ -129,4 +122,13 @@ public class TestFolderLayoutTests
                     + "'TestResults/'."
             );
     }
+
+    [GeneratedRegex(@"\[Tt\]est\[Rr\]esult", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex TestResultMarker { get; }
+
+    [GeneratedRegex(@"^[A-Z][A-Za-z0-9]*$", RegexOptions.Compiled, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex PascalCaseFolder { get; }
+
+    [GeneratedRegex(@"\bTestResults\b", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex TestResultsWord { get; }
 }

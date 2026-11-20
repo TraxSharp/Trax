@@ -69,6 +69,7 @@ internal sealed class NodeRunner : INodeRunner
                     $"'{_command}' was not found on PATH. Install Node.js 22 or later, or pass --node with "
                         + "the absolute path of the node executable."
                 ),
+            UseShellExecute = false,
         };
         psi.ArgumentList.Add(scriptPath);
         foreach (var arg in args)

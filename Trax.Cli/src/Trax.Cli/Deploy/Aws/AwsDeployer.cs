@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json.Nodes;
 using Trax.Effect.Configuration.Deploy;
 
@@ -27,8 +28,9 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
     )
     {
         var env = file.Environment(environment);
-        var prefixList =
-            env.Profile == DeployEnvironment.Try ? await aws.CloudFrontPrefixListAsync(ct) : null;
+        var prefixList = string.Equals(env.Profile, DeployEnvironment.Try, StringComparison.Ordinal)
+            ? await aws.CloudFrontPrefixListAsync(ct).ConfigureAwait(false)
+            : null;
         return AwsStack.Build(file, environment, exports, prefixList);
     }
 
@@ -47,7 +49,9 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         var tags = Tags(file, environment);
 
         // Nothing is created until every secret the app needs has a value.
-        var stored = (await aws.ListSecretsAsync(AwsStack.AppSecretName(stack, ""), ct))
+        var stored = (
+            await aws.ListSecretsAsync(AwsStack.AppSecretName(stack, ""), ct).ConfigureAwait(false)
+        )
             .Select(s => s.Name)
             .ToHashSet(StringComparer.Ordinal);
         var missing = file
@@ -59,7 +63,7 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
                     + $"'trax deploy secret set <name> --env {environment}'."
             );
 
-        var existing = await aws.DescribeStackAsync(stack, ct);
+        var existing = await aws.DescribeStackAsync(stack, ct).ConfigureAwait(false);
         if (existing is { Dead: true })
             throw new InvalidOperationException(
                 $"{stack} is {existing.Status}: its creation failed and it can only be deleted. Run "
@@ -70,7 +74,9 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
                 $"{stack} is {existing.Status}. Wait for it to settle, then deploy again."
             );
 
-        var template = AwsStack.Compact(await PlanAsync(file, environment, exports, ct));
+        var template = AwsStack.Compact(
+            await PlanAsync(file, environment, exports, ct).ConfigureAwait(false)
+        );
         if (template.Length > InlineTemplateLimit)
             throw new InvalidOperationException(
                 $"The template is {template.Length} bytes, over CloudFormation's {InlineTemplateLimit}-byte limit "
@@ -78,11 +84,12 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
             );
 
         say($"Pushing images tagged {tag}...");
-        var login = await aws.RegistryLoginAsync(ct);
+        var login = await aws.RegistryLoginAsync(ct).ConfigureAwait(false);
         var image = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var (name, service) in file.Services)
         {
-            var repository = await aws.EnsureRepositoryAsync(Repository(stack, name), tags, ct);
+            var repository = await aws.EnsureRepositoryAsync(Repository(stack, name), tags, ct)
+                .ConfigureAwait(false);
             say($"  {name} -> {repository}:{tag}");
             images.Publish(DeployFile.ProjectPath(filePath, service), repository, tag, login);
             image[name] = $"{repository}:{tag}";
@@ -93,7 +100,11 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         // zero; an existing one keeps them on the image they run.
         var waiting =
             existing is null
-            || existing.Parameters.GetValueOrDefault(AwsStack.ScaleParameter) == "0";
+            || string.Equals(
+                existing.Parameters.GetValueOrDefault(AwsStack.ScaleParameter),
+                "0",
+                StringComparison.Ordinal
+            );
         var first = new Dictionary<string, string?>(StringComparer.Ordinal)
         {
             [AwsStack.ScaleParameter] = waiting ? "0" : "1",
@@ -108,25 +119,26 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         if (existing?.Parameters.ContainsKey(AwsStack.ProtectParameter) is true)
             first[AwsStack.ProtectParameter] = "true";
         say(existing is null ? $"Creating {stack}..." : $"Updating {stack}...");
-        await aws.DeployAsync(stack, template, first, tags, say, ct);
+        await aws.DeployAsync(stack, template, first, tags, say, ct).ConfigureAwait(false);
 
-        var outputs = (await aws.DescribeStackAsync(stack, ct))!.Outputs;
+        var outputs = (await aws.DescribeStackAsync(stack, ct).ConfigureAwait(false))!.Outputs;
         say("Migrating the database...");
         var migration = await aws.RunTaskAsync(
-            new AwsTaskRequest(
-                outputs["ClusterName"],
-                outputs["MigrateTaskDefinition"],
-                AwsStack.MigrateContainer,
-                outputs["ServiceSubnets"].Split(','),
-                outputs["TaskSecurityGroup"],
-                outputs["AssignPublicIp"] == "ENABLED"
-            ),
-            say,
-            ct
-        );
+                new AwsTaskRequest(
+                    outputs["ClusterName"],
+                    outputs["MigrateTaskDefinition"],
+                    AwsStack.MigrateContainer,
+                    outputs["ServiceSubnets"].Split(','),
+                    outputs["TaskSecurityGroup"],
+                    string.Equals(outputs["AssignPublicIp"], "ENABLED", StringComparison.Ordinal)
+                ),
+                say,
+                ct
+            )
+            .ConfigureAwait(false);
         if (migration.ExitCode != 0)
             throw new InvalidOperationException(
-                $"The migration ended {(migration.ExitCode is null ? "without an exit code" : $"with exit code {migration.ExitCode}")}"
+                $"The migration ended {(migration.ExitCode is null ? "without an exit code" : string.Create(CultureInfo.InvariantCulture, $"with exit code {migration.ExitCode}"))}"
                     + (migration.StoppedReason is null ? "" : $" ({migration.StoppedReason})")
                     + ", so no service was moved to the new version. Its log is "
                     + $"{AwsStack.LogGroup(stack, AwsStack.MigrateContainer)} {migration.LogStream}: "
@@ -144,9 +156,11 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         if (first.ContainsKey(AwsStack.ProtectParameter))
             second[AwsStack.ProtectParameter] = "true";
         say($"Rolling the services onto {tag}...");
-        await aws.DeployAsync(stack, template, second, tags, say, ct);
+        await aws.DeployAsync(stack, template, second, tags, say, ct).ConfigureAwait(false);
 
-        return (await aws.DescribeStackAsync(stack, ct))!.Outputs.GetValueOrDefault("Url");
+        return (
+            await aws.DescribeStackAsync(stack, ct).ConfigureAwait(false)
+        )!.Outputs.GetValueOrDefault("Url");
     }
 
     /// <summary>
@@ -162,7 +176,7 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
     {
         file.Environment(environment);
         var stack = file.StackName(environment);
-        var existing = await aws.DescribeStackAsync(stack, ct);
+        var existing = await aws.DescribeStackAsync(stack, ct).ConfigureAwait(false);
         if (existing is null)
             say($"{stack} does not exist.");
         else
@@ -172,13 +186,17 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
                 say("Turning off the database's deletion protection...");
                 var keep = existing.Parameters.Keys.ToDictionary(
                     k => k,
-                    k => k == AwsStack.ProtectParameter ? "false" : (string?)null,
+                    k =>
+                        string.Equals(k, AwsStack.ProtectParameter, StringComparison.Ordinal)
+                            ? "false"
+                            : (string?)null,
                     StringComparer.Ordinal
                 );
-                await aws.DeployAsync(stack, null, keep, Tags(file, environment), say, ct);
+                await aws.DeployAsync(stack, template: null, keep, Tags(file, environment), say, ct)
+                    .ConfigureAwait(false);
             }
             say($"Deleting {stack}...");
-            await aws.DeleteStackAsync(stack, say, ct);
+            await aws.DeleteStackAsync(stack, say, ct).ConfigureAwait(false);
             if (existing.Parameters.ContainsKey(AwsStack.ProtectParameter))
                 say(
                     "The database left a final snapshot, which RDS keeps until you delete it (RDS console, "
@@ -188,9 +206,10 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         if (!deleteData)
             return;
         foreach (var name in file.Services.Keys)
-            await aws.DeleteRepositoryAsync(Repository(stack, name), ct);
+            await aws.DeleteRepositoryAsync(Repository(stack, name), ct).ConfigureAwait(false);
         foreach (var name in file.Secrets)
-            await aws.DeleteSecretAsync(AwsStack.AppSecretName(stack, name), ct);
+            await aws.DeleteSecretAsync(AwsStack.AppSecretName(stack, name), ct)
+                .ConfigureAwait(false);
         say("Deleted the images and the app's secrets (a secret can be restored for seven days).");
     }
 
@@ -223,7 +242,11 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
 
     private static string? Git(string directory, params string[] args)
     {
-        var psi = new ProcessStartInfo("git") { WorkingDirectory = directory };
+        var psi = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = directory,
+            UseShellExecute = false,
+        };
         foreach (var arg in args)
             psi.ArgumentList.Add(arg);
         try
@@ -251,7 +274,10 @@ internal sealed class DotnetImagePublisher : IImagePublisher
         );
         if (exit != 0)
             throw new InvalidOperationException(
-                $"Publishing {Path.GetFileName(projectPath)} to {repositoryUri} failed (exit {exit}):\n{stdout}{stderr}"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Publishing {Path.GetFileName(projectPath)} to {repositoryUri} failed (exit {exit}):\n{stdout}{stderr}"
+                )
             );
     }
 
@@ -262,10 +288,11 @@ internal sealed class DotnetImagePublisher : IImagePublisher
         RegistryLogin login
     )
     {
-        var slash = repositoryUri.IndexOf('/');
+        var slash = repositoryUri.IndexOf('/', StringComparison.Ordinal);
         var psi = new ProcessStartInfo("dotnet")
         {
             WorkingDirectory = Path.GetDirectoryName(projectPath)!,
+            UseShellExecute = false,
         };
         foreach (
             var arg in new[]

@@ -53,7 +53,9 @@ public class ScaffoldFromSchemaCompilesTests
             """
         );
 
-        var player = schema.Types.Single(t => t.Name == "Player");
+        var player = schema.Types.Single(t =>
+            string.Equals(t.Name, "Player", StringComparison.Ordinal)
+        );
         player.Fields.Select(f => f.TypeName).Should().Equal("string", "string", "List<string>");
         player.Fields[0].Description.Should().Contain("TODO").And.Contain("UUID");
         AssertCompiles(schema);
@@ -73,7 +75,9 @@ public class ScaffoldFromSchemaCompilesTests
             """
         );
 
-        var holder = schema.Types.Single(t => t.Name == "Holder");
+        var holder = schema.Types.Single(t =>
+            string.Equals(t.Name, "Holder", StringComparison.Ordinal)
+        );
         holder.Fields.Select(f => f.TypeName).Should().Equal("object", "List<object>");
         holder.Fields[1].Description.Should().Contain("TODO").And.Contain("SearchResult");
         AssertCompiles(schema);
@@ -182,7 +186,7 @@ public class ScaffoldFromSchemaCompilesTests
         );
 
         schema
-            .Types.Single(t => t.Name == "Player")
+            .Types.Single(t => string.Equals(t.Name, "Player", StringComparison.Ordinal))
             .Fields.Select(f => f.TypeName)
             .Should()
             .Contain(["Dictionary<string, object>", "List<List<object>>"]);

@@ -44,7 +44,7 @@ public class MachineLoaderTests
     public void SelectMachine_returns_the_only_machine_when_none_named()
     {
         MachineLoader
-            .SelectMachine([typeof(DeclarativeTurnstileMachine)], null, "asm.dll")
+            .SelectMachine([typeof(DeclarativeTurnstileMachine)], machineFullName: null, "asm.dll")
             .Should()
             .Be(typeof(DeclarativeTurnstileMachine));
     }
@@ -61,7 +61,7 @@ public class MachineLoaderTests
     [Test]
     public void SelectMachine_throws_listing_candidates_when_ambiguous()
     {
-        var select = () => MachineLoader.SelectMachine(Two, null, "asm.dll");
+        var select = () => MachineLoader.SelectMachine(Two, machineFullName: null, "asm.dll");
 
         select
             .Should()
@@ -84,7 +84,7 @@ public class MachineLoaderTests
     [Test]
     public void Load_throws_a_clear_error_when_the_assembly_is_missing()
     {
-        var load = () => MachineLoader.Load("/no/such/assembly.dll", null);
+        var load = () => MachineLoader.Load("/no/such/assembly.dll", machineFullName: null);
 
         load.Should().Throw<InvalidOperationException>().WithMessage("*not found*");
     }
@@ -105,7 +105,7 @@ public class MachineLoaderTests
     [Test]
     public void Load_throws_when_the_assembly_has_multiple_machines_and_none_named()
     {
-        var load = () => MachineLoader.Load(ThisAssemblyPath, null);
+        var load = () => MachineLoader.Load(ThisAssemblyPath, machineFullName: null);
 
         load.Should().Throw<InvalidOperationException>().WithMessage("*--machine*");
     }
@@ -117,7 +117,7 @@ public class MachineLoaderTests
         File.WriteAllText(fake, "this is not a managed assembly");
         try
         {
-            var load = () => MachineLoader.Load(fake, null);
+            var load = () => MachineLoader.Load(fake, machineFullName: null);
 
             load.Should().Throw<InvalidOperationException>().WithMessage("*as a .NET assembly*");
         }
@@ -132,7 +132,8 @@ public class MachineLoaderTests
     {
         // The CLI's own assembly has the command code but no IMachine implementations. This is the empty-assembly
         // path, not a real engine-version mismatch, which nothing here exercises; see docs/adr/0001.
-        var load = () => MachineLoader.Load(typeof(MachineLoader).Assembly.Location, null);
+        var load = () =>
+            MachineLoader.Load(typeof(MachineLoader).Assembly.Location, machineFullName: null);
 
         load.Should().Throw<InvalidOperationException>().WithMessage("*No machines found*");
     }

@@ -33,7 +33,9 @@ public class OpenApiMoreEdgesTests
         var parser = new OpenApiSchemaParser();
         var schema = parser.Parse(FixturePath("openapi-more-edges.json"));
 
-        var statusEnum = schema.Enums.SingleOrDefault(e => e.Name == "Status");
+        var statusEnum = schema.Enums.SingleOrDefault(e =>
+            string.Equals(e.Name, "Status", StringComparison.Ordinal)
+        );
         statusEnum.Should().NotBeNull();
         statusEnum!.Values.Should().BeEquivalentTo("Active", "Inactive", "Pending");
     }
@@ -47,6 +49,9 @@ public class OpenApiMoreEdgesTests
         var schema = parser.Parse(FixturePath("openapi-more-edges.json"));
 
         // One enum entry total even though referenced twice.
-        schema.Enums.Where(e => e.Name == "Status").Should().HaveCount(1);
+        schema
+            .Enums.Where(e => string.Equals(e.Name, "Status", StringComparison.Ordinal))
+            .Should()
+            .HaveCount(1);
     }
 }

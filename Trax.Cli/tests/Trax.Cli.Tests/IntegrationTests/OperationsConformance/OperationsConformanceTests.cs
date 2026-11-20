@@ -86,7 +86,13 @@ public class OperationsConformanceTests
             .Be(
                 ClientGenerator
                     .Render(options)
-                    .Single(f => f.Path == ClientGenerator.ConsoleDocumentsFileName)
+                    .Single(f =>
+                        string.Equals(
+                            f.Path,
+                            ClientGenerator.ConsoleDocumentsFileName,
+                            StringComparison.Ordinal
+                        )
+                    )
                     .Text,
                 $"the host registers the documents the clients send. {Regenerate}"
             );
@@ -127,18 +133,22 @@ public class OperationsConformanceTests
         var conversation = Task.Run(async () =>
         {
             var answers = new List<Task>();
-            while (await process.StandardOutput.ReadLineAsync() is { } request)
+            while (
+                await process.StandardOutput.ReadLineAsync().ConfigureAwait(false) is { } request
+            )
             {
                 var answering = testee.AnswerAsync(request);
                 answers.Add(
                     Task.Run(async () =>
                     {
-                        var answer = await answering;
-                        await writing.WaitAsync();
+                        var answer = await answering.ConfigureAwait(false);
+                        await writing.WaitAsync().ConfigureAwait(false);
                         try
                         {
-                            await process.StandardInput.WriteLineAsync(answer);
-                            await process.StandardInput.FlushAsync();
+                            await process
+                                .StandardInput.WriteLineAsync(answer)
+                                .ConfigureAwait(false);
+                            await process.StandardInput.FlushAsync().ConfigureAwait(false);
                         }
                         finally
                         {

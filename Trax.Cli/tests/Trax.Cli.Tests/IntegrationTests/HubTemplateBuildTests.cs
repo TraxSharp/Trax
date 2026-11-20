@@ -89,11 +89,11 @@ public class HubTemplateBuildTests
 
     private static string Errors(string output) =>
         string.Join(
-            "\n",
+            '\n',
             output
                 .Split('\n')
                 .Where(l => l.Contains(" error ", StringComparison.Ordinal))
-                .Distinct()
+                .Distinct(StringComparer.Ordinal)
                 .Take(20)
         );
 

@@ -637,7 +637,9 @@ public class OpenApiFixEndToEndTests
 
         var content = File.ReadAllText(trainFiles[0]);
         // Description attribute should be on a single line (no raw newlines in string)
-        var attrLine = content.Split('\n').FirstOrDefault(l => l.Contains("Description ="));
+        var attrLine = content
+            .Split('\n')
+            .FirstOrDefault(l => l.Contains("Description =", StringComparison.Ordinal));
         attrLine.Should().NotBeNull();
         // The description value should not contain literal newlines
         attrLine.Should().NotContain("\r");

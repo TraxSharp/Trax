@@ -45,7 +45,7 @@ public class ScaffoldTrainShapeTests
             )
             .Select(Path.GetFileName)
             .Cast<string>()
-            .Order();
+            .Order(StringComparer.Ordinal);
 
     [TestCaseSource(nameof(FixtureSchemas))]
     public void Every_scaffolded_train_declares_its_chain_in_Junctions(string fixture)
@@ -55,7 +55,11 @@ public class ScaffoldTrainShapeTests
 
         var sources = Directory
             .EnumerateFiles(_outputDir, "*.cs", SearchOption.AllDirectories)
-            .ToDictionary(f => Path.GetRelativePath(_outputDir, f), File.ReadAllText);
+            .ToDictionary(
+                f => Path.GetRelativePath(_outputDir, f),
+                File.ReadAllText,
+                StringComparer.Ordinal
+            );
 
         // Where the generator writes each operation's train implementation. Named per operation
         // rather than matched on "*Train.cs", which would also match the I*Train.cs interfaces.
@@ -82,7 +86,11 @@ public class ScaffoldTrainShapeTests
                 .DescendantNodes()
                 .OfType<ClassDeclarationSyntax>()
                 .SingleOrDefault(c =>
-                    c.Identifier.ValueText == Path.GetFileNameWithoutExtension(path)
+                    string.Equals(
+                        c.Identifier.ValueText,
+                        Path.GetFileNameWithoutExtension(path),
+                        StringComparison.Ordinal
+                    )
                 );
 
             trainClass.Should().NotBeNull($"{path} must declare the train class it is named for");
@@ -104,13 +112,15 @@ public class ScaffoldTrainShapeTests
 
             root.DescendantNodes()
                 .OfType<MemberDeclarationSyntax>()
-                .Where(m => MemberName(m) == "RunInternal")
+                .Where(m => string.Equals(MemberName(m), "RunInternal", StringComparison.Ordinal))
                 .Should()
                 .BeEmpty($"{path} would not compile against the Trax a new scaffold references");
 
             root.DescendantNodes()
                 .OfType<InvocationExpressionSyntax>()
-                .Where(i => InvokedName(i.Expression) == "Activate")
+                .Where(i =>
+                    string.Equals(InvokedName(i.Expression), "Activate", StringComparison.Ordinal)
+                )
                 .Should()
                 .BeEmpty($"{path} would not compile against the Trax a new scaffold references");
         }

@@ -7,7 +7,7 @@ namespace Trax.Cli.Generator;
 
 public partial class CodeRenderer
 {
-    private readonly Dictionary<string, Template> _templates = new();
+    private readonly Dictionary<string, Template> _templates = new(StringComparer.Ordinal);
     private string? _modelsNamespace;
     private HashSet<string> _modelNames = new(StringComparer.Ordinal);
     private const string UnitType = "global::Trax.Core.Functional.Unit";
@@ -173,36 +173,36 @@ public partial class CodeRenderer
     ];
 
     public string RenderTrainsCsproj() =>
-        RenderTrainsCsproj(TrainsPackages.ToDictionary(p => p, _ => "1.*"));
+        RenderTrainsCsproj(TrainsPackages.ToDictionary(p => p, _ => "1.*", StringComparer.Ordinal));
 
     /// <summary>The trains csproj, referencing each of <see cref="TrainsPackages"/> at the version given.</summary>
     internal string RenderTrainsCsproj(IReadOnlyDictionary<string, string> versions)
     {
-        var scriptObject = new ScriptObject();
+        var scriptObject = new ScriptObject(StringComparer.Ordinal);
         var packages = new ScriptArray();
         foreach (var name in TrainsPackages)
         {
-            var package = new ScriptObject();
+            var package = new ScriptObject(StringComparer.Ordinal);
             package["Name"] = name;
             package["Version"] = versions[name];
             packages.Add(package);
         }
         scriptObject["Packages"] = packages;
 
-        var context = new TemplateContext();
+        var context = new TemplateContext(StringComparer.Ordinal);
         context.PushGlobal(scriptObject);
         return _templates["TrainsCsproj"].Render(context);
     }
 
     public string RenderGraphQLNamespaces(IEnumerable<string> groups, string projectName)
     {
-        var scriptObject = new ScriptObject();
+        var scriptObject = new ScriptObject(StringComparer.Ordinal);
         scriptObject["Namespace"] = $"{projectName}.Trains";
 
         var groupList = new ScriptArray();
         foreach (var group in groups)
         {
-            var obj = new ScriptObject
+            var obj = new ScriptObject(StringComparer.Ordinal)
             {
                 ["name"] = group,
                 ["value"] = NamingConventions.ToCamelCase(group),
@@ -215,21 +215,21 @@ public partial class CodeRenderer
         if (!_templates.TryGetValue("GraphQLNamespaces", out var template))
             throw new InvalidOperationException("Template 'GraphQLNamespaces' not found.");
 
-        var context = new TemplateContext();
+        var context = new TemplateContext(StringComparer.Ordinal);
         context.PushGlobal(scriptObject);
 
         return template.Render(context);
     }
 
-    public string RenderManifestNames(List<ApiOperation> operations, string projectName)
+    public string RenderManifestNames(IList<ApiOperation> operations, string projectName)
     {
-        var scriptObject = new ScriptObject();
+        var scriptObject = new ScriptObject(StringComparer.Ordinal);
         scriptObject["project_name"] = projectName;
 
         var opList = new ScriptArray();
         foreach (var op in operations)
         {
-            var opObj = new ScriptObject
+            var opObj = new ScriptObject(StringComparer.Ordinal)
             {
                 ["name"] = op.Name,
                 ["kebab_name"] = NamingConventions.ToKebabCase(op.Name),
@@ -242,7 +242,7 @@ public partial class CodeRenderer
         if (!_templates.TryGetValue("ManifestNames", out var template))
             throw new InvalidOperationException("Template 'ManifestNames' not found.");
 
-        var context = new TemplateContext();
+        var context = new TemplateContext(StringComparer.Ordinal);
         context.PushGlobal(scriptObject);
 
         return template.Render(context);
@@ -251,7 +251,7 @@ public partial class CodeRenderer
     private static ScriptObject MapField(ApiField field)
     {
         var sanitizedName = NamingConventions.SanitizeIdentifier(field.Name);
-        var obj = new ScriptObject
+        var obj = new ScriptObject(StringComparer.Ordinal)
         {
             ["Name"] = field.Name,
             ["SanitizedName"] = sanitizedName,
@@ -283,14 +283,13 @@ public partial class CodeRenderer
         if (_modelsNamespace == null || _modelNames.Count == 0)
             return typeExpression;
 
-        return ModelName()
-            .Replace(
-                typeExpression,
-                m =>
-                    _modelNames.Contains(m.Value) && !FollowedByTypeArguments(typeExpression, m)
-                        ? $"global::{_modelsNamespace}.{m.Value}"
-                        : m.Value
-            );
+        return ModelName.Replace(
+            typeExpression,
+            m =>
+                _modelNames.Contains(m.Value) && !FollowedByTypeArguments(typeExpression, m)
+                    ? $"global::{_modelsNamespace}.{m.Value}"
+                    : m.Value
+        );
     }
 
     private static bool FollowedByTypeArguments(
@@ -299,18 +298,22 @@ public partial class CodeRenderer
     ) => m.Index + m.Length < text.Length && text[m.Index + m.Length] == '<';
 
     private static bool IsUnitOutput(ApiType outputType) =>
-        outputType.Name == "Unit"
-        || (outputType.IsBuiltIn && outputType.Fields.Count == 0 && outputType.Name == "Unit");
+        string.Equals(outputType.Name, "Unit", StringComparison.Ordinal)
+        || (
+            outputType.IsBuiltIn
+            && outputType.Fields.Count == 0
+            && string.Equals(outputType.Name, "Unit", StringComparison.Ordinal)
+        );
 
     private string Render(string templateName, object model)
     {
         if (!_templates.TryGetValue(templateName, out var template))
             throw new InvalidOperationException($"Template '{templateName}' not found.");
 
-        var scriptObject = new ScriptObject();
+        var scriptObject = new ScriptObject(StringComparer.Ordinal);
         scriptObject.Import(model, renamer: member => member.Name);
 
-        var context = new TemplateContext();
+        var context = new TemplateContext(StringComparer.Ordinal);
         context.PushGlobal(scriptObject);
 
         return template.Render(context);
@@ -338,6 +341,10 @@ public partial class CodeRenderer
         }
     }
 
-    [System.Text.RegularExpressions.GeneratedRegex(SchemaNames.Pattern)]
-    private static partial System.Text.RegularExpressions.Regex ModelName();
+    [System.Text.RegularExpressions.GeneratedRegex(
+        SchemaNames.Pattern,
+        System.Text.RegularExpressions.RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial System.Text.RegularExpressions.Regex ModelName { get; }
 }

@@ -119,7 +119,9 @@ internal static class MachineLoader
     )
     {
         if (machineFullName is not null)
-            return machines.FirstOrDefault(t => t.FullName == machineFullName)
+            return machines.FirstOrDefault(t =>
+                    string.Equals(t.FullName, machineFullName, StringComparison.Ordinal)
+                )
                 ?? throw new InvalidOperationException(
                     $"Machine '{machineFullName}' not found in {assemblyName}. Available:\n  "
                         + string.Join("\n  ", machines.Select(t => t.FullName))

@@ -4,6 +4,7 @@ using AwesomeAssertions;
 using Trax.Cli.Clients;
 using Trax.Cli.Machines;
 using Trax.Cli.Tests.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 
 namespace Trax.Cli.Tests.UnitTests;
@@ -45,7 +46,7 @@ public partial class ClientGeneratorTests
         );
 
     private static string Text(IReadOnlyList<ClientFile> files, string path) =>
-        files.Single(f => f.Path == path).Text;
+        files.Single(f => string.Equals(f.Path, path, StringComparison.Ordinal)).Text;
 
     private static readonly ClientDocumentFile StartRunFile = new(
         "src/startRun.graphql",
@@ -71,11 +72,15 @@ public partial class ClientGeneratorTests
             .And.Contain($"generatedClientFormat = {ClientGenerator.ClientFormat}");
         foreach (
             var file in files.Where(f =>
-                f.Path.EndsWith(".g.ts") && f.Path is not "format.g.ts" and not "types.g.ts"
+                f.Path.EndsWith(".g.ts", StringComparison.Ordinal)
+                && f.Path is not "format.g.ts" and not "types.g.ts"
             )
         )
         {
-            if (file.Path.EndsWith(".machine.g.ts") || file.Path.EndsWith(".contexts.g.ts"))
+            if (
+                file.Path.EndsWith(".machine.g.ts", StringComparison.Ordinal)
+                || file.Path.EndsWith(".contexts.g.ts", StringComparison.Ordinal)
+            )
                 continue;
             FirstImport(file.Text)
                 .Should()
@@ -595,7 +600,10 @@ public partial class ClientGeneratorTests
         generator.Check(options, _out).Should().BeEmpty();
 
         var client = Path.Combine(_out, "client.g.ts");
-        File.WriteAllText(client, File.ReadAllText(client).Replace("\n", "\r\n"));
+        File.WriteAllText(
+            client,
+            File.ReadAllText(client).Replace("\n", "\r\n", StringComparison.Ordinal)
+        );
         generator.Check(options, _out).Should().BeEmpty("a checkout that writes CRLF is not drift");
 
         File.AppendAllText(Path.Combine(_out, "documents", "startRun.g.ts"), "// edited\n");
@@ -884,13 +892,20 @@ public partial class ClientGeneratorTests
 
     private static void MakeFifo(string path)
     {
-        using var mkfifo = System.Diagnostics.Process.Start("mkfifo", [path]);
+        using var mkfifo = System
+            .Diagnostics.Process.Start(
+                new System.Diagnostics.ProcessStartInfo("mkfifo", [path])
+                {
+                    UseShellExecute = false,
+                }
+            )
+            .NotNull();
         mkfifo.WaitForExit();
         mkfifo.ExitCode.Should().Be(0);
     }
 
     private static string TwinHeader(string id, string kind) =>
-        $"// AUTO-GENERATED from {id}.ir.json by {(kind == "machine" ? "generateMachineFactory" : "generateContextTypes")}. Do not edit by hand.\n";
+        $"// AUTO-GENERATED from {id}.ir.json by {(string.Equals(kind, "machine", StringComparison.Ordinal) ? "generateMachineFactory" : "generateContextTypes")}. Do not edit by hand.\n";
 
     [Test]
     public void Write_leaves_a_twin_trax_machine_generate_wrote_for_a_machine_the_manifest_does_not_serve()
@@ -969,7 +984,11 @@ public partial class ClientGeneratorTests
     {
         var document = StartRunFile with
         {
-            Text = ClientManifests.StartRunDocument.Replace("$input", "$" + name),
+            Text = ClientManifests.StartRunDocument.Replace(
+                "$input",
+                "$" + name,
+                StringComparison.Ordinal
+            ),
         };
 
         var render = () => RenderDocuments(ClientManifests.Sample(), document);
@@ -985,7 +1004,8 @@ public partial class ClientGeneratorTests
         {
             Text = ClientManifests.StartRunDocument.Replace(
                 "mutation StartRun",
-                "mutation SendDocument"
+                "mutation SendDocument",
+                StringComparison.Ordinal
             ),
         };
 
@@ -1020,7 +1040,8 @@ public partial class ClientGeneratorTests
             {
                 Text = ClientManifests.StartRunDocument.Replace(
                     "mutation StartRun",
-                    $"mutation {word}"
+                    $"mutation {word}",
+                    StringComparison.Ordinal
                 ),
             };
             var render = () => RenderDocuments(ClientManifests.Sample(), document);
@@ -1048,12 +1069,12 @@ public partial class ClientGeneratorTests
     public void The_generator_and_the_runtime_name_one_client_format()
     {
         var source = Path.Combine(EngineSrc(), "clientFormat.ts");
-        var match = ClientFormatDeclaration().Match(File.ReadAllText(source));
+        var match = ClientFormatDeclaration.Match(File.ReadAllText(source));
 
         match
             .Success.Should()
             .BeTrue("clientFormat.ts declares `export const clientFormat = <n>;`");
-        int.Parse(match.Groups["format"].Value)
+        int.Parse(match.Groups["format"].Value, System.Globalization.CultureInfo.InvariantCulture)
             .Should()
             .Be(
                 ClientGenerator.ClientFormat,
@@ -1080,6 +1101,10 @@ public partial class ClientGeneratorTests
         return "";
     }
 
-    [GeneratedRegex(@"^export const clientFormat = (?<format>\d+);$", RegexOptions.Multiline)]
-    private static partial Regex ClientFormatDeclaration();
+    [GeneratedRegex(
+        @"^export const clientFormat = (?<format>\d+);$",
+        RegexOptions.Multiline,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ClientFormatDeclaration { get; }
 }

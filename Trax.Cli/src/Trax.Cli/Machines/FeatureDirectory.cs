@@ -165,7 +165,7 @@ internal static class FeatureDirectory
         var warnings = derived.Warnings.Select(p => read.Glossary.Locate(p).ToString()).ToList();
         if (derived.Problems.Count > 0)
             return new Result(
-                new Dictionary<string, string>(),
+                new Dictionary<string, string>(StringComparer.Ordinal),
                 derived.Problems.Select(p => read.Glossary.Locate(p).ToString()).ToList(),
                 uiSteps,
                 warnings
@@ -211,9 +211,9 @@ internal static class FeatureDirectory
         {
             var path = Path.Combine(outDir, name);
             var before = File.Exists(path) ? Lf(File.ReadAllText(path)) : null;
-            if (before == text)
+            if (string.Equals(before, text, StringComparison.Ordinal))
                 continue;
-            File.WriteAllText(path, text, new UTF8Encoding(false));
+            File.WriteAllText(path, text, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             changes.Add($"{(before is null ? "wrote" : "updated")} {name}");
         }
         foreach (var stale in existing.Where(n => !files.ContainsKey(n)))
@@ -237,9 +237,9 @@ internal static class FeatureDirectory
             var path = Path.Combine(outDir, name);
             if (!File.Exists(path))
                 drift.Add($"{name} is missing");
-            else if (Lf(File.ReadAllText(path)) != text)
+            else if (!string.Equals(Lf(File.ReadAllText(path)), text, StringComparison.Ordinal))
                 drift.Add(
-                    name == AccessFileName
+                    string.Equals(name, AccessFileName, StringComparison.Ordinal)
                         ? $"{name} is stale: who may do what has changed"
                         : $"{name} is stale"
                 );
@@ -270,7 +270,7 @@ internal static class FeatureDirectory
             .EnumerateFileSystemEntries(outDir)
             .Select(Path.GetFileName)
             .Where(n => !IsOwned(n!) || Directory.Exists(Path.Combine(outDir, n!)))
-            .OrderBy(n => n, StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
             .ToList();
         if (foreign.Count > 0)
             throw new FeatureMachinesException(
@@ -280,7 +280,7 @@ internal static class FeatureDirectory
         return Directory
             .EnumerateFiles(outDir)
             .Select(p => Path.GetFileName(p))
-            .OrderBy(n => n, StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
             .ToList();
     }
 

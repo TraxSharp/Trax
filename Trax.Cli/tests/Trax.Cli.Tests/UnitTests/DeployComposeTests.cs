@@ -72,7 +72,7 @@ public class DeployComposeTests
         };
 
     private static Dictionary<string, DeployManifest> Exports() =>
-        new() { ["hub"] = Hub(), ["worker"] = Worker() };
+        new(StringComparer.Ordinal) { ["hub"] = Hub(), ["worker"] = Worker() };
 
     [Test]
     public void A_hub_and_two_workers_become_this_stack()
@@ -207,7 +207,11 @@ public class DeployComposeTests
         var compose = ComposeTarget
             .Render(
                 File_(),
-                new Dictionary<string, DeployManifest> { ["hub"] = hub, ["worker"] = worker }
+                new Dictionary<string, DeployManifest>(StringComparer.Ordinal)
+                {
+                    ["hub"] = hub,
+                    ["worker"] = worker,
+                }
             )[0]
             .Content;
 
@@ -221,7 +225,7 @@ public class DeployComposeTests
         var act = () =>
             ComposeTarget.Render(
                 File_(),
-                new Dictionary<string, DeployManifest>
+                new Dictionary<string, DeployManifest>(StringComparer.Ordinal)
                 {
                     ["hub"] = Hub(provider),
                     ["worker"] = Worker(),
@@ -252,7 +256,14 @@ public class DeployComposeTests
         var path = Write(File_());
         var exporter = new FakeExporter(Exports(), _dir);
 
-        var exit = DeployCommand.Run("compose", path, null, build: false, exporter, (_, _) => { });
+        var exit = DeployCommand.Run(
+            "compose",
+            path,
+            outDir: null,
+            build: false,
+            exporter,
+            (_, _) => { }
+        );
 
         exit.Should().Be(0);
         File.Exists(Path.Combine(_dir, "compose.yaml")).Should().BeTrue();
@@ -277,7 +288,7 @@ public class DeployComposeTests
         var exit = DeployCommand.Run(
             "compose",
             path,
-            null,
+            outDir: null,
             build: false,
             new FakeExporter(Exports(), _dir),
             (_, _) => { }
@@ -297,7 +308,7 @@ public class DeployComposeTests
             .Run(
                 "compose",
                 path,
-                null,
+                outDir: null,
                 build: true,
                 new FakeExporter(Exports(), _dir),
                 (p, i) => built.Add((p, i))
@@ -314,8 +325,8 @@ public class DeployComposeTests
             .Run(
                 "gcp",
                 Write(File_()),
-                null,
-                false,
+                outDir: null,
+                build: false,
                 new FakeExporter(Exports(), _dir),
                 (_, _) => { }
             )
@@ -409,7 +420,7 @@ public class DeployComposeTests
         var psi = DotnetHostExporter.StartInfo(
             "/src/Orders/Orders.csproj",
             "/tmp/m.json",
-            new Dictionary<string, string> { ["X"] = "y" }
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["X"] = "y" }
         );
 
         psi.ArgumentList.Should()

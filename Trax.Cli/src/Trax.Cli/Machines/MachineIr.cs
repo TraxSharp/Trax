@@ -57,7 +57,7 @@ internal sealed class MachineIr
         // A machine listed twice leaves --machine with two IRs to pick from, so the manifest is refused whole.
         var repeated = manifest
             .Machines.GroupBy(m => m.Id, StringComparer.Ordinal)
-            .Where(g => g.Count() > 1)
+            .Where(g => g.Skip(1).Any())
             .Select(g => $"'{g.Key}'")
             .ToList();
         if (repeated.Count > 0)
@@ -70,7 +70,9 @@ internal sealed class MachineIr
         var ids = string.Join(", ", manifest.Machines.Select(m => m.Id));
         if (id is not null)
             return Of(
-                manifest.Machines.FirstOrDefault(m => m.Id == id)
+                manifest.Machines.FirstOrDefault(m =>
+                    string.Equals(m.Id, id, StringComparison.Ordinal)
+                )
                     ?? throw new InvalidOperationException(
                         manifest.Machines.Count == 0
                             ? $"The manifest {manifestPath} exposes no machine, so it has no '{id}'."

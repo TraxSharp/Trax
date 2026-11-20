@@ -17,7 +17,9 @@ public class OpenApiEdgeCasesTests
     {
         var schema = ParseEdgeCases().Parse(FixturePath("openapi-edge-cases.json"));
 
-        var op = schema.Operations.Single(o => o.Name == "ScalarResponse");
+        var op = schema.Operations.Single(o =>
+            string.Equals(o.Name, "ScalarResponse", StringComparison.Ordinal)
+        );
         op.OutputType.Name.Should().Be("ScalarResponseOutput");
         op.OutputType.Fields.Should().ContainSingle(f => f.Name == "Value");
         op.OutputType.Fields[0].TypeName.Should().Be("double");
@@ -28,8 +30,14 @@ public class OpenApiEdgeCasesTests
     {
         var schema = ParseEdgeCases().Parse(FixturePath("openapi-edge-cases.json"));
 
-        var op = schema.Operations.Single(o => o.Name == "AllOfRef");
-        var fields = op.OutputType.Fields.ToDictionary(f => f.Name, f => f.TypeName);
+        var op = schema.Operations.Single(o =>
+            string.Equals(o.Name, "AllOfRef", StringComparison.Ordinal)
+        );
+        var fields = op.OutputType.Fields.ToDictionary(
+            f => f.Name,
+            f => f.TypeName,
+            StringComparer.Ordinal
+        );
 
         // allOf with $ref → resolves to the referenced type name (Pascal-cased)
         fields.Should().ContainKey("Merged");
@@ -62,9 +70,14 @@ public class OpenApiEdgeCasesTests
         var schema = ParseEdgeCases().Parse(FixturePath("openapi-edge-cases.json"));
 
         // MergedShape allOf merges Base { id, name } with { extra }
-        var merged = schema.Types.Single(t => t.Name == "MergedShape");
+        var merged = schema.Types.Single(t =>
+            string.Equals(t.Name, "MergedShape", StringComparison.Ordinal)
+        );
         merged.Fields.Select(f => f.Name).Should().Contain(new[] { "Id", "Name", "Extra" });
-        merged.Fields.Single(f => f.Name == "Extra").IsRequired.Should().BeTrue();
+        merged
+            .Fields.Single(f => string.Equals(f.Name, "Extra", StringComparison.Ordinal))
+            .IsRequired.Should()
+            .BeTrue();
     }
 
     [Test]

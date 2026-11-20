@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -28,11 +29,13 @@ internal static class BoardWriter
                             .Web
                             .JavaScriptEncoder
                             .UnsafeRelaxedJsonEscaping,
+                        RespectNullableAnnotations = false,
+                        RespectRequiredConstructorParameters = false,
                     }
                 ) + "\n",
             "mermaid" => Mermaid(board),
             "html" => Html(board),
-            _ => throw new ArgumentOutOfRangeException(nameof(format), format, null),
+            _ => throw new ArgumentOutOfRangeException(nameof(format), format, message: null),
         };
 
     internal static JsonObject Json(Board.Drawn board) =>
@@ -87,7 +90,9 @@ internal static class BoardWriter
     private static string Mermaid(Board.Drawn board)
     {
         var ids = board
-            .Stickies.Select((s, i) => (s.Id, Node: $"n{i}"))
+            .Stickies.Select(
+                (s, i) => (s.Id, Node: string.Create(CultureInfo.InvariantCulture, $"n{i}"))
+            )
             .ToDictionary(x => x.Id, x => x.Node, StringComparer.Ordinal);
         var text = new StringBuilder("flowchart LR\n");
         foreach (var (kind, colour) in Colours)
@@ -97,10 +102,15 @@ internal static class BoardWriter
         // A machine id may be a word Mermaid reads (end) or a sticky's node id (n0), so each subgraph has an id of
         // its own and the machine as its title.
         foreach (
-            var (group, index) in board.Stickies.GroupBy(s => s.Machine).Select((g, i) => (g, i))
+            var (group, index) in board
+                .Stickies.GroupBy(s => s.Machine, StringComparer.Ordinal)
+                .Select((g, i) => (g, i))
         )
         {
-            text.Append($"  subgraph m{index}[\"{MachineRenderer.MermaidText(group.Key)}\"]\n");
+            text.Append(
+                System.Globalization.CultureInfo.InvariantCulture,
+                $"  subgraph m{index}[\"{MachineRenderer.MermaidText(group.Key)}\"]\n"
+            );
             foreach (var sticky in group)
                 text.Append(
                     $"    {ids[sticky.Id]}[\"{MachineRenderer.MermaidText(sticky.Label)}\"]:::{sticky.Kind.ToString().ToLowerInvariant()}\n"

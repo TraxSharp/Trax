@@ -38,7 +38,7 @@ public class OpenApiCoverageGapsExtraTests
         names.Should().HaveCount(3);
         names.Should().Contain("GetThing");
         names.Should().Contain("GetThingByThingId");
-        names.Should().Contain(n => n.EndsWith("2", StringComparison.Ordinal));
+        names.Should().Contain(n => n.EndsWith('2'));
     }
 
     [Test]
@@ -50,9 +50,15 @@ public class OpenApiCoverageGapsExtraTests
         var parser = new OpenApiSchemaParser();
         var schema = parser.Parse(FixturePath("coverage-gaps.json"));
 
-        var output = schema.Operations.Single(o => o.Name == "ListEmpties").OutputType!;
-        var single = output.Fields.Single(f => f.Name == "Single");
-        var many = output.Fields.Single(f => f.Name == "Many");
+        var output = schema
+            .Operations.Single(o => string.Equals(o.Name, "ListEmpties", StringComparison.Ordinal))
+            .OutputType!;
+        var single = output.Fields.Single(f =>
+            string.Equals(f.Name, "Single", StringComparison.Ordinal)
+        );
+        var many = output.Fields.Single(f =>
+            string.Equals(f.Name, "Many", StringComparison.Ordinal)
+        );
 
         single.TypeName.Should().Be("object");
         many.TypeName.Should().Be("List<object>");

@@ -104,7 +104,7 @@ internal sealed partial class ClientGenerator
             .Distinct(StringComparer.Ordinal)
             .ToList();
         if (requirements.Count > 0)
-            sb.Append(TypeScript.Doc(string.Join(" ", requirements)));
+            sb.Append(TypeScript.Doc(string.Join(' ', requirements)));
         sb.Append(
             $"export function {function}({string.Join(", ", parameters)}): Promise<{result}> {{\n"
         );
@@ -124,7 +124,12 @@ internal sealed partial class ClientGenerator
     )
     {
         var sb = new StringBuilder("{\n");
-        foreach (var group in operation.Trains.GroupBy(t => t.Path.Count == 2 ? null : t.Path[1]))
+        foreach (
+            var group in operation.Trains.GroupBy(
+                t => t.Path.Count == 2 ? null : t.Path[1],
+                StringComparer.Ordinal
+            )
+        )
         {
             var indent = group.Key is null ? 2 : 4;
             if (group.Key is not null)
@@ -203,9 +208,14 @@ internal sealed partial class ClientGenerator
                         text = o.Text,
                     }),
                 },
-                new JsonSerializerOptions { WriteIndented = true }
+                new JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                    RespectNullableAnnotations = false,
+                    RespectRequiredConstructorParameters = false,
+                }
             )
-            .Replace("\r\n", "\n") + "\n";
+            .Replace("\r\n", "\n", StringComparison.Ordinal) + "\n";
 
     // The manifest's types plus the root and namespace types that hold each exposed train and query model, so an editor
     // checks and completes a document against what the host serves.
@@ -248,7 +258,7 @@ internal sealed partial class ClientGenerator
                 sb.Append($"type {holder}{TypeScript.Upper(ns)} {{\n");
                 foreach (
                     var train in trains
-                        .Where(t => t.Namespace == ns)
+                        .Where(t => string.Equals(t.Namespace, ns, StringComparison.Ordinal))
                         .OrderBy(t => t.Field, StringComparer.Ordinal)
                 )
                     sb.Append($"  {TrainField(train)}\n");
@@ -259,7 +269,11 @@ internal sealed partial class ClientGenerator
         foreach (var (kind, type) in roots)
             sb.Append($"  {kind}: {type}\n");
         sb.Append("}\n\n");
-        sb.Append(WithoutDirectives((manifest.Types ?? "").Replace("\r\n", "\n").Trim()))
+        sb.Append(
+                WithoutDirectives(
+                    (manifest.Types ?? "").Replace("\r\n", "\n", StringComparison.Ordinal).Trim()
+                )
+            )
             .Append('\n');
         return sb.ToString();
     }
@@ -271,14 +285,16 @@ internal sealed partial class ClientGenerator
             '\n',
             sdl.Split('\n')
                 .Select(line =>
-                    line.TrimStart().StartsWith('"') ? line : DirectiveUse().Replace(line, "")
+                    line.TrimStart().StartsWith('"') ? line : DirectiveUse.Replace(line, "")
                 )
         );
 
     [System.Text.RegularExpressions.GeneratedRegex(
-        @"\s+@[_A-Za-z][_0-9A-Za-z]*(?:\((?:[^()""]|""(?:[^""\\]|\\.)*"")*\))?"
+        @"\s+@[_A-Za-z][_0-9A-Za-z]*(?:\((?:[^()""]|""(?:[^""\\]|\\.)*"")*\))?",
+        System.Text.RegularExpressions.RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
     )]
-    private static partial System.Text.RegularExpressions.Regex DirectiveUse();
+    private static partial System.Text.RegularExpressions.Regex DirectiveUse { get; }
 
     private static string TrainField(ClientManifestTrain train)
     {

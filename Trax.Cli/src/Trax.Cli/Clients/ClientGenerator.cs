@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -92,7 +93,7 @@ internal sealed partial class ClientGenerator
                 TypeScript.Identifier(TypeScript.Camel(machine.Id), "machine"),
                 machine.Id
             );
-            if (MachineModuleNames.Contains(camel) || SharedOutput().IsMatch(camel))
+            if (MachineModuleNames.Contains(camel) || SharedOutput.IsMatch(camel))
                 throw new InvalidOperationException(
                     $"The machine '{machine.Id}' is written as '{camel}', a name its generated modules use. "
                         + "Rename it on the host."
@@ -373,8 +374,12 @@ internal sealed partial class ClientGenerator
                 drift.Add(new(file.Path, DriftStatus.Missing));
             // Twice the text's bytes allows every line ending to be CRLF; anything longer differs anyway.
             else if (
-                ReadPrefix(path, 2 * Encoding.UTF8.GetByteCount(file.Text) + 1)
-                    ?.Replace("\r\n", "\n") != file.Text
+                !string.Equals(
+                    ReadPrefix(path, 2 * Encoding.UTF8.GetByteCount(file.Text) + 1)
+                        ?.Replace("\r\n", "\n", StringComparison.Ordinal),
+                    file.Text,
+                    StringComparison.Ordinal
+                )
             )
                 drift.Add(new(file.Path, DriftStatus.Drifted));
         }
@@ -490,9 +495,14 @@ internal sealed partial class ClientGenerator
     // format 1 and its documents, and nothing else.
     private static bool DocumentFile(string path, string name)
     {
-        if (name != DocumentsFileName)
-            return FirstLine(path)
-                == (name == EditorSchemaFileName ? EditorSchemaHeader : EditorConfigHeader);
+        if (!string.Equals(name, DocumentsFileName, StringComparison.Ordinal))
+            return string.Equals(
+                FirstLine(path),
+                string.Equals(name, EditorSchemaFileName, StringComparison.Ordinal)
+                    ? EditorSchemaHeader
+                    : EditorConfigHeader,
+                StringComparison.Ordinal
+            );
         if (ReadPrefix(path, ManifestBytes) is not { } text)
             return false;
         try
@@ -523,10 +533,21 @@ internal sealed partial class ClientGenerator
     private static bool IsRoot(string folder, Writer writer) =>
         writer switch
         {
-            Writer.Manifest => FirstLine(Path.Combine(folder, "index.g.ts")) == ClientHeaderLine,
-            Writer.OperationsTypeScript => FirstLine(Path.Combine(folder, "index.g.ts"))
-                == OperationsHeaderLine,
-            _ => FirstLine(Path.Combine(folder, "Types.g.cs")) == OperationsHeaderLine,
+            Writer.Manifest => string.Equals(
+                FirstLine(Path.Combine(folder, "index.g.ts")),
+                ClientHeaderLine,
+                StringComparison.Ordinal
+            ),
+            Writer.OperationsTypeScript => string.Equals(
+                FirstLine(Path.Combine(folder, "index.g.ts")),
+                OperationsHeaderLine,
+                StringComparison.Ordinal
+            ),
+            _ => string.Equals(
+                FirstLine(Path.Combine(folder, "Types.g.cs")),
+                OperationsHeaderLine,
+                StringComparison.Ordinal
+            ),
         };
 
     // Refuses a client whose files would land in another client of the same writer, or that sits in a folder another
@@ -581,7 +602,11 @@ internal sealed partial class ClientGenerator
     // The folders on the way to a generated file, by their path under outDir: a/b/c.g.ts gives a and a/b.
     private static IEnumerable<string> Folders(string file)
     {
-        for (var end = file.IndexOf('/'); end >= 0; end = file.IndexOf('/', end + 1))
+        for (
+            var end = file.IndexOf('/', StringComparison.Ordinal);
+            end >= 0;
+            end = file.IndexOf('/', end + 1)
+        )
             yield return file[..end];
     }
 
@@ -621,7 +646,10 @@ internal sealed partial class ClientGenerator
         {
             var id = Path.GetFileName(dir);
             var client = Path.Combine(dir, $"{id}.client.g.ts");
-            if (MachineGenerator.IsMachineId(id) && FirstLine(client) == ClientHeaderLine)
+            if (
+                MachineGenerator.IsMachineId(id)
+                && string.Equals(FirstLine(client), ClientHeaderLine, StringComparison.Ordinal)
+            )
                 served.Add(id);
         }
         return served;
@@ -646,14 +674,17 @@ internal sealed partial class ClientGenerator
         var first = FirstLine(path);
         if (first is null)
             return false;
-        if (first == header)
+        if (string.Equals(first, header, StringComparison.Ordinal))
             return true;
         return relative.Split('/') is [var id, var name]
             && served.Contains(id)
             && TwinFiles.Any(t =>
-                name == $"{id}.{t.Kind}.g.ts"
-                && first
-                    == $"// AUTO-GENERATED from {id}.ir.json by {t.Generator}. Do not edit by hand."
+                string.Equals(name, $"{id}.{t.Kind}.g.ts", StringComparison.Ordinal)
+                && string.Equals(
+                    first,
+                    $"// AUTO-GENERATED from {id}.ir.json by {t.Generator}. Do not edit by hand.",
+                    StringComparison.Ordinal
+                )
             );
     }
 
@@ -740,8 +771,12 @@ internal sealed partial class ClientGenerator
     };
 
     // A schema several of a twin's outcomes share is declared as sharedOutput0, sharedOutput1, ...
-    [System.Text.RegularExpressions.GeneratedRegex(@"\AsharedOutput[0-9]+\z")]
-    private static partial System.Text.RegularExpressions.Regex SharedOutput();
+    [System.Text.RegularExpressions.GeneratedRegex(
+        @"\AsharedOutput[0-9]+\z",
+        System.Text.RegularExpressions.RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial System.Text.RegularExpressions.Regex SharedOutput { get; }
 
     // The names the client's own modules export from the index, which no machine, train or type may take.
     private static readonly string[] RuntimeNames =
@@ -781,15 +816,19 @@ internal sealed partial class ClientGenerator
                     + "Export the manifest again from the host."
             );
         foreach (var name in new[] { train.Field, train.Namespace }.OfType<string>())
-            if (!GraphQLName().IsMatch(name))
+            if (!GraphQLName.IsMatch(name))
                 throw new InvalidOperationException(
                     $"The train field or namespace {TypeScript.Literal(name)} is not a GraphQL name. Export the "
                         + "manifest again from the host."
                 );
     }
 
-    [System.Text.RegularExpressions.GeneratedRegex(@"\A[_A-Za-z][_0-9A-Za-z]*\z")]
-    private static partial System.Text.RegularExpressions.Regex GraphQLName();
+    [System.Text.RegularExpressions.GeneratedRegex(
+        @"\A[_A-Za-z][_0-9A-Za-z]*\z",
+        System.Text.RegularExpressions.RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial System.Text.RegularExpressions.Regex GraphQLName { get; }
 
     /// <summary>
     /// Refuses an IR the twin generator must not read: one naming another machine than the manifest entry (its id
@@ -803,7 +842,7 @@ internal sealed partial class ClientGenerator
     {
         var ir = machine.Ir;
         var id = ir["id"] is JsonValue value && value.TryGetValue<string>(out var s) ? s : null;
-        if (id != machine.Id)
+        if (!string.Equals(id, machine.Id, StringComparison.Ordinal))
             throw new InvalidOperationException(
                 $"The IR of the machine '{machine.Id}' is the IR of '{id}'. Export the manifest again from the host."
             );
@@ -816,19 +855,22 @@ internal sealed partial class ClientGenerator
                     $"The IR of the machine '{machine.Id}' has no {key}. Export the manifest again from the host."
                 );
             foreach (var item in list)
+            {
                 if (
                     item is not JsonValue v
                     || !v.TryGetValue<string>(out var name)
                     || !TypeScript.IsIdentifier(name)
                 )
                     throw NotAnIdentifier(machine.Id, what, item?.ToJsonString());
-                else if (TypeScript.IsPrototypeMember(name))
+
+                if (TypeScript.IsPrototypeMember(name))
                     throw new InvalidOperationException(
                         $"The machine '{machine.Id}' has the {what} {TypeScript.Literal(name)}, a name every "
                             + "JavaScript object has, so the twin would read it as something else. Rename it on the host."
                     );
-                else
-                    names.Add(name);
+
+                names.Add(name);
+            }
         }
         // The twin looks a state's context and invariant, and a trigger's input, up by name: a key that is none of them
         // is not the host's.
@@ -875,7 +917,7 @@ internal sealed partial class ClientGenerator
         var hash = Convert.ToHexStringLower(
             SHA256.HashData(Encoding.UTF8.GetBytes(machine.IrText()))
         );
-        if (hash != machine.IrHash)
+        if (!string.Equals(hash, machine.IrHash, StringComparison.Ordinal))
             throw new InvalidOperationException(
                 $"The IR of the machine '{machine.Id}' hashes to {hash}, and the manifest names {machine.IrHash}: "
                     + "its documents were registered for another IR. Export the manifest again from the host."
@@ -885,7 +927,9 @@ internal sealed partial class ClientGenerator
     private static bool HasProtoKey(JsonNode? node) =>
         node switch
         {
-            JsonObject o => o.Any(p => p.Key == "__proto__" || HasProtoKey(p.Value)),
+            JsonObject o => o.Any(p =>
+                string.Equals(p.Key, "__proto__", StringComparison.Ordinal) || HasProtoKey(p.Value)
+            ),
             JsonArray a => a.Any(HasProtoKey),
             _ => false,
         };
@@ -1277,7 +1321,10 @@ internal sealed partial class ClientGenerator
             );
             if (result.ExitCode != 0)
                 throw new InvalidOperationException(
-                    $"node generate-twin.mjs failed (exit {result.ExitCode}): {result.StdErr.Trim()}"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"node generate-twin.mjs failed (exit {result.ExitCode}): {result.StdErr.Trim()}"
+                    )
                 );
             foreach (var kind in new[] { "contexts", "machine" })
             {
@@ -1332,10 +1379,14 @@ internal sealed partial class ClientGenerator
         sb.Append($"let server: ReturnType<typeof createMachineServer> | null = null;\n");
         sb.Append("let serverGeneration = -1;\n\n");
         sb.Append(
-            $"/**\n * The server of '{EscapeDocText(machine.Id)}' over the connection given to configureTrax. Once configureTrax is\n"
-                + " * called again, a server made before refuses every request and stream with a TraxOperationError\n"
-                + " * (`CONNECTION_CHANGED`): call this again for the server over the new connection.\n */\n"
-        );
+                $"/**\n * The server of '{EscapeDocText(machine.Id)}' over the connection given to configureTrax. Once configureTrax is\n"
+            )
+            .Append(
+                " * called again, a server made before refuses every request and stream with a TraxOperationError\n"
+            )
+            .Append(
+                " * (`CONNECTION_CHANGED`): call this again for the server over the new connection.\n */\n"
+            );
         sb.Append($"export function {camel}Server(): ReturnType<typeof createMachineServer> {{\n");
         sb.Append("  const generation = traxGeneration();\n");
         sb.Append("  if (server === null || serverGeneration !== generation) {\n");
@@ -1376,10 +1427,14 @@ internal sealed partial class ClientGenerator
         sb.Append("  }\n");
         sb.Append("  return server;\n}\n\n");
         sb.Append(
-            $"/**\n * One instance of '{EscapeDocText(machine.Id)}': the given id, or one started with `startInput`. It renders again\n"
-                + " * when configureTrax is called, onto a server over the new connection. A start in flight is kept per user (the\n"
-                + " * `user` given to configureTrax), so it is never sent again as another user.\n */\n"
-        );
+                $"/**\n * One instance of '{EscapeDocText(machine.Id)}': the given id, or one started with `startInput`. It renders again\n"
+            )
+            .Append(
+                " * when configureTrax is called, onto a server over the new connection. A start in flight is kept per user (the\n"
+            )
+            .Append(
+                " * `user` given to configureTrax), so it is never sent again as another user.\n */\n"
+            );
         sb.Append(
             $"export function use{pascal}(options: Omit<UseServerMachineOptions, \"server\"> = {{}}) {{\n"
         );
@@ -1392,12 +1447,18 @@ internal sealed partial class ClientGenerator
             $"  return useServerMachine({camel}, {{ ...options, startStorageKey, server: {camel}Server() }});\n}}\n\n"
         );
         sb.Append(
-            $"/**\n * The instance of '{EscapeDocText(machine.Id)}' this browser keeps across visits for the `user` given to\n"
-                + " * configureTrax, started when there is none. Each user's instance is kept under a key of its own, so a browser\n"
-                + $" * two people sign in to never opens one's instance for the other. `rememberKey` replaces the {EscapeDocText(TypeScript.Literal("trax." + machine.Id))}\n"
-                + " * the key starts with. It renders again when configureTrax is called, onto a server over the new connection and\n"
-                + " * the new user's key at once.\n */\n"
-        );
+                $"/**\n * The instance of '{EscapeDocText(machine.Id)}' this browser keeps across visits for the `user` given to\n"
+            )
+            .Append(
+                " * configureTrax, started when there is none. Each user's instance is kept under a key of its own, so a browser\n"
+            )
+            .Append(
+                $" * two people sign in to never opens one's instance for the other. `rememberKey` replaces the {EscapeDocText(TypeScript.Literal("trax." + machine.Id))}\n"
+            )
+            .Append(
+                " * the key starts with. It renders again when configureTrax is called, onto a server over the new connection and\n"
+            )
+            .Append(" * the new user's key at once.\n */\n");
         sb.Append(
             $"export function useRemembered{pascal}({{ rememberKey, ...options }}: Omit<UseRememberedMachineOptions, \"server\" | \"rememberKey\"> & {{ rememberKey?: string }} = {{}}) {{\n"
         );
@@ -1561,10 +1622,10 @@ internal sealed partial class ClientGenerator
                 )
             );
             body.Append(
-                $"export function {names[0]}(): Promise<{names[1]}> {{\n"
-                    + $"  return sendDocument({names[2]}, {{}}, [\"views\", {TypeScript.Literal(view.Operation)}]);\n"
-                    + "}\n\n"
-            );
+                    $"export function {names[0]}(): Promise<{names[1]}> {{\n"
+                        + $"  return sendDocument({names[2]}, {{}}, [\"views\", {TypeScript.Literal(view.Operation)}]);\n"
+                )
+                .Append("}\n\n");
         }
         var sb = new StringBuilder(Header);
         sb.Append("import \"./format.g\";\n");
@@ -1585,8 +1646,12 @@ internal sealed partial class ClientGenerator
     {
         if (manifest.Progress.Count == 0)
             return null;
-        var query = manifest.Progress.SingleOrDefault(d => d.Operation == "query");
-        var stream = manifest.Progress.SingleOrDefault(d => d.Operation == "subscription");
+        var query = manifest.Progress.SingleOrDefault(d =>
+            string.Equals(d.Operation, "query", StringComparison.Ordinal)
+        );
+        var stream = manifest.Progress.SingleOrDefault(d =>
+            string.Equals(d.Operation, "subscription", StringComparison.Ordinal)
+        );
         if (query is null || stream is null || manifest.Progress.Count != 2)
             throw new InvalidOperationException(
                 "The manifest's progress documents are not one query and one subscription. Export the manifest "
@@ -1893,7 +1958,7 @@ internal sealed partial class ClientGenerator
         {
             if (_owners.TryGetValue(name, out var other))
                 throw new InvalidOperationException(
-                    other == owner
+                    string.Equals(other, owner, StringComparison.Ordinal)
                         ? $"'{owner}' is listed twice in the manifest. Export the manifest again from the host."
                         : $"'{other}' and '{owner}' both generate the name '{name}'. {rename}"
                 );

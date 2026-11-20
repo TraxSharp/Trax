@@ -54,7 +54,10 @@ public class TraxProjectGeneratorInternalsTests
         File.WriteAllText(host, "");
 
         TraxProjectGenerator
-            .Dotnet(n => n == "DOTNET_HOST_PATH" ? host : null, _ => "/elsewhere/dotnet")
+            .Dotnet(
+                n => string.Equals(n, "DOTNET_HOST_PATH", StringComparison.Ordinal) ? host : null,
+                _ => "/elsewhere/dotnet"
+            )
             .Should()
             .Be(host);
     }
@@ -64,7 +67,14 @@ public class TraxProjectGeneratorInternalsTests
     [TestCase("bin/dotnet")]
     public void A_relative_DOTNET_HOST_PATH_is_not_run(string relative) =>
         TraxProjectGenerator
-            .Dotnet(n => n == "DOTNET_HOST_PATH" ? relative : null, _ => null, _ => true)
+            .Dotnet(
+                n =>
+                    string.Equals(n, "DOTNET_HOST_PATH", StringComparison.Ordinal)
+                        ? relative
+                        : null,
+                _ => null,
+                _ => true
+            )
             .Should()
             .BeNull();
 
@@ -72,7 +82,10 @@ public class TraxProjectGeneratorInternalsTests
     public void A_DOTNET_HOST_PATH_that_is_not_a_file_falls_back_to_PATH() =>
         TraxProjectGenerator
             .Dotnet(
-                n => n == "DOTNET_HOST_PATH" ? Path.Combine(_tempDir, "missing") : null,
+                n =>
+                    string.Equals(n, "DOTNET_HOST_PATH", StringComparison.Ordinal)
+                        ? Path.Combine(_tempDir, "missing")
+                        : null,
                 _ => "/usr/bin/dotnet"
             )
             .Should()
@@ -151,9 +164,7 @@ public class TraxProjectGeneratorInternalsTests
         TraxProjectGenerator.PatchProgramCs(hubDir, "MyApi");
 
         var updated = File.ReadAllText(programPath);
-        var occurrences = System
-            .Text.RegularExpressions.Regex.Matches(updated, "using MyApi.Trains;")
-            .Count;
+        var occurrences = updated.Split("using MyApi.Trains;").Length - 1;
         occurrences.Should().Be(1);
     }
 

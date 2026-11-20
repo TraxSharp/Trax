@@ -28,8 +28,7 @@ internal static partial class SchemaNames
         StringComparer.Ordinal
     );
 
-    internal static bool IsIdentifier(string? name) =>
-        name is not null && Identifier().IsMatch(name);
+    internal static bool IsIdentifier(string? name) => name is not null && Identifier.IsMatch(name);
 
     internal static void Validate(ApiSchema schema, string projectName)
     {
@@ -47,7 +46,7 @@ internal static partial class SchemaNames
                 .Select(t => t.Name)
                 .Concat(schema.Enums.Select(e => e.Name))
                 .Where(Reserved.Contains)
-                .Distinct()
+                .Distinct(StringComparer.Ordinal)
         )
             problems.Add($"type '{name}' (reserved for the framework type of that name)");
 
@@ -97,7 +96,9 @@ internal static partial class SchemaNames
                 + Environment.NewLine
                 + string.Join(
                     Environment.NewLine,
-                    problems.Distinct().Select(p => "  " + GeneratedText.SingleLine(p))
+                    problems
+                        .Distinct(StringComparer.Ordinal)
+                        .Select(p => "  " + GeneratedText.SingleLine(p))
                 )
         );
     }
@@ -131,7 +132,7 @@ internal static partial class SchemaNames
         foreach (
             var name in names
                 .GroupBy(n => n, StringComparer.Ordinal)
-                .Where(g => g.Count() > 1)
+                .Where(g => g.Skip(1).Any())
                 .Select(g => g.Key)
         )
             problems.Add($"{kind} '{name}' (more than once after the PascalCase conversion)");
@@ -168,14 +169,16 @@ internal static partial class SchemaNames
         foreach (
             var group in definitions
                 .GroupBy(d => d.Name, StringComparer.OrdinalIgnoreCase)
-                .Where(g => g.Count() > 1)
+                .Where(g => g.Skip(1).Any())
         )
             problems.Add(
                 $"{kind} '{group.Key}' comes from more than one definition: "
                     + string.Join(
                         ", ",
                         group.Select(d =>
-                            d.Source == d.Name ? $"'{d.Source}'" : $"'{d.Source}' (as '{d.Name}')"
+                            string.Equals(d.Source, d.Name, StringComparison.Ordinal)
+                                ? $"'{d.Source}'"
+                                : $"'{d.Source}' (as '{d.Name}')"
                         )
                     )
             );
@@ -202,7 +205,7 @@ internal static partial class SchemaNames
 
     private static bool ReadType(string text, ref int position)
     {
-        var match = IdentifierAt().Match(text, position);
+        var match = IdentifierAt.Match(text, position);
         if (!match.Success)
             return false;
         position += match.Length;
@@ -237,9 +240,9 @@ internal static partial class SchemaNames
         return true;
     }
 
-    [GeneratedRegex("^" + Pattern + @"\z")]
-    private static partial Regex Identifier();
+    [GeneratedRegex("^" + Pattern + @"\z", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Identifier { get; }
 
-    [GeneratedRegex(@"\G" + Pattern)]
-    private static partial Regex IdentifierAt();
+    [GeneratedRegex(@"\G" + Pattern, RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex IdentifierAt { get; }
 }

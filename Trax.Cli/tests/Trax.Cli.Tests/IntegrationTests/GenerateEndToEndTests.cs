@@ -83,7 +83,14 @@ public class GenerateEndToEndTests
         var output = new DirectoryInfo(_outputDir);
 
         Action act = () =>
-            GenerateCommand.Handle(schema, output, "MyApi", null, force: false, _hive.Generator());
+            GenerateCommand.Handle(
+                schema,
+                output,
+                "MyApi",
+                type: null,
+                force: false,
+                _hive.Generator()
+            );
 
         act.Should().NotThrow();
         Directory.Exists(Path.Combine(_outputDir, "MyApi.Hub")).Should().BeTrue();

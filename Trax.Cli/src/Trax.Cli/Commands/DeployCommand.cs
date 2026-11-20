@@ -1,5 +1,6 @@
 using System.CommandLine;
 using System.Diagnostics;
+using System.Globalization;
 using Trax.Cli.Deploy;
 using Trax.Effect.Configuration.Deploy;
 
@@ -56,7 +57,7 @@ internal static class DeployCommand
                 var environment = parseResult.GetValue(env);
                 var chosen =
                     parseResult.GetValue(target) ?? (environment is null ? "compose" : "aws");
-                if (chosen != "aws")
+                if (!string.Equals(chosen, "aws", StringComparison.Ordinal))
                     return Task.FromResult(
                         Run(
                             chosen,
@@ -153,7 +154,7 @@ internal static class DeployCommand
                     $"{path} exists. Edit it, or pass --force to write a new one over it."
                 );
             var file = DeployInit.Create(directory, app);
-            if (target == "aws")
+            if (string.Equals(target, "aws", StringComparison.Ordinal))
                 file.Environments["production"] = new DeployEnvironment
                 {
                     Profile = DeployEnvironment.Production,
@@ -166,7 +167,7 @@ internal static class DeployCommand
             foreach (var (name, service) in file.Services)
                 Console.WriteLine($"  {name, -12}{service.Project}");
             Console.WriteLine(
-                target == "aws"
+                string.Equals(target, "aws", StringComparison.Ordinal)
                     ? "Check the production environment's region, domain and hostedZoneId, name the settings and "
                         + "secrets the hosts read, then run 'trax deploy plan --env production'."
                     : "Name the settings and secrets the hosts read, then run 'trax deploy --target compose'."
@@ -191,7 +192,7 @@ internal static class DeployCommand
     {
         try
         {
-            if (target != "compose")
+            if (!string.Equals(target, "compose", StringComparison.Ordinal))
                 throw new InvalidOperationException(
                     $"--target '{target}' is not one trax deploys to. Use compose, or aws with --env."
                 );
@@ -266,6 +267,7 @@ internal static class DeployCommand
         var psi = new ProcessStartInfo("dotnet")
         {
             WorkingDirectory = Path.GetDirectoryName(projectPath)!,
+            UseShellExecute = false,
         };
         foreach (
             var arg in new[]
@@ -283,7 +285,10 @@ internal static class DeployCommand
         var (exit, stdout, stderr) = ChildProcess.Run(psi);
         if (exit != 0)
             throw new InvalidOperationException(
-                $"Building the {repository} image failed (exit {exit}):\n{stdout}{stderr}"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Building the {repository} image failed (exit {exit}):\n{stdout}{stderr}"
+                )
             );
     }
 }

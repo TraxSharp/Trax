@@ -58,8 +58,12 @@ public class OpenApiSchemaParserTests
 
         var schema = parser.Parse(FixturePath("petstore.json"));
 
-        var getPet = schema.Operations.Single(o => o.Name == "GetPet");
-        var petIdField = getPet.InputType.Fields.Single(f => f.Name == "PetId");
+        var getPet = schema.Operations.Single(o =>
+            string.Equals(o.Name, "GetPet", StringComparison.Ordinal)
+        );
+        var petIdField = getPet.InputType.Fields.Single(f =>
+            string.Equals(f.Name, "PetId", StringComparison.Ordinal)
+        );
         petIdField.TypeName.Should().Be("Guid");
     }
 
@@ -70,7 +74,9 @@ public class OpenApiSchemaParserTests
 
         var schema = parser.Parse(FixturePath("petstore.json"));
 
-        var deletePet = schema.Operations.Single(o => o.Name == "DeletePet");
+        var deletePet = schema.Operations.Single(o =>
+            string.Equals(o.Name, "DeletePet", StringComparison.Ordinal)
+        );
         deletePet.OutputType.Name.Should().Be("Unit");
     }
 
@@ -81,9 +87,15 @@ public class OpenApiSchemaParserTests
 
         var schema = parser.Parse(FixturePath("petstore.json"));
 
-        var createPet = schema.Operations.Single(o => o.Name == "CreatePet");
-        var nameField = createPet.InputType.Fields.Single(f => f.Name == "Name");
-        var tagField = createPet.InputType.Fields.Single(f => f.Name == "Tag");
+        var createPet = schema.Operations.Single(o =>
+            string.Equals(o.Name, "CreatePet", StringComparison.Ordinal)
+        );
+        var nameField = createPet.InputType.Fields.Single(f =>
+            string.Equals(f.Name, "Name", StringComparison.Ordinal)
+        );
+        var tagField = createPet.InputType.Fields.Single(f =>
+            string.Equals(f.Name, "Tag", StringComparison.Ordinal)
+        );
 
         nameField.IsRequired.Should().BeTrue();
         tagField.IsRequired.Should().BeFalse();
@@ -136,9 +148,12 @@ public class OpenApiSchemaParserTests
 
         var schema = parser.Parse(FixturePath("complex-openapi.json"));
 
-        schema.Operations.Single(o => o.Name == "ListUsers").Kind.Should().Be(OperationKind.Query);
         schema
-            .Operations.Single(o => o.Name == "CreateUser")
+            .Operations.Single(o => string.Equals(o.Name, "ListUsers", StringComparison.Ordinal))
+            .Kind.Should()
+            .Be(OperationKind.Query);
+        schema
+            .Operations.Single(o => string.Equals(o.Name, "CreateUser", StringComparison.Ordinal))
             .Kind.Should()
             .Be(OperationKind.Mutation);
     }
@@ -150,8 +165,12 @@ public class OpenApiSchemaParserTests
 
         var schema = parser.Parse(FixturePath("complex-openapi.json"));
 
-        var getUser = schema.Operations.Single(o => o.Name == "GetUser");
-        var userIdField = getUser.InputType.Fields.Single(f => f.Name == "UserId");
+        var getUser = schema.Operations.Single(o =>
+            string.Equals(o.Name, "GetUser", StringComparison.Ordinal)
+        );
+        var userIdField = getUser.InputType.Fields.Single(f =>
+            string.Equals(f.Name, "UserId", StringComparison.Ordinal)
+        );
         userIdField.TypeName.Should().Be("long");
     }
 
@@ -162,10 +181,18 @@ public class OpenApiSchemaParserTests
 
         var schema = parser.Parse(FixturePath("complex-openapi.json"));
 
-        var createUser = schema.Operations.Single(o => o.Name == "CreateUser");
-        var emailField = createUser.InputType.Fields.Single(f => f.Name == "Email");
-        var nameField = createUser.InputType.Fields.Single(f => f.Name == "Name");
-        var birthDateField = createUser.InputType.Fields.Single(f => f.Name == "BirthDate");
+        var createUser = schema.Operations.Single(o =>
+            string.Equals(o.Name, "CreateUser", StringComparison.Ordinal)
+        );
+        var emailField = createUser.InputType.Fields.Single(f =>
+            string.Equals(f.Name, "Email", StringComparison.Ordinal)
+        );
+        var nameField = createUser.InputType.Fields.Single(f =>
+            string.Equals(f.Name, "Name", StringComparison.Ordinal)
+        );
+        var birthDateField = createUser.InputType.Fields.Single(f =>
+            string.Equals(f.Name, "BirthDate", StringComparison.Ordinal)
+        );
 
         emailField.IsRequired.Should().BeTrue();
         nameField.IsRequired.Should().BeTrue();
@@ -179,7 +206,9 @@ public class OpenApiSchemaParserTests
 
         var schema = parser.Parse(FixturePath("complex-openapi.json"));
 
-        var healthOp = schema.Operations.SingleOrDefault(o => o.HttpPath == "/health");
+        var healthOp = schema.Operations.SingleOrDefault(o =>
+            string.Equals(o.HttpPath, "/health", StringComparison.Ordinal)
+        );
         healthOp.Should().NotBeNull();
         healthOp!.Name.Should().NotBeNullOrWhiteSpace();
         // No operationId in the schema, so the name is synthesized from path segments
@@ -193,8 +222,12 @@ public class OpenApiSchemaParserTests
 
         var schema = parser.Parse(FixturePath("complex-openapi.json"));
 
-        var userType = schema.Types.Single(t => t.Name == "User");
-        var rolesField = userType.Fields.Single(f => f.Name == "Roles");
+        var userType = schema.Types.Single(t =>
+            string.Equals(t.Name, "User", StringComparison.Ordinal)
+        );
+        var rolesField = userType.Fields.Single(f =>
+            string.Equals(f.Name, "Roles", StringComparison.Ordinal)
+        );
         rolesField.TypeName.Should().Be("List<string>");
     }
 

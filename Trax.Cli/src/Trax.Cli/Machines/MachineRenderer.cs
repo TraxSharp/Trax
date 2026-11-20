@@ -65,7 +65,7 @@ internal static partial class MachineRenderer
         {
             sb.Append('\n');
             var marks = new List<string>();
-            if (state == ir.Initial)
+            if (string.Equals(state, ir.Initial, StringComparison.Ordinal))
                 marks.Add($"{g.Initial} initial");
             if (ir.Committed.Contains(state))
                 marks.Add($"{g.Committed} committed");
@@ -73,10 +73,12 @@ internal static partial class MachineRenderer
                 marks.Add("unreachable from the initial state");
             sb.Append(Paint(Safe(state), "1"));
             if (marks.Count > 0)
-                sb.Append(' ').Append(string.Join("  ", marks));
+                sb.Append(' ').AppendJoin("  ", marks);
             sb.Append('\n');
 
-            var edges = ir.Transitions.Where(t => t.From == state).ToList();
+            var edges = ir
+                .Transitions.Where(t => string.Equals(t.From, state, StringComparison.Ordinal))
+                .ToList();
             if (edges.Count == 0)
             {
                 sb.Append("  (no transitions)\n");
@@ -106,7 +108,7 @@ internal static partial class MachineRenderer
                 if (edge.Timer is not null)
                     notes.Add(Paint($"{g.Timer} after {Safe(edge.Timer)} (server only)", "36"));
                 if (notes.Count > 0)
-                    line.Append("   ").Append(string.Join("   ", notes));
+                    line.Append("   ").AppendJoin("   ", notes);
                 sb.Append(line.ToString().TrimEnd()).Append('\n');
             }
         }
@@ -132,7 +134,12 @@ internal static partial class MachineRenderer
         var sb = new StringBuilder("stateDiagram-v2\n");
         sb.Append($"    [*] --> {ir.Initial}\n");
         foreach (
-            var state in ir.States.Where(s => !ir.Transitions.Any(t => t.From == s || t.To == s))
+            var state in ir.States.Where(s =>
+                !ir.Transitions.Any(t =>
+                    string.Equals(t.From, s, StringComparison.Ordinal)
+                    || string.Equals(t.To, s, StringComparison.Ordinal)
+                )
+            )
         )
             sb.Append($"    {state}\n");
         foreach (var edge in ir.Transitions)
@@ -140,7 +147,7 @@ internal static partial class MachineRenderer
         if (ir.Committed.Count > 0)
         {
             sb.Append("    classDef committed font-weight:bold,stroke-width:3px\n");
-            sb.Append($"    class {string.Join(",", ir.Committed)} committed\n");
+            sb.Append($"    class {string.Join(',', ir.Committed)} committed\n");
         }
         return sb.ToString();
     }
@@ -189,7 +196,7 @@ internal static partial class MachineRenderer
     internal static string MermaidText(string text)
     {
         var sb = new StringBuilder(text.Length);
-        foreach (var c in Safe(LineBreaks().Replace(text, " ")))
+        foreach (var c in Safe(LineBreaks.Replace(text, " ")))
             sb.Append(
                 c switch
                 {
@@ -205,11 +212,17 @@ internal static partial class MachineRenderer
         return sb.ToString();
     }
 
-    [GeneratedRegex(@"\r\n|[\r\n\u0085\u2028\u2029]")]
-    private static partial Regex LineBreaks();
+    [GeneratedRegex(
+        @"\r\n|[\r\n\u0085\u2028\u2029]",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex LineBreaks { get; }
 
     private static string DotText(string text) =>
-        text.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n");
+        text.Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("\"", "\\\"", StringComparison.Ordinal)
+            .Replace("\n", "\\n", StringComparison.Ordinal);
 
     private sealed record Glyphs(
         string Initial,

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Xml;
 
@@ -81,7 +82,7 @@ internal static class ScenarioExplanation
             case ["command", var trigger]:
                 return $"grant: {machine} {trigger} is served to {Rule(hosted?["triggers"]?[trigger])}";
             case ["edge", var from, var trigger, var to]:
-                return from == to
+                return string.Equals(from, to, StringComparison.Ordinal)
                     ? $"edge: {machine} {from} --{trigger}--> {to} (a self-transition: it changes nothing and sets no policy off)"
                     : $"edge: {machine} {from} --{trigger}--> {to}";
             case ["guard", var from, var trigger]:
@@ -120,7 +121,7 @@ internal static class ScenarioExplanation
         var targets = (ir?["outcomes"]?[$"{state}.{kind}"]?["edges"] as JsonArray ?? [])
             .Select(e => e?["to"]?.GetValue<string>())
             .OfType<string>()
-            .Distinct()
+            .Distinct(StringComparer.Ordinal)
             .ToList();
         return targets.Count == 0 ? "" : $", to {string.Join(" or ", targets)}";
     }
@@ -128,7 +129,7 @@ internal static class ScenarioExplanation
     private static string Timer(string machine, string state, JsonObject? ir)
     {
         var timer = (ir?["timers"] as JsonArray ?? []).FirstOrDefault(t =>
-            t?["state"]?.GetValue<string>() == state
+            string.Equals(t?["state"]?.GetValue<string>(), state, StringComparison.Ordinal)
         );
         if (timer is null)
             return $"timer: {machine} {state} has a timer";
@@ -141,10 +142,13 @@ internal static class ScenarioExplanation
         try
         {
             var span = XmlConvert.ToTimeSpan(iso);
-            return span.TotalDays >= 1 && span.TotalDays % 1 == 0 ? $"{span.TotalDays} d"
-                : span.TotalHours >= 1 && span.TotalHours % 1 == 0 ? $"{span.TotalHours} h"
-                : span.TotalMinutes >= 1 && span.TotalMinutes % 1 == 0 ? $"{span.TotalMinutes} min"
-                : $"{span.TotalSeconds} s";
+            return span.TotalDays >= 1 && span.TotalDays % 1 == 0
+                    ? string.Create(CultureInfo.InvariantCulture, $"{span.TotalDays} d")
+                : span.TotalHours >= 1 && span.TotalHours % 1 == 0
+                    ? string.Create(CultureInfo.InvariantCulture, $"{span.TotalHours} h")
+                : span.TotalMinutes >= 1 && span.TotalMinutes % 1 == 0
+                    ? string.Create(CultureInfo.InvariantCulture, $"{span.TotalMinutes} min")
+                : string.Create(CultureInfo.InvariantCulture, $"{span.TotalSeconds} s");
         }
         catch (FormatException)
         {
@@ -157,9 +161,22 @@ internal static class ScenarioExplanation
     {
         var matches = policies
             .Where(p =>
-                p?["when"]?["machine"]?.GetValue<string>() == source
-                && p["when"]?["enters"]?.GetValue<string>() == entered
-                && p["then"]?["machine"]?.GetValue<string>() == target
+                p is not null
+                && string.Equals(
+                    p["when"]?["machine"]?.GetValue<string>(),
+                    source,
+                    StringComparison.Ordinal
+                )
+                && string.Equals(
+                    p["when"]?["enters"]?.GetValue<string>(),
+                    entered,
+                    StringComparison.Ordinal
+                )
+                && string.Equals(
+                    p["then"]?["machine"]?.GetValue<string>(),
+                    target,
+                    StringComparison.Ordinal
+                )
             )
             .ToList();
         if (matches.Count == 0)
