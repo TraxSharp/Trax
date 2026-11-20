@@ -113,7 +113,7 @@ context, whose members see only their own loans:
         {
             OwnerType = typeof(Member),
             PrincipalAccessorType = typeof(ILendingCaller),
-            FilterBypassAllowlist = new Dictionary<string, string>
+            FilterBypassAllowlist = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 [
                     "samples/Bookworm/Trax.Samples.Bookworm/Trains/Lending/BorrowBook/Junctions/BorrowBookJunction.cs"
@@ -157,7 +157,9 @@ public sealed class CheckTraxInvariantsAttribute : Attribute, ITestAction
 
     public ActionTargets Targets => ActionTargets.Test;
 
-    public void BeforeTest(ITest test) => _before = Find();
+    // ITestAction is synchronous, and the check runs between tests, never inside one, so it
+    // waits here. Every await below is ConfigureAwait(false).
+    public void BeforeTest(ITest test) => _before = FindAsync().GetAwaiter().GetResult();
 
     public void AfterTest(ITest test)
     {
@@ -170,8 +172,6 @@ public sealed class CheckTraxInvariantsAttribute : Attribute, ITestAction
         if (added.Count > 0)
             Assert.Fail(TraxInvariants.Describe(added));
     }
-
-    private List<TraxInvariantViolation> Added() => Find().Except(_before).ToList();
 // ...
 }
 ```

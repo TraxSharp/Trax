@@ -129,18 +129,23 @@ var billingClient = consumerHost.Services.GetRequiredKeyedService<IGraphQLClient
     "serverC"
 );
 
-var product = await inventoryClient.Run(
-    new GetProductRequest { Input = new GetProductInput("SKU-1") }
-);
+using var outputs = DemoOutput.Create();
+var output = outputs.CreateLogger("demo");
+
+var product = await inventoryClient
+    .Run(new GetProductRequest { Input = new GetProductInput("SKU-1") })
+    .ConfigureAwait(false);
 // ...
 try
 {
-    await inventoryClient.Run(new GetInvoiceRequest { Input = new GetInvoiceInput("INV-1") });
-    Console.WriteLine("UNEXPECTED: the inventory client accepted a billing query");
+    await inventoryClient
+        .Run(new GetInvoiceRequest { Input = new GetInvoiceInput("INV-1") })
+        .ConfigureAwait(false);
+    output.Say("UNEXPECTED: the inventory client accepted a billing query");
 }
 catch (GraphQLValidationException)
 {
-    Console.WriteLine("serverB rejected a billing query (schema isolation holds)");
+    output.Say("serverB rejected a billing query (schema isolation holds)");
 }
 ```
 

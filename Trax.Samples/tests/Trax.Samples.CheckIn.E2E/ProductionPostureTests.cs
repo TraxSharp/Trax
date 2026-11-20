@@ -67,7 +67,7 @@ public class ProductionPostureTests
     [Test]
     public async Task A_demo_token_reads_no_view_in_Production()
     {
-        var body = new { id = BookingsViewId(), variables = new { } };
+        var body = new { id = await BookingsViewIdAsync().ConfigureAwait(false), variables = new { } };
         var token = DemoTokens.Issuer.Mint("Ada", "passenger", TimeProvider.System);
 
         using var development = await PostAsync(_development.NotNull(), body, token);
@@ -98,7 +98,7 @@ public class ProductionPostureTests
         }
     }
 
-    private static async Task<string> BookingsViewId()
+    private static async Task<string> BookingsViewIdAsync()
     {
         using var manifest = JsonDocument.Parse(
             await File.ReadAllTextAsync(

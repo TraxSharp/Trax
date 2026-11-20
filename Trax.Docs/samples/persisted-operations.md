@@ -207,8 +207,8 @@ builder.Services.AddTraxGraphQL(graphql =>
         .ExposeOperationMutations()
         .GateOperations(roles: DemoKeys.OperatorRole)
         .UsePersistedOperations(opts =>
-            opts.RequirePersisted(true)
-                .LogNonPersistedRequests(true)
+            opts.RequirePersisted(require: true)
+                .LogNonPersistedRequests(log: true)
                 // One process serves this endpoint and writes the store, so an upload reaches
                 // every cached copy without a broadcast. A second node needs
                 // UseRabbitMqInvalidation(...) instead; the host refuses to start with neither.
@@ -242,13 +242,6 @@ app.UseTraxGraphQL();
 // or OpenID Connect sign-in.
 if (isDevelopment)
     app.UseTraxApiDashboard(dashboard => dashboard.AllowAnonymousShell());
-
-app.Run();
-
-/// <summary>
-/// Visible to <c>WebApplicationFactory&lt;Program&gt;</c> for E2E tests.
-/// </summary>
-public partial class Program;
 ```
 
 `DemoKeys` (in `Auth/DemoKeys.cs`) holds two constants: `OperatorKey =

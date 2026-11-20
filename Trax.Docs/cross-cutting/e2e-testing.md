@@ -53,14 +53,21 @@ API key works only in Development.
 ## Name each host when the project tests two
 
 A test project that references two hosts (a scheduler and an API, say) sees two global `Program`
-types and can name neither. Give each host a marker in its own namespace, after `app.Run()`:
+types and can name neither. Give each host a marker in its own namespace, after `app.RunAsync()`:
 
 ```csharp from=Trax.Samples/samples/Scheduling/Trax.Samples.Scheduling.Host/Program.cs
-app.Run();
+await app.RunAsync().ConfigureAwait(false);
 
 namespace Trax.Samples.Scheduling.Host
 {
-    public partial class Program;
+    /// <summary>
+    /// Names this assembly for <c>WebApplicationFactory&lt;Program&gt;</c> in the E2E suite. It is
+    /// never created: the host is the top-level program above.
+    /// </summary>
+    public sealed class Program
+    {
+        private Program() { }
+    }
 }
 ```
 
@@ -98,7 +105,7 @@ before the factory starts the host, and clear Npgsql's pools when the suite ends
     {
         await DropTraxSchema();
 
-        StartedAt = DateTime.UtcNow;
+        StartedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
         Factory = new SchedulingHostFactory();
 
         // Resolving Services starts the host: migrations run and the manifests are seeded
@@ -114,16 +121,15 @@ before the factory starts the host, and clear Npgsql's pools when the suite ends
 
     private static async Task DropTraxSchema()
     {
-        await using var connection = new NpgsqlConnection(
-            SchedulingHostFactory.TestConnectionString
-        );
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(
-            "DROP SCHEMA IF EXISTS trax CASCADE;",
-            connection
-        );
-        await command.ExecuteNonQueryAsync();
-    }
+        var connection = new NpgsqlConnection(SchedulingHostFactory.TestConnectionString);
+        await using (connection.ConfigureAwait(false))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            var command = new NpgsqlCommand("DROP SCHEMA IF EXISTS trax CASCADE;", connection);
+            await using (command.ConfigureAwait(false))
+            {
+                await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+            }
 ```
 
 One host serves the suite and the tests share its database, so run them one at a time:
@@ -147,12 +153,15 @@ public sealed class Db(IServiceProvider services)
         CancellationToken cancellationToken = default
     )
     {
-        using var scope = services.CreateScope();
+        var scope = services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        var dataContext = await factory.CreateDbContextAsync(cancellationToken);
+        var dataContext = await factory
+            .CreateDbContextAsync(cancellationToken)
+            .ConfigureAwait(false);
         try
         {
-            return await query(dataContext);
+            return await query(dataContext).ConfigureAwait(false);
         }
         finally
         {
@@ -221,11 +230,11 @@ Clean the execution rows before each test and keep the manifests:
 ```csharp from=Trax.Samples/tests/Trax.Samples.EnergyHub.E2E/Fixtures/HubTestFixture.cs
     private async Task CleanExecutionData()
     {
-        await DataContext.BackgroundJobs.ExecuteDeleteAsync();
-        await DataContext.Logs.ExecuteDeleteAsync();
-        await DataContext.WorkQueues.ExecuteDeleteAsync();
-        await DataContext.DeadLetters.ExecuteDeleteAsync();
-        await DataContext.Metadatas.ExecuteDeleteAsync();
+        await DataContext.BackgroundJobs.ExecuteDeleteAsync().ConfigureAwait(false);
+        await DataContext.Logs.ExecuteDeleteAsync().ConfigureAwait(false);
+        await DataContext.WorkQueues.ExecuteDeleteAsync().ConfigureAwait(false);
+        await DataContext.DeadLetters.ExecuteDeleteAsync().ConfigureAwait(false);
+        await DataContext.Metadatas.ExecuteDeleteAsync().ConfigureAwait(false);
         DataContext.Reset();
     }
 ```
@@ -246,7 +255,8 @@ back with; `JsonSerializer`'s defaults write PascalCase, which the dispatcher do
                     InputTypeName = typeof(MonitorSolarProductionInput).FullName,
                     ManifestId = solarManifest.Id,
                     Priority = 20,
-                }
+                },
+                TimeProvider.System
             );
 
             await DataContext.Track(entry);

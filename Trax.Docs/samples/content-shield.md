@@ -244,7 +244,9 @@ Locally, `Program.cs` serves the function over HTTP:
 ```csharp from=Trax.Samples/samples/EphemeralWorkers/Trax.Samples.ContentShield.Runner/Program.cs
 using Trax.Samples.ContentShield.Runner;
 
-await new Function().RunLocalAsync([$"--contentRoot={AppContext.BaseDirectory}", .. args]);
+await new Function()
+    .RunLocalAsync([$"--contentRoot={AppContext.BaseDirectory}", .. args])
+    .ConfigureAwait(false);
 ```
 
 The Kestrel server `RunLocalAsync` starts reads `appsettings.json` from its content root, and the

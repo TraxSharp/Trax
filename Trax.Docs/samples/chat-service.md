@@ -137,7 +137,7 @@ samples/ChatService/
 
 ### The host
 
-`Program.cs`, less its banner comment and the `partial class Program` the tests need:
+`Program.cs`, less its banner comment and the `Program` marker class the tests need:
 
 ```csharp from=Trax.Samples/samples/ChatService/Trax.Samples.ChatService.Api/Program.cs
 using Microsoft.EntityFrameworkCore;
@@ -234,10 +234,11 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 // ── Auto-migrate chat schema ────────────────────────────────────────────────
-using (var scope = app.Services.CreateScope())
+var scope = app.Services.CreateAsyncScope();
+await using (scope.ConfigureAwait(false))
 {
     var db = scope.ServiceProvider.GetRequiredService<ChatDbContext>();
-    await db.Database.MigrateAsync();
+    await db.Database.MigrateAsync().ConfigureAwait(false);
 }
 
 // ── Map endpoints ───────────────────────────────────────────────────────────
@@ -247,7 +248,7 @@ app.UseAuthorization();
 app.UseTraxGraphQL();
 app.MapHealthChecks("/trax/health");
 
-app.Run();
+await app.RunAsync().ConfigureAwait(false);
 
 // The display name is what other participants see beside a message.
 static TraxPrincipal ChatUser((string Id, string Name) person) =>
@@ -285,9 +286,12 @@ public class ValidateSenderJunction(ChatDbContext db, TraxPrincipal caller)
             throw new TrainException("Message content cannot be empty.");
 
         if (
-            !await db.ChatParticipants.AnyAsync(p =>
-                p.ChatRoomId == input.ChatRoomId && p.UserId == caller.Id
-            )
+            !await db
+                .ChatParticipants.AnyAsync(
+                    p => p.ChatRoomId == input.ChatRoomId && p.UserId == caller.Id,
+                    cancellationToken: CancellationToken
+                )
+                .ConfigureAwait(false)
         )
             throw new TrainException($"You are not a participant in room {input.ChatRoomId}.");
 
@@ -322,14 +326,15 @@ parse, or one with no room id, is skipped rather than failing the run), and send
 topic:
 
 ```csharp from=Trax.Samples/samples/ChatService/Trax.Samples.ChatService/Hooks/ChatLifecycleHook.cs
-public class ChatLifecycleHook(ITopicEventSender eventSender) : ITrainLifecycleHook
+public class ChatLifecycleHook(ITopicEventSender eventSender, TimeProvider clock)
+    : ITrainLifecycleHook
 {
-    private static readonly Dictionary<string, string> TrainEventTypes = new()
+    private static readonly Dictionary<string, string> TrainEventTypes = new(StringComparer.Ordinal)
     {
-        [typeof(ISendMessageTrain).FullName!] = "MessageSent",
-        [typeof(ICreateChatRoomTrain).FullName!] = "RoomCreated",
-        [typeof(IJoinChatRoomTrain).FullName!] = "UserJoined",
-        [typeof(IInviteToChatRoomTrain).FullName!] = "UserJoined",
+        [typeof(ISendMessageTrain).FullName.NotNull()] = "MessageSent",
+        [typeof(ICreateChatRoomTrain).FullName.NotNull()] = "RoomCreated",
+        [typeof(IJoinChatRoomTrain).FullName.NotNull()] = "UserJoined",
+        [typeof(IInviteToChatRoomTrain).FullName.NotNull()] = "UserJoined",
     };
 
     public async Task OnCompleted(Metadata metadata, CancellationToken ct)
@@ -361,11 +366,13 @@ public class ChatLifecycleHook(ITopicEventSender eventSender) : ITrainLifecycleH
             ChatRoomId: chatRoomId,
             EventType: eventType,
             Payload: metadata.Output,
-            Timestamp: metadata.EndTime ?? DateTime.UtcNow,
+            Timestamp: metadata.EndTime ?? clock.GetUtcNow().UtcDateTime,
             TrainExternalId: metadata.ExternalId
         );
 
-        await eventSender.SendAsync(ChatSubscriptions.Topic(chatRoomId), chatEvent, ct);
+        await eventSender
+            .SendAsync(ChatSubscriptions.Topic(chatRoomId), chatEvent, ct)
+            .ConfigureAwait(false);
     }
 }
 ```
@@ -408,10 +415,12 @@ public class ChatSubscriptions
         var userId = caller.Principal?.Id;
         var isParticipant =
             userId is not null
-            && await db.ChatParticipants.AnyAsync(
-                p => p.ChatRoomId == chatRoomId && p.UserId == userId,
-                cancellationToken
-            );
+            && await db
+                .ChatParticipants.AnyAsync(
+                    p => p.ChatRoomId == chatRoomId && p.UserId == userId,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
 
         if (!isParticipant)
             throw new GraphQLException(
@@ -422,10 +431,9 @@ public class ChatSubscriptions
                     .Build()
             );
 
-        return await receiver.SubscribeAsync<ChatSubscriptionEvent>(
-            Topic(chatRoomId),
-            cancellationToken
-        );
+        return await receiver
+            .SubscribeAsync<ChatSubscriptionEvent>(Topic(chatRoomId), cancellationToken)
+            .ConfigureAwait(false);
     }
 }
 ```

@@ -149,7 +149,7 @@ public sealed class LoanToBookEdge
         [Parent(requires: nameof(Loan.BookId))] Loan loan,
         CrossSchemaLoader<CatalogDbContext, Book> books,
         CancellationToken cancellationToken
-    ) => await books.LoadAsync(loan.BookId, cancellationToken);
+    ) => await books.LoadAsync(loan.BookId, cancellationToken).ConfigureAwait(false);
 }
 ```
 
@@ -207,7 +207,8 @@ public sealed class TraxLendingCaller(TraxCaller caller) : ILendingCaller
 {
     public string? PrincipalId => caller.Principal?.Id;
 
-    public bool IsLibrarian => caller.Principal?.Roles.Contains(BookwormRoles.Librarian) == true;
+    public bool IsLibrarian =>
+        caller.Principal?.Roles.Contains(BookwormRoles.Librarian, StringComparer.Ordinal) == true;
 }
 ```
 
@@ -247,20 +248,38 @@ with no caller). Both are listed, with their reasons, in the census's `FilterByp
 ### Lending integrity
 
 ```csharp from=Trax.Samples/samples/Bookworm/Trax.Samples.Bookworm/Trains/Lending/BorrowBook/Junctions/BorrowBookJunction.cs
-if (!await catalog.Books.AnyAsync(b => b.Id == input.BookId))
-    throw new TrainException($"Book {input.BookId} is not in the catalog.");
+if (
+    !await catalog
+        .Books.AnyAsync(b => b.Id == input.BookId, cancellationToken: CancellationToken)
+        .ConfigureAwait(false)
+)
+    throw new TrainException(
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"Book {input.BookId} is not in the catalog."
+        )
+    );
 
 // Availability depends on every member's loans, not only the caller's, so this one read
 // steps outside the owner filter. It returns a yes or no and no row.
 var onLoan = await lending
     .Loans.IgnoreQueryFilters()
-    .AnyAsync(l => l.BookId == input.BookId && l.ReturnedAt == null);
+    .AnyAsync(
+        l => l.BookId == input.BookId && l.ReturnedAt == null,
+        cancellationToken: CancellationToken
+    )
+    .ConfigureAwait(false);
 if (onLoan)
-    throw new TrainException($"Book {input.BookId} is already on loan.");
+    throw new TrainException(
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"Book {input.BookId} is already on loan."
+        )
+    );
 // ...
 try
 {
-    await lending.SaveChangesAsync();
+    await lending.SaveChangesAsync(CancellationToken).ConfigureAwait(false);
 }
 catch (DbUpdateException ex)
     when (ex.InnerException
@@ -269,7 +288,12 @@ catch (DbUpdateException ex)
 {
     // Another borrow of the same book committed between the check and this insert; the
     // partial unique index on open loans refused the second one.
-    throw new TrainException($"Book {input.BookId} is already on loan.");
+    throw new TrainException(
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"Book {input.BookId} is already on loan."
+        )
+    );
 }
 ```
 
@@ -310,7 +334,7 @@ public sealed class BookwormDataLayerGuards : DomainDataLayerGuardFixture
         {
             OwnerType = typeof(Member),
             PrincipalAccessorType = typeof(ILendingCaller),
-            FilterBypassAllowlist = new Dictionary<string, string>
+            FilterBypassAllowlist = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 [
                     "samples/Bookworm/Trax.Samples.Bookworm/Trains/Lending/BorrowBook/Junctions/BorrowBookJunction.cs"
