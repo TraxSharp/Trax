@@ -11,9 +11,9 @@ namespace Trax.Cli.Tests.UnitTests;
 /// </summary>
 public class MachineGenerateOptionsTests
 {
-    private string _root = null!;
-    private string _tools = null!;
-    private string _engineSrc = null!;
+    private string _root = "";
+    private string _tools = "";
+    private string _engineSrc = "";
 
     [SetUp]
     public void SetUp()

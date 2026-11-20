@@ -4,6 +4,7 @@ using System.Text;
 using GraphQLParser;
 using GraphQLParser.AST;
 using GraphQLParser.Visitors;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 
 namespace Trax.Cli.Clients;
@@ -700,7 +701,7 @@ internal sealed partial class ClientDocumentSet
                 return;
             }
             if (composite)
-                Set(scope, field.SelectionSet!, named, fragmentStack);
+                Set(scope, field.SelectionSet.NotNull(), named, fragmentStack);
         }
 
         private void Set(

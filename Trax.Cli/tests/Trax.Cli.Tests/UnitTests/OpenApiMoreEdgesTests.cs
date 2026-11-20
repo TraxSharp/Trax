@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Trax.Cli.Schema.OpenApi;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.UnitTests;
 
@@ -37,7 +38,7 @@ public class OpenApiMoreEdgesTests
             string.Equals(e.Name, "Status", StringComparison.Ordinal)
         );
         statusEnum.Should().NotBeNull();
-        statusEnum!.Values.Should().BeEquivalentTo("Active", "Inactive", "Pending");
+        statusEnum.NotNull().Values.Should().BeEquivalentTo("Active", "Inactive", "Pending");
     }
 
     [Test]

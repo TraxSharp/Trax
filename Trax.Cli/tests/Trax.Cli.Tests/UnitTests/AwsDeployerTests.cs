@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Trax.Cli.Commands;
 using Trax.Cli.Deploy;
 using Trax.Cli.Deploy.Aws;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.UnitTests;
 
@@ -46,7 +47,7 @@ public class AwsDeployerTests
         aws.Deploys[0]["HubImage"].Should().Be($"repo/trax/orders-production/hub:{Tag}");
         aws.Deploys[1][AwsStack.ScaleParameter].Should().Be("1");
         aws.Deploys[1]["WorkerImage"].Should().Be($"repo/trax/orders-production/worker:{Tag}");
-        aws.Task!.TaskDefinition.Should().Be("migrate-td");
+        aws.Task.NotNull().TaskDefinition.Should().Be("migrate-td");
         images.Published.Should().Equal("hub", "worker");
         url.Should().Be("https://orders.example.com");
     }

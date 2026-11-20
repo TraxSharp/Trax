@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using AwesomeAssertions;
 using Trax.Cli.Commands;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.IntegrationTests;
 
@@ -26,7 +27,7 @@ public class HelpUsageTests
         foreach (var arg in args)
             info.ArgumentList.Add(arg);
 
-        using var process = Process.Start(info)!;
+        using var process = Process.Start(info).NotNull();
         var stdOutTask = process.StandardOutput.ReadToEndAsync();
         var stdErrTask = process.StandardError.ReadToEndAsync();
         process

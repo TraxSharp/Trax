@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using GraphQLParser.AST;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Clients;
 
@@ -16,7 +17,7 @@ internal sealed record OperationsRoots(string Query, string Mutation, string Sub
         var declared = sdl
             .Definitions.OfType<GraphQLSchemaDefinition>()
             .SelectMany(s => s.OperationTypes)
-            .ToDictionary(o => o.Operation, o => o.Type!.Name.StringValue);
+            .ToDictionary(o => o.Operation, o => o.Type.NotNull().Name.StringValue);
         return new(
             declared.GetValueOrDefault(OperationType.Query, "Query"),
             declared.GetValueOrDefault(OperationType.Mutation, "Mutation"),

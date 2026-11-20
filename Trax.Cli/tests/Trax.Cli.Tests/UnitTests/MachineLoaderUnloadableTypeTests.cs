@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Trax.Cli.Machines;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.UnitTests;
 
@@ -15,7 +16,7 @@ namespace Trax.Cli.Tests.UnitTests;
 /// </summary>
 public class MachineLoaderUnloadableTypeTests
 {
-    private string _dir = null!;
+    private string _dir = "";
 
     [SetUp]
     public void SetUp()
@@ -61,7 +62,7 @@ public class MachineLoaderUnloadableTypeTests
     private string EmitConsumer(bool withMachine)
     {
         var suffix = Guid.NewGuid().ToString("N");
-        var platform = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
+        var platform = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES").NotNull())
             .Split(Path.PathSeparator)
             .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))
             .ToList();

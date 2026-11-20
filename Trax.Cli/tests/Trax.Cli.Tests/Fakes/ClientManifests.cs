@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 
@@ -143,13 +144,13 @@ internal static class ClientManifests
 
     public static ClientManifestMachine Machine(IMachine machine)
     {
-        var hash = machine.SchemaHash!;
+        var hash = machine.SchemaHash.NotNull();
         var field = Trax.Cli.Clients.TypeScript.Camel(machine.Name);
         return new ClientManifestMachine
         {
             Id = machine.Name,
             IrHash = hash,
-            Ir = (JsonObject)JsonNode.Parse(machine.ExportIr())!,
+            Ir = (JsonObject)JsonNode.Parse(machine.ExportIr()).NotNull(),
             Documents =
             [
                 Document(

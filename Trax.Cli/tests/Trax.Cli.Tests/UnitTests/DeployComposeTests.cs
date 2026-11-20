@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Trax.Cli.Commands;
 using Trax.Cli.Deploy;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.Deploy;
 
 namespace Trax.Cli.Tests.UnitTests;
@@ -14,7 +15,7 @@ namespace Trax.Cli.Tests.UnitTests;
 /// </summary>
 public class DeployComposeTests
 {
-    private string _dir = null!;
+    private string _dir = "";
 
     [SetUp]
     public void SetUp()
@@ -25,7 +26,7 @@ public class DeployComposeTests
             var project in new[] { "Orders/Orders.csproj", "Orders.Worker/Orders.Worker.csproj" }
         )
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(_dir, project))!);
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(_dir, project)).NotNull());
             File.WriteAllText(Path.Combine(_dir, project), "<Project />");
         }
     }
@@ -274,7 +275,7 @@ public class DeployComposeTests
                 Path.Combine(_dir, "Orders", "Orders.csproj"),
                 Path.Combine(_dir, "Orders.Worker", "Orders.Worker.csproj")
             );
-        exporter.Environment!["ConnectionStrings__Trax"].Should().Contain(".invalid");
+        exporter.Environment.NotNull()["ConnectionStrings__Trax"].Should().Contain(".invalid");
         exporter.Environment["Auth__Authority"].Should().StartWith("https://");
         exporter.Environment.Should().ContainKey("Stripe__ApiKey");
     }
@@ -449,7 +450,7 @@ public class DeployComposeTests
     private void WriteProject(string relative, string sdk, string reference, bool exe = false)
     {
         var path = Path.Combine(_dir, relative);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(path).NotNull());
         File.WriteAllText(
             path,
             $"""

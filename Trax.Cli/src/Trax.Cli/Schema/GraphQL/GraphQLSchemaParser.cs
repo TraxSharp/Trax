@@ -4,6 +4,7 @@ using GraphQLParser.AST;
 using GraphQLParser.Exceptions;
 using Trax.Cli.Generator;
 using Trax.Cli.Models;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Schema.GraphQL;
 
@@ -58,8 +59,8 @@ public class GraphQLSchemaParser : ISchemaParser
             StringComparer.Ordinal
         );
 
-        string? queryTypeName = "Query";
-        string? mutationTypeName = "Mutation";
+        string queryTypeName = "Query";
+        string mutationTypeName = "Mutation";
 
         var objectExtensions = new List<GraphQLObjectTypeExtension>();
         var inputExtensions = new List<GraphQLInputObjectTypeExtension>();
@@ -196,7 +197,7 @@ public class GraphQLSchemaParser : ISchemaParser
                 new ApiEnum
                 {
                     Name = NamingConventions.ToPascalCase(name),
-                    Values = enumDef.Values!.Select(v => v.Name.StringValue).ToList(),
+                    Values = enumDef.Values.NotNull().Select(v => v.Name.StringValue).ToList(),
                     Description = enumDef.Description?.Value.ToString(),
                     SourceName = name,
                 }
@@ -206,8 +207,8 @@ public class GraphQLSchemaParser : ISchemaParser
         // Collect shared types (non-Query/Mutation/Subscription object types)
         var reservedTypeNames = new HashSet<string>(StringComparer.Ordinal)
         {
-            queryTypeName!,
-            mutationTypeName!,
+            queryTypeName,
+            mutationTypeName,
             "Subscription",
         };
         foreach (var (name, typeDef) in typeDefinitions)
@@ -225,7 +226,7 @@ public class GraphQLSchemaParser : ISchemaParser
         }
 
         // Parse query operations
-        if (typeDefinitions.TryGetValue(queryTypeName!, out var queryType))
+        if (typeDefinitions.TryGetValue(queryTypeName, out var queryType))
         {
             ParseOperations(
                 queryType,
@@ -238,7 +239,7 @@ public class GraphQLSchemaParser : ISchemaParser
         }
 
         // Parse mutation operations
-        if (typeDefinitions.TryGetValue(mutationTypeName!, out var mutationType))
+        if (typeDefinitions.TryGetValue(mutationTypeName, out var mutationType))
         {
             ParseOperations(
                 mutationType,

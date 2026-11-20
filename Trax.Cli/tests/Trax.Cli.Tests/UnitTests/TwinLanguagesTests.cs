@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Trax.Cli.Commands;
 using Trax.Cli.Machines;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.UnitTests;
 
@@ -17,11 +18,12 @@ public class TwinLanguagesTests
     {
         var file = Path.Combine(EngineTools(), "twin-languages.json");
         var expected = JsonNode
-            .Parse(File.ReadAllText(file))!
+            .Parse(File.ReadAllText(file))
+            .NotNull()
             .AsArray()
             .Select(l => new TwinLanguage(
-                l!["lang"]!.GetValue<string>(),
-                l["writes"]!.GetValue<string>()
+                l.NotNull()["lang"].NotNull().GetValue<string>(),
+                l["writes"].NotNull().GetValue<string>()
             ));
 
         TwinLanguages.All.Should().Equal(expected);

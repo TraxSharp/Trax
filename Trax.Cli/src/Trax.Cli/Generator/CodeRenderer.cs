@@ -2,6 +2,7 @@ using System.Reflection;
 using Scriban;
 using Scriban.Runtime;
 using Trax.Cli.Models;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Generator;
 
@@ -333,7 +334,7 @@ public partial class CodeRenderer
                 continue;
 
             var templateName = resourceName[prefix.Length..^4]; // strip prefix and .sbn
-            using var stream = assembly.GetManifestResourceStream(resourceName)!;
+            using var stream = assembly.GetManifestResourceStream(resourceName).NotNull();
             using var reader = new StreamReader(stream);
             var content = reader.ReadToEnd();
 

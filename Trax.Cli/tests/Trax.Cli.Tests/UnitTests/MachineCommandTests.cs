@@ -2,6 +2,7 @@ using System.CommandLine;
 using AwesomeAssertions;
 using Trax.Cli.Commands;
 using Trax.Cli.Tests.Fakes;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.UnitTests;
 
@@ -13,7 +14,7 @@ namespace Trax.Cli.Tests.UnitTests;
 /// </summary>
 public class MachineCommandTests
 {
-    private string _tempDir = null!;
+    private string _tempDir = "";
 
     [SetUp]
     public void SetUp()
@@ -30,7 +31,7 @@ public class MachineCommandTests
     }
 
     private static string ThisAssembly => typeof(DeclarativeTurnstileMachine).Assembly.Location;
-    private static string TurnstileName => typeof(DeclarativeTurnstileMachine).FullName!;
+    private static string TurnstileName => typeof(DeclarativeTurnstileMachine).FullName.NotNull();
 
     [Test]
     public void Create_builds_the_machine_command_group()

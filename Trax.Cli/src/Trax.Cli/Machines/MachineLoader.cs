@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.Loader;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence;
 
 namespace Trax.Cli.Machines;
@@ -74,7 +75,7 @@ internal static class MachineLoader
             );
 
         var type = SelectMachine(machines, machineFullName, Path.GetFileName(fullPath));
-        return (IMachine)Activator.CreateInstance(type)!;
+        return (IMachine)Activator.CreateInstance(type).NotNull();
     }
 
     /// <summary>

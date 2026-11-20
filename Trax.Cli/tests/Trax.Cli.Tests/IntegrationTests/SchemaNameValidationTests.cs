@@ -6,6 +6,7 @@ using Trax.Cli.Generator;
 using Trax.Cli.Models;
 using Trax.Cli.Schema.GraphQL;
 using Trax.Cli.Schema.OpenApi;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.IntegrationTests;
 
@@ -24,8 +25,8 @@ public class SchemaNameValidationTests
     private const string Adr =
         "see cli/0002 (docs/adr/0002-generated-code-refuses-a-schema-name-it-cannot-emit.md)";
 
-    private string _root = null!;
-    private string _outputDir = null!;
+    private string _root = "";
+    private string _outputDir = "";
 
     [SetUp]
     public void SetUp()
@@ -409,7 +410,7 @@ public class SchemaNameValidationTests
             )
             .ToList();
 
-        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
+        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES").NotNull())
             .Split(Path.PathSeparator)
             .Select(path => MetadataReference.CreateFromFile(path));
         var errors = CSharpCompilation

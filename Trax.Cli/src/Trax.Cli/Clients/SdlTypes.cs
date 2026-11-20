@@ -161,7 +161,7 @@ internal sealed class SdlTypes
 
     /// <summary>The declared types <paramref name="types"/> name.</summary>
     public IEnumerable<string> NamesIn(IEnumerable<GraphQLType> types) =>
-        types.Select(NameOf).Where(n => n is not null).Select(n => n!);
+        types.Select(NameOf).OfType<string>();
 
     /// <summary>A value sent as <paramref name="type"/>: null allowed where the type is nullable.</summary>
     public string InputType(GraphQLType type) =>

@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Trax.Cli.Machines;
 using Trax.Cli.Tests.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence;
 
 namespace Trax.Cli.Tests.IntegrationTests;
@@ -15,8 +16,8 @@ public class MachineGeneratorNodeTests
 {
     private static readonly IMachine Turnstile = new DeclarativeTurnstileMachine();
 
-    private string _out = null!;
-    private string _engineSrc = null!;
+    private string _out = "";
+    private string _engineSrc = "";
 
     [SetUp]
     public void SetUp()
@@ -32,7 +33,7 @@ public class MachineGeneratorNodeTests
                 "Trax.StateMachine/ts is not checked out beside Trax.Cli; skipping byte-parity test."
             );
 
-        _engineSrc = Path.Combine(engineRoot!, "src");
+        _engineSrc = Path.Combine(engineRoot.NotNull(), "src");
         _out = Path.Combine(Path.GetTempPath(), $"trax-machine-it-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_out);
     }
@@ -145,7 +146,7 @@ public class MachineGeneratorNodeTests
             )
         );
 
-        var engineRoot = Directory.GetParent(_engineSrc)!.FullName;
+        var engineRoot = Directory.GetParent(_engineSrc).NotNull().FullName;
         var machinesRoot = Path.Combine(engineRoot, "..", "conformance", "machines");
         FilesShouldMatch(
             Path.Combine(irOut, $"{id}.ir.json"),

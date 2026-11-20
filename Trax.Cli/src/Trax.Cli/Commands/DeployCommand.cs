@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Diagnostics;
 using System.Globalization;
 using Trax.Cli.Deploy;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.Deploy;
 
 namespace Trax.Cli.Commands;
@@ -199,7 +200,7 @@ internal static class DeployCommand
             var file = DeployFile.Read(filePath);
             var exports = Export(file, filePath, exporter);
 
-            var dir = outDir ?? Path.GetDirectoryName(Path.GetFullPath(filePath))!;
+            var dir = outDir ?? Path.GetDirectoryName(Path.GetFullPath(filePath)).NotNull();
             var files = ComposeTarget.Render(file, exports);
             var compose = Path.Combine(dir, ComposeTarget.ComposeFile);
             if (
@@ -266,7 +267,7 @@ internal static class DeployCommand
     {
         var psi = new ProcessStartInfo("dotnet")
         {
-            WorkingDirectory = Path.GetDirectoryName(projectPath)!,
+            WorkingDirectory = Path.GetDirectoryName(projectPath).NotNull(),
             UseShellExecute = false,
         };
         foreach (

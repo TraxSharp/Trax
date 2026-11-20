@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Trax.Cli.Commands;
 using Trax.Cli.Generator;
 using Trax.Cli.Schema.GraphQL;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.IntegrationTests;
 
@@ -13,14 +14,14 @@ namespace Trax.Cli.Tests.IntegrationTests;
 [TestFixture]
 public class GenerateEndToEndTests
 {
-    private string _outputDir = null!;
-    private TemplateHive _hive = null!;
+    private string _outputDir = "";
+    private TemplateHive? _hive;
 
     [OneTimeSetUp]
     public void OneTimeSetUp() => _hive = TemplateHive.Install();
 
     [OneTimeTearDown]
-    public void OneTimeTearDown() => _hive.Dispose();
+    public void OneTimeTearDown() => _hive?.Dispose();
 
     [SetUp]
     public void SetUp()
@@ -42,7 +43,7 @@ public class GenerateEndToEndTests
     public void Generate_FromGraphqlSchema_ProducesHubAndTrainsProjects()
     {
         var schema = new GraphQLSchemaParser().Parse(FixturePath("simple.graphql"));
-        var generator = _hive.Generator();
+        var generator = _hive.NotNull().Generator();
 
         generator.Generate(schema, _outputDir, "MyApi", force: false);
 
@@ -66,7 +67,7 @@ public class GenerateEndToEndTests
     public void Generate_TwiceWithForce_OverwritesExistingDirectory()
     {
         var schema = new GraphQLSchemaParser().Parse(FixturePath("simple.graphql"));
-        var generator = _hive.Generator();
+        var generator = _hive.NotNull().Generator();
 
         generator.Generate(schema, _outputDir, "MyApi", force: false);
         // Second call with force should not throw
@@ -89,7 +90,7 @@ public class GenerateEndToEndTests
                 "MyApi",
                 type: null,
                 force: false,
-                _hive.Generator()
+                _hive.NotNull().Generator()
             );
 
         act.Should().NotThrow();

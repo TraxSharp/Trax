@@ -6,7 +6,7 @@ namespace Trax.Cli.Tests.UnitTests;
 [TestFixture]
 public class TraxProjectGeneratorInternalsTests
 {
-    private string _tempDir = null!;
+    private string _tempDir = "";
 
     [SetUp]
     public void SetUp()

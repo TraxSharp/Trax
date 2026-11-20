@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using AwesomeAssertions;
 using Trax.Cli.Generator;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.IntegrationTests;
 
@@ -83,7 +84,7 @@ internal sealed class TemplateHive : IDisposable
         foreach (var arg in args)
             psi.ArgumentList.Add(arg);
 
-        using var process = Process.Start(psi)!;
+        using var process = Process.Start(psi).NotNull();
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();
         if (!process.WaitForExit(Timeout))

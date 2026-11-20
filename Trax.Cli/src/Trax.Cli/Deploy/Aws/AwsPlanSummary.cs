@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Deploy.Aws;
 
@@ -21,11 +22,11 @@ internal static class AwsPlanSummary
     )
     {
         var env = file.Environment(environment);
-        var resources = (JsonObject)template["Resources"]!;
+        var resources = (JsonObject)template["Resources"].NotNull();
         yield return $"{file.StackName(environment)} ({env.Profile}, {env.Region}) has {resources.Count} resources:";
         foreach (
             var group in resources
-                .Select(r => (string)r.Value!["Type"]!)
+                .Select(r => r.Value.NotNull()["Type"].NotNull().GetValue<string>())
                 .GroupBy(t => t, StringComparer.Ordinal)
                 .OrderBy(g => g.Key, StringComparer.Ordinal)
         )

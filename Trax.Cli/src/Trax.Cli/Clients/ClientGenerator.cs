@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using GraphQLParser;
 using GraphQLParser.AST;
 using Trax.Cli.Machines;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 
 namespace Trax.Cli.Clients;
@@ -215,7 +216,8 @@ internal sealed partial class ClientGenerator
                     EditorConfig(
                         options.DocumentGlobs
                             ?? options
-                                .Documents!.Select(d => d.Source)
+                                .Documents.NotNull()
+                                .Select(d => d.Source)
                                 .Order(StringComparer.Ordinal)
                                 .ToList()
                     )
@@ -286,7 +288,7 @@ internal sealed partial class ClientGenerator
         foreach (var file in files)
         {
             var path = Path.Combine(outDir, file.Path);
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(path).NotNull());
             Replace(path, file.Text);
         }
         return files;
@@ -297,7 +299,7 @@ internal sealed partial class ClientGenerator
     private static void Replace(string path, string text)
     {
         var temp = Path.Combine(
-            Path.GetDirectoryName(path)!,
+            Path.GetDirectoryName(path).NotNull(),
             $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp"
         );
         try
@@ -1578,7 +1580,7 @@ internal sealed partial class ClientGenerator
             var names = ViewNames(view);
             var pascal = TypeScript.Upper(view.Operation);
             var result = selections.Of(
-                SdlTypes.ParseType($"{pascal}View!", owner)!,
+                SdlTypes.ParseType($"{pascal}View!", owner).NotNull(),
                 SelectionTypes.SelectionAt(
                     Operation(view, owner),
                     ["views", view.Operation],
@@ -1650,7 +1652,7 @@ internal sealed partial class ClientGenerator
         var used = new HashSet<string>(StringComparer.Ordinal);
         var selections = new SelectionTypes(types);
         var progress = selections.Of(
-            SdlTypes.ParseType("RunProgress!", "runProgress")!,
+            SdlTypes.ParseType("RunProgress!", "runProgress").NotNull(),
             SelectionTypes.SelectionAt(
                 Operation(query, "the runProgress query"),
                 [RunProgressField],
@@ -1660,7 +1662,7 @@ internal sealed partial class ClientGenerator
             used
         );
         var progressEvent = selections.Of(
-            SdlTypes.ParseType("RunProgressEvent!", "runProgress")!,
+            SdlTypes.ParseType("RunProgressEvent!", "runProgress").NotNull(),
             SelectionTypes.SelectionAt(
                 Operation(stream, "the runProgress subscription"),
                 [RunProgressField],

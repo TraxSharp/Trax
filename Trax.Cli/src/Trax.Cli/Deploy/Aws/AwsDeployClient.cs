@@ -16,6 +16,7 @@ using Amazon.SecretsManager;
 using Amazon.SecretsManager.Model;
 using Amazon.SecurityToken;
 using Amazon.SecurityToken.Model;
+using Trax.Core.Extensions;
 using InvalidOperationException = System.InvalidOperationException;
 using Task = System.Threading.Tasks.Task;
 
@@ -76,7 +77,7 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
                     ct
                 )
                 .ConfigureAwait(false);
-            return found.Repositories![0].RepositoryUri;
+            return found.Repositories.NotNull()[0].RepositoryUri;
         }
         catch (RepositoryNotFoundException)
         {
@@ -112,7 +113,7 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
         var data = (
             await ecr.GetAuthorizationTokenAsync(new GetAuthorizationTokenRequest(), ct)
                 .ConfigureAwait(false)
-        ).AuthorizationData![0];
+        ).AuthorizationData.NotNull()[0];
         var userAndPassword = Encoding.UTF8.GetString(
             Convert.FromBase64String(data.AuthorizationToken)
         );
@@ -132,7 +133,7 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
             var found = (
                 await cfn.DescribeStacksAsync(new DescribeStacksRequest { StackName = stack }, ct)
                     .ConfigureAwait(false)
-            ).Stacks![0];
+            ).Stacks.NotNull()[0];
             return new AwsStackState(
                 found.StackStatus.Value,
                 (found.Outputs ?? []).ToDictionary(
@@ -298,7 +299,7 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
                             ct
                         )
                         .ConfigureAwait(false)
-                ).Stacks![0];
+                ).Stacks.NotNull()[0];
             }
             catch (AmazonCloudFormationException ex)
                 when (ex.Message.Contains("does not exist", StringComparison.Ordinal))
@@ -377,7 +378,7 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
                         ct
                     )
                     .ConfigureAwait(false)
-            ).Tasks![0];
+            ).Tasks.NotNull()[0];
             if (!string.Equals(current.LastStatus, last, StringComparison.Ordinal))
                 progress($"  migrate task {current.LastStatus}");
             last = current.LastStatus;

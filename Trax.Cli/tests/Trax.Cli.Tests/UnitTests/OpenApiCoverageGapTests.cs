@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Trax.Cli.Schema.OpenApi;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.UnitTests;
 
@@ -39,7 +40,7 @@ public class OpenApiCoverageGapTests
             string.Equals(o.Name, "ListWidgets", StringComparison.Ordinal)
         );
         listOp.OutputType.Should().NotBeNull();
-        listOp.OutputType!.Name.Should().Be("ListWidgetsOutput");
+        listOp.OutputType.NotNull().Name.Should().Be("ListWidgetsOutput");
         listOp.OutputType.Fields.Should().Contain(f => f.Name == "Count");
         listOp.OutputType.Fields.Should().Contain(f => f.Name == "Label");
 
@@ -47,14 +48,14 @@ public class OpenApiCoverageGapTests
         var noContentOp = schema.Operations.Single(o =>
             string.Equals(o.Name, "NoContent", StringComparison.Ordinal)
         );
-        noContentOp.OutputType!.Name.Should().Be("Unit");
+        noContentOp.OutputType.NotNull().Name.Should().Be("Unit");
         noContentOp.OutputType.IsBuiltIn.Should().BeTrue();
 
         // Non-JSON (binary) => Unit output
         var binaryOp = schema.Operations.Single(o =>
             string.Equals(o.Name, "BinaryDownload", StringComparison.Ordinal)
         );
-        binaryOp.OutputType!.Name.Should().Be("Unit");
+        binaryOp.OutputType.NotNull().Name.Should().Be("Unit");
         binaryOp.OutputType.IsBuiltIn.Should().BeTrue();
     }
 
@@ -68,7 +69,7 @@ public class OpenApiCoverageGapTests
             string.Equals(o.Name, "CreateThing", StringComparison.Ordinal)
         );
         op.InputType.Should().NotBeNull();
-        op.InputType!.Fields.Should().Contain(f => f.Name == "Name");
+        op.InputType.NotNull().Fields.Should().Contain(f => f.Name == "Name");
         op.InputType.Fields.Should().Contain(f => f.Name == "Color");
     }
 }

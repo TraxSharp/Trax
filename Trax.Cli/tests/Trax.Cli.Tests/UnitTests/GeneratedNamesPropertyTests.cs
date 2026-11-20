@@ -5,6 +5,7 @@ using CsCheck;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Trax.Cli.Clients;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.UnitTests;
 
@@ -512,7 +513,7 @@ public partial class GeneratedNamesPropertyTests
         foreach (var file in files)
         {
             var path = Path.Combine(dir, file.Path);
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(path).NotNull());
             File.WriteAllText(path, file.Text);
         }
         File.WriteAllText(Path.Combine(dir, "case.graphql"), $"# {folder}\n{client.Source}\n");
@@ -631,7 +632,7 @@ public partial class GeneratedNamesPropertyTests
         System.Diagnostics.Process process;
         try
         {
-            process = System.Diagnostics.Process.Start(start)!;
+            process = System.Diagnostics.Process.Start(start).NotNull();
         }
         catch (System.ComponentModel.Win32Exception)
         {
@@ -804,7 +805,7 @@ public partial class GeneratedNamesPropertyTests
             .GetDiagnostics();
 
     private static readonly Lazy<List<MetadataReference>> References = new(() =>
-        ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
+        ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES").NotNull())
             .Split(Path.PathSeparator)
             .Select(path => (MetadataReference)MetadataReference.CreateFromFile(path))
             .ToList()

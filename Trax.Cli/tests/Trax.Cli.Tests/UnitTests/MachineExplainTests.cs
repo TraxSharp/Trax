@@ -70,7 +70,7 @@ public class MachineExplainTests
             Then the shop is open
         """;
 
-    private string _dir = null!;
+    private string _dir = "";
     private string Features => Path.Combine(_dir, "features");
 
     [SetUp]

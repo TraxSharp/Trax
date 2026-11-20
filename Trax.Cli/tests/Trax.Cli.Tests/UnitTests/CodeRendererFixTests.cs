@@ -12,7 +12,7 @@ namespace Trax.Cli.Tests.UnitTests;
 [TestFixture]
 public class CodeRendererFixTests
 {
-    private CodeRenderer _renderer = null!;
+    private CodeRenderer _renderer = new();
 
     [SetUp]
     public void SetUp()

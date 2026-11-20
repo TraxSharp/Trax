@@ -2,6 +2,7 @@ using System.Text;
 using GraphQLParser;
 using GraphQLParser.AST;
 using Trax.Cli.Generator;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Clients;
 
@@ -456,7 +457,7 @@ internal sealed partial class ClientGenerator
                         below.Add(() =>
                             ObjectRecord(
                                 (GraphQLObjectTypeDefinition)
-                                    types.Definition(Named(definition.Type))!,
+                                    types.Definition(Named(definition.Type)).NotNull(),
                                 child,
                                 names.Claim(childName, $"the key {key} of {owner}"),
                                 $"{typeName}.{Doc(field.Name.StringValue)} as {Doc(owner)} selects it.",

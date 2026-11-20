@@ -13,7 +13,7 @@ namespace Trax.Cli.Tests.UnitTests;
 /// </summary>
 public class SchemaShapeFidelityTests
 {
-    private string _dir = null!;
+    private string _dir = "";
 
     [SetUp]
     public void SetUp()

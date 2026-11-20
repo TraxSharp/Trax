@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Trax.Cli.Generator;
 using Trax.Cli.Models;
+using Trax.Core.Extensions;
 using OperationKind = Trax.Cli.Models.OperationKind;
 
 namespace Trax.Cli.Tests.UnitTests;
@@ -165,7 +166,7 @@ public class ScaffoldCompilationTests
     {
         // Every assembly deployed with the tests, which includes the Trax packages and their
         // dependencies whether or not anything has loaded them yet.
-        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
+        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES").NotNull())
             .Split(Path.PathSeparator)
             .Select(path => MetadataReference.CreateFromFile(path));
 

@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Globalization;
 using Trax.Cli.Deploy;
 using Trax.Cli.Deploy.Aws;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.Deploy;
 
 namespace Trax.Cli.Commands;
@@ -211,7 +212,7 @@ internal static class DeployAwsCommands
                 var exports = DeployCommand.Export(file, filePath, exporter);
                 var deployer = new AwsDeployer(Client(env.Region), Images, Console.WriteLine);
                 var tag = AwsDeployer.ImageTag(
-                    Path.GetDirectoryName(Path.GetFullPath(filePath))!,
+                    Path.GetDirectoryName(Path.GetFullPath(filePath)).NotNull(),
                     DateTime.UtcNow
                 );
                 var url = await deployer
@@ -238,7 +239,7 @@ internal static class DeployAwsCommands
                     .PlanAsync(file, environment, exports, ct)
                     .ConfigureAwait(false);
                 var dir = Path.Combine(
-                    Path.GetDirectoryName(Path.GetFullPath(filePath))!,
+                    Path.GetDirectoryName(Path.GetFullPath(filePath)).NotNull(),
                     ".trax",
                     "deploy",
                     "aws"

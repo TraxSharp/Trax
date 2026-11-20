@@ -7,7 +7,7 @@ namespace Trax.Cli.Tests.UnitTests;
 [TestFixture]
 public class SchemaParserEdgeCaseTests
 {
-    private string _tempDir = null!;
+    private string _tempDir = "";
 
     [SetUp]
     public void SetUp()

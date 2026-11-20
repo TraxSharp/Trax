@@ -5,6 +5,7 @@ using Trax.Cli.Generator;
 using Trax.Cli.Models;
 using Trax.Cli.Schema.GraphQL;
 using Trax.Cli.Schema.OpenApi;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.IntegrationTests;
 
@@ -25,7 +26,7 @@ public class ScaffoldFromSchemaCompilesTests
         global using System.Threading.Tasks;
         """;
 
-    private string _dir = null!;
+    private string _dir = "";
 
     [SetUp]
     public void SetUp()
@@ -217,7 +218,7 @@ public class ScaffoldFromSchemaCompilesTests
             .Select(f => CSharpSyntaxTree.ParseText(File.ReadAllText(f), path: f))
             .Append(CSharpSyntaxTree.ParseText(ImplicitUsings, path: "GlobalUsings.cs"));
 
-        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
+        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES").NotNull())
             .Split(Path.PathSeparator)
             .Select(path => MetadataReference.CreateFromFile(path));
 

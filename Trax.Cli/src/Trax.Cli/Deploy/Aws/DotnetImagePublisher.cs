@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.Deploy;
 
 namespace Trax.Cli.Deploy.Aws;
@@ -35,7 +36,7 @@ internal sealed class DotnetImagePublisher : IImagePublisher
         var slash = repositoryUri.IndexOf('/', StringComparison.Ordinal);
         var psi = new ProcessStartInfo("dotnet")
         {
-            WorkingDirectory = Path.GetDirectoryName(projectPath)!,
+            WorkingDirectory = Path.GetDirectoryName(projectPath).NotNull(),
             UseShellExecute = false,
         };
         foreach (

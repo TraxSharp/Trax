@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using AwesomeAssertions;
 using Trax.Cli.Clients;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.IntegrationTests.OperationsConformance;
 
@@ -116,7 +117,7 @@ public class OperationsConformanceTests
         Process process;
         try
         {
-            process = Process.Start(start)!;
+            process = Process.Start(start).NotNull();
         }
         catch (Win32Exception)
         {

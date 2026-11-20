@@ -5,6 +5,7 @@ using AwesomeAssertions;
 using Trax.Cli.Commands;
 using Trax.Cli.Machines;
 using Trax.Cli.Tests.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 
@@ -22,8 +23,8 @@ namespace Trax.Cli.Tests.UnitTests;
 public class MachineGeneratorTests
 {
     private const string Adr = "see cli/0005 (docs/adr/0005-a-machine-id-is-kebab-case.md)";
-    private string _root = null!;
-    private string _tools = null!;
+    private string _root = "";
+    private string _tools = "";
     private static readonly IMachine Turnstile = new DeclarativeTurnstileMachine();
 
     [SetUp]
@@ -538,7 +539,7 @@ public class MachineGeneratorTests
     [Test]
     public void DefaultToolsDir_of_a_filesystem_root_is_refused()
     {
-        var root = Path.GetPathRoot(Path.GetFullPath("."))!;
+        var root = Path.GetPathRoot(Path.GetFullPath(".")).NotNull();
 
         var lookup = () => MachineGenerator.DefaultToolsDir(root);
 

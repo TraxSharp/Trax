@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Trax.Cli.Models;
 using Trax.Cli.Schema.OpenApi;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.UnitTests;
 
@@ -161,7 +162,7 @@ public class OpenApiParserFixTests
             string.Equals(e.Name, "Status", StringComparison.Ordinal)
         );
         statusEnum.Should().NotBeNull();
-        statusEnum!.Values.Should().BeEquivalentTo("Active", "Inactive", "Archived");
+        statusEnum.NotNull().Values.Should().BeEquivalentTo("Active", "Inactive", "Archived");
     }
 
     [Test]
@@ -175,7 +176,7 @@ public class OpenApiParserFixTests
             string.Equals(e.Name, "Priority", StringComparison.Ordinal)
         );
         priorityEnum.Should().NotBeNull();
-        priorityEnum!.Values.Should().BeEquivalentTo("Low", "Medium", "High", "Critical");
+        priorityEnum.NotNull().Values.Should().BeEquivalentTo("Low", "Medium", "High", "Critical");
     }
 
     [Test]
@@ -308,7 +309,7 @@ public class OpenApiParserFixTests
             string.Equals(t.Name, "VoteTallyResponse", StringComparison.Ordinal)
         );
         voteTally.Should().NotBeNull();
-        voteTally!.Fields.Should().HaveCount(1);
+        voteTally.NotNull().Fields.Should().HaveCount(1);
         voteTally.Fields[0].Name.Should().Be("Items");
         voteTally.Fields[0].TypeName.Should().StartWith("List<");
     }
@@ -337,7 +338,7 @@ public class OpenApiParserFixTests
             string.Equals(t.Name, "Scoreboard", StringComparison.Ordinal)
         );
         scoreboard.Should().NotBeNull();
-        scoreboard!.Fields.Should().HaveCount(1);
+        scoreboard.NotNull().Fields.Should().HaveCount(1);
         scoreboard.Fields[0].Name.Should().Be("Items");
         scoreboard.Fields[0].TypeName.Should().Be("List<ScoreEntry>");
     }
@@ -381,7 +382,7 @@ public class OpenApiParserFixTests
             string.Equals(t.Name, "VoteTallyResponseItem", StringComparison.Ordinal)
         );
         itemType.Should().NotBeNull();
-        itemType!.Fields.Should().Contain(f => f.Name == "RepId");
+        itemType.NotNull().Fields.Should().Contain(f => f.Name == "RepId");
         itemType.Fields.Should().Contain(f => f.Name == "Name");
     }
 
@@ -414,7 +415,7 @@ public class OpenApiParserFixTests
             string.Equals(t.Name, "ScoreEntry", StringComparison.Ordinal)
         );
         scoreEntry.Should().NotBeNull();
-        scoreEntry!.Fields.Should().Contain(f => f.Name == "Player");
+        scoreEntry.NotNull().Fields.Should().Contain(f => f.Name == "Player");
         scoreEntry.Fields.Should().Contain(f => f.Name == "Score");
     }
 
@@ -446,7 +447,7 @@ public class OpenApiParserFixTests
             string.Equals(t.Name, "ListEventsItem", StringComparison.Ordinal)
         );
         itemType.Should().NotBeNull();
-        itemType!.Fields.Should().Contain(f => f.Name == "Id");
+        itemType.NotNull().Fields.Should().Contain(f => f.Name == "Id");
         itemType.Fields.Should().Contain(f => f.Name == "Title");
         itemType.Fields.Should().Contain(f => f.Name == "StartDate");
     }
@@ -589,7 +590,10 @@ public class OpenApiParserFixTests
             string.Equals(t.Name, mixedField.TypeName, StringComparison.Ordinal)
         );
         mixedType.Should().NotBeNull();
-        mixedType!.Fields.Should().Contain(f => f.Name == "Name" && f.TypeName == "string");
+        mixedType
+            .NotNull()
+            .Fields.Should()
+            .Contain(f => f.Name == "Name" && f.TypeName == "string");
     }
 
     #endregion
@@ -830,7 +834,7 @@ public class OpenApiParserFixTests
             string.Equals(o.HttpPath, "/", StringComparison.Ordinal)
         );
         rootOp.Should().NotBeNull();
-        rootOp!.Name.Should().Be("Root");
+        rootOp.NotNull().Name.Should().Be("Root");
     }
 
     [Test]
@@ -844,7 +848,7 @@ public class OpenApiParserFixTests
             string.Equals(o.HttpPath, "/events/calendar.ics", StringComparison.Ordinal)
         );
         calendarOp.Should().NotBeNull();
-        calendarOp!.Name.Should().NotContain(".");
+        calendarOp.NotNull().Name.Should().NotContain(".");
     }
 
     [Test]

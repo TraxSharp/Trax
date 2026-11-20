@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Xml;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Machines;
 
@@ -23,12 +24,12 @@ internal static class ScenarioExplanation
     /// <param name="files">The files a derivation gave, by name: <c>host.json</c> and each <c>&lt;machine&gt;.ir.json</c>.</param>
     internal static IReadOnlyList<Scenario> Explain(IReadOnlyDictionary<string, string> files)
     {
-        var host = JsonNode.Parse(files[FeatureDirectory.HostFileName])!.AsObject();
+        var host = JsonNode.Parse(files[FeatureDirectory.HostFileName]).NotNull().AsObject();
         var irs = files
             .Where(f => f.Key.EndsWith(FeatureDirectory.IrSuffix, StringComparison.Ordinal))
             .ToDictionary(
                 f => f.Key[..^FeatureDirectory.IrSuffix.Length],
-                f => JsonNode.Parse(f.Value)!.AsObject(),
+                f => JsonNode.Parse(f.Value).NotNull().AsObject(),
                 StringComparer.Ordinal
             );
         var policies = host["policies"] as JsonArray ?? [];
@@ -37,7 +38,7 @@ internal static class ScenarioExplanation
         var scenarios =
             new SortedDictionary<(string File, int Line), (string Name, List<string> Facts)>();
         foreach (var (machine, facts) in host["provenance"] as JsonObject ?? [])
-        foreach (var (key, sources) in facts!.AsObject())
+        foreach (var (key, sources) in facts.NotNull().AsObject())
         {
             var said = Say(
                 machine,
@@ -46,11 +47,17 @@ internal static class ScenarioExplanation
                 irs.GetValueOrDefault(machine),
                 policies
             );
-            foreach (var source in sources!.AsArray())
+            foreach (var source in sources.NotNull().AsArray())
             {
-                var at = (source!["file"]!.GetValue<string>(), source["line"]!.GetValue<int>());
+                var at = (
+                    source.NotNull()["file"].NotNull().GetValue<string>(),
+                    source["line"].NotNull().GetValue<int>()
+                );
                 if (!scenarios.TryGetValue(at, out var scenario))
-                    scenarios[at] = scenario = (source["scenario"]!.GetValue<string>(), []);
+                    scenarios[at] = scenario = (
+                        source["scenario"].NotNull().GetValue<string>(),
+                        []
+                    );
                 if (!scenario.Facts.Contains(said))
                     scenario.Facts.Add(said);
             }
@@ -110,7 +117,10 @@ internal static class ScenarioExplanation
             JsonObject o when o["roles"] is JsonArray sets => string.Join(
                 " and ",
                 sets.Select(set =>
-                    string.Join(" or ", set!.AsArray().Select(r => r!.GetValue<string>()))
+                    string.Join(
+                        " or ",
+                        set.NotNull().AsArray().Select(r => r.NotNull().GetValue<string>())
+                    )
                 )
             ),
             _ => rule.ToJsonString(),
@@ -185,7 +195,7 @@ internal static class ScenarioExplanation
             "; ",
             matches.Select(p =>
             {
-                var then = p!["then"]!;
+                var then = p.NotNull()["then"].NotNull();
                 var trigger = then["trigger"]?.GetValue<string>();
                 var which = p["shape"]?.GetValue<string>() switch
                 {

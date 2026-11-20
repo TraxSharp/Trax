@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using GraphQLParser.AST;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 
 namespace Trax.Cli.Clients;
@@ -56,7 +57,9 @@ internal sealed partial class ClientGenerator
         if (operation.Trains is [var single])
         {
             resultType = selections.Of(
-                SdlTypes.ParseType(single.Train.Answer, $"the train '{single.Train.Field}'")!,
+                SdlTypes
+                    .ParseType(single.Train.Answer, $"the train '{single.Train.Field}'")
+                    .NotNull(),
                 single.Field.SelectionSet,
                 owner,
                 used
@@ -140,10 +143,9 @@ internal sealed partial class ClientGenerator
                     .Append(": ")
                     .Append(
                         selections.Of(
-                            SdlTypes.ParseType(
-                                train.Train.Answer,
-                                $"the train '{train.Train.Field}'"
-                            )!,
+                            SdlTypes
+                                .ParseType(train.Train.Answer, $"the train '{train.Train.Field}'")
+                                .NotNull(),
                             train.Field.SelectionSet,
                             owner,
                             used,
@@ -182,7 +184,7 @@ internal sealed partial class ClientGenerator
                 $"/** The fragment '{EscapeDocText(name)}' on {EscapeDocText(on)} ({EscapeDocText(source)}): the fields it selects. */\n"
             );
             body.Append(
-                $"export type {name} = {selections.Of(SdlTypes.ParseType(on + "!", $"the fragment '{name}'")!, definition.SelectionSet, $"the fragment {name}", used)};\n\n"
+                $"export type {name} = {selections.Of(SdlTypes.ParseType(on + "!", $"the fragment '{name}'").NotNull(), definition.SelectionSet, $"the fragment {name}", used)};\n\n"
             );
         }
         var sb = new StringBuilder(Header).Append("import \"./format.g\";\n");
@@ -246,7 +248,7 @@ internal sealed partial class ClientGenerator
                 sb.Append($"  {TrainField(train)}\n");
             var namespaces = trains
                 .Where(t => t.Namespace is not null)
-                .Select(t => t.Namespace!)
+                .Select(t => t.Namespace.NotNull())
                 .Distinct(StringComparer.Ordinal)
                 .Order(StringComparer.Ordinal)
                 .ToList();

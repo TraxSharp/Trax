@@ -4,6 +4,7 @@ using Trax.Cli.Clients;
 using Trax.Cli.Commands;
 using Trax.Cli.Machines;
 using Trax.Cli.Tests.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 
 namespace Trax.Cli.Tests.UnitTests;
@@ -359,7 +360,7 @@ public partial class ClientDocumentsGeneratorTests
         var entry = json.GetProperty("documents").EnumerateArray().Single();
         entry.GetProperty("name").GetString().Should().Be("OrderCard");
         entry.GetProperty("source").GetString().Should().Be("src/trax/orderCard.graphql");
-        var text = entry.GetProperty("text").GetString()!;
+        var text = entry.GetProperty("text").GetString().NotNull();
         module
             .Should()
             .Contain(
@@ -1104,7 +1105,7 @@ public partial class ClientDocumentsGeneratorTests
             }
         )
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(dir, file))!);
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(dir, file)).NotNull());
             File.WriteAllText(Path.Combine(dir, file), "");
         }
         try
@@ -1295,7 +1296,8 @@ public partial class ClientDocumentsGeneratorTests
                 .Parser.Parse(document)
                 .Definitions.OfType<GraphQLParser.AST.GraphQLOperationDefinition>()
                 .Single()
-                .Variables!.Items.Select(v => new ClientManifestArgument
+                .Variables.NotNull()
+                .Items.Select(v => new ClientManifestArgument
                 {
                     Name = v.Variable.Name.StringValue,
                     Type = PrintType(v.Type),
@@ -1330,9 +1332,13 @@ public partial class ClientDocumentsGeneratorTests
 
     private static string Id(IReadOnlyList<ClientFile> files)
     {
-        var text = Json(files).GetProperty("documents")[0].GetProperty("text").GetString()!;
+        var text = Json(files)
+            .GetProperty("documents")[0]
+            .GetProperty("text")
+            .GetString()
+            .NotNull();
         return ClientDocumentSet.IdOf(
-            Json(files).GetProperty("documents")[0].GetProperty("name").GetString()!,
+            Json(files).GetProperty("documents")[0].GetProperty("name").GetString().NotNull(),
             text
         );
     }
@@ -1362,9 +1368,9 @@ public partial class ClientDocumentsGeneratorTests
                 .EnumerateArray()
                 .Select(c =>
                     (
-                        c.GetProperty("name").GetString()!,
-                        c.GetProperty("text").GetString()!,
-                        c.GetProperty("id").GetString()!
+                        c.GetProperty("name").GetString().NotNull(),
+                        c.GetProperty("text").GetString().NotNull(),
+                        c.GetProperty("id").GetString().NotNull()
                     )
                 )
                 .ToList();

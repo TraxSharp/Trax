@@ -14,7 +14,7 @@ namespace Trax.Cli.Tests.UnitTests;
 [TestFixture]
 public class HubProgramPatchTests
 {
-    private string _hubDir = null!;
+    private string _hubDir = "";
 
     [SetUp]
     public void SetUp()

@@ -1,4 +1,5 @@
 using System.Globalization;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Machines;
 
@@ -75,7 +76,7 @@ internal sealed partial class MachineGenerator
             foreach (var artifact in planned)
             {
                 current = artifact.FinalPath;
-                CreateDirectory(Path.GetDirectoryName(artifact.FinalPath)!, createdDirs);
+                CreateDirectory(Path.GetDirectoryName(artifact.FinalPath).NotNull(), createdDirs);
                 var temp = $"{artifact.FinalPath}.{token}.tmp";
                 copies.Add((artifact, temp));
                 _files.Copy(artifact.StagedPath, temp);

@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Trax.Cli.Schema.OpenApi;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.UnitTests;
 
@@ -52,7 +53,7 @@ public class OpenApiCoverageGapsExtraTests
 
         var output = schema
             .Operations.Single(o => string.Equals(o.Name, "ListEmpties", StringComparison.Ordinal))
-            .OutputType!;
+            .OutputType.NotNull();
         var single = output.Fields.Single(f =>
             string.Equals(f.Name, "Single", StringComparison.Ordinal)
         );

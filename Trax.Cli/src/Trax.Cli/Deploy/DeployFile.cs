@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Deploy;
 
@@ -199,7 +200,7 @@ internal sealed partial class DeployFile
             throw new InvalidOperationException(
                 Problem("services is empty. Name at least one project to deploy.")
             );
-        var dir = Path.GetDirectoryName(Path.GetFullPath(path))!;
+        var dir = Path.GetDirectoryName(Path.GetFullPath(path)).NotNull();
         foreach (var (name, service) in Services)
         {
             if (!Name.IsMatch(name) || name is "database" or "rabbitmq" or "migrate")
@@ -252,7 +253,10 @@ internal sealed partial class DeployFile
     /// <summary>The full path of <paramref name="service"/>'s project.</summary>
     public static string ProjectPath(string deployFilePath, DeployService service) =>
         Path.GetFullPath(
-            Path.Combine(Path.GetDirectoryName(Path.GetFullPath(deployFilePath))!, service.Project)
+            Path.Combine(
+                Path.GetDirectoryName(Path.GetFullPath(deployFilePath)).NotNull(),
+                service.Project
+            )
         );
 
     [GeneratedRegex("^[a-z][a-z0-9-]*$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]

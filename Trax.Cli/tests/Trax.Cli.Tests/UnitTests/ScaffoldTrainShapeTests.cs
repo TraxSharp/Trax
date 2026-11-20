@@ -6,6 +6,7 @@ using Trax.Cli.Generator;
 using Trax.Cli.Models;
 using Trax.Cli.Schema.GraphQL;
 using Trax.Cli.Schema.OpenApi;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.UnitTests;
 
@@ -25,7 +26,7 @@ namespace Trax.Cli.Tests.UnitTests;
 [Property("adr", "Trax.Docs/adr/0016-a-junction-chain-is-a-declaration-not-a-step-of-the-work.md")]
 public class ScaffoldTrainShapeTests
 {
-    private string _outputDir = null!;
+    private string _outputDir = "";
 
     [SetUp]
     public void SetUp() =>
@@ -95,7 +96,8 @@ public class ScaffoldTrainShapeTests
 
             trainClass.Should().NotBeNull($"{path} must declare the train class it is named for");
 
-            trainClass!
+            trainClass
+                .NotNull()
                 .Members.OfType<MethodDeclarationSyntax>()
                 .Should()
                 .Contain(

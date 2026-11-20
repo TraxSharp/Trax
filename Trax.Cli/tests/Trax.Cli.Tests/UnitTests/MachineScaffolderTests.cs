@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Trax.Cli.Machines;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence;
 
 namespace Trax.Cli.Tests.UnitTests;
@@ -13,7 +14,7 @@ namespace Trax.Cli.Tests.UnitTests;
 /// </summary>
 public class MachineScaffolderTests
 {
-    private string _dir = null!;
+    private string _dir = "";
 
     [SetUp]
     public void SetUp()
@@ -168,7 +169,7 @@ public class MachineScaffolderTests
     {
         var tree = CSharpSyntaxTree.ParseText(source);
 
-        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
+        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES").NotNull())
             .Split(Path.PathSeparator)
             .Where(p => p.EndsWith(".dll", StringComparison.Ordinal))
             .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))

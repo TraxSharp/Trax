@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Trax.Cli.Deploy;
 using Trax.Cli.Deploy.Aws;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.Deploy;
 
 namespace Trax.Cli.Tests.UnitTests;
@@ -83,12 +84,18 @@ public class AwsStackTemplateTests
         JsonObject template,
         string type
     ) =>
-        ((JsonObject)template["Resources"]!)
-            .Where(r => string.Equals((string)r.Value!["Type"]!, type, StringComparison.Ordinal))
-            .Select(r => (r.Key, (JsonObject)r.Value!));
+        ((JsonObject)template["Resources"].NotNull())
+            .Where(r =>
+                string.Equals(
+                    r.Value.NotNull()["Type"].NotNull().GetValue<string>(),
+                    type,
+                    StringComparison.Ordinal
+                )
+            )
+            .Select(r => (r.Key, (JsonObject)r.Value.NotNull()));
 
     private static JsonObject Properties(JsonObject template, string id) =>
-        (JsonObject)template["Resources"]![id]!["Properties"]!;
+        (JsonObject)template["Resources"].NotNull()[id].NotNull()["Properties"].NotNull();
 
     [TestCase(DeployEnvironment.Production)]
     [TestCase(DeployEnvironment.Try)]
@@ -97,21 +104,24 @@ public class AwsStackTemplateTests
         var template = Build(File_(profile));
 
         foreach (var (id, group) in Resources(template, "AWS::EC2::SecurityGroup"))
-        foreach (var rule in group["Properties"]!["SecurityGroupIngress"]?.AsArray() ?? [])
+        foreach (var rule in group["Properties"].NotNull()["SecurityGroupIngress"]?.AsArray() ?? [])
         {
             var open =
-                string.Equals((string?)rule!["CidrIp"], "0.0.0.0/0", StringComparison.Ordinal)
-                || string.Equals((string?)rule["CidrIpv6"], "::/0", StringComparison.Ordinal);
+                string.Equals(
+                    (string?)rule.NotNull()["CidrIp"],
+                    "0.0.0.0/0",
+                    StringComparison.Ordinal
+                ) || string.Equals((string?)rule["CidrIpv6"], "::/0", StringComparison.Ordinal);
             if (!open)
                 continue;
             id.Should()
                 .Be("LoadBalancerSecurityGroup", "only the load balancer is open to the internet");
             profile.Should().Be(DeployEnvironment.Production, "try admits CloudFront alone");
-            ((int)rule["FromPort"]!).Should().BeOneOf(80, 443);
+            ((int)rule["FromPort"].NotNull()).Should().BeOneOf(80, 443);
         }
         foreach (var (_, rule) in Resources(template, "AWS::EC2::SecurityGroupIngress"))
-            rule["Properties"]!
-                ["SourceSecurityGroupId"]
+            rule["Properties"]
+                .NotNull()["SourceSecurityGroupId"]
                 .Should()
                 .NotBeNull("every other way in names a group");
     }
@@ -121,9 +131,11 @@ public class AwsStackTemplateTests
     {
         var ingress = Properties(Build(File_(DeployEnvironment.Try)), "LoadBalancerSecurityGroup")[
             "SecurityGroupIngress"
-        ]!.AsArray();
+        ]
+            .NotNull()
+            .AsArray();
 
-        ingress.Select(r => (string?)r!["SourcePrefixListId"]).Should().Equal(PrefixList);
+        ingress.Select(r => (string?)r.NotNull()["SourcePrefixListId"]).Should().Equal(PrefixList);
     }
 
     [TestCase(DeployEnvironment.Production)]
@@ -131,8 +143,8 @@ public class AwsStackTemplateTests
     public void Every_security_group_replaces_the_default_egress(string profile)
     {
         foreach (var (id, group) in Resources(Build(File_(profile)), "AWS::EC2::SecurityGroup"))
-            group["Properties"]!
-                ["SecurityGroupEgress"]
+            group["Properties"]
+                .NotNull()["SecurityGroupEgress"]
                 .Should()
                 .NotBeNull($"{id} would otherwise allow all egress");
     }
@@ -144,10 +156,14 @@ public class AwsStackTemplateTests
         var template = Build(File_(profile));
         var database = Properties(template, "Database");
 
-        ((bool)database["PubliclyAccessible"]!).Should().BeFalse();
-        ((bool)database["StorageEncrypted"]!).Should().BeTrue();
-        ((bool)database["MultiAZ"]!).Should().Be(multiAz);
-        ((string)template["Resources"]!["Database"]!["DeletionPolicy"]!)
+        ((bool)database["PubliclyAccessible"].NotNull()).Should().BeFalse();
+        ((bool)database["StorageEncrypted"].NotNull()).Should().BeTrue();
+        ((bool)database["MultiAZ"].NotNull()).Should().Be(multiAz);
+        template["Resources"]
+            .NotNull()["Database"]
+            .NotNull()["DeletionPolicy"]
+            .NotNull()
+            .GetValue<string>()
             .Should()
             .Be(multiAz ? "Snapshot" : "Delete");
     }
@@ -158,13 +174,21 @@ public class AwsStackTemplateTests
         var text = AwsStack.Compact(Build());
 
         foreach (var (_, role) in Resources(Build(), "AWS::IAM::Role"))
-        foreach (var policy in role["Properties"]!["Policies"]?.AsArray() ?? [])
-        foreach (var statement in policy!["PolicyDocument"]!["Statement"]!.AsArray())
-            statement!["Action"]!
+        foreach (var policy in role["Properties"].NotNull()["Policies"]?.AsArray() ?? [])
+        foreach (
+            var statement in policy
+                .NotNull()["PolicyDocument"]
+                .NotNull()["Statement"]
+                .NotNull()
+                .AsArray()
+        )
+            statement
+                .NotNull()["Action"]
+                .NotNull()
                 .AsArray()
                 .Select(a => (string?)a)
                 .Should()
-                .NotContain(a => a!.Contains('*'));
+                .NotContain(a => a.NotNull().Contains('*'));
         text.Should().NotContain("\"Action\":\"*\"");
     }
 
@@ -175,10 +199,14 @@ public class AwsStackTemplateTests
 
         foreach (var (id, task) in Resources(template, "AWS::ECS::TaskDefinition"))
         {
-            var container = task["Properties"]!["ContainerDefinitions"]![0]!;
-            var names = container["Environment"]!
+            var container = task["Properties"]
+                .NotNull()["ContainerDefinitions"]
+                .NotNull()[0]
+                .NotNull();
+            var names = container["Environment"]
+                .NotNull()
                 .AsArray()
-                .Select(e => (string)e!["Name"]!)
+                .Select(e => e.NotNull()["Name"].NotNull().GetValue<string>())
                 .ToList();
             names
                 .Should()
@@ -186,14 +214,16 @@ public class AwsStackTemplateTests
                     ["Stripe__ApiKey", "PGPASSWORD"],
                     $"{id} must take secrets by reference"
                 );
-            container["Secrets"]!
+            container["Secrets"]
+                .NotNull()
                 .AsArray()
-                .Select(s => (string)s!["Name"]!)
+                .Select(s => s.NotNull()["Name"].NotNull().GetValue<string>())
                 .Should()
                 .Contain(["Stripe__ApiKey", "PGPASSWORD"]);
         }
         var database = Properties(template, "Database");
-        database["MasterUserPassword"]!
+        database["MasterUserPassword"]
+            .NotNull()
             .ToJsonString()
             .Should()
             .Contain("{{resolve:secretsmanager:");
@@ -204,20 +234,32 @@ public class AwsStackTemplateTests
     {
         var template = Build();
 
-        Properties(template, "HttpsListener")["Protocol"]!.GetValue<string>().Should().Be("HTTPS");
-        Properties(template, "HttpListener")["DefaultActions"]![0]!["Type"]!
+        Properties(template, "HttpsListener")["Protocol"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("HTTPS");
+        Properties(template, "HttpListener")["DefaultActions"]
+            .NotNull()[0]
+            .NotNull()["Type"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be("redirect");
-        Properties(template, "Certificate")["DomainName"]!
+        Properties(template, "Certificate")["DomainName"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be("orders.example.com");
-        Properties(template, "DomainRecord")["Name"]!
+        Properties(template, "DomainRecord")["Name"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be("orders.example.com");
-        template["Outputs"]!["Url"]!["Value"]!
+        template["Outputs"]
+            .NotNull()["Url"]
+            .NotNull()["Value"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be("https://orders.example.com");
@@ -228,14 +270,15 @@ public class AwsStackTemplateTests
     {
         var template = Build(File_(DeployEnvironment.Try));
 
-        Properties(template, "Distribution")["DistributionConfig"]!["DefaultCacheBehavior"]![
-            "ViewerProtocolPolicy"
-        ]!
+        Properties(template, "Distribution")["DistributionConfig"]
+            .NotNull()["DefaultCacheBehavior"]
+            .NotNull()["ViewerProtocolPolicy"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be("redirect-to-https");
-        ((JsonObject)template["Resources"]!).ContainsKey("NatGateway").Should().BeFalse();
-        ((JsonObject)template["Resources"]!).ContainsKey("Certificate").Should().BeFalse();
+        ((JsonObject)template["Resources"].NotNull()).ContainsKey("NatGateway").Should().BeFalse();
+        ((JsonObject)template["Resources"].NotNull()).ContainsKey("Certificate").Should().BeFalse();
     }
 
     [Test]
@@ -243,11 +286,13 @@ public class AwsStackTemplateTests
     {
         var template = Build();
 
-        Properties(template, "HubService")["DesiredCount"]!
+        Properties(template, "HubService")["DesiredCount"]
+            .NotNull()
             .ToJsonString()
             .Should()
             .Be("""{"Fn::If":["Running",1,0]}""");
-        Properties(template, "WorkerService")["DesiredCount"]!
+        Properties(template, "WorkerService")["DesiredCount"]
+            .NotNull()
             .ToJsonString()
             .Should()
             .Be("""{"Fn::If":["Running",3,0]}""", "the environment's count overrides the file's");
@@ -259,14 +304,23 @@ public class AwsStackTemplateTests
         var template = Build();
         string[] Env(string id) =>
             [
-                .. Properties(template, id)["ContainerDefinitions"]![0]!["Environment"]!
+                .. Properties(template, id)["ContainerDefinitions"]
+                    .NotNull()[0]
+                    .NotNull()["Environment"]
+                    .NotNull()
                     .AsArray()
-                    .Select(e => $"{e!["Name"]}={e["Value"]!.ToJsonString().Trim('"')}"),
+                    .Select(e =>
+                        $"{e.NotNull()["Name"]}={e["Value"].NotNull().ToJsonString().Trim('"')}"
+                    ),
             ];
 
         Env("HubTaskDefinition").Should().Contain("TRAX_MIGRATIONS=skip");
         Env("MigrateTaskDefinition").Should().NotContain("TRAX_MIGRATIONS=skip");
-        Properties(template, "MigrateTaskDefinition")["ContainerDefinitions"]![0]!["Command"]![0]!
+        Properties(template, "MigrateTaskDefinition")["ContainerDefinitions"]
+            .NotNull()[0]
+            .NotNull()["Command"]
+            .NotNull()[0]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be("--trax-migrate");
@@ -277,20 +331,34 @@ public class AwsStackTemplateTests
     public void Cognito_gives_the_hosts_its_issuer_and_client()
     {
         var template = Build();
-        var env = Properties(template, "HubTaskDefinition")["ContainerDefinitions"]![0]![
-            "Environment"
-        ]!.AsArray();
+        var env = Properties(template, "HubTaskDefinition")["ContainerDefinitions"]
+            .NotNull()[0]
+            .NotNull()["Environment"]
+            .NotNull()
+            .AsArray();
 
         Resources(template, "AWS::Cognito::UserPool").Should().ContainSingle();
         env.Single(e =>
-            string.Equals((string)e!["Name"]!, "Auth__Authority", StringComparison.Ordinal)
-        )!["Value"]!
+                string.Equals(
+                    e.NotNull()["Name"].NotNull().GetValue<string>(),
+                    "Auth__Authority",
+                    StringComparison.Ordinal
+                )
+            )
+            .NotNull()["Value"]
+            .NotNull()
             .ToJsonString()
             .Should()
             .Contain("cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}");
         env.Single(e =>
-            string.Equals((string)e!["Name"]!, "Auth__Audience", StringComparison.Ordinal)
-        )!["Value"]!
+                string.Equals(
+                    e.NotNull()["Name"].NotNull().GetValue<string>(),
+                    "Auth__Audience",
+                    StringComparison.Ordinal
+                )
+            )
+            .NotNull()["Value"]
+            .NotNull()
             .ToJsonString()
             .Should()
             .Be("""{"Ref":"UserPoolClient"}""");

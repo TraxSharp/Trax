@@ -13,8 +13,8 @@ namespace Trax.Cli.Tests.UnitTests;
 [Property("adr", "docs/adr/0001-the-machine-toolchain-is-half-in-process.md")]
 public class ExecutableLookupTests
 {
-    private string _root = null!;
-    private string _previousDirectory = null!;
+    private string _root = "";
+    private string _previousDirectory = "";
 
     [SetUp]
     public void SetUp()

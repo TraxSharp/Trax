@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Trax.Cli.Machines;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.Fakes;
 
@@ -64,7 +65,9 @@ internal sealed class FakeNodeRunner : INodeRunner
     }
 
     private static string ReadIrId(string irPath) =>
-        ((JsonObject)JsonNode.Parse(File.ReadAllText(irPath))!)["id"]!.GetValue<string>();
+        ((JsonObject)JsonNode.Parse(File.ReadAllText(irPath)).NotNull())["id"]
+            .NotNull()
+            .GetValue<string>();
 
     private static Dictionary<string, string> ParseFlags(IReadOnlyList<string> args)
     {

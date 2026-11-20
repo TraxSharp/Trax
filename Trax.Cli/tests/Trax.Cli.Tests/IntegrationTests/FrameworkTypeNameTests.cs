@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Trax.Cli.Generator;
 using Trax.Cli.Models;
 using Trax.Cli.Schema.GraphQL;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.IntegrationTests;
 
@@ -33,7 +34,7 @@ public class FrameworkTypeNameTests
         global using System.Threading.Tasks;
         """;
 
-    private string _outputDir = null!;
+    private string _outputDir = "";
 
     [SetUp]
     public void SetUp() =>
@@ -97,7 +98,7 @@ public class FrameworkTypeNameTests
 
     private static IEnumerable<Diagnostic> Compile(IEnumerable<SyntaxTree> sources)
     {
-        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
+        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES").NotNull())
             .Split(Path.PathSeparator)
             .Select(path => MetadataReference.CreateFromFile(path));
 

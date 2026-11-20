@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.Deploy;
 
 namespace Trax.Cli.Deploy.Aws;
@@ -115,7 +116,9 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         say(existing is null ? $"Creating {stack}..." : $"Updating {stack}...");
         await aws.DeployAsync(stack, template, first, tags, say, ct).ConfigureAwait(false);
 
-        var outputs = (await aws.DescribeStackAsync(stack, ct).ConfigureAwait(false))!.Outputs;
+        var outputs = (await aws.DescribeStackAsync(stack, ct).ConfigureAwait(false))
+            .NotNull()
+            .Outputs;
         say("Migrating the database...");
         var migration = await aws.RunTaskAsync(
                 new AwsTaskRequest(
@@ -152,9 +155,9 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         say($"Rolling the services onto {tag}...");
         await aws.DeployAsync(stack, template, second, tags, say, ct).ConfigureAwait(false);
 
-        return (
-            await aws.DescribeStackAsync(stack, ct).ConfigureAwait(false)
-        )!.Outputs.GetValueOrDefault("Url");
+        return (await aws.DescribeStackAsync(stack, ct).ConfigureAwait(false))
+            .NotNull()
+            .Outputs.GetValueOrDefault("Url");
     }
 
     /// <summary>

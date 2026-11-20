@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Trax.Cli.Models;
 using Trax.Cli.Schema.OpenApi;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.UnitTests;
 
@@ -210,7 +211,7 @@ public class OpenApiSchemaParserTests
             string.Equals(o.HttpPath, "/health", StringComparison.Ordinal)
         );
         healthOp.Should().NotBeNull();
-        healthOp!.Name.Should().NotBeNullOrWhiteSpace();
+        healthOp.NotNull().Name.Should().NotBeNullOrWhiteSpace();
         // No operationId in the schema, so the name is synthesized from path segments
         healthOp.Name.Should().Be("Health");
     }

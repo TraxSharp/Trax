@@ -3,6 +3,7 @@ using System.IO.Compression;
 using AwesomeAssertions;
 using Trax.Cli.Machines;
 using Trax.Cli.Tests.Fakes;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.IntegrationTests;
 
@@ -17,7 +18,7 @@ namespace Trax.Cli.Tests.IntegrationTests;
 /// </summary>
 public class MachineGenerateFromPackedToolTests
 {
-    private string _root = null!;
+    private string _root = "";
 
     [SetUp]
     public void SetUp()
@@ -66,7 +67,7 @@ public class MachineGenerateFromPackedToolTests
             "--assembly",
             typeof(DeclarativeTurnstileMachine).Assembly.Location,
             "--machine",
-            typeof(DeclarativeTurnstileMachine).FullName!,
+            typeof(DeclarativeTurnstileMachine).FullName.NotNull(),
             "--twin-out",
             "twin",
             "--corpus-out",
@@ -105,7 +106,7 @@ public class MachineGenerateFromPackedToolTests
             "--assembly",
             typeof(DeclarativeTurnstileMachine).Assembly.Location,
             "--machine",
-            typeof(DeclarativeTurnstileMachine).FullName!,
+            typeof(DeclarativeTurnstileMachine).FullName.NotNull(),
             "--twin-out",
             "twin"
         );
@@ -864,7 +865,8 @@ public class MachineGenerateFromPackedToolTests
             .Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(engine, "package.json")))
             .RootElement.GetProperty("devDependencies")
             .GetProperty(name)
-            .GetString()!
+            .GetString()
+            .NotNull()
             .TrimStart('^', '~');
 
     // The turnstile, shipping the corpus the tool just wrote, so SelfCheck replays it through the C# engine.
@@ -905,7 +907,7 @@ public class MachineGenerateFromPackedToolTests
     // bin/<Configuration>/<tfm>/: the configuration this test run built, which pack --no-build must match.
     private static string BuildConfiguration() =>
         new DirectoryInfo(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar))
-            .Parent!
+            .Parent.NotNull()
             .Name;
 
     private static string RepoFolder(string name)
@@ -948,7 +950,7 @@ public class MachineGenerateFromPackedToolTests
         psi.Environment.Remove("MSBuildSDKsPath");
         psi.Environment.Remove("MSBuildExtensionsPath");
         psi.Environment.Remove("MSBUILD_EXE_PATH");
-        using var process = Process.Start(psi)!;
+        using var process = Process.Start(psi).NotNull();
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();
         // Bounded, so a hung child fails this test with what it printed instead of stalling the run.

@@ -29,7 +29,7 @@ public class LexiconFormatCommandTests
         Outcome: "it fails" when it fails
         """;
 
-    private string _dir = null!;
+    private string _dir = "";
     private string File_ => Path.Combine(_dir, "shop.lexicon");
 
     [SetUp]

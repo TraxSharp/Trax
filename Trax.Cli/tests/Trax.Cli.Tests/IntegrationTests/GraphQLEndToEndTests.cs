@@ -7,9 +7,9 @@ namespace Trax.Cli.Tests.IntegrationTests;
 [TestFixture]
 public class GraphQLEndToEndTests
 {
-    private GraphQLSchemaParser _parser = null!;
-    private TraxProjectGenerator _generator = null!;
-    private string _outputDir = null!;
+    private GraphQLSchemaParser _parser = new();
+    private TraxProjectGenerator _generator = new();
+    private string _outputDir = "";
 
     [SetUp]
     public void SetUp()

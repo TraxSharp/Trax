@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Trax.Cli.Tests.IntegrationTests.OperationsConformance.Generated;
 using Trax.Client;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.IntegrationTests.OperationsConformance;
 
@@ -25,12 +26,12 @@ internal sealed class OperationsTestee : IAsyncDisposable
     /// <summary>Answers one request line with its answer line, once the request settles.</summary>
     public async Task<string> AnswerAsync(string line)
     {
-        var request = JsonNode.Parse(line)!.AsObject();
-        var id = request["id"]!.GetValue<int>();
+        var request = JsonNode.Parse(line).NotNull().AsObject();
+        var id = request["id"].NotNull().GetValue<int>();
         JsonObject answer;
         try
         {
-            answer = request["op"]!.GetValue<string>() switch
+            answer = request["op"].NotNull().GetValue<string>() switch
             {
                 "open" => await OpenAsync(request).ConfigureAwait(false),
                 "send" => await SendAsync(request).ConfigureAwait(false),
@@ -64,7 +65,7 @@ internal sealed class OperationsTestee : IAsyncDisposable
                 new GraphQLSubscriptionSocketOptions
                 {
                     Endpoint = new Uri(
-                        request["socket"]!.GetValue<string>(),
+                        request["socket"].NotNull().GetValue<string>(),
                         UriKind.RelativeOrAbsolute
                     ),
                     AllowInsecureTransport = insecure,
@@ -75,7 +76,7 @@ internal sealed class OperationsTestee : IAsyncDisposable
                 {
                     Http = http,
                     Endpoint = new Uri(
-                        request["endpoint"]!.GetValue<string>(),
+                        request["endpoint"].NotNull().GetValue<string>(),
                         UriKind.RelativeOrAbsolute
                     ),
                     AllowInsecureTransport = insecure,
@@ -104,7 +105,7 @@ internal sealed class OperationsTestee : IAsyncDisposable
     {
         var client = _client ?? throw new InvalidOperationException("send before open");
         var variables = request["variables"];
-        return request["operation"]!.GetValue<string>() switch
+        return request["operation"].NotNull().GetValue<string>() switch
         {
             "Runs" => Answer(client.RunsAsync(Read<RunsVariables>(variables))),
             "Retry" => Answer(client.RetryAsync(Read<RetryVariables>(variables))),
@@ -133,7 +134,7 @@ internal sealed class OperationsTestee : IAsyncDisposable
         Unsubscribe();
         lock (_gate)
             _events = [];
-        _stream = request["operation"]!.GetValue<string>() switch
+        _stream = request["operation"].NotNull().GetValue<string>() switch
         {
             "Changes" => client.Changes(Read<ChangesVariables>(request["variables"]), Record),
             var other => throw new InvalidOperationException($"No stream {other} to follow."),

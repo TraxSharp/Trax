@@ -17,8 +17,8 @@ namespace Trax.Cli.Tests.UnitTests;
 /// </summary>
 public partial class ClientGeneratorTests
 {
-    private string _tools = null!;
-    private string _out = null!;
+    private string _tools = "";
+    private string _out = "";
 
     [SetUp]
     public void SetUp()
@@ -251,7 +251,7 @@ public partial class ClientGeneratorTests
         var node = new FakeNodeRunner();
         var checkout = ClientManifests.Sample().Machines[0];
         var ir = (JsonObject)checkout.Ir.DeepClone();
-        ((JsonArray)ir[list]!).Add(name);
+        ((JsonArray)ir[list].NotNull()).Add(name);
         var manifest = ClientManifests.Sample() with { Machines = [checkout with { Ir = ir }] };
 
         var render = () => Render(manifest, node);
@@ -639,7 +639,7 @@ public partial class ClientGeneratorTests
         var node = new FakeNodeRunner();
         var checkout = ClientManifests.Sample().Machines[0];
         var ir = (JsonObject)checkout.Ir.DeepClone();
-        ((JsonArray)ir["states"]!).Add("Done\"; alert(1); \"");
+        ((JsonArray)ir["states"].NotNull()).Add("Done\"; alert(1); \"");
         var manifest = ClientManifests.Sample() with { Machines = [checkout with { Ir = ir }] };
 
         var render = () => Render(manifest, node);

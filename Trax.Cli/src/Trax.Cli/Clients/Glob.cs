@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Clients;
 
@@ -58,7 +59,7 @@ internal static class Glob
     public static string Resolved(string path)
     {
         var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
-        var resolved = Path.GetPathRoot(full)!;
+        var resolved = Path.GetPathRoot(full).NotNull();
         var parts = full[resolved.Length..]
             .Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
         for (var i = 0; i < parts.Length; i++)

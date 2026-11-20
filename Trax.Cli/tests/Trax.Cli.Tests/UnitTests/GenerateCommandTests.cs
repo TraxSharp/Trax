@@ -8,7 +8,7 @@ namespace Trax.Cli.Tests.UnitTests;
 [TestFixture]
 public class GenerateCommandTests
 {
-    private string _tempDir = null!;
+    private string _tempDir = "";
     private int _originalExitCode;
 
     [SetUp]

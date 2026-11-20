@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.Deploy;
 
 namespace Trax.Cli.Deploy.Aws;
@@ -184,7 +185,13 @@ internal static class AwsStack
             );
         }
         else
-            ((JsonArray)resources["TaskSecurityGroup"]!["Properties"]!["SecurityGroupEgress"]!).Add(
+            (
+                (JsonArray)
+                    resources["TaskSecurityGroup"]
+                        .NotNull()["Properties"]
+                        .NotNull()["SecurityGroupEgress"]
+                        .NotNull()
+            ).Add(
                 Rule(
                     "tcp",
                     5432,
@@ -601,8 +608,8 @@ internal static class AwsStack
             ]
             : [Rule("tcp", 80, 80, prefixList: cloudFrontPrefixList, description: "CloudFront")];
         var albGroup = SecurityGroup(stack, vpc, "The load balancer", []);
-        ((JsonObject)albGroup["Properties"]!)["SecurityGroupIngress"] = ingress;
-        ((JsonObject)albGroup["Properties"]!)["SecurityGroupEgress"] = new JsonArray(
+        ((JsonObject)albGroup["Properties"].NotNull())["SecurityGroupIngress"] = ingress;
+        ((JsonObject)albGroup["Properties"].NotNull())["SecurityGroupEgress"] = new JsonArray(
             Rule(
                 "-1",
                 from: null,

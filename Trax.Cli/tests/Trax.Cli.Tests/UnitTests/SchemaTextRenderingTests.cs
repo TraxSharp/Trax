@@ -26,7 +26,7 @@ public class SchemaTextRenderingTests
     private const string Adr =
         "see cli/0002 (docs/adr/0002-generated-code-refuses-a-schema-name-it-cannot-emit.md)";
 
-    private CodeRenderer _renderer = null!;
+    private CodeRenderer _renderer = new();
 
     [SetUp]
     public void SetUp() => _renderer = new CodeRenderer();

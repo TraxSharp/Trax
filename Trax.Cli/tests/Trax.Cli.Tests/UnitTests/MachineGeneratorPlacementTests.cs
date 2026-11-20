@@ -11,8 +11,8 @@ namespace Trax.Cli.Tests.UnitTests;
 /// </summary>
 public class MachineGeneratorPlacementTests
 {
-    private string _root = null!;
-    private string _tools = null!;
+    private string _root = "";
+    private string _tools = "";
 
     [SetUp]
     public void SetUp()
@@ -31,7 +31,7 @@ public class MachineGeneratorPlacementTests
             Directory.Delete(_root, recursive: true);
     }
 
-    private MachineGenerateOptions Options(string irOut, string twinOut) =>
+    private MachineGenerateOptions Options(string? irOut, string twinOut) =>
         new(
             MachineIr.Of(new DeclarativeTurnstileMachine()),
             irOut,
@@ -125,7 +125,12 @@ public class MachineGeneratorPlacementTests
         var node = new FakeNodeRunner();
 
         var act = () =>
-            new MachineGenerator(node).Generate(Options(null!, twinOut) with { Lang = "csharp" });
+            new MachineGenerator(node).Generate(
+                Options(irOut: null, twinOut) with
+                {
+                    Lang = "csharp",
+                }
+            );
 
         act.Should()
             .Throw<InvalidOperationException>()
@@ -148,7 +153,7 @@ public class MachineGeneratorPlacementTests
         );
 
         new MachineGenerator(new FakeNodeRunner { ViewContent = "// new view\n" }).Generate(
-            Options(null!, twinOut) with
+            Options(irOut: null, twinOut) with
             {
                 Lang = "csharp",
             }

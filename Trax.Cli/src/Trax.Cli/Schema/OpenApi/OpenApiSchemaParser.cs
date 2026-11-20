@@ -4,6 +4,7 @@ using Microsoft.OpenApi.Readers;
 using Microsoft.OpenApi.Readers.Exceptions;
 using Trax.Cli.Generator;
 using Trax.Cli.Models;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Schema.OpenApi;
 
@@ -762,7 +763,7 @@ public partial class OpenApiSchemaParser : ISchemaParser
             var refSchema = schema.AllOf.FirstOrDefault(s => s.Reference != null);
             if (refSchema != null)
                 return NamingConventions.ToPascalCase(
-                    NamingConventions.SimplifySchemaName(refSchema.Reference!.Id)
+                    NamingConventions.SimplifySchemaName(refSchema.Reference.NotNull().Id)
                 );
 
             return "object"; // fallback
@@ -1000,7 +1001,7 @@ public partial class OpenApiSchemaParser : ISchemaParser
         // If every property is a bare "type: object" with no further structure,
         // the promoted type would have no GraphQL-representable fields (HotChocolate
         // silently ignores System.Object properties). Fall back to "object" instead.
-        if (schema.Properties!.Values.All(IsBareObjectSchema))
+        if (schema.Properties.NotNull().Values.All(IsBareObjectSchema))
             return "object";
 
         var typeName = EnsureUniqueName(NamingConventions.ToPascalCase(contextName));

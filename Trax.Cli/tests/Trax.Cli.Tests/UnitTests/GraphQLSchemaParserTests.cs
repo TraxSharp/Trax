@@ -7,7 +7,7 @@ namespace Trax.Cli.Tests.UnitTests;
 [TestFixture]
 public class GraphQLSchemaParserTests
 {
-    private GraphQLSchemaParser _parser = null!;
+    private GraphQLSchemaParser _parser = new();
 
     [SetUp]
     public void SetUp()

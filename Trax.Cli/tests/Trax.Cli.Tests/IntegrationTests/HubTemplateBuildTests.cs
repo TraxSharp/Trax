@@ -2,6 +2,7 @@ using System.Diagnostics;
 using AwesomeAssertions;
 using Trax.Cli.Generator;
 using Trax.Cli.Schema.GraphQL;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.IntegrationTests;
 
@@ -20,8 +21,8 @@ public class HubTemplateBuildTests
     private static readonly TimeSpan InstallTimeout = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan BuildTimeout = TimeSpan.FromMinutes(8);
 
-    private string _root = null!;
-    private string _hive = null!;
+    private string _root = "";
+    private string _hive = "";
 
     [OneTimeSetUp]
     public void InstallTheTemplateIntoAPrivateHive()
@@ -113,7 +114,7 @@ public class HubTemplateBuildTests
         foreach (var arg in args)
             psi.ArgumentList.Add(arg);
 
-        using var process = Process.Start(psi)!;
+        using var process = Process.Start(psi).NotNull();
         // Both streams at once: a build writes more than a pipe buffer.
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();

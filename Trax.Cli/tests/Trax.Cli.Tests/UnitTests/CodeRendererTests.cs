@@ -6,7 +6,7 @@ namespace Trax.Cli.Tests.UnitTests;
 
 public class CodeRendererTests
 {
-    private CodeRenderer _renderer = null!;
+    private CodeRenderer _renderer = new();
 
     [SetUp]
     public void SetUp()

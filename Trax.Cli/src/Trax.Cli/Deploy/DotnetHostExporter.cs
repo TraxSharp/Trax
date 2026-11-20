@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.Deploy;
 
 namespace Trax.Cli.Deploy;
@@ -47,7 +48,7 @@ internal sealed class DotnetHostExporter : IHostExporter
     {
         var psi = new ProcessStartInfo("dotnet")
         {
-            WorkingDirectory = Path.GetDirectoryName(projectPath)!,
+            WorkingDirectory = Path.GetDirectoryName(projectPath).NotNull(),
             UseShellExecute = false,
         };
         foreach (

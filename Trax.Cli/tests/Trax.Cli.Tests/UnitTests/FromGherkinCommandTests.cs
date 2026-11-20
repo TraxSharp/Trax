@@ -79,7 +79,7 @@ public class FromGherkinCommandTests
             Then the shop is open
         """;
 
-    private string _dir = null!;
+    private string _dir = "";
     private string Features => Path.Combine(_dir, "features");
     private string Out => Path.Combine(_dir, "machines");
 

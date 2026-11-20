@@ -3,6 +3,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Trax.Cli.Clients;
 using Trax.Cli.Commands;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.UnitTests;
 
@@ -111,7 +112,7 @@ public partial class OperationsClientGeneratorTests
     {
         var files = Render(("src/graphql/Runs.graphql", Runs));
         var module = Text(files, "documents/runs.g.ts");
-        var text = Documents(files)[0].GetProperty("text").GetString()!;
+        var text = Documents(files)[0].GetProperty("text").GetString().NotNull();
 
         module
             .Should()
@@ -494,7 +495,8 @@ public partial class OperationsClientGeneratorTests
         var runs = Text(files, "Documents/Runs.g.cs");
         var text = Documents(Render(("src/graphql/Runs.graphql", Runs)))[0]
             .GetProperty("text")
-            .GetString()!;
+            .GetString()
+            .NotNull();
 
         files
             .Select(f => f.Path)
@@ -604,8 +606,8 @@ public partial class OperationsClientGeneratorTests
         var files = ClientGenerator.RenderCSharp(options, "Console.Operations");
         var registered = Documents(ClientGenerator.Render(options))
             .ToDictionary(
-                d => d.GetProperty("name").GetString()!,
-                d => d.GetProperty("text").GetString()!,
+                d => d.GetProperty("name").GetString().NotNull(),
+                d => d.GetProperty("text").GetString().NotNull(),
                 StringComparer.Ordinal
             );
 
@@ -614,12 +616,14 @@ public partial class OperationsClientGeneratorTests
             .Select(d => d.ToString())
             .Should()
             .BeEmpty();
-        var descriptors = assembly!
-            .GetType("Console.Operations.TraxOperations")!
+        var descriptors = assembly
+            .NotNull()
+            .GetType("Console.Operations.TraxOperations")
+            .NotNull()
             .GetFields(
                 System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static
             )
-            .Select(f => (Trax.Client.TraxDocument)f.GetValue(null)!)
+            .Select(f => (Trax.Client.TraxDocument)f.GetValue(null).NotNull())
             .ToList();
         descriptors.Should().HaveCount(console.Documents.Count);
         foreach (var document in descriptors.Where(d => d.Id is not null))
@@ -1064,7 +1068,7 @@ public partial class OperationsClientGeneratorTests
             ClientGenerator.WriteCSharp(options, ns, dir.FullName);
             var written = Path.Combine(dir.FullName, "Documents", "Runs.g.cs");
             var other = Path.Combine(dir.FullName, "documents", "Runs.g.cs");
-            Directory.CreateDirectory(Path.GetDirectoryName(other)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(other).NotNull());
             if (File.Exists(other))
                 Assert.Ignore("The file system ignores case: documents/ is Documents/ here.");
             File.Copy(written, other);
@@ -1449,9 +1453,9 @@ public partial class OperationsClientGeneratorTests
             .Select(d => d.ToString())
             .Should()
             .BeEmpty();
-        var type = assembly!.GetType("Trax.Operations.Probe")!;
+        var type = assembly.NotNull().GetType("Trax.Operations.Probe").NotNull();
         string Call(string method, params object[] args) =>
-            (string)type.GetMethod(method)!.Invoke(null, args)!;
+            (string)type.GetMethod(method).NotNull().Invoke(null, args).NotNull();
 
         Call("LeftOut")
             .Should()
@@ -1678,8 +1682,8 @@ public partial class OperationsClientGeneratorTests
         );
         var registered = Documents(ClientGenerator.Render(options))
             .ToDictionary(
-                d => d.GetProperty("name").GetString()!,
-                d => d.GetProperty("text").GetString()!,
+                d => d.GetProperty("name").GetString().NotNull(),
+                d => d.GetProperty("text").GetString().NotNull(),
                 StringComparer.Ordinal
             );
 
@@ -1695,10 +1699,14 @@ public partial class OperationsClientGeneratorTests
             .Should()
             .BeEmpty();
         var document = (Trax.Client.TraxDocument)
-            assembly!
-                .GetType("Trax.Operations.TraxOperations")!
-                .GetField("Hostile")!
-                .GetValue(null)!;
+            assembly
+                .NotNull()
+                .GetType("Trax.Operations.TraxOperations")
+                .NotNull()
+                .GetField("Hostile")
+                .NotNull()
+                .GetValue(null)
+                .NotNull();
         registered["Hostile"].Should().Contain("café ☃ \u2028");
         document.Text.Should().Be(registered["Hostile"], "the text is sent byte for byte");
         document.Id.Should().Be(ClientDocumentSet.ConsoleIdOf("Hostile", document.Text));
@@ -1869,7 +1877,7 @@ public partial class OperationsClientGeneratorTests
         params string[] callers
     )
     {
-        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
+        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES").NotNull())
             .Split(Path.PathSeparator)
             .Select(path => Microsoft.CodeAnalysis.MetadataReference.CreateFromFile(path));
         var compilation = Microsoft.CodeAnalysis.CSharp.CSharpCompilation.Create(
@@ -1976,9 +1984,9 @@ public partial class OperationsClientGeneratorTests
                 .EnumerateArray()
                 .Select(c =>
                     (
-                        c.GetProperty("name").GetString()!,
-                        c.GetProperty("text").GetString()!,
-                        c.GetProperty("id").GetString()!
+                        c.GetProperty("name").GetString().NotNull(),
+                        c.GetProperty("text").GetString().NotNull(),
+                        c.GetProperty("id").GetString().NotNull()
                     )
                 )
                 .ToList();

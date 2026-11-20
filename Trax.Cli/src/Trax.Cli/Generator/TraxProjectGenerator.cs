@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using Trax.Cli.Machines;
 using Trax.Cli.Models;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Generator;
 
@@ -35,7 +36,7 @@ public partial class TraxProjectGenerator
         // Build the project in a sibling directory and swap it in only when every step has succeeded, so a
         // failure (most often `dotnet new`) leaves the existing directory as it was. A sibling keeps the swap
         // a rename on one volume.
-        var parent = Path.GetDirectoryName(outputDir)!;
+        var parent = Path.GetDirectoryName(outputDir).NotNull();
         Directory.CreateDirectory(parent);
         var staging = Path.Combine(
             parent,

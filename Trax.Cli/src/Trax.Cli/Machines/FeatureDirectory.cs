@@ -1,4 +1,5 @@
 using System.Text;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
 
@@ -148,15 +149,15 @@ internal static class FeatureDirectory
         }
         var reading =
             trains.Count == 0
-                ? Lexicon.ReadDirectory(featuresDir)!
-                : Lexicon.ReadDirectory(featuresDir, assemblies)!;
+                ? Lexicon.ReadDirectory(featuresDir).NotNull()
+                : Lexicon.ReadDirectory(featuresDir, assemblies).NotNull();
         if (!reading.Succeeded)
             throw new FeatureMachinesException(
                 string.Join(Environment.NewLine, reading.Problems.Select(p => p.ToString()))
                     + Environment.NewLine
                     + $"{reading.Problems.Count} problem(s) in the lexicon."
             );
-        return (reading.Glossary!, reading.Json!);
+        return (reading.Glossary.NotNull(), reading.Json.NotNull());
     }
 
     private static Result Derived(Derived derived, Read read)
@@ -174,8 +175,8 @@ internal static class FeatureDirectory
         var files = new SortedDictionary<string, string>(StringComparer.Ordinal);
         foreach (var (id, ir) in derived.Irs)
             files[id + IrSuffix] = ir + "\n";
-        files[HostFileName] = derived.Host! + "\n";
-        files[AccessFileName] = derived.Access!;
+        files[HostFileName] = derived.Host.NotNull() + "\n";
+        files[AccessFileName] = derived.Access.NotNull();
         if (read.Json is { } json)
             files[GlossaryFileName] = json;
         return new Result(files, [], uiSteps, warnings);
@@ -269,7 +270,9 @@ internal static class FeatureDirectory
         var foreign = Directory
             .EnumerateFileSystemEntries(outDir)
             .Select(Path.GetFileName)
-            .Where(n => !IsOwned(n!) || Directory.Exists(Path.Combine(outDir, n!)))
+            .Where(n =>
+                !IsOwned(n.NotNull()) || Directory.Exists(Path.Combine(outDir, n.NotNull()))
+            )
             .Order(StringComparer.Ordinal)
             .ToList();
         if (foreign.Count > 0)

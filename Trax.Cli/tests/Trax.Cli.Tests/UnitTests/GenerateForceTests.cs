@@ -19,7 +19,7 @@ public class GenerateForceTests
     private const string Adr =
         "see cli/0004 (docs/adr/0004-generate-force-replaces-only-on-success.md)";
 
-    private string _root = null!;
+    private string _root = "";
     private int _originalExitCode;
 
     [SetUp]
