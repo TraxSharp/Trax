@@ -67,13 +67,19 @@ public class ProductionPostureTests
     [Test]
     public async Task A_demo_token_reads_no_view_in_Production()
     {
-        var body = new { id = await BookingsViewIdAsync().ConfigureAwait(false), variables = new { } };
+        var body = new
+        {
+            id = await BookingsViewIdAsync().ConfigureAwait(false),
+            variables = new { },
+        };
         var token = DemoTokens.Issuer.Mint("Ada", "passenger", TimeProvider.System);
 
-        using var development = await PostAsync(_development.NotNull(), body, token);
+        using var development = await PostAsync(_development.NotNull(), body, token)
+            .ConfigureAwait(false);
         development.RootElement.TryGetProperty("errors", out _).Should().BeFalse(Show(development));
 
-        using var production = await PostAsync(_production.NotNull(), body, token);
+        using var production = await PostAsync(_production.NotNull(), body, token)
+            .ConfigureAwait(false);
         production.RootElement.TryGetProperty("errors", out _).Should().BeTrue(Show(production));
         Bookings(production).Should().BeNull(Show(production));
     }
