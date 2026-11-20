@@ -403,24 +403,32 @@ public class DeployComposeTests
     [Test]
     public async Task Init_names_each_Trax_host_under_the_directory_and_skips_tests()
     {
-        await WriteProject("Orders/Orders.csproj", "Microsoft.NET.Sdk.Web", "Trax.Api")
+        await WriteProjectAsync("Orders/Orders.csproj", "Microsoft.NET.Sdk.Web", "Trax.Api")
             .ConfigureAwait(false);
-        await WriteProject(
+        await WriteProjectAsync(
                 "Orders.Worker/Orders.Worker.csproj",
                 "Microsoft.NET.Sdk.Worker",
                 "Trax.Scheduler",
                 exe: true
             )
             .ConfigureAwait(false);
-        await WriteProject("Orders.Trains/Orders.Trains.csproj", "Microsoft.NET.Sdk", "Trax.Effect")
+        await WriteProjectAsync(
+                "Orders.Trains/Orders.Trains.csproj",
+                "Microsoft.NET.Sdk",
+                "Trax.Effect"
+            )
             .ConfigureAwait(false);
-        await WriteProject(
+        await WriteProjectAsync(
                 "tests/Orders.Tests/Orders.Tests.csproj",
                 "Microsoft.NET.Sdk.Web",
                 "Trax.Api"
             )
             .ConfigureAwait(false);
-        await WriteProject("Unrelated/Unrelated.csproj", "Microsoft.NET.Sdk.Web", "Newtonsoft.Json")
+        await WriteProjectAsync(
+                "Unrelated/Unrelated.csproj",
+                "Microsoft.NET.Sdk.Web",
+                "Newtonsoft.Json"
+            )
             .ConfigureAwait(false);
 
         var file = DeployInit.Create(_dir, "orders");
@@ -433,7 +441,7 @@ public class DeployComposeTests
     [Test]
     public async Task Init_calls_a_lone_host_the_hub()
     {
-        await WriteProject("App/App.csproj", "Microsoft.NET.Sdk.Web", "Trax.Api")
+        await WriteProjectAsync("App/App.csproj", "Microsoft.NET.Sdk.Web", "Trax.Api")
             .ConfigureAwait(false);
 
         DeployInit.Create(_dir, "orders").Services.Keys.Should().Equal("hub");
@@ -442,7 +450,7 @@ public class DeployComposeTests
     [Test]
     public async Task Init_does_not_replace_an_existing_file_without_force()
     {
-        await WriteProject("App/App.csproj", "Microsoft.NET.Sdk.Web", "Trax.Api")
+        await WriteProjectAsync("App/App.csproj", "Microsoft.NET.Sdk.Web", "Trax.Api")
             .ConfigureAwait(false);
         await File.WriteAllTextAsync(Path.Combine(_dir, DeployFile.FileName), "{}")
             .ConfigureAwait(false);
@@ -516,7 +524,12 @@ public class DeployComposeTests
         return path;
     }
 
-    private async Task WriteProject(string relative, string sdk, string reference, bool exe = false)
+    private async Task WriteProjectAsync(
+        string relative,
+        string sdk,
+        string reference,
+        bool exe = false
+    )
     {
         var path = Path.Combine(_dir, relative);
         Directory.CreateDirectory(Path.GetDirectoryName(path).NotNull());

@@ -46,7 +46,7 @@ public class SchemaTextRenderingTests
             )
             .ConfigureAwait(false);
 
-        await AssertOnOneDocLine(result, Collapsed).ConfigureAwait(false);
+        await AssertOnOneDocLineAsync(result, Collapsed).ConfigureAwait(false);
     }
 
     // Every bidirectional control, which would let a description reorder how the code around it displays.
@@ -101,7 +101,7 @@ public class SchemaTextRenderingTests
     {
         var op = Operation(fieldDescription: MultiLine);
 
-        await AssertOnOneDocLine(
+        await AssertOnOneDocLineAsync(
                 await _renderer.RenderInputAsync(op, "MyApi").ConfigureAwait(false),
                 Collapsed
             )
@@ -188,7 +188,7 @@ public class SchemaTextRenderingTests
             .ContainSingle();
     }
 
-    private static async Task AssertOnOneDocLine(string source, string expectedText)
+    private static async Task AssertOnOneDocLineAsync(string source, string expectedText)
     {
         var lines = source.Split('\n');
         lines.Should().Contain(l => l.Trim() == "/// " + expectedText);

@@ -942,8 +942,8 @@ public partial class ClientGeneratorTests
         var options = new ClientGenerateOptions(ClientManifests.Sample(), ToolsDir: _tools);
         Directory.CreateDirectory(_out);
         var fifo = Path.Combine(_out, "x.g.ts");
-        await MakeFifo(fifo).ConfigureAwait(false);
-        await MakeFifo(Path.Combine(_out, "format.g.ts")).ConfigureAwait(false);
+        await MakeFifoAsync(fifo).ConfigureAwait(false);
+        await MakeFifoAsync(Path.Combine(_out, "format.g.ts")).ConfigureAwait(false);
 
         // Opening a FIFO blocks until something writes to it, so a run that opens one never ends.
         var run = Task.Run(async () =>
@@ -977,7 +977,7 @@ public partial class ClientGeneratorTests
         (await generator.CheckAsync(options, _out).ConfigureAwait(false)).Should().BeEmpty();
     }
 
-    private static async Task MakeFifo(string path)
+    private static async Task MakeFifoAsync(string path)
     {
         using var mkfifo = System
             .Diagnostics.Process.Start(

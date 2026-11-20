@@ -239,7 +239,7 @@ internal static class DeployAwsCommands
         TextWriter stderr,
         CancellationToken ct
     ) =>
-        await Guard(
+        await GuardAsync(
                 stderr,
                 async () =>
                 {
@@ -277,7 +277,7 @@ internal static class DeployAwsCommands
         TextWriter stderr,
         CancellationToken ct
     ) =>
-        await Guard(
+        await GuardAsync(
                 stderr,
                 async () =>
                 {
@@ -317,7 +317,7 @@ internal static class DeployAwsCommands
         TextWriter stderr,
         CancellationToken ct
     ) =>
-        await Guard(
+        await GuardAsync(
                 stderr,
                 async () =>
                 {
@@ -379,7 +379,7 @@ internal static class DeployAwsCommands
         TextWriter stderr,
         CancellationToken ct
     ) =>
-        await Guard(
+        await GuardAsync(
                 stderr,
                 async () =>
                 {
@@ -417,7 +417,7 @@ internal static class DeployAwsCommands
         TextWriter stderr,
         CancellationToken ct
     ) =>
-        await Guard(
+        await GuardAsync(
                 stderr,
                 async () =>
                 {
@@ -450,7 +450,7 @@ internal static class DeployAwsCommands
         TextWriter stderr,
         CancellationToken ct
     ) =>
-        await Guard(
+        await GuardAsync(
                 stderr,
                 async () =>
                 {
@@ -491,7 +491,7 @@ internal static class DeployAwsCommands
         TextWriter stderr,
         CancellationToken ct
     ) =>
-        await Guard(
+        await GuardAsync(
                 stderr,
                 async () =>
                 {
@@ -545,7 +545,7 @@ internal static class DeployAwsCommands
         return value.ToString();
     }
 
-    private static async Task<int> Guard(TextWriter stderr, Func<Task> action)
+    private static async Task<int> GuardAsync(TextWriter stderr, Func<Task> action)
     {
         try
         {

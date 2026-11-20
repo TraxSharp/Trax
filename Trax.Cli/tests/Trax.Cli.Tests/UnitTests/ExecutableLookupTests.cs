@@ -38,7 +38,8 @@ public class ExecutableLookupTests
         IgnoreOnWindows();
         var checkout = Directory.CreateDirectory(Path.Combine(_root, "checkout")).FullName;
         var marker = Path.Combine(_root, "planted-node-ran");
-        await Script(Path.Combine(checkout, "node"), $"touch '{marker}'").ConfigureAwait(false);
+        await ScriptAsync(Path.Combine(checkout, "node"), $"touch '{marker}'")
+            .ConfigureAwait(false);
         Directory.SetCurrentDirectory(checkout);
 
         // The empty entry and '.' are how a PATH says "the current directory".
@@ -65,8 +66,9 @@ public class ExecutableLookupTests
         var checkout = Directory.CreateDirectory(Path.Combine(_root, "checkout")).FullName;
         var bin = Directory.CreateDirectory(Path.Combine(_root, "bin")).FullName;
         var marker = Path.Combine(_root, "planted-node-ran");
-        await Script(Path.Combine(checkout, "node"), $"touch '{marker}'").ConfigureAwait(false);
-        await Script(Path.Combine(bin, "node"), "echo v24.0.0").ConfigureAwait(false);
+        await ScriptAsync(Path.Combine(checkout, "node"), $"touch '{marker}'")
+            .ConfigureAwait(false);
+        await ScriptAsync(Path.Combine(bin, "node"), "echo v24.0.0").ConfigureAwait(false);
         Directory.SetCurrentDirectory(checkout);
 
         var runner = new NodeRunner(
@@ -88,7 +90,7 @@ public class ExecutableLookupTests
         IgnoreOnWindows();
         var checkout = Directory.CreateDirectory(Path.Combine(_root, "checkout")).FullName;
         var planted = Path.Combine(checkout, "node");
-        await Script(planted, "exit 0").ConfigureAwait(false);
+        await ScriptAsync(planted, "exit 0").ConfigureAwait(false);
         Directory.SetCurrentDirectory(checkout);
 
         ExecutableLookup.Resolve("node").Should().NotBe(planted).And.NotBe("node");
@@ -101,7 +103,7 @@ public class ExecutableLookupTests
         var first = Directory.CreateDirectory(Path.Combine(_root, "first")).FullName;
         var second = Directory.CreateDirectory(Path.Combine(_root, "second")).FullName;
         await File.WriteAllTextAsync(Path.Combine(first, "node"), "not executable");
-        await Script(Path.Combine(second, "node"), "exit 0").ConfigureAwait(false);
+        await ScriptAsync(Path.Combine(second, "node"), "exit 0").ConfigureAwait(false);
 
         ExecutableLookup
             .Resolve("node", $"{first}:{second}", pathExt: null, windows: false)
@@ -114,7 +116,7 @@ public class ExecutableLookupTests
     {
         IgnoreOnWindows();
         var node = Path.Combine(_root, "node");
-        await Script(node, "exit 0").ConfigureAwait(false);
+        await ScriptAsync(node, "exit 0").ConfigureAwait(false);
 
         ExecutableLookup.Resolve(node, "", pathExt: null, windows: false).Should().Be(node);
         ExecutableLookup
@@ -292,7 +294,7 @@ public class ExecutableLookupTests
     public async Task Off_Windows_a_file_named_like_a_shim_is_an_ordinary_executable()
     {
         IgnoreOnWindows();
-        await Script(Path.Combine(_root, "node.cmd"), "exit 0").ConfigureAwait(false);
+        await ScriptAsync(Path.Combine(_root, "node.cmd"), "exit 0").ConfigureAwait(false);
 
         ExecutableLookup
             .Resolve("node.cmd", _root, pathExt: null, windows: false)
@@ -323,7 +325,7 @@ public class ExecutableLookupTests
             Assert.Ignore("Plants a shell script; the Windows rules are pinned without one below.");
     }
 
-    private static async Task Script(string path, string body)
+    private static async Task ScriptAsync(string path, string body)
     {
         await File.WriteAllTextAsync(path, $"#!/bin/sh\n{body}\n").ConfigureAwait(false);
         if (!OperatingSystem.IsWindows())

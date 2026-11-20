@@ -72,9 +72,12 @@ public class MachineGeneratorNodeTests
         (await File.ReadAllTextAsync(corpus).ConfigureAwait(false)).Should().Contain("\"cases\"");
 
         // Idempotent: a second run against the same source is byte-identical, which is what makes check sound.
-        await FilesShouldMatch(machine, Path.Combine(_out, "b", "twin", "turnstile.machine.g.ts"))
+        await FilesShouldMatchAsync(
+                machine,
+                Path.Combine(_out, "b", "twin", "turnstile.machine.g.ts")
+            )
             .ConfigureAwait(false);
-        await FilesShouldMatch(corpus, Path.Combine(_out, "b", "corpus", "differential.json"))
+        await FilesShouldMatchAsync(corpus, Path.Combine(_out, "b", "corpus", "differential.json"))
             .ConfigureAwait(false);
         first
             .Written.Select(w => w.Kind)
@@ -163,22 +166,22 @@ public class MachineGeneratorNodeTests
 
         var engineRoot = Directory.GetParent(_engineSrc).NotNull().FullName;
         var machinesRoot = Path.Combine(engineRoot, "..", "conformance", "machines");
-        await FilesShouldMatch(
+        await FilesShouldMatchAsync(
                 Path.Combine(irOut, $"{id}.ir.json"),
                 Path.Combine(machinesRoot, id, $"{id}.ir.json")
             )
             .ConfigureAwait(false);
-        await FilesShouldMatch(
+        await FilesShouldMatchAsync(
                 Path.Combine(twinOut, $"{id}.contexts.g.ts"),
                 Path.Combine(engineRoot, "src", "machines", id, $"{id}.contexts.g.ts")
             )
             .ConfigureAwait(false);
-        await FilesShouldMatch(
+        await FilesShouldMatchAsync(
                 Path.Combine(twinOut, $"{id}.machine.g.ts"),
                 Path.Combine(engineRoot, "src", "machines", id, $"{id}.machine.g.ts")
             )
             .ConfigureAwait(false);
-        await FilesShouldMatch(
+        await FilesShouldMatchAsync(
                 Path.Combine(corpusOut, "differential.json"),
                 Path.Combine(machinesRoot, id, "differential.json")
             )
@@ -205,7 +208,7 @@ public class MachineGeneratorNodeTests
         check.Checks.Should().OnlyContain(c => c.Status == DriftStatus.UpToDate);
     }
 
-    private static async Task FilesShouldMatch(string generated, string committed)
+    private static async Task FilesShouldMatchAsync(string generated, string committed)
     {
         File.Exists(committed).Should().BeTrue($"committed artifact should exist: {committed}");
         (await File.ReadAllBytesAsync(generated).ConfigureAwait(false))

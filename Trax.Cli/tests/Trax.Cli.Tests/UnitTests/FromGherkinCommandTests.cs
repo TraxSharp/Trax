@@ -135,7 +135,7 @@ public class FromGherkinCommandTests
     [Test]
     public async Task Trains_that_are_not_there_is_a_message()
     {
-        await UseLexicon().ConfigureAwait(false);
+        await UseLexiconAsync().ConfigureAwait(false);
 
         var stderr = new StringWriter();
         var exit = await MachineCommand
@@ -157,7 +157,7 @@ public class FromGherkinCommandTests
     [Test]
     public async Task Trains_give_a_lexicon_the_fields_its_Runs_lines_leave_out()
     {
-        await UseLexicon(
+        await UseLexiconAsync(
                 Lexicon
                     + $"""
 
@@ -204,7 +204,7 @@ public class FromGherkinCommandTests
     [Test]
     public async Task A_lexicon_is_elaborated_and_its_glossary_written_with_the_machines()
     {
-        await UseLexicon().ConfigureAwait(false);
+        await UseLexiconAsync().ConfigureAwait(false);
 
         var (exit, _, err) = await FromLexiconAsync().ConfigureAwait(false);
 
@@ -237,9 +237,9 @@ public class FromGherkinCommandTests
     [Test]
     public async Task A_changed_lexicon_makes_the_glossary_stale()
     {
-        await UseLexicon().ConfigureAwait(false);
+        await UseLexiconAsync().ConfigureAwait(false);
         await FromLexiconAsync().ConfigureAwait(false);
-        await UseLexicon(
+        await UseLexiconAsync(
                 Lexicon.Replace("\"is a draft\"", "\"is still a draft\"", StringComparison.Ordinal)
             )
             .ConfigureAwait(false);
@@ -265,7 +265,7 @@ public class FromGherkinCommandTests
     [Test]
     public async Task Two_lexicons_in_one_directory_are_refused()
     {
-        await UseLexicon().ConfigureAwait(false);
+        await UseLexiconAsync().ConfigureAwait(false);
         await File.WriteAllTextAsync(Path.Combine(Features, "more.lexicon"), Lexicon)
             .ConfigureAwait(false);
 
@@ -278,7 +278,7 @@ public class FromGherkinCommandTests
     [Test]
     public async Task A_lexicon_problem_names_its_line_and_writes_nothing()
     {
-        await UseLexicon(
+        await UseLexiconAsync(
                 Lexicon.Replace(
                     "Trigger: Place",
                     "Trigger: Place\n    Stores: x",
@@ -309,7 +309,7 @@ public class FromGherkinCommandTests
     [Test]
     public async Task Run_missing_and_usage_read_the_lexicon_each_time()
     {
-        await UseLexicon().ConfigureAwait(false);
+        await UseLexiconAsync().ConfigureAwait(false);
         await FromLexiconAsync().ConfigureAwait(false);
         var usage = new StringWriter();
 
@@ -1143,7 +1143,7 @@ public class FromGherkinCommandTests
     }
 
     // The features directory written with a lexicon in place of glossary.json.
-    private async Task UseLexicon(string text = Lexicon)
+    private async Task UseLexiconAsync(string text = Lexicon)
     {
         File.Delete(Path.Combine(Features, "glossary.json"));
         await File.WriteAllTextAsync(Path.Combine(Features, "shop.lexicon"), text)

@@ -24,7 +24,7 @@ public class AwsDeployerTests
         return (new AwsDeployer(aws, images, _ => { }), aws, images);
     }
 
-    private static Task<string?> Deploy(AwsDeployer deployer) =>
+    private static Task<string?> DeployAsync(AwsDeployer deployer) =>
         deployer.DeployAsync(
             AwsStackTemplateTests.File_(),
             "/src/trax.deploy.json",
@@ -40,7 +40,7 @@ public class AwsDeployerTests
         var (deployer, aws, images) = Deployer();
         aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
 
-        var url = await Deploy(deployer);
+        var url = await DeployAsync(deployer);
 
         aws.Calls.Should().Equal("deploy", "run-task", "deploy");
         aws.Deploys[0][AwsStack.ScaleParameter].Should().Be("0");
@@ -59,7 +59,7 @@ public class AwsDeployerTests
         aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
         aws.Existing = FakeAws.Running();
 
-        await Deploy(deployer);
+        await DeployAsync(deployer);
 
         aws.Deploys[0][AwsStack.ScaleParameter].Should().Be("1");
         aws.Deploys[0]["HubImage"].Should().BeNull("null keeps the previous value");
@@ -77,7 +77,7 @@ public class AwsDeployerTests
         aws.Existing = FakeAws.Running();
         aws.ExitCode = 1;
 
-        var act = () => Deploy(deployer);
+        var act = () => DeployAsync(deployer);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -90,7 +90,7 @@ public class AwsDeployerTests
     {
         var (deployer, aws, images) = Deployer();
 
-        var act = () => Deploy(deployer);
+        var act = () => DeployAsync(deployer);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -110,7 +110,7 @@ public class AwsDeployerTests
             new Dictionary<string, string>(StringComparer.Ordinal)
         );
 
-        var act = () => Deploy(deployer);
+        var act = () => DeployAsync(deployer);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
