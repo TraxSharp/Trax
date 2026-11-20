@@ -48,11 +48,13 @@ public static class DemoSignIn
             return null;
         return app.MapPost(
                 pattern,
-                (DemoSignInRequest request) =>
+                (DemoSignInRequest request, TimeProvider clock) =>
                 {
                     try
                     {
-                        return Results.Ok(new { token = issuer.Mint(request.Name, request.Role) });
+                        return Results.Ok(
+                            new { token = issuer.Mint(request.Name, request.Role, clock) }
+                        );
                     }
                     catch (ArgumentException ex)
                     {

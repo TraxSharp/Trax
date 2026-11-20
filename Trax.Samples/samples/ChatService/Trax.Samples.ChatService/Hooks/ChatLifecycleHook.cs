@@ -27,7 +27,8 @@ namespace Trax.Samples.ChatService.Hooks;
 /// opted in (AllowOutputForBroadcastSubscribers) any user would read every room's
 /// messages. The room-scoped topic here is the only way a chat event leaves the server.
 /// </summary>
-public class ChatLifecycleHook(ITopicEventSender eventSender) : ITrainLifecycleHook
+public class ChatLifecycleHook(ITopicEventSender eventSender, TimeProvider clock)
+    : ITrainLifecycleHook
 {
     private static readonly Dictionary<string, string> TrainEventTypes = new(StringComparer.Ordinal)
     {
@@ -66,7 +67,7 @@ public class ChatLifecycleHook(ITopicEventSender eventSender) : ITrainLifecycleH
             ChatRoomId: chatRoomId,
             EventType: eventType,
             Payload: metadata.Output,
-            Timestamp: metadata.EndTime ?? DateTime.UtcNow,
+            Timestamp: metadata.EndTime ?? clock.GetUtcNow().UtcDateTime,
             TrainExternalId: metadata.ExternalId
         );
 

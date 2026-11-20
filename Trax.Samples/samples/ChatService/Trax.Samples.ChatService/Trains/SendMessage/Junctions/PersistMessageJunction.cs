@@ -14,7 +14,8 @@ namespace Trax.Samples.ChatService.Trains.SendMessage.Junctions;
 public class PersistMessageJunction(
     ChatDbContext db,
     TraxPrincipal caller,
-    ILogger<PersistMessageJunction> logger
+    ILogger<PersistMessageJunction> logger,
+    TimeProvider clock
 ) : Junction<SendMessageInput, SendMessageOutput>
 {
     public override async Task<SendMessageOutput> Run(SendMessageInput input)
@@ -33,7 +34,7 @@ public class PersistMessageJunction(
             SenderUserId = caller.Id,
             SenderDisplayName = participant.DisplayName,
             Content = input.Content,
-            SentAt = DateTime.UtcNow,
+            SentAt = clock.GetUtcNow().UtcDateTime,
         };
 
         db.ChatMessages.Add(message);

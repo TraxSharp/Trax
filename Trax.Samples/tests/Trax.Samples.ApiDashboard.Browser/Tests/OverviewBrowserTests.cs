@@ -84,12 +84,11 @@ public partial class OverviewBrowserTests : ConsoleTest
     {
         await Seed.DeadLetterAsync();
         var train = typeof(IImportFeedTrain).FullName.NotNull();
+        var weekAgo = TimeProvider.System.GetUtcNow().UtcDateTime.AddDays(-7);
         var failed = await Host.QueryAsync(dc =>
             dc.Metadatas.AsNoTracking()
                 .CountAsync(m =>
-                    m.Name == train
-                    && m.TrainState == TrainState.Failed
-                    && m.StartTime >= DateTime.UtcNow.AddDays(-7)
+                    m.Name == train && m.TrainState == TrainState.Failed && m.StartTime >= weekAgo
                 )
         );
 

@@ -217,7 +217,7 @@ public partial class MachineBrowserTests : ConsoleTest
 
         await Console.OpenAsync(page.Route, Caller.Operator);
         await Assertions.Expect(page.Lit).ToHaveTextAsync(StartsClosed, new() { Timeout = Render });
-        await subscribed.Task.WaitAsync(BrowserTimeouts.Render);
+        await subscribed.Task.WaitAsync(BrowserTimeouts.Render, TimeProvider.System);
         await Assertions
             .Expect(page.Commands)
             .ToContainTextAsync(nameof(GateTrigger.Open), new() { Timeout = Render });

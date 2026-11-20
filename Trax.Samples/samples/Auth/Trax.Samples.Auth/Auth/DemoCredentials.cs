@@ -74,7 +74,7 @@ public static class DemoCredentials
     /// standard ones Trax's default JWT resolver maps: <c>sub</c> to the id, <c>name</c> to the
     /// display name, <c>role</c> to roles; <c>email_verified</c> lands in the claim bag.
     /// </summary>
-    public static string MintToken(DemoUser user)
+    public static string MintToken(DemoUser user, TimeProvider clock)
     {
         var claims = new List<Claim>
         {
@@ -94,7 +94,7 @@ public static class DemoCredentials
                 Issuer = JwtIssuer,
                 Audience = JwtAudience,
                 Subject = new ClaimsIdentity(claims),
-                Expires = DateTime.UtcNow.AddHours(1),
+                Expires = clock.GetUtcNow().UtcDateTime.AddHours(1),
                 SigningCredentials = new SigningCredentials(
                     new SymmetricSecurityKey(JwtSigningKey),
                     SecurityAlgorithms.HmacSha256

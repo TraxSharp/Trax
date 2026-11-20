@@ -13,13 +13,14 @@ public class AddInviteeJunction(
     ChatDbContext db,
     TraxPrincipal caller,
     ChatDirectory directory,
-    ILogger<AddInviteeJunction> logger
+    ILogger<AddInviteeJunction> logger,
+    TimeProvider clock
 ) : Junction<InviteToChatRoomInput, InviteToChatRoomOutput>
 {
     public override async Task<InviteToChatRoomOutput> Run(InviteToChatRoomInput input)
     {
         var invitee = directory.Find(input.UserId).NotNull();
-        var now = DateTime.UtcNow;
+        var now = clock.GetUtcNow().UtcDateTime;
 
         db.ChatParticipants.Add(
             new ChatParticipant

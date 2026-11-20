@@ -67,7 +67,7 @@ public class ApiDashboardBrowserTests : ConsoleTest
             .Expect(Console.Footer)
             .ToContainTextAsync("Trax Dashboard — v", new() { Timeout = Render.Ms() });
 
-        var socketUrl = await connected.Acknowledged.WaitAsync(Render);
+        var socketUrl = await connected.Acknowledged.WaitAsync(Render, TimeProvider.System);
         socketUrl.Should().Be($"ws://{Host.Address.Authority}/trax/graphql");
 
         // The router took the deep link under the base path the host wrote into the page.
@@ -130,7 +130,7 @@ public class ApiDashboardBrowserTests : ConsoleTest
 
         var request = await connected.FirstRequest;
         (await request.HeaderValueAsync("x-api-key")).Should().Be(Caller.Operator.Key);
-        (await connected.Acknowledged.WaitAsync(Render))
+        (await connected.Acknowledged.WaitAsync(Render, TimeProvider.System))
             .Should()
             .Be($"ws://{Host.Address.Authority}/trax/graphql");
     }
@@ -143,7 +143,7 @@ public class ApiDashboardBrowserTests : ConsoleTest
         (await (await connected.FirstRequest).HeaderValueAsync("x-api-key"))
             .Should()
             .Be(Caller.Operator.Key);
-        await connected.Acknowledged.WaitAsync(Render);
+        await connected.Acknowledged.WaitAsync(Render, TimeProvider.System);
 
         (await StoredAsync())
             .Should()

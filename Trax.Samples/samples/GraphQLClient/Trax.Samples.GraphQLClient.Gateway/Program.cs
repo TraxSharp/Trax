@@ -20,6 +20,9 @@ using Trax.Samples.GraphQLClient.InventoryServer.Trains;
 const string inventoryUrl = "http://localhost:5310";
 const string billingUrl = "http://localhost:5311";
 
+// The composition root names the real clock; the health wait below reads it.
+var clock = TimeProvider.System;
+
 var inventory = InventoryServerHost.Build([]);
 inventory.Urls.Add(inventoryUrl);
 await inventory.StartAsync().ConfigureAwait(false);
@@ -30,8 +33,8 @@ await billing.StartAsync().ConfigureAwait(false);
 
 using (var probe = new HttpClient())
 {
-    await WaitForHealthyAsync(probe, $"{inventoryUrl}/trax/health").ConfigureAwait(false);
-    await WaitForHealthyAsync(probe, $"{billingUrl}/trax/health").ConfigureAwait(false);
+    await WaitForHealthyAsync(probe, $"{inventoryUrl}/trax/health", clock).ConfigureAwait(false);
+    await WaitForHealthyAsync(probe, $"{billingUrl}/trax/health", clock).ConfigureAwait(false);
 }
 
 // The consumer is a host of its own, as "server A" would be in a real app, and resolves the
@@ -88,10 +91,10 @@ await inventory.StopAsync().ConfigureAwait(false);
 await billing.StopAsync().ConfigureAwait(false);
 return 0;
 
-static async Task WaitForHealthyAsync(HttpClient client, string healthUrl)
+static async Task WaitForHealthyAsync(HttpClient client, string healthUrl, TimeProvider clock)
 {
-    var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
-    while (DateTime.UtcNow < deadline)
+    var deadline = clock.GetUtcNow() + TimeSpan.FromSeconds(30);
+    while (clock.GetUtcNow() < deadline)
     {
         try
         {
@@ -104,7 +107,7 @@ static async Task WaitForHealthyAsync(HttpClient client, string healthUrl)
             // server not up yet
         }
 
-        await Task.Delay(100).ConfigureAwait(false);
+        await Task.Delay(TimeSpan.FromMilliseconds(100), clock).ConfigureAwait(false);
     }
 
     throw new TimeoutException($"Server at {healthUrl} did not become healthy within 30s.");

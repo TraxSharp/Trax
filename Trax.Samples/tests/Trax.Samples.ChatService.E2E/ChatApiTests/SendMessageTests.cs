@@ -163,8 +163,8 @@ public class SendMessageTests : ChatApiTestFixture
 
         result.HasErrors.Should().BeFalse();
 
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
-        while (DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(5);
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             DataContext.Reset();
             var metadata = await DataContext

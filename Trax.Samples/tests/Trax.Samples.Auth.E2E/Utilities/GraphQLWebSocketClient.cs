@@ -78,10 +78,10 @@ public sealed class GraphQLWebSocketClient : IAsyncDisposable
     /// <summary>The next message that is not a ping or pong.</summary>
     public async Task<JsonElement> ReceiveAsync(TimeSpan timeout)
     {
-        var deadline = DateTime.UtcNow + timeout;
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + timeout;
         while (true)
         {
-            var remaining = deadline - DateTime.UtcNow;
+            var remaining = deadline - TimeProvider.System.GetUtcNow().UtcDateTime;
             if (remaining <= TimeSpan.Zero)
                 throw new TimeoutException(
                     string.Create(

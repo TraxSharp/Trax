@@ -38,7 +38,9 @@ public class DemoSignInTests
     [Test]
     public void A_token_carries_the_samples_issuer_audience_and_role()
     {
-        var token = new JsonWebToken(DemoTokens.Issuer.Mint("Ada", CheckInRoles.Agent));
+        var token = new JsonWebToken(
+            DemoTokens.Issuer.Mint("Ada", CheckInRoles.Agent, TimeProvider.System)
+        );
 
         token.Issuer.Should().Be("trax-samples-checkin-dev");
         token.Audiences.Should().Equal("trax-samples-checkin");
@@ -49,7 +51,7 @@ public class DemoSignInTests
     [Test]
     public void A_role_the_sample_does_not_have_is_refused() =>
         FluentActions
-            .Invoking(() => DemoTokens.Issuer.Mint("Ada", "admin"))
+            .Invoking(() => DemoTokens.Issuer.Mint("Ada", "admin", TimeProvider.System))
             .Should()
             .Throw<ArgumentException>();
 

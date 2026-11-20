@@ -190,7 +190,9 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
         _undo.Push(async () =>
         {
             Holds.Release(key);
-            await queued.WaitAsync(BrowserTimeouts.Server).ConfigureAwait(false);
+            await queued
+                .WaitAsync(BrowserTimeouts.Server, TimeProvider.System)
+                .ConfigureAwait(false);
         });
         return await Wait.ForAsync(
                 () =>
@@ -290,7 +292,7 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
             ExternalId: run.ExternalId,
             TrainName: typeof(TTrain).FullName.NotNull(),
             TrainState: nameof(TrainState.InProgress),
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TimeProvider.System.GetUtcNow().UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             EventType: TrainLifecycleEventMessage.JunctionStartedEventType,
@@ -303,7 +305,7 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
                 Kind: JunctionRunKind.Junction,
                 Name: ProbeJunction,
                 State: JunctionRunState.InProgress,
-                StartedAt: DateTime.UtcNow
+                StartedAt: TimeProvider.System.GetUtcNow().UtcDateTime
             ),
         };
         foreach (var handler in host.Services.GetServices<IJunctionEventHandler>())
@@ -437,7 +439,7 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
                             .SingleAsync()
                             .ConfigureAwait(false)
                             is { } due
-                        && due.AddSeconds(2) < DateTimeOffset.UtcNow
+                        && due.AddSeconds(2) < TimeProvider.System.GetUtcNow()
                     ),
                 BrowserTimeouts.Server,
                 $"{ReminderMachine.Id} {instance.Id}'s timer is past due"

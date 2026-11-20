@@ -100,9 +100,9 @@ public class SubscriptionAuthTests : AuthTestFixture
         await socket.SubscribeAsync("oscar", Completed);
 
         // graphql-transport-ws does not acknowledge a subscribe, so trigger until one arrives.
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(30);
         JsonElement? received = null;
-        while (received is null && DateTime.UtcNow < deadline)
+        while (received is null && TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             var echo = await GraphQL.SendAsync(
                 """{ discover { echo(input: { message: "ping" }) { echoed } } }""",

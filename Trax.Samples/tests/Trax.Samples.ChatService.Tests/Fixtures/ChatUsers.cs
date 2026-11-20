@@ -30,7 +30,7 @@ public static class ChatUsers
         {
             Id = Guid.NewGuid(),
             Name = "Test Room",
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = TestClock.Now.UtcDateTime,
             CreatedByUserId = participants.Length > 0 ? participants[0].Id : Alice.Id,
         };
         db.ChatRooms.Add(room);
@@ -42,7 +42,7 @@ public static class ChatUsers
                     ChatRoomId = room.Id,
                     UserId = p.Id,
                     DisplayName = p.DisplayName,
-                    JoinedAt = DateTime.UtcNow,
+                    JoinedAt = TestClock.Now.UtcDateTime,
                 }
             );
         await db.SaveChangesAsync().ConfigureAwait(false);

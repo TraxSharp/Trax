@@ -123,7 +123,7 @@ public class DemoCredentialsEnvironmentTests
         // A token from the identity provider authenticates through the JWT scheme.
         var idpToken = _identityProvider
             .NotNull()
-            .CreateIssuer("trax-samples-auth")
+            .CreateIssuer("trax-samples-auth", TimeProvider.System)
             .Mint(b => b.WithSubject("u-123").WithRole(AuthRoles.Operator));
         var viaIdp = await graphQL.SendAsync(WhoAmI, Caller.WithToken("idp user", idpToken));
         viaIdp.HasErrors.Should().BeFalse(viaIdp.Raw);
@@ -139,7 +139,10 @@ public class DemoCredentialsEnvironmentTests
     private static Caller DemoOscarKey => Caller.WithApiKey("demo oscar", DemoCredentials.OscarKey);
 
     private static Caller DemoAliceToken =>
-        Caller.WithToken("demo alice", DemoCredentials.MintToken(DemoCredentials.Alice));
+        Caller.WithToken(
+            "demo alice",
+            DemoCredentials.MintToken(DemoCredentials.Alice, TimeProvider.System)
+        );
 
     private ProductionAuthApiFactory ConfiguredProductionHost()
     {

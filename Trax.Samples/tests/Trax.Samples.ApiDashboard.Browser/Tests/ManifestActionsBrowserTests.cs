@@ -66,7 +66,9 @@ public class ManifestActionsBrowserTests : ConsoleTest
                 .Select(w => w.ScheduledAt)
                 .SingleAsync()
         );
-        due.Should().NotBeNull().And.BeAfter(DateTime.UtcNow.AddMinutes(25));
+        due.Should()
+            .NotBeNull()
+            .And.BeAfter(TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(25));
     }
 
     [Test]

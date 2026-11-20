@@ -74,11 +74,14 @@ public class MetadataCleanupTests : SchedulingTestFixture
         }
     }
 
-    private static Task Backdate(long metadataId, TimeSpan age) =>
-        Db.Query(dc =>
+    private static Task Backdate(long metadataId, TimeSpan age)
+    {
+        var startTime = TimeProvider.System.GetUtcNow().UtcDateTime - age;
+        return Db.Query(dc =>
             dc.Metadatas.Where(m => m.Id == metadataId)
-                .ExecuteUpdateAsync(s => s.SetProperty(m => m.StartTime, DateTime.UtcNow - age))
+                .ExecuteUpdateAsync(s => s.SetProperty(m => m.StartTime, startTime))
         );
+    }
 
     private static Task<bool> Exists(long metadataId) =>
         Db.Query(dc => dc.Metadatas.AnyAsync(m => m.Id == metadataId));

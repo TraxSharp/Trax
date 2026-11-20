@@ -47,7 +47,8 @@ public class DependencyChainTests : HubTestFixture
                     InputTypeName = typeof(MonitorSolarProductionInput).FullName,
                     ManifestId = solarManifest.Id,
                     Priority = 20,
-                }
+                },
+                TimeProvider.System
             );
 
             await DataContext.Track(entry);

@@ -130,6 +130,7 @@ static async Task SeedAsync(IServiceProvider services)
     await using var scopeDisposal = scope.ConfigureAwait(false);
     var catalog = scope.ServiceProvider.GetRequiredService<ICatalogDbContext>();
     var lending = scope.ServiceProvider.GetRequiredService<ILendingDbContext>();
+    var clock = scope.ServiceProvider.GetRequiredService<TimeProvider>();
 
     if (!await catalog.Books.AnyAsync().ConfigureAwait(false))
     {
@@ -183,7 +184,7 @@ static async Task SeedAsync(IServiceProvider services)
             {
                 MemberId = member.Id,
                 BookId = firstBookId,
-                BorrowedAt = DateTime.UtcNow,
+                BorrowedAt = clock.GetUtcNow().UtcDateTime,
             }
         );
         await lending.SaveChangesAsync().ConfigureAwait(false);

@@ -388,8 +388,8 @@ public class ChatServiceE2ETests : ChatApiTestFixture
         DataContext.Reset();
 
         // Poll briefly in case metadata persistence is slightly delayed
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
-        while (DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(5);
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             DataContext.Reset();
             var metadata = await DataContext

@@ -67,10 +67,10 @@ public class CrossProcessEventTests : ApiTestFixture
     )
     {
         var before = new List<JsonElement>();
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(45);
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(45);
         while (true)
         {
-            var remaining = deadline - DateTime.UtcNow;
+            var remaining = deadline - TimeProvider.System.GetUtcNow().UtcDateTime;
             remaining.Should().BePositive("the runner's completion should reach the API");
 
             var payload = await socket.ReceiveNextAsync(remaining).ConfigureAwait(false);

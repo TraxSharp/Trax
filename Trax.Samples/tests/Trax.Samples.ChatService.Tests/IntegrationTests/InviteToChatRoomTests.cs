@@ -101,7 +101,8 @@ public class InviteToChatRoomTests
             db,
             ChatUsers.Alice,
             directory,
-            NullLogger<AddInviteeJunction>.Instance
+            NullLogger<AddInviteeJunction>.Instance,
+            TestClock.Fixed()
         );
 
         var output = await junction.Run(Invite(roomId, ChatUsers.Bob.Id));

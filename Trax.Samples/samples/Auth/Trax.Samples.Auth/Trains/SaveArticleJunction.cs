@@ -8,7 +8,7 @@ using Trax.Samples.Auth.Data;
 
 namespace Trax.Samples.Auth.Trains;
 
-public class SaveArticleJunction(TraxPrincipal caller, INewsroomDbContext db)
+public class SaveArticleJunction(TraxPrincipal caller, INewsroomDbContext db, TimeProvider clock)
     : Junction<PublishArticleInput, PublishArticleOutput>
 {
     public override async Task<PublishArticleOutput> Run(PublishArticleInput input)
@@ -18,7 +18,7 @@ public class SaveArticleJunction(TraxPrincipal caller, INewsroomDbContext db)
             Title = input.Title,
             Body = input.Body,
             AuthorId = caller.Id,
-            PublishedAt = DateTime.UtcNow,
+            PublishedAt = clock.GetUtcNow().UtcDateTime,
             EditorNote = input.EditorNote is null
                 ? null
                 : new EditorNote { Text = input.EditorNote },

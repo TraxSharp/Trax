@@ -21,7 +21,8 @@ public class ScheduleDemoRun(
     CaseFiles caseFiles,
     FaultInjector faults,
     ICurrentPrincipalProvider caller,
-    IDataContextProviderFactory dataContexts
+    IDataContextProviderFactory dataContexts,
+    TimeProvider clock
 ) : EffectJunction<StartRunInput, StartRunOutput>
 {
     /// <summary>Two retries: three attempts in all.</summary>
@@ -101,7 +102,7 @@ public class ScheduleDemoRun(
     // the page follows.
     private async Task<string> FirstRunOf(long manifestId)
     {
-        var deadline = DateTime.UtcNow + FirstRunWait;
+        var deadline = clock.GetUtcNow().UtcDateTime + FirstRunWait;
         while (true)
         {
             var context = await dataContexts
@@ -119,14 +120,14 @@ public class ScheduleDemoRun(
                 if (queued is not null)
                     return queued;
             }
-            if (DateTime.UtcNow > deadline)
+            if (clock.GetUtcNow().UtcDateTime > deadline)
                 throw new TimeoutException(
                     string.Create(
                         CultureInfo.InvariantCulture,
                         $"The scheduler did not queue the run within {FirstRunWait.TotalSeconds} seconds."
                     )
                 );
-            await Task.Delay(TimeSpan.FromMilliseconds(100), CancellationToken)
+            await Task.Delay(TimeSpan.FromMilliseconds(100), clock, CancellationToken)
                 .ConfigureAwait(false);
         }
     }

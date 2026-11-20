@@ -7,8 +7,10 @@ namespace Trax.Samples.ContentShield.Trains.ContentReview.LookupModerationResult
 /// Fetches a moderation result from the database. Returns a simulated result
 /// for demonstration purposes.
 /// </summary>
-public class FetchModerationResultJunction(ILogger<FetchModerationResultJunction> logger)
-    : Junction<LookupModerationResultInput, ModerationResult>
+public class FetchModerationResultJunction(
+    ILogger<FetchModerationResultJunction> logger,
+    TimeProvider clock
+) : Junction<LookupModerationResultInput, ModerationResult>
 {
     public override async Task<ModerationResult> Run(LookupModerationResultInput input)
     {
@@ -25,7 +27,7 @@ public class FetchModerationResultJunction(ILogger<FetchModerationResultJunction
             ModerationStatus = "Reviewed",
             Classification = "safe",
             ThreatScore = 0.12,
-            ReviewedAt = DateTimeOffset.UtcNow.AddMinutes(-15),
+            ReviewedAt = clock.GetUtcNow().AddMinutes(-15),
         };
     }
 }

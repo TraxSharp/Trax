@@ -10,7 +10,7 @@ namespace Trax.Samples.Bookworm.Trains.Lending.ReturnBook.Junctions;
 /// Sets the loan's returned timestamp. The loan is looked up through the lending filter, so a member
 /// can return only their own loans (another member's loan is "not found"), and a librarian any loan.
 /// </summary>
-public class ReturnBookJunction(ILendingDbContext lending)
+public class ReturnBookJunction(ILendingDbContext lending, TimeProvider clock)
     : Junction<ReturnBookInput, ReturnBookOutput>
 {
     public override async Task<ReturnBookOutput> Run(ReturnBookInput input)
@@ -34,7 +34,7 @@ public class ReturnBookJunction(ILendingDbContext lending)
                 )
             );
 
-        var returnedAt = DateTime.UtcNow;
+        var returnedAt = clock.GetUtcNow().UtcDateTime;
         loan.ReturnedAt = returnedAt;
         await lending.SaveChangesAsync(CancellationToken).ConfigureAwait(false);
 

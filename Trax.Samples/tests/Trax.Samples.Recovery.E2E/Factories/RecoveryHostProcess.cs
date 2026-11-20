@@ -122,7 +122,9 @@ public sealed partial class RecoveryHostProcess : IAsyncDisposable
         Uri address;
         try
         {
-            address = await listening.Task.WaitAsync(StartTimeout).ConfigureAwait(false);
+            address = await listening
+                .Task.WaitAsync(StartTimeout, TimeProvider.System)
+                .ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is TimeoutException or InvalidOperationException)
         {

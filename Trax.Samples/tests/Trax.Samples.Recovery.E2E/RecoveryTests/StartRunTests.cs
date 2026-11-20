@@ -38,8 +38,10 @@ public class StartRunTests : RecoveryTestFixture
             services.GetRequiredService<CaseFiles>(),
             faults,
             new Operator(),
-            // The manifest is scheduled for real; only the wait for its first run gives up.
-            new NeverSeen()
+            // The manifest is scheduled for real; only the wait for its first run gives up, on
+            // the real clock.
+            new NeverSeen(),
+            TimeProvider.System
         );
 
         var starting = () =>
@@ -78,7 +80,8 @@ public class StartRunTests : RecoveryTestFixture
             services.GetRequiredService<CaseFiles>(),
             faults,
             new Operator(),
-            new NeverSeen()
+            new NeverSeen(),
+            TimeProvider.System
         );
 
         var starting = () =>

@@ -154,9 +154,8 @@ public class TopicMapMachineTests : RecoveryTestFixture
                 );
             if (from == TopicMapState.Expired)
             {
-                await row.ExecuteUpdateAsync(x =>
-                    x.SetProperty(d => d.DueAt, DateTimeOffset.UtcNow.AddMinutes(-1))
-                );
+                var minuteAgo = TimeProvider.System.GetUtcNow().AddMinutes(-1);
+                await row.ExecuteUpdateAsync(x => x.SetProperty(d => d.DueAt, minuteAgo));
                 await SharedRecoverySetup
                     .Factory.Services.GetRequiredService<InvokeOutcomeReconciler>()
                     .FireDueTimersOnce(CancellationToken.None);

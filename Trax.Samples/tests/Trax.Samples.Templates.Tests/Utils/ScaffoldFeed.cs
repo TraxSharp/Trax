@@ -109,7 +109,7 @@ internal static class ScaffoldFeed
     {
         var version = string.Create(
             CultureInfo.InvariantCulture,
-            $"0.0.0-scaffold.{DateTime.UtcNow:yyyyMMddHHmmss}"
+            $"0.0.0-scaffold.{TimeProvider.System.GetUtcNow().UtcDateTime:yyyyMMddHHmmss}"
         );
         var root = Path.Combine(Path.GetTempPath(), "trax-scaffold-feed-" + Guid.NewGuid());
         var feed = Path.Combine(root, "feed");

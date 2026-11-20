@@ -47,8 +47,9 @@ public sealed class HubClient : IAsyncDisposable
         TimeSpan? timeout = null
     )
     {
-        var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(15));
-        while (DateTime.UtcNow < deadline)
+        var deadline =
+            TimeProvider.System.GetUtcNow().UtcDateTime + (timeout ?? TimeSpan.FromSeconds(15));
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             var hit = _received.FirstOrDefault(match);
             if (hit is not null)

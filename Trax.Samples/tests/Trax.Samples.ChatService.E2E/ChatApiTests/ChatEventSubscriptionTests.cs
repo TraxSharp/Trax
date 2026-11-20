@@ -241,11 +241,11 @@ public class ChatEventSubscriptionTests : ChatApiTestFixture
     )
     {
         var messages = new List<JsonElement>();
-        var deadline = DateTime.UtcNow + window;
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + window;
         for (
             var remaining = window;
             remaining > TimeSpan.Zero;
-            remaining = deadline - DateTime.UtcNow
+            remaining = deadline - TimeProvider.System.GetUtcNow().UtcDateTime
         )
         {
             try

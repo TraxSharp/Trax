@@ -18,6 +18,11 @@ public sealed class DemoDecider(DemoPace pace) : IDecider
 {
     public const string ModelName = "demo-rules-1.0";
 
+    // The latency is drawn from a seeded sequence, so it varies from call to call but a run of the
+    // demo waits the same way each time. Random is not thread-safe, and runs decide concurrently.
+    private readonly Random _latency = new(Seed: 2026);
+    private readonly Lock _latencyGate = new();
+
     public async Task<DecisionResult> Decide(
         DecisionRequest request,
         CancellationToken cancellationToken
@@ -109,7 +114,9 @@ public sealed class DemoDecider(DemoPace pace) : IDecider
         var max = pace.ModelLatencyMax;
         if (max <= min)
             return min;
-        return min
-            + TimeSpan.FromMilliseconds(Random.Shared.NextDouble() * (max - min).TotalMilliseconds);
+        double draw;
+        lock (_latencyGate)
+            draw = _latency.NextDouble();
+        return min + TimeSpan.FromMilliseconds(draw * (max - min).TotalMilliseconds);
     }
 }

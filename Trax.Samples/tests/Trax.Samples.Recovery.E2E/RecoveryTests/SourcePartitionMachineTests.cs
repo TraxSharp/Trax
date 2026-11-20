@@ -34,7 +34,7 @@ public class SourcePartitionMachineTests : RecoveryTestFixture
     public async Task StartFromNoInstances()
     {
         await PartitionMachines.ResetAsync();
-        _started = DateTime.UtcNow.AddSeconds(-1);
+        _started = TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(-1);
     }
 
     [Test]

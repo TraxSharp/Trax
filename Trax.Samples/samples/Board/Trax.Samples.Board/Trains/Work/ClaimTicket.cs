@@ -13,7 +13,7 @@ using Trax.StateMachine.Persistence;
 
 namespace Trax.Samples.Board.Trains.Work;
 
-public class ClaimTicket(TraxPrincipal caller, TicketBoard board)
+public class ClaimTicket(TraxPrincipal caller, TicketBoard board, TimeProvider clock)
     : Junction<ClaimWorkInput, WorkPackage>
 {
     public override async Task<WorkPackage> Run(ClaimWorkInput input)
@@ -34,7 +34,8 @@ public class ClaimTicket(TraxPrincipal caller, TicketBoard board)
                 string.Equals(t.Id, id, global::System.StringComparison.Ordinal)
             )
             : tickets.FirstOrDefault(t =>
-                t.State == lane.State && (t.Context.ClaimedBy is null || TicketBoard.Lapsed(t))
+                t.State == lane.State
+                && (t.Context.ClaimedBy is null || TicketBoard.Lapsed(t, clock.GetUtcNow()))
             );
         if (ticket is null)
             return Refused(
@@ -52,10 +53,10 @@ public class ClaimTicket(TraxPrincipal caller, TicketBoard board)
             );
         if (
             string.Equals(ticket.Context.ClaimedBy, caller.Id, StringComparison.Ordinal)
-            && !TicketBoard.Lapsed(ticket)
+            && !TicketBoard.Lapsed(ticket, clock.GetUtcNow())
         )
             return Package(lane, ticket);
-        if (ticket.Context.ClaimedBy is not null && TicketBoard.Lapsed(ticket))
+        if (ticket.Context.ClaimedBy is not null && TicketBoard.Lapsed(ticket, clock.GetUtcNow()))
             await board
                 .Fire(ticket.Id, TicketTrigger.Release, input: null, CancellationToken)
                 .ConfigureAwait(false);
@@ -67,7 +68,7 @@ public class ClaimTicket(TraxPrincipal caller, TicketBoard board)
                 new ClaimInput
                 {
                     By = caller.Id,
-                    At = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+                    At = clock.GetUtcNow().ToString("O", CultureInfo.InvariantCulture),
                 },
                 CancellationToken
             )

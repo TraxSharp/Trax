@@ -54,7 +54,8 @@ public class SendMessageTests
         var junction = new PersistMessageJunction(
             db,
             ChatUsers.Alice,
-            NullLogger<PersistMessageJunction>.Instance
+            NullLogger<PersistMessageJunction>.Instance,
+            TestClock.Fixed()
         );
 
         var result = await junction.Run(

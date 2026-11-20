@@ -13,7 +13,7 @@ namespace Trax.Samples.StateMachine;
 /// takes per customer, so the page can show what the server actually charged. The page itself never calls
 /// it: there is no charge endpoint.
 /// </summary>
-public sealed class SimulatedPaymentProvider
+public sealed class SimulatedPaymentProvider(TimeProvider clock)
 {
     private readonly ConcurrentDictionary<string, List<ProviderCharge>> _charges = new(
         StringComparer.Ordinal
@@ -26,7 +26,7 @@ public sealed class SimulatedPaymentProvider
             Receipt = $"rcpt_{Guid.NewGuid():N}",
             AmountCents = amountCents,
             Items = items,
-            ChargedAt = DateTime.UtcNow,
+            ChargedAt = clock.GetUtcNow().UtcDateTime,
         };
         var list = _charges.GetOrAdd(customer, _ => []);
         lock (list)

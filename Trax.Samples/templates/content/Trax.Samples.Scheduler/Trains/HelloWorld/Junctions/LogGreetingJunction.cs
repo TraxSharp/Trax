@@ -9,15 +9,17 @@ namespace Trax.Samples.Scheduler.Trains.HelloWorld.Junctions;
 /// (the running junction, cancellation between junctions) only see EffectJunction. Plain
 /// Junction&lt;TIn, TOut&gt; works when no provider needs to.
 /// </summary>
-public class LogGreetingJunction(ILogger<LogGreetingJunction> logger)
+public class LogGreetingJunction(ILogger<LogGreetingJunction> logger, TimeProvider clock)
     : EffectJunction<HelloWorldInput, Unit>
 {
     public override async Task<Unit> Run(HelloWorldInput input)
     {
-        var timestamp = DateTime.UtcNow.ToString(
-            "yyyy-MM-dd HH:mm:ss UTC",
-            System.Globalization.CultureInfo.InvariantCulture
-        );
+        var timestamp = clock
+            .GetUtcNow()
+            .UtcDateTime.ToString(
+                "yyyy-MM-dd HH:mm:ss UTC",
+                System.Globalization.CultureInfo.InvariantCulture
+            );
 
         logger.LogInformation(
             "Hello, {Name}! This scheduled job ran at {Timestamp}",

@@ -35,7 +35,8 @@ public class CreateChatRoomTests
         var junction = new PersistRoomJunction(
             db,
             ChatUsers.Alice,
-            NullLogger<PersistRoomJunction>.Instance
+            NullLogger<PersistRoomJunction>.Instance,
+            TestClock.Fixed()
         );
 
         var result = await junction.Run(new CreateChatRoomInput { Name = "General" });

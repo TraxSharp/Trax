@@ -19,9 +19,9 @@ public static class TrainStatePoller
         long? afterMetadataId = null
     )
     {
-        var deadline = DateTime.UtcNow + (timeout ?? DefaultTimeout);
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + (timeout ?? DefaultTimeout);
 
-        while (DateTime.UtcNow < deadline)
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             dataContext.Reset();
 
@@ -41,7 +41,7 @@ public static class TrainStatePoller
                 return metadata;
 
             // determinism: polling interval while waiting, bounded by the deadline above.
-            await Task.Delay(PollInterval).ConfigureAwait(false);
+            await Task.Delay(PollInterval, TimeProvider.System).ConfigureAwait(false);
         }
 
         throw new TimeoutException(
@@ -61,9 +61,9 @@ public static class TrainStatePoller
         long? afterMetadataId = null
     )
     {
-        var deadline = DateTime.UtcNow + (timeout ?? DefaultTimeout);
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + (timeout ?? DefaultTimeout);
 
-        while (DateTime.UtcNow < deadline)
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             dataContext.Reset();
 
@@ -81,7 +81,7 @@ public static class TrainStatePoller
                 return metadata;
 
             // determinism: polling interval while waiting, bounded by the deadline above.
-            await Task.Delay(PollInterval).ConfigureAwait(false);
+            await Task.Delay(PollInterval, TimeProvider.System).ConfigureAwait(false);
         }
 
         throw new TimeoutException(

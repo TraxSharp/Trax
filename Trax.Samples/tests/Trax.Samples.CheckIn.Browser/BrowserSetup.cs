@@ -186,9 +186,9 @@ public class BrowserSetup
     private static async Task WaitForHealth()
     {
         using var http = new HttpClient { BaseAddress = Api, Timeout = TimeSpan.FromSeconds(2) };
-        var deadline = DateTime.UtcNow + TimeSpan.FromMinutes(1);
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromMinutes(1);
         var last = "no answer";
-        while (DateTime.UtcNow < deadline)
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             if (s_host.NotNull().HasExited)
                 throw new InvalidOperationException(

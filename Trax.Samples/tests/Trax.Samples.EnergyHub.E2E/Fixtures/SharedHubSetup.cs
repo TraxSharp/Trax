@@ -65,8 +65,8 @@ public class SharedHubSetup
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var dc = (IDataContext)factory.Create();
 
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
-        while (DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(15);
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             dc.Reset();
             var count = await dc.Manifests.AsNoTracking().CountAsync().ConfigureAwait(false);

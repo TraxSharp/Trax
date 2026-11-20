@@ -15,7 +15,11 @@ namespace Trax.Samples.Board.Tickets;
 /// Reads the board and moves tickets on it, as the host. Every train that touches a ticket goes through here, so each
 /// move is the ticket machine's own transition, checked by its guards, and nothing else writes a ticket.
 /// </summary>
-public sealed class TicketBoard(IMachineInstances instances, IDataContextProviderFactory trax)
+public sealed class TicketBoard(
+    IMachineInstances instances,
+    IDataContextProviderFactory trax,
+    TimeProvider clock
+)
 {
     /// <summary>How long a claim holds a ticket before another worker may take it.</summary>
     public static readonly TimeSpan Lease = TimeSpan.FromMinutes(10);
@@ -111,7 +115,7 @@ public sealed class TicketBoard(IMachineInstances instances, IDataContextProvide
             || !string.Equals(ticket.Context.ClaimedBy, worker, StringComparison.Ordinal)
         )
             return $"{ticket.Id} is not claimed by {(worker is null ? "anyone" : Name(worker))}; claim it first";
-        if (Lapsed(ticket))
+        if (Lapsed(ticket, clock.GetUtcNow()))
         {
             await Fire(ticket.Id, TicketTrigger.Release, input: null, ct).ConfigureAwait(false);
             return $"the claim on {ticket.Id} ran out; claim it again";
@@ -128,9 +132,10 @@ public sealed class TicketBoard(IMachineInstances instances, IDataContextProvide
             ? ""
             : principal[(principal.IndexOf(':', StringComparison.Ordinal) + 1)..];
 
-    public static bool Lapsed(Ticket ticket) =>
+    /// <summary>Whether the ticket's claim is older than the lease at <paramref name="now"/>.</summary>
+    public static bool Lapsed(Ticket ticket, DateTimeOffset now) =>
         ticket.Context.ClaimedAt is { } at
-        && DateTimeOffset.Parse(at, CultureInfo.InvariantCulture) + Lease < DateTimeOffset.UtcNow;
+        && DateTimeOffset.Parse(at, CultureInfo.InvariantCulture) + Lease < now;
 
     private static Ticket Read(string state, string context) =>
         new(

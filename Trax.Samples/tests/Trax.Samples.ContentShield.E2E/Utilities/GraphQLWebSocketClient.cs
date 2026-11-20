@@ -82,11 +82,11 @@ public class GraphQLWebSocketClient : IAsyncDisposable
     public async Task<JsonElement> ReceiveNextAsync(TimeSpan? timeout = null)
     {
         var effectiveTimeout = timeout ?? TimeSpan.FromSeconds(10);
-        var deadline = DateTime.UtcNow + effectiveTimeout;
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + effectiveTimeout;
 
-        while (DateTime.UtcNow < deadline)
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
-            var remaining = deadline - DateTime.UtcNow;
+            var remaining = deadline - TimeProvider.System.GetUtcNow().UtcDateTime;
             if (remaining <= TimeSpan.Zero)
                 break;
 

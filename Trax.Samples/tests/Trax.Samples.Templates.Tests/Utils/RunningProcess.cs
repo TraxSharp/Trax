@@ -33,7 +33,7 @@ internal sealed class RunningProcess : IAsyncDisposable
 
     public async Task WaitFor(string text)
     {
-        var deadline = DateTime.UtcNow + Dotnet.ProcessTimeout;
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + Dotnet.ProcessTimeout;
         while (!Output.Contains(text, StringComparison.Ordinal))
         {
             if (_process.HasExited)
@@ -43,13 +43,14 @@ internal sealed class RunningProcess : IAsyncDisposable
                         $"dotnet {string.Join(' ', _args)} exited {_process.ExitCode} before printing "
                     ) + $"'{text}':\n{Output}"
                 );
-            if (DateTime.UtcNow > deadline)
+            if (TimeProvider.System.GetUtcNow().UtcDateTime > deadline)
                 throw new TimeoutException(
                     $"dotnet {string.Join(' ', _args)} did not print '{text}' within "
                         + $"{Dotnet.ProcessTimeout}:\n{Output}"
                 );
             // determinism: polls for the condition, bounded by ProcessTimeout above.
-            await Task.Delay(TimeSpan.FromMilliseconds(200)).ConfigureAwait(false);
+            await Task.Delay(TimeSpan.FromMilliseconds(200), TimeProvider.System)
+                .ConfigureAwait(false);
         }
     }
 

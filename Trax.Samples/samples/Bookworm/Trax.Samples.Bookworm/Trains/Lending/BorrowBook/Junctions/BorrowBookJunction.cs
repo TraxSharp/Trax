@@ -19,7 +19,8 @@ public class BorrowBookJunction(
     ILendingDbContext lending,
     ICatalogDbContext catalog,
     ILendingCaller caller,
-    ILoanPolicy loanPolicy
+    ILoanPolicy loanPolicy,
+    TimeProvider clock
 ) : Junction<BorrowBookInput, BorrowBookOutput>
 {
     public override async Task<BorrowBookOutput> Run(BorrowBookInput input)
@@ -62,7 +63,7 @@ public class BorrowBookJunction(
                 )
             );
 
-        var borrowedAt = DateTime.UtcNow;
+        var borrowedAt = clock.GetUtcNow().UtcDateTime;
         var loan = new Loan
         {
             MemberId = member.Id,

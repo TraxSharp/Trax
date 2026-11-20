@@ -53,7 +53,8 @@ public class JoinChatRoomTests
         var junction = new AddParticipantJunction(
             db,
             ChatUsers.Bob,
-            NullLogger<AddParticipantJunction>.Instance
+            NullLogger<AddParticipantJunction>.Instance,
+            TestClock.Fixed()
         );
 
         var result = await junction.Run(new JoinChatRoomInput { ChatRoomId = roomId });

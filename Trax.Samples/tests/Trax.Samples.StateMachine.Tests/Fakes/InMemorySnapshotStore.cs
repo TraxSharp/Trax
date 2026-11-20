@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Time.Testing;
+
 namespace Trax.Samples.StateMachine.Tests.Fakes;
 
 /// <summary>
@@ -10,13 +12,16 @@ public sealed class InMemorySnapshotStore : ISnapshotStore
 {
     private readonly Dictionary<(string UserKey, Guid Id), StoredSnapshot> _rows = new();
 
+    // The stamp on each written row. No test reads it, so the clock stands still.
+    private readonly FakeTimeProvider _clock = new();
+
     /// <summary>Pre-populate a stored draft verbatim (e.g. an older-version snapshot to migrate on load).</summary>
     public void Seed(string userKey, Guid id, string json, string? lastRequestId = null) =>
         _rows[(userKey, id)] = new StoredSnapshot(
             json,
             Guid.NewGuid(),
             lastRequestId,
-            DateTimeOffset.UtcNow
+            _clock.GetUtcNow()
         );
 
     public Task<StoredSnapshot?> Get(
@@ -43,7 +48,7 @@ public sealed class InMemorySnapshotStore : ISnapshotStore
             ToJson(snapshot),
             Guid.NewGuid(),
             existing?.LastRequestId,
-            DateTimeOffset.UtcNow
+            _clock.GetUtcNow()
         );
         return Task.FromResult(true);
     }
@@ -64,7 +69,7 @@ public sealed class InMemorySnapshotStore : ISnapshotStore
             ToJson(snapshot),
             Guid.NewGuid(),
             requestId ?? row.LastRequestId,
-            DateTimeOffset.UtcNow
+            _clock.GetUtcNow()
         );
         return Task.FromResult(true);
     }

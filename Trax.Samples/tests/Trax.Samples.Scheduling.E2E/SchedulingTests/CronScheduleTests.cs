@@ -10,7 +10,7 @@ public class CronScheduleTests : SchedulingTestFixture
     {
         var digest = await Db.Manifest(ManifestNames.SendDailyDigest);
         var runs = await Db.Runs(digest.Id, afterId: 0);
-        var now = DateTime.UtcNow;
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime;
 
         // The host seeded the manifest just after the suite started.
         var startedAt = SharedSchedulingSetup.StartedAt;

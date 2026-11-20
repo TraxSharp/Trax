@@ -4,7 +4,7 @@ using Trax.Core.Junction;
 
 namespace Trax.Samples.EnergyHub.Trains.GridTrading.TradeGridEnergy.Junctions;
 
-public class SubmitToUbossJunction(ILogger<SubmitToUbossJunction> logger)
+public class SubmitToUbossJunction(ILogger<SubmitToUbossJunction> logger, TimeProvider clock)
     : Junction<TradeGridEnergyInput, TradeGridEnergyOutput>
 {
     public override async Task<TradeGridEnergyOutput> Run(TradeGridEnergyInput input)
@@ -20,7 +20,7 @@ public class SubmitToUbossJunction(ILogger<SubmitToUbossJunction> logger)
         var revenue = (decimal)kwhSold * input.RatePerKwh;
         var transactionId = string.Create(
             CultureInfo.InvariantCulture,
-            $"UBOSS-{DateTime.UtcNow:yyyyMMddHHmm}-{Guid.NewGuid():N}"
+            $"UBOSS-{clock.GetUtcNow().UtcDateTime:yyyyMMddHHmm}-{Guid.NewGuid():N}"
         )[..32];
 
         logger.LogInformation(

@@ -36,7 +36,7 @@ public class SharedSchedulingSetup
     {
         await DropTraxSchema();
 
-        StartedAt = DateTime.UtcNow;
+        StartedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
         Factory = new SchedulingHostFactory();
 
         // Resolving Services starts the host: migrations run and the manifests are seeded

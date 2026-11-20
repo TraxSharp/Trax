@@ -29,7 +29,9 @@ public static class DemoFeatureCredentials
             return new FeatureCredential(
                 new Dictionary<string, string>(StringComparer.Ordinal)
                 {
-                    ["Authorization"] = "Bearer " + issuer.Mint(Subject(person, scenario), role),
+                    ["Authorization"] =
+                        "Bearer "
+                        + issuer.Mint(Subject(person, scenario), role, TimeProvider.System),
                 }
             );
         };

@@ -8,7 +8,7 @@ namespace Trax.Samples.Api.Trains.Lookup.Junctions;
 /// (the running junction, cancellation between junctions) only see EffectJunction. Plain
 /// Junction&lt;TIn, TOut&gt; works when no provider needs to.
 /// </summary>
-public class FetchDataJunction(ILogger<FetchDataJunction> logger)
+public class FetchDataJunction(ILogger<FetchDataJunction> logger, TimeProvider clock)
     : EffectJunction<LookupInput, LookupOutput>
 {
     public override async Task<LookupOutput> Run(LookupInput input)
@@ -22,7 +22,7 @@ public class FetchDataJunction(ILogger<FetchDataJunction> logger)
         {
             Id = input.Id,
             Name = $"Record {input.Id}",
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = clock.GetUtcNow().UtcDateTime,
         };
     }
 }

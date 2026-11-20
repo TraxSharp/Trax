@@ -145,7 +145,8 @@ public sealed class PageChecks
     {
         try
         {
-            return await seen.WaitAsync(BrowserTimeouts.Server).ConfigureAwait(false);
+            return await seen.WaitAsync(BrowserTimeouts.Server, TimeProvider.System)
+                .ConfigureAwait(false);
         }
         catch (TimeoutException inner)
         {

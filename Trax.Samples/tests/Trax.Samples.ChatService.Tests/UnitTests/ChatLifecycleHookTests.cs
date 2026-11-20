@@ -6,6 +6,7 @@ using Trax.Core.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Samples.ChatService.Hooks;
 using Trax.Samples.ChatService.Subscriptions;
+using Trax.Samples.ChatService.Tests.Fixtures;
 using Trax.Samples.ChatService.Trains.CreateChatRoom;
 using Trax.Samples.ChatService.Trains.InviteToChatRoom;
 using Trax.Samples.ChatService.Trains.JoinChatRoom;
@@ -23,7 +24,7 @@ public class ChatLifecycleHookTests
     public void SetUp()
     {
         _eventSender = new Mock<ITopicEventSender>();
-        _hook = new ChatLifecycleHook(_eventSender.NotNull().Object);
+        _hook = new ChatLifecycleHook(_eventSender.NotNull().Object, TestClock.Fixed());
     }
 
     #region OnCompleted — SendMessage
@@ -39,7 +40,7 @@ public class ChatLifecycleHookTests
             SenderUserId = "alice",
             SenderDisplayName = "Alice",
             Content = "Hello!",
-            SentAt = DateTime.UtcNow,
+            SentAt = TestClock.Now.UtcDateTime,
         };
 
         var metadata = CreateMetadata(typeof(ISendMessageTrain), output);
@@ -72,7 +73,7 @@ public class ChatLifecycleHookTests
             SenderUserId = "bob",
             SenderDisplayName = "Bob",
             Content = "Test message",
-            SentAt = DateTime.UtcNow,
+            SentAt = TestClock.Now.UtcDateTime,
         };
 
         var metadata = CreateMetadata(typeof(ISendMessageTrain), output);
@@ -110,7 +111,7 @@ public class ChatLifecycleHookTests
         {
             ChatRoomId = chatRoomId,
             Name = "General",
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = TestClock.Now.UtcDateTime,
         };
 
         var metadata = CreateMetadata(typeof(ICreateChatRoomTrain), output);
@@ -143,7 +144,7 @@ public class ChatLifecycleHookTests
             ChatRoomId = chatRoomId,
             UserId = "charlie",
             DisplayName = "Charlie",
-            JoinedAt = DateTime.UtcNow,
+            JoinedAt = TestClock.Now.UtcDateTime,
         };
 
         var metadata = CreateMetadata(typeof(IJoinChatRoomTrain), output);
@@ -173,7 +174,7 @@ public class ChatLifecycleHookTests
             UserId = "TraxApiKey:bob",
             DisplayName = "Bob",
             InvitedByDisplayName = "Alice",
-            JoinedAt = DateTime.UtcNow,
+            JoinedAt = TestClock.Now.UtcDateTime,
         };
 
         var metadata = CreateMetadata(typeof(IInviteToChatRoomTrain), output);
@@ -205,7 +206,7 @@ public class ChatLifecycleHookTests
             Name = "SomeOther.Namespace.IUnrelatedTrain",
             ExternalId = Guid.NewGuid().ToString(),
             Output = """{"someField": "value"}""",
-            EndTime = DateTime.UtcNow,
+            EndTime = TestClock.Now.UtcDateTime,
         };
 
         await _hook.NotNull().OnCompleted(metadata, CancellationToken.None);
@@ -235,7 +236,7 @@ public class ChatLifecycleHookTests
             Name = typeof(ISendMessageTrain).FullName.NotNull(),
             ExternalId = Guid.NewGuid().ToString(),
             Output = null,
-            EndTime = DateTime.UtcNow,
+            EndTime = TestClock.Now.UtcDateTime,
         };
 
         await _hook.NotNull().OnCompleted(metadata, CancellationToken.None);
@@ -261,7 +262,7 @@ public class ChatLifecycleHookTests
             Name = typeof(ISendMessageTrain).FullName.NotNull(),
             ExternalId = Guid.NewGuid().ToString(),
             Output = "not valid json",
-            EndTime = DateTime.UtcNow,
+            EndTime = TestClock.Now.UtcDateTime,
         };
 
         await _hook.NotNull().OnCompleted(metadata, CancellationToken.None);
@@ -287,7 +288,7 @@ public class ChatLifecycleHookTests
             Name = typeof(ISendMessageTrain).FullName.NotNull(),
             ExternalId = Guid.NewGuid().ToString(),
             Output = """{"someOtherField": "value"}""",
-            EndTime = DateTime.UtcNow,
+            EndTime = TestClock.Now.UtcDateTime,
         };
 
         await _hook.NotNull().OnCompleted(metadata, CancellationToken.None);
@@ -316,7 +317,7 @@ public class ChatLifecycleHookTests
             Name = trainInterface.FullName.NotNull(),
             ExternalId = Guid.NewGuid().ToString(),
             Output = JsonSerializer.Serialize(output),
-            EndTime = DateTime.UtcNow,
+            EndTime = TestClock.Now.UtcDateTime,
         };
     }
 

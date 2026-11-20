@@ -183,13 +183,12 @@ public class OrderMachineTests : RecoveryTestFixture
 
         // The wait passes: move its due time into the past and let the server sweep it.
         var orderId = _order.NotNull().Id;
+        var minuteAgo = TimeProvider.System.GetUtcNow().AddMinutes(-1);
         await using (var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope())
             await scope
                 .ServiceProvider.GetRequiredService<IDataContext>()
                 .SnapshotDrafts.Where(d => d.Id == orderId && d.Machine == OrderMachine.MachineId)
-                .ExecuteUpdateAsync(x =>
-                    x.SetProperty(d => d.DueAt, DateTimeOffset.UtcNow.AddMinutes(-1))
-                );
+                .ExecuteUpdateAsync(x => x.SetProperty(d => d.DueAt, minuteAgo));
         await SharedRecoverySetup
             .Factory.Services.GetRequiredService<InvokeOutcomeReconciler>()
             .FireDueTimersOnce(CancellationToken.None);

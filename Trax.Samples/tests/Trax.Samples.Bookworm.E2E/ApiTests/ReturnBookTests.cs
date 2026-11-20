@@ -44,7 +44,11 @@ public class ReturnBookTests : ApiTestFixture
             .GetProperty("output");
 
         result.GetProperty("loanId").GetInt32().Should().Be(loanId);
-        result.GetProperty("returnedAt").GetDateTime().Should().BeOnOrBefore(DateTime.UtcNow);
+        result
+            .GetProperty("returnedAt")
+            .GetDateTime()
+            .Should()
+            .BeOnOrBefore(TimeProvider.System.GetUtcNow().UtcDateTime);
 
         // The stamp persists: re-reading this exact loan through the query model (filtered by id, so
         // pagination can't hide it) shows a non-null returnedAt.
