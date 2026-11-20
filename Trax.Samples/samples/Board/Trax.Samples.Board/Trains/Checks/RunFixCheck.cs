@@ -1,4 +1,5 @@
 using System.Globalization;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.EffectJunction;
@@ -24,7 +25,7 @@ public class RunFixCheck(InvokedRun run, TicketBoard board) : EffectJunction<Fix
         )
             return CheckResult.Refuse(refusal);
 
-        var report = ticket!.Report;
+        var report = ticket.NotNull().Report;
         var patched = report.Current.With(check.FreeFrom, check.Inclusive);
         var cases = report
             .EarlierCases.Prepend(ticket.Context.ReproSubtotal ?? report.Policy.FreeFrom)

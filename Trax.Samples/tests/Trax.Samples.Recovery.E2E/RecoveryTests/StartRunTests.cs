@@ -1,6 +1,7 @@
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Services.EffectProvider;
@@ -96,7 +97,10 @@ public class StartRunTests : RecoveryTestFixture
             .BeTrue(
                 "the dispatcher may start the first run as soon as the manifest is scheduled, so the crash is armed by then"
             );
-        faults.IsArmed(seen.RunId!).Should().BeFalse("the start that failed disarms its crash");
+        faults
+            .IsArmed(seen.RunId.NotNull())
+            .Should()
+            .BeFalse("the start that failed disarms its crash");
     }
 
     [Test]
@@ -146,7 +150,7 @@ public class StartRunTests : RecoveryTestFixture
     // moment, then fails the start, so nothing is scheduled for real.
     public class SchedulingSeen : DispatchProxy
     {
-        public FaultInjector Faults { get; set; } = null!;
+        public required FaultInjector Faults { get; set; }
         public string? RunId { get; private set; }
         public bool ArmedWhenScheduled { get; private set; }
 

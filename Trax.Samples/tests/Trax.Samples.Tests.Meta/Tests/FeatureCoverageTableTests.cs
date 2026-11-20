@@ -1,4 +1,5 @@
 using System.Globalization;
+using Trax.Core.Extensions;
 
 namespace Trax.Samples.Tests.Meta.Tests;
 
@@ -156,7 +157,7 @@ public partial class FeatureCoverageTableTests
                 var full = Path.GetFullPath(
                     Path.Combine(projectDir, include.Trim().Replace('\\', '/'))
                 );
-                var dir = Path.GetDirectoryName(full)!;
+                var dir = Path.GetDirectoryName(full).NotNull();
                 var name = Path.GetFileName(full);
                 if (
                     !name.Contains('*', StringComparison.Ordinal)

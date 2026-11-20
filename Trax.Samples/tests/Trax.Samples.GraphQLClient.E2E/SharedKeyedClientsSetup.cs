@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Samples.GraphQLClient.E2E.Factories;
 
 namespace Trax.Samples.GraphQLClient.E2E;
@@ -11,10 +12,14 @@ namespace Trax.Samples.GraphQLClient.E2E;
 [SetUpFixture]
 public class SharedKeyedClientsSetup
 {
-    private static InventoryServerFactory _inventory = null!;
-    private static BillingServerFactory _billing = null!;
+    private static InventoryServerFactory? _inventory;
+    private static BillingServerFactory? _billing;
 
-    public static ServiceProvider Clients { get; private set; } = null!;
+    public static ServiceProvider Clients
+    {
+        get => field.NotNull(nameof(Clients));
+        private set;
+    }
 
     [OneTimeSetUp]
     public void OneTimeSetUp()
@@ -25,10 +30,10 @@ public class SharedKeyedClientsSetup
         var services = new ServiceCollection();
         services
             .AddKeyedTraxGraphQLClient("serverB", new Uri("http://localhost/trax/graphql"))
-            .ConfigureHttpClient(_inventory.CreateClient());
+            .ConfigureHttpClient(_inventory.NotNull().CreateClient());
         services
             .AddKeyedTraxGraphQLClient("serverC", new Uri("http://localhost/trax/graphql"))
-            .ConfigureHttpClient(_billing.CreateClient());
+            .ConfigureHttpClient(_billing.NotNull().CreateClient());
 
         Clients = services.BuildServiceProvider();
     }
@@ -37,7 +42,9 @@ public class SharedKeyedClientsSetup
     public async Task OneTimeTearDown()
     {
         await Clients.DisposeAsync();
-        await _inventory.DisposeAsync();
-        await _billing.DisposeAsync();
+        if (_inventory is not null)
+            await _inventory.DisposeAsync().ConfigureAwait(false);
+        if (_billing is not null)
+            await _billing.DisposeAsync().ConfigureAwait(false);
     }
 }

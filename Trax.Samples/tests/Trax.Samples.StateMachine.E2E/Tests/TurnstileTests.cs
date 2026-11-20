@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Samples.StateMachine.E2E.Fixtures;
 using Trax.Samples.StateMachine.E2E.Utilities;
 
@@ -42,7 +43,7 @@ public class TurnstileTests : StateMachineTestFixture
             input: """{"coin":"quarter"}"""
         );
         unlocked.State.Should().Be("Unlocked");
-        unlocked.Context["paidWith"]!.GetValue<string>().Should().Be("quarter");
+        unlocked.Context["paidWith"].NotNull().GetValue<string>().Should().Be("quarter");
 
         var locked = await Machines.AdvanceAsync(Alice, Turnstile, id, "Push");
         locked.State.Should().Be("Locked");
@@ -61,7 +62,9 @@ public class TurnstileTests : StateMachineTestFixture
         var (retried, _) = await Machines.StartAsync(Alice, Turnstile, requestId);
 
         started.State.Should().Be("Locked");
-        retried.Should().Be(id!.Value, "a retried start answers with the instance it created");
+        retried
+            .Should()
+            .Be(id.NotNull().Value, "a retried start answers with the instance it created");
         (await Machines.AdvanceAsync(Alice, Turnstile, id.Value, "Coin", """{"coin":"dollar"}"""))
             .State.Should()
             .Be("Unlocked");
@@ -146,7 +149,9 @@ public class TurnstileTests : StateMachineTestFixture
         // Bob's draft under the same id is his own, and leaves Alice's alone.
         await SeedAsync(Bob, id, TurnstileWire("Locked"));
         (await Machines.LoadAsync(Bob, Turnstile, id)).State.Should().Be("Locked");
-        (await Machines.LoadAsync(Alice, Turnstile, id)).Context["paidWith"]!
+        (await Machines.LoadAsync(Alice, Turnstile, id))
+            .Context["paidWith"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be("dollar");

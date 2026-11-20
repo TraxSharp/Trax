@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Core.Train;
 
@@ -97,7 +98,7 @@ public partial class SampleTrainGraphTests
         Directory
             .EnumerateFiles(GoldensDirectory, "*.chain.json")
             .Select(Path.GetFileName)
-            .Where(file => !names.Contains(file!))
+            .Where(file => !names.Contains(file.NotNull()))
             .Should()
             .BeEmpty("a golden whose train was renamed or removed checks nothing; delete it");
     }
@@ -119,7 +120,10 @@ public partial class SampleTrainGraphTests
             )
         )
         {
-            if (await DeclaresATrainAsync(Path.GetDirectoryName(project)!).ConfigureAwait(false))
+            if (
+                await DeclaresATrainAsync(Path.GetDirectoryName(project).NotNull())
+                    .ConfigureAwait(false)
+            )
                 withTrains.Add(project);
         }
 
@@ -178,15 +182,17 @@ public partial class SampleTrainGraphTests
 
     private static ChainGraph GraphOf(Type train)
     {
-        var declared = TrainBase(train)!;
+        var declared = TrainBase(train).NotNull();
         var arguments = declared.GetGenericArguments();
         var instance =
             Activator.CreateInstance(train)
             ?? throw new InvalidOperationException($"{train.FullName} could not be built.");
         var chain = (ChainRecorder)
             train
-                .GetMethod(nameof(Train<,>.DeclaredChain), Type.EmptyTypes)!
-                .Invoke(instance, parameters: null)!;
+                .GetMethod(nameof(Train<,>.DeclaredChain), Type.EmptyTypes)
+                .NotNull()
+                .Invoke(instance, parameters: null)
+                .NotNull();
 
         return ChainGraph.From(chain, train, arguments[0], arguments[1]);
     }
@@ -223,7 +229,7 @@ public partial class SampleTrainGraphTests
             .Select(Path.GetFileNameWithoutExtension)
             .Where(name => !string.Equals(name, self, StringComparison.Ordinal))
             .Order(StringComparer.Ordinal)
-            .Select(name => Assembly.Load(new AssemblyName(name!)));
+            .Select(name => Assembly.Load(new AssemblyName(name.NotNull())));
     }
 
     private static async Task<bool> DeclaresATrainAsync(string projectDirectory)

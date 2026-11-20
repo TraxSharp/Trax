@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 using Trax.Samples.ApiDashboard.Browser.Host;
@@ -68,7 +69,11 @@ public partial class QueueBrowserTests : ConsoleTest
         var sent = Console.SendsAsync("CancelWorkQueueEntries");
         await Console.Button("Cancel selected").ClickAsync();
         await Console.ConfirmAsync("Cancel queued entries", "Cancel 2 queued entr(ies)?");
-        var ids = (await sent).PostDataJSON()!.Value.GetProperty("variables").GetProperty("ids");
+        var ids = (await sent)
+            .PostDataJSON()
+            .NotNull()
+            .Value.GetProperty("variables")
+            .GetProperty("ids");
         ids.EnumerateArray()
             .Select(i => i.GetInt64())
             .Should()
@@ -98,7 +103,9 @@ public partial class QueueBrowserTests : ConsoleTest
         await Assertions
             .Expect(entry.DetailField("Status"))
             .ToHaveTextAsync("Queued", new() { Timeout = Render });
-        await Assertions.Expect(entry.DetailField("Subject")).ToHaveTextAsync(blocked.SubjectKey!);
+        await Assertions
+            .Expect(entry.DetailField("Subject"))
+            .ToHaveTextAsync(blocked.SubjectKey.NotNull());
 
         var sent = Console.SendsAsync("CancelWorkQueueEntry");
         await Console.Button("Cancel entry").ClickAsync();

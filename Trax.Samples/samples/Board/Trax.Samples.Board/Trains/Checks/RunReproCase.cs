@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.EffectJunction;
@@ -24,7 +25,7 @@ public class RunReproCase(InvokedRun run, TicketBoard board)
         )
             return CheckResult.Refuse(refusal);
 
-        var report = ticket!.Report;
+        var report = ticket.NotNull().Report;
         var policy = report.Policy.Charge(check.Subtotal);
         var charged = report.Current.Charge(check.Subtotal);
         var failed = ticket.Context.FailedCases ?? 0;

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Samples.Scheduling.E2E.Utilities;
 using Trax.Samples.Scheduling.Host;
 using Trax.Samples.Scheduling.Services;
@@ -21,31 +22,43 @@ public abstract class SchedulingTestFixture
 
     protected static SupplierFeed SupplierFeed => Services.GetRequiredService<SupplierFeed>();
 
-    private IServiceScope _scope = null!;
-    private HttpClient _http = null!;
+    private IServiceScope? _scope;
+    private HttpClient? _http;
 
-    protected ITraxScheduler Scheduler { get; private set; } = null!;
+    protected ITraxScheduler Scheduler
+    {
+        get => field.NotNull(nameof(Scheduler));
+        private set;
+    }
 
     /// <summary>The GraphQL endpoint, sending the demo operator key.</summary>
-    protected GraphQLClient Operator { get; private set; } = null!;
+    protected GraphQLClient Operator
+    {
+        get => field.NotNull(nameof(Operator));
+        private set;
+    }
 
     /// <summary>The GraphQL endpoint, sending no key.</summary>
-    protected GraphQLClient Anonymous { get; private set; } = null!;
+    protected GraphQLClient Anonymous
+    {
+        get => field.NotNull(nameof(Anonymous));
+        private set;
+    }
 
     [SetUp]
     public void SetUpScope()
     {
         _scope = Services.CreateScope();
-        Scheduler = _scope.ServiceProvider.GetRequiredService<ITraxScheduler>();
+        Scheduler = _scope.NotNull().ServiceProvider.GetRequiredService<ITraxScheduler>();
         _http = SharedSchedulingSetup.Factory.CreateClient();
-        Operator = new GraphQLClient(_http, DemoKeys.OperatorKey);
-        Anonymous = new GraphQLClient(_http, apiKey: null);
+        Operator = new GraphQLClient(_http.NotNull(), DemoKeys.OperatorKey);
+        Anonymous = new GraphQLClient(_http.NotNull(), apiKey: null);
     }
 
     [TearDown]
     public void TearDownScope()
     {
-        _http.Dispose();
-        _scope.Dispose();
+        _http?.Dispose();
+        _scope?.Dispose();
     }
 }

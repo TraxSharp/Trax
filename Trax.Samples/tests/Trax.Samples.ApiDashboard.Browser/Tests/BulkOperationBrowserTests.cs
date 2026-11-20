@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 using Trax.Samples.ApiDashboard.Browser.Host;
@@ -27,7 +28,7 @@ public partial class BulkOperationBrowserTests : ConsoleTest
     public async Task A_bulk_cancel_over_a_filter_shows_its_operation_with_the_right_counts()
     {
         var held = await Seed.HeldRunsAsync(3);
-        var train = typeof(IReconcileAccountTrain).FullName!;
+        var train = typeof(IReconcileAccountTrain).FullName.NotNull();
         // An earlier test's runs of this train were released when it ended; wait until they have finished, so
         // the filter matches this test's three.
         await Wait.UntilAsync(
@@ -65,7 +66,7 @@ public partial class BulkOperationBrowserTests : ConsoleTest
             $"this filter matches: {held.Count}"
         );
 
-        var variables = (await started).PostDataJSON()!.Value.GetProperty("variables");
+        var variables = (await started).PostDataJSON().NotNull().Value.GetProperty("variables");
         variables.GetProperty("kind").GetString().Should().Be("CANCEL");
         variables.GetProperty("expectedCount").GetInt32().Should().Be(held.Count);
         var filter = variables.GetProperty("filter").GetProperty("executions");

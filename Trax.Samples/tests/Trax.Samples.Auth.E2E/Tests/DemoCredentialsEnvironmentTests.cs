@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.Auth.Jwt;
 using Trax.Api.Auth.Jwt.Testing;
+using Trax.Core.Extensions;
 using Trax.Samples.Auth.Auth;
 using Trax.Samples.Auth.E2E.Factories;
 using Trax.Samples.Auth.E2E.Utilities;
@@ -35,14 +36,14 @@ public class DemoCredentialsEnvironmentTests
 
     private const string BotKey = "a-real-key-that-only-configuration-holds";
 
-    private TestJwksServer _identityProvider = null!;
+    private TestJwksServer? _identityProvider;
 
     [OneTimeSetUp]
     public async Task StartIdentityProvider() =>
         _identityProvider = await TestJwksServer.StartAsync();
 
     [OneTimeTearDown]
-    public async Task StopIdentityProvider() => await _identityProvider.DisposeAsync();
+    public async Task StopIdentityProvider() => await _identityProvider.NotNull().DisposeAsync();
 
     [Test]
     public async Task Development_RegistersTheDemoSchemes()
@@ -121,6 +122,7 @@ public class DemoCredentialsEnvironmentTests
 
         // A token from the identity provider authenticates through the JWT scheme.
         var idpToken = _identityProvider
+            .NotNull()
             .CreateIssuer("trax-samples-auth")
             .Mint(b => b.WithSubject("u-123").WithRole(AuthRoles.Operator));
         var viaIdp = await graphQL.SendAsync(WhoAmI, Caller.WithToken("idp user", idpToken));
@@ -152,7 +154,7 @@ public class DemoCredentialsEnvironmentTests
                 ["Auth:ApiKeys:0:Salt"] = Convert.ToBase64String(salt),
                 ["Auth:ApiKeys:0:Hash"] = Convert.ToBase64String(hash),
                 ["Auth:ApiKeys:0:Roles:0"] = AuthRoles.Operator,
-                ["Auth:Jwt:Authority"] = _identityProvider.Issuer,
+                ["Auth:Jwt:Authority"] = _identityProvider.NotNull().Issuer,
                 ["Auth:Jwt:Audience"] = "trax-samples-auth",
             },
             builder =>

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 using Trax.Samples.ApiDashboard.Browser.Host;
@@ -38,7 +39,7 @@ public partial class OverviewBrowserTests : ConsoleTest
     public async Task Dead_letters_that_failed_alike_are_one_entry_that_opens_them_filtered_by_train_and_reason()
     {
         var (first, _) = await Seed.DeadLettersSharingAReasonAsync();
-        var train = typeof(IImportFeedTrain).FullName!;
+        var train = typeof(IImportFeedTrain).FullName.NotNull();
         // Earlier tests on this host may have left dead letters of the same train and reason: the entry
         // counts them all.
         var awaiting = await Host.QueryAsync(dc =>
@@ -46,7 +47,7 @@ public partial class OverviewBrowserTests : ConsoleTest
                 .CountAsync(d =>
                     d.Status == DeadLetterStatus.AwaitingIntervention
                     && d.Reason == first.Reason
-                    && d.Manifest!.Name == train
+                    && d.Manifest.NotNull().Name == train
                 )
         );
         awaiting.Should().BeGreaterThanOrEqualTo(2);
@@ -82,7 +83,7 @@ public partial class OverviewBrowserTests : ConsoleTest
     public async Task A_failure_bar_opens_the_trains_failed_runs()
     {
         await Seed.DeadLetterAsync();
-        var train = typeof(IImportFeedTrain).FullName!;
+        var train = typeof(IImportFeedTrain).FullName.NotNull();
         var failed = await Host.QueryAsync(dc =>
             dc.Metadatas.AsNoTracking()
                 .CountAsync(m =>

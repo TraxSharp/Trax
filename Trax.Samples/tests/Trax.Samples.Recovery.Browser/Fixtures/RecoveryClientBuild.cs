@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using Trax.Core.Extensions;
 
 namespace Trax.Samples.Recovery.Browser.Fixtures;
 
@@ -48,7 +49,7 @@ public static class RecoveryClientBuild
         foreach (var arg in new[] { vite, "build", "--outDir", output, "--emptyOutDir" })
             start.ArgumentList.Add(arg);
 
-        using var process = Process.Start(start)!;
+        using var process = Process.Start(start).NotNull();
         var log = new StringBuilder();
         var reading = Task.WhenAll(
             Drain(process.StandardOutput, log),

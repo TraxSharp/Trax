@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 using Trax.Samples.ApiDashboard.Browser.Pages;
@@ -44,7 +45,7 @@ public partial class DeadLetterBrowserTests : ConsoleTest
         );
         await deadLetters.RequeueAsync(deadLetter.Id);
 
-        var sent = (await requeue).PostDataJSON()!.Value;
+        var sent = (await requeue).PostDataJSON().NotNull().Value;
         sent.GetProperty("id")
             .GetString()
             .Should()
@@ -63,7 +64,7 @@ public partial class DeadLetterBrowserTests : ConsoleTest
             dc.WorkQueues.AsNoTracking().SingleOrDefaultAsync(w => w.DeadLetterId == deadLetter.Id)
         );
         entry.Should().NotBeNull("the requeue queues a run of the dead letter's manifest");
-        entry!.ManifestId.Should().Be(deadLetter.ManifestId);
+        entry.NotNull().ManifestId.Should().Be(deadLetter.ManifestId);
         (
             await Host.QueryAsync(dc =>
                 dc.DeadLetters.AsNoTracking().SingleAsync(d => d.Id == deadLetter.Id)
@@ -121,7 +122,11 @@ public partial class DeadLetterBrowserTests : ConsoleTest
         var sent = Console.SendsAsync("RequeueDeadLetters");
         await Console.Button("Requeue selected").ClickAsync();
         await Console.ConfirmAsync("Requeue dead letters", "Requeue 2 dead letter(s)?");
-        var ids = (await sent).PostDataJSON()!.Value.GetProperty("variables").GetProperty("ids");
+        var ids = (await sent)
+            .PostDataJSON()
+            .NotNull()
+            .Value.GetProperty("variables")
+            .GetProperty("ids");
         ids.EnumerateArray()
             .Select(i => i.GetInt64())
             .Should()

@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
+using Trax.Core.Extensions;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 using Trax.Samples.ApiDashboard.Browser.Pages;
 using Trax.Scheduler.Services.Operations;
@@ -45,7 +46,8 @@ public partial class SystemBrowserTests : ConsoleTest
         await scheduler.SwitchAsync("Resume", "Job dispatcher", "starts again");
 
         var input = (await update)
-            .PostDataJSON()!
+            .PostDataJSON()
+            .NotNull()
             .Value.GetProperty("variables")
             .GetProperty("input");
         input
@@ -105,7 +107,8 @@ public partial class SystemBrowserTests : ConsoleTest
             await scheduler.Button(retry, "Save retry").ClickAsync().ConfigureAwait(false);
 
             var input = (await update.ConfigureAwait(false))
-                .PostDataJSON()!
+                .PostDataJSON()
+                .NotNull()
                 .Value.GetProperty("variables")
                 .GetProperty("input");
             input.EnumerateObject().Select(p => p.Name).Should().Equal(["defaultMaxRetries"]);

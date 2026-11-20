@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Samples.Templates.Tests.Utils;
 using static Trax.Samples.Templates.Tests.Utils.Dotnet;
 
@@ -28,8 +29,8 @@ public class ScaffoldedTemplateTests
     private const string Adr =
         "see docs/adr/0003-templates-serve-the-dashboard-only-in-development.md";
 
-    private string _workDir = null!;
-    private string _hive = null!;
+    private string? _workDir;
+    private string? _hive;
     private readonly Dictionary<string, Task<string>> _scaffolds = new(StringComparer.Ordinal);
 
     [OneTimeSetUp]
@@ -39,20 +40,27 @@ public class ScaffoldedTemplateTests
         // is where a consumer runs `dotnet new`. Its nuget.config stands in for the packages
         // being published.
         _workDir = Path.Combine(Path.GetTempPath(), "trax-template-scaffold-" + Guid.NewGuid());
-        _hive = Path.Combine(_workDir, "hive");
-        Directory.CreateDirectory(_workDir);
+        _hive = Path.Combine(_workDir.NotNull(), "hive");
+        Directory.CreateDirectory(_workDir.NotNull());
 
         var packed = await ScaffoldFeed.Get();
-        await ScaffoldFeed.WriteNuGetConfig(_workDir, packed).ConfigureAwait(false);
-        await Run(_workDir, "new", "install", packed.TemplatesNupkg, "--debug:custom-hive", _hive)
+        await ScaffoldFeed.WriteNuGetConfig(_workDir.NotNull(), packed).ConfigureAwait(false);
+        await Run(
+                _workDir.NotNull(),
+                "new",
+                "install",
+                packed.TemplatesNupkg,
+                "--debug:custom-hive",
+                _hive.NotNull()
+            )
             .ConfigureAwait(false);
     }
 
     [OneTimeTearDown]
     public void DeleteTheWorkDirectory()
     {
-        if (Directory.Exists(_workDir))
-            Directory.Delete(_workDir, recursive: true);
+        if (Directory.Exists(_workDir.NotNull()))
+            Directory.Delete(_workDir.NotNull(), recursive: true);
     }
 
     [TestCase("trax-hub")]
@@ -209,7 +217,7 @@ public class ScaffoldedTemplateTests
             await File.ReadAllTextAsync(path)
         );
         manifest.Roles.Should().Equal(roles.Split(','));
-        manifest.Database!.Provider.Should().Be("postgres");
+        manifest.Database.NotNull().Provider.Should().Be("postgres");
         manifest.Endpoints.GraphQL.Should().Be("/trax/graphql");
         manifest.Endpoints.Health.Should().Be(health);
         manifest.Endpoints.Console.Should().BeNull("the console is served only in Development");
@@ -268,9 +276,9 @@ public class ScaffoldedTemplateTests
 
     private async Task<string> ScaffoldOnce(string shortName)
     {
-        var dir = Path.Combine(_workDir, shortName, "App");
+        var dir = Path.Combine(_workDir.NotNull(), shortName, "App");
         await Run(
-                _workDir,
+                _workDir.NotNull(),
                 "new",
                 shortName,
                 "--name",
@@ -278,7 +286,7 @@ public class ScaffoldedTemplateTests
                 "--output",
                 dir,
                 "--debug:custom-hive",
-                _hive
+                _hive.NotNull()
             )
             .ConfigureAwait(false);
         await Run(dir, "build").ConfigureAwait(false);

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Trax.Core.Extensions;
 using Trax.Samples.Shared.Testing;
 
 namespace Trax.Samples.Recovery.E2E.Utilities;
@@ -29,7 +30,7 @@ public sealed class OrderDraft(GraphQLClient graphQL, string apiKey)
             )
             .ConfigureAwait(false);
         result.Problem.Should().BeNull("the start should be accepted");
-        Id = Guid.Parse(result.Answer.GetProperty("id").GetString()!);
+        Id = Guid.Parse(result.Answer.GetProperty("id").GetString().NotNull());
         return result;
     }
 
@@ -80,7 +81,7 @@ public sealed class OrderDraft(GraphQLClient graphQL, string apiKey)
             )
             .ConfigureAwait(false);
         reached.Should().BeTrue($"the order should reach {state}; it is in {last?.State}");
-        return last!;
+        return last.NotNull();
     }
 
     private async Task<Result> SendAsync(string query, string field, object variables)

@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 
 namespace Trax.Samples.Tests.Meta.Tests;
 
@@ -31,27 +32,36 @@ public partial class E2EDatabaseProvisioningTests
         // Databases the run can reach: the service's POSTGRES_DB plus every database the
         // workflow creates before the tests, both named by this folder's entry in the CI
         // package table, and by each suite of this folder (a test project with a job of its own).
-        var config = JsonNode.Parse(
-            File.ReadAllText(MonorepoRoot.Combine(".github", "ci", "packages.json"))
-        )!;
-        var rows = config["packages"]!
+        var config = JsonNode
+            .Parse(File.ReadAllText(MonorepoRoot.Combine(".github", "ci", "packages.json")))
+            .NotNull();
+        var rows = config["packages"]
+            .NotNull()
             .AsArray()
             .Where(p =>
-                string.Equals((string?)p!["folder"], "Trax.Samples", StringComparison.Ordinal)
+                string.Equals(
+                    (string?)p.NotNull()["folder"],
+                    "Trax.Samples",
+                    StringComparison.Ordinal
+                )
             )
             .Concat(
                 (config["suites"]?.AsArray() ?? []).Where(s =>
-                    string.Equals((string?)s!["folder"], "Trax.Samples", StringComparison.Ordinal)
+                    string.Equals(
+                        (string?)s.NotNull()["folder"],
+                        "Trax.Samples",
+                        StringComparison.Ordinal
+                    )
                 )
             )
-            .Select(p => p!["dotnet"]!);
+            .Select(p => p.NotNull()["dotnet"].NotNull());
         var provisioned = new HashSet<string>(StringComparer.Ordinal);
         foreach (var package in rows)
         {
             if ((string?)package["postgres"] is { Length: > 0 } defaultDb)
                 provisioned.Add(defaultDb);
-            foreach (var db in package["databases"]!.AsArray())
-                provisioned.Add((string)db!);
+            foreach (var db in package["databases"].NotNull().AsArray())
+                provisioned.Add(db.NotNull().GetValue<string>());
         }
 
         hostPorts.Should().NotBeEmpty("the workflow must map at least one Postgres host port");

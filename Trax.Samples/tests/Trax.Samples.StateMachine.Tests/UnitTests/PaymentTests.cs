@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Trax.Core.Extensions;
 
 namespace Trax.Samples.StateMachine.Tests.UnitTests;
 
@@ -23,7 +24,7 @@ public class PaymentTests
             Context = new JsonObject
             {
                 ["items"] = new JsonArray(
-                    items.Select(i => (JsonNode)JsonValue.Create(i)!).ToArray()
+                    items.Select(i => (JsonNode)JsonValue.Create(i).NotNull()).ToArray()
                 ),
                 ["receipt"] = null,
                 ["total"] = items.Length * CheckoutMachine.UnitPriceCents,

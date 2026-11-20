@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Samples.StateMachine.E2E.Fixtures;
 using Trax.Samples.StateMachine.E2E.Utilities;
 using Trax.StateMachine;
@@ -28,10 +29,10 @@ public class ForwardMigrationTests : StateMachineTestFixture
 
         var loaded = await Machines.LoadAsync(Alice, Checkout, id);
 
-        loaded.Snapshot["version"]!.GetValue<int>().Should().Be(2);
+        loaded.Snapshot["version"].NotNull().GetValue<int>().Should().Be(2);
         loaded.State.Should().Be("Review");
-        loaded.Context["items"]!.AsArray().Should().HaveCount(2);
-        loaded.Context["total"]!.GetValue<long>().Should().Be(1998);
+        loaded.Context["items"].NotNull().AsArray().Should().HaveCount(2);
+        loaded.Context["total"].NotNull().GetValue<long>().Should().Be(1998);
     }
 
     [Test]
@@ -44,7 +45,7 @@ public class ForwardMigrationTests : StateMachineTestFixture
         var paid = await Machines.SendAsync(Alice, Checkout, id);
 
         paid.State.Should().Be("Paid");
-        paid.Snapshot["version"]!.GetValue<int>().Should().Be(2);
+        paid.Snapshot["version"].NotNull().GetValue<int>().Should().Be(2);
         Charges.For(book).Should().ContainSingle().Which.AmountCents.Should().Be(999);
     }
 

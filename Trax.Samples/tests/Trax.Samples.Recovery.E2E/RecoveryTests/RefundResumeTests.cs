@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Testing;
 using Trax.Mediator.Services.TrustedExecution;
 using Trax.Samples.Recovery.E2E.Factories;
@@ -137,7 +138,7 @@ public class RefundResumeTests : RecoveryTestFixture
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         var result = response.GetData("operations", "resumeExecution");
         result.GetProperty("success").GetBoolean().Should().BeFalse();
-        return result.GetProperty("message").GetString()!;
+        return result.GetProperty("message").GetString().NotNull();
     }
 
     private async Task ShouldHaveRunOnlyNotify(long resumed, string? result, string surface)
@@ -224,7 +225,7 @@ public class RefundResumeTests : RecoveryTestFixture
                     .ConfigureAwait(false);
         }
         result.Success.Should().BeTrue(result.Message);
-        return await Run.RunOfEntryAsync(result.Id!.Value).ConfigureAwait(false);
+        return await Run.RunOfEntryAsync(result.Id.NotNull().Value).ConfigureAwait(false);
     }
 
     private async Task<string> OutputAsync(long metadataId)
@@ -239,6 +240,6 @@ public class RefundResumeTests : RecoveryTestFixture
             )
             .ConfigureAwait(false);
         detail.HasErrors.Should().BeFalse(detail.FirstErrorMessage);
-        return detail.GetData("operations", "executionDetail", "output").GetString()!;
+        return detail.GetData("operations", "executionDetail", "output").GetString().NotNull();
     }
 }

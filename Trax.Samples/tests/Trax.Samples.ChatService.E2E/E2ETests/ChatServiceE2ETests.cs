@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Samples.ChatService.E2E.Fixtures;
 
@@ -44,13 +45,13 @@ public class ChatServiceE2ETests : ChatApiTestFixture
         output.GetProperty("name").GetString().Should().Be("Persistence Test");
 
         // Verify persisted to SQLite chat database
-        var chatRoomId = Guid.Parse(chatRoomIdStr!);
+        var chatRoomId = Guid.Parse(chatRoomIdStr.NotNull());
         var room = await ChatDb
             .ChatRooms.AsNoTracking()
             .FirstOrDefaultAsync(r => r.Id == chatRoomId);
 
         room.Should().NotBeNull();
-        room!.Name.Should().Be("Persistence Test");
+        room.NotNull().Name.Should().Be("Persistence Test");
         room.CreatedByUserId.Should().Be("TraxApiKey:alice");
 
         // Verify Trax metadata persisted to SQLite with Completed state
@@ -88,14 +89,14 @@ public class ChatServiceE2ETests : ChatApiTestFixture
             .GetData("dispatch", "createChatRoom", "output")
             .GetProperty("chatRoomId")
             .GetString();
-        var chatRoomId = Guid.Parse(chatRoomIdStr!);
+        var chatRoomId = Guid.Parse(chatRoomIdStr.NotNull());
 
         var participant = await ChatDb
             .ChatParticipants.AsNoTracking()
             .FirstOrDefaultAsync(p => p.ChatRoomId == chatRoomId && p.UserId == "TraxApiKey:alice");
 
         participant.Should().NotBeNull();
-        participant!.DisplayName.Should().Be("Alice");
+        participant.NotNull().DisplayName.Should().Be("Alice");
     }
 
     #endregion
@@ -143,7 +144,7 @@ public class ChatServiceE2ETests : ChatApiTestFixture
             );
 
         participant.Should().NotBeNull();
-        participant!.DisplayName.Should().Be("Bob");
+        participant.NotNull().DisplayName.Should().Be("Bob");
 
         // Verify Trax metadata Completed
         DataContext.Reset();
@@ -199,7 +200,7 @@ public class ChatServiceE2ETests : ChatApiTestFixture
             );
 
         message.Should().NotBeNull();
-        message!.SenderUserId.Should().Be("TraxApiKey:alice");
+        message.NotNull().SenderUserId.Should().Be("TraxApiKey:alice");
     }
 
     [Test]
@@ -237,7 +238,7 @@ public class ChatServiceE2ETests : ChatApiTestFixture
             );
 
         metadata.Should().NotBeNull("SendMessage metadata should be persisted to SQLite");
-        metadata!.TrainState.Should().Be(TrainState.Completed);
+        metadata.NotNull().TrainState.Should().Be(TrainState.Completed);
         metadata.Name.Should().Contain("SendMessage");
         metadata.Input.Should().Contain("Metadata check");
     }
@@ -436,7 +437,8 @@ public class ChatServiceE2ETests : ChatApiTestFixture
         return result
             .GetData("dispatch", "createChatRoom", "output")
             .GetProperty("chatRoomId")
-            .GetString()!;
+            .GetString()
+            .NotNull();
     }
 
     #endregion

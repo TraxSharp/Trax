@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 
 namespace Trax.Samples.Tests.Meta.Tests;
 
@@ -34,9 +35,9 @@ public class PlaywrightVersionTests
             )
             ?.Attribute("Version")
             ?.Value;
-        var screenshots = JsonNode.Parse(
-            File.ReadAllText(RepoRoot.Combine("scripts", "screenshots", "package.json"))
-        )!;
+        var screenshots = JsonNode
+            .Parse(File.ReadAllText(RepoRoot.Combine("scripts", "screenshots", "package.json")))
+            .NotNull();
         var npm =
             (string?)screenshots["dependencies"]?["playwright"]
             ?? (string?)screenshots["devDependencies"]?["playwright"];

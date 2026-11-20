@@ -12,6 +12,7 @@ using Trax.Api.Auth.ApiKey;
 using Trax.Api.Dashboard.Extensions;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
@@ -90,7 +91,8 @@ public sealed class ConsoleHost : IAsyncDisposable
         await app.StartAsync(app.Lifetime.ApplicationStarted).ConfigureAwait(false);
         var address = new Uri(
             app.Services.GetRequiredService<IServer>()
-                .Features.Get<IServerAddressesFeature>()!
+                .Features.Get<IServerAddressesFeature>()
+                .NotNull()
                 .Addresses.Single()
         );
         return new ConsoleHost(app, address);

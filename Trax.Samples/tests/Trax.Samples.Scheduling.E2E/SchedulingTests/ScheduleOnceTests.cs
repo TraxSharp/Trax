@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Samples.Scheduling.E2E.Fixtures;
 using Trax.Samples.Shared.Testing;
@@ -21,7 +22,7 @@ public class ScheduleOnceTests : SchedulingTestFixture
             afterId: 0,
             TimeSpan.FromSeconds(40)
         );
-        run.StartTime.Should().BeOnOrAfter(seeded.ScheduledAt!.Value);
+        run.StartTime.Should().BeOnOrAfter(seeded.ScheduledAt.NotNull().Value);
 
         await Db.WaitUntil(
             async () =>

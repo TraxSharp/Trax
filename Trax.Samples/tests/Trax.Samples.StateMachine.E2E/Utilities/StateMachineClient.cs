@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 
 namespace Trax.Samples.StateMachine.E2E.Utilities;
@@ -25,9 +26,11 @@ public sealed partial class StateMachineClient(GraphQLClient graphQL)
 
     // The version a snapshot of each machine carries, from its IR.
     private static int VersionOf(string machine) =>
-        Manifest.Machines.Single(m => string.Equals(m.Id, machine, StringComparison.Ordinal)).Ir[
-            "version"
-        ]!.GetValue<int>();
+        Manifest
+            .Machines.Single(m => string.Equals(m.Id, machine, StringComparison.Ordinal))
+            .Ir["version"]
+            .NotNull()
+            .GetValue<int>();
 
     /// <summary>The generated document of <paramref name="machine"/>'s <paramref name="operation"/>, or null.</summary>
     public static ClientManifestDocument? DocumentOf(string machine, string operation) =>
@@ -86,7 +89,7 @@ public sealed partial class StateMachineClient(GraphQLClient graphQL)
     {
         var response = await graphQL
             .SendIdAsync(
-                DocumentOf(machine, "discard")!.Id,
+                DocumentOf(machine, "discard").NotNull().Id,
                 caller,
                 new { id, requestId = $"discard-{Guid.NewGuid():N}" }
             )
@@ -248,7 +251,7 @@ public sealed partial class StateMachineClient(GraphQLClient graphQL)
         return new SnapshotResult(wire, ProblemCode: null, raw)
         {
             Id = answer.GetProperty("id") is { ValueKind: JsonValueKind.String } id
-                ? Guid.Parse(id.GetString()!)
+                ? Guid.Parse(id.GetString().NotNull())
                 : null,
         };
     }

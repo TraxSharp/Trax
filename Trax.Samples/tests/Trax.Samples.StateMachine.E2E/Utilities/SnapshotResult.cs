@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 
 namespace Trax.Samples.StateMachine.E2E.Utilities;
@@ -19,11 +20,11 @@ public sealed record SnapshotResult(string? Wire, string? ProblemCode, string Ra
         get
         {
             ProblemCode.Should().BeNull($"the operation should succeed: {Raw}");
-            return JsonNode.Parse(Wire!)!.AsObject();
+            return JsonNode.Parse(Wire.NotNull()).NotNull().AsObject();
         }
     }
 
-    public string State => Snapshot["state"]!.GetValue<string>();
+    public string State => Snapshot["state"].NotNull().GetValue<string>();
 
-    public JsonObject Context => Snapshot["context"]!.AsObject();
+    public JsonObject Context => Snapshot["context"].NotNull().AsObject();
 }

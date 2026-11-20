@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Samples.ContentShield.Runner;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.JobSubmitter;
@@ -82,7 +83,7 @@ internal sealed class TestRunner : Function
         (ITraxRequestHandler)(
             descriptor.ImplementationFactory?.Invoke(sp)
             ?? descriptor.ImplementationInstance
-            ?? ActivatorUtilities.CreateInstance(sp, descriptor.ImplementationType!)
+            ?? ActivatorUtilities.CreateInstance(sp, descriptor.ImplementationType.NotNull())
         );
 
     private static int FreePort()

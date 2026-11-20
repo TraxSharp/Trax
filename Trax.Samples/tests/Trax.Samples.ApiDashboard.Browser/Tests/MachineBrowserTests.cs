@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.Playwright;
+using Trax.Core.Extensions;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 using Trax.Samples.ApiDashboard.Browser.Host;
 using Trax.Samples.ApiDashboard.Browser.Pages;
@@ -284,7 +285,8 @@ public partial class MachineBrowserTests : ConsoleTest
         await page.OpenAsync(Caller.Operator);
 
         var answer = await (await boardRead).JsonAsync();
-        answer!
+        answer
+            .NotNull()
             .Value.GetProperty("data")
             .GetProperty("operations")
             .GetProperty("machineBoard")

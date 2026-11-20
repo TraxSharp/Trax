@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
@@ -45,7 +46,10 @@ public sealed class CheckoutMachine : Machine<CheckoutState, CheckoutTrigger>
 
     /// <summary>The amount to charge for a checkout snapshot, in cents.</summary>
     public static long AmountCents(Snapshot snapshot) =>
-        long.Parse(snapshot.Context["total"]!.ToJsonString(), CultureInfo.InvariantCulture);
+        long.Parse(
+            snapshot.Context["total"].NotNull().ToJsonString(),
+            CultureInfo.InvariantCulture
+        );
 
     private static readonly Rule HasItems = Field((CheckoutContext c) => c.Items)
         .CountGreaterThan(0);
@@ -69,7 +73,7 @@ public sealed class CheckoutMachine : Machine<CheckoutState, CheckoutTrigger>
     {
         var next = (JsonObject)ctx.DeepClone();
         var items = next["items"] as JsonArray ?? [];
-        items.Add(input!["item"]!.GetValue<string>());
+        items.Add(input.NotNull()["item"].NotNull().GetValue<string>());
         next["items"] = items;
         next["total"] = (long)items.Count * UnitPriceCents;
         return next;

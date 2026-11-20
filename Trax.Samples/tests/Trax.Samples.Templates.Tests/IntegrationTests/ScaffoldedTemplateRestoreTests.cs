@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Xml.Linq;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Samples.Templates.Tests.Utils;
 using static Trax.Samples.Templates.Tests.Utils.Dotnet;
 
@@ -23,8 +24,8 @@ public class ScaffoldedTemplateRestoreTests
     private const string Adr =
         "see docs/adr/0004-the-template-package-carries-its-package-versions.md";
 
-    private string _workDir = null!;
-    private string _hive = null!;
+    private string? _workDir;
+    private string? _hive;
 
     [OneTimeSetUp]
     public async Task PackAndInstallTheTemplates()
@@ -33,20 +34,27 @@ public class ScaffoldedTemplateRestoreTests
         // is where a consumer runs `dotnet new`. Its nuget.config stands in for the packages
         // being published.
         _workDir = Path.Combine(Path.GetTempPath(), "trax-template-restore-" + Guid.NewGuid());
-        _hive = Path.Combine(_workDir, "hive");
-        Directory.CreateDirectory(_workDir);
+        _hive = Path.Combine(_workDir.NotNull(), "hive");
+        Directory.CreateDirectory(_workDir.NotNull());
 
         var packed = await ScaffoldFeed.Get();
-        await ScaffoldFeed.WriteNuGetConfig(_workDir, packed).ConfigureAwait(false);
-        await Run(_workDir, "new", "install", packed.TemplatesNupkg, "--debug:custom-hive", _hive)
+        await ScaffoldFeed.WriteNuGetConfig(_workDir.NotNull(), packed).ConfigureAwait(false);
+        await Run(
+                _workDir.NotNull(),
+                "new",
+                "install",
+                packed.TemplatesNupkg,
+                "--debug:custom-hive",
+                _hive.NotNull()
+            )
             .ConfigureAwait(false);
     }
 
     [OneTimeTearDown]
     public void DeleteTheWorkDirectory()
     {
-        if (Directory.Exists(_workDir))
-            Directory.Delete(_workDir, recursive: true);
+        if (Directory.Exists(_workDir.NotNull()))
+            Directory.Delete(_workDir.NotNull(), recursive: true);
     }
 
     [TestCase("trax-hub")]
@@ -88,8 +96,8 @@ public class ScaffoldedTemplateRestoreTests
         var pins = props
             .Descendants("PackageVersion")
             .ToDictionary(
-                e => e.Attribute("Include")!.Value,
-                e => e.Attribute("Version")!.Value,
+                e => e.Attribute("Include").NotNull().Value,
+                e => e.Attribute("Version").NotNull().Value,
                 StringComparer.OrdinalIgnoreCase
             );
 
@@ -136,9 +144,9 @@ public class ScaffoldedTemplateRestoreTests
         string suffix
     )
     {
-        var output = Path.Combine(_workDir, $"{shortName}-{suffix}");
+        var output = Path.Combine(_workDir.NotNull(), $"{shortName}-{suffix}");
         await Run(
-                _workDir,
+                _workDir.NotNull(),
                 "new",
                 shortName,
                 "--name",
@@ -146,7 +154,7 @@ public class ScaffoldedTemplateRestoreTests
                 "--output",
                 output,
                 "--debug:custom-hive",
-                _hive
+                _hive.NotNull()
             )
             .ConfigureAwait(false);
 

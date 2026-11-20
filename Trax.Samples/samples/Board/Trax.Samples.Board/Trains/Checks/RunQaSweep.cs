@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.EffectJunction;
@@ -23,7 +24,7 @@ public class RunQaSweep(InvokedRun run, TicketBoard board) : EffectJunction<QaCh
         )
             return CheckResult.Refuse(refusal);
 
-        var report = ticket!.Report;
+        var report = ticket.NotNull().Report;
         var patched = report.Current.With(
             ticket.Context.FixFreeFrom ?? report.Current.FreeFrom,
             ticket.Context.FixInclusive ?? report.Current.Inclusive

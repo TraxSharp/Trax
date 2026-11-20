@@ -1,4 +1,5 @@
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Samples.Recovery.Auth;
 using Trax.Samples.Recovery.Corpus;
 using Trax.Samples.Recovery.E2E.Factories;
@@ -74,7 +75,7 @@ public class RestartTests
 
         var failed = await resumed.WaitForStateAsync(nameof(TopicMapState.BuildFailed));
         (await RunStateAsync(draftId)).Should().Be("failed", "the restarted host reaped it");
-        failed.Context["fields"]!.AsArray().Should().HaveCount(CorpusFixture.Fields.Count);
+        failed.Context["fields"].NotNull().AsArray().Should().HaveCount(CorpusFixture.Fields.Count);
 
         // The seeded data is still there.
         (await CountAsync("topic_map.works"))
@@ -87,7 +88,7 @@ public class RestartTests
             .State.Should()
             .Be(nameof(TopicMapState.Building));
         var built = await resumed.WaitForStateAsync(nameof(TopicMapState.Built));
-        built.Context["topicPairs"]!.GetValue<int>().Should().Be(32);
+        built.Context["topicPairs"].NotNull().GetValue<int>().Should().Be(32);
     }
 
     // The state of the latest run the draft's Building state queued, as Postgres spells it.

@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Text;
 using AwesomeAssertions;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
+using Trax.Core.Extensions;
 using Trax.Samples.PersistedOperations.E2E.Fixtures;
 
 namespace Trax.Samples.PersistedOperations.E2E.ApiTests;
@@ -69,7 +70,7 @@ public class AdditionalCoverageTests : ApiTestBase
 
         a.Should().NotBeNull();
         b.Should().NotBeNull();
-        a!.Document.Should().NotBe(b!.Document);
+        a.NotNull().Document.Should().NotBe(b.NotNull().Document);
         none.Should().BeNull("the null-tenant row was never written for this id");
     }
 
@@ -87,7 +88,7 @@ public class AdditionalCoverageTests : ApiTestBase
 
         var json = "{\"id\":\"content_v1\",\"variables\":{\"name\":\"Charset\"}}";
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
-        content.Headers.ContentType!.CharSet = "utf-8";
+        content.Headers.ContentType.NotNull().CharSet = "utf-8";
         var resp = await Http.PostAsync("/trax/graphql/", content);
         ((int)resp.StatusCode).Should().Be(200);
 

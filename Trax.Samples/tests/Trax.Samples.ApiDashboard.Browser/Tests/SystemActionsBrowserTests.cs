@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Playwright;
+using Trax.Core.Extensions;
 using Trax.Samples.ApiDashboard.Browser.Factories;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 using Trax.Scheduler.Services.Effects;
@@ -186,7 +187,8 @@ public partial class SystemActionsBrowserTests : ConsoleTest
             var sent = Console.SendsAsync("SetLogLevels");
             await Console.Button("Save log levels").ClickAsync();
             var levels = (await sent)
-                .PostDataJSON()!
+                .PostDataJSON()
+                .NotNull()
                 .Value.GetProperty("variables")
                 .GetProperty("levels");
             levels.GetArrayLength().Should().Be(1, "only the changed category is sent");

@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.Samples.Recovery.Auth;
 using Trax.Samples.Recovery.Browser.Fixtures;
 
@@ -35,14 +36,19 @@ public class BuiltBundleTests
     public void Built_bundle_holds_no_operator_only_document()
     {
         var trax = Path.Combine(RecoveryClientBuild.ClientFolder, "src", "trax");
-        var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(trax, "manifest.json")))!;
-        var pageDocuments = JsonNode.Parse(
-            File.ReadAllText(Path.Combine(trax, "trax.documents.json"))
-        )!["documents"]!.AsArray();
-        var operatorTrains = manifest["trains"]!
+        var manifest = JsonNode
+            .Parse(File.ReadAllText(Path.Combine(trax, "manifest.json")))
+            .NotNull();
+        var pageDocuments = JsonNode
+            .Parse(File.ReadAllText(Path.Combine(trax, "trax.documents.json")))
+            .NotNull()["documents"]
+            .NotNull()
+            .AsArray();
+        var operatorTrains = manifest["trains"]
+            .NotNull()
             .AsArray()
-            .Where(t => !UserMayRun(t!["requires"]!))
-            .Select(t => t!["field"]!.GetValue<string>())
+            .Where(t => !UserMayRun(t.NotNull()["requires"].NotNull()))
+            .Select(t => t.NotNull()["field"].NotNull().GetValue<string>())
             .ToList();
         var bundle = Bundle();
 
@@ -54,7 +60,9 @@ public class BuiltBundleTests
             );
         foreach (var document in pageDocuments)
         foreach (var train in operatorTrains)
-            document!["text"]!
+            document
+                .NotNull()["text"]
+                .NotNull()
                 .GetValue<string>()
                 .Should()
                 .NotMatchRegex(
@@ -62,16 +70,18 @@ public class BuiltBundleTests
                     $"the page is a user's, and '{train}' is a train only an operator may run"
                 );
         foreach (
-            var id in manifest["machines"]!
+            var id in manifest["machines"]
+                .NotNull()
                 .AsArray()
-                .SelectMany(m => m!["documents"]!.AsArray())
-                .Concat(manifest["progress"]!.AsArray())
+                .SelectMany(m => m.NotNull()["documents"].NotNull().AsArray())
+                .Concat(manifest["progress"].NotNull().AsArray())
                 .Where(d =>
-                    d!["document"]!
+                    d.NotNull()["document"]
+                        .NotNull()
                         .GetValue<string>()
                         .Contains("operations", StringComparison.Ordinal)
                 )
-                .Select(d => d!["id"]!.GetValue<string>())
+                .Select(d => d.NotNull()["id"].NotNull().GetValue<string>())
         )
             bundle
                 .Should()
@@ -89,15 +99,16 @@ public class BuiltBundleTests
 
     // A train the page's user may run: every role set it requires names the user's role.
     private static bool UserMayRun(JsonNode requires) =>
-        requires["anonymous"]!.GetValue<bool>()
-        || requires["roleSets"]!
+        requires["anonymous"].NotNull().GetValue<bool>()
+        || requires["roleSets"]
+            .NotNull()
             .AsArray()
             .All(set =>
-                set!
+                set.NotNull()
                     .AsArray()
                     .Any(r =>
                         string.Equals(
-                            r!.GetValue<string>(),
+                            r.NotNull().GetValue<string>(),
                             RecoveryRoles.User,
                             StringComparison.Ordinal
                         )

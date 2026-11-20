@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Samples.Board.Auth;
 using Trax.Samples.Board.E2E.Utilities;
 
@@ -6,13 +7,41 @@ namespace Trax.Samples.Board.E2E.Fixtures;
 /// <summary>Gives each test the board's five workers, each with its own key, and a way to file a fresh ticket.</summary>
 public abstract class BoardTestFixture
 {
-    protected HttpClient Http { get; private set; } = null!;
-    protected GraphQLClient GraphQL { get; private set; } = null!;
-    protected BoardWorker Triage { get; private set; } = null!;
-    protected BoardWorker Repro { get; private set; } = null!;
-    protected BoardWorker Fix { get; private set; } = null!;
-    protected BoardWorker Qa { get; private set; } = null!;
-    protected BoardWorker Sam { get; private set; } = null!;
+    protected HttpClient Http
+    {
+        get => field.NotNull(nameof(Http));
+        private set;
+    }
+    protected GraphQLClient GraphQL
+    {
+        get => field.NotNull(nameof(GraphQL));
+        private set;
+    }
+    protected BoardWorker Triage
+    {
+        get => field.NotNull(nameof(Triage));
+        private set;
+    }
+    protected BoardWorker Repro
+    {
+        get => field.NotNull(nameof(Repro));
+        private set;
+    }
+    protected BoardWorker Fix
+    {
+        get => field.NotNull(nameof(Fix));
+        private set;
+    }
+    protected BoardWorker Qa
+    {
+        get => field.NotNull(nameof(Qa));
+        private set;
+    }
+    protected BoardWorker Sam
+    {
+        get => field.NotNull(nameof(Sam));
+        private set;
+    }
 
     [SetUp]
     public void OpenConnections()
@@ -62,8 +91,14 @@ public abstract class BoardTestFixture
     }
 
     protected async Task<string> LaneOf(string ticketId) =>
-        (await Sam.TicketAsync(ticketId).ConfigureAwait(false)).GetProperty("lane").GetString()!;
+        (await Sam.TicketAsync(ticketId).ConfigureAwait(false))
+            .GetProperty("lane")
+            .GetString()
+            .NotNull();
 
     protected async Task<string> StateOf(string ticketId) =>
-        (await Sam.TicketAsync(ticketId).ConfigureAwait(false)).GetProperty("state").GetString()!;
+        (await Sam.TicketAsync(ticketId).ConfigureAwait(false))
+            .GetProperty("state")
+            .GetString()
+            .NotNull();
 }

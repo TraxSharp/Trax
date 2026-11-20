@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Trax.Api.Auth;
+using Trax.Core.Extensions;
 using Trax.Core.Junction;
 using Trax.Samples.ChatService.Data;
 using Trax.Samples.ChatService.Data.Entities;
@@ -17,7 +18,7 @@ public class AddInviteeJunction(
 {
     public override async Task<InviteToChatRoomOutput> Run(InviteToChatRoomInput input)
     {
-        var invitee = directory.Find(input.UserId)!;
+        var invitee = directory.Find(input.UserId).NotNull();
         var now = DateTime.UtcNow;
 
         db.ChatParticipants.Add(

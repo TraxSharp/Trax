@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Samples.Recovery.E2E.Factories;
 using Trax.Samples.Recovery.E2E.Utilities;
 using Trax.StateMachine;
@@ -18,7 +19,7 @@ public class ClientManifestExportTests
     private const string Unreachable =
         "Host=127.0.0.1;Port=1;Database=nowhere;Username=nobody;Password=nothing;Timeout=3";
 
-    private string _folder = null!;
+    private string? _folder;
 
     [SetUp]
     public void Folder() =>
@@ -27,14 +28,14 @@ public class ClientManifestExportTests
     [TearDown]
     public void Remove()
     {
-        if (Directory.Exists(_folder))
-            Directory.Delete(_folder, recursive: true);
+        if (Directory.Exists(_folder.NotNull()))
+            Directory.Delete(_folder.NotNull(), recursive: true);
     }
 
     [Test]
     public async Task The_host_writes_its_manifest_and_exits_without_a_database()
     {
-        var path = Path.Combine(_folder, "client.json");
+        var path = Path.Combine(_folder.NotNull(), "client.json");
 
         var (exitCode, output) = await RecoveryHostProcess.ExportAsync(
             path,
@@ -57,7 +58,7 @@ public class ClientManifestExportTests
     [Test]
     public async Task The_host_writes_its_manifest_without_a_connection_string()
     {
-        var path = Path.Combine(_folder, "client.json");
+        var path = Path.Combine(_folder.NotNull(), "client.json");
 
         var (exitCode, output) = await RecoveryHostProcess.ExportAsync(
             path,
@@ -76,7 +77,7 @@ public class ClientManifestExportTests
     [Test]
     public async Task The_committed_client_manifest_is_the_one_the_host_exports()
     {
-        var path = Path.Combine(_folder, "client.json");
+        var path = Path.Combine(_folder.NotNull(), "client.json");
         var (exitCode, output) = await RecoveryHostProcess.ExportAsync(
             path,
             Unreachable,

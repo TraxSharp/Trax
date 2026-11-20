@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Playwright;
+using Trax.Core.Extensions;
 using Trax.Samples.ApiDashboard.Browser.Factories;
 
 // In the assembly root namespace so this [SetUpFixture] covers every test namespace.
@@ -17,9 +18,17 @@ public partial class ConsoleSetup
 {
     private static IPlaywright? _playwright;
 
-    public static ConsoleHost Host { get; private set; } = null!;
+    public static ConsoleHost Host
+    {
+        get => field.NotNull(nameof(Host));
+        private set;
+    }
 
-    public static IBrowser Browser { get; private set; } = null!;
+    public static IBrowser Browser
+    {
+        get => field.NotNull(nameof(Browser));
+        private set;
+    }
 
     /// <summary>The persisted id of each console document, by operation name, as the page is told them.</summary>
     public static IReadOnlyDictionary<string, string> DocumentIds { get; private set; } =
@@ -62,7 +71,11 @@ public partial class ConsoleSetup
         return config.RootElement.TryGetProperty("documents", out var documents)
             ? documents
                 .EnumerateObject()
-                .ToDictionary(p => p.Name, p => p.Value.GetString()!, StringComparer.Ordinal)
+                .ToDictionary(
+                    p => p.Name,
+                    p => p.Value.GetString().NotNull(),
+                    StringComparer.Ordinal
+                )
             : new Dictionary<string, string>(StringComparer.Ordinal);
     }
 

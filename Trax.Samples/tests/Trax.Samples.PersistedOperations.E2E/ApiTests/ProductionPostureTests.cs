@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.Hosting;
+using Trax.Core.Extensions;
 using Trax.Samples.PersistedOperations.E2E.Fixtures;
 
 namespace Trax.Samples.PersistedOperations.E2E.ApiTests;
@@ -24,7 +25,7 @@ public class ProductionPostureTests
         }
         """;
 
-    private PersistedOperationsApiFactory _production = null!;
+    private PersistedOperationsApiFactory? _production;
 
     [OneTimeSetUp]
     public void StartProduction()
@@ -39,13 +40,14 @@ public class ProductionPostureTests
     public async Task StopProduction()
     {
         if (_production is not null)
-            await _production.DisposeAsync();
+            if (_production is not null)
+                await _production.DisposeAsync().ConfigureAwait(false);
     }
 
     [Test]
     public async Task An_inline_document_is_refused_in_Production()
     {
-        using var http = _production.CreateClient();
+        using var http = _production.NotNull().CreateClient();
 
         var resp = await http.PostAsJsonAsync(
             "/trax/graphql/",
@@ -59,7 +61,7 @@ public class ProductionPostureTests
     [Test]
     public async Task An_anonymous_upload_is_refused_in_Production()
     {
-        var body = await PostUploadAsync(_production.CreateClient(), "anon_prod_v1");
+        var body = await PostUploadAsync(_production.NotNull().CreateClient(), "anon_prod_v1");
 
         body.Should().NotContain("\"success\":true");
         GraphQLErrors.FirstCode(body).Should().Be("TRAX_AUTHORIZATION", body);
@@ -77,7 +79,7 @@ public class ProductionPostureTests
     [Test]
     public async Task Production_serves_no_dashboard()
     {
-        using var http = _production.CreateClient();
+        using var http = _production.NotNull().CreateClient();
 
         var resp = await http.GetAsync("/trax/dashboard/");
 
@@ -100,7 +102,7 @@ public class ProductionPostureTests
     public async Task Production_serves_no_demo_page()
     {
         // The page sends the demo operator key, so it is served only where that key exists.
-        using var http = _production.CreateClient();
+        using var http = _production.NotNull().CreateClient();
 
         var resp = await http.GetAsync("/");
 

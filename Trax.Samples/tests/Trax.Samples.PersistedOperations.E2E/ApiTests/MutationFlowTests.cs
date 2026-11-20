@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Samples.PersistedOperations.E2E.Fixtures;
 
 namespace Trax.Samples.PersistedOperations.E2E.ApiTests;
@@ -55,7 +56,7 @@ public class MutationFlowTests : ApiTestBase
             .Be("SHAPE_DIFF_VIOLATION");
 
         var row = await Store.GetAsync("mut_shape_v1", tenantKey: null, CancellationToken.None);
-        row!.Document.Should().Be(GreetDocuments.Casual);
+        row.NotNull().Document.Should().Be(GreetDocuments.Casual);
     }
 
     [Test]
@@ -65,7 +66,7 @@ public class MutationFlowTests : ApiTestBase
         await UploadAsync("mut_bypass_v1", GreetDocuments.RenamedField, bypassShapeDiff: true);
 
         var row = await Store.GetAsync("mut_bypass_v1", tenantKey: null, CancellationToken.None);
-        row!.Document.Should().Be(GreetDocuments.RenamedField);
+        row.NotNull().Document.Should().Be(GreetDocuments.RenamedField);
     }
 
     [Test]

@@ -1,5 +1,6 @@
 using System.Globalization;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Samples.CheckIn.Trains;
 using Trax.StateMachine.Gherkin;
 
@@ -18,10 +19,12 @@ public class InMemoryRunTests
     private static string Machines => Path.Combine(AppContext.BaseDirectory, "machines");
 
     private static LexiconReading Lexicon =>
-        Trax.StateMachine.Gherkin.Lexicon.ReadDirectory(
-            Features,
-            [typeof(IIssueBoardingPassTrain).Assembly]
-        )!;
+        Trax
+            .StateMachine.Gherkin.Lexicon.ReadDirectory(
+                Features,
+                [typeof(IIssueBoardingPassTrain).Assembly]
+            )
+            .NotNull();
 
     private static FeatureGlossary Glossary => Lexicon.GlossaryOrThrow();
 

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
+using Trax.Core.Extensions;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 using Trax.Samples.ApiDashboard.Browser.Host;
 
@@ -58,7 +59,10 @@ public partial class TrainActionsBrowserTests : ConsoleTest
         var dialog = Console.Dialog("Run a train");
         await Assertions
             .Expect(dialog.GetByLabel("Train", new() { Exact = true }))
-            .ToHaveValueAsync(typeof(IImportFeedTrain).FullName!, new() { Timeout = Render });
+            .ToHaveValueAsync(
+                typeof(IImportFeedTrain).FullName.NotNull(),
+                new() { Timeout = Render }
+            );
         await dialog.GetByLabel("Field key", new() { Exact = true }).FillAsync(key);
 
         var sent = Console.SendsAsync("RunTrain");

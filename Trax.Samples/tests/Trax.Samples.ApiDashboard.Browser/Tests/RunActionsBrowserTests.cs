@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
+using Trax.Core.Extensions;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 using Trax.Samples.ApiDashboard.Browser.Host;
 using Trax.Samples.ApiDashboard.Browser.Pages;
@@ -48,7 +49,7 @@ public partial class RunActionsBrowserTests : ConsoleTest
         var held = await Seed.HeldRunsAsync(2);
         var runs = new FilteredRunsPage(
             Console,
-            $"state=IN_PROGRESS&train={Uri.EscapeDataString(typeof(IReconcileAccountTrain).FullName!)}"
+            $"state=IN_PROGRESS&train={Uri.EscapeDataString(typeof(IReconcileAccountTrain).FullName.NotNull())}"
         );
         await runs.OpenAsync(Caller.Operator);
         foreach (var run in held)
@@ -59,7 +60,11 @@ public partial class RunActionsBrowserTests : ConsoleTest
         var sent = Console.SendsAsync("CancelExecutions");
         await Console.Button("Cancel selected").ClickAsync();
         await Console.ConfirmAsync("Cancel runs", "Request cancellation of 2 run(s)?");
-        var ids = (await sent).PostDataJSON()!.Value.GetProperty("variables").GetProperty("ids");
+        var ids = (await sent)
+            .PostDataJSON()
+            .NotNull()
+            .Value.GetProperty("variables")
+            .GetProperty("ids");
         ids.EnumerateArray()
             .Select(i => i.GetInt64())
             .Should()
@@ -100,11 +105,11 @@ public partial class RunActionsBrowserTests : ConsoleTest
         );
         entry.TrainName.Should().Be(typeof(ISettleClaimTrain).FullName);
         var key = System
-            .Text.Json.JsonDocument.Parse(failed.Input!)
+            .Text.Json.JsonDocument.Parse(failed.Input.NotNull())
             .RootElement.EnumerateObject()
             .Single()
             .Value.GetString();
-        entry.Input.Should().Contain(key!, "the run's own input is queued again");
+        entry.Input.Should().Contain(key.NotNull(), "the run's own input is queued again");
         Checks
             .Sent.Count(s =>
                 string.Equals(s.OperationName, "RequeueExecution", StringComparison.Ordinal)

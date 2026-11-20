@@ -3,6 +3,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
+using Trax.Core.Extensions;
 using Trax.Samples.PersistedOperations.Api.Auth;
 
 namespace Trax.Samples.PersistedOperations.E2E.Fixtures;
@@ -13,8 +14,16 @@ namespace Trax.Samples.PersistedOperations.E2E.Fixtures;
 /// </summary>
 public abstract class ApiTestBase
 {
-    protected HttpClient Http { get; private set; } = null!;
-    protected IPersistedOperationStore Store { get; private set; } = null!;
+    protected HttpClient Http
+    {
+        get => field.NotNull(nameof(Http));
+        private set;
+    }
+    protected IPersistedOperationStore Store
+    {
+        get => field.NotNull(nameof(Store));
+        private set;
+    }
 
     [SetUp]
     public async Task BaseSetUpAsync()

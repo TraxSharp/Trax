@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Trax.Api.Auth.Jwt.Testing;
+using Trax.Core.Extensions;
 using Trax.Samples.Auth.Auth;
 using Trax.Samples.Auth.E2E.Fixtures;
 using Trax.Samples.Auth.E2E.Utilities;
@@ -127,6 +128,6 @@ public class SubscriptionAuthTests : AuthTestFixture
         received
             .Should()
             .NotBeNull("an operator subscribed to every train should see one complete");
-        received!.Value.GetProperty("trainState").GetString().Should().Be("COMPLETED");
+        received.NotNull().Value.GetProperty("trainState").GetString().Should().Be("COMPLETED");
     }
 }

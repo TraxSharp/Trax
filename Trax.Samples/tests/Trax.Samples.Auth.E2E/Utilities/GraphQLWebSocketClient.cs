@@ -3,6 +3,7 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.TestHost;
+using Trax.Core.Extensions;
 
 namespace Trax.Samples.Auth.E2E.Utilities;
 
@@ -12,7 +13,7 @@ namespace Trax.Samples.Auth.E2E.Utilities;
 /// </summary>
 public sealed class GraphQLWebSocketClient : IAsyncDisposable
 {
-    private WebSocket _socket = null!;
+    private WebSocket? _socket;
 
     /// <summary>
     /// Opens a socket and sends <c>connection_init</c> with <paramref name="payload"/>. Throws
@@ -102,6 +103,7 @@ public sealed class GraphQLWebSocketClient : IAsyncDisposable
             JsonSerializer.Serialize(message, JsonSerializerOptions.Web)
         );
         await _socket
+            .NotNull()
             .SendAsync(bytes, WebSocketMessageType.Text, endOfMessage: true, CancellationToken.None)
             .ConfigureAwait(false);
     }
@@ -116,7 +118,10 @@ public sealed class GraphQLWebSocketClient : IAsyncDisposable
             WebSocketReceiveResult result;
             do
             {
-                result = await _socket.ReceiveAsync(buffer, cts.Token).ConfigureAwait(false);
+                result = await _socket
+                    .NotNull()
+                    .ReceiveAsync(buffer, cts.Token)
+                    .ConfigureAwait(false);
                 if (result.MessageType == WebSocketMessageType.Close)
                     throw new WebSocketClosedException(
                         $"closed by the server: {result.CloseStatus} {result.CloseStatusDescription}"
@@ -140,11 +145,12 @@ public sealed class GraphQLWebSocketClient : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        if (_socket.State == WebSocketState.Open)
+        if (_socket.NotNull().State == WebSocketState.Open)
         {
             try
             {
                 await _socket
+                    .NotNull()
                     .CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None)
                     .ConfigureAwait(false);
             }
@@ -153,6 +159,6 @@ public sealed class GraphQLWebSocketClient : IAsyncDisposable
                 // The server may already have gone; nothing to clean up.
             }
         }
-        _socket.Dispose();
+        _socket.NotNull().Dispose();
     }
 }

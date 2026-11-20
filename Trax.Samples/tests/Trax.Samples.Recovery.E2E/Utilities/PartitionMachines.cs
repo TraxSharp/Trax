@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.SnapshotDraft;
@@ -70,7 +71,7 @@ public static class PartitionMachines
             .BeTrue(
                 $"{source}/{month} should reach {state}; it is in {row?.State ?? "no instance"}"
             );
-        return row!;
+        return row.NotNull();
     }
 
     /// <summary>

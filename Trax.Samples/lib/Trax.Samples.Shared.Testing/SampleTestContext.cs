@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 
 namespace Trax.Samples.Shared.Testing;
 
@@ -43,5 +44,5 @@ public static class SampleTestContext
 
     private static TContext Construct<TContext>(DbContextOptions<TContext> options)
         where TContext : DbContext =>
-        (TContext)Activator.CreateInstance(typeof(TContext), options)!;
+        (TContext)Activator.CreateInstance(typeof(TContext), options).NotNull();
 }

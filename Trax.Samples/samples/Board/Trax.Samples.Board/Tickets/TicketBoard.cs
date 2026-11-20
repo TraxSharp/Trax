@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Samples.Board.Machines;
@@ -73,7 +74,7 @@ public sealed class TicketBoard(IMachineInstances instances, IDataContextProvide
                 ct
             )
             .ConfigureAwait(false);
-        return (await Find(ticketId, ct).ConfigureAwait(false))!;
+        return (await Find(ticketId, ct).ConfigureAwait(false)).NotNull();
     }
 
     /// <summary>Fires one of the ticket machine's triggers, as the host.</summary>

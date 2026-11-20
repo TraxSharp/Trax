@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Samples.StateMachine.Tests.Fakes;
 
 namespace Trax.Samples.StateMachine.Tests.UnitTests;
@@ -45,12 +46,9 @@ public class CheckoutMachineTests
 
         loaded.Version.Should().Be(2);
         loaded.State.Should().Be("Review");
-        loaded.Context["items"]!.AsArray().Should().HaveCount(2);
+        loaded.Context["items"].NotNull().AsArray().Should().HaveCount(2);
         // Backfilled from the item count (2 items x 999 cents), so the v2 total guard passes.
-        loaded.Context["total"]!
-            .GetValue<int>()
-            .Should()
-            .Be(1998);
+        loaded.Context["total"].NotNull().GetValue<int>().Should().Be(1998);
     }
 
     [Test]
@@ -103,7 +101,7 @@ public class CheckoutMachineTests
             .Which.Snapshot;
 
         advanced.State.Should().Be("Review");
-        advanced.Context["total"]!.GetValue<int>().Should().Be(999);
+        advanced.Context["total"].NotNull().GetValue<int>().Should().Be(999);
     }
 
     [Test]
@@ -144,12 +142,17 @@ public class CheckoutMachineTests
             .Which.Snapshot;
 
         cart.State.Should().Be("Cart");
-        cart.Context["items"]!
+        cart.Context["items"]
+            .NotNull()
             .AsArray()
-            .Select(i => i!.GetValue<string>())
+            .Select(i => i.NotNull().GetValue<string>())
             .Should()
             .Equal("book", "pen");
-        cart.Context["total"]!.GetValue<long>().Should().Be(2 * CheckoutMachine.UnitPriceCents);
+        cart.Context["total"]
+            .NotNull()
+            .GetValue<long>()
+            .Should()
+            .Be(2 * CheckoutMachine.UnitPriceCents);
     }
 
     [Test]

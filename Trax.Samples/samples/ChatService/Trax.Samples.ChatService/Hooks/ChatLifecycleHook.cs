@@ -1,5 +1,6 @@
 using System.Text.Json;
 using HotChocolate.Subscriptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.TrainLifecycleHook;
 using Trax.Samples.ChatService.Subscriptions;
@@ -30,10 +31,10 @@ public class ChatLifecycleHook(ITopicEventSender eventSender) : ITrainLifecycleH
 {
     private static readonly Dictionary<string, string> TrainEventTypes = new(StringComparer.Ordinal)
     {
-        [typeof(ISendMessageTrain).FullName!] = "MessageSent",
-        [typeof(ICreateChatRoomTrain).FullName!] = "RoomCreated",
-        [typeof(IJoinChatRoomTrain).FullName!] = "UserJoined",
-        [typeof(IInviteToChatRoomTrain).FullName!] = "UserJoined",
+        [typeof(ISendMessageTrain).FullName.NotNull()] = "MessageSent",
+        [typeof(ICreateChatRoomTrain).FullName.NotNull()] = "RoomCreated",
+        [typeof(IJoinChatRoomTrain).FullName.NotNull()] = "UserJoined",
+        [typeof(IInviteToChatRoomTrain).FullName.NotNull()] = "UserJoined",
     };
 
     public async Task OnCompleted(Metadata metadata, CancellationToken ct)

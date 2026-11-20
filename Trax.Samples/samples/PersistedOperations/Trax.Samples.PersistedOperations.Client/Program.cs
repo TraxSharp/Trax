@@ -34,6 +34,9 @@ using var app = new HttpClient { BaseAddress = new Uri(ApiUrl) };
 using var operatorHttp = new HttpClient { BaseAddress = new Uri(ApiUrl) };
 operatorHttp.DefaultRequestHeaders.Add("X-Api-Key", "operator-key-do-not-use-in-production");
 
+using var outputs = DemoOutput.Create();
+var output = outputs.CreateLogger("demo");
+
 try
 {
     // Upload the manifest. On a re-run this puts greet_v1 back to CASUAL: the response shape is
@@ -41,11 +44,11 @@ try
     foreach (var op in await LoadManifestAsync().ConfigureAwait(false))
     {
         await UploadAsync(operatorHttp, op.Id, op.Document).ConfigureAwait(false);
-        Console.WriteLine($"Uploaded {op.Id}");
+        output.Say($"Uploaded {op.Id}");
     }
 
     // 1. The app calls by id.
-    Console.WriteLine("\n1. The app calls greet_v1 for Alice");
+    output.Say("\n1. The app calls greet_v1 for Alice");
     Expect(await GreetAsync(app).ConfigureAwait(false), "Hey Alice!");
 
     var inline = await app.PostAsJsonAsync(
@@ -59,11 +62,11 @@ try
     var inlineBody = await inline.Content.ReadAsStringAsync().ConfigureAwait(false);
     if (!inlineBody.Contains("PERSISTED_OPERATION_REQUIRED", StringComparison.Ordinal))
         throw new InvalidOperationException($"The server ran an inline query: {inlineBody}");
-    Console.WriteLine($"   An inline query is refused: {inlineBody}");
+    output.Say($"   An inline query is refused: {inlineBody}");
 
     // 2. The operator fixes greet_v1; the app does not change.
     await UploadAsync(operatorHttp, "greet_v1", FormalFix).ConfigureAwait(false);
-    Console.WriteLine("\n2. The operator re-uploads greet_v1 with style FORMAL");
+    output.Say("\n2. The operator re-uploads greet_v1 with style FORMAL");
     Expect(await GreetAsync(app).ConfigureAwait(false), "Good day, Alice.");
 
     // 3. An upload that renames the field the app reads is refused.
@@ -73,14 +76,14 @@ try
         throw new InvalidOperationException(
             "The server accepted an upload that renames the field the app reads."
         );
-    Console.WriteLine($"\n3. Renaming greeting to message is refused: {refusal}");
+    output.Say($"\n3. Renaming greeting to message is refused: {refusal}");
     Expect(await GreetAsync(app).ConfigureAwait(false), "Good day, Alice.");
 }
 catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException)
 {
     // A refused upload (the API not in Development, so no demo key), an API that is not running,
     // or a step that did not do what it should: say which, without a stack trace.
-    Console.Error.WriteLine($"\n{ex.Message}");
+    output.Fail($"\n{ex.Message}");
     return 1;
 }
 
@@ -108,9 +111,9 @@ static async Task<string> GreetAsync(HttpClient app)
         : raw;
 }
 
-static void Expect(string actual, string expected)
+void Expect(string actual, string expected)
 {
-    Console.WriteLine($"   greet_v1 answers: {actual}");
+    output.Say($"   greet_v1 answers: {actual}");
     if (!string.Equals(actual, expected, StringComparison.Ordinal))
         throw new InvalidOperationException($"Expected \"{expected}\", got {actual}");
 }
@@ -200,8 +203,10 @@ static async Task<List<ManifestEntry>> LoadManifestAsync()
             .RootElement.GetProperty("operations")
             .EnumerateArray()
             .Select(entry => new ManifestEntry(
-                entry.GetProperty("id").GetString()!,
-                entry.GetProperty("document").GetString()!
+                entry.GetProperty("id").GetString()
+                    ?? throw new InvalidOperationException("A manifest operation has no id."),
+                entry.GetProperty("document").GetString()
+                    ?? throw new InvalidOperationException("A manifest operation has no document.")
             ))
             .ToList();
     }

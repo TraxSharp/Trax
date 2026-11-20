@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Samples.ContentShield.E2E.ApiTests;
@@ -15,7 +16,11 @@ public abstract class ApiTestFixture
 
     protected AsyncServiceScope Scope { get; private set; }
 
-    protected IDataContext DataContext { get; private set; } = null!;
+    protected IDataContext DataContext
+    {
+        get => field.NotNull(nameof(DataContext));
+        private set;
+    }
 
     internal static TestRunner Runner => SharedApiSetup.Runner;
 

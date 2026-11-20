@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using Trax.Core.Extensions;
 using Trax.Samples.Recovery.Browser.Factories;
 using Trax.Samples.Recovery.Browser.Fixtures;
 using Trax.Samples.Recovery.E2E.Factories;
@@ -18,15 +19,27 @@ public class BrowserSetup
     private static IPlaywright? _playwright;
 
     /// <summary>The built page's folder.</summary>
-    public static string Dist { get; private set; } = null!;
+    public static string Dist
+    {
+        get => field.NotNull(nameof(Dist));
+        private set;
+    }
 
     /// <summary>The host the page talks to. A test that kills it starts the next one with <see cref="RestartHostAsync"/>.</summary>
-    public static RecoveryHostProcess Host { get; private set; } = null!;
+    public static RecoveryHostProcess Host
+    {
+        get => field.NotNull(nameof(Host));
+        private set;
+    }
 
-    public static IBrowser Browser { get; private set; } = null!;
+    public static IBrowser Browser
+    {
+        get => field.NotNull(nameof(Browser));
+        private set;
+    }
 
     /// <summary>The address the page's API calls are forwarded to.</summary>
-    public static Uri HostAddress => Host.Http.BaseAddress!;
+    public static Uri HostAddress => Host.Http.BaseAddress.NotNull();
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()

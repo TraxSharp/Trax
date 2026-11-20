@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Samples.PersistedOperations.E2E.Fixtures;
 
@@ -13,7 +14,11 @@ namespace Trax.Samples.PersistedOperations.E2E;
 [SetUpFixture]
 public class SharedApiSetup
 {
-    public static PersistedOperationsApiFactory Factory { get; private set; } = null!;
+    public static PersistedOperationsApiFactory Factory
+    {
+        get => field.NotNull(nameof(Factory));
+        private set;
+    }
 
     /// <summary>
     /// Starts the host. An unreachable database fails the whole suite rather than skipping it: a

@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.EffectJunction;
@@ -22,7 +23,7 @@ public class RunTriage(InvokedRun run, TicketBoard board) : EffectJunction<Triag
         )
             return CheckResult.Refuse(refusal);
 
-        if (!string.Equals(check.Area, ticket!.Report.Area, StringComparison.Ordinal))
+        if (!string.Equals(check.Area, ticket.NotNull().Report.Area, StringComparison.Ordinal))
             return CheckResult.Refuse(
                 $"area {check.Area} does not own this report; it is {ticket.Report.Area}"
             );

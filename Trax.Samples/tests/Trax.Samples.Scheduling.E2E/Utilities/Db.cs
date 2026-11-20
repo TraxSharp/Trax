@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -187,7 +188,7 @@ public sealed class Db(IServiceProvider services)
                     $"manifest {manifestId} should have a {status} dead letter after {afterId} within {timeout.TotalSeconds}s"
                 )
             );
-        return deadLetter!;
+        return deadLetter.NotNull();
     }
 
     /// <summary>Waits until <paramref name="condition"/> holds, failing the test with <paramref name="because"/> when it never does.</summary>

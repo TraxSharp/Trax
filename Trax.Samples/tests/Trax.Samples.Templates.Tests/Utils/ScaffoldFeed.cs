@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Security;
 using System.Xml.Linq;
+using Trax.Core.Extensions;
 using static Trax.Samples.Templates.Tests.Utils.Dotnet;
 
 namespace Trax.Samples.Templates.Tests.Utils;
@@ -216,7 +217,7 @@ internal static class ScaffoldFeed
                         ).Descendants("PackageVersion")
                     );
             }
-            return pins.Select(e => e.Attribute("Include")!.Value)
+            return pins.Select(e => e.Attribute("Include").NotNull().Value)
                 .Where(id => id.StartsWith("Trax.", StringComparison.Ordinal))
                 .Distinct(StringComparer.Ordinal)
                 .ToList();
@@ -225,7 +226,7 @@ internal static class ScaffoldFeed
 
     private static string TraxProject(string id)
     {
-        var monorepo = Path.GetDirectoryName(RepoRoot())!;
+        var monorepo = Path.GetDirectoryName(RepoRoot()).NotNull();
         return Directory
                 .EnumerateDirectories(monorepo, "Trax.*")
                 .SelectMany(f => new[] { f, Path.Combine(f, "dotnet") })

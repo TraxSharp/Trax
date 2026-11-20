@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
+using Trax.Core.Extensions;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 using Trax.Samples.ApiDashboard.Browser.Host;
 using Trax.StateMachine.Persistence;
@@ -111,7 +112,10 @@ public class ApiDashboardBrowserTests : ConsoleTest
     {
         var url = Console.Url(route.Replace("{gate}", $"{_gate}", StringComparison.Ordinal));
         var document = await Page.GotoAsync(url);
-        document!.Status.Should().Be(200, $"{url} is a route of the app, not a missing file");
+        document
+            .NotNull()
+            .Status.Should()
+            .Be(200, $"{url} is a route of the app, not a missing file");
 
         // Nothing is stored, so every load asks for the key again.
         var connected = await Console.ConnectAsync(Caller.Operator);

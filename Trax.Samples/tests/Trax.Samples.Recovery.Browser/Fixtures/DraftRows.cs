@@ -1,4 +1,5 @@
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Samples.Recovery.Browser.Factories;
 
 namespace Trax.Samples.Recovery.Browser.Fixtures;
@@ -48,7 +49,7 @@ public static class DraftRows
                         id
                     )
                     .ConfigureAwait(false)
-            )!;
+            ).NotNull();
 
     /// <summary>Whether the host still stores the instance.</summary>
     public static async Task<bool> ExistsAsync(Guid id) =>
@@ -59,7 +60,7 @@ public static class DraftRows
                         id
                     )
                     .ConfigureAwait(false)
-            )!;
+            ).NotNull();
 
     /// <summary>The row's <c>due_at</c>, or null when its state has no timer.</summary>
     public static async Task<DateTimeOffset?> DueAtAsync(Guid id) =>
@@ -104,7 +105,7 @@ public static class DraftRows
                         id
                     )
                     .ConfigureAwait(false)
-            )!;
+            ).NotNull();
 
     /// <summary>The state of the latest run the instance's Building state queued, as Postgres spells it.</summary>
     public static async Task<string?> RunStateAsync(Guid id) =>

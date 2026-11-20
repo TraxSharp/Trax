@@ -1,4 +1,5 @@
 using System.Globalization;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.EffectJunction;
@@ -23,7 +24,7 @@ public class RunClose(InvokedRun run, TicketBoard board) : EffectJunction<CloseC
         )
             return CheckResult.Refuse(refusal);
 
-        var failed = ticket!.Context.FailedCases ?? 0;
+        var failed = ticket.NotNull().Context.FailedCases ?? 0;
         var moved = await board
             .Fire(
                 ticket.Id,

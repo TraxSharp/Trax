@@ -1,4 +1,5 @@
 using System.Net;
+using Trax.Core.Extensions;
 using Trax.Samples.SignalRBroadcaster.E2E.Fixtures;
 
 namespace Trax.Samples.SignalRBroadcaster.E2E.HubTests;
@@ -10,32 +11,38 @@ namespace Trax.Samples.SignalRBroadcaster.E2E.HubTests;
 [TestFixture]
 public class LiveEventTests
 {
-    private string _cookie = null!;
-    private HubClient _client = null!;
+    private string? _cookie;
+    private HubClient? _client;
 
     [SetUp]
     public async Task SetUp()
     {
         _cookie = await HubClient.SignIn(SharedHostSetup.Factory);
-        _client = HubClient.Create(SharedHostSetup.Factory, _cookie);
-        await _client.Connection.StartAsync();
+        _client = HubClient.Create(SharedHostSetup.Factory, _cookie.NotNull());
+        await _client.NotNull().Connection.StartAsync();
     }
 
     [TearDown]
-    public async Task TearDown() => await _client.DisposeAsync();
+    public async Task TearDown()
+    {
+        if (_client is not null)
+            await _client.DisposeAsync().ConfigureAwait(false);
+    }
 
     [Test]
     public async Task A_ping_raises_started_and_completed_events_live()
     {
         await RunPing("Succeed");
 
-        var started = await _client.WaitFor(e =>
-            e is { TrainName: "IPingTrain", EventType: "Started" }
-        );
-        var completed = await _client.WaitFor(e =>
-            string.Equals(e.EventType, "Completed", StringComparison.Ordinal)
-            && string.Equals(e.ExternalId, started.ExternalId, StringComparison.Ordinal)
-        );
+        var started = await _client
+            .NotNull()
+            .WaitFor(e => e is { TrainName: "IPingTrain", EventType: "Started" });
+        var completed = await _client
+            .NotNull()
+            .WaitFor(e =>
+                string.Equals(e.EventType, "Completed", StringComparison.Ordinal)
+                && string.Equals(e.ExternalId, started.ExternalId, StringComparison.Ordinal)
+            );
 
         completed.FailureReason.Should().BeNull();
     }
@@ -45,9 +52,9 @@ public class LiveEventTests
     {
         await RunPing("FailForClients");
 
-        var failed = await _client.WaitFor(e =>
-            string.Equals(e.EventType, "Failed", StringComparison.Ordinal)
-        );
+        var failed = await _client
+            .NotNull()
+            .WaitFor(e => string.Equals(e.EventType, "Failed", StringComparison.Ordinal));
 
         failed.FailureReason.Should().Be("The ping target did not answer.");
     }
@@ -57,9 +64,9 @@ public class LiveEventTests
     {
         await RunPing("FailUnexpectedly");
 
-        var failed = await _client.WaitFor(e =>
-            string.Equals(e.EventType, "Failed", StringComparison.Ordinal)
-        );
+        var failed = await _client
+            .NotNull()
+            .WaitFor(e => string.Equals(e.EventType, "Failed", StringComparison.Ordinal));
 
         failed.FailureReason.Should().Be(LiveTrainEvent.MaskedReason);
         failed.FailureReason.Should().NotContain("10.0.4.17");
@@ -72,7 +79,7 @@ public class LiveEventTests
         {
             Content = JsonContent.Create(new { outcome }),
         };
-        request.Headers.Add("Cookie", _cookie);
+        request.Headers.Add("Cookie", _cookie.NotNull());
 
         var response = await http.SendAsync(request).ConfigureAwait(false);
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);

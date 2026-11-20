@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Samples.Recovery.Auth;
 using Trax.Samples.Recovery.Trains.Topics;
@@ -194,8 +195,12 @@ public sealed class TopicMapMachine : Machine<TopicMapState, TopicMapTrigger>
         new()
         {
             RunId = $"map-{Guid.NewGuid():N}",
-            Fields = ctx["fields"]!.AsArray().Select(f => f!.GetValue<string>()).ToList(),
-            FromYear = ctx["fromYear"]!.GetValue<int>(),
-            ToYear = ctx["toYear"]!.GetValue<int>(),
+            Fields = ctx["fields"]
+                .NotNull()
+                .AsArray()
+                .Select(f => f.NotNull().GetValue<string>())
+                .ToList(),
+            FromYear = ctx["fromYear"].NotNull().GetValue<int>(),
+            ToYear = ctx["toYear"].NotNull().GetValue<int>(),
         };
 }

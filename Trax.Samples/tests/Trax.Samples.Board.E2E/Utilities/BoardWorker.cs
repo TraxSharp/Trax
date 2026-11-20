@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Trax.Core.Extensions;
 using Trax.Samples.Shared.Testing;
 
 namespace Trax.Samples.Board.E2E.Utilities;
@@ -55,7 +56,9 @@ public sealed class BoardWorker(GraphQLClient graphQL, string apiKey)
             )
             .ConfigureAwait(false);
         if (result.Problem is null)
-            _assignments[ticketId] = Guid.Parse(result.Answer.GetProperty("id").GetString()!);
+            _assignments[ticketId] = Guid.Parse(
+                result.Answer.GetProperty("id").GetString().NotNull()
+            );
         return result;
     }
 
@@ -104,7 +107,8 @@ public sealed class BoardWorker(GraphQLClient graphQL, string apiKey)
     {
         var sent = inputType is null
             ? await SendAsync(ticketId, operation).ConfigureAwait(false)
-            : await SendAsync(ticketId, operation, inputType, input!).ConfigureAwait(false);
+            : await SendAsync(ticketId, operation, inputType, input.NotNull())
+                .ConfigureAwait(false);
         sent.Problem.Should().BeNull($"{operation} should be accepted for checking");
         sent.State.Should().StartWith("Checking");
         Result? last = null;
@@ -121,7 +125,7 @@ public sealed class BoardWorker(GraphQLClient graphQL, string apiKey)
             )
             .ConfigureAwait(false);
         answered.Should().BeTrue($"the check should answer; the assignment is in {last?.State}");
-        return last!;
+        return last.NotNull();
     }
 
     public async Task<JsonElement> TicketAsync(string ticketId)

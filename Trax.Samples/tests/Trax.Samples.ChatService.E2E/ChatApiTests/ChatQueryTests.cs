@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Samples.ChatService.E2E.Fixtures;
 
 namespace Trax.Samples.ChatService.E2E.ChatApiTests;
@@ -30,7 +31,8 @@ public class ChatQueryTests : ChatApiTestFixture
         var chatRoomId = createResult
             .GetData("dispatch", "createChatRoom", "output")
             .GetProperty("chatRoomId")
-            .GetString()!;
+            .GetString()
+            .NotNull();
 
         for (var i = 1; i <= messageCount; i++)
         {
@@ -196,7 +198,8 @@ public class ChatQueryTests : ChatApiTestFixture
         var chatRoomId = createResult
             .GetData("dispatch", "createChatRoom", "output")
             .GetProperty("chatRoomId")
-            .GetString()!;
+            .GetString()
+            .NotNull();
 
         var result = await GraphQL.SendAsync(
             $$"""

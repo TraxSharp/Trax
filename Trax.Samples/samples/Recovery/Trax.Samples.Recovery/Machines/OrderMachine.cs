@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Samples.Recovery.Trains.Order;
 using Trax.StateMachine;
@@ -93,15 +94,20 @@ public sealed class OrderMachine : Machine<OrderState, OrderTrigger>
         new()
         {
             OrderId = $"order-{Guid.NewGuid():N}",
-            Items = cart["items"]!.AsArray().Select(i => i!.GetValue<string>()).ToList(),
-            Total = cart["total"]!.GetValue<decimal>(),
+            Items = cart["items"]
+                .NotNull()
+                .AsArray()
+                .Select(i => i.NotNull().GetValue<string>())
+                .ToList(),
+            Total = cart["total"].NotNull().GetValue<decimal>(),
         };
 
     // AddItem's reduction: the item goes in the cart at the menu's price, never one a client sends.
     private static JsonObject AddToCart(JsonObject cart, JsonNode? input)
     {
-        var item = input!["item"]!.GetValue<string>();
-        var items = cart["items"]?.AsArray().Select(i => i!.GetValue<string>()).ToList() ?? [];
+        var item = input.NotNull()["item"].NotNull().GetValue<string>();
+        var items =
+            cart["items"]?.AsArray().Select(i => i.NotNull().GetValue<string>()).ToList() ?? [];
         var total = cart["total"]?.GetValue<decimal>() ?? 0m;
         return new JsonObject
         {

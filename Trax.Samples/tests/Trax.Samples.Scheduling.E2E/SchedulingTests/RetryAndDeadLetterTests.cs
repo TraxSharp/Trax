@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Samples.Scheduling.E2E.Fixtures;
 using Trax.Samples.Scheduling.E2E.Utilities;
@@ -19,10 +20,10 @@ public class RetryAndDeadLetterTests : SchedulingTestFixture
 
         // DefaultRetryDelay 2 s, RetryBackoffMultiplier 2.0: the first retry waits at least 2 s
         // after the failure, the second at least 4 s.
-        (failures[1].StartTime - failures[0].EndTime!.Value)
+        (failures[1].StartTime - failures[0].EndTime.NotNull().Value)
             .Should()
             .BeGreaterThan(TimeSpan.FromSeconds(1.9));
-        (failures[2].StartTime - failures[1].EndTime!.Value)
+        (failures[2].StartTime - failures[1].EndTime.NotNull().Value)
             .Should()
             .BeGreaterThan(TimeSpan.FromSeconds(3.9));
 

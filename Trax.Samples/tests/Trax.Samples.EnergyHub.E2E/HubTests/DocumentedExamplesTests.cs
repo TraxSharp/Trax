@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 using Trax.Samples.EnergyHub.E2E.Fixtures;
 
 namespace Trax.Samples.EnergyHub.E2E.HubTests;
@@ -75,7 +76,7 @@ public partial class DocumentedExamplesTests : HubTestFixture
 
         dir.Should().NotBeNull("the tests run inside the Trax.Samples repository");
         return Path.Combine(
-            dir!.FullName,
+            dir.NotNull().FullName,
             "samples",
             "DistributedWorkers",
             "Trax.Samples.EnergyHub.Hub",

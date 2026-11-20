@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Samples.Scheduling.E2E.Fixtures;
 using Trax.Samples.Shared.Testing;
@@ -30,7 +31,7 @@ public class DormantDependentTests : SchedulingTestFixture
         );
 
         run.Input.Should().NotBeNull("the host saves train parameters");
-        using var input = JsonDocument.Parse(run.Input!);
+        using var input = JsonDocument.Parse(run.Input.NotNull());
         input.RootElement.GetProperty("changePercent").GetDecimal().Should().Be(7.5m);
     }
 

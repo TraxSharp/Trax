@@ -3,6 +3,7 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.TestHost;
+using Trax.Core.Extensions;
 
 namespace Trax.Samples.ContentShield.E2E.Utilities;
 
@@ -19,7 +20,7 @@ public class GraphQLWebSocketClient : IAsyncDisposable
         PropertyNameCaseInsensitive = true,
     };
 
-    private WebSocket _webSocket = null!;
+    private WebSocket? _webSocket;
     private readonly List<string> _activeSubscriptions = [];
 
     public static async Task<GraphQLWebSocketClient> ConnectAsync(
@@ -133,6 +134,7 @@ public class GraphQLWebSocketClient : IAsyncDisposable
         var json = JsonSerializer.Serialize(message, JsonOptions);
         var bytes = Encoding.UTF8.GetBytes(json);
         await _webSocket
+            .NotNull()
             .SendAsync(
                 new ArraySegment<byte>(bytes),
                 WebSocketMessageType.Text,
@@ -154,6 +156,7 @@ public class GraphQLWebSocketClient : IAsyncDisposable
             do
             {
                 result = await _webSocket
+                    .NotNull()
                     .ReceiveAsync(new ArraySegment<byte>(buffer), cts.Token)
                     .ConfigureAwait(false);
                 await ms.WriteAsync(buffer, 0, result.Count, cts.Token).ConfigureAwait(false);
@@ -179,11 +182,12 @@ public class GraphQLWebSocketClient : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        if (_webSocket.State == WebSocketState.Open)
+        if (_webSocket.NotNull().State == WebSocketState.Open)
         {
             try
             {
                 await _webSocket
+                    .NotNull()
                     .CloseAsync(
                         WebSocketCloseStatus.NormalClosure,
                         "Test complete",
@@ -197,6 +201,6 @@ public class GraphQLWebSocketClient : IAsyncDisposable
             }
         }
 
-        _webSocket.Dispose();
+        _webSocket.NotNull().Dispose();
     }
 }

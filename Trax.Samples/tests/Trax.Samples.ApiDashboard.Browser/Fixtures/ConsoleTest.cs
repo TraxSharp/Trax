@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using Trax.Core.Extensions;
 using Trax.Samples.ApiDashboard.Browser.Factories;
 using Trax.Samples.ApiDashboard.Browser.Pages;
 
@@ -18,24 +19,40 @@ namespace Trax.Samples.ApiDashboard.Browser.Fixtures;
 [NonParallelizable]
 public abstract class ConsoleTest
 {
-    private IBrowserContext _context = null!;
+    private IBrowserContext? _context;
 
     protected static ConsoleHost Host => ConsoleSetup.Host;
 
-    protected IPage Page { get; private set; } = null!;
+    protected IPage Page
+    {
+        get => field.NotNull(nameof(Page));
+        private set;
+    }
 
-    protected ConsolePage Console { get; private set; } = null!;
+    protected ConsolePage Console
+    {
+        get => field.NotNull(nameof(Console));
+        private set;
+    }
 
-    protected PageChecks Checks { get; private set; } = null!;
+    protected PageChecks Checks
+    {
+        get => field.NotNull(nameof(Checks));
+        private set;
+    }
 
-    protected Seed Seed { get; private set; } = null!;
+    protected Seed Seed
+    {
+        get => field.NotNull(nameof(Seed));
+        private set;
+    }
 
     [SetUp]
     public async Task OpenContextAsync()
     {
         Seed = new Seed(Host);
         _context = await ConsoleSetup.Browser.NewContextAsync();
-        Page = await _context.NewPageAsync();
+        Page = await _context.NotNull().NewPageAsync();
         Checks = await PageChecks.WatchAsync(
             Page,
             Host.Address,
@@ -55,7 +72,7 @@ public abstract class ConsoleTest
         }
         finally
         {
-            await _context.CloseAsync();
+            await _context.NotNull().CloseAsync();
             await Seed.DisposeAsync();
         }
         problems

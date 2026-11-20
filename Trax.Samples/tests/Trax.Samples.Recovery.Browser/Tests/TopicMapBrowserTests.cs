@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Playwright;
+using Trax.Core.Extensions;
 using Trax.Samples.Recovery.Browser.Factories;
 using Trax.Samples.Recovery.Browser.Fixtures;
 using Trax.Samples.Recovery.E2E.Utilities;
@@ -126,7 +127,7 @@ public partial class TopicMapBrowserTests
         await Expect(page.ReviewDeadline)
             .ToBeVisibleAsync(new() { Timeout = BrowserTimeouts.Server.Ms() });
         var shown = DateTimeOffset.Parse(
-            (await page.ReviewDeadline.GetAttributeAsync("data-due-at"))!,
+            (await page.ReviewDeadline.GetAttributeAsync("data-due-at")).NotNull(),
             System.Globalization.CultureInfo.InvariantCulture
         );
         var held = await DraftRows.DueAtAsync((await DraftAsync(page)).Id);
@@ -134,7 +135,7 @@ public partial class TopicMapBrowserTests
         shown
             .Should()
             .BeCloseTo(
-                held!.Value,
+                held.NotNull().Value,
                 TimeSpan.FromMilliseconds(1),
                 $"the page shows the due time the server holds, pushed beside the snapshot ({Adr})"
             );
@@ -187,7 +188,7 @@ public partial class TopicMapBrowserTests
             "start",
             new { requestId = $"viewer-start-{Guid.NewGuid():N}" }
         );
-        var id = started.GetProperty("id").GetString()!;
+        var id = started.GetProperty("id").GetString().NotNull();
         await TypedAsync(
             page,
             ViewerKey,
@@ -348,7 +349,7 @@ public partial class TopicMapBrowserTests
 
         await Expect(page.WizardState)
             .ToHaveTextAsync(ChoosingRange, new() { Timeout = BrowserTimeouts.Render.Ms() });
-        await Expect(page.DraftId).ToHaveTextAsync(shown!);
+        await Expect(page.DraftId).ToHaveTextAsync(shown.NotNull());
         page.RequestsNaming("saveSnapshot")
             .Should()
             .BeEmpty(
@@ -411,7 +412,7 @@ public partial class TopicMapBrowserTests
         discarded.GetProperty("discarded").GetBoolean().Should().BeTrue();
 
         await Expect(page.DraftId)
-            .Not.ToHaveTextAsync(shown!, new() { Timeout = BrowserTimeouts.Render.Ms() });
+            .Not.ToHaveTextAsync(shown.NotNull(), new() { Timeout = BrowserTimeouts.Render.Ms() });
         await Expect(page.WizardState)
             .ToHaveTextAsync(ChoosingFields, new() { Timeout = BrowserTimeouts.Render.Ms() });
         var started = await DraftAsync(page);
@@ -444,7 +445,7 @@ public partial class TopicMapBrowserTests
         await page.Page.GetByRole(AriaRole.Button, new() { Name = "Start a new map" }).ClickAsync();
 
         await Expect(page.DraftId)
-            .Not.ToHaveTextAsync(shown!, new() { Timeout = BrowserTimeouts.Render.Ms() });
+            .Not.ToHaveTextAsync(shown.NotNull(), new() { Timeout = BrowserTimeouts.Render.Ms() });
         await Expect(page.WizardState)
             .ToHaveTextAsync(ChoosingFields, new() { Timeout = BrowserTimeouts.Render.Ms() });
         (await DraftRows.ExistsAsync(old.Id))
@@ -483,7 +484,7 @@ public partial class TopicMapBrowserTests
         await Expect(page.WizardState)
             .ToHaveTextAsync(ChoosingFields, new() { Timeout = BrowserTimeouts.Render.Ms() });
         await Expect(page.DraftId)
-            .ToHaveTextAsync(shown!, new() { Timeout = BrowserTimeouts.Render.Ms() });
+            .ToHaveTextAsync(shown.NotNull(), new() { Timeout = BrowserTimeouts.Render.Ms() });
         await Expect(page.Page.Locator(".hint.error")).ToHaveCountAsync(0);
         (await DraftRows.FindAsync(draft.Id.ToString())).State.Should().Be("ChoosingFields");
         (await DraftRows.DueAtAsync(draft.Id))
@@ -615,7 +616,7 @@ public partial class TopicMapBrowserTests
 
     private static async Task<(Guid Id, long RowId, string State)> DraftAsync(RecoveryPage page)
     {
-        var shown = (await page.DraftId.TextContentAsync().ConfigureAwait(false))!;
+        var shown = (await page.DraftId.TextContentAsync().ConfigureAwait(false)).NotNull();
         return await DraftRows
             .FindAsync(shown.Replace("draft", "", StringComparison.Ordinal).Trim())
             .ConfigureAwait(false);

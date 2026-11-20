@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 using Trax.Samples.Recovery.E2E.Fixtures;
 using Trax.Samples.Shared.Testing;
 
@@ -79,7 +80,7 @@ public sealed partial class RecoveryHostProcess : IAsyncDisposable
 
         var start = new ProcessStartInfo("dotnet")
         {
-            WorkingDirectory = Path.GetDirectoryName(assembly)!,
+            WorkingDirectory = Path.GetDirectoryName(assembly).NotNull(),
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -210,7 +211,7 @@ public sealed partial class RecoveryHostProcess : IAsyncDisposable
         var assembly = HostAssembly();
         var start = new ProcessStartInfo("dotnet")
         {
-            WorkingDirectory = Path.GetDirectoryName(assembly)!,
+            WorkingDirectory = Path.GetDirectoryName(assembly).NotNull(),
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -255,7 +256,7 @@ public sealed partial class RecoveryHostProcess : IAsyncDisposable
             AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar)
         );
         var framework = testBin.Name;
-        var configuration = testBin.Parent!.Name;
+        var configuration = testBin.Parent.NotNull().Name;
         var samples = testBin;
         while (
             samples is not null && !File.Exists(Path.Combine(samples.FullName, "Trax.Samples.slnx"))

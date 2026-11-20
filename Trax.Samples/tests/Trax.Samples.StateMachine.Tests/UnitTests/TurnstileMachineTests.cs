@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Samples.StateMachine.Tests.Fakes;
 using Trax.StateMachine;
 
@@ -50,7 +51,7 @@ public class TurnstileMachineTests
             .Which.Snapshot;
 
         snapshot.State.Should().Be("Unlocked");
-        snapshot.Context["paidWith"]!.GetValue<string>().Should().Be("quarter");
+        snapshot.Context["paidWith"].NotNull().GetValue<string>().Should().Be("quarter");
     }
 
     [Test]

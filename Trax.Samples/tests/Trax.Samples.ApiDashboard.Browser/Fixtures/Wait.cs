@@ -1,4 +1,5 @@
 using System.Globalization;
+using Trax.Core.Extensions;
 using Trax.Samples.Shared.Testing;
 
 namespace Trax.Samples.ApiDashboard.Browser.Fixtures;
@@ -32,6 +33,6 @@ public static class Wait
                 what
             )
             .ConfigureAwait(false);
-        return found!;
+        return found.NotNull();
     }
 }

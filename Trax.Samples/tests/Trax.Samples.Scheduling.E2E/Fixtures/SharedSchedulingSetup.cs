@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Samples.Scheduling.E2E.Factories;
 using Trax.Samples.Scheduling.E2E.Utilities;
 using Trax.Samples.Shared.Testing;
@@ -15,9 +16,17 @@ namespace Trax.Samples.Scheduling.E2E;
 [SetUpFixture]
 public class SharedSchedulingSetup
 {
-    public static SchedulingHostFactory Factory { get; private set; } = null!;
+    public static SchedulingHostFactory Factory
+    {
+        get => field.NotNull(nameof(Factory));
+        private set;
+    }
 
-    public static Db Db { get; private set; } = null!;
+    public static Db Db
+    {
+        get => field.NotNull(nameof(Db));
+        private set;
+    }
 
     /// <summary>When the host started, by the test's clock.</summary>
     public static DateTime StartedAt { get; private set; }

@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Samples.Scheduling.E2E.Fixtures;
 
 namespace Trax.Samples.Scheduling.E2E.SchedulingTests;
@@ -18,7 +19,7 @@ public class CronScheduleTests : SchedulingTestFixture
             first07 = first07.AddDays(1);
 
         digest.NextScheduledRun.Should().NotBeNull();
-        var next = digest.NextScheduledRun!.Value;
+        var next = digest.NextScheduledRun.NotNull().Value;
         next.TimeOfDay.Should().Be(TimeSpan.FromHours(7), "the cron is 07:00 UTC");
 
         if (first07 > now)

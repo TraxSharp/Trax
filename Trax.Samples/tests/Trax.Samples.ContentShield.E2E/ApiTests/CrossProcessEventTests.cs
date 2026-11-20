@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Samples.ContentShield.E2E.Fixtures;
 using Trax.Samples.ContentShield.E2E.Utilities;
@@ -52,7 +53,8 @@ public class CrossProcessEventTests : ApiTestFixture
         return queued
             .GetData("dispatch", "sendViolationNotice")
             .GetProperty("externalId")
-            .GetString()!;
+            .GetString()
+            .NotNull();
     }
 
     /// <summary>

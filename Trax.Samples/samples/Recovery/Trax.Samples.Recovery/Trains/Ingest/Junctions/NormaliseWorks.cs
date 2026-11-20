@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Samples.Recovery.Index;
 
@@ -55,7 +56,7 @@ public partial class NormaliseWorks(DemoPace pace)
             work.GetProperty("display_name").GetString() ?? "",
             string.Join(' ', words),
             int.Parse(
-                work.GetProperty("publication_date").GetString()![..4],
+                work.GetProperty("publication_date").GetString().NotNull()[..4],
                 CultureInfo.InvariantCulture
             ),
             work.GetProperty("authorships")
@@ -64,7 +65,7 @@ public partial class NormaliseWorks(DemoPace pace)
                 .ToList(),
             work.GetProperty("referenced_works")
                 .EnumerateArray()
-                .Select(r => r.GetString()!.Split('/')[^1])
+                .Select(r => r.GetString().NotNull().Split('/')[^1])
                 .ToList()
         );
     }

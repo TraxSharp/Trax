@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Samples.Bookworm.Catalog.Context;
 using Trax.Samples.Bookworm.Catalog.Models.Books;
 using Trax.Samples.Bookworm.E2E.Utilities;
@@ -10,7 +11,11 @@ namespace Trax.Samples.Bookworm.E2E.Fixtures;
 [TestFixture]
 public abstract class ApiTestFixture
 {
-    protected GraphQLClient GraphQL { get; private set; } = null!;
+    protected GraphQLClient GraphQL
+    {
+        get => field.NotNull(nameof(GraphQL));
+        private set;
+    }
 
     [SetUp]
     public void SetUp() => GraphQL = new GraphQLClient(SharedBookwormSetup.Factory.CreateClient());

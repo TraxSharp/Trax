@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 using Trax.Samples.Recovery.Machines;
 using Trax.Samples.Shared.Testing;
 
@@ -59,7 +60,7 @@ public sealed partial class TopicMapDraft(GraphQLClient graphQL, string apiKey, 
             )
             .ConfigureAwait(false);
         result.Problem.Should().BeNull("the start should be accepted");
-        Id = result.Id!.Value;
+        Id = result.Id.NotNull().Value;
         return result;
     }
 
@@ -182,7 +183,7 @@ public sealed partial class TopicMapDraft(GraphQLClient graphQL, string apiKey, 
             )
             .ConfigureAwait(false);
         reached.Should().BeTrue($"the draft should reach {state}; it is in {last?.State}");
-        return last!;
+        return last.NotNull();
     }
 
     private static readonly JsonSerializerOptions Camel = new(JsonSerializerDefaults.Web)
@@ -212,7 +213,7 @@ public sealed partial class TopicMapDraft(GraphQLClient graphQL, string apiKey, 
     private static Result Parse(JsonElement answer)
     {
         var id = answer.GetProperty("id") is { ValueKind: JsonValueKind.String } minted
-            ? Guid.Parse(minted.GetString()!)
+            ? Guid.Parse(minted.GetString().NotNull())
             : (Guid?)null;
         if (answer.GetProperty("problem") is { ValueKind: JsonValueKind.Object } problem)
             return new Result(Snapshot: null, problem.GetProperty("code").GetString(), id);
@@ -222,7 +223,10 @@ public sealed partial class TopicMapDraft(GraphQLClient graphQL, string apiKey, 
             if (field.Value.ValueKind != JsonValueKind.Null)
                 context[field.Name] = JsonNode.Parse(field.Value.GetRawText());
         return new Result(
-            JsonNode.Parse(Snapshot(answer.GetProperty("state").GetString()!, context))!.AsObject(),
+            JsonNode
+                .Parse(Snapshot(answer.GetProperty("state").GetString().NotNull(), context))
+                .NotNull()
+                .AsObject(),
             Problem: null,
             id
         );
@@ -246,6 +250,6 @@ public sealed partial class TopicMapDraft(GraphQLClient graphQL, string apiKey, 
     {
         public string? State => Snapshot?["state"]?.GetValue<string>();
 
-        public JsonObject Context => Snapshot!["context"]!.AsObject();
+        public JsonObject Context => Snapshot.NotNull()["context"].NotNull().AsObject();
     }
 }

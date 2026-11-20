@@ -1,4 +1,5 @@
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Samples.Bookworm.E2E.Factories;
 
 // Intentionally in the assembly root namespace so this [SetUpFixture] runs once for every test
@@ -18,7 +19,11 @@ namespace Trax.Samples.Bookworm.E2E;
 [SetUpFixture]
 public class SharedBookwormSetup
 {
-    public static BookwormApiFactory Factory { get; private set; } = null!;
+    public static BookwormApiFactory Factory
+    {
+        get => field.NotNull(nameof(Factory));
+        private set;
+    }
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()

@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Samples.Scheduling.E2E.Fixtures;
 
@@ -25,7 +26,7 @@ public class DependentManifestTests : SchedulingTestFixture
             TimeSpan.FromSeconds(20)
         );
 
-        dependentRun.StartTime.Should().BeOnOrAfter(parentRun.EndTime!.Value);
+        dependentRun.StartTime.Should().BeOnOrAfter(parentRun.EndTime.NotNull().Value);
     }
 
     [Test]

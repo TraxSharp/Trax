@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Xml;
 using Trax.Api.Auth;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Attributes;
@@ -75,7 +76,7 @@ public class ClaimTicket(TraxPrincipal caller, TicketBoard board)
         {
             AdvanceOutcome.Advanced => Package(
                 lane,
-                (await board.Find(ticket.Id, CancellationToken).ConfigureAwait(false))!
+                (await board.Find(ticket.Id, CancellationToken).ConfigureAwait(false)).NotNull()
             ),
             AdvanceOutcome.Rejected or AdvanceOutcome.Conflict => Refused(
                 lane.Key,

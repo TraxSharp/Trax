@@ -1,5 +1,6 @@
 using System.Net;
 using System.Reflection;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Samples.Recovery.Auth;
 using Trax.Samples.Recovery.Trains.Topics;
@@ -23,7 +24,7 @@ public class TopicMapAuthorizationTests
         var authorize = typeof(BuildTopicMapTrain).GetCustomAttribute<TraxAuthorizeAttribute>();
 
         authorize.Should().NotBeNull();
-        (authorize!.Roles ?? "")
+        (authorize.NotNull().Roles ?? "")
             .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
             .Should()
             .Contain(

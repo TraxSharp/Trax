@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 
 namespace Trax.Samples.StateMachine.E2E.Utilities;
@@ -35,5 +36,10 @@ public sealed class RecordingCharge : ICharge
         _charges.Where(c => c.Items.Contains(item, StringComparer.Ordinal)).ToList();
 
     private static IReadOnlyList<string> Items(Snapshot snapshot) =>
-        snapshot.Context["items"]!.AsArray().Select(i => i!.GetValue<string>()).ToList();
+        snapshot
+            .Context["items"]
+            .NotNull()
+            .AsArray()
+            .Select(i => i.NotNull().GetValue<string>())
+            .ToList();
 }

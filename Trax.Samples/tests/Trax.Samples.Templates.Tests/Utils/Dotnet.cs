@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using Trax.Core.Extensions;
 
 namespace Trax.Samples.Templates.Tests.Utils;
 
@@ -50,7 +51,7 @@ internal static class Dotnet
         var psi = StartInfo(workingDirectory, args);
         foreach (var (name, value) in environment)
             psi.Environment[name] = value;
-        using var process = Process.Start(psi)!;
+        using var process = Process.Start(psi).NotNull();
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();
 
@@ -95,7 +96,7 @@ internal static class Dotnet
         foreach (var (name, value) in environment)
             psi.Environment[name] = value;
 
-        var running = new RunningProcess(Process.Start(psi)!, args);
+        var running = new RunningProcess(Process.Start(psi).NotNull(), args);
         await running.WaitFor(ready).ConfigureAwait(false);
         return running;
     }

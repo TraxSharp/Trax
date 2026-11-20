@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Samples.ChatService.E2E.Fixtures;
 using Trax.Samples.ChatService.E2E.Utilities;
 
@@ -37,7 +38,7 @@ public class InviteToChatRoomTests : ChatApiTestFixture
         return rooms
             .GetData("discover", "getChatRooms", "rooms")
             .EnumerateArray()
-            .Select(r => r.GetProperty("id").GetString()!)
+            .Select(r => r.GetProperty("id").GetString().NotNull())
             .ToList();
     }
 

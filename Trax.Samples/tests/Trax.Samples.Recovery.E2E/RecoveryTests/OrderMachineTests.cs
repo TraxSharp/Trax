@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Samples.Recovery.Auth;
 using Trax.Samples.Recovery.E2E.Fixtures;
@@ -23,7 +24,7 @@ namespace Trax.Samples.Recovery.E2E.RecoveryTests;
 )]
 public class OrderMachineTests : RecoveryTestFixture
 {
-    private OrderDraft _order = null!;
+    private OrderDraft? _order;
 
     [SetUp]
     public void NewOrder() => _order = new OrderDraft(GraphQL, OperatorKey);
@@ -34,18 +35,19 @@ public class OrderMachineTests : RecoveryTestFixture
     [Test]
     public void TheMachine_Builds_AndItsIrRoutesEveryOutcomeAndTheCartsTimer()
     {
-        var ir = JsonNode.Parse(new OrderMachine().ExportIr())!.AsObject();
+        var ir = JsonNode.Parse(new OrderMachine().ExportIr()).NotNull().AsObject();
 
-        ir["id"]!.GetValue<string>().Should().Be(OrderMachine.MachineId);
-        var outcomes = ir["outcomes"]!.AsObject();
+        ir["id"].NotNull().GetValue<string>().Should().Be(OrderMachine.MachineId);
+        var outcomes = ir["outcomes"].NotNull().AsObject();
         Target(outcomes, "Ordered.done").Should().Be(nameof(OrderState.Delivered));
         Target(outcomes, "Ordered.failed").Should().Be(nameof(OrderState.Cancelled));
         Target(outcomes, "Ordered.cancelled").Should().Be(nameof(OrderState.Cancelled));
 
-        var timer = ir["timers"]!.AsArray().Should().ContainSingle().Subject!;
-        timer["state"]!.GetValue<string>().Should().Be(nameof(OrderState.Cart));
-        timer["target"]!.GetValue<string>().Should().Be(nameof(OrderState.Cleared));
-        timer["after"]!
+        var timer = ir["timers"].NotNull().AsArray().Should().ContainSingle().Subject.NotNull();
+        timer["state"].NotNull().GetValue<string>().Should().Be(nameof(OrderState.Cart));
+        timer["target"].NotNull().GetValue<string>().Should().Be(nameof(OrderState.Cleared));
+        timer["after"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be("PT30M", "a cart waits 30 minutes as shipped");
@@ -54,15 +56,15 @@ public class OrderMachineTests : RecoveryTestFixture
     [Test]
     public async Task AnOrder_IsDelivered_AndTheServerPricesTheCart()
     {
-        await _order.StartAsync();
-        var added = await _order.AddItemAsync("Margherita");
-        added = await _order.AddItemAsync("Garlic bread");
+        await _order.NotNull().StartAsync();
+        var added = await _order.NotNull().AddItemAsync("Margherita");
+        added = await _order.NotNull().AddItemAsync("Garlic bread");
 
         added.State.Should().Be(nameof(OrderState.Cart));
         added.Context.GetProperty("total").GetDecimal().Should().Be(17m, "the menu's prices");
-        (await _order.PlaceOrderAsync()).State.Should().Be(nameof(OrderState.Ordered));
+        (await _order.NotNull().PlaceOrderAsync()).State.Should().Be(nameof(OrderState.Ordered));
 
-        await _order.WaitForStateAsync(nameof(OrderState.Delivered));
+        await _order.NotNull().WaitForStateAsync(nameof(OrderState.Delivered));
         Names(await StepsAsync())
             .Should()
             .Equal("SendToRestaurant", "ChargeCard", "Cook", "PickUp", "Deliver");
@@ -71,18 +73,18 @@ public class OrderMachineTests : RecoveryTestFixture
     [Test]
     public async Task PlaceOrderPressedTwice_MakesOneOrderAndOneRun()
     {
-        await _order.StartAsync();
-        await _order.AddItemAsync("Margherita");
+        await _order.NotNull().StartAsync();
+        await _order.NotNull().AddItemAsync("Margherita");
 
         // A double click: the same request sent twice, the second before the first answered.
         var press = $"place-{Guid.NewGuid():N}";
         var answers = await Task.WhenAll(
-            _order.PlaceOrderAsync(press),
+            _order.NotNull().PlaceOrderAsync(press),
             // allowed-delay: the stagger only orders the two sends; no result is awaited by time.
-            Task.Delay(50).ContinueWith(_ => _order.PlaceOrderAsync(press)).Unwrap()
+            Task.Delay(50).ContinueWith(_ => _order.NotNull().PlaceOrderAsync(press)).Unwrap()
         );
         // A second press under a request of its own.
-        var again = await _order.PlaceOrderAsync();
+        var again = await _order.NotNull().PlaceOrderAsync();
 
         answers[0].State.Should().Be(nameof(OrderState.Ordered));
         answers[1]
@@ -91,7 +93,7 @@ public class OrderMachineTests : RecoveryTestFixture
         again
             .Problem.Should()
             .Be("NO_TRANSITION", "an order already placed cannot be placed again");
-        await _order.WaitForStateAsync(nameof(OrderState.Delivered));
+        await _order.NotNull().WaitForStateAsync(nameof(OrderState.Delivered));
         (await RunsAsync()).Should().ContainSingle("one order queues one run");
     }
 
@@ -99,11 +101,11 @@ public class OrderMachineTests : RecoveryTestFixture
     public async Task ATabletThatTimesOut_IsTriedAgain_AndTheOrderIsDelivered()
     {
         await ArmAsync("TABLET_TIMES_OUT");
-        await _order.StartAsync();
-        await _order.AddItemAsync("Margherita");
-        await _order.PlaceOrderAsync();
+        await _order.NotNull().StartAsync();
+        await _order.NotNull().AddItemAsync("Margherita");
+        await _order.NotNull().PlaceOrderAsync();
 
-        await _order.WaitForStateAsync(nameof(OrderState.Delivered));
+        await _order.NotNull().WaitForStateAsync(nameof(OrderState.Delivered));
 
         var calls = (await TabletCallsAsync()).TakeLast(2).ToList();
         calls.Select(c => c.GetProperty("attempt").GetInt32()).Should().Equal(1, 2);
@@ -116,11 +118,11 @@ public class OrderMachineTests : RecoveryTestFixture
     public async Task AClosedRestaurant_CancelsTheOrder_BeforeTheCardIsCharged()
     {
         await ArmAsync("RESTAURANT_CLOSED");
-        await _order.StartAsync();
-        await _order.AddItemAsync("Margherita");
-        await _order.PlaceOrderAsync();
+        await _order.NotNull().StartAsync();
+        await _order.NotNull().AddItemAsync("Margherita");
+        await _order.NotNull().PlaceOrderAsync();
 
-        await _order.WaitForStateAsync(nameof(OrderState.Cancelled));
+        await _order.NotNull().WaitForStateAsync(nameof(OrderState.Cancelled));
 
         var steps = await StepsAsync();
         Names(steps).Should().Equal("SendToRestaurant");
@@ -134,11 +136,11 @@ public class OrderMachineTests : RecoveryTestFixture
         await ArmAsync("RESTAURANT_CLOSED", DemoKeys.User);
         try
         {
-            await _order.StartAsync();
-            await _order.AddItemAsync("Margherita");
-            await _order.PlaceOrderAsync();
+            await _order.NotNull().StartAsync();
+            await _order.NotNull().AddItemAsync("Margherita");
+            await _order.NotNull().PlaceOrderAsync();
 
-            await _order.WaitForStateAsync(nameof(OrderState.Delivered));
+            await _order.NotNull().WaitForStateAsync(nameof(OrderState.Delivered));
 
             // The trouble waited for its own user's order.
             await theirs.StartAsync();
@@ -155,10 +157,10 @@ public class OrderMachineTests : RecoveryTestFixture
     [Test]
     public async Task TabletCalls_lists_only_the_callers_orders()
     {
-        await _order.StartAsync();
-        await _order.AddItemAsync("Margherita");
-        await _order.PlaceOrderAsync();
-        await _order.WaitForStateAsync(nameof(OrderState.Delivered));
+        await _order.NotNull().StartAsync();
+        await _order.NotNull().AddItemAsync("Margherita");
+        await _order.NotNull().PlaceOrderAsync();
+        await _order.NotNull().WaitForStateAsync(nameof(OrderState.Delivered));
 
         var mine = (await TabletCallsAsync()).Select(OrderIdOf).ToHashSet(StringComparer.Ordinal);
         var theirs = (await TabletCallsAsync(DemoKeys.User)).Select(OrderIdOf).ToList();
@@ -175,15 +177,16 @@ public class OrderMachineTests : RecoveryTestFixture
     [Test]
     public async Task ACartNobodyOrders_IsClearedByTheServer()
     {
-        await _order.StartAsync();
-        var cart = await _order.AddItemAsync("Pepperoni");
+        await _order.NotNull().StartAsync();
+        var cart = await _order.NotNull().AddItemAsync("Pepperoni");
         cart.Answer.GetProperty("dueAt").GetString().Should().NotBeNull("the cart's timer runs");
 
         // The wait passes: move its due time into the past and let the server sweep it.
+        var orderId = _order.NotNull().Id;
         await using (var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope())
             await scope
                 .ServiceProvider.GetRequiredService<IDataContext>()
-                .SnapshotDrafts.Where(d => d.Id == _order.Id && d.Machine == OrderMachine.MachineId)
+                .SnapshotDrafts.Where(d => d.Id == orderId && d.Machine == OrderMachine.MachineId)
                 .ExecuteUpdateAsync(x =>
                     x.SetProperty(d => d.DueAt, DateTimeOffset.UtcNow.AddMinutes(-1))
                 );
@@ -191,8 +194,8 @@ public class OrderMachineTests : RecoveryTestFixture
             .Factory.Services.GetRequiredService<InvokeOutcomeReconciler>()
             .FireDueTimersOnce(CancellationToken.None);
 
-        (await _order.LoadAsync()).State.Should().Be(nameof(OrderState.Cleared));
-        (await _order.PlaceOrderAsync())
+        (await _order.NotNull().LoadAsync()).State.Should().Be(nameof(OrderState.Cleared));
+        (await _order.NotNull().PlaceOrderAsync())
             .Problem.Should()
             .Be("NO_TRANSITION", "a cleared cart cannot be ordered");
     }
@@ -200,17 +203,23 @@ public class OrderMachineTests : RecoveryTestFixture
     [Test]
     public async Task AnEmptyCart_OrAnItemNotOnTheMenu_IsRefused()
     {
-        await _order.StartAsync();
+        await _order.NotNull().StartAsync();
 
-        (await _order.PlaceOrderAsync()).Problem.Should().Be("GUARD_FAILED");
-        (await _order.AddItemAsync("Sushi")).Problem.Should().Be("GUARD_FAILED");
-        (await _order.LoadAsync()).State.Should().Be(nameof(OrderState.Cart));
+        (await _order.NotNull().PlaceOrderAsync()).Problem.Should().Be("GUARD_FAILED");
+        (await _order.NotNull().AddItemAsync("Sushi")).Problem.Should().Be("GUARD_FAILED");
+        (await _order.NotNull().LoadAsync()).State.Should().Be(nameof(OrderState.Cart));
     }
 
     private static string Target(JsonObject outcomes, string trigger) =>
-        outcomes[trigger]!["edges"]![0]!["to"]!.GetValue<string>();
+        outcomes[trigger]
+            .NotNull()["edges"]
+            .NotNull()[0]
+            .NotNull()["to"]
+            .NotNull()
+            .GetValue<string>();
 
-    private static string OrderIdOf(JsonElement call) => call.GetProperty("orderId").GetString()!;
+    private static string OrderIdOf(JsonElement call) =>
+        call.GetProperty("orderId").GetString().NotNull();
 
     private async Task ArmAsync(string trouble, string key = OperatorKey)
     {
@@ -232,7 +241,8 @@ public class OrderMachineTests : RecoveryTestFixture
             return await scope
                 .ServiceProvider.GetRequiredService<IDataContext>()
                 .Metadatas.Where(m =>
-                    m.InvokingMachine == OrderMachine.MachineId && m.InvokingInstanceId == _order.Id
+                    m.InvokingMachine == OrderMachine.MachineId
+                    && m.InvokingInstanceId == _order.NotNull().Id
                 )
                 .Select(m => m.Id)
                 .ToListAsync()

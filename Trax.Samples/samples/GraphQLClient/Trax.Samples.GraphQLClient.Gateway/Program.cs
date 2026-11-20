@@ -2,6 +2,7 @@ using System.Globalization;
 using Trax.Api.GraphQL.Client;
 using Trax.Samples.GraphQLClient.BillingServer;
 using Trax.Samples.GraphQLClient.BillingServer.Trains;
+using Trax.Samples.GraphQLClient.Gateway;
 using Trax.Samples.GraphQLClient.Gateway.Requests;
 using Trax.Samples.GraphQLClient.InventoryServer;
 using Trax.Samples.GraphQLClient.InventoryServer.Trains;
@@ -46,10 +47,13 @@ var billingClient = consumerHost.Services.GetRequiredKeyedService<IGraphQLClient
     "serverC"
 );
 
+using var outputs = DemoOutput.Create();
+var output = outputs.CreateLogger("demo");
+
 var product = await inventoryClient
     .Run(new GetProductRequest { Input = new GetProductInput("SKU-1") })
     .ConfigureAwait(false);
-Console.WriteLine(
+output.Say(
     string.Create(
         CultureInfo.InvariantCulture,
         $"serverB (inventory) -> {product.Name}, {product.QuantityOnHand} on hand"
@@ -59,7 +63,7 @@ Console.WriteLine(
 var invoice = await billingClient
     .Run(new GetInvoiceRequest { Input = new GetInvoiceInput("INV-1") })
     .ConfigureAwait(false);
-Console.WriteLine(
+output.Say(
     string.Create(
         CultureInfo.InvariantCulture,
         $"serverC (billing)   -> invoice {invoice.InvoiceId}: {invoice.AmountCents}c ({invoice.Status})"
@@ -73,11 +77,11 @@ try
     await inventoryClient
         .Run(new GetInvoiceRequest { Input = new GetInvoiceInput("INV-1") })
         .ConfigureAwait(false);
-    Console.WriteLine("UNEXPECTED: the inventory client accepted a billing query");
+    output.Say("UNEXPECTED: the inventory client accepted a billing query");
 }
 catch (GraphQLValidationException)
 {
-    Console.WriteLine("serverB rejected a billing query (schema isolation holds)");
+    output.Say("serverB rejected a billing query (schema isolation holds)");
 }
 
 await inventory.StopAsync().ConfigureAwait(false);

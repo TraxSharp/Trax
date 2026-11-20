@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Samples.ChatService.Auth;
@@ -11,13 +12,29 @@ namespace Trax.Samples.ChatService.E2E.Fixtures;
 [TestFixture]
 public abstract class ChatApiTestFixture
 {
-    protected HttpClient HttpClient { get; private set; } = null!;
+    protected HttpClient HttpClient
+    {
+        get => field.NotNull(nameof(HttpClient));
+        private set;
+    }
 
-    protected GraphQLClient GraphQL { get; private set; } = null!;
+    protected GraphQLClient GraphQL
+    {
+        get => field.NotNull(nameof(GraphQL));
+        private set;
+    }
 
-    protected IDataContext DataContext { get; private set; } = null!;
+    protected IDataContext DataContext
+    {
+        get => field.NotNull(nameof(DataContext));
+        private set;
+    }
 
-    protected ChatDbContext ChatDb { get; private set; } = null!;
+    protected ChatDbContext ChatDb
+    {
+        get => field.NotNull(nameof(ChatDb));
+        private set;
+    }
 
     private AsyncServiceScope Scope { get; set; }
 
@@ -78,7 +95,8 @@ public abstract class ChatApiTestFixture
         return created
             .GetData("dispatch", "createChatRoom", "output")
             .GetProperty("chatRoomId")
-            .GetString()!;
+            .GetString()
+            .NotNull();
     }
 
     /// <summary>Joins a room as the caller holding <paramref name="apiKey"/>.</summary>

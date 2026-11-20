@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Samples.Auth.Auth;
 using Trax.Samples.Auth.Data;
 using Trax.Samples.Auth.E2E.Utilities;
@@ -15,9 +16,17 @@ namespace Trax.Samples.Auth.E2E.Fixtures;
 /// </summary>
 public abstract class AuthTestFixture
 {
-    protected HttpClient Http { get; private set; } = null!;
+    protected HttpClient Http
+    {
+        get => field.NotNull(nameof(Http));
+        private set;
+    }
 
-    protected GraphQLClient GraphQL { get; private set; } = null!;
+    protected GraphQLClient GraphQL
+    {
+        get => field.NotNull(nameof(GraphQL));
+        private set;
+    }
 
     protected static Caller Anonymous => Caller.Anonymous;
 
@@ -29,13 +38,29 @@ public abstract class AuthTestFixture
 
     protected static Caller OscarKey => Caller.WithApiKey("oscar (key)", DemoCredentials.OscarKey);
 
-    protected Caller AliceToken { get; private set; } = null!;
+    protected Caller AliceToken
+    {
+        get => field.NotNull(nameof(AliceToken));
+        private set;
+    }
 
-    protected Caller ErinToken { get; private set; } = null!;
+    protected Caller ErinToken
+    {
+        get => field.NotNull(nameof(ErinToken));
+        private set;
+    }
 
-    protected Caller BobToken { get; private set; } = null!;
+    protected Caller BobToken
+    {
+        get => field.NotNull(nameof(BobToken));
+        private set;
+    }
 
-    protected Caller OscarToken { get; private set; } = null!;
+    protected Caller OscarToken
+    {
+        get => field.NotNull(nameof(OscarToken));
+        private set;
+    }
 
     [OneTimeSetUp]
     public async Task CreateClients()
@@ -57,7 +82,7 @@ public abstract class AuthTestFixture
     {
         var minted = await Http.GetFromJsonAsync<MintedToken>($"/dev/token/{user}")
             .ConfigureAwait(false);
-        return minted!.Token;
+        return minted.NotNull().Token;
     }
 
     /// <summary>

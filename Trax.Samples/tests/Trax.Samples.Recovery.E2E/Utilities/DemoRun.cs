@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using Trax.Core.Extensions;
 using Trax.Samples.Shared.Testing;
 
 namespace Trax.Samples.Recovery.E2E.Utilities;
@@ -46,9 +47,9 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
             .ConfigureAwait(false);
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         var output = response.GetData("dispatch", "startRun", "output");
-        RunId = output.GetProperty("runId").GetString()!;
+        RunId = output.GetProperty("runId").GetString().NotNull();
         ManifestId = output.GetProperty("manifestId").GetInt64();
-        ManifestExternalId = output.GetProperty("manifestExternalId").GetString()!;
+        ManifestExternalId = output.GetProperty("manifestExternalId").GetString().NotNull();
     }
 
     /// <summary>
@@ -126,7 +127,8 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
                         .ConfigureAwait(false);
                     state = response
                         .GetData("operations", "executionDetail", "trainState")
-                        .GetString()!;
+                        .GetString()
+                        .NotNull();
                     return state is "COMPLETED" or "FAILED" or "CANCELLED";
                 },
                 Patience,
@@ -294,7 +296,7 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
         {
             foreach (var n in list.EnumerateArray())
             {
-                nodes[n.GetProperty("id").GetString()!] = n;
+                nodes[n.GetProperty("id").GetString().NotNull()] = n;
                 if (n.TryGetProperty("tracks", out var tracks))
                     foreach (var track in tracks.EnumerateArray())
                         if (track.TryGetProperty("nodes", out var inner))

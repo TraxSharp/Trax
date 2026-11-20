@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Samples.PersistedOperations.E2E.Fixtures;
 
@@ -62,7 +63,8 @@ public class HotFixFlowTests : ApiTestBase
             .Should()
             .Be("SHAPE_DIFF_VIOLATION");
 
-        (await Store.GetAsync("greet_v1", tenantKey: null, CancellationToken.None))!
+        (await Store.GetAsync("greet_v1", tenantKey: null, CancellationToken.None))
+            .NotNull()
             .Document.Should()
             .Be(GreetDocuments.Formal);
         using var after = await AppCallsAsync("greet_v1", "Alice");
@@ -91,8 +93,9 @@ public class HotFixFlowTests : ApiTestBase
         await Store.DeactivateAsync(id, tenantKey: null, "test cleanup", CancellationToken.None);
         await Store.RestoreAsync(id, tenantKey: null, CancellationToken.None);
 
-        var factory =
-            SharedApiSetup.Factory!.Services.GetRequiredService<IDataContextProviderFactory>();
+        var factory = SharedApiSetup
+            .Factory.NotNull()
+            .Services.GetRequiredService<IDataContextProviderFactory>();
         var ctx = await factory.CreateDbContextAsync(CancellationToken.None);
 
         var rows = await ctx

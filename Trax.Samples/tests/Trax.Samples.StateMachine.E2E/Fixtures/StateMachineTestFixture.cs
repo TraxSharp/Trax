@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Samples.StateMachine.E2E.Utilities;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
@@ -18,11 +19,23 @@ public abstract class StateMachineTestFixture
 
     protected const string Checkout = "checkout";
 
-    protected HttpClient Http { get; private set; } = null!;
+    protected HttpClient Http
+    {
+        get => field.NotNull(nameof(Http));
+        private set;
+    }
 
-    protected GraphQLClient GraphQL { get; private set; } = null!;
+    protected GraphQLClient GraphQL
+    {
+        get => field.NotNull(nameof(GraphQL));
+        private set;
+    }
 
-    protected StateMachineClient Machines { get; private set; } = null!;
+    protected StateMachineClient Machines
+    {
+        get => field.NotNull(nameof(Machines));
+        private set;
+    }
 
     protected static Caller Anonymous => Caller.Anonymous;
 
@@ -99,7 +112,7 @@ public abstract class StateMachineTestFixture
     /// </summary>
     protected static async Task SeedAsync(Caller caller, Guid id, string wire)
     {
-        var node = JsonNode.Parse(wire)!.AsObject();
+        var node = JsonNode.Parse(wire).NotNull().AsObject();
         var scope = SharedStateMachineSetup.Factory.Services.CreateAsyncScope();
         await using var scopeDisposal = scope.ConfigureAwait(false);
         var written = await scope
@@ -109,10 +122,10 @@ public abstract class StateMachineTestFixture
                 id,
                 new Snapshot
                 {
-                    Machine = node["machine"]!.GetValue<string>(),
-                    Version = node["version"]!.GetValue<int>(),
-                    State = node["state"]!.GetValue<string>(),
-                    Context = node["context"]!.AsObject().DeepClone().AsObject(),
+                    Machine = node["machine"].NotNull().GetValue<string>(),
+                    Version = node["version"].NotNull().GetValue<int>(),
+                    State = node["state"].NotNull().GetValue<string>(),
+                    Context = node["context"].NotNull().AsObject().DeepClone().AsObject(),
                 }
             )
             .ConfigureAwait(false);

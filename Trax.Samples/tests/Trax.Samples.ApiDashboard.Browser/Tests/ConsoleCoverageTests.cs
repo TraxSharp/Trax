@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 
 namespace Trax.Samples.ApiDashboard.Browser.Tests;
@@ -138,7 +139,7 @@ public partial class ConsoleCoverageTests
         foreach (var method in methods)
         foreach (var covers in method.GetCustomAttributes<CoversAttribute>())
         {
-            var test = $"{method.DeclaringType!.Name}.{method.Name}";
+            var test = $"{method.DeclaringType.NotNull().Name}.{method.Name}";
             if (!covered.TryGetValue(covers.What, out var tests))
                 covered[covers.What] = tests = [];
             tests.Add(test);

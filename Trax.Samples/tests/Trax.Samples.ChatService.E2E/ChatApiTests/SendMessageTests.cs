@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Samples.ChatService.E2E.Fixtures;
 
@@ -30,7 +31,8 @@ public class SendMessageTests : ChatApiTestFixture
         return result
             .GetData("dispatch", "createChatRoom", "output")
             .GetProperty("chatRoomId")
-            .GetString()!;
+            .GetString()
+            .NotNull();
     }
 
     [Test]
@@ -95,7 +97,7 @@ public class SendMessageTests : ChatApiTestFixture
             );
 
         message.Should().NotBeNull();
-        message!.SenderUserId.Should().Be("TraxApiKey:alice");
+        message.NotNull().SenderUserId.Should().Be("TraxApiKey:alice");
     }
 
     [Test]

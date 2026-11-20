@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using Trax.Core.Extensions;
 using Trax.Samples.ChatService.E2E.Fixtures;
 using Trax.Samples.ChatService.E2E.Utilities;
 
@@ -122,7 +123,9 @@ public class ChatEventSubscriptionTests : ChatApiTestFixture
 
         var chatEvent = await SendUntilReceivedAsync(bob, AliceKey, roomId, "hi bob");
 
-        using var payload = JsonDocument.Parse(chatEvent.GetProperty("payload").GetString()!);
+        using var payload = JsonDocument.Parse(
+            chatEvent.GetProperty("payload").GetString().NotNull()
+        );
         payload
             .RootElement.GetProperty("senderUserId")
             .GetString()
@@ -206,7 +209,7 @@ public class ChatEventSubscriptionTests : ChatApiTestFixture
             {
                 received.Add(message.GetRawText());
                 if (message.TryGetProperty("id", out var id))
-                    answered.Add(id.GetString()!);
+                    answered.Add(id.GetString().NotNull());
             }
         }
         answered.Should().Contain([.. lifecycleFields, "bobs-room"], "every subscription answered");

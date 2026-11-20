@@ -1,4 +1,5 @@
 using System.Globalization;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Samples.Scheduling.E2E.Fixtures;
 
@@ -25,7 +26,7 @@ public class ManifestOperationsTests : SchedulingTestFixture
 
         var items = response.Data("operations", "manifests", "items").EnumerateArray().ToList();
         var byId = items.ToDictionary(
-            i => i.GetProperty("externalId").GetString()!,
+            i => i.GetProperty("externalId").GetString().NotNull(),
             StringComparer.Ordinal
         );
 

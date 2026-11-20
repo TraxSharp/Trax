@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Trax.Api.GraphQL.Client.Trax;
+using Trax.Core.Extensions;
 using Trax.Samples.GraphQLClient.Requests;
 using Trax.Samples.GraphQLClient.Requests.A_RawString;
 using Trax.Samples.GraphQLClient.Requests.D_Typed;
@@ -20,9 +21,9 @@ namespace Trax.Samples.GraphQLClient.E2E;
 [TestFixture]
 public class ClientModesE2ETests
 {
-    private WebApplication _server = null!;
-    private ServiceProvider _clients = null!;
-    private IGraphQLClientExecutor _executor = null!;
+    private WebApplication? _server;
+    private ServiceProvider? _clients;
+    private IGraphQLClientExecutor? _executor;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -32,36 +33,42 @@ public class ClientModesE2ETests
         builder.Services.AddSingleton<PlayerStore>();
         PlayerSchemaConfiguration.Configure(builder.Services.AddGraphQLServer());
         _server = builder.Build();
-        _server.MapGraphQL("/graphql");
-        await _server.StartAsync(_server.Lifetime.ApplicationStarted);
+        _server.NotNull().MapGraphQL("/graphql");
+        await _server.NotNull().StartAsync(_server.NotNull().Lifetime.ApplicationStarted);
 
         var services = new ServiceCollection();
         services
             .AddTraxGraphQLClient(new Uri("http://localhost/graphql"))
             .UseAssemblySchema(PlayerSchemaConfiguration.Configure)
-            .ConfigureHttpClient(_server.GetTestClient());
+            .ConfigureHttpClient(_server.NotNull().GetTestClient());
         _clients = services.BuildServiceProvider();
-        _executor = _clients.GetRequiredService<IGraphQLClientExecutor>();
+        _executor = _clients.NotNull().GetRequiredService<IGraphQLClientExecutor>();
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await _clients.DisposeAsync();
-        await _server.DisposeAsync();
+        if (_clients is not null)
+            await _clients.DisposeAsync().ConfigureAwait(false);
+        if (_server is not null)
+            await _server.DisposeAsync().ConfigureAwait(false);
     }
 
     [Test]
     public async Task Raw_string_and_resource_modes_return_the_same_player()
     {
-        var raw = await _executor.Run(
-            new GetPlayerByRawStringRequest { Id = "player-1" },
-            _server.Lifetime.ApplicationStarted
-        );
-        var resource = await _executor.Run(
-            new GetPlayerByResourceRequest { Id = "player-1" },
-            _server.Lifetime.ApplicationStarted
-        );
+        var raw = await _executor
+            .NotNull()
+            .Run(
+                new GetPlayerByRawStringRequest { Id = "player-1" },
+                _server.NotNull().Lifetime.ApplicationStarted
+            );
+        var resource = await _executor
+            .NotNull()
+            .Run(
+                new GetPlayerByResourceRequest { Id = "player-1" },
+                _server.NotNull().Lifetime.ApplicationStarted
+            );
 
         raw.Name.Should().Be("Aragorn");
         resource.Should().BeEquivalentTo(raw);
@@ -70,14 +77,18 @@ public class ClientModesE2ETests
     [Test]
     public async Task Typed_mode_returns_the_same_player_as_the_raw_string()
     {
-        var raw = await _executor.Run(
-            new GetPlayerByRawStringRequest { Id = "player-1" },
-            _server.Lifetime.ApplicationStarted
-        );
-        var typed = await _executor.Run(
-            new GetPlayerByTypedRequest { Id = "player-1" },
-            _server.Lifetime.ApplicationStarted
-        );
+        var raw = await _executor
+            .NotNull()
+            .Run(
+                new GetPlayerByRawStringRequest { Id = "player-1" },
+                _server.NotNull().Lifetime.ApplicationStarted
+            );
+        var typed = await _executor
+            .NotNull()
+            .Run(
+                new GetPlayerByTypedRequest { Id = "player-1" },
+                _server.NotNull().Lifetime.ApplicationStarted
+            );
 
         typed.Id.Should().Be(raw.Id);
         typed.Name.Should().Be(raw.Name);
@@ -88,12 +99,14 @@ public class ClientModesE2ETests
     [Test]
     public async Task Typed_mode_reads_through_the_discover_path()
     {
-        var nested = await _executor.Run(
-            new LookupPlayerByNestedPathRequest { Id = "player-1" },
-            _server.Lifetime.ApplicationStarted
-        );
+        var nested = await _executor
+            .NotNull()
+            .Run(
+                new LookupPlayerByNestedPathRequest { Id = "player-1" },
+                _server.NotNull().Lifetime.ApplicationStarted
+            );
 
         nested.Should().NotBeNull();
-        nested!.Name.Should().Be("Aragorn");
+        nested.NotNull().Name.Should().Be("Aragorn");
     }
 }

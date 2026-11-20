@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using Microsoft.Playwright;
+using Trax.Core.Extensions;
 using Trax.Samples.CheckIn.E2E.Fixtures;
 
 namespace Trax.Samples.CheckIn.Browser;
@@ -27,11 +28,23 @@ public class BrowserSetup
     private static readonly StringBuilder HostLog = new();
     private static IPlaywright? s_playwright;
 
-    public static string Dist { get; private set; } = null!;
+    public static string Dist
+    {
+        get => field.NotNull(nameof(Dist));
+        private set;
+    }
 
-    public static IBrowser Browser { get; private set; } = null!;
+    public static IBrowser Browser
+    {
+        get => field.NotNull(nameof(Browser));
+        private set;
+    }
 
-    public static Uri Api { get; private set; } = null!;
+    public static Uri Api
+    {
+        get => field.NotNull(nameof(Api));
+        private set;
+    }
 
     /// <summary>What the pages' consoles said and which of their requests failed, for a failing test's message.</summary>
     public static System.Collections.Concurrent.ConcurrentQueue<string> Seen { get; } = new();
@@ -152,7 +165,7 @@ public class BrowserSetup
         );
         start.Environment["CheckIn__PageOrigin"] = Api.ToString().TrimEnd('/');
         start.Environment["CheckIn__MachineSweepInterval"] = "00:00:00.200";
-        var process = Process.Start(start)!;
+        var process = Process.Start(start).NotNull();
         process.OutputDataReceived += (_, e) =>
         {
             if (e.Data is not null)
@@ -177,7 +190,7 @@ public class BrowserSetup
         var last = "no answer";
         while (DateTime.UtcNow < deadline)
         {
-            if (s_host!.HasExited)
+            if (s_host.NotNull().HasExited)
                 throw new InvalidOperationException(
                     string.Create(
                         CultureInfo.InvariantCulture,
@@ -228,7 +241,7 @@ public class BrowserSetup
         foreach (var arg in new[] { vite, "build", "--outDir", output, "--emptyOutDir" })
             start.ArgumentList.Add(arg);
         start.Environment["VITE_CHECKIN_API"] = Api.ToString().TrimEnd('/');
-        using var process = Process.Start(start)!;
+        using var process = Process.Start(start).NotNull();
         var log = new StringBuilder();
         var reading = Task.WhenAll(
             Drain(process.StandardOutput, log),

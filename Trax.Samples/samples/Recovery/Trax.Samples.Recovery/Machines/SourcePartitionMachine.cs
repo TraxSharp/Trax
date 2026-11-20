@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.Samples.Recovery.Trains.Ingest;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
@@ -67,8 +68,8 @@ public sealed class SourcePartitionMachine : Machine<PartitionState, PartitionTr
             .Context<PartitionContext>()
             .Invokes<IIngestPartitionTrain, IngestPartitionInput, IngestPartitionResult>(
                 ctx => new IngestPartitionInput(
-                    ctx["source"]!.GetValue<string>(),
-                    ctx["month"]!.GetValue<string>()
+                    ctx["source"].NotNull().GetValue<string>(),
+                    ctx["month"].NotNull().GetValue<string>()
                 )
             )
             // Tried in order: an unsure ingest goes to review, any other to Ingested.

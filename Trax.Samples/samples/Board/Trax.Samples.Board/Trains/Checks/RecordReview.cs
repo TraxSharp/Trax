@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.EffectJunction;
@@ -26,7 +27,7 @@ public class RecordReview(InvokedRun run, TicketBoard board)
         var approve = string.Equals(check.Decision, "approve", StringComparison.Ordinal);
         var moved = await board
             .Fire(
-                ticket!.Id,
+                ticket.NotNull().Id,
                 approve ? TicketTrigger.Approved : TicketTrigger.SentBack,
                 new NoteInput
                 {

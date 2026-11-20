@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
@@ -287,7 +288,7 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
         var message = new TrainLifecycleEventMessage(
             MetadataId: run.Id,
             ExternalId: run.ExternalId,
-            TrainName: typeof(TTrain).FullName!,
+            TrainName: typeof(TTrain).FullName.NotNull(),
             TrainState: nameof(TrainState.InProgress),
             Timestamp: DateTime.UtcNow,
             FailureJunction: null,
@@ -656,7 +657,7 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
             .ConfigureAwait(false);
     }
 
-    private static string TrainName<TTrain>() => typeof(TTrain).FullName!;
+    private static string TrainName<TTrain>() => typeof(TTrain).FullName.NotNull();
 
     private static string Input(string key) =>
         JsonSerializer.Serialize(new KeyedInput { Key = key });

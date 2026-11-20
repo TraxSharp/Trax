@@ -1,4 +1,5 @@
 using System.Reflection;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 
@@ -69,6 +70,6 @@ public class MachineAuthorizationCensusTests
                 && typeof(IMachine).IsAssignableFrom(t)
                 && t.GetConstructor(Type.EmptyTypes) is not null
             )
-            .Select(t => (IMachine)Activator.CreateInstance(t)!)
+            .Select(t => (IMachine)Activator.CreateInstance(t).NotNull())
             .ToList();
 }

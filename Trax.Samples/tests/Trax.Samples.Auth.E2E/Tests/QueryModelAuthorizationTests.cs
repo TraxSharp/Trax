@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Trax.Core.Extensions;
 using Trax.Samples.Auth.E2E.Fixtures;
 
 namespace Trax.Samples.Auth.E2E.Tests;
@@ -82,7 +83,7 @@ public class QueryModelAuthorizationTests : AuthTestFixture
                 .Where(n => n.GetProperty("editorNote").ValueKind != JsonValueKind.Null)
                 .Select(n => n.GetProperty("editorNote").GetProperty("text").GetString())
                 .Should()
-                .Contain(t => t!.StartsWith(NoteText));
+                .Contain(t => t.NotNull().StartsWith(NoteText));
         }
     }
 

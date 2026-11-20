@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Samples.Recovery.E2E.Fixtures;
@@ -71,12 +72,12 @@ public class SourcePartitionMachineTests : RecoveryTestFixture
                 unsure ? nameof(PartitionState.NeedsReview) : nameof(PartitionState.Ingested)
             );
 
-            var context = JsonNode.Parse(row.Context)!.AsObject();
-            context["source"]!.GetValue<string>().Should().Be(source);
-            context["month"]!.GetValue<string>().Should().Be(month);
-            context["works"]!.GetValue<int>().Should().Be(3);
-            context["fingerprint"]!.GetValue<string>().Should().HaveLength(64);
-            context["needsReview"]!.GetValue<int>().Should().Be(unsure ? 1 : 0);
+            var context = JsonNode.Parse(row.Context).NotNull().AsObject();
+            context["source"].NotNull().GetValue<string>().Should().Be(source);
+            context["month"].NotNull().GetValue<string>().Should().Be(month);
+            context["works"].NotNull().GetValue<int>().Should().Be(3);
+            context["fingerprint"].NotNull().GetValue<string>().Should().HaveLength(64);
+            context["needsReview"].NotNull().GetValue<int>().Should().Be(unsure ? 1 : 0);
             context.Should().HaveCount(7, "the instance holds counts and a fingerprint, no rows");
         }
 
@@ -101,7 +102,7 @@ public class SourcePartitionMachineTests : RecoveryTestFixture
             await DiscoverAsync(source);
 
             await PartitionMachines.WaitForStateAsync(source, month, nameof(PartitionState.Failed));
-            var instance = (await PartitionMachines.OfAsync(source, month))!;
+            var instance = (await PartitionMachines.OfAsync(source, month)).NotNull();
             var failedRun = (await RunsOfAsync(instance.Id))[^1];
             (await TrainStateOfAsync(failedRun.MetadataId))
                 .Should()
@@ -110,7 +111,7 @@ public class SourcePartitionMachineTests : RecoveryTestFixture
             (await ActAsync(source, month, "RETRY"))
                 .Should()
                 .Be((nameof(PartitionState.Ingesting), (string?)null));
-            var retried = (await PartitionMachines.OfAsync(source, month))!;
+            var retried = (await PartitionMachines.OfAsync(source, month)).NotNull();
             var retryRun = (await RunsOfAsync(instance.Id))[^1];
             retryRun.ExternalId.Should().NotBe(failedRun.ExternalId, "a retry is a new run");
             retried.InvokeToken.Should().Be(retryRun.ExternalId);
@@ -135,7 +136,8 @@ public class SourcePartitionMachineTests : RecoveryTestFixture
                 .BeNull(
                     "the retry's outcome was applied already, so a second delivery moves nothing"
                 );
-            (await PartitionMachines.OfAsync(source, month))!
+            (await PartitionMachines.OfAsync(source, month))
+                .NotNull()
                 .State.Should()
                 .Be(nameof(PartitionState.Ingested));
         }
@@ -181,7 +183,7 @@ public class SourcePartitionMachineTests : RecoveryTestFixture
             .NotContain("context");
 
         // A user's draft operations never reach a system instance, even by its id.
-        var id = (await PartitionMachines.OfAsync(IndexFixture.Crossref, "2025-01"))!.Id;
+        var id = (await PartitionMachines.OfAsync(IndexFixture.Crossref, "2025-01")).NotNull().Id;
         // A system-owned machine cannot be exposed, so it has no field under machines, and the host serves no
         // generic read either.
         var machines = await GraphQL.SendAsync(
@@ -213,7 +215,7 @@ public class SourcePartitionMachineTests : RecoveryTestFixture
     {
         await DiscoverAsync(IndexFixture.Crossref);
         await PartitionMachines.WaitUntilSettledAsync();
-        var before = (await PartitionMachines.OfAsync(IndexFixture.Crossref, "2025-02"))!;
+        var before = (await PartitionMachines.OfAsync(IndexFixture.Crossref, "2025-02")).NotNull();
         before.State.Should().Be(nameof(PartitionState.NeedsReview));
         var runsBefore = (await RunsOfAsync(before.Id)).Count;
 
@@ -233,7 +235,7 @@ public class SourcePartitionMachineTests : RecoveryTestFixture
             .GetString()
             .Should()
             .Be("TRAX_AUTHORIZATION", response.FirstErrorMessage);
-        var after = (await PartitionMachines.OfAsync(IndexFixture.Crossref, "2025-02"))!;
+        var after = (await PartitionMachines.OfAsync(IndexFixture.Crossref, "2025-02")).NotNull();
         after.State.Should().Be(before.State, "a refused action moves nothing");
         after.Version.Should().Be(before.Version);
         (await RunsOfAsync(before.Id)).Should().HaveCount(runsBefore, "and queues nothing");

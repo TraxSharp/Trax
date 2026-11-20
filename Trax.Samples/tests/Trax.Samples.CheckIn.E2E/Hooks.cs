@@ -1,4 +1,5 @@
 using Reqnroll;
+using Trax.Core.Extensions;
 using Trax.Samples.CheckIn.Api.Auth;
 using Trax.Samples.CheckIn.E2E.Fixtures;
 using Trax.Samples.Shared.Testing;
@@ -37,7 +38,8 @@ public sealed class Hooks
                 .ReadDirectory(
                     Path.Combine(AppContext.BaseDirectory, "features"),
                     [typeof(Trax.Samples.CheckIn.Trains.IIssueBoardingPassTrain).Assembly]
-                )!
+                )
+                .NotNull()
                 .GlossaryOrThrow();
             o.Manifest = manifest;
             o.Credential = DemoFeatureCredentials.PerPerson(DemoTokens.Issuer);

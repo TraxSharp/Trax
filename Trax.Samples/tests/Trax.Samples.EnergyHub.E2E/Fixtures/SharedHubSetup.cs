@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Samples.EnergyHub.E2E.Factories;
@@ -10,9 +11,17 @@ namespace Trax.Samples.EnergyHub.E2E.HubTests;
 [SetUpFixture]
 public class SharedHubSetup
 {
-    public static EnergyHubFactory Factory { get; private set; } = null!;
+    public static EnergyHubFactory Factory
+    {
+        get => field.NotNull(nameof(Factory));
+        private set;
+    }
 
-    public static EnergyWorkerFactory Worker { get; private set; } = null!;
+    public static EnergyWorkerFactory Worker
+    {
+        get => field.NotNull(nameof(Worker));
+        private set;
+    }
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Mediator.Services.TrainBus;
@@ -19,9 +20,17 @@ public abstract class HubTestFixture
 
     protected AsyncServiceScope WorkerScope { get; private set; }
 
-    protected ITrainBus TrainBus { get; private set; } = null!;
+    protected ITrainBus TrainBus
+    {
+        get => field.NotNull(nameof(TrainBus));
+        private set;
+    }
 
-    protected IDataContext DataContext { get; private set; } = null!;
+    protected IDataContext DataContext
+    {
+        get => field.NotNull(nameof(DataContext));
+        private set;
+    }
 
     [SetUp]
     public virtual async Task SetUp()

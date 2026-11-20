@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 
 namespace Trax.Samples.Recovery.Index;
 
@@ -232,7 +233,7 @@ public static partial class IndexFixture
             ),
             ["referenced_works"] = new JsonArray(
                 references
-                    .Select(r => (JsonNode)JsonValue.Create($"https://openalex.org/{r}")!)
+                    .Select(r => (JsonNode)JsonValue.Create($"https://openalex.org/{r}").NotNull())
                     .ToArray()
             ),
         };

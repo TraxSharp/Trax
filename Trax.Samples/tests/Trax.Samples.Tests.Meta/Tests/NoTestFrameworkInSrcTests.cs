@@ -1,3 +1,5 @@
+using Trax.Core.Extensions;
+
 namespace Trax.Samples.Tests.Meta.Tests;
 
 /// <summary>
@@ -139,7 +141,11 @@ public class NoTestFrameworkInSrcTests
                 .Select(e => e.Attribute("Include")?.Value)
                 .Should()
                 .Contain(
-                    v => TestFrameworkPackages.Contains(v!, StringComparer.OrdinalIgnoreCase),
+                    v =>
+                        TestFrameworkPackages.Contains(
+                            v.NotNull(),
+                            StringComparer.OrdinalIgnoreCase
+                        ),
                     $"'{name}' is on the sanctioned list because it ships test fixtures. It no "
                         + "longer references a test framework, so the exemption is stale and "
                         + "should be removed."
