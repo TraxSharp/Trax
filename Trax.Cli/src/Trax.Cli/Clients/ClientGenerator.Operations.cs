@@ -122,17 +122,17 @@ internal sealed partial class ClientGenerator
         return files.OrderBy(f => f.Path, StringComparer.Ordinal).ToList();
     }
 
-    /// <summary>Writes the operations client under <paramref name="outDir"/>, as <see cref="Write(ClientGenerateOptions, string)"/> does.</summary>
-    public static IReadOnlyList<ClientFile> Write(
+    /// <summary>Writes the operations client under <paramref name="outDir"/>, as <see cref="WriteAsync(ClientGenerateOptions, string)"/> does.</summary>
+    public static Task<IReadOnlyList<ClientFile>> WriteAsync(
         OperationsGenerateOptions options,
         string outDir
-    ) => Write(Render(options), outDir, Writer.OperationsTypeScript);
+    ) => WriteAsync(Render(options), outDir, Writer.OperationsTypeScript);
 
     /// <summary>What differs between the operations client the documents generate and the one under <paramref name="outDir"/>.</summary>
-    public static IReadOnlyList<ClientDrift> Check(
+    public static Task<IReadOnlyList<ClientDrift>> CheckAsync(
         OperationsGenerateOptions options,
         string outDir
-    ) => Check(Render(options), outDir, Writer.OperationsTypeScript);
+    ) => CheckAsync(Render(options), outDir, Writer.OperationsTypeScript);
 
     // A console document's module: its descriptor, the types of its variables and of what it selects, and the function
     // that sends it (or, for a subscription, follows it).

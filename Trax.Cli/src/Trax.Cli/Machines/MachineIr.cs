@@ -40,14 +40,16 @@ internal sealed class MachineIr
     /// The machine named <paramref name="id"/> in the manifest at <paramref name="manifestPath"/>, or its only
     /// machine when no id is given.
     /// </summary>
-    public static MachineIr FromManifest(string manifestPath, string? id)
+    public static async Task<MachineIr> FromManifestAsync(string manifestPath, string? id)
     {
         if (!File.Exists(manifestPath))
             throw new InvalidOperationException($"Manifest not found: {manifestPath}");
         ClientManifest manifest;
         try
         {
-            manifest = ClientManifest.Read(File.ReadAllText(manifestPath));
+            manifest = ClientManifest.Read(
+                await File.ReadAllTextAsync(manifestPath).ConfigureAwait(false)
+            );
         }
         catch (InvalidOperationException ex)
         {

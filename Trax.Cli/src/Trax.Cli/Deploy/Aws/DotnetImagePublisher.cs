@@ -12,11 +12,16 @@ namespace Trax.Cli.Deploy.Aws;
 /// </summary>
 internal sealed class DotnetImagePublisher : IImagePublisher
 {
-    public void Publish(string projectPath, string repositoryUri, string tag, RegistryLogin login)
+    public async Task PublishAsync(
+        string projectPath,
+        string repositoryUri,
+        string tag,
+        RegistryLogin login
+    )
     {
-        var (exit, stdout, stderr) = ChildProcess.Run(
-            StartInfo(projectPath, repositoryUri, tag, login)
-        );
+        var (exit, stdout, stderr) = await ChildProcess
+            .RunAsync(StartInfo(projectPath, repositoryUri, tag, login))
+            .ConfigureAwait(false);
         if (exit != 0)
             throw new InvalidOperationException(
                 string.Create(

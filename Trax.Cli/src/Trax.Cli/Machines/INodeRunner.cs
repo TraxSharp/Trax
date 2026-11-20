@@ -10,8 +10,8 @@ namespace Trax.Cli.Machines;
 internal interface INodeRunner
 {
     /// <summary>Whether a working <c>node</c> is found (checked via <c>node --version</c>).</summary>
-    bool IsAvailable();
+    Task<bool> IsAvailableAsync();
 
     /// <summary>Run <c>node &lt;scriptPath&gt; &lt;args...&gt;</c>, capturing output. Never throws on a non-zero exit.</summary>
-    NodeResult Run(string scriptPath, IReadOnlyList<string> args);
+    Task<NodeResult> RunAsync(string scriptPath, IReadOnlyList<string> args);
 }

@@ -48,23 +48,26 @@ public class FrameworkTypeNameTests
     }
 
     [Test]
-    public void A_library_whose_models_are_named_like_framework_types_compiles()
+    public async Task A_library_whose_models_are_named_like_framework_types_compiles()
     {
-        var schema = new GraphQLSchemaParser().Parse(
-            Path.Combine(
-                TestContext.CurrentContext.TestDirectory,
-                "Fixtures",
-                "Schemas",
-                "framework-type-names.graphql"
+        var schema = await new GraphQLSchemaParser()
+            .ParseAsync(
+                Path.Combine(
+                    TestContext.CurrentContext.TestDirectory,
+                    "Fixtures",
+                    "Schemas",
+                    "framework-type-names.graphql"
+                )
             )
+            .ConfigureAwait(false);
+
+        await new TraxProjectGenerator()
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "Api")
+            .ConfigureAwait(false);
+
+        var sources = (await GeneratedSources.ReadAsync(_outputDir).ConfigureAwait(false)).Append(
+            CSharpSyntaxTree.ParseText(ImplicitUsings, path: "GlobalUsings.cs")
         );
-
-        new TraxProjectGenerator().GenerateTrainsLibrary(schema, _outputDir, "Api");
-
-        var sources = Directory
-            .EnumerateFiles(_outputDir, "*.cs", SearchOption.AllDirectories)
-            .Select(f => CSharpSyntaxTree.ParseText(File.ReadAllText(f), path: f))
-            .Append(CSharpSyntaxTree.ParseText(ImplicitUsings, path: "GlobalUsings.cs"));
 
         var errors = Compile(sources)
             .Where(d => d.Severity == DiagnosticSeverity.Error)

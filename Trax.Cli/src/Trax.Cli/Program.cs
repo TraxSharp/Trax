@@ -8,5 +8,8 @@ namespace Trax.Cli;
 [ExcludeFromCodeCoverage]
 internal static class Program
 {
-    private static Task<int> Main(string[] args) => TraxCommandLine.Parse(args).InvokeAsync();
+    private static async Task<int> Main(string[] args) =>
+        await (await TraxCommandLine.ParseAsync(args).ConfigureAwait(false))
+            .InvokeAsync()
+            .ConfigureAwait(false);
 }

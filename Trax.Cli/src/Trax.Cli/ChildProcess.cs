@@ -11,7 +11,9 @@ internal static class ChildProcess
     /// soon as the child fills the other's pipe buffer (about 64 KB), because the child then blocks on
     /// that write and never closes the stream being read.
     /// </summary>
-    public static (int ExitCode, string StdOut, string StdErr) Run(ProcessStartInfo psi)
+    public static async Task<(int ExitCode, string StdOut, string StdErr)> RunAsync(
+        ProcessStartInfo psi
+    )
     {
         psi.RedirectStandardOutput = true;
         psi.RedirectStandardError = true;
@@ -24,7 +26,11 @@ internal static class ChildProcess
 
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();
-        process.WaitForExit();
-        return (process.ExitCode, stdout.GetAwaiter().GetResult(), stderr.GetAwaiter().GetResult());
+        await process.WaitForExitAsync().ConfigureAwait(false);
+        return (
+            process.ExitCode,
+            await stdout.ConfigureAwait(false),
+            await stderr.ConfigureAwait(false)
+        );
     }
 }

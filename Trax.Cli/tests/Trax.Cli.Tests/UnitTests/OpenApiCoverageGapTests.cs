@@ -10,19 +10,20 @@ public class OpenApiCoverageGapTests
         Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "Schemas", name);
 
     [Test]
-    public void Parse_MalformedDocument_Throws()
+    public async Task Parse_MalformedDocument_Throws()
     {
         var path = Path.GetTempFileName();
         try
         {
+            await
             // Empty/invalid OpenAPI document — reader returns null and the parser
             // converts diagnostic errors into InvalidOperationException.
-            File.WriteAllText(path, "{}");
+            File.WriteAllTextAsync(path, "{}");
             var parser = new OpenApiSchemaParser();
 
-            Action act = () => parser.Parse(path);
+            Func<Task> act = () => parser.ParseAsync(path);
 
-            act.Should().Throw<Exception>();
+            await act.Should().ThrowAsync<Exception>().ConfigureAwait(false);
         }
         finally
         {
@@ -31,10 +32,12 @@ public class OpenApiCoverageGapTests
     }
 
     [Test]
-    public void Parse_InlineResponseObject_BuildsOutputType()
+    public async Task Parse_InlineResponseObject_BuildsOutputType()
     {
         var parser = new OpenApiSchemaParser();
-        var schema = parser.Parse(FixturePath("inline-response-object.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("inline-response-object.json"))
+            .ConfigureAwait(false);
 
         var listOp = schema.Operations.Single(o =>
             string.Equals(o.Name, "ListWidgets", StringComparison.Ordinal)
@@ -60,10 +63,12 @@ public class OpenApiCoverageGapTests
     }
 
     [Test]
-    public void Parse_RefRequestBody_PullsFieldsIntoInput()
+    public async Task Parse_RefRequestBody_PullsFieldsIntoInput()
     {
         var parser = new OpenApiSchemaParser();
-        var schema = parser.Parse(FixturePath("refbody-input.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("refbody-input.json"))
+            .ConfigureAwait(false);
 
         var op = schema.Operations.Single(o =>
             string.Equals(o.Name, "CreateThing", StringComparison.Ordinal)

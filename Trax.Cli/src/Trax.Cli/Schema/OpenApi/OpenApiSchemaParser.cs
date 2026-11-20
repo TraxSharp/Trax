@@ -35,13 +35,20 @@ public partial class OpenApiSchemaParser : ISchemaParser
     /// OpenAPI version it cannot read, a YAML or JSON syntax error, an unreadable file) into a message
     /// that names the file, instead of an unhandled exception.
     /// </summary>
-    private static (OpenApiDocument? Document, OpenApiDiagnostic Diagnostic) Read(string filePath)
+    private static async Task<(OpenApiDocument? Document, OpenApiDiagnostic Diagnostic)> ReadAsync(
+        string filePath
+    )
     {
         try
         {
-            using var stream = File.OpenRead(filePath);
-            var document = new OpenApiStreamReader().Read(stream, out var diagnostic);
-            return (document, diagnostic);
+            var stream = File.OpenRead(filePath);
+            await using (stream.ConfigureAwait(false))
+            {
+                var result = await new OpenApiStreamReader()
+                    .ReadAsync(stream)
+                    .ConfigureAwait(false);
+                return (result.OpenApiDocument, result.OpenApiDiagnostic);
+            }
         }
         catch (OpenApiUnsupportedSpecVersionException ex)
         {
@@ -67,9 +74,18 @@ public partial class OpenApiSchemaParser : ISchemaParser
                 + "(Swagger) and 3.0. An ASP.NET Core 10 API writes 3.1 by default; set "
                 + "options.OpenApiVersion = OpenApiSpecVersion.OpenApi3_0 in AddOpenApi to export 3.0.";
 
-    public ApiSchema Parse(string filePath)
+    private readonly TextWriter _warnings;
+
+    /// <summary>A parser that drops the warnings the OpenAPI reader reports about a document.</summary>
+    public OpenApiSchemaParser()
+        : this(TextWriter.Null) { }
+
+    /// <summary>A parser that writes to <paramref name="warnings"/> what the OpenAPI reader reports about a document.</summary>
+    public OpenApiSchemaParser(TextWriter warnings) => _warnings = warnings;
+
+    public async Task<ApiSchema> ParseAsync(string filePath)
     {
-        var (document, diagnostic) = Read(filePath);
+        var (document, diagnostic) = await ReadAsync(filePath).ConfigureAwait(false);
 
         // A syntax error leaves a document with no paths at all rather than none, so both are a
         // document that could not be read.
@@ -88,7 +104,9 @@ public partial class OpenApiSchemaParser : ISchemaParser
         {
             foreach (var error in diagnostic.Errors)
             {
-                Console.Error.WriteLine($"Warning: {error.Pointer} - {error.Message}");
+                await _warnings
+                    .WriteLineAsync($"Warning: {error.Pointer} - {error.Message}")
+                    .ConfigureAwait(false);
             }
         }
 

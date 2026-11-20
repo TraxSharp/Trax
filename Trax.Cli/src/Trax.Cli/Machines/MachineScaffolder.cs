@@ -12,10 +12,11 @@ namespace Trax.Cli.Machines;
 /// </summary>
 internal static class MachineScaffolder
 {
-    private static readonly Template Template = LoadTemplate();
+    // Read from the assembly once, on first use.
+    private static readonly Lazy<Task<Template>> ScaffoldTemplate = new(LoadTemplateAsync);
 
     /// <summary>Render the machine source for <paramref name="name"/> (kebab id -> PascalCase types).</summary>
-    internal static string Render(string name, string @namespace, bool withEffect)
+    internal static async Task<string> RenderAsync(string name, string @namespace, bool withEffect)
     {
         var id = Kebab(name);
         var model = new
@@ -30,11 +31,13 @@ internal static class MachineScaffolder
         scriptObject.Import(model, renamer: member => member.Name);
         var context = new TemplateContext(StringComparer.Ordinal);
         context.PushGlobal(scriptObject);
-        return Template.Render(context);
+        return await (await ScaffoldTemplate.Value.ConfigureAwait(false))
+            .RenderAsync(context)
+            .ConfigureAwait(false);
     }
 
     /// <summary>Write the scaffold to <c>&lt;outputDir&gt;/&lt;Pascal&gt;Machine.cs</c> and return the path.</summary>
-    internal static string Write(
+    internal static async Task<string> WriteAsync(
         string name,
         string outputDir,
         string @namespace,
@@ -67,7 +70,11 @@ internal static class MachineScaffolder
                 $"{path} already exists. Use --force to overwrite."
             );
 
-        File.WriteAllText(path, Render(name, @namespace, withEffect));
+        await File.WriteAllTextAsync(
+                path,
+                await RenderAsync(name, @namespace, withEffect).ConfigureAwait(false)
+            )
+            .ConfigureAwait(false);
         return path;
     }
 
@@ -83,15 +90,21 @@ internal static class MachineScaffolder
     private static IEnumerable<string> SplitWords(string name) =>
         name.Split(['-', '_', ' '], StringSplitOptions.RemoveEmptyEntries);
 
-    private static Template LoadTemplate()
+    private static async Task<Template> LoadTemplateAsync()
     {
         var assembly = Assembly.GetExecutingAssembly();
-        using var stream =
+        var stream =
             assembly.GetManifestResourceStream("Trax.Cli.Templates.MachineScaffold.sbn")
             ?? throw new InvalidOperationException(
                 "Embedded template MachineScaffold.sbn not found."
             );
-        using var reader = new StreamReader(stream);
-        return Template.Parse(reader.ReadToEnd(), "MachineScaffold.sbn");
+        await using (stream.ConfigureAwait(false))
+        {
+            using var reader = new StreamReader(stream);
+            return Template.Parse(
+                await reader.ReadToEndAsync().ConfigureAwait(false),
+                "MachineScaffold.sbn"
+            );
+        }
     }
 }

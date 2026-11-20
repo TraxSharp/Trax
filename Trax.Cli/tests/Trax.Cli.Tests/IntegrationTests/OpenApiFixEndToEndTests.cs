@@ -42,10 +42,14 @@ public class OpenApiFixEndToEndTests
     #region NonFatalErrors
 
     [Test]
-    public void GenerateTrainsLibrary_NonFatalErrors_AllFilesGenerated()
+    public async Task GenerateTrainsLibrary_NonFatalErrors_AllFilesGenerated()
     {
-        var schema = _parser.Parse(FixturePath("non-fatal-errors.yaml"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("non-fatal-errors.yaml"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         File.Exists(Path.Combine(_outputDir, "TestProject.Trains.csproj")).Should().BeTrue();
         File.Exists(Path.Combine(_outputDir, "ManifestNames.cs")).Should().BeTrue();
@@ -60,10 +64,14 @@ public class OpenApiFixEndToEndTests
     }
 
     [Test]
-    public void GenerateTrainsLibrary_NonFatalErrors_ModelFilesGenerated()
+    public async Task GenerateTrainsLibrary_NonFatalErrors_ModelFilesGenerated()
     {
-        var schema = _parser.Parse(FixturePath("non-fatal-errors.yaml"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("non-fatal-errors.yaml"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         File.Exists(Path.Combine(_outputDir, "Models", "Item.cs")).Should().BeTrue();
         File.Exists(Path.Combine(_outputDir, "Models", "Issue.cs")).Should().BeTrue();
@@ -74,10 +82,14 @@ public class OpenApiFixEndToEndTests
     #region InlineEnums
 
     [Test]
-    public void GenerateTrainsLibrary_InlineEnums_EnumFilesGenerated()
+    public async Task GenerateTrainsLibrary_InlineEnums_EnumFilesGenerated()
     {
-        var schema = _parser.Parse(FixturePath("inline-enums.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("inline-enums.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         // Inline enums from parameters and properties should be generated as enum files
         var modelsDir = Path.Combine(_outputDir, "Models");
@@ -90,21 +102,30 @@ public class OpenApiFixEndToEndTests
     }
 
     [Test]
-    public void GenerateTrainsLibrary_InlineEnums_NoUnnamedEnumFile()
+    public async Task GenerateTrainsLibrary_InlineEnums_NoUnnamedEnumFile()
     {
-        var schema = _parser.Parse(FixturePath("inline-enums.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("inline-enums.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         File.Exists(Path.Combine(_outputDir, "Models", "UnnamedEnum.cs")).Should().BeFalse();
     }
 
     [Test]
-    public void GenerateTrainsLibrary_InlineEnums_StatusEnumHasCorrectValues()
+    public async Task GenerateTrainsLibrary_InlineEnums_StatusEnumHasCorrectValues()
     {
-        var schema = _parser.Parse(FixturePath("inline-enums.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("inline-enums.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
-        var content = File.ReadAllText(Path.Combine(_outputDir, "Models", "Status.cs"));
+        var content = await File.ReadAllTextAsync(Path.Combine(_outputDir, "Models", "Status.cs"))
+            .ConfigureAwait(false);
         content.Should().Contain("public enum Status");
         content.Should().Contain("Active");
         content.Should().Contain("Inactive");
@@ -112,12 +133,17 @@ public class OpenApiFixEndToEndTests
     }
 
     [Test]
-    public void GenerateTrainsLibrary_InlineEnums_PriorityEnumHasCorrectValues()
+    public async Task GenerateTrainsLibrary_InlineEnums_PriorityEnumHasCorrectValues()
     {
-        var schema = _parser.Parse(FixturePath("inline-enums.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("inline-enums.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
-        var content = File.ReadAllText(Path.Combine(_outputDir, "Models", "Priority.cs"));
+        var content = await File.ReadAllTextAsync(Path.Combine(_outputDir, "Models", "Priority.cs"))
+            .ConfigureAwait(false);
         content.Should().Contain("public enum Priority");
         content.Should().Contain("Low");
         content.Should().Contain("Medium");
@@ -126,10 +152,14 @@ public class OpenApiFixEndToEndTests
     }
 
     [Test]
-    public void GenerateTrainsLibrary_InlineEnums_InputFileReferencesEnumType()
+    public async Task GenerateTrainsLibrary_InlineEnums_InputFileReferencesEnumType()
     {
-        var schema = _parser.Parse(FixturePath("inline-enums.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("inline-enums.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var inputFile = Path.Combine(
             _outputDir,
@@ -138,7 +168,7 @@ public class OpenApiFixEndToEndTests
             "ListItems",
             "ListItemsInput.cs"
         );
-        var content = File.ReadAllText(inputFile);
+        var content = await File.ReadAllTextAsync(inputFile).ConfigureAwait(false);
 
         content.Should().Contain("Status");
         content.Should().Contain("SortBy");
@@ -147,10 +177,14 @@ public class OpenApiFixEndToEndTests
     }
 
     [Test]
-    public void GenerateTrainsLibrary_InlineEnums_CreateItemInputReferencesEnum()
+    public async Task GenerateTrainsLibrary_InlineEnums_CreateItemInputReferencesEnum()
     {
-        var schema = _parser.Parse(FixturePath("inline-enums.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("inline-enums.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var inputFile = Path.Combine(
             _outputDir,
@@ -159,7 +193,7 @@ public class OpenApiFixEndToEndTests
             "CreateItem",
             "CreateItemInput.cs"
         );
-        var content = File.ReadAllText(inputFile);
+        var content = await File.ReadAllTextAsync(inputFile).ConfigureAwait(false);
 
         content.Should().Contain("global::TestProject.Trains.Models.Priority");
     }
@@ -169,37 +203,52 @@ public class OpenApiFixEndToEndTests
     #region PropertyCollision
 
     [Test]
-    public void GenerateTrainsLibrary_PropertyCollision_PropertyNamedLikeTypeRefused()
+    public async Task GenerateTrainsLibrary_PropertyCollision_PropertyNamedLikeTypeRefused()
     {
-        var schema = _parser.Parse(InvalidFixturePath("property-collision.json"));
+        var schema = await _parser
+            .ParseAsync(InvalidFixturePath("property-collision.json"))
+            .ConfigureAwait(false);
 
-        var act = () => _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var act = async () =>
+            await _generator
+                .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+                .ConfigureAwait(false);
 
-        act.Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage("*property 'Notification' of 'Notification'*cannot have its type's name*");
+        (
+            await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*property 'Notification' of 'Notification'*cannot have its type's name*");
     }
 
     [Test]
-    public void GenerateTrainsLibrary_PropertyCollision_RefusalNamesBothCollidingTypes()
+    public async Task GenerateTrainsLibrary_PropertyCollision_RefusalNamesBothCollidingTypes()
     {
-        var schema = _parser.Parse(InvalidFixturePath("property-collision.json"));
+        var schema = await _parser
+            .ParseAsync(InvalidFixturePath("property-collision.json"))
+            .ConfigureAwait(false);
 
-        var act = () => _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var act = async () =>
+            await _generator
+                .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+                .ConfigureAwait(false);
 
-        act.Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage("*property 'Testimonial' of 'Testimonial'*cannot have its type's name*");
+        (
+            await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*property 'Testimonial' of 'Testimonial'*cannot have its type's name*");
     }
 
     [Test]
-    public void GenerateTrainsLibrary_PropertyCollision_RefusedSchemaWritesNothing()
+    public async Task GenerateTrainsLibrary_PropertyCollision_RefusedSchemaWritesNothing()
     {
-        var schema = _parser.Parse(InvalidFixturePath("property-collision.json"));
+        var schema = await _parser
+            .ParseAsync(InvalidFixturePath("property-collision.json"))
+            .ConfigureAwait(false);
 
-        var act = () => _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var act = async () =>
+            await _generator
+                .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+                .ConfigureAwait(false);
 
-        act.Should().Throw<InvalidOperationException>();
+        await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
         Directory
             .Exists(_outputDir)
             .Should()
@@ -211,54 +260,70 @@ public class OpenApiFixEndToEndTests
     #region ArrayComponentSchemas
 
     [Test]
-    public void GenerateTrainsLibrary_ArrayComponentSchema_WrapperTypeGenerated()
+    public async Task GenerateTrainsLibrary_ArrayComponentSchema_WrapperTypeGenerated()
     {
-        var schema = _parser.Parse(FixturePath("array-component.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("array-component.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var voteTallyFile = Path.Combine(_outputDir, "Models", "VoteTallyResponse.cs");
         File.Exists(voteTallyFile).Should().BeTrue();
 
-        var content = File.ReadAllText(voteTallyFile);
+        var content = await File.ReadAllTextAsync(voteTallyFile).ConfigureAwait(false);
         content.Should().Contain("public record VoteTallyResponse");
         content.Should().Contain("Items");
         content.Should().Contain("List<");
     }
 
     [Test]
-    public void GenerateTrainsLibrary_ArrayComponentSchema_RefArrayTypeGenerated()
+    public async Task GenerateTrainsLibrary_ArrayComponentSchema_RefArrayTypeGenerated()
     {
-        var schema = _parser.Parse(FixturePath("array-component.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("array-component.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var scoreboardFile = Path.Combine(_outputDir, "Models", "Scoreboard.cs");
         File.Exists(scoreboardFile).Should().BeTrue();
 
-        var content = File.ReadAllText(scoreboardFile);
+        var content = await File.ReadAllTextAsync(scoreboardFile).ConfigureAwait(false);
         content.Should().Contain("public record Scoreboard");
         content.Should().Contain("List<ScoreEntry>");
     }
 
     [Test]
-    public void GenerateTrainsLibrary_ArrayComponentSchema_RegularSchemaAlsoGenerated()
+    public async Task GenerateTrainsLibrary_ArrayComponentSchema_RegularSchemaAlsoGenerated()
     {
-        var schema = _parser.Parse(FixturePath("array-component.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("array-component.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var scoreEntryFile = Path.Combine(_outputDir, "Models", "ScoreEntry.cs");
         File.Exists(scoreEntryFile).Should().BeTrue();
 
-        var content = File.ReadAllText(scoreEntryFile);
+        var content = await File.ReadAllTextAsync(scoreEntryFile).ConfigureAwait(false);
         content.Should().Contain("public record ScoreEntry");
         content.Should().Contain("Player");
         content.Should().Contain("Score");
     }
 
     [Test]
-    public void GenerateTrainsLibrary_ArrayComponentSchema_TrainFilesGenerated()
+    public async Task GenerateTrainsLibrary_ArrayComponentSchema_TrainFilesGenerated()
     {
-        var schema = _parser.Parse(FixturePath("array-component.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("array-component.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var tallyDir = Path.Combine(_outputDir, "Trains", "Votes", "VoteTally");
         File.Exists(Path.Combine(tallyDir, "IVoteTallyTrain.cs")).Should().BeTrue();
@@ -271,10 +336,14 @@ public class OpenApiFixEndToEndTests
     #region DuplicateOperationNames
 
     [Test]
-    public void GenerateTrainsLibrary_DuplicateNames_AllTrainFoldersCreated()
+    public async Task GenerateTrainsLibrary_DuplicateNames_AllTrainFoldersCreated()
     {
-        var schema = _parser.Parse(FixturePath("duplicate-names.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("duplicate-names.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         // First GET: GetUsers (prefix kept — "Users" collides with PostUsers)
         var getUsersDir = Path.Combine(_outputDir, "Trains", "Users", "GetUsers");
@@ -286,12 +355,17 @@ public class OpenApiFixEndToEndTests
     }
 
     [Test]
-    public void GenerateTrainsLibrary_DuplicateNames_ManifestNamesHasAll()
+    public async Task GenerateTrainsLibrary_DuplicateNames_ManifestNamesHasAll()
     {
-        var schema = _parser.Parse(FixturePath("duplicate-names.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("duplicate-names.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
-        var content = File.ReadAllText(Path.Combine(_outputDir, "ManifestNames.cs"));
+        var content = await File.ReadAllTextAsync(Path.Combine(_outputDir, "ManifestNames.cs"))
+            .ConfigureAwait(false);
 
         content.Should().Contain("GetUsers");
         content.Should().Contain("PostUsers");
@@ -301,52 +375,63 @@ public class OpenApiFixEndToEndTests
     }
 
     [Test]
-    public void GenerateTrainsLibrary_DuplicateNames_JunctionsHaveCorrectHttpPaths()
+    public async Task GenerateTrainsLibrary_DuplicateNames_JunctionsHaveCorrectHttpPaths()
     {
-        var schema = _parser.Parse(FixturePath("duplicate-names.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("duplicate-names.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
-        var getUsersJunction = File.ReadAllText(
-            Path.Combine(
-                _outputDir,
-                "Trains",
-                "Users",
-                "GetUsers",
-                "Junctions",
-                "GetUsersJunction.cs"
+        var getUsersJunction = await File.ReadAllTextAsync(
+                Path.Combine(
+                    _outputDir,
+                    "Trains",
+                    "Users",
+                    "GetUsers",
+                    "Junctions",
+                    "GetUsersJunction.cs"
+                )
             )
-        );
+            .ConfigureAwait(false);
         getUsersJunction.Should().Contain("GET /users");
 
-        var getUsersByIdJunction = File.ReadAllText(
-            Path.Combine(
-                _outputDir,
-                "Trains",
-                "Users",
-                "GetUsersByUserId",
-                "Junctions",
-                "GetUsersByUserIdJunction.cs"
+        var getUsersByIdJunction = await File.ReadAllTextAsync(
+                Path.Combine(
+                    _outputDir,
+                    "Trains",
+                    "Users",
+                    "GetUsersByUserId",
+                    "Junctions",
+                    "GetUsersByUserIdJunction.cs"
+                )
             )
-        );
+            .ConfigureAwait(false);
         getUsersByIdJunction.Should().Contain("GET /users/{userId}");
     }
 
     [Test]
-    public void GenerateTrainsLibrary_DuplicateNames_DeleteOperationHasUnitOutput()
+    public async Task GenerateTrainsLibrary_DuplicateNames_DeleteOperationHasUnitOutput()
     {
-        var schema = _parser.Parse(FixturePath("duplicate-names.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("duplicate-names.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
-        var deleteJunction = File.ReadAllText(
-            Path.Combine(
-                _outputDir,
-                "Trains",
-                "Users",
-                "DeleteUsers",
-                "Junctions",
-                "DeleteUsersJunction.cs"
+        var deleteJunction = await File.ReadAllTextAsync(
+                Path.Combine(
+                    _outputDir,
+                    "Trains",
+                    "Users",
+                    "DeleteUsers",
+                    "Junctions",
+                    "DeleteUsersJunction.cs"
+                )
             )
-        );
+            .ConfigureAwait(false);
         deleteJunction.Should().Contain("global::Trax.Core.Functional.Unit");
         deleteJunction.Should().Contain("Unit");
     }
@@ -356,11 +441,15 @@ public class OpenApiFixEndToEndTests
     #region EmptyInputJunction
 
     [Test]
-    public void GenerateTrainsLibrary_EmptyInputOperation_JunctionUsesTypedInputName()
+    public async Task GenerateTrainsLibrary_EmptyInputOperation_JunctionUsesTypedInputName()
     {
         // listNotifications has no parameters → generates an empty input record
-        var schema = _parser.Parse(FixturePath("empty-input.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("empty-input.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var junctionPath = Path.Combine(
             _outputDir,
@@ -373,7 +462,7 @@ public class OpenApiFixEndToEndTests
 
         if (File.Exists(junctionPath))
         {
-            var content = File.ReadAllText(junctionPath);
+            var content = await File.ReadAllTextAsync(junctionPath).ConfigureAwait(false);
             // Empty input uses the typed record name, not Unit
             content.Should().Contain("Junction<ListNotificationsInput,");
             content.Should().NotContain("using Trax.Core.Functional;");
@@ -381,10 +470,14 @@ public class OpenApiFixEndToEndTests
     }
 
     [Test]
-    public void GenerateTrainsLibrary_EmptyInputOperation_InputFileGenerated()
+    public async Task GenerateTrainsLibrary_EmptyInputOperation_InputFileGenerated()
     {
-        var schema = _parser.Parse(FixturePath("empty-input.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("empty-input.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var inputPath = Path.Combine(
             _outputDir,
@@ -395,7 +488,7 @@ public class OpenApiFixEndToEndTests
         );
 
         File.Exists(inputPath).Should().BeTrue("empty input records should still generate a file");
-        var content = File.ReadAllText(inputPath);
+        var content = await File.ReadAllTextAsync(inputPath).ConfigureAwait(false);
         content.Should().Contain("public record ListNotificationsInput;");
     }
 
@@ -404,54 +497,70 @@ public class OpenApiFixEndToEndTests
     #region InlineObjectPromotion
 
     [Test]
-    public void GenerateTrainsLibrary_InlineObjectInArrayComponent_PromotedTypeFileGenerated()
+    public async Task GenerateTrainsLibrary_InlineObjectInArrayComponent_PromotedTypeFileGenerated()
     {
-        var schema = _parser.Parse(FixturePath("array-component.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("array-component.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var itemFile = Path.Combine(_outputDir, "Models", "VoteTallyResponseItem.cs");
         File.Exists(itemFile).Should().BeTrue();
 
-        var content = File.ReadAllText(itemFile);
+        var content = await File.ReadAllTextAsync(itemFile).ConfigureAwait(false);
         content.Should().Contain("public record VoteTallyResponseItem");
         content.Should().Contain("RepId");
         content.Should().Contain("Name");
     }
 
     [Test]
-    public void GenerateTrainsLibrary_InlineObjectInArrayComponent_WrapperReferencesPromotedType()
+    public async Task GenerateTrainsLibrary_InlineObjectInArrayComponent_WrapperReferencesPromotedType()
     {
-        var schema = _parser.Parse(FixturePath("array-component.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("array-component.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var wrapperFile = Path.Combine(_outputDir, "Models", "VoteTallyResponse.cs");
-        var content = File.ReadAllText(wrapperFile);
+        var content = await File.ReadAllTextAsync(wrapperFile).ConfigureAwait(false);
         content.Should().Contain("List<VoteTallyResponseItem>");
     }
 
     [Test]
-    public void GenerateTrainsLibrary_InlineObjectInArrayComponent_EnumFileGenerated()
+    public async Task GenerateTrainsLibrary_InlineObjectInArrayComponent_EnumFileGenerated()
     {
-        var schema = _parser.Parse(FixturePath("array-component.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("array-component.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var enumFile = Path.Combine(_outputDir, "Models", "LegVoted.cs");
         File.Exists(enumFile).Should().BeTrue();
 
-        var content = File.ReadAllText(enumFile);
+        var content = await File.ReadAllTextAsync(enumFile).ConfigureAwait(false);
         content.Should().Contain("public enum LegVoted");
     }
 
     [Test]
-    public void GenerateTrainsLibrary_InlineObjectInArrayResponse_PromotedTypeFileGenerated()
+    public async Task GenerateTrainsLibrary_InlineObjectInArrayResponse_PromotedTypeFileGenerated()
     {
-        var schema = _parser.Parse(FixturePath("inline-object-array.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("inline-object-array.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var itemFile = Path.Combine(_outputDir, "Models", "ListEventsItem.cs");
         File.Exists(itemFile).Should().BeTrue();
 
-        var content = File.ReadAllText(itemFile);
+        var content = await File.ReadAllTextAsync(itemFile).ConfigureAwait(false);
         content.Should().Contain("public record ListEventsItem");
         content.Should().Contain("Id");
         content.Should().Contain("Title");
@@ -459,10 +568,14 @@ public class OpenApiFixEndToEndTests
     }
 
     [Test]
-    public void GenerateTrainsLibrary_InlineObjectInArrayResponse_OutputFileReferencesPromotedType()
+    public async Task GenerateTrainsLibrary_InlineObjectInArrayResponse_OutputFileReferencesPromotedType()
     {
-        var schema = _parser.Parse(FixturePath("inline-object-array.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("inline-object-array.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         // Output type is generated alongside the train, not in Models/
         var outputFile = Path.Combine(
@@ -474,15 +587,19 @@ public class OpenApiFixEndToEndTests
         );
         File.Exists(outputFile).Should().BeTrue();
 
-        var content = File.ReadAllText(outputFile);
+        var content = await File.ReadAllTextAsync(outputFile).ConfigureAwait(false);
         content.Should().Contain("List<global::TestProject.Trains.Models.ListEventsItem>");
     }
 
     [Test]
-    public void GenerateTrainsLibrary_ArrayResponseWithRefItems_NoExtraTypePromoted()
+    public async Task GenerateTrainsLibrary_ArrayResponseWithRefItems_NoExtraTypePromoted()
     {
-        var schema = _parser.Parse(FixturePath("inline-object-array.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("inline-object-array.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         // Speaker is a $ref — should use the existing type, not create ListSpeakersItem
         File.Exists(Path.Combine(_outputDir, "Models", "ListSpeakersItem.cs")).Should().BeFalse();
@@ -490,10 +607,14 @@ public class OpenApiFixEndToEndTests
     }
 
     [Test]
-    public void GenerateTrainsLibrary_ArrayResponseWithBareObject_NoTypePromoted()
+    public async Task GenerateTrainsLibrary_ArrayResponseWithBareObject_NoTypePromoted()
     {
-        var schema = _parser.Parse(FixturePath("inline-object-array.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("inline-object-array.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         // RawData returns array of bare objects — no RawDataItem type should be created
         File.Exists(Path.Combine(_outputDir, "Models", "RawDataItem.cs")).Should().BeFalse();
@@ -504,23 +625,29 @@ public class OpenApiFixEndToEndTests
     #region CombinedScenarios
 
     [Test]
-    public void GenerateTrainsLibrary_InlineEnums_ItemModelUsesEnumTypes()
+    public async Task GenerateTrainsLibrary_InlineEnums_ItemModelUsesEnumTypes()
     {
-        var schema = _parser.Parse(FixturePath("inline-enums.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("inline-enums.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var itemFile = Path.Combine(_outputDir, "Models", "Item.cs");
         File.Exists(itemFile).Should().BeTrue();
 
-        var content = File.ReadAllText(itemFile);
+        var content = await File.ReadAllTextAsync(itemFile).ConfigureAwait(false);
         content.Should().Contain("Category");
         content.Should().Contain("Status");
     }
 
     [Test]
-    public void GenerateTrainsLibrary_ArrayComponentSchema_EnumsInArrayItemsResolved()
+    public async Task GenerateTrainsLibrary_ArrayComponentSchema_EnumsInArrayItemsResolved()
     {
-        var schema = _parser.Parse(FixturePath("array-component.json"));
+        var schema = await _parser
+            .ParseAsync(FixturePath("array-component.json"))
+            .ConfigureAwait(false);
 
         // VoteTallyResponse has items with enum "leg_voted" [Y, N, O]
         // Since the items are inline objects, the enum may or may not be promoted,
@@ -534,10 +661,14 @@ public class OpenApiFixEndToEndTests
     #region DottedSchemaNames
 
     [Test]
-    public void GenerateTrainsLibrary_DottedNames_ModelFilesHaveSimplifiedNames()
+    public async Task GenerateTrainsLibrary_DottedNames_ModelFilesHaveSimplifiedNames()
     {
-        var schema = _parser.Parse(FixturePath("dotted-names.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("dotted-names.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         File.Exists(Path.Combine(_outputDir, "Models", "UserDto.cs")).Should().BeTrue();
         File.Exists(Path.Combine(_outputDir, "Models", "UserListDto.cs")).Should().BeTrue();
@@ -546,10 +677,14 @@ public class OpenApiFixEndToEndTests
     }
 
     [Test]
-    public void GenerateTrainsLibrary_DottedNames_NoDotsInModelFileNames()
+    public async Task GenerateTrainsLibrary_DottedNames_NoDotsInModelFileNames()
     {
-        var schema = _parser.Parse(FixturePath("dotted-names.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("dotted-names.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var modelsDir = Path.Combine(_outputDir, "Models");
         if (Directory.Exists(modelsDir))
@@ -563,20 +698,31 @@ public class OpenApiFixEndToEndTests
     }
 
     [Test]
-    public void GenerateTrainsLibrary_DottedNames_UserListDtoReferencesUserDto()
+    public async Task GenerateTrainsLibrary_DottedNames_UserListDtoReferencesUserDto()
     {
-        var schema = _parser.Parse(FixturePath("dotted-names.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("dotted-names.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
-        var content = File.ReadAllText(Path.Combine(_outputDir, "Models", "UserListDto.cs"));
+        var content = await File.ReadAllTextAsync(
+                Path.Combine(_outputDir, "Models", "UserListDto.cs")
+            )
+            .ConfigureAwait(false);
         content.Should().Contain("List<UserDto>");
     }
 
     [Test]
-    public void GenerateTrainsLibrary_DottedNames_RootPathGeneratesValidTrain()
+    public async Task GenerateTrainsLibrary_DottedNames_RootPathGeneratesValidTrain()
     {
-        var schema = _parser.Parse(FixturePath("dotted-names.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("dotted-names.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var rootDir = Path.Combine(_outputDir, "Trains", "Health", "Root");
         File.Exists(Path.Combine(rootDir, "IRootTrain.cs")).Should().BeTrue();
@@ -584,10 +730,14 @@ public class OpenApiFixEndToEndTests
     }
 
     [Test]
-    public void GenerateTrainsLibrary_DottedNames_CalendarIcsNoDotsInTrainName()
+    public async Task GenerateTrainsLibrary_DottedNames_CalendarIcsNoDotsInTrainName()
     {
-        var schema = _parser.Parse(FixturePath("dotted-names.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("dotted-names.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         // calendar.ics path should produce a valid train name without dots
         var eventsDir = Path.Combine(_outputDir, "Trains", "Events");
@@ -601,32 +751,46 @@ public class OpenApiFixEndToEndTests
     }
 
     [Test]
-    public void GenerateTrainsLibrary_DottedNames_GraphQLNamespacesNoInvalidChars()
+    public async Task GenerateTrainsLibrary_DottedNames_GraphQLNamespacesNoInvalidChars()
     {
-        var schema = _parser.Parse(FixturePath("dotted-names.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("dotted-names.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
-        var content = File.ReadAllText(Path.Combine(_outputDir, "GraphQLNamespaces.cs"));
+        var content = await File.ReadAllTextAsync(Path.Combine(_outputDir, "GraphQLNamespaces.cs"))
+            .ConfigureAwait(false);
         // Should not contain commas or dots in identifier names
         content.Should().NotMatchRegex(@"public const string [^=]*[.,][^=]*=");
     }
 
     [Test]
-    public void GenerateTrainsLibrary_DottedNames_ManifestNamesNoInvalidChars()
+    public async Task GenerateTrainsLibrary_DottedNames_ManifestNamesNoInvalidChars()
     {
-        var schema = _parser.Parse(FixturePath("dotted-names.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("dotted-names.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
-        var content = File.ReadAllText(Path.Combine(_outputDir, "ManifestNames.cs"));
+        var content = await File.ReadAllTextAsync(Path.Combine(_outputDir, "ManifestNames.cs"))
+            .ConfigureAwait(false);
         // All const names should be valid C# identifiers (no dots or commas)
         content.Should().NotMatchRegex(@"public const string [^=]*[.,][^=]*=");
     }
 
     [Test]
-    public void GenerateTrainsLibrary_DottedNames_MultilineDescriptionInAttribute()
+    public async Task GenerateTrainsLibrary_DottedNames_MultilineDescriptionInAttribute()
     {
-        var schema = _parser.Parse(FixturePath("dotted-names.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("dotted-names.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var notesDir = Path.Combine(_outputDir, "Trains", "Notes");
         var trainFiles = Directory
@@ -635,7 +799,7 @@ public class OpenApiFixEndToEndTests
             .ToArray();
         trainFiles.Should().NotBeEmpty();
 
-        var content = File.ReadAllText(trainFiles[0]);
+        var content = await File.ReadAllTextAsync(trainFiles[0]).ConfigureAwait(false);
         // Description attribute should be on a single line (no raw newlines in string)
         var attrLine = content
             .Split('\n')
@@ -646,10 +810,14 @@ public class OpenApiFixEndToEndTests
     }
 
     [Test]
-    public void GenerateTrainsLibrary_DottedNames_EmptySchemaTypeNotGenerated()
+    public async Task GenerateTrainsLibrary_DottedNames_EmptySchemaTypeNotGenerated()
     {
-        var schema = _parser.Parse(FixturePath("dotted-names.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("dotted-names.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         // Empty types (no fields) should not be generated — HotChocolate rejects them
         var emptyFile = Path.Combine(_outputDir, "Models", "EmptyResponse.cs");

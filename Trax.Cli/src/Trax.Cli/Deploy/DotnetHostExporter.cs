@@ -11,7 +11,7 @@ namespace Trax.Cli.Deploy;
 /// </summary>
 internal sealed class DotnetHostExporter : IHostExporter
 {
-    public DeployManifest Export(
+    public async Task<DeployManifest> ExportAsync(
         string projectPath,
         IReadOnlyDictionary<string, string> environment
     )
@@ -21,7 +21,7 @@ internal sealed class DotnetHostExporter : IHostExporter
         try
         {
             var psi = StartInfo(projectPath, path, environment);
-            var (exit, stdout, stderr) = ChildProcess.Run(psi);
+            var (exit, stdout, stderr) = await ChildProcess.RunAsync(psi).ConfigureAwait(false);
             if (exit != 0 || !File.Exists(path))
                 throw new InvalidOperationException(
                     $"{Path.GetFileName(projectPath)} did not report what it needs from its deployment "
@@ -31,7 +31,7 @@ internal sealed class DotnetHostExporter : IHostExporter
                         )
                         + $"app.Run() refuses. Its output:\n{stdout}{stderr}"
                 );
-            return DeployManifest.Read(File.ReadAllText(path));
+            return DeployManifest.Read(await File.ReadAllTextAsync(path).ConfigureAwait(false));
         }
         finally
         {

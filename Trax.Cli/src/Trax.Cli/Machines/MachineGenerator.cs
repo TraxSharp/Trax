@@ -39,12 +39,12 @@ internal sealed partial class MachineGenerator
     }
 
     /// <summary>Produce every requested artifact and place it at its output root. Every artifact is replaced or none is.</summary>
-    public GenerateResult Generate(MachineGenerateOptions options)
+    public async Task<GenerateResult> GenerateAsync(MachineGenerateOptions options)
     {
         var staging = CreateStagingDir();
         try
         {
-            var planned = Produce(options, staging);
+            var planned = await ProduceAsync(options, staging).ConfigureAwait(false);
             Place(planned);
             return new GenerateResult(
                 planned.Select(a => new GeneratedArtifact(a.Kind, a.FinalPath)).ToList()
@@ -164,22 +164,24 @@ internal sealed partial class MachineGenerator
     }
 
     /// <summary>Regenerate to staging and diff against what is committed; never writes to the output roots.</summary>
-    public CheckResult Check(MachineGenerateOptions options)
+    public async Task<CheckResult> CheckAsync(MachineGenerateOptions options)
     {
         var staging = CreateStagingDir();
         try
         {
-            var checks = Produce(options, staging)
-                .Select(a =>
+            var checks = new List<ArtifactCheck>();
+            foreach (var a in await ProduceAsync(options, staging).ConfigureAwait(false))
+            {
+                if (!File.Exists(a.FinalPath))
                 {
-                    if (!File.Exists(a.FinalPath))
-                        return new ArtifactCheck(a.Kind, a.FinalPath, DriftStatus.Missing);
-                    var status = FilesEqual(a.StagedPath, a.FinalPath)
-                        ? DriftStatus.UpToDate
-                        : DriftStatus.Drifted;
-                    return new ArtifactCheck(a.Kind, a.FinalPath, status);
-                })
-                .ToList();
+                    checks.Add(new ArtifactCheck(a.Kind, a.FinalPath, DriftStatus.Missing));
+                    continue;
+                }
+                var status = await FilesEqualAsync(a.StagedPath, a.FinalPath).ConfigureAwait(false)
+                    ? DriftStatus.UpToDate
+                    : DriftStatus.Drifted;
+                checks.Add(new ArtifactCheck(a.Kind, a.FinalPath, status));
+            }
             return new CheckResult(checks);
         }
         finally
@@ -190,13 +192,16 @@ internal sealed partial class MachineGenerator
 
     // Generate every requested artifact into the staging directory and return each one's staged + final path.
     // The IR is always produced (it feeds the node steps) but only planned for placement when --ir-out is set.
-    private IReadOnlyList<PlannedArtifact> Produce(MachineGenerateOptions o, string staging)
+    private async Task<IReadOnlyList<PlannedArtifact>> ProduceAsync(
+        MachineGenerateOptions o,
+        string staging
+    )
     {
         if (o.IrOut is null && o.TwinOut is null && o.CorpusOut is null)
             throw new InvalidOperationException(
                 "Nothing to generate: pass at least one of --ir-out, --twin-out, --corpus-out."
             );
-        var importStyle = RefuseConflictingOptions(o);
+        var importStyle = await RefuseConflictingOptionsAsync(o).ConfigureAwait(false);
 
         string id;
         try
@@ -219,7 +224,7 @@ internal sealed partial class MachineGenerator
         var planned = new List<PlannedArtifact>();
 
         var stagedIr = Path.Combine(staging, $"{id}.ir.json");
-        File.WriteAllText(stagedIr, o.Machine.ExportIr() + "\n");
+        await File.WriteAllTextAsync(stagedIr, o.Machine.ExportIr() + "\n").ConfigureAwait(false);
         if (o.IrOut is not null)
             planned.Add(new("ir", stagedIr, Path.Combine(o.IrOut, $"{id}.ir.json")));
 
@@ -239,8 +244,8 @@ internal sealed partial class MachineGenerator
                 if (o.Namespace is not null)
                     args.AddRange(["--namespace", o.Namespace]);
                 var file = $"{MachineScaffolder.Pascal(id)}.g.cs";
-                RefuseAnotherMachinesView(o.TwinOut, file, id);
-                RunNode(twinScript, args, "the C# view");
+                await RefuseAnotherMachinesViewAsync(o.TwinOut, file, id).ConfigureAwait(false);
+                await RunNodeAsync(twinScript, args, "the C# view").ConfigureAwait(false);
                 twin = [new("view", Path.Combine(twinStage, file), Path.Combine(o.TwinOut, file))];
             }
             else if (o.Lang is not null and not "typescript")
@@ -257,7 +262,7 @@ internal sealed partial class MachineGenerator
                     args.Add("--specifier");
                     args.Add(o.Specifier);
                 }
-                RunNode(twinScript, args, "the twin");
+                await RunNodeAsync(twinScript, args, "the twin").ConfigureAwait(false);
                 twin =
                 [
                     new(
@@ -280,11 +285,12 @@ internal sealed partial class MachineGenerator
         {
             var corpusStage = Path.Combine(staging, "differential.json");
             var corpusScript = ToolScript(o, "generate-corpus.mjs", "the corpus");
-            RunNode(
-                corpusScript,
-                ["--ir", stagedIr, .. EngineSrcArgs(o), "--out", corpusStage],
-                "the corpus"
-            );
+            await RunNodeAsync(
+                    corpusScript,
+                    ["--ir", stagedIr, .. EngineSrcArgs(o), "--out", corpusStage],
+                    "the corpus"
+                )
+                .ConfigureAwait(false);
             PlannedArtifact corpus = new(
                 "corpus",
                 corpusStage,
@@ -297,9 +303,9 @@ internal sealed partial class MachineGenerator
         return planned;
     }
 
-    private void RunNode(string script, IReadOnlyList<string> args, string what)
+    private async Task RunNodeAsync(string script, IReadOnlyList<string> args, string what)
     {
-        if (!_node.IsAvailable())
+        if (!await _node.IsAvailableAsync().ConfigureAwait(false))
             throw new InvalidOperationException(
                 $"Generating {what} needs Node.js 22 or later, and node was not found on PATH (or --node is not "
                     + "an executable). Install it, pass --node with the absolute path of node, or generate "
@@ -311,7 +317,7 @@ internal sealed partial class MachineGenerator
                     + "is not a sibling of --engine-src."
             );
 
-        var result = _node.Run(script, args);
+        var result = await _node.RunAsync(script, args).ConfigureAwait(false);
         if (result.ExitCode != 0)
             throw new InvalidOperationException(
                 string.Create(
@@ -351,11 +357,11 @@ internal sealed partial class MachineGenerator
     /// Refuses a combination of options that would fail inside node, or be silently ignored, and returns the
     /// import style the twin is generated with.
     /// </summary>
-    internal static string RefuseConflictingOptions(MachineGenerateOptions o)
+    internal static async Task<string> RefuseConflictingOptionsAsync(MachineGenerateOptions o)
     {
-        if (o.Lang is not null && !TwinLanguages.Contains(o.Lang))
+        if (o.Lang is not null && !await TwinLanguages.ContainsAsync(o.Lang).ConfigureAwait(false))
             throw new InvalidOperationException(
-                $"--lang must be {TwinLanguages.OneOf([.. TwinLanguages.All.Select(l => l.Lang)])}, got '{o.Lang}'."
+                $"--lang must be {TwinLanguages.OneOf([.. (await TwinLanguages.AllAsync().ConfigureAwait(false)).Select(l => l.Lang)])}, got '{o.Lang}'."
             );
         if (
             string.Equals(o.Lang, "csharp", StringComparison.Ordinal)
@@ -481,10 +487,18 @@ internal sealed partial class MachineGenerator
 
     // Line endings aside: a checkout with core.autocrlf holds the committed artifacts with CRLF, and the generators
     // write LF. The client check compares the same way.
-    private static bool FilesEqual(string a, string b) =>
+    private static async Task<bool> FilesEqualAsync(string a, string b) =>
         string.Equals(
-            File.ReadAllText(a).Replace("\r\n", "\n", StringComparison.Ordinal),
-            File.ReadAllText(b).Replace("\r\n", "\n", StringComparison.Ordinal),
+            (await File.ReadAllTextAsync(a).ConfigureAwait(false)).Replace(
+                "\r\n",
+                "\n",
+                StringComparison.Ordinal
+            ),
+            (await File.ReadAllTextAsync(b).ConfigureAwait(false)).Replace(
+                "\r\n",
+                "\n",
+                StringComparison.Ordinal
+            ),
             StringComparison.Ordinal
         );
 
@@ -494,7 +508,7 @@ internal sealed partial class MachineGenerator
     /// <c>topicmap</c> <c>Topicmap.g.cs</c>, which a disk that ignores case holds as one file), or is a file the
     /// generator did not write under a name that differs only in case.
     /// </summary>
-    private static void RefuseAnotherMachinesView(string twinOut, string file, string id)
+    private static async Task RefuseAnotherMachinesViewAsync(string twinOut, string file, string id)
     {
         if (!Directory.Exists(twinOut))
             return;
@@ -503,7 +517,10 @@ internal sealed partial class MachineGenerator
             var name = Path.GetFileName(path);
             if (!name.Equals(file, StringComparison.OrdinalIgnoreCase))
                 continue;
-            var head = string.Join('\n', File.ReadLines(path).Take(3));
+            var head = string.Join(
+                '\n',
+                await File.ReadLinesAsync(path).Take(3).ToListAsync().ConfigureAwait(false)
+            );
             var other = ViewHeader.Match(head).Groups["id"];
             if (
                 other.Success

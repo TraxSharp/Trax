@@ -101,18 +101,18 @@ internal sealed partial class ClientGenerator
     }
 
     /// <summary>Writes the C# operations client under <paramref name="outDir"/>.</summary>
-    public static IReadOnlyList<ClientFile> WriteCSharp(
+    public static Task<IReadOnlyList<ClientFile>> WriteCSharpAsync(
         OperationsGenerateOptions options,
         string @namespace,
         string outDir
-    ) => Write(RenderCSharp(options, @namespace), outDir, Writer.OperationsCSharp);
+    ) => WriteAsync(RenderCSharp(options, @namespace), outDir, Writer.OperationsCSharp);
 
     /// <summary>What differs between the C# operations client the documents generate and the one under <paramref name="outDir"/>.</summary>
-    public static IReadOnlyList<ClientDrift> CheckCSharp(
+    public static Task<IReadOnlyList<ClientDrift>> CheckCSharpAsync(
         OperationsGenerateOptions options,
         string @namespace,
         string outDir
-    ) => Check(RenderCSharp(options, @namespace), outDir, Writer.OperationsCSharp);
+    ) => CheckAsync(RenderCSharp(options, @namespace), outDir, Writer.OperationsCSharp);
 
     private const string Rename = "Rename one of them.";
 

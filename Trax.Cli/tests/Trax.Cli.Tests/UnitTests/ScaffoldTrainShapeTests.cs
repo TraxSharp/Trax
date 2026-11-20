@@ -49,10 +49,12 @@ public class ScaffoldTrainShapeTests
             .Order(StringComparer.Ordinal);
 
     [TestCaseSource(nameof(FixtureSchemas))]
-    public void Every_scaffolded_train_declares_its_chain_in_Junctions(string fixture)
+    public async Task Every_scaffolded_train_declares_its_chain_in_Junctions(string fixture)
     {
-        var schema = Parse(fixture);
-        new TraxProjectGenerator().GenerateTrainsLibrary(schema, _outputDir, "Shape");
+        var schema = await ParseAsync(fixture).ConfigureAwait(false);
+        await new TraxProjectGenerator()
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "Shape")
+            .ConfigureAwait(false);
 
         var sources = Directory
             .EnumerateFiles(_outputDir, "*.cs", SearchOption.AllDirectories)
@@ -81,9 +83,9 @@ public class ScaffoldTrainShapeTests
 
         foreach (var (path, source) in trains)
         {
-            var trainClass = CSharpSyntaxTree
-                .ParseText(source)
-                .GetRoot()
+            var trainClass = (
+                await CSharpSyntaxTree.ParseText(source).GetRootAsync().ConfigureAwait(false)
+            )
                 .DescendantNodes()
                 .OfType<ClassDeclarationSyntax>()
                 .SingleOrDefault(c =>
@@ -110,7 +112,10 @@ public class ScaffoldTrainShapeTests
 
         foreach (var (path, source) in sources)
         {
-            var root = CSharpSyntaxTree.ParseText(source).GetRoot();
+            var root = await CSharpSyntaxTree
+                .ParseText(source)
+                .GetRootAsync()
+                .ConfigureAwait(false);
 
             root.DescendantNodes()
                 .OfType<MemberDeclarationSyntax>()
@@ -150,10 +155,12 @@ public class ScaffoldTrainShapeTests
         };
 
     [Test]
-    public void The_fixtures_include_a_Unit_output_train()
+    public async Task The_fixtures_include_a_Unit_output_train()
     {
-        FixtureSchemas()
-            .SelectMany(f => Parse(f).Operations)
+        var operations = new List<ApiOperation>();
+        foreach (var fixture in FixtureSchemas())
+            operations.AddRange((await ParseAsync(fixture).ConfigureAwait(false)).Operations);
+        operations
             .Should()
             .Contain(
                 o => o.OutputType.Name == "Unit",
@@ -161,7 +168,7 @@ public class ScaffoldTrainShapeTests
             );
     }
 
-    private static ApiSchema Parse(string fixture)
+    private static async Task<ApiSchema> ParseAsync(string fixture)
     {
         var path = Path.Combine(
             TestContext.CurrentContext.TestDirectory,
@@ -170,7 +177,7 @@ public class ScaffoldTrainShapeTests
             fixture
         );
         return fixture.EndsWith(".graphql", StringComparison.Ordinal)
-            ? new GraphQLSchemaParser().Parse(path)
-            : new OpenApiSchemaParser().Parse(path);
+            ? (await new GraphQLSchemaParser().ParseAsync(path).ConfigureAwait(false))
+            : (await new OpenApiSchemaParser().ParseAsync(path).ConfigureAwait(false));
     }
 }

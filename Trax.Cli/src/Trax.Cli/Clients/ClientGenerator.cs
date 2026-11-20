@@ -42,7 +42,7 @@ internal sealed partial class ClientGenerator
     }
 
     /// <summary>Every file of the client, in path order.</summary>
-    public IReadOnlyList<ClientFile> Render(ClientGenerateOptions options)
+    public async Task<IReadOnlyList<ClientFile>> RenderAsync(ClientGenerateOptions options)
     {
         var manifest = options.Manifest;
         var spec = options.Specifier;
@@ -175,7 +175,7 @@ internal sealed partial class ClientGenerator
 
         foreach (var (machine, camel, pascal) in machines)
         {
-            files.AddRange(Twin(machine, spec, options.ToolsDir));
+            files.AddRange(await TwinAsync(machine, spec, options.ToolsDir).ConfigureAwait(false));
             files.Add(
                 new(
                     $"{machine.Id}/{machine.Id}.client.g.ts",
@@ -259,18 +259,22 @@ internal sealed partial class ClientGenerator
     /// folder is not entered. A link at any path the client writes, or at a folder on the way there, is refused
     /// before anything is written.
     /// </summary>
-    public IReadOnlyList<ClientFile> Write(ClientGenerateOptions options, string outDir) =>
-        Write(Render(options), outDir, Writer.Manifest);
+    public async Task<IReadOnlyList<ClientFile>> WriteAsync(
+        ClientGenerateOptions options,
+        string outDir
+    ) =>
+        await WriteAsync(await RenderAsync(options).ConfigureAwait(false), outDir, Writer.Manifest)
+            .ConfigureAwait(false);
 
-    private static IReadOnlyList<ClientFile> Write(
+    private static async Task<IReadOnlyList<ClientFile>> WriteAsync(
         IReadOnlyList<ClientFile> files,
         string outDir,
         Writer writer
     )
     {
         RefuseLinks(files, outDir);
-        RefuseOverlap(files, outDir, writer);
-        foreach (var stale in Stale(files, outDir, writer))
+        await RefuseOverlapAsync(files, outDir, writer).ConfigureAwait(false);
+        foreach (var stale in await StaleAsync(files, outDir, writer).ConfigureAwait(false))
         {
             var path = Path.Combine(outDir, stale);
             File.Delete(path);
@@ -289,14 +293,14 @@ internal sealed partial class ClientGenerator
         {
             var path = Path.Combine(outDir, file.Path);
             Directory.CreateDirectory(Path.GetDirectoryName(path).NotNull());
-            Replace(path, file.Text);
+            await ReplaceAsync(path, file.Text).ConfigureAwait(false);
         }
         return files;
     }
 
     // Writes the text beside the path and renames it over whatever is there, so a FIFO or a device at the path is
     // replaced rather than opened.
-    private static void Replace(string path, string text)
+    private static async Task ReplaceAsync(string path, string text)
     {
         var temp = Path.Combine(
             Path.GetDirectoryName(path).NotNull(),
@@ -304,7 +308,7 @@ internal sealed partial class ClientGenerator
         );
         try
         {
-            File.WriteAllText(temp, text);
+            await File.WriteAllTextAsync(temp, text).ConfigureAwait(false);
             File.Move(temp, path, overwrite: true);
         }
         finally
@@ -337,17 +341,21 @@ internal sealed partial class ClientGenerator
     /// missing or changed, and a file this generator wrote that would no longer be written. Line endings are not a
     /// difference, so a checkout that writes CRLF passes.
     /// </summary>
-    public IReadOnlyList<ClientDrift> Check(ClientGenerateOptions options, string outDir) =>
-        Check(Render(options), outDir, Writer.Manifest);
+    public async Task<IReadOnlyList<ClientDrift>> CheckAsync(
+        ClientGenerateOptions options,
+        string outDir
+    ) =>
+        await CheckAsync(await RenderAsync(options).ConfigureAwait(false), outDir, Writer.Manifest)
+            .ConfigureAwait(false);
 
-    private static IReadOnlyList<ClientDrift> Check(
+    private static async Task<IReadOnlyList<ClientDrift>> CheckAsync(
         IReadOnlyList<ClientFile> files,
         string outDir,
         Writer writer
     )
     {
         RefuseLinks(files, outDir);
-        RefuseOverlap(files, outDir, writer);
+        await RefuseOverlapAsync(files, outDir, writer).ConfigureAwait(false);
         var drift = new List<ClientDrift>();
         foreach (var file in files)
         {
@@ -357,15 +365,17 @@ internal sealed partial class ClientGenerator
             // Twice the text's bytes allows every line ending to be CRLF; anything longer differs anyway.
             else if (
                 !string.Equals(
-                    ReadPrefix(path, 2 * Encoding.UTF8.GetByteCount(file.Text) + 1)
-                        ?.Replace("\r\n", "\n", StringComparison.Ordinal),
+                    (
+                        await ReadPrefixAsync(path, 2 * Encoding.UTF8.GetByteCount(file.Text) + 1)
+                            .ConfigureAwait(false)
+                    )?.Replace("\r\n", "\n", StringComparison.Ordinal),
                     file.Text,
                     StringComparison.Ordinal
                 )
             )
                 drift.Add(new(file.Path, DriftStatus.Drifted));
         }
-        foreach (var stale in Stale(files, outDir, writer))
+        foreach (var stale in await StaleAsync(files, outDir, writer).ConfigureAwait(false))
             drift.Add(new(stale, DriftStatus.Drifted));
         return drift;
     }
@@ -394,7 +404,7 @@ internal sealed partial class ClientGenerator
     // wrote it. Anything else, an app's own *.g.ts or *.g.cs or another writer's, is left alone. A folder below outDir
     // that is the root of another client of this writer (IsRoot) is not entered, since its files carry the same
     // header. A linked folder is not entered either, so nothing outside outDir is read or deleted through it.
-    private static IReadOnlyList<string> Stale(
+    private static async Task<IReadOnlyList<string>> StaleAsync(
         IReadOnlyList<ClientFile> files,
         string outDir,
         Writer writer
@@ -403,7 +413,10 @@ internal sealed partial class ClientGenerator
         if (!Directory.Exists(outDir))
             return [];
         var expected = files.Select(f => f.Path).ToHashSet(StringComparer.Ordinal);
-        var served = writer == Writer.Manifest ? Served(outDir) : [];
+        var served =
+            writer == Writer.Manifest
+                ? await ServedAsync(outDir).ConfigureAwait(false)
+                : new HashSet<string>(StringComparer.Ordinal);
         var header = writer == Writer.Manifest ? ClientHeaderLine : OperationsHeaderLine;
         var pattern = writer == Writer.OperationsCSharp ? "*.g.cs" : "*.g.ts";
         var stale = new List<string>();
@@ -413,16 +426,23 @@ internal sealed partial class ClientGenerator
             foreach (var file in Directory.EnumerateFiles(folder, pattern, Entries))
             {
                 var path = Path.GetRelativePath(outDir, file).Replace('\\', '/');
-                if (!Writes(expected, outDir, path) && Generated(path, file, header, served))
+                if (
+                    !Writes(expected, outDir, path)
+                    && await GeneratedAsync(path, file, header, served).ConfigureAwait(false)
+                )
                     stale.Add(path);
             }
             foreach (var sub in Directory.EnumerateDirectories(folder, "*", Entries))
-                if (!IsRoot(sub, writer))
+                if (!await IsRootAsync(sub, writer).ConfigureAwait(false))
                     folders.Push(sub);
         }
         if (writer == Writer.Manifest)
             foreach (var name in DocumentFiles)
-                if (!expected.Contains(name) && DocumentFile(Path.Combine(outDir, name), name))
+                if (
+                    !expected.Contains(name)
+                    && await DocumentFileAsync(Path.Combine(outDir, name), name)
+                        .ConfigureAwait(false)
+                )
                     stale.Add(name);
         return stale.Order(StringComparer.Ordinal).ToList();
     }
@@ -475,17 +495,17 @@ internal sealed partial class ClientGenerator
     // Whether a file at the client's root is the one this generator writes under that name: the editor's files start
     // with their header; trax.documents.json carries none, so it is this generator's when it is the object it writes,
     // format 1 and its documents, and nothing else.
-    private static bool DocumentFile(string path, string name)
+    private static async Task<bool> DocumentFileAsync(string path, string name)
     {
         if (!string.Equals(name, DocumentsFileName, StringComparison.Ordinal))
             return string.Equals(
-                FirstLine(path),
+                await FirstLineAsync(path).ConfigureAwait(false),
                 string.Equals(name, EditorSchemaFileName, StringComparison.Ordinal)
                     ? EditorSchemaHeader
                     : EditorConfigHeader,
                 StringComparison.Ordinal
             );
-        if (ReadPrefix(path, ManifestBytes) is not { } text)
+        if (await ReadPrefixAsync(path, ManifestBytes).ConfigureAwait(false) is not { } text)
             return false;
         try
         {
@@ -512,32 +532,31 @@ internal sealed partial class ClientGenerator
     // Whether a folder is the root of a client this writer wrote: it holds the file the writer always writes at its
     // root, starting with the writer's header. index.g.ts for the TypeScript clients, Types.g.cs for the C# one; no
     // writer puts either in a folder below its root.
-    private static bool IsRoot(string folder, Writer writer) =>
-        writer switch
+    private static async Task<bool> IsRootAsync(string folder, Writer writer)
+    {
+        var (file, header) = writer switch
         {
-            Writer.Manifest => string.Equals(
-                FirstLine(Path.Combine(folder, "index.g.ts")),
-                ClientHeaderLine,
-                StringComparison.Ordinal
-            ),
-            Writer.OperationsTypeScript => string.Equals(
-                FirstLine(Path.Combine(folder, "index.g.ts")),
-                OperationsHeaderLine,
-                StringComparison.Ordinal
-            ),
-            _ => string.Equals(
-                FirstLine(Path.Combine(folder, "Types.g.cs")),
-                OperationsHeaderLine,
-                StringComparison.Ordinal
-            ),
+            Writer.Manifest => ("index.g.ts", ClientHeaderLine),
+            Writer.OperationsTypeScript => ("index.g.ts", OperationsHeaderLine),
+            _ => ("Types.g.cs", OperationsHeaderLine),
         };
+        return string.Equals(
+            await FirstLineAsync(Path.Combine(folder, file)).ConfigureAwait(false),
+            header,
+            StringComparison.Ordinal
+        );
+    }
 
     // Refuses a client whose files would land in another client of the same writer, or that sits in a folder another
     // one writes into: both carry the same header, so each run would take the other's files for its own stale ones.
     // Nesting is fine as long as neither folder holds the other's files, so outDir inside another client's root is
     // refused only when it is (or is inside) a folder that client writes: documents/ (Documents/ in C#), or a
     // machine's folder.
-    private static void RefuseOverlap(IReadOnlyList<ClientFile> files, string outDir, Writer writer)
+    private static async Task RefuseOverlapAsync(
+        IReadOnlyList<ClientFile> files,
+        string outDir,
+        Writer writer
+    )
     {
         foreach (
             var folder in files
@@ -547,7 +566,7 @@ internal sealed partial class ClientGenerator
         )
         {
             var path = Path.Combine(outDir, folder);
-            if (IsRoot(path, writer))
+            if (await IsRootAsync(path, writer).ConfigureAwait(false))
                 throw new InvalidOperationException(
                     $"{path} holds another client trax client wrote, and this one writes into it. Clients may sit "
                         + "one inside the other, but not in a folder the other writes: move one of them."
@@ -560,7 +579,7 @@ internal sealed partial class ClientGenerator
             parent = Path.GetDirectoryName(parent)
         )
         {
-            if (!IsRoot(parent, writer))
+            if (!await IsRootAsync(parent, writer).ConfigureAwait(false))
                 continue;
             // Compared in any case: on a file system that ignores it (macOS, Windows) documents/ is Documents/, and a
             // refusal on one that does not costs a rename, where letting it through costs the other client's files.
@@ -570,7 +589,7 @@ internal sealed partial class ClientGenerator
             {
                 Writer.OperationsCSharp => Is("Documents"),
                 Writer.OperationsTypeScript => Is("documents"),
-                _ => Is("documents") || Served(parent).Any(Is),
+                _ => Is("documents") || (await ServedAsync(parent).ConfigureAwait(false)).Any(Is),
             };
             if (writes)
                 throw new InvalidOperationException(
@@ -596,11 +615,11 @@ internal sealed partial class ClientGenerator
     // holds a client module with this generator's header. The second matters because the host usually exports its
     // manifest over that manifest.json before trax client runs, so it already names the new set of machines. With
     // neither, no twin is taken for this generator's: a twin left by an earlier run is kept, not deleted.
-    private static HashSet<string> Served(string outDir)
+    private static async Task<HashSet<string>> ServedAsync(string outDir)
     {
         var served = new HashSet<string>(StringComparer.Ordinal);
         var manifest = Path.Combine(outDir, "manifest.json");
-        if (ReadPrefix(manifest, ManifestBytes) is { } text)
+        if (await ReadPrefixAsync(manifest, ManifestBytes).ConfigureAwait(false) is { } text)
         {
             try
             {
@@ -630,7 +649,11 @@ internal sealed partial class ClientGenerator
             var client = Path.Combine(dir, $"{id}.client.g.ts");
             if (
                 MachineGenerator.IsMachineId(id)
-                && string.Equals(FirstLine(client), ClientHeaderLine, StringComparison.Ordinal)
+                && string.Equals(
+                    await FirstLineAsync(client).ConfigureAwait(false),
+                    ClientHeaderLine,
+                    StringComparison.Ordinal
+                )
             )
                 served.Add(id);
         }
@@ -646,14 +669,14 @@ internal sealed partial class ClientGenerator
         ("contexts", "generateContextTypes"),
     ];
 
-    private static bool Generated(
+    private static async Task<bool> GeneratedAsync(
         string relative,
         string path,
         string header,
         IReadOnlySet<string> served
     )
     {
-        var first = FirstLine(path);
+        var first = await FirstLineAsync(path).ConfigureAwait(false);
         if (first is null)
             return false;
         if (string.Equals(first, header, StringComparison.Ordinal))
@@ -678,9 +701,9 @@ internal sealed partial class ClientGenerator
 
     // The first line of a file, without its line ending, read from at most HeaderBytes of it; null when it is not a
     // regular file or is empty.
-    private static string? FirstLine(string path)
+    private static async Task<string?> FirstLineAsync(string path)
     {
-        var text = ReadPrefix(path, HeaderBytes);
+        var text = await ReadPrefixAsync(path, HeaderBytes).ConfigureAwait(false);
         if (string.IsNullOrEmpty(text))
             return null;
         var end = text.IndexOf('\n', StringComparison.Ordinal);
@@ -690,24 +713,22 @@ internal sealed partial class ClientGenerator
     // At most `limit` bytes of a file, as UTF-8, or null when it is not a regular file. .NET reports a FIFO, a socket
     // or a device as an ordinary file of length 0, and opening a FIFO blocks until something writes to it, so a file
     // of length 0 is not opened (it holds nothing to read either), and one that opens unseekable is not read.
-    private static string? ReadPrefix(string path, int limit)
+    private static async Task<string?> ReadPrefixAsync(string path, int limit)
     {
         var info = new FileInfo(path);
         if (!info.Exists || info.LinkTarget is not null)
             return null;
         if (info.Length == 0)
             return "";
-        using var stream = new FileStream(
-            path,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.ReadWrite
-        );
-        if (!stream.CanSeek)
-            return null;
-        var buffer = new byte[(int)Math.Min(limit, stream.Length)];
-        stream.ReadExactly(buffer);
-        return Encoding.UTF8.GetString(buffer);
+        var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        await using (stream.ConfigureAwait(false))
+        {
+            if (!stream.CanSeek)
+                return null;
+            var buffer = new byte[(int)Math.Min(limit, stream.Length)];
+            await stream.ReadExactlyAsync(buffer).ConfigureAwait(false);
+            return Encoding.UTF8.GetString(buffer);
+        }
     }
 
     // The names a machine's client module and its twin declare or import beside the machine's own, which its camel id
@@ -1263,22 +1284,23 @@ internal sealed partial class ClientGenerator
             """
         + TransportGuards;
 
-    private IEnumerable<ClientFile> Twin(
+    private async Task<IReadOnlyList<ClientFile>> TwinAsync(
         ClientManifestMachine machine,
         string spec,
         string? toolsDir
     )
     {
+        var twin = new List<ClientFile>();
         var staging = Path.Combine(Path.GetTempPath(), $"trax-client-{Guid.NewGuid():N}");
         Directory.CreateDirectory(staging);
         try
         {
             var ir = Path.Combine(staging, $"{machine.Id}.ir.json");
-            File.WriteAllText(ir, machine.IrText() + "\n");
+            await File.WriteAllTextAsync(ir, machine.IrText() + "\n").ConfigureAwait(false);
             var outDir = Path.Combine(staging, "twin");
             Directory.CreateDirectory(outDir);
             var script = Path.Combine(toolsDir ?? _bundledToolsDir, "generate-twin.mjs");
-            if (!_node.IsAvailable())
+            if (!await _node.IsAvailableAsync().ConfigureAwait(false))
                 throw new InvalidOperationException(
                     "Generating a machine's twin needs Node.js 22 or later, and node was not found on PATH (or --node "
                         + "is not an executable)."
@@ -1288,19 +1310,21 @@ internal sealed partial class ClientGenerator
                     $"The twin generator is not found at {script}. This trax was built from source, not installed "
                         + "from its package: pass --tools-dir with the engine's tools/ directory."
                 );
-            var result = _node.Run(
-                script,
-                [
-                    "--ir",
-                    ir,
-                    "--out-dir",
-                    outDir,
-                    "--import-style",
-                    "specifier",
-                    "--specifier",
-                    spec,
-                ]
-            );
+            var result = await _node
+                .RunAsync(
+                    script,
+                    [
+                        "--ir",
+                        ir,
+                        "--out-dir",
+                        outDir,
+                        "--import-style",
+                        "specifier",
+                        "--specifier",
+                        spec,
+                    ]
+                )
+                .ConfigureAwait(false);
             if (result.ExitCode != 0)
                 throw new InvalidOperationException(
                     string.Create(
@@ -1313,8 +1337,14 @@ internal sealed partial class ClientGenerator
                 var file = Path.Combine(outDir, $"{machine.Id}.{kind}.g.ts");
                 if (!File.Exists(file))
                     throw new InvalidOperationException($"The twin generator wrote no {file}.");
-                yield return new($"{machine.Id}/{machine.Id}.{kind}.g.ts", File.ReadAllText(file));
+                twin.Add(
+                    new(
+                        $"{machine.Id}/{machine.Id}.{kind}.g.ts",
+                        await File.ReadAllTextAsync(file).ConfigureAwait(false)
+                    )
+                );
             }
+            return twin;
         }
         finally
         {

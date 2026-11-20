@@ -297,18 +297,20 @@ public partial class GeneratedNamesPropertyTests
         );
 
     [Test]
-    public void The_manifest_client_is_refused_or_declares_each_name_once_as_an_identifier()
+    public async Task The_manifest_client_is_refused_or_declares_each_name_once_as_an_identifier()
     {
         var written = 0;
-        Gen.Select(Cases, Name, Name)
-            .Sample(
-                (c, field, view) =>
+        await Gen.Select(Cases, Name, Name)
+            .SampleAsync(
+                async (c, field, view) =>
                 {
                     IReadOnlyList<ClientFile> files;
                     try
                     {
-                        files = new ClientGenerator(new Fakes.FakeNodeRunner()).Render(
-                            ManifestOptions(c, field, view)
+                        files = (
+                            await new ClientGenerator(new Fakes.FakeNodeRunner())
+                                .RenderAsync(ManifestOptions(c, field, view))
+                                .ConfigureAwait(false)
                         );
                     }
                     catch (InvalidOperationException)
@@ -319,7 +321,8 @@ public partial class GeneratedNamesPropertyTests
                     Interlocked.Increment(ref written);
                 },
                 iter: 2000
-            );
+            )
+            .ConfigureAwait(false);
         written
             .Should()
             .BePositive("some of the cases are written, or the property holds of nothing");
@@ -367,7 +370,7 @@ public partial class GeneratedNamesPropertyTests
     // compiler over what is written, so a module that does not parse or names a type it does not declare or import
     // fails here rather than in a consumer's build.
     [Test]
-    public void A_sample_of_the_typescript_clients_typechecks()
+    public async Task A_sample_of_the_typescript_clients_typechecks()
     {
         var engine = TypeScriptEngine();
         var root = Directory.CreateTempSubdirectory("trax-ts-names-");
@@ -404,34 +407,35 @@ public partial class GeneratedNamesPropertyTests
                 var fragment = Pick();
                 if (
                     operations < 40
-                    && TryWrite(
-                        root,
-                        string.Create(CultureInfo.InvariantCulture, $"operations-{i}"),
-                        OperationsWithFragment(c, fragment)
-                    )
+                    && await TryWriteAsync(
+                            root,
+                            string.Create(CultureInfo.InvariantCulture, $"operations-{i}"),
+                            OperationsWithFragment(c, fragment)
+                        )
+                        .ConfigureAwait(false)
                 )
                     operations++;
                 if (
                     manifests < 40
-                    && TryWrite(
-                        root,
-                        string.Create(CultureInfo.InvariantCulture, $"manifest-{i}"),
-                        ManifestWithProgress(
-                            c,
-                            Pick(),
-                            fragment,
-                            Hostile[views.Next(Hostile.Length)]
+                    && await TryWriteAsync(
+                            root,
+                            string.Create(CultureInfo.InvariantCulture, $"manifest-{i}"),
+                            ManifestWithProgress(
+                                c,
+                                Pick(),
+                                fragment,
+                                Hostile[views.Next(Hostile.Length)]
+                            )
                         )
-                    )
+                        .ConfigureAwait(false)
                 )
                     manifests++;
             }
             operations.Should().Be(40, "the seed writes enough operations clients to check");
             manifests.Should().Be(40, "the seed writes enough manifest clients to check");
-
-            File.WriteAllText(
-                Path.Combine(root.FullName, "tsconfig.json"),
-                $$"""
+            await File.WriteAllTextAsync(
+                    Path.Combine(root.FullName, "tsconfig.json"),
+                    $$"""
                 {
                   "compilerOptions": {
                     "target": "es2022",
@@ -463,25 +467,33 @@ public partial class GeneratedNamesPropertyTests
                   "include": ["cases"]
                 }
                 """
-            );
+                )
+                .ConfigureAwait(false);
             Directory.CreateSymbolicLink(
                 Path.Combine(root.FullName, "node_modules"),
                 Path.Combine(engine, "node_modules")
             );
 
-            var (code, output) = Node(
-                root.FullName,
-                Path.Combine(engine, "node_modules", "typescript", "bin", "tsc"),
-                "-p",
-                "tsconfig.json"
-            );
+            var (code, output) = await NodeAsync(
+                    root.FullName,
+                    Path.Combine(engine, "node_modules", "typescript", "bin", "tsc"),
+                    "-p",
+                    "tsconfig.json"
+                )
+                .ConfigureAwait(false);
 
-            var failing = CaseFolder
-                .Matches(output)
-                .Select(m => m.Groups["folder"].Value)
-                .Distinct(StringComparer.Ordinal)
-                .Select(folder =>
-                    File.ReadAllText(Path.Combine(root.FullName, "cases", folder, "case.graphql"))
+            var failing = new List<string>();
+            foreach (
+                var folder in CaseFolder
+                    .Matches(output)
+                    .Select(m => m.Groups["folder"].Value)
+                    .Distinct(StringComparer.Ordinal)
+            )
+                failing.Add(
+                    await File.ReadAllTextAsync(
+                            Path.Combine(root.FullName, "cases", folder, "case.graphql")
+                        )
+                        .ConfigureAwait(false)
                 );
             code.Should()
                 .Be(0, $"every sampled client typechecks:\n{output}\n{string.Join('\n', failing)}");
@@ -494,16 +506,16 @@ public partial class GeneratedNamesPropertyTests
 
     // Writes the client `render` makes under cases/<folder>, beside the schema and documents it was made from; false
     // when the generator refuses them.
-    private static bool TryWrite(
+    private static async Task<bool> TryWriteAsync(
         DirectoryInfo root,
         string folder,
-        (Func<IReadOnlyList<ClientFile>> Render, string Source) client
+        (Func<Task<IReadOnlyList<ClientFile>>> Render, string Source) client
     )
     {
         IReadOnlyList<ClientFile> files;
         try
         {
-            files = client.Render();
+            files = await client.Render().ConfigureAwait(false);
         }
         catch (InvalidOperationException)
         {
@@ -514,13 +526,17 @@ public partial class GeneratedNamesPropertyTests
         {
             var path = Path.Combine(dir, file.Path);
             Directory.CreateDirectory(Path.GetDirectoryName(path).NotNull());
-            File.WriteAllText(path, file.Text);
+            await File.WriteAllTextAsync(path, file.Text).ConfigureAwait(false);
         }
-        File.WriteAllText(Path.Combine(dir, "case.graphql"), $"# {folder}\n{client.Source}\n");
+        await File.WriteAllTextAsync(
+                Path.Combine(dir, "case.graphql"),
+                $"# {folder}\n{client.Source}\n"
+            )
+            .ConfigureAwait(false);
         return true;
     }
 
-    private static (Func<IReadOnlyList<ClientFile>>, string) OperationsWithFragment(
+    private static (Func<Task<IReadOnlyList<ClientFile>>>, string) OperationsWithFragment(
         Case c,
         string fragment
     )
@@ -534,17 +550,19 @@ public partial class GeneratedNamesPropertyTests
             """;
         return (
             () =>
-                ClientGenerator.Render(
-                    new OperationsGenerateOptions(
-                        c.Schema,
-                        [new ClientDocumentFile("src/graphql/Runs.graphql", document)]
+                Task.FromResult(
+                    ClientGenerator.Render(
+                        new OperationsGenerateOptions(
+                            c.Schema,
+                            [new ClientDocumentFile("src/graphql/Runs.graphql", document)]
+                        )
                     )
                 ),
             $"{c.Schema}\n{document}"
         );
     }
 
-    private static (Func<IReadOnlyList<ClientFile>>, string) ManifestWithProgress(
+    private static (Func<Task<IReadOnlyList<ClientFile>>>, string) ManifestWithProgress(
         Case c,
         string field,
         string fragment,
@@ -568,7 +586,7 @@ public partial class GeneratedNamesPropertyTests
         };
         return (
             () =>
-                new ClientGenerator(new Fakes.FakeNodeRunner()).Render(
+                new ClientGenerator(new Fakes.FakeNodeRunner()).RenderAsync(
                     options with
                     {
                         Manifest = manifest,
@@ -618,7 +636,10 @@ public partial class GeneratedNamesPropertyTests
         return "";
     }
 
-    private static (int ExitCode, string Output) Node(string workingDirectory, params string[] args)
+    private static async Task<(int ExitCode, string Output)> NodeAsync(
+        string workingDirectory,
+        params string[] args
+    )
     {
         var start = new System.Diagnostics.ProcessStartInfo("node")
         {
@@ -645,12 +666,20 @@ public partial class GeneratedNamesPropertyTests
         {
             var stdout = process.StandardOutput.ReadToEndAsync();
             var stderr = process.StandardError.ReadToEndAsync();
-            if (!process.WaitForExit(TimeSpan.FromMinutes(5)))
+            using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+            try
+            {
+                await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
             {
                 process.Kill(entireProcessTree: true);
                 return (-1, "tsc did not finish within five minutes.");
             }
-            return (process.ExitCode, stdout.Result + stderr.Result);
+            return (
+                process.ExitCode,
+                await stdout.ConfigureAwait(false) + await stderr.ConfigureAwait(false)
+            );
         }
     }
 

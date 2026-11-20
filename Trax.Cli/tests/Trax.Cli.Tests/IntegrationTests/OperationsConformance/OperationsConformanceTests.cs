@@ -25,8 +25,27 @@ public class OperationsConformanceTests
     private const string Regenerate =
         "Regenerate both clients as conformance/operations/PROTOCOL.md says (\"The fixture\").";
 
+    // The fixture's documents, by their path under it, in path order.
+    private static async Task<List<ClientDocumentFile>> ReadDocumentsAsync(string fixture)
+    {
+        var documents = new List<ClientDocumentFile>();
+        foreach (
+            var source in Directory
+                .GetFiles(Path.Combine(fixture, "documents"), "*.graphql")
+                .Select(path => Path.GetRelativePath(fixture, path).Replace('\\', '/'))
+                .Order(StringComparer.Ordinal)
+        )
+            documents.Add(
+                new ClientDocumentFile(
+                    source,
+                    await File.ReadAllTextAsync(Path.Combine(fixture, source)).ConfigureAwait(false)
+                )
+            );
+        return documents;
+    }
+
     [Test]
-    public void The_committed_clients_and_registered_documents_are_what_the_cli_generates()
+    public async Task The_committed_clients_and_registered_documents_are_what_the_cli_generates()
     {
         var root = RepositoryRoot();
         var fixture = Path.Combine(
@@ -37,52 +56,55 @@ public class OperationsConformanceTests
             "fixture"
         );
         var options = new OperationsGenerateOptions(
-            File.ReadAllText(Path.Combine(fixture, "operations.graphql")),
-            Directory
-                .GetFiles(Path.Combine(fixture, "documents"), "*.graphql")
-                .Select(path => Path.GetRelativePath(fixture, path).Replace('\\', '/'))
-                .Order(StringComparer.Ordinal)
-                .Select(source => new ClientDocumentFile(
-                    source,
-                    File.ReadAllText(Path.Combine(fixture, source))
-                ))
-                .ToList()
+            await File.ReadAllTextAsync(Path.Combine(fixture, "operations.graphql")),
+            await ReadDocumentsAsync(fixture).ConfigureAwait(false)
         );
 
-        ClientGenerator
-            .Check(
-                options,
-                Path.Combine(
-                    root,
-                    "Trax.StateMachine",
-                    "ts",
-                    "tools",
-                    "conformance",
-                    "operations",
-                    "client"
+        (
+            await ClientGenerator
+                .CheckAsync(
+                    options,
+                    Path.Combine(
+                        root,
+                        "Trax.StateMachine",
+                        "ts",
+                        "tools",
+                        "conformance",
+                        "operations",
+                        "client"
+                    )
                 )
-            )
+                .ConfigureAwait(false)
+        )
             .Select(d => $"{d.Status} {d.Path}")
             .Should()
             .BeEmpty($"the TypeScript client is what the fixture generates. {Regenerate}");
-        ClientGenerator
-            .CheckCSharp(
-                options,
-                Namespace,
-                Path.Combine(
-                    root,
-                    "Trax.Cli",
-                    "tests",
-                    "Trax.Cli.Tests",
-                    "IntegrationTests",
-                    "OperationsConformance",
-                    "Generated"
+        (
+            await ClientGenerator
+                .CheckCSharpAsync(
+                    options,
+                    Namespace,
+                    Path.Combine(
+                        root,
+                        "Trax.Cli",
+                        "tests",
+                        "Trax.Cli.Tests",
+                        "IntegrationTests",
+                        "OperationsConformance",
+                        "Generated"
+                    )
                 )
-            )
+                .ConfigureAwait(false)
+        )
             .Select(d => $"{d.Status} {d.Path}")
             .Should()
             .BeEmpty($"the C# client is what the fixture generates. {Regenerate}");
-        File.ReadAllText(Path.Combine(fixture, ClientGenerator.ConsoleDocumentsFileName))
+        (
+            await File.ReadAllTextAsync(
+                    Path.Combine(fixture, ClientGenerator.ConsoleDocumentsFileName)
+                )
+                .ConfigureAwait(false)
+        )
             .Should()
             .Be(
                 ClientGenerator

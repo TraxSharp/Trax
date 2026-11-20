@@ -37,9 +37,9 @@ public class MachineLoaderUnloadableTypeTests
     }
 
     [Test]
-    public void DiscoverMachines_finds_a_machine_beside_a_type_whose_base_cannot_load()
+    public async Task DiscoverMachines_finds_a_machine_beside_a_type_whose_base_cannot_load()
     {
-        var path = EmitConsumer(withMachine: true);
+        var path = await EmitConsumerAsync(withMachine: true).ConfigureAwait(false);
         var assembly = new AssemblyLoadContext(name: null).LoadFromAssemblyPath(path);
 
         var machines = MachineLoader.DiscoverMachines(assembly);
@@ -48,9 +48,9 @@ public class MachineLoaderUnloadableTypeTests
     }
 
     [Test]
-    public void Load_of_an_assembly_whose_only_types_cannot_load_names_what_is_missing()
+    public async Task Load_of_an_assembly_whose_only_types_cannot_load_names_what_is_missing()
     {
-        var path = EmitConsumer(withMachine: false);
+        var path = await EmitConsumerAsync(withMachine: false).ConfigureAwait(false);
 
         var act = () => MachineLoader.Load(path, machineFullName: null);
 
@@ -59,7 +59,7 @@ public class MachineLoaderUnloadableTypeTests
             .WithMessage("No machines found*could not be loaded*MissingDependency*");
     }
 
-    private string EmitConsumer(bool withMachine)
+    private async Task<string> EmitConsumerAsync(bool withMachine)
     {
         var suffix = Guid.NewGuid().ToString("N");
         var platform = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES").NotNull())
@@ -103,7 +103,7 @@ public class MachineLoaderUnloadableTypeTests
             [.. platform, MetadataReference.CreateFromImage(dependency)]
         );
         var path = Path.Combine(_dir, $"Consumer{suffix}.dll");
-        File.WriteAllBytes(path, image);
+        await File.WriteAllBytesAsync(path, image).ConfigureAwait(false);
         return path;
     }
 

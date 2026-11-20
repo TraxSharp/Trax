@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Trax.Cli.Commands;
 using Trax.Cli.Generator;
 using Trax.Cli.Schema.GraphQL;
+using Trax.Cli.Tests.Fakes;
 
 namespace Trax.Cli.Tests.UnitTests;
 
@@ -39,38 +40,51 @@ public class GenerateForceTests
     }
 
     [Test]
-    public void Handle_Force_WhenScaffoldingFails_LeavesTheExistingDirectoryUntouched()
+    public async Task Handle_Force_WhenScaffoldingFails_LeavesTheExistingDirectoryUntouched()
     {
-        var output = ExistingOutput(out var sentinel);
+        var (output, sentinel) = await ExistingOutputAsync().ConfigureAwait(false);
 
-        var exitCode = 0;
-        var stderr = CaptureStderr(() =>
-            exitCode = GenerateCommand.Handle(
-                SchemaFile(),
-                new DirectoryInfo(output),
-                "Proj",
-                type: null,
-                force: true,
-                new TraxProjectGenerator(FailingScaffold)
+        var run = await CommandOutput
+            .OfAsync(
+                (o, e) =>
+                    GenerateCommand.HandleAsync(
+                        SchemaFile(),
+                        new DirectoryInfo(output),
+                        "Proj",
+                        type: null,
+                        force: true,
+                        o,
+                        e,
+                        new TraxProjectGenerator(FailingScaffoldAsync)
+                    )
             )
-        );
+            .ConfigureAwait(false);
+        var (exitCode, stderr) = (run.ExitCode, run.Stderr);
 
         exitCode.Should().Be(1);
         stderr.Should().Contain("template is not installed");
-        File.ReadAllText(sentinel)
+        (await File.ReadAllTextAsync(sentinel).ConfigureAwait(false))
             .Should()
             .Be("keep me", "a failed run must not delete anything; " + Adr);
     }
 
     [Test]
-    public void Generate_WhenScaffoldingFails_LeavesNothingBesideTheOutput()
+    public async Task Generate_WhenScaffoldingFails_LeavesNothingBesideTheOutput()
     {
-        var output = ExistingOutput(out _);
-        var generator = new TraxProjectGenerator(FailingScaffold);
+        var (output, _) = await ExistingOutputAsync().ConfigureAwait(false);
+        var generator = new TraxProjectGenerator(FailingScaffoldAsync);
 
-        var act = () => generator.Generate(Schema(), output, "Proj", force: true);
+        var act = async () =>
+            await generator
+                .GenerateAsync(
+                    await SchemaAsync().ConfigureAwait(false),
+                    output,
+                    "Proj",
+                    force: true
+                )
+                .ConfigureAwait(false);
 
-        act.Should().Throw<InvalidOperationException>();
+        await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
         Directory
             .GetFileSystemEntries(_root)
             .Should()
@@ -78,60 +92,100 @@ public class GenerateForceTests
     }
 
     [Test]
-    public void Generate_WhenTheOutputDoesNotExist_AndScaffoldingFails_CreatesNothing()
+    public async Task Generate_WhenTheOutputDoesNotExist_AndScaffoldingFails_CreatesNothing()
     {
         var output = Path.Combine(_root, "out");
-        var generator = new TraxProjectGenerator(FailingScaffold);
+        var generator = new TraxProjectGenerator(FailingScaffoldAsync);
 
-        var act = () => generator.Generate(Schema(), output, "Proj", force: false);
+        var act = async () =>
+            await generator
+                .GenerateAsync(
+                    await SchemaAsync().ConfigureAwait(false),
+                    output,
+                    "Proj",
+                    force: false
+                )
+                .ConfigureAwait(false);
 
-        act.Should().Throw<InvalidOperationException>();
+        await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
         Directory.GetFileSystemEntries(_root).Should().BeEmpty();
     }
 
     [Test]
-    public void Generate_Force_OnSuccess_ReplacesTheDirectory()
+    public async Task Generate_Force_OnSuccess_ReplacesTheDirectory()
     {
-        var output = ExistingOutput(out var sentinel);
-        var generator = new TraxProjectGenerator(FakeScaffold);
+        var (output, sentinel) = await ExistingOutputAsync().ConfigureAwait(false);
+        var generator = new TraxProjectGenerator(FakeScaffoldAsync);
 
-        generator.Generate(Schema(), output, "Proj", force: true);
+        await generator
+            .GenerateAsync(await SchemaAsync().ConfigureAwait(false), output, "Proj", force: true)
+            .ConfigureAwait(false);
 
         File.Exists(sentinel).Should().BeFalse("--force replaces the directory on success");
         File.Exists(Path.Combine(output, "Proj.Hub", "Proj.Hub.csproj")).Should().BeTrue();
         File.Exists(Path.Combine(output, "Proj.Trains", "Proj.Trains.csproj")).Should().BeTrue();
-        File.ReadAllText(Path.Combine(output, "Proj.Hub", "Proj.Hub.csproj"))
+        (
+            await File.ReadAllTextAsync(Path.Combine(output, "Proj.Hub", "Proj.Hub.csproj"))
+                .ConfigureAwait(false)
+        )
             .Should()
             .Contain(@"..\Proj.Trains\Proj.Trains.csproj");
         Directory.GetFileSystemEntries(_root).Should().BeEquivalentTo([output]);
     }
 
     [Test]
-    public void Generate_Force_OnADirectoryHoldingAGitRepository_IsRefused()
+    public async Task Generate_Force_OnADirectoryHoldingAGitRepository_IsRefused()
     {
-        var output = ExistingOutput(out var sentinel);
+        var (output, sentinel) = await ExistingOutputAsync().ConfigureAwait(false);
         Directory.CreateDirectory(Path.Combine(output, ".git"));
         var scaffolded = false;
-        var generator = new TraxProjectGenerator((_, _) => scaffolded = true);
+        var generator = new TraxProjectGenerator(
+            (_, _) =>
+            {
+                scaffolded = true;
+                return Task.CompletedTask;
+            }
+        );
 
-        var act = () => generator.Generate(Schema(), output, "Proj", force: true);
+        var act = async () =>
+            await generator
+                .GenerateAsync(
+                    await SchemaAsync().ConfigureAwait(false),
+                    output,
+                    "Proj",
+                    force: true
+                )
+                .ConfigureAwait(false);
 
-        act.Should().Throw<InvalidOperationException>().WithMessage("*.git*", Adr);
+        (
+            await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*.git*", Adr);
         scaffolded.Should().BeFalse("the refusal comes before any work; " + Adr);
         File.Exists(sentinel).Should().BeTrue();
     }
 
     [Test]
-    public void Generate_Force_OnAGitWorktree_IsRefused()
+    public async Task Generate_Force_OnAGitWorktree_IsRefused()
     {
         // A linked worktree or submodule has a .git file, not a directory.
-        var output = ExistingOutput(out var sentinel);
-        File.WriteAllText(Path.Combine(output, ".git"), "gitdir: /elsewhere");
-        var generator = new TraxProjectGenerator(FakeScaffold);
+        var (output, sentinel) = await ExistingOutputAsync().ConfigureAwait(false);
+        await File.WriteAllTextAsync(Path.Combine(output, ".git"), "gitdir: /elsewhere")
+            .ConfigureAwait(false);
+        var generator = new TraxProjectGenerator(FakeScaffoldAsync);
 
-        var act = () => generator.Generate(Schema(), output, "Proj", force: true);
+        var act = async () =>
+            await generator
+                .GenerateAsync(
+                    await SchemaAsync().ConfigureAwait(false),
+                    output,
+                    "Proj",
+                    force: true
+                )
+                .ConfigureAwait(false);
 
-        act.Should().Throw<InvalidOperationException>().WithMessage("*.git*", Adr);
+        (
+            await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*.git*", Adr);
         File.Exists(sentinel).Should().BeTrue();
     }
 
@@ -169,64 +223,69 @@ public class GenerateForceTests
         act.Should().NotThrow();
     }
 
-    private string ExistingOutput(out string sentinel)
+    private async Task<(string Output, string Sentinel)> ExistingOutputAsync()
     {
         var output = Path.Combine(_root, "out");
         Directory.CreateDirectory(output);
-        sentinel = Path.Combine(output, "keep.txt");
-        File.WriteAllText(sentinel, "keep me");
-        return output;
+        var sentinel = Path.Combine(output, "keep.txt");
+        await File.WriteAllTextAsync(sentinel, "keep me").ConfigureAwait(false);
+        return (output, sentinel);
     }
 
     [Test]
-    public void Generate_Force_OnADirectoryWhoseSubdirectoryIsAGitRepository_IsRefused()
+    public async Task Generate_Force_OnADirectoryWhoseSubdirectoryIsAGitRepository_IsRefused()
     {
         // A workspace of side-by-side repositories: the directory itself is not a repository.
         var workspace = Path.Combine(_root, "workspace");
         var repoGit = Path.Combine(workspace, "SomeRepo", ".git");
         Directory.CreateDirectory(repoGit);
-        File.WriteAllText(Path.Combine(repoGit, "HEAD"), "ref: refs/heads/main\n");
+        await File.WriteAllTextAsync(Path.Combine(repoGit, "HEAD"), "ref: refs/heads/main\n");
 
-        var act = () =>
-            new TraxProjectGenerator(FakeScaffold).Generate(
-                Schema(),
-                workspace,
-                "Proj",
-                force: true
-            );
+        var act = async () =>
+            await new TraxProjectGenerator(FakeScaffoldAsync)
+                .GenerateAsync(
+                    await SchemaAsync().ConfigureAwait(false),
+                    workspace,
+                    "Proj",
+                    force: true
+                )
+                .ConfigureAwait(false);
 
-        act.Should().Throw<InvalidOperationException>();
+        await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
         Directory
             .Exists(repoGit)
             .Should()
             .BeTrue("replacing the directory deletes every repository inside it; " + Adr);
     }
 
-    private static void FailingScaffold(string name, string dir) =>
+    private static Task FailingScaffoldAsync(string name, string dir) =>
         throw new InvalidOperationException("The 'trax-hub' template is not installed.");
 
-    private static void FakeScaffold(string name, string dir)
+    private static async Task FakeScaffoldAsync(string name, string dir)
     {
         Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, $"{name}.csproj"), "<Project>\n</Project>\n");
+        await File.WriteAllTextAsync(Path.Combine(dir, $"{name}.csproj"), "<Project>\n</Project>\n")
+            .ConfigureAwait(false);
         // The template ships its Trax pins beside the hub csproj.
-        File.WriteAllText(
-            Path.Combine(dir, "Directory.Packages.props"),
-            """
-            <Project>
-              <ItemGroup>
-                <PackageVersion Include="Trax.Effect" Version="1.58.0" />
-                <PackageVersion Include="Trax.Effect.Data.InMemory" Version="1.58.0" />
-                <PackageVersion Include="Trax.Mediator" Version="1.24.0" />
-                <PackageVersion Include="Trax.Scheduler" Version="1.35.0" />
-              </ItemGroup>
-            </Project>
-            """
-        );
-        File.WriteAllText(
-            Path.Combine(dir, "Program.cs"),
-            "builder.Services.AddTrax(t => t.AddMediator(typeof(Program).Assembly));\n"
-        );
+        await File.WriteAllTextAsync(
+                Path.Combine(dir, "Directory.Packages.props"),
+                """
+                <Project>
+                  <ItemGroup>
+                    <PackageVersion Include="Trax.Effect" Version="1.58.0" />
+                    <PackageVersion Include="Trax.Effect.Data.InMemory" Version="1.58.0" />
+                    <PackageVersion Include="Trax.Mediator" Version="1.24.0" />
+                    <PackageVersion Include="Trax.Scheduler" Version="1.35.0" />
+                  </ItemGroup>
+                </Project>
+                """
+            )
+            .ConfigureAwait(false);
+        await File.WriteAllTextAsync(
+                Path.Combine(dir, "Program.cs"),
+                "builder.Services.AddTrax(t => t.AddMediator(typeof(Program).Assembly));\n"
+            )
+            .ConfigureAwait(false);
     }
 
     private static FileInfo SchemaFile() =>
@@ -239,34 +298,25 @@ public class GenerateForceTests
             )
         );
 
-    private static Trax.Cli.Models.ApiSchema Schema() =>
-        new GraphQLSchemaParser().Parse(SchemaFile().FullName);
-
-    private static string CaptureStderr(Action action)
-    {
-        var originalErr = Console.Error;
-        using var writer = new StringWriter();
-        Console.SetError(writer);
-        try
-        {
-            action();
-        }
-        finally
-        {
-            Console.SetError(originalErr);
-        }
-        return writer.ToString();
-    }
+    private static async Task<Trax.Cli.Models.ApiSchema> SchemaAsync() =>
+        await new GraphQLSchemaParser().ParseAsync(SchemaFile().FullName).ConfigureAwait(false);
 
     [Test]
-    public void Generate_writes_the_hubs_exact_Trax_versions_into_the_trains_project()
+    public async Task Generate_writes_the_hubs_exact_Trax_versions_into_the_trains_project()
     {
         var output = Path.Combine(_root, "pinned");
-        var schema = new Trax.Cli.Schema.GraphQL.GraphQLSchemaParser().Parse(SchemaFile().FullName);
+        var schema = await new Trax.Cli.Schema.GraphQL.GraphQLSchemaParser()
+            .ParseAsync(SchemaFile().FullName)
+            .ConfigureAwait(false);
 
-        new TraxProjectGenerator(FakeScaffold).Generate(schema, output, "Demo", force: false);
+        await new TraxProjectGenerator(FakeScaffoldAsync)
+            .GenerateAsync(schema, output, "Demo", force: false)
+            .ConfigureAwait(false);
 
-        var csproj = File.ReadAllText(Path.Combine(output, "Demo.Trains", "Demo.Trains.csproj"));
+        var csproj = await File.ReadAllTextAsync(
+                Path.Combine(output, "Demo.Trains", "Demo.Trains.csproj")
+            )
+            .ConfigureAwait(false);
         csproj
             .Should()
             .NotContain("*", "a floating version lets the pair resolve different Trax releases");
@@ -318,32 +368,34 @@ public class GenerateForceTests
             .WithMessage("*pins no version for Trax.Effect*");
     }
 
-    private string HubPinning(string name, string mediatorVersion)
+    private async Task<string> HubPinningAsync(string name, string mediatorVersion)
     {
         var hub = Path.Combine(_root, name);
         Directory.CreateDirectory(hub);
-        File.WriteAllText(
-            Path.Combine(hub, "Directory.Packages.props"),
-            $"""
-            <Project>
-              <ItemGroup>
-                <PackageVersion Include="Trax.Effect" Version="1.50.0" />
-                <PackageVersion Include="Trax.Effect.Data.InMemory" Version="1.50.0" />
-                <PackageVersion Include="Trax.Mediator" Version="{mediatorVersion}" />
-                <PackageVersion Include="Trax.Scheduler" Version="[1.30.0, 2.0.0)" />
-              </ItemGroup>
-            </Project>
-            """
-        );
+        await File.WriteAllTextAsync(
+                Path.Combine(hub, "Directory.Packages.props"),
+                $"""
+                <Project>
+                  <ItemGroup>
+                    <PackageVersion Include="Trax.Effect" Version="1.50.0" />
+                    <PackageVersion Include="Trax.Effect.Data.InMemory" Version="1.50.0" />
+                    <PackageVersion Include="Trax.Mediator" Version="{mediatorVersion}" />
+                    <PackageVersion Include="Trax.Scheduler" Version="[1.30.0, 2.0.0)" />
+                  </ItemGroup>
+                </Project>
+                """
+            )
+            .ConfigureAwait(false);
         return hub;
     }
 
     [Test]
-    public void HubPackageVersions_refuses_a_pin_that_is_not_a_nuget_version()
+    public async Task HubPackageVersions_refuses_a_pin_that_is_not_a_nuget_version()
     {
         // Decoded by the XML reader, &quot; is a quote, which written raw into the trains csproj would
         // close the attribute and let the rest of the value add to the project.
-        var hub = HubPinning("quoted-hub", "1.0.0&quot; Condition=&quot;false");
+        var hub = await HubPinningAsync("quoted-hub", "1.0.0&quot; Condition=&quot;false")
+            .ConfigureAwait(false);
 
         var act = () => TraxProjectGenerator.HubPackageVersions(hub, "Quoted.Hub");
 
@@ -357,9 +409,9 @@ public class GenerateForceTests
     [TestCase("1.*")]
     [TestCase("[1.20.0]")]
     [TestCase("(1.0,2.0]")]
-    public void HubPackageVersions_accepts_nuget_versions_and_ranges(string version)
+    public async Task HubPackageVersions_accepts_nuget_versions_and_ranges(string version)
     {
-        var hub = HubPinning($"hub-{Guid.NewGuid():N}", version);
+        var hub = await HubPinningAsync($"hub-{Guid.NewGuid():N}", version).ConfigureAwait(false);
 
         TraxProjectGenerator
             .HubPackageVersions(hub, "Any.Hub")
@@ -368,14 +420,14 @@ public class GenerateForceTests
     }
 
     [Test]
-    public void HubPackageVersions_reports_a_props_file_it_cannot_open_cleanly()
+    public async Task HubPackageVersions_reports_a_props_file_it_cannot_open_cleanly()
     {
         if (OperatingSystem.IsWindows())
         {
             Assert.Ignore("file modes are Unix-only");
             return;
         }
-        var hub = HubPinning("locked-hub", "1.20.0");
+        var hub = await HubPinningAsync("locked-hub", "1.20.0").ConfigureAwait(false);
         var props = Path.Combine(hub, "Directory.Packages.props");
         File.SetUnixFileMode(props, UnixFileMode.None);
         try

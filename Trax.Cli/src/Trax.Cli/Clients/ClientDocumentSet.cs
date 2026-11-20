@@ -468,13 +468,8 @@ internal sealed partial class ClientDocumentSet
 
     private static string Print(ASTNode node)
     {
-        var writer = new StringWriter();
-        new SDLPrinter(new SDLPrinterOptions { PrintComments = false })
-            .PrintAsync(node, writer)
-            .AsTask()
-            .GetAwaiter()
-            .GetResult();
-        return writer.ToString().Replace("\r\n", "\n", StringComparison.Ordinal).Trim();
+        var printed = new SDLPrinter(new SDLPrinterOptions { PrintComments = false }).Print(node);
+        return printed.Replace("\r\n", "\n", StringComparison.Ordinal).Trim();
     }
 
     // An operation's variables by name, or null when it declares one twice, which GraphQL refuses: each repeat is

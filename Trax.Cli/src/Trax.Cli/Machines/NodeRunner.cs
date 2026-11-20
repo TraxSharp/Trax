@@ -26,13 +26,13 @@ internal sealed class NodeRunner : INodeRunner
     /// Whether the executable is found and answers <c>--version</c>. A relative <c>--node</c> is not "missing"
     /// but refused, so it throws <see cref="InvalidOperationException"/> with the rule instead of returning false.
     /// </summary>
-    public bool IsAvailable()
+    public async Task<bool> IsAvailableAsync()
     {
         if (Resolved() is null)
             return false;
         try
         {
-            var result = Run("--version", []);
+            var result = await RunAsync("--version", []).ConfigureAwait(false);
             return result.ExitCode == 0;
         }
         catch (System.ComponentModel.Win32Exception)
@@ -42,7 +42,7 @@ internal sealed class NodeRunner : INodeRunner
         }
     }
 
-    public NodeResult Run(string scriptPath, IReadOnlyList<string> args)
+    public async Task<NodeResult> RunAsync(string scriptPath, IReadOnlyList<string> args)
     {
         var psi = new ProcessStartInfo
         {
@@ -58,7 +58,7 @@ internal sealed class NodeRunner : INodeRunner
         foreach (var arg in args)
             psi.ArgumentList.Add(arg);
 
-        var (exitCode, stdout, stderr) = ChildProcess.Run(psi);
+        var (exitCode, stdout, stderr) = await ChildProcess.RunAsync(psi).ConfigureAwait(false);
         return new NodeResult(exitCode, stdout, stderr);
     }
 

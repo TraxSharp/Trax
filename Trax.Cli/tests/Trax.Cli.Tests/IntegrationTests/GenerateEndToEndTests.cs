@@ -18,7 +18,8 @@ public class GenerateEndToEndTests
     private TemplateHive? _hive;
 
     [OneTimeSetUp]
-    public void OneTimeSetUp() => _hive = TemplateHive.Install();
+    public async Task OneTimeSetUp() =>
+        _hive = await TemplateHive.InstallAsync().ConfigureAwait(false);
 
     [OneTimeTearDown]
     public void OneTimeTearDown() => _hive?.Dispose();
@@ -40,12 +41,16 @@ public class GenerateEndToEndTests
         Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "Schemas", name);
 
     [Test]
-    public void Generate_FromGraphqlSchema_ProducesHubAndTrainsProjects()
+    public async Task Generate_FromGraphqlSchema_ProducesHubAndTrainsProjects()
     {
-        var schema = new GraphQLSchemaParser().Parse(FixturePath("simple.graphql"));
+        var schema = await new GraphQLSchemaParser()
+            .ParseAsync(FixturePath("simple.graphql"))
+            .ConfigureAwait(false);
         var generator = _hive.NotNull().Generator();
 
-        generator.Generate(schema, _outputDir, "MyApi", force: false);
+        await generator
+            .GenerateAsync(schema, _outputDir, "MyApi", force: false)
+            .ConfigureAwait(false);
 
         Directory.Exists(Path.Combine(_outputDir, "MyApi.Hub")).Should().BeTrue();
         Directory.Exists(Path.Combine(_outputDir, "MyApi.Trains")).Should().BeTrue();
@@ -55,45 +60,57 @@ public class GenerateEndToEndTests
             .BeTrue();
 
         // Hub csproj has the project reference to trains
-        var hubCsproj = File.ReadAllText(Path.Combine(_outputDir, "MyApi.Hub", "MyApi.Hub.csproj"));
+        var hubCsproj = await File.ReadAllTextAsync(
+                Path.Combine(_outputDir, "MyApi.Hub", "MyApi.Hub.csproj")
+            )
+            .ConfigureAwait(false);
         hubCsproj.Should().Contain("MyApi.Trains.csproj");
 
         // Hub Program.cs scans the trains assembly
-        var programCs = File.ReadAllText(Path.Combine(_outputDir, "MyApi.Hub", "Program.cs"));
+        var programCs = await File.ReadAllTextAsync(
+                Path.Combine(_outputDir, "MyApi.Hub", "Program.cs")
+            )
+            .ConfigureAwait(false);
         programCs.Should().Contain("MyApi.Trains");
     }
 
     [Test]
-    public void Generate_TwiceWithForce_OverwritesExistingDirectory()
+    public async Task Generate_TwiceWithForce_OverwritesExistingDirectory()
     {
-        var schema = new GraphQLSchemaParser().Parse(FixturePath("simple.graphql"));
+        var schema = await new GraphQLSchemaParser()
+            .ParseAsync(FixturePath("simple.graphql"))
+            .ConfigureAwait(false);
         var generator = _hive.NotNull().Generator();
 
-        generator.Generate(schema, _outputDir, "MyApi", force: false);
+        await generator
+            .GenerateAsync(schema, _outputDir, "MyApi", force: false)
+            .ConfigureAwait(false);
         // Second call with force should not throw
-        Action act = () => generator.Generate(schema, _outputDir, "MyApi", force: true);
+        Func<Task> act = () => generator.GenerateAsync(schema, _outputDir, "MyApi", force: true);
 
-        act.Should().NotThrow();
+        await act.Should().NotThrowAsync().ConfigureAwait(false);
         Directory.Exists(Path.Combine(_outputDir, "MyApi.Hub")).Should().BeTrue();
     }
 
     [Test]
-    public void GenerateCommand_HandleHappyPath_RunsToCompletion()
+    public async Task GenerateCommand_HandleHappyPath_RunsToCompletion()
     {
         var schema = new FileInfo(FixturePath("simple.graphql"));
         var output = new DirectoryInfo(_outputDir);
 
-        Action act = () =>
-            GenerateCommand.Handle(
+        Func<Task> act = () =>
+            GenerateCommand.HandleAsync(
                 schema,
                 output,
                 "MyApi",
                 type: null,
                 force: false,
+                TextWriter.Null,
+                TextWriter.Null,
                 _hive.NotNull().Generator()
             );
 
-        act.Should().NotThrow();
+        await act.Should().NotThrowAsync().ConfigureAwait(false);
         Directory.Exists(Path.Combine(_outputDir, "MyApi.Hub")).Should().BeTrue();
     }
 }

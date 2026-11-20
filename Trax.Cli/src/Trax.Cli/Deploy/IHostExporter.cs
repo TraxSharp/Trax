@@ -7,5 +7,8 @@ namespace Trax.Cli.Deploy;
 /// <summary>Asks a project's host what it needs from its deployment.</summary>
 internal interface IHostExporter
 {
-    DeployManifest Export(string projectPath, IReadOnlyDictionary<string, string> environment);
+    Task<DeployManifest> ExportAsync(
+        string projectPath,
+        IReadOnlyDictionary<string, string> environment
+    );
 }

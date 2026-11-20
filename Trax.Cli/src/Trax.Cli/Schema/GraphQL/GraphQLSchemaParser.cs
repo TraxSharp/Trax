@@ -40,11 +40,20 @@ public class GraphQLSchemaParser : ISchemaParser
     private readonly HashSet<string> _customScalars = new(StringComparer.Ordinal);
     private readonly HashSet<string> _abstractTypes = new(StringComparer.Ordinal);
 
-    public ApiSchema Parse(string filePath)
+    private readonly TextWriter _warnings;
+
+    /// <summary>A parser that drops the warnings about what a schema has that trax skips.</summary>
+    public GraphQLSchemaParser()
+        : this(TextWriter.Null) { }
+
+    /// <summary>A parser that writes to <paramref name="warnings"/> what a schema has that trax skips.</summary>
+    public GraphQLSchemaParser(TextWriter warnings) => _warnings = warnings;
+
+    public async Task<ApiSchema> ParseAsync(string filePath)
     {
         _customScalars.Clear();
         _abstractTypes.Clear();
-        var document = Read(filePath);
+        var document = await ReadAsync(filePath).ConfigureAwait(false);
 
         var schema = new ApiSchema { SourceFile = filePath, SchemaType = "graphql" };
 
@@ -188,7 +197,9 @@ public class GraphQLSchemaParser : ISchemaParser
         );
 
         foreach (var kind in skipped.Distinct(StringComparer.Ordinal))
-            Console.WriteLine($"Warning: {kind} definitions are not supported and were skipped.");
+            await _warnings
+                .WriteLineAsync($"Warning: {kind} definitions are not supported and were skipped.")
+                .ConfigureAwait(false);
 
         // Parse enums
         foreach (var (name, enumDef) in enumDefinitions)
@@ -254,7 +265,9 @@ public class GraphQLSchemaParser : ISchemaParser
         // Warn about subscriptions
         if (typeDefinitions.ContainsKey("Subscription"))
         {
-            Console.WriteLine("Warning: Subscription fields are not supported and were skipped.");
+            await _warnings
+                .WriteLineAsync("Warning: Subscription fields are not supported and were skipped.")
+                .ConfigureAwait(false);
         }
 
         return schema;
@@ -287,12 +300,12 @@ public class GraphQLSchemaParser : ISchemaParser
     /// Reads and parses the SDL, turning a syntax error or an unreadable file into a message that names
     /// the file (and, for a syntax error, the line and column) instead of an unhandled exception.
     /// </summary>
-    private static GraphQLDocument Read(string filePath)
+    private static async Task<GraphQLDocument> ReadAsync(string filePath)
     {
         string sdl;
         try
         {
-            sdl = File.ReadAllText(filePath);
+            sdl = await File.ReadAllTextAsync(filePath).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

@@ -10,18 +10,20 @@ namespace Trax.Cli.Tests.UnitTests;
 public class TraxCommandLineTests
 {
     [Test]
-    public void A_specifier_starting_with_an_at_sign_is_passed_through_as_written()
+    public async Task A_specifier_starting_with_an_at_sign_is_passed_through_as_written()
     {
-        var result = TraxCommandLine.Parse([
-            "machine",
-            "generate",
-            "--assembly",
-            "machines.dll",
-            "--import-style",
-            "specifier",
-            "--specifier",
-            "@traxsharp/state-machine",
-        ]);
+        var result = await TraxCommandLine
+            .ParseAsync([
+                "machine",
+                "generate",
+                "--assembly",
+                "machines.dll",
+                "--import-style",
+                "specifier",
+                "--specifier",
+                "@traxsharp/state-machine",
+            ])
+            .ConfigureAwait(false);
 
         result.Errors.Select(e => e.Message).Should().BeEmpty();
         result.GetValue<string?>("--specifier").Should().Be("@traxsharp/state-machine");

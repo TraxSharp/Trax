@@ -23,10 +23,12 @@ public class TraxProjectGeneratorInternalsTests
     }
 
     [Test]
-    public void IsDotnetAvailable_OnDevHost_ReturnsTrue()
+    public async Task IsDotnetAvailable_OnDevHost_ReturnsTrue()
     {
         // The build environment must have dotnet for these tests to run at all.
-        TraxProjectGenerator.IsDotnetAvailable().Should().BeTrue();
+        (await TraxProjectGenerator.IsDotnetAvailableAsync().ConfigureAwait(false))
+            .Should()
+            .BeTrue();
     }
 
     [Test]
@@ -92,12 +94,12 @@ public class TraxProjectGeneratorInternalsTests
             .Be("/usr/bin/dotnet");
 
     [Test]
-    public void AddProjectReference_AppendsItemGroupBeforeProjectClose()
+    public async Task AddProjectReference_AppendsItemGroupBeforeProjectClose()
     {
         var apiDir = Path.Combine(_tempDir, "MyApi.Hub");
         Directory.CreateDirectory(apiDir);
         var csprojPath = Path.Combine(apiDir, "MyApi.Hub.csproj");
-        File.WriteAllText(
+        await File.WriteAllTextAsync(
             csprojPath,
             """
             <Project Sdk="Microsoft.NET.Sdk">
@@ -108,21 +110,23 @@ public class TraxProjectGeneratorInternalsTests
             """
         );
 
-        TraxProjectGenerator.AddProjectReference(apiDir, "MyApi.Hub", "MyApi.Trains");
+        await TraxProjectGenerator
+            .AddProjectReferenceAsync(apiDir, "MyApi.Hub", "MyApi.Trains")
+            .ConfigureAwait(false);
 
-        var updated = File.ReadAllText(csprojPath);
+        var updated = await File.ReadAllTextAsync(csprojPath).ConfigureAwait(false);
         updated.Should().Contain("<ProjectReference");
         updated.Should().Contain(@"..\MyApi.Trains\MyApi.Trains.csproj");
         updated.TrimEnd().Should().EndWith("</Project>");
     }
 
     [Test]
-    public void PatchProgramCs_RewritesAssemblyScanWithoutAUsing()
+    public async Task PatchProgramCs_RewritesAssemblyScanWithoutAUsing()
     {
         var hubDir = Path.Combine(_tempDir, "Hub");
         Directory.CreateDirectory(hubDir);
         var programPath = Path.Combine(hubDir, "Program.cs");
-        File.WriteAllText(
+        await File.WriteAllTextAsync(
             programPath,
             """
             using Microsoft.Extensions.DependencyInjection;
@@ -135,9 +139,9 @@ public class TraxProjectGeneratorInternalsTests
             """
         );
 
-        TraxProjectGenerator.PatchProgramCs(hubDir, "MyApi");
+        await TraxProjectGenerator.PatchProgramCsAsync(hubDir, "MyApi").ConfigureAwait(false);
 
-        var updated = File.ReadAllText(programPath);
+        var updated = await File.ReadAllTextAsync(programPath).ConfigureAwait(false);
         updated
             .Should()
             .Contain("typeof(Program).Assembly, typeof(MyApi.Trains.ManifestNames).Assembly");
@@ -145,12 +149,12 @@ public class TraxProjectGeneratorInternalsTests
     }
 
     [Test]
-    public void PatchProgramCs_TrainsUsingAlreadyPresent_NotDuplicated()
+    public async Task PatchProgramCs_TrainsUsingAlreadyPresent_NotDuplicated()
     {
         var hubDir = Path.Combine(_tempDir, "Hub2");
         Directory.CreateDirectory(hubDir);
         var programPath = Path.Combine(hubDir, "Program.cs");
-        File.WriteAllText(
+        await File.WriteAllTextAsync(
             programPath,
             """
             using MyApi.Trains;
@@ -161,29 +165,32 @@ public class TraxProjectGeneratorInternalsTests
             """
         );
 
-        TraxProjectGenerator.PatchProgramCs(hubDir, "MyApi");
+        await TraxProjectGenerator.PatchProgramCsAsync(hubDir, "MyApi").ConfigureAwait(false);
 
-        var updated = File.ReadAllText(programPath);
+        var updated = await File.ReadAllTextAsync(programPath).ConfigureAwait(false);
         var occurrences = updated.Split("using MyApi.Trains;").Length - 1;
         occurrences.Should().Be(1);
     }
 
     [Test]
-    public void Generate_OutputExistsWithoutForce_Throws()
+    public async Task Generate_OutputExistsWithoutForce_Throws()
     {
         var outputDir = Path.Combine(_tempDir, "exists");
         Directory.CreateDirectory(outputDir);
         var generator = new TraxProjectGenerator();
 
-        Action act = () =>
-            generator.Generate(
+        Func<Task> act = () =>
+            generator.GenerateAsync(
                 new Trax.Cli.Models.ApiSchema { SourceFile = "x", SchemaType = "openapi" },
                 outputDir,
                 "Proj",
                 force: false
             );
 
-        act.Should().Throw<InvalidOperationException>().WithMessage("*--force*");
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*--force*")
+            .ConfigureAwait(false);
     }
 
     [Test]

@@ -358,71 +358,64 @@ public partial class MachineRendererTests
     }
 
     [Test]
-    public void Show_prints_the_machine_from_an_assembly()
+    public async Task Show_prints_the_machine_from_an_assembly()
     {
         using var output = new StringWriter();
-        var exit = MachineCommand.RunShow(
-            typeof(DeclarativeTurnstileMachine).Assembly.Location,
-            typeof(DeclarativeTurnstileMachine).FullName,
-            format: null,
-            ascii: false,
-            output
-        );
+        var exit = await MachineCommand
+            .RunShowAsync(
+                typeof(DeclarativeTurnstileMachine).Assembly.Location,
+                typeof(DeclarativeTurnstileMachine).FullName,
+                format: null,
+                ascii: false,
+                output,
+                TextWriter.Null
+            )
+            .ConfigureAwait(false);
 
         exit.Should().Be(0);
         output.ToString().Should().StartWith("turnstile  v1   initial: Locked");
     }
 
     [Test]
-    public void Show_with_several_machines_and_none_named_gives_the_error_generate_does()
+    public async Task Show_with_several_machines_and_none_named_gives_the_error_generate_does()
     {
-        var original = Console.Error;
-        using var error = new StringWriter();
-        Console.SetError(error);
-        int exit;
-        try
-        {
-            exit = MachineCommand.RunShow(
-                typeof(DeclarativeTurnstileMachine).Assembly.Location,
-                machineName: null,
-                format: null,
-                ascii: false,
-                new StringWriter()
-            );
-        }
-        finally
-        {
-            Console.SetError(original);
-        }
+        var run = await CommandOutput
+            .OfAsync(
+                (o, e) =>
+                    MachineCommand.RunShowAsync(
+                        typeof(DeclarativeTurnstileMachine).Assembly.Location,
+                        machineName: null,
+                        format: null,
+                        ascii: false,
+                        o,
+                        e
+                    )
+            )
+            .ConfigureAwait(false);
 
-        exit.Should().Be(1);
-        error.ToString().Should().Contain("pass --machine <FullName> to pick one");
+        run.ExitCode.Should().Be(1);
+        run.Stderr.Should().Contain("pass --machine <FullName> to pick one");
     }
 
     [Test]
-    public void Show_refuses_an_unknown_format()
+    public async Task Show_refuses_an_unknown_format()
     {
-        var original = Console.Error;
-        using var error = new StringWriter();
-        Console.SetError(error);
-        try
-        {
-            MachineCommand
-                .RunShow(
-                    typeof(DeclarativeTurnstileMachine).Assembly.Location,
-                    typeof(DeclarativeTurnstileMachine).FullName,
-                    "svg",
-                    ascii: false,
-                    new StringWriter()
-                )
-                .Should()
-                .Be(1);
-        }
-        finally
-        {
-            Console.SetError(original);
-        }
-        error.ToString().Should().Contain("--format must be");
+        var run = await CommandOutput
+            .OfAsync(
+                (o, e) =>
+                    MachineCommand.RunShowAsync(
+                        typeof(DeclarativeTurnstileMachine).Assembly.Location,
+                        typeof(DeclarativeTurnstileMachine).FullName,
+                        "svg",
+                        ascii: false,
+                        o,
+                        e
+                    )
+            )
+            .ConfigureAwait(false);
+
+        run.ExitCode.Should().Be(1);
+        run.Stderr.Should().Contain("--format must be");
     }
 
     [Test]

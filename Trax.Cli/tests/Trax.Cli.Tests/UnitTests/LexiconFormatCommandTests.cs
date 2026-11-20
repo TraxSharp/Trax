@@ -43,35 +43,39 @@ public class LexiconFormatCommandTests
     [TearDown]
     public void TearDown() => Directory.Delete(_dir, recursive: true);
 
-    private static (int Exit, string Out, string Err) Format(string path, bool check = false)
+    private static async Task<(int Exit, string Out, string Err)> FormatAsync(
+        string path,
+        bool check = false
+    )
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var exit = LexiconCommand.RunFormat([path], check, stdout, stderr);
+        var exit = await LexiconCommand
+            .RunFormatAsync([path], check, stdout, stderr)
+            .ConfigureAwait(false);
         return (exit, stdout.ToString(), stderr.ToString());
     }
 
     [Test]
-    public void Formatting_twice_changes_nothing_the_second_time_and_the_glossary_stays_the_same()
+    public async Task Formatting_twice_changes_nothing_the_second_time_and_the_glossary_stays_the_same()
     {
         var before = Lexicon.Read(File_, Untidy).Json;
 
-        Format(_dir).Exit.Should().Be(0);
-        var once = File.ReadAllText(File_);
-        var again = Format(_dir);
+        (await FormatAsync(_dir).ConfigureAwait(false)).Exit.Should().Be(0);
+        var once = await File.ReadAllTextAsync(File_).ConfigureAwait(false);
+        var again = await FormatAsync(_dir).ConfigureAwait(false);
 
         again.Exit.Should().Be(0);
         again.Out.Should().BeEmpty("a formatted lexicon is already in its layout");
-        File.ReadAllText(File_).Should().Be(once);
+        (await File.ReadAllTextAsync(File_).ConfigureAwait(false)).Should().Be(once);
         Lexicon.Read(File_, once).Json.Should().NotBeNull().And.Be(before);
     }
 
     [Test]
-    public void A_lexicon_is_indented_by_block_and_its_columns_lined_up()
+    public async Task A_lexicon_is_indented_by_block_and_its_columns_lined_up()
     {
-        Format(File_);
-
-        File.ReadAllText(File_)
+        await FormatAsync(File_).ConfigureAwait(false);
+        (await File.ReadAllTextAsync(File_).ConfigureAwait(false))
             .Should()
             .Be(
                 """
@@ -96,37 +100,46 @@ public class LexiconFormatCommandTests
     }
 
     [Test]
-    public void Check_fails_on_a_lexicon_not_in_its_layout_and_writes_nothing()
+    public async Task Check_fails_on_a_lexicon_not_in_its_layout_and_writes_nothing()
     {
-        var (exit, _, err) = Format(File_, check: true);
+        var (exit, _, err) = await FormatAsync(File_, check: true).ConfigureAwait(false);
 
         exit.Should().Be(1);
         err.Should().Contain("is not in its layout");
-        File.ReadAllText(File_).Should().Be(Untidy);
+        (await File.ReadAllTextAsync(File_).ConfigureAwait(false)).Should().Be(Untidy);
     }
 
     [Test]
-    public void Build_output_and_dependencies_are_not_formatted()
+    public async Task Build_output_and_dependencies_are_not_formatted()
     {
-        Format(_dir);
+        await FormatAsync(_dir).ConfigureAwait(false);
         foreach (var copy in new[] { "bin", "obj", "node_modules", ".git" })
         {
             Directory.CreateDirectory(Path.Combine(_dir, copy));
-            File.WriteAllText(Path.Combine(_dir, copy, "shop.lexicon"), Untidy);
+            await File.WriteAllTextAsync(Path.Combine(_dir, copy, "shop.lexicon"), Untidy)
+                .ConfigureAwait(false);
         }
 
-        var (exit, _, err) = Format(_dir, check: true);
+        var (exit, _, err) = await FormatAsync(_dir, check: true).ConfigureAwait(false);
 
         exit.Should().Be(0, err);
-        File.ReadAllText(Path.Combine(_dir, "bin", "shop.lexicon")).Should().Be(Untidy);
+        (
+            await File.ReadAllTextAsync(Path.Combine(_dir, "bin", "shop.lexicon"))
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .Be(Untidy);
     }
 
     [Test]
-    public void A_line_it_cannot_read_is_reported_at_its_line_and_the_file_is_left_alone()
+    public async Task A_line_it_cannot_read_is_reported_at_its_line_and_the_file_is_left_alone()
     {
-        File.WriteAllText(File_, Untidy.Replace("Roles:", "Rolez:", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(
+            File_,
+            Untidy.Replace("Roles:", "Rolez:", StringComparison.Ordinal)
+        );
 
-        var (exit, _, err) = Format(File_);
+        var (exit, _, err) = await FormatAsync(File_).ConfigureAwait(false);
 
         exit.Should().Be(1);
         err.Should().Contain("shop.lexicon:4:").And.Contain("did you mean 'Roles:'");

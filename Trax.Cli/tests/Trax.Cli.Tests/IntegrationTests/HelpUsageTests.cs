@@ -15,7 +15,7 @@ public class HelpUsageTests
 {
     private static string EntryAssembly => typeof(GenerateCommand).Assembly.Location;
 
-    private static (int ExitCode, string StdOut) RunCli(params string[] args)
+    private static async Task<(int ExitCode, string StdOut)> RunCliAsync(params string[] args)
     {
         var info = new ProcessStartInfo("dotnet")
         {
@@ -30,11 +30,21 @@ public class HelpUsageTests
         using var process = Process.Start(info).NotNull();
         var stdOutTask = process.StandardOutput.ReadToEndAsync();
         var stdErrTask = process.StandardError.ReadToEndAsync();
-        process
-            .WaitForExit(TimeSpan.FromSeconds(60))
-            .Should()
-            .BeTrue("`trax --help` returns at once");
-        return (process.ExitCode, stdOutTask.Result + stdErrTask.Result);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+        var exited = true;
+        try
+        {
+            await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            exited = false;
+        }
+        exited.Should().BeTrue("`trax --help` returns at once");
+        return (
+            process.ExitCode,
+            await stdOutTask.ConfigureAwait(false) + await stdErrTask.ConfigureAwait(false)
+        );
     }
 
     [Test]
@@ -44,9 +54,9 @@ public class HelpUsageTests
     }
 
     [Test]
-    public void Root_help_shows_the_trax_command_name()
+    public async Task Root_help_shows_the_trax_command_name()
     {
-        var (exitCode, output) = RunCli("--help");
+        var (exitCode, output) = await RunCliAsync("--help").ConfigureAwait(false);
 
         exitCode.Should().Be(0);
         output.Should().Contain("Usage:\n  trax [command] [options]".ReplaceLineEndings());
@@ -54,9 +64,9 @@ public class HelpUsageTests
     }
 
     [Test]
-    public void Subcommand_help_shows_the_trax_command_name()
+    public async Task Subcommand_help_shows_the_trax_command_name()
     {
-        var (exitCode, output) = RunCli("machine", "--help");
+        var (exitCode, output) = await RunCliAsync("machine", "--help").ConfigureAwait(false);
 
         exitCode.Should().Be(0);
         output.Should().Contain("trax machine [command] [options]");

@@ -26,7 +26,7 @@ namespace Trax.Cli.Deploy.Aws;
 /// <see cref="IAwsDeployClient"/> over the AWS SDK for .NET. Credentials come from the standard chain (a profile,
 /// SSO, the environment, or a role in CI); trax never stores one.
 /// </summary>
-internal sealed class AwsDeployClient(string region) : IAwsDeployClient
+internal sealed class AwsDeployClient(string region, TimeProvider clock) : IAwsDeployClient
 {
     private static readonly TimeSpan Poll = TimeSpan.FromSeconds(10);
 
@@ -166,7 +166,7 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
     {
         using var cfn = new AmazonCloudFormationClient(_region);
         var existing = await DescribeStackAsync(stack, ct).ConfigureAwait(false);
-        var started = DateTime.UtcNow;
+        var started = clock.GetUtcNow().UtcDateTime;
         var changeSet = await cfn.CreateChangeSetAsync(
                 new CreateChangeSetRequest
                 {
@@ -231,7 +231,7 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
                     $"CloudFormation refused the change to {stack}: {described.StatusReason}"
                 );
             }
-            await Task.Delay(TimeSpan.FromSeconds(3), ct).ConfigureAwait(false);
+            await Task.Delay(TimeSpan.FromSeconds(3), clock, ct).ConfigureAwait(false);
         }
         foreach (var change in described.Changes ?? [])
         {
@@ -255,7 +255,7 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
         return true;
     }
 
-    private static async Task WaitAsync(
+    private async Task WaitAsync(
         AmazonCloudFormationClient cfn,
         string stack,
         DateTime since,
@@ -266,7 +266,7 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
         var seen = new HashSet<string>(StringComparer.Ordinal);
         while (true)
         {
-            await Task.Delay(Poll, ct).ConfigureAwait(false);
+            await Task.Delay(Poll, clock, ct).ConfigureAwait(false);
             var events =
                 (
                     await cfn.DescribeStackEventsAsync(
@@ -367,7 +367,7 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
         var last = "";
         while (true)
         {
-            await Task.Delay(Poll, ct).ConfigureAwait(false);
+            await Task.Delay(Poll, clock, ct).ConfigureAwait(false);
             var current = (
                 await ecs.DescribeTasksAsync(
                         new DescribeTasksRequest
@@ -398,7 +398,7 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
     public async Task DeleteStackAsync(string stack, Action<string> progress, CancellationToken ct)
     {
         using var cfn = new AmazonCloudFormationClient(_region);
-        var started = DateTime.UtcNow;
+        var started = clock.GetUtcNow().UtcDateTime;
         await cfn.DeleteStackAsync(new DeleteStackRequest { StackName = stack }, ct)
             .ConfigureAwait(false);
         await WaitAsync(cfn, stack, started, progress, ct).ConfigureAwait(false);
@@ -568,7 +568,7 @@ internal sealed class AwsDeployClient(string region) : IAwsDeployClient
             } while (next is not null);
             if (!follow)
                 yield break;
-            await Task.Delay(TimeSpan.FromSeconds(2), ct).ConfigureAwait(false);
+            await Task.Delay(TimeSpan.FromSeconds(2), clock, ct).ConfigureAwait(false);
         }
     }
 }

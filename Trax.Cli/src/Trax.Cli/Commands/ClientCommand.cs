@@ -94,36 +94,47 @@ internal static class ClientCommand
             @namespace,
             node,
         };
-        command.SetAction(parseResult =>
-            parseResult.GetValue(operations) is { } schema
-                ? RunOperations(
-                    parseResult.GetValue(manifest)?.FullName,
-                    schema.FullName,
-                    parseResult.GetRequiredValue(output).FullName,
-                    parseResult.GetValue(check),
-                    parseResult.GetValue(documents) ?? [],
-                    parseResult.GetValue(lang),
-                    parseResult.GetValue(@namespace)
-                )
-            : parseResult.GetValue(lang) is not null || parseResult.GetValue(@namespace) is not null
-                ? Refuse(
-                    "--lang and --namespace choose the operations client's language; give them with --operations."
-                )
-            : Run(
-                parseResult.GetValue(target) ?? "react",
-                parseResult.GetValue(manifest)?.FullName,
-                parseResult.GetRequiredValue(output).FullName,
-                parseResult.GetValue(check),
-                parseResult.GetValue(specifier),
-                parseResult.GetValue(toolsDir)?.FullName,
-                new NodeRunner(parseResult.GetValue(node) ?? "node"),
-                parseResult.GetValue(documents) ?? []
-            )
+        command.SetAction(
+            (parseResult, _) =>
+            {
+                var stdout = parseResult.InvocationConfiguration.Output;
+                var stderr = parseResult.InvocationConfiguration.Error;
+                return parseResult.GetValue(operations) is { } schema
+                        ? RunOperationsAsync(
+                            parseResult.GetValue(manifest)?.FullName,
+                            schema.FullName,
+                            parseResult.GetRequiredValue(output).FullName,
+                            parseResult.GetValue(check),
+                            parseResult.GetValue(documents) ?? [],
+                            parseResult.GetValue(lang),
+                            parseResult.GetValue(@namespace),
+                            stdout,
+                            stderr
+                        )
+                    : parseResult.GetValue(lang) is not null
+                    || parseResult.GetValue(@namespace) is not null
+                        ? RefuseAsync(
+                            "--lang and --namespace choose the operations client's language; give them with --operations.",
+                            stderr
+                        )
+                    : RunAsync(
+                        parseResult.GetValue(target) ?? "react",
+                        parseResult.GetValue(manifest)?.FullName,
+                        parseResult.GetRequiredValue(output).FullName,
+                        parseResult.GetValue(check),
+                        parseResult.GetValue(specifier),
+                        parseResult.GetValue(toolsDir)?.FullName,
+                        new NodeRunner(parseResult.GetValue(node) ?? "node"),
+                        stdout,
+                        stderr,
+                        parseResult.GetValue(documents) ?? []
+                    );
+            }
         );
         return command;
     }
 
-    internal static int Run(
+    internal static async Task<int> RunAsync(
         string target,
         string? manifestPath,
         string outDir,
@@ -131,6 +142,8 @@ internal static class ClientCommand
         string? specifier,
         string? toolsDir,
         INodeRunner node,
+        TextWriter stdout,
+        TextWriter stderr,
         IReadOnlyList<string>? documentGlobs = null
     )
     {
@@ -156,14 +169,17 @@ internal static class ClientCommand
             {
                 var cwd = Directory.GetCurrentDirectory();
                 // The schema written for the editor is a .graphql file too: never read it as a document.
-                documentFiles = ReadDocuments(
-                    documentGlobs,
-                    Path.GetFullPath(Path.Combine(outDir, ClientGenerator.EditorSchemaFileName))
-                );
+                documentFiles = await ReadDocumentsAsync(
+                        documentGlobs,
+                        Path.GetFullPath(Path.Combine(outDir, ClientGenerator.EditorSchemaFileName))
+                    )
+                    .ConfigureAwait(false);
                 editorGlobs = documentGlobs.Select(g => Glob.RelativeTo(cwd, outDir, g)).ToList();
             }
             var options = new ClientGenerateOptions(
-                ClientManifest.Read(File.ReadAllText(manifestPath)),
+                ClientManifest.Read(
+                    await File.ReadAllTextAsync(manifestPath).ConfigureAwait(false)
+                ),
                 specifier ?? ClientGenerator.DefaultSpecifier,
                 toolsDir,
                 documentFiles,
@@ -173,44 +189,54 @@ internal static class ClientCommand
 
             if (check)
             {
-                var drift = generator.Check(options, outDir);
+                var drift = await generator.CheckAsync(options, outDir).ConfigureAwait(false);
                 foreach (var file in drift)
-                    Console.WriteLine(
-                        $"  {(file.Status == DriftStatus.Missing ? "MISSING" : "DRIFT"), -8}{file.Path}"
-                    );
+                    await stdout
+                        .WriteLineAsync(
+                            $"  {(file.Status == DriftStatus.Missing ? "MISSING" : "DRIFT"), -8}{file.Path}"
+                        )
+                        .ConfigureAwait(false);
                 if (drift.Count == 0)
                 {
-                    Console.WriteLine($"The client in {outDir} is what the manifest generates.");
+                    await stdout
+                        .WriteLineAsync($"The client in {outDir} is what the manifest generates.")
+                        .ConfigureAwait(false);
                     return 0;
                 }
-                Console.Error.WriteLine(
-                    "The client is stale: export the manifest from the host again and run 'trax client'."
-                );
+                await stderr
+                    .WriteLineAsync(
+                        "The client is stale: export the manifest from the host again and run 'trax client'."
+                    )
+                    .ConfigureAwait(false);
                 return 1;
             }
 
-            var written = generator.Write(options, outDir);
+            var written = await generator.WriteAsync(options, outDir).ConfigureAwait(false);
             foreach (var file in written)
-                Console.WriteLine($"  {file.Path}");
-            Console.WriteLine($"Generated {written.Count} file(s) in {outDir}.");
+                await stdout.WriteLineAsync($"  {file.Path}").ConfigureAwait(false);
+            await stdout
+                .WriteLineAsync($"Generated {written.Count} file(s) in {outDir}.")
+                .ConfigureAwait(false);
             return 0;
         }
         catch (Exception ex)
             when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
         {
-            Console.Error.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
     }
 
-    internal static int RunOperations(
+    internal static async Task<int> RunOperationsAsync(
         string? manifestPath,
         string schemaPath,
         string outDir,
         bool check,
         IReadOnlyList<string> documentGlobs,
-        string? lang = null,
-        string? @namespace = null
+        string? lang,
+        string? @namespace,
+        TextWriter stdout,
+        TextWriter stderr
     )
     {
         try
@@ -239,44 +265,55 @@ internal static class ClientCommand
             if (!File.Exists(schemaPath))
                 throw new InvalidOperationException($"No operations schema at {schemaPath}.");
             var options = new OperationsGenerateOptions(
-                File.ReadAllText(schemaPath),
-                ReadDocuments(documentGlobs, Path.GetFullPath(schemaPath))
+                await File.ReadAllTextAsync(schemaPath).ConfigureAwait(false),
+                await ReadDocumentsAsync(documentGlobs, Path.GetFullPath(schemaPath))
+                    .ConfigureAwait(false)
             );
 
             if (check)
             {
-                var drift =
+                var drift = await (
                     language == OperationsLanguage.CSharp
-                        ? ClientGenerator.CheckCSharp(options, ns, outDir)
-                        : ClientGenerator.Check(options, outDir);
+                        ? ClientGenerator.CheckCSharpAsync(options, ns, outDir)
+                        : ClientGenerator.CheckAsync(options, outDir)
+                ).ConfigureAwait(false);
                 foreach (var file in drift)
-                    Console.WriteLine(
-                        $"  {(file.Status == DriftStatus.Missing ? "MISSING" : "DRIFT"), -8}{file.Path}"
-                    );
+                    await stdout
+                        .WriteLineAsync(
+                            $"  {(file.Status == DriftStatus.Missing ? "MISSING" : "DRIFT"), -8}{file.Path}"
+                        )
+                        .ConfigureAwait(false);
                 if (drift.Count == 0)
                 {
-                    Console.WriteLine($"The client in {outDir} is what the documents generate.");
+                    await stdout
+                        .WriteLineAsync($"The client in {outDir} is what the documents generate.")
+                        .ConfigureAwait(false);
                     return 0;
                 }
-                Console.Error.WriteLine(
-                    "The client is stale: run 'trax client --operations' again after changing a document or the schema."
-                );
+                await stderr
+                    .WriteLineAsync(
+                        "The client is stale: run 'trax client --operations' again after changing a document or the schema."
+                    )
+                    .ConfigureAwait(false);
                 return 1;
             }
 
-            var written =
+            var written = await (
                 language == OperationsLanguage.CSharp
-                    ? ClientGenerator.WriteCSharp(options, ns, outDir)
-                    : ClientGenerator.Write(options, outDir);
+                    ? ClientGenerator.WriteCSharpAsync(options, ns, outDir)
+                    : ClientGenerator.WriteAsync(options, outDir)
+            ).ConfigureAwait(false);
             foreach (var file in written)
-                Console.WriteLine($"  {file.Path}");
-            Console.WriteLine($"Generated {written.Count} file(s) in {outDir}.");
+                await stdout.WriteLineAsync($"  {file.Path}").ConfigureAwait(false);
+            await stdout
+                .WriteLineAsync($"Generated {written.Count} file(s) in {outDir}.")
+                .ConfigureAwait(false);
             return 0;
         }
         catch (Exception ex)
             when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
         {
-            Console.Error.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
     }
@@ -285,7 +322,7 @@ internal static class ClientCommand
     // (a schema written as a .graphql file a glob would match too). The two are compared with their links resolved
     // and spelled as on disk, since the matches are under the working directory, which is reported that way, and
     // `exclude` may not be.
-    private static List<ClientDocumentFile> ReadDocuments(
+    private static async Task<List<ClientDocumentFile>> ReadDocumentsAsync(
         IReadOnlyList<string> globs,
         string exclude
     )
@@ -304,17 +341,20 @@ internal static class ClientCommand
                 );
             found.UnionWith(matches);
         }
-        return found
-            .Select(path => new ClientDocumentFile(
-                Path.GetRelativePath(cwd, path).Replace('\\', '/'),
-                File.ReadAllText(path)
-            ))
-            .ToList();
+        var files = new List<ClientDocumentFile>();
+        foreach (var path in found)
+            files.Add(
+                new ClientDocumentFile(
+                    Path.GetRelativePath(cwd, path).Replace('\\', '/'),
+                    await File.ReadAllTextAsync(path).ConfigureAwait(false)
+                )
+            );
+        return files;
     }
 
-    private static int Refuse(string message)
+    private static async Task<int> RefuseAsync(string message, TextWriter stderr)
     {
-        Console.Error.WriteLine(message);
+        await stderr.WriteLineAsync(message).ConfigureAwait(false);
         return 1;
     }
 }

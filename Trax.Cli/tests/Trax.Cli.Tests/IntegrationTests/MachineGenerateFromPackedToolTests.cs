@@ -21,9 +21,9 @@ public class MachineGenerateFromPackedToolTests
     private string _root = "";
 
     [SetUp]
-    public void SetUp()
+    public async Task SetUp()
     {
-        if (!new NodeRunner().IsAvailable())
+        if (!(await new NodeRunner().IsAvailableAsync().ConfigureAwait(false)))
             NodePrerequisite.Missing(
                 "node is not on PATH; the packed tool's twin and corpus need it."
             );
@@ -52,38 +52,45 @@ public class MachineGenerateFromPackedToolTests
     }
 
     [Test]
-    public void The_packed_tool_generates_a_twin_and_a_corpus_the_CSharp_engine_replays_without_engine_src()
+    public async Task The_packed_tool_generates_a_twin_and_a_corpus_the_CSharp_engine_replays_without_engine_src()
     {
-        var tool = PackAndUnpackTheTool();
+        var tool = await PackAndUnpackTheToolAsync().ConfigureAwait(false);
         var work = Path.Combine(_root, "consumer");
         Directory.CreateDirectory(work);
 
-        var (exitCode, output) = Run(
-            "dotnet",
-            work,
-            Path.Combine(tool, "trax.dll"),
-            "machine",
-            "generate",
-            "--assembly",
-            typeof(DeclarativeTurnstileMachine).Assembly.Location,
-            "--machine",
-            typeof(DeclarativeTurnstileMachine).FullName.NotNull(),
-            "--twin-out",
-            "twin",
-            "--corpus-out",
-            "corpus"
-        );
+        var (exitCode, output) = await RunAsync(
+                "dotnet",
+                work,
+                Path.Combine(tool, "trax.dll"),
+                "machine",
+                "generate",
+                "--assembly",
+                typeof(DeclarativeTurnstileMachine).Assembly.Location,
+                "--machine",
+                typeof(DeclarativeTurnstileMachine).FullName.NotNull(),
+                "--twin-out",
+                "twin",
+                "--corpus-out",
+                "corpus"
+            )
+            .ConfigureAwait(false);
 
         exitCode.Should().Be(0, output);
-        // With no engine checkout to import by path, the twin imports the published package.
-        File.ReadAllText(Path.Combine(work, "twin", "turnstile.machine.g.ts"))
-            .Should()
-            .Contain("from \"@traxsharp/state-machine\"");
-        File.ReadAllText(Path.Combine(work, "twin", "turnstile.contexts.g.ts"))
+        (
+            await
+            // With no engine checkout to import by path, the twin imports the published package.
+            File.ReadAllTextAsync(Path.Combine(work, "twin", "turnstile.machine.g.ts"))
+                .ConfigureAwait(false)
+        ).Should().Contain("from \"@traxsharp/state-machine\"");
+        (
+            await File.ReadAllTextAsync(Path.Combine(work, "twin", "turnstile.contexts.g.ts"))
+                .ConfigureAwait(false)
+        )
             .Should()
             .Contain("export type TurnstileState");
 
-        var corpus = File.ReadAllText(Path.Combine(work, "corpus", "differential.json"));
+        var corpus = await File.ReadAllTextAsync(Path.Combine(work, "corpus", "differential.json"))
+            .ConfigureAwait(false);
         corpus.Should().Contain("\"cases\"");
         new TurnstileReplaying(corpus).SelfCheck().Should().BeEmpty();
     }
@@ -92,105 +99,110 @@ public class MachineGenerateFromPackedToolTests
     // and the tool from its nupkg. A break that shows only in what is published (an export-map entry, a file left out
     // of the tarball) fails here instead of in the next outside developer's build.
     [Test]
-    public void The_published_engine_and_tool_typecheck_together_in_an_empty_project()
+    public async Task The_published_engine_and_tool_typecheck_together_in_an_empty_project()
     {
-        var tool = PackAndUnpackTheTool();
-        var work = OutsideProject(RepoFolder(Path.Combine("Trax.StateMachine", "ts")));
+        var tool = await PackAndUnpackTheToolAsync().ConfigureAwait(false);
+        var work = await OutsideProjectAsync(RepoFolder(Path.Combine("Trax.StateMachine", "ts")))
+            .ConfigureAwait(false);
 
-        var (generated, generateOutput) = Run(
-            "dotnet",
-            work,
-            Path.Combine(tool, "trax.dll"),
-            "machine",
-            "generate",
-            "--assembly",
-            typeof(DeclarativeTurnstileMachine).Assembly.Location,
-            "--machine",
-            typeof(DeclarativeTurnstileMachine).FullName.NotNull(),
-            "--twin-out",
-            "twin"
-        );
+        var (generated, generateOutput) = await RunAsync(
+                "dotnet",
+                work,
+                Path.Combine(tool, "trax.dll"),
+                "machine",
+                "generate",
+                "--assembly",
+                typeof(DeclarativeTurnstileMachine).Assembly.Location,
+                "--machine",
+                typeof(DeclarativeTurnstileMachine).FullName.NotNull(),
+                "--twin-out",
+                "twin"
+            )
+            .ConfigureAwait(false);
         generated.Should().Be(0, generateOutput);
 
-        GenerateClient(tool, work);
-        File.WriteAllText(
-            Path.Combine(work, "page.ts"),
-            """
-            import { configureTrax, useReminder, useRememberedCheckout, startRun, useRunProgress, followRunProgress, type StartRunInput } from "./trax/index.g";
+        await GenerateClient(tool, work).ConfigureAwait(false);
+        await File.WriteAllTextAsync(
+                Path.Combine(work, "page.ts"),
+                """
+                import { configureTrax, useReminder, useRememberedCheckout, startRun, useRunProgress, followRunProgress, type StartRunInput } from "./trax/index.g";
 
-            configureTrax({ url: "/graphql", socketUrl: "ws://localhost/graphql", user: "u-1" });
+                configureTrax({ url: "/graphql", socketUrl: "ws://localhost/graphql", user: "u-1" });
 
-            export function usePage() {
-              const reminder = useReminder({ startInput: {} });
-              void reminder.send("Approve");
-              // @ts-expect-error a timer trigger is the server's to fire, never a client's send
-              void reminder.send("Review.after");
-              return reminder.state;
-            }
+                export function usePage() {
+                  const reminder = useReminder({ startInput: {} });
+                  void reminder.send("Approve");
+                  // @ts-expect-error a timer trigger is the server's to fire, never a client's send
+                  void reminder.send("Review.after");
+                  return reminder.state;
+                }
 
-            export function useDraft() {
-              // @ts-expect-error the user is the connection's, given to configureTrax, never the hook's
-              useRememberedCheckout({ user: "u-2" });
-              return useRememberedCheckout({ rememberKey: "drafts" }).forget;
-            }
+                export function useDraft() {
+                  // @ts-expect-error the user is the connection's, given to configureTrax, never the hook's
+                  useRememberedCheckout({ user: "u-2" });
+                  return useRememberedCheckout({ rememberKey: "drafts" }).forget;
+                }
 
-            export function usePay() {
-              const checkout = useRememberedCheckout();
-              void checkout.send("Pay");
-              // @ts-expect-error an effect-bound trigger's input is the receipt the server's effect runner hands it
-              void checkout.send("Pay", { receipt: "made-up" });
-              return checkout.can("Pay");
-            }
+                export function usePay() {
+                  const checkout = useRememberedCheckout();
+                  void checkout.send("Pay");
+                  // @ts-expect-error an effect-bound trigger's input is the receipt the server's effect runner hands it
+                  void checkout.send("Pay", { receipt: "made-up" });
+                  return checkout.can("Pay");
+                }
 
-            const input: StartRunInput = { scenario: "crash" };
-            export const run = () => startRun(input, { mode: "QUEUE" });
+                const input: StartRunInput = { scenario: "crash" };
+                export const run = () => startRun(input, { mode: "QUEUE" });
 
-            export function useRunPage(runId: string | null) {
-              const progress = useRunProgress(runId);
-              const names: string[] = progress.steps.map((s) => s.name);
-              // @ts-expect-error a state is one of the run's states, never any string
-              const wrong: typeof progress.state = "DONE";
-              const attempts: string[] = [...progress.earlier, ...(progress.runId ? [progress.runId] : [])];
-              return { names, attempts, done: progress.state === "COMPLETED", wrong };
-            }
+                export function useRunPage(runId: string | null) {
+                  const progress = useRunProgress(runId);
+                  const names: string[] = progress.steps.map((s) => s.name);
+                  // @ts-expect-error a state is one of the run's states, never any string
+                  const wrong: typeof progress.state = "DONE";
+                  const attempts: string[] = [...progress.earlier, ...(progress.runId ? [progress.runId] : [])];
+                  return { names, attempts, done: progress.state === "COMPLETED", wrong };
+                }
 
-            export const stop = followRunProgress("r", (e) => void e.sequence);
-            """
-        );
+                export const stop = followRunProgress("r", (e) => void e.sequence);
+                """
+            )
+            .ConfigureAwait(false);
+        await File.WriteAllTextAsync(
+                Path.Combine(work, "consumer.ts"),
+                """
+                import { requireClientFormat, clientFormat, RefusalCode } from "@traxsharp/state-machine";
+                import { createMachineExecutor } from "@traxsharp/state-machine/client";
+                import { turnstile } from "./twin/turnstile.machine.g";
 
-        File.WriteAllText(
-            Path.Combine(work, "consumer.ts"),
-            """
-            import { requireClientFormat, clientFormat, RefusalCode } from "@traxsharp/state-machine";
-            import { createMachineExecutor } from "@traxsharp/state-machine/client";
-            import { turnstile } from "./twin/turnstile.machine.g";
-
-            requireClientFormat(clientFormat);
-            const code: RefusalCode = RefusalCode.GuardFailed;
-            export const state: string = turnstile.initial().state;
-            export const make = () => createMachineExecutor("/graphql", { machines: [{ machine: turnstile, documents: [] }] });
-            export { code };
-            """
-        );
-        File.WriteAllText(
-            Path.Combine(work, "tsconfig.json"),
-            """
-            {
-              "compilerOptions": {
-                "strict": true, "noEmit": true, "target": "ES2022", "module": "ESNext",
-                "moduleResolution": "bundler", "skipLibCheck": false, "lib": ["ES2022", "DOM"]
-              },
-              "include": ["consumer.ts", "page.ts", "twin/*.ts", "trax/**/*.ts"]
-            }
-            """
-        );
-        var (checkedCode, checkOutput) = Run(
-            "node",
-            work,
-            Path.Combine(work, "node_modules", "typescript", "bin", "tsc"),
-            "-p",
-            "tsconfig.json"
-        );
+                requireClientFormat(clientFormat);
+                const code: RefusalCode = RefusalCode.GuardFailed;
+                export const state: string = turnstile.initial().state;
+                export const make = () => createMachineExecutor("/graphql", { machines: [{ machine: turnstile, documents: [] }] });
+                export { code };
+                """
+            )
+            .ConfigureAwait(false);
+        await File.WriteAllTextAsync(
+                Path.Combine(work, "tsconfig.json"),
+                """
+                {
+                  "compilerOptions": {
+                    "strict": true, "noEmit": true, "target": "ES2022", "module": "ESNext",
+                    "moduleResolution": "bundler", "skipLibCheck": false, "lib": ["ES2022", "DOM"]
+                  },
+                  "include": ["consumer.ts", "page.ts", "twin/*.ts", "trax/**/*.ts"]
+                }
+                """
+            )
+            .ConfigureAwait(false);
+        var (checkedCode, checkOutput) = await RunAsync(
+                "node",
+                work,
+                Path.Combine(work, "node_modules", "typescript", "bin", "tsc"),
+                "-p",
+                "tsconfig.json"
+            )
+            .ConfigureAwait(false);
         checkedCode.Should().Be(0, checkOutput);
     }
 
@@ -198,63 +210,68 @@ public class MachineGenerateFromPackedToolTests
     // property or an enum fails erasableSyntaxOnly, a type imported as a value fails verbatimModuleSyntax, and an unused
     // import fails noUnusedLocals. The generated client is checked under that app's compiler options.
     [Test]
-    public void The_generated_client_typechecks_under_a_vite_react_ts_tsconfig()
+    public async Task The_generated_client_typechecks_under_a_vite_react_ts_tsconfig()
     {
-        var tool = PackAndUnpackTheTool();
-        var work = OutsideProject(RepoFolder(Path.Combine("Trax.StateMachine", "ts")));
-        GenerateClient(tool, work);
-        File.WriteAllText(
-            Path.Combine(work, "main.ts"),
-            """
-            import { configureTrax, TraxOperationError, useRememberedCheckout, useRunProgress, startRun } from "./trax/index.g";
+        var tool = await PackAndUnpackTheToolAsync().ConfigureAwait(false);
+        var work = await OutsideProjectAsync(RepoFolder(Path.Combine("Trax.StateMachine", "ts")))
+            .ConfigureAwait(false);
+        await GenerateClient(tool, work).ConfigureAwait(false);
+        await File.WriteAllTextAsync(
+                Path.Combine(work, "main.ts"),
+                """
+                import { configureTrax, TraxOperationError, useRememberedCheckout, useRunProgress, startRun } from "./trax/index.g";
 
-            configureTrax({ url: "/graphql", socketUrl: "ws://localhost/graphql", user: "u-1" });
+                configureTrax({ url: "/graphql", socketUrl: "ws://localhost/graphql", user: "u-1" });
 
-            export function usePage(runId: string | null) {
-              const checkout = useRememberedCheckout();
-              const progress = useRunProgress(runId);
-              return { state: checkout.state, steps: progress.steps.length };
-            }
+                export function usePage(runId: string | null) {
+                  const checkout = useRememberedCheckout();
+                  const progress = useRunProgress(runId);
+                  return { state: checkout.state, steps: progress.steps.length };
+                }
 
-            export const failed = (e: unknown) => e instanceof TraxOperationError && e.code === "CLIENT_OUTDATED";
-            export const run = () => startRun({ scenario: "ok" });
-            """
-        );
+                export const failed = (e: unknown) => e instanceof TraxOperationError && e.code === "CLIENT_OUTDATED";
+                export const run = () => startRun({ scenario: "ok" });
+                """
+            )
+            .ConfigureAwait(false);
+        await
         // The compiler options create-vite's react-ts template writes into tsconfig.app.json, less its vite/client types.
-        File.WriteAllText(
-            Path.Combine(work, "tsconfig.json"),
-            """
-            {
-              "compilerOptions": {
-                "target": "ES2022",
-                "lib": ["ES2023", "DOM", "DOM.Iterable"],
-                "module": "ESNext",
-                "skipLibCheck": true,
-                "moduleResolution": "bundler",
-                "allowImportingTsExtensions": true,
-                "verbatimModuleSyntax": true,
-                "moduleDetection": "force",
-                "noEmit": true,
-                "jsx": "react-jsx",
-                "strict": true,
-                "noUnusedLocals": true,
-                "noUnusedParameters": true,
-                "erasableSyntaxOnly": true,
-                "noFallthroughCasesInSwitch": true,
-                "noUncheckedSideEffectImports": true
-              },
-              "include": ["main.ts", "trax/**/*.ts"]
-            }
-            """
-        );
+        File.WriteAllTextAsync(
+                Path.Combine(work, "tsconfig.json"),
+                """
+                {
+                  "compilerOptions": {
+                    "target": "ES2022",
+                    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+                    "module": "ESNext",
+                    "skipLibCheck": true,
+                    "moduleResolution": "bundler",
+                    "allowImportingTsExtensions": true,
+                    "verbatimModuleSyntax": true,
+                    "moduleDetection": "force",
+                    "noEmit": true,
+                    "jsx": "react-jsx",
+                    "strict": true,
+                    "noUnusedLocals": true,
+                    "noUnusedParameters": true,
+                    "erasableSyntaxOnly": true,
+                    "noFallthroughCasesInSwitch": true,
+                    "noUncheckedSideEffectImports": true
+                  },
+                  "include": ["main.ts", "trax/**/*.ts"]
+                }
+                """
+            )
+            .ConfigureAwait(false);
 
-        var (code, output) = Run(
-            "node",
-            work,
-            Path.Combine(work, "node_modules", "typescript", "bin", "tsc"),
-            "-p",
-            "tsconfig.json"
-        );
+        var (code, output) = await RunAsync(
+                "node",
+                work,
+                Path.Combine(work, "node_modules", "typescript", "bin", "tsc"),
+                "-p",
+                "tsconfig.json"
+            )
+            .ConfigureAwait(false);
 
         code.Should().Be(0, output);
     }
@@ -263,40 +280,46 @@ public class MachineGenerateFromPackedToolTests
     // graphql-ws socket and a fetch that answers when told to: what configureTrax does to a mounted hook, and what
     // useRunProgress shows when the stream and a read answer out of order.
     [Test]
-    public void The_generated_hooks_behave_in_an_outside_project()
+    public async Task The_generated_hooks_behave_in_an_outside_project()
     {
-        var tool = PackAndUnpackTheTool();
+        var tool = await PackAndUnpackTheToolAsync().ConfigureAwait(false);
         var engine = RepoFolder(Path.Combine("Trax.StateMachine", "ts"));
-        var work = OutsideProject(
-            engine,
-            $"react-dom@{EngineDevDependency(engine, "react-dom")}",
-            $"vitest@{EngineDevDependency(engine, "vitest")}",
-            $"jsdom@{EngineDevDependency(engine, "jsdom")}",
-            $"@testing-library/react@{EngineDevDependency(engine, "@testing-library/react")}"
-        );
-        GenerateClient(tool, work);
-        File.WriteAllText(
-            Path.Combine(work, "vitest.config.mjs"),
-            """
-            export default { test: { include: ["client.g.test.ts"], environment: "jsdom", setupFiles: ["jsdom-storage.mjs"] } };
-            """
-        );
+        var work = await OutsideProjectAsync(
+                engine,
+                $"react-dom@{EngineDevDependency(engine, "react-dom")}",
+                $"vitest@{EngineDevDependency(engine, "vitest")}",
+                $"jsdom@{EngineDevDependency(engine, "jsdom")}",
+                $"@testing-library/react@{EngineDevDependency(engine, "@testing-library/react")}"
+            )
+            .ConfigureAwait(false);
+        await GenerateClient(tool, work).ConfigureAwait(false);
+        await File.WriteAllTextAsync(
+                Path.Combine(work, "vitest.config.mjs"),
+                """
+                export default { test: { include: ["client.g.test.ts"], environment: "jsdom", setupFiles: ["jsdom-storage.mjs"] } };
+                """
+            )
+            .ConfigureAwait(false);
+        await
         // Node 25 and later define a global localStorage of their own, which holds nothing without
         // --localstorage-file and shadows jsdom's; the remembered hooks under test need the page's.
-        File.WriteAllText(
-            Path.Combine(work, "jsdom-storage.mjs"),
-            """
-            Object.defineProperty(globalThis, "localStorage", { value: globalThis.jsdom.window.localStorage, configurable: true });
-            """
-        );
-        File.WriteAllText(Path.Combine(work, "client.g.test.ts"), GeneratedHookTests);
+        File.WriteAllTextAsync(
+                Path.Combine(work, "jsdom-storage.mjs"),
+                """
+                Object.defineProperty(globalThis, "localStorage", { value: globalThis.jsdom.window.localStorage, configurable: true });
+                """
+            )
+            .ConfigureAwait(false);
+        await File.WriteAllTextAsync(Path.Combine(work, "client.g.test.ts"), GeneratedHookTests)
+            .ConfigureAwait(false);
 
-        var (code, output) = Run(
-            "node",
-            work,
-            Path.Combine(work, "node_modules", "vitest", "vitest.mjs"),
-            "run"
-        );
+        var (code, output) = await RunAsync(
+                "node",
+                work,
+                Path.Combine(work, "node_modules", "vitest", "vitest.mjs"),
+                "run"
+            )
+            .ConfigureAwait(false);
 
         code.Should().Be(0, output);
     }
@@ -795,50 +818,62 @@ public class MachineGenerateFromPackedToolTests
         """;
 
     // An empty project that installs the engine from its npm tarball, and what it needs to typecheck a client.
-    private string OutsideProject(string engine, params string[] more)
+    private async Task<string> OutsideProjectAsync(string engine, params string[] more)
     {
-        var (packed, packOutput) = Run("npm", _root, "pack", engine, "--pack-destination", _root);
+        var (packed, packOutput) = await RunAsync(
+                "npm",
+                _root,
+                "pack",
+                engine,
+                "--pack-destination",
+                _root
+            )
+            .ConfigureAwait(false);
         packed.Should().Be(0, packOutput);
         var tarball = Directory.GetFiles(_root, "traxsharp-state-machine-*.tgz").Single();
 
         var work = Path.Combine(_root, "outside");
         Directory.CreateDirectory(work);
-        File.WriteAllText(
-            Path.Combine(work, "package.json"),
-            """{ "name": "outside", "private": true, "type": "module" }"""
-        );
-        var (installed, installOutput) = Run(
-            "npm",
-            work,
-            [
-                "install",
-                "--no-audit",
-                "--no-fund",
-                tarball,
-                $"typescript@{EngineDevDependency(engine, "typescript")}",
-                $"react@{EngineDevDependency(engine, "react")}",
-                $"@types/react@{EngineDevDependency(engine, "@types/react")}",
-                "graphql-ws@6",
-                .. more,
-            ]
-        );
+        await File.WriteAllTextAsync(
+                Path.Combine(work, "package.json"),
+                """{ "name": "outside", "private": true, "type": "module" }"""
+            )
+            .ConfigureAwait(false);
+        var (installed, installOutput) = await RunAsync(
+                "npm",
+                work,
+                [
+                    "install",
+                    "--no-audit",
+                    "--no-fund",
+                    tarball,
+                    $"typescript@{EngineDevDependency(engine, "typescript")}",
+                    $"react@{EngineDevDependency(engine, "react")}",
+                    $"@types/react@{EngineDevDependency(engine, "@types/react")}",
+                    "graphql-ws@6",
+                    .. more,
+                ]
+            )
+            .ConfigureAwait(false);
         installed.Should().Be(0, installOutput);
         return work;
     }
 
     // The client, generated by the published tool from a manifest as a frontend's build generates it, and checked.
-    private static void GenerateClient(string tool, string work)
+    private static async Task GenerateClient(string tool, string work)
     {
-        File.WriteAllText(
-            Path.Combine(work, "manifest.json"),
-            Trax.StateMachine.ClientManifest.Write(Fakes.ClientManifests.Sample())
-        );
+        await File.WriteAllTextAsync(
+                Path.Combine(work, "manifest.json"),
+                StateMachine.ClientManifest.Write(ClientManifests.Sample())
+            )
+            .ConfigureAwait(false);
         // The page's own document of the train, from which its function is generated.
         Directory.CreateDirectory(Path.Combine(work, "documents"));
-        File.WriteAllText(
-            Path.Combine(work, "documents", "startRun.graphql"),
-            Fakes.ClientManifests.StartRunDocument
-        );
+        await File.WriteAllTextAsync(
+                Path.Combine(work, "documents", "startRun.graphql"),
+                ClientManifests.StartRunDocument
+            )
+            .ConfigureAwait(false);
         string[] client =
         [
             Path.Combine(tool, "trax.dll"),
@@ -850,9 +885,11 @@ public class MachineGenerateFromPackedToolTests
             "--documents",
             "documents/*.graphql",
         ];
-        var (clientCode, clientOutput) = Run("dotnet", work, client);
+        var (clientCode, clientOutput) = await RunAsync("dotnet", work, client)
+            .ConfigureAwait(false);
         clientCode.Should().Be(0, clientOutput);
-        var (checkCode, checkOutput) = Run("dotnet", work, [.. client, "--check"]);
+        var (checkCode, checkOutput) = await RunAsync("dotnet", work, [.. client, "--check"])
+            .ConfigureAwait(false);
         checkCode
             .Should()
             .Be(0, "the client just generated is what the manifest generates: " + checkOutput);
@@ -860,9 +897,12 @@ public class MachineGenerateFromPackedToolTests
 
     // A dev dependency's version as the engine pins it, so the outside project typechecks with the TypeScript the
     // engine is built with.
-    private static string EngineDevDependency(string engine, string name) =>
+    private static async Task<string> EngineDevDependency(string engine, string name) =>
         System
-            .Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(engine, "package.json")))
+            .Text.Json.JsonDocument.Parse(
+                await File.ReadAllTextAsync(Path.Combine(engine, "package.json"))
+                    .ConfigureAwait(false)
+            )
             .RootElement.GetProperty("devDependencies")
             .GetProperty(name)
             .GetString()
@@ -880,27 +920,30 @@ public class MachineGenerateFromPackedToolTests
     // The solution, not the project, as CI packs it: a solution build leaves the referenced Trax.Effect
     // projects, which are outside it, at their default configuration, and a project pack would look for them
     // at this one.
-    private string PackAndUnpackTheTool()
+    private async Task<string> PackAndUnpackTheToolAsync()
     {
         var project = Path.Combine(RepoFolder("Trax.Cli"), "Trax.Cli.slnx");
         var packages = Path.Combine(_root, "packages");
-        var (exitCode, output) = Run(
-            "dotnet",
-            _root,
-            "pack",
-            project,
-            "--no-build",
-            "--configuration",
-            BuildConfiguration(),
-            "--output",
-            packages,
-            "-p:Version=0.0.0-packtest",
-            "-p:EnablePackageValidation=false"
-        );
+        var (exitCode, output) = await RunAsync(
+                "dotnet",
+                _root,
+                "pack",
+                project,
+                "--no-build",
+                "--configuration",
+                BuildConfiguration(),
+                "--output",
+                packages,
+                "-p:Version=0.0.0-packtest",
+                "-p:EnablePackageValidation=false"
+            )
+            .ConfigureAwait(false);
         exitCode.Should().Be(0, output);
 
         var unpacked = Path.Combine(_root, "tool");
-        ZipFile.ExtractToDirectory(Directory.GetFiles(packages, "*.nupkg").Single(), unpacked);
+        await ZipFile
+            .ExtractToDirectoryAsync(Directory.GetFiles(packages, "*.nupkg").Single(), unpacked)
+            .ConfigureAwait(false);
         return Path.Combine(unpacked, "tools", "net10.0", "any");
     }
 
@@ -928,7 +971,7 @@ public class MachineGenerateFromPackedToolTests
         throw new InvalidOperationException($"No {name} folder above {AppContext.BaseDirectory}.");
     }
 
-    private static (int ExitCode, string Output) Run(
+    private static async Task<(int ExitCode, string Output)> RunAsync(
         string fileName,
         string workingDirectory,
         params string[] args
@@ -954,16 +997,40 @@ public class MachineGenerateFromPackedToolTests
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();
         // Bounded, so a hung child fails this test with what it printed instead of stalling the run.
-        var exited = process.WaitForExit(TimeSpan.FromMinutes(5));
-        if (!exited)
-            process.Kill(entireProcessTree: true);
-        Task.WaitAll([stdout, stderr], TimeSpan.FromSeconds(30));
-        var output = Drained(stdout) + Drained(stderr);
+        var exited = true;
+        using (var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5)))
+        {
+            try
+            {
+                await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                exited = false;
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        using (var drain = new CancellationTokenSource(TimeSpan.FromSeconds(30)))
+        {
+            try
+            {
+                await Task.WhenAll(stdout, stderr).WaitAsync(drain.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // A grandchild still holds a pipe open; what was read so far is reported below.
+            }
+        }
+        var output =
+            await DrainedAsync(stdout).ConfigureAwait(false)
+            + await DrainedAsync(stderr).ConfigureAwait(false);
         return exited
             ? (process.ExitCode, output)
             : (-1, $"{fileName} {string.Join(' ', args)} timed out after five minutes:\n{output}");
     }
 
-    private static string Drained(Task<string> read) =>
-        read.IsCompletedSuccessfully ? read.Result : "(output still held open by a child process)";
+    private static async Task<string> DrainedAsync(Task<string> read) =>
+        read.IsCompletedSuccessfully
+            ? await read.ConfigureAwait(false)
+            : "(output still held open by a child process)";
 }

@@ -13,9 +13,11 @@ public class OpenApiEdgeCasesTests
     private static OpenApiSchemaParser ParseEdgeCases() => new();
 
     [Test]
-    public void Parse_ScalarResponse_BuildsSingleValueOutput()
+    public async Task Parse_ScalarResponse_BuildsSingleValueOutput()
     {
-        var schema = ParseEdgeCases().Parse(FixturePath("openapi-edge-cases.json"));
+        var schema = await ParseEdgeCases()
+            .ParseAsync(FixturePath("openapi-edge-cases.json"))
+            .ConfigureAwait(false);
 
         var op = schema.Operations.Single(o =>
             string.Equals(o.Name, "ScalarResponse", StringComparison.Ordinal)
@@ -26,9 +28,11 @@ public class OpenApiEdgeCasesTests
     }
 
     [Test]
-    public void Parse_AllOfRefAndComposition_BuildsExpectedFields()
+    public async Task Parse_AllOfRefAndComposition_BuildsExpectedFields()
     {
-        var schema = ParseEdgeCases().Parse(FixturePath("openapi-edge-cases.json"));
+        var schema = await ParseEdgeCases()
+            .ParseAsync(FixturePath("openapi-edge-cases.json"))
+            .ConfigureAwait(false);
 
         var op = schema.Operations.Single(o =>
             string.Equals(o.Name, "AllOfRef", StringComparison.Ordinal)
@@ -65,9 +69,11 @@ public class OpenApiEdgeCasesTests
     }
 
     [Test]
-    public void Parse_AllOfMergesFields_FromMultipleSchemas()
+    public async Task Parse_AllOfMergesFields_FromMultipleSchemas()
     {
-        var schema = ParseEdgeCases().Parse(FixturePath("openapi-edge-cases.json"));
+        var schema = await ParseEdgeCases()
+            .ParseAsync(FixturePath("openapi-edge-cases.json"))
+            .ConfigureAwait(false);
 
         // MergedShape allOf merges Base { id, name } with { extra }
         var merged = schema.Types.Single(t =>
@@ -81,9 +87,11 @@ public class OpenApiEdgeCasesTests
     }
 
     [Test]
-    public void Parse_OperationIdCollisions_AppliesPathParamDisambiguation()
+    public async Task Parse_OperationIdCollisions_AppliesPathParamDisambiguation()
     {
-        var schema = ParseEdgeCases().Parse(FixturePath("openapi-edge-cases.json"));
+        var schema = await ParseEdgeCases()
+            .ParseAsync(FixturePath("openapi-edge-cases.json"))
+            .ConfigureAwait(false);
 
         // Three operations all named getUser are disambiguated:
         //   /users/{userId}                   → GetUser
@@ -96,22 +104,26 @@ public class OpenApiEdgeCasesTests
     }
 
     [Test]
-    public void Parse_TwoSchemasInRow_CachedTypesReturnCachedInstance()
+    public async Task Parse_TwoSchemasInRow_CachedTypesReturnCachedInstance()
     {
         var parser = ParseEdgeCases();
-        var first = parser.Parse(FixturePath("petstore.json"));
+        var first = await parser.ParseAsync(FixturePath("petstore.json")).ConfigureAwait(false);
         // Re-parse a second time on a fresh parser — exercises ResolveSchemaType cache hit path
         // by parsing the same schema with previously-resolved types in _resolvedTypes
-        var schema2 = ParseEdgeCases().Parse(FixturePath("openapi-edge-cases.json"));
+        var schema2 = await ParseEdgeCases()
+            .ParseAsync(FixturePath("openapi-edge-cases.json"))
+            .ConfigureAwait(false);
 
         first.Should().NotBeNull();
         schema2.Should().NotBeNull();
     }
 
     [Test]
-    public void Parse_GraphQL_UnknownType_BuildsObjectFallbackOutput()
+    public async Task Parse_GraphQL_UnknownType_BuildsObjectFallbackOutput()
     {
-        var schema = new GraphQLSchemaParser().Parse(FixturePath("graphql-unknown-type.graphql"));
+        var schema = await new GraphQLSchemaParser()
+            .ParseAsync(FixturePath("graphql-unknown-type.graphql"))
+            .ConfigureAwait(false);
 
         var op = schema.Operations.Single();
         op.OutputType.Fields.Should().ContainSingle();

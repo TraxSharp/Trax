@@ -86,7 +86,9 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
             var repository = await aws.EnsureRepositoryAsync(Repository(stack, name), tags, ct)
                 .ConfigureAwait(false);
             say($"  {name} -> {repository}:{tag}");
-            images.Publish(DeployFile.ProjectPath(filePath, service), repository, tag, login);
+            await images
+                .PublishAsync(DeployFile.ProjectPath(filePath, service), repository, tag, login)
+                .ConfigureAwait(false);
             image[name] = $"{repository}:{tag}";
         }
         var migrator = image[AwsStack.Migrator(file, exports)];
@@ -224,20 +226,23 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
     /// A tag no earlier deploy used: the time, then the commit and whether the tree had changes, so an image says
     /// what it was built from.
     /// </summary>
-    public static string ImageTag(string directory, DateTime now)
+    public static async Task<string> ImageTagAsync(string directory, DateTime now)
     {
         var tag = now.ToString(
             "yyyyMMdd-HHmmss",
             System.Globalization.CultureInfo.InvariantCulture
         );
-        var commit = Git(directory, "rev-parse", "--short=12", "HEAD");
+        var commit = await GitAsync(directory, "rev-parse", "--short=12", "HEAD")
+            .ConfigureAwait(false);
         if (commit is null)
             return tag;
-        var dirty = Git(directory, "status", "--porcelain") is { Length: > 0 };
+        var dirty =
+            await GitAsync(directory, "status", "--porcelain").ConfigureAwait(false) is
+            { Length: > 0 };
         return $"{tag}-{commit}{(dirty ? "-dirty" : "")}";
     }
 
-    private static string? Git(string directory, params string[] args)
+    private static async Task<string?> GitAsync(string directory, params string[] args)
     {
         var psi = new ProcessStartInfo("git")
         {
@@ -248,7 +253,7 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
             psi.ArgumentList.Add(arg);
         try
         {
-            var (exit, stdout, _) = ChildProcess.Run(psi);
+            var (exit, stdout, _) = await ChildProcess.RunAsync(psi).ConfigureAwait(false);
             return exit == 0 ? stdout.Trim() : null;
         }
         catch (System.ComponentModel.Win32Exception)

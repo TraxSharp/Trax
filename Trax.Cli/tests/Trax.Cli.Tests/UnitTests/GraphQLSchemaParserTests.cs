@@ -21,9 +21,9 @@ public class GraphQLSchemaParserTests
     #region SimpleSchema
 
     [Test]
-    public void Parse_SimpleGraphql_HasTwoOperations()
+    public async Task Parse_SimpleGraphql_HasTwoOperations()
     {
-        var schema = _parser.Parse(FixturePath("simple.graphql"));
+        var schema = await _parser.ParseAsync(FixturePath("simple.graphql")).ConfigureAwait(false);
 
         schema.Operations.Should().HaveCount(2);
         schema.Operations.Should().Contain(o => o.Kind == OperationKind.Query);
@@ -31,27 +31,27 @@ public class GraphQLSchemaParserTests
     }
 
     [Test]
-    public void Parse_SimpleGraphql_HasQueryNamedGetPlayer()
+    public async Task Parse_SimpleGraphql_HasQueryNamedGetPlayer()
     {
-        var schema = _parser.Parse(FixturePath("simple.graphql"));
+        var schema = await _parser.ParseAsync(FixturePath("simple.graphql")).ConfigureAwait(false);
 
         var query = schema.Operations.First(o => o.Kind == OperationKind.Query);
         query.Name.Should().Be("GetPlayer");
     }
 
     [Test]
-    public void Parse_SimpleGraphql_HasMutationNamedCreatePlayer()
+    public async Task Parse_SimpleGraphql_HasMutationNamedCreatePlayer()
     {
-        var schema = _parser.Parse(FixturePath("simple.graphql"));
+        var schema = await _parser.ParseAsync(FixturePath("simple.graphql")).ConfigureAwait(false);
 
         var mutation = schema.Operations.First(o => o.Kind == OperationKind.Mutation);
         mutation.Name.Should().Be("CreatePlayer");
     }
 
     [Test]
-    public void Parse_SimpleGraphql_HasPlayerTypeWithThreeFields()
+    public async Task Parse_SimpleGraphql_HasPlayerTypeWithThreeFields()
     {
-        var schema = _parser.Parse(FixturePath("simple.graphql"));
+        var schema = await _parser.ParseAsync(FixturePath("simple.graphql")).ConfigureAwait(false);
 
         schema.Types.Should().Contain(t => t.Name == "Player");
         var player = schema.Types.First(t =>
@@ -61,9 +61,9 @@ public class GraphQLSchemaParserTests
     }
 
     [Test]
-    public void Parse_SimpleGraphql_QueryInputTypeHasIdFieldMappedToString()
+    public async Task Parse_SimpleGraphql_QueryInputTypeHasIdFieldMappedToString()
     {
-        var schema = _parser.Parse(FixturePath("simple.graphql"));
+        var schema = await _parser.ParseAsync(FixturePath("simple.graphql")).ConfigureAwait(false);
 
         var query = schema.Operations.First(o => o.Kind == OperationKind.Query);
         query.InputType.Fields.Should().HaveCount(1);
@@ -74,9 +74,9 @@ public class GraphQLSchemaParserTests
     }
 
     [Test]
-    public void Parse_SimpleGraphql_MutationInputTypeHasTwoRequiredFields()
+    public async Task Parse_SimpleGraphql_MutationInputTypeHasTwoRequiredFields()
     {
-        var schema = _parser.Parse(FixturePath("simple.graphql"));
+        var schema = await _parser.ParseAsync(FixturePath("simple.graphql")).ConfigureAwait(false);
 
         var mutation = schema.Operations.First(o => o.Kind == OperationKind.Mutation);
         mutation.InputType.Fields.Where(f => f.IsRequired).Should().HaveCount(2);
@@ -87,9 +87,11 @@ public class GraphQLSchemaParserTests
     #region NestedTypes
 
     [Test]
-    public void Parse_NestedTypes_ContainsOrderOrderItemCustomer()
+    public async Task Parse_NestedTypes_ContainsOrderOrderItemCustomer()
     {
-        var schema = _parser.Parse(FixturePath("nested-types.graphql"));
+        var schema = await _parser
+            .ParseAsync(FixturePath("nested-types.graphql"))
+            .ConfigureAwait(false);
 
         var typeNames = schema.Types.Select(t => t.Name).ToList();
         typeNames.Should().Contain("Order");
@@ -102,9 +104,9 @@ public class GraphQLSchemaParserTests
     #region Enums
 
     [Test]
-    public void Parse_Enums_HasOneEnumWithFourValues()
+    public async Task Parse_Enums_HasOneEnumWithFourValues()
     {
-        var schema = _parser.Parse(FixturePath("enums.graphql"));
+        var schema = await _parser.ParseAsync(FixturePath("enums.graphql")).ConfigureAwait(false);
 
         schema.Enums.Should().HaveCount(1);
         var statusEnum = schema.Enums[0];
@@ -113,9 +115,9 @@ public class GraphQLSchemaParserTests
     }
 
     [Test]
-    public void Parse_Enums_HasMutationNamedUpdateStatus()
+    public async Task Parse_Enums_HasMutationNamedUpdateStatus()
     {
-        var schema = _parser.Parse(FixturePath("enums.graphql"));
+        var schema = await _parser.ParseAsync(FixturePath("enums.graphql")).ConfigureAwait(false);
 
         schema
             .Operations.Should()
@@ -127,9 +129,11 @@ public class GraphQLSchemaParserTests
     #region Nullable
 
     [Test]
-    public void Parse_Nullable_QuerySearchHasThreeNullableInputFields()
+    public async Task Parse_Nullable_QuerySearchHasThreeNullableInputFields()
     {
-        var schema = _parser.Parse(FixturePath("nullable.graphql"));
+        var schema = await _parser
+            .ParseAsync(FixturePath("nullable.graphql"))
+            .ConfigureAwait(false);
 
         var search = schema.Operations.First(o =>
             string.Equals(o.Name, "Search", StringComparison.Ordinal)
@@ -139,9 +143,11 @@ public class GraphQLSchemaParserTests
     }
 
     [Test]
-    public void Parse_Nullable_SearchResultHasNullableFields()
+    public async Task Parse_Nullable_SearchResultHasNullableFields()
     {
-        var schema = _parser.Parse(FixturePath("nullable.graphql"));
+        var schema = await _parser
+            .ParseAsync(FixturePath("nullable.graphql"))
+            .ConfigureAwait(false);
 
         var searchResult = schema.Types.First(t =>
             string.Equals(t.Name, "SearchResult", StringComparison.Ordinal)
@@ -163,25 +169,31 @@ public class GraphQLSchemaParserTests
     #region TypeCollision
 
     [Test]
-    public void Parse_TypeCollision_AllChatsQueryIsDisambiguated()
+    public async Task Parse_TypeCollision_AllChatsQueryIsDisambiguated()
     {
-        var schema = _parser.Parse(FixturePath("type-collision.graphql"));
+        var schema = await _parser
+            .ParseAsync(FixturePath("type-collision.graphql"))
+            .ConfigureAwait(false);
 
         schema.Operations.Should().Contain(o => o.Name == "AllChatsQuery");
     }
 
     [Test]
-    public void Parse_TypeCollision_ChatHistoriesQueryIsDisambiguated()
+    public async Task Parse_TypeCollision_ChatHistoriesQueryIsDisambiguated()
     {
-        var schema = _parser.Parse(FixturePath("type-collision.graphql"));
+        var schema = await _parser
+            .ParseAsync(FixturePath("type-collision.graphql"))
+            .ConfigureAwait(false);
 
         schema.Operations.Should().Contain(o => o.Name == "ChatHistoriesQuery");
     }
 
     [Test]
-    public void Parse_TypeCollision_NonCollidingOperationNamesUnchanged()
+    public async Task Parse_TypeCollision_NonCollidingOperationNamesUnchanged()
     {
-        var schema = _parser.Parse(FixturePath("type-collision.graphql"));
+        var schema = await _parser
+            .ParseAsync(FixturePath("type-collision.graphql"))
+            .ConfigureAwait(false);
 
         // GetPlayer doesn't collide with any type name
         schema.Operations.Should().Contain(o => o.Name == "GetPlayer");
@@ -190,9 +202,11 @@ public class GraphQLSchemaParserTests
     }
 
     [Test]
-    public void Parse_TypeCollision_DisambiguatedOperationOutputTypePreserved()
+    public async Task Parse_TypeCollision_DisambiguatedOperationOutputTypePreserved()
     {
-        var schema = _parser.Parse(FixturePath("type-collision.graphql"));
+        var schema = await _parser
+            .ParseAsync(FixturePath("type-collision.graphql"))
+            .ConfigureAwait(false);
 
         var allChats = schema.Operations.First(o =>
             string.Equals(o.Name, "AllChatsQuery", StringComparison.Ordinal)
@@ -203,13 +217,13 @@ public class GraphQLSchemaParserTests
     }
 
     [Test]
-    public void Parse_TypeCollision_MutationCollidingWithTypeGetsMutationSuffix()
+    public async Task Parse_TypeCollision_MutationCollidingWithTypeGetsMutationSuffix()
     {
         // Create a schema where a mutation name collides with a type
         var tempFile = Path.GetTempFileName();
         try
         {
-            File.WriteAllText(
+            await File.WriteAllTextAsync(
                 tempFile,
                 """
                 type Query {
@@ -224,7 +238,7 @@ public class GraphQLSchemaParserTests
                 }
                 """
             );
-            var schema = _parser.Parse(tempFile);
+            var schema = await _parser.ParseAsync(tempFile).ConfigureAwait(false);
 
             schema.Operations.Should().Contain(o => o.Name == "ItemMutation");
         }
@@ -235,12 +249,12 @@ public class GraphQLSchemaParserTests
     }
 
     [Test]
-    public void Parse_TypeCollision_CollidingWithEnumTypeIsDisambiguated()
+    public async Task Parse_TypeCollision_CollidingWithEnumTypeIsDisambiguated()
     {
         var tempFile = Path.GetTempFileName();
         try
         {
-            File.WriteAllText(
+            await File.WriteAllTextAsync(
                 tempFile,
                 """
                 type Query {
@@ -258,7 +272,7 @@ public class GraphQLSchemaParserTests
                 }
                 """
             );
-            var schema = _parser.Parse(tempFile);
+            var schema = await _parser.ParseAsync(tempFile).ConfigureAwait(false);
 
             // "Status" collides with the Status enum
             schema.Operations.Should().Contain(o => o.Name == "StatusMutation");
@@ -272,12 +286,12 @@ public class GraphQLSchemaParserTests
     }
 
     [Test]
-    public void Parse_TypeCollision_CollidingWithInputTypeIsDisambiguated()
+    public async Task Parse_TypeCollision_CollidingWithInputTypeIsDisambiguated()
     {
         var tempFile = Path.GetTempFileName();
         try
         {
-            File.WriteAllText(
+            await File.WriteAllTextAsync(
                 tempFile,
                 """
                 type Query {
@@ -292,7 +306,7 @@ public class GraphQLSchemaParserTests
                 }
                 """
             );
-            var schema = _parser.Parse(tempFile);
+            var schema = await _parser.ParseAsync(tempFile).ConfigureAwait(false);
 
             // "FilterInput" collides with the FilterInput input type
             schema.Operations.Should().Contain(o => o.Name == "FilterInputQuery");
@@ -304,9 +318,11 @@ public class GraphQLSchemaParserTests
     }
 
     [Test]
-    public void Parse_TypeCollision_HasCorrectTotalOperationCount()
+    public async Task Parse_TypeCollision_HasCorrectTotalOperationCount()
     {
-        var schema = _parser.Parse(FixturePath("type-collision.graphql"));
+        var schema = await _parser
+            .ParseAsync(FixturePath("type-collision.graphql"))
+            .ConfigureAwait(false);
 
         schema.Operations.Should().HaveCount(4);
     }
@@ -316,13 +332,13 @@ public class GraphQLSchemaParserTests
     #region EmptySchema
 
     [Test]
-    public void Parse_EmptySchema_HasZeroOperations()
+    public async Task Parse_EmptySchema_HasZeroOperations()
     {
         var tempFile = Path.GetTempFileName();
         try
         {
-            File.WriteAllText(tempFile, string.Empty);
-            var schema = _parser.Parse(tempFile);
+            await File.WriteAllTextAsync(tempFile, string.Empty);
+            var schema = await _parser.ParseAsync(tempFile).ConfigureAwait(false);
             schema.Operations.Should().BeEmpty();
         }
         finally

@@ -33,12 +33,12 @@ public class ExecutableLookupTests
     }
 
     [Test]
-    public void A_node_planted_in_the_current_directory_never_runs()
+    public async Task A_node_planted_in_the_current_directory_never_runs()
     {
         IgnoreOnWindows();
         var checkout = Directory.CreateDirectory(Path.Combine(_root, "checkout")).FullName;
         var marker = Path.Combine(_root, "planted-node-ran");
-        Script(Path.Combine(checkout, "node"), $"touch '{marker}'");
+        await Script(Path.Combine(checkout, "node"), $"touch '{marker}'").ConfigureAwait(false);
         Directory.SetCurrentDirectory(checkout);
 
         // The empty entry and '.' are how a PATH says "the current directory".
@@ -47,7 +47,9 @@ public class ExecutableLookupTests
             name => ExecutableLookup.Resolve(name, ":.:checkout", pathExt: null, windows: false)
         );
 
-        runner.IsAvailable().Should().BeFalse("no absolute PATH entry holds a node");
+        (await runner.IsAvailableAsync().ConfigureAwait(false))
+            .Should()
+            .BeFalse("no absolute PATH entry holds a node");
         File.Exists(marker)
             .Should()
             .BeFalse(
@@ -57,14 +59,14 @@ public class ExecutableLookupTests
     }
 
     [Test]
-    public void The_node_on_PATH_runs_instead_of_one_in_the_current_directory()
+    public async Task The_node_on_PATH_runs_instead_of_one_in_the_current_directory()
     {
         IgnoreOnWindows();
         var checkout = Directory.CreateDirectory(Path.Combine(_root, "checkout")).FullName;
         var bin = Directory.CreateDirectory(Path.Combine(_root, "bin")).FullName;
         var marker = Path.Combine(_root, "planted-node-ran");
-        Script(Path.Combine(checkout, "node"), $"touch '{marker}'");
-        Script(Path.Combine(bin, "node"), "echo v24.0.0");
+        await Script(Path.Combine(checkout, "node"), $"touch '{marker}'").ConfigureAwait(false);
+        await Script(Path.Combine(bin, "node"), "echo v24.0.0").ConfigureAwait(false);
         Directory.SetCurrentDirectory(checkout);
 
         var runner = new NodeRunner(
@@ -72,31 +74,34 @@ public class ExecutableLookupTests
             name => ExecutableLookup.Resolve(name, $".:{bin}", pathExt: null, windows: false)
         );
 
-        runner.IsAvailable().Should().BeTrue();
-        runner.Run("--version", []).StdOut.Trim().Should().Be("v24.0.0");
+        (await runner.IsAvailableAsync().ConfigureAwait(false)).Should().BeTrue();
+        (await runner.RunAsync("--version", []).ConfigureAwait(false))
+            .StdOut.Trim()
+            .Should()
+            .Be("v24.0.0");
         File.Exists(marker).Should().BeFalse();
     }
 
     [Test]
-    public void The_real_lookup_does_not_resolve_to_the_current_directory()
+    public async Task The_real_lookup_does_not_resolve_to_the_current_directory()
     {
         IgnoreOnWindows();
         var checkout = Directory.CreateDirectory(Path.Combine(_root, "checkout")).FullName;
         var planted = Path.Combine(checkout, "node");
-        Script(planted, "exit 0");
+        await Script(planted, "exit 0").ConfigureAwait(false);
         Directory.SetCurrentDirectory(checkout);
 
         ExecutableLookup.Resolve("node").Should().NotBe(planted).And.NotBe("node");
     }
 
     [Test]
-    public void A_file_without_an_execute_bit_is_skipped()
+    public async Task A_file_without_an_execute_bit_is_skipped()
     {
         IgnoreOnWindows();
         var first = Directory.CreateDirectory(Path.Combine(_root, "first")).FullName;
         var second = Directory.CreateDirectory(Path.Combine(_root, "second")).FullName;
-        File.WriteAllText(Path.Combine(first, "node"), "not executable");
-        Script(Path.Combine(second, "node"), "exit 0");
+        await File.WriteAllTextAsync(Path.Combine(first, "node"), "not executable");
+        await Script(Path.Combine(second, "node"), "exit 0").ConfigureAwait(false);
 
         ExecutableLookup
             .Resolve("node", $"{first}:{second}", pathExt: null, windows: false)
@@ -105,11 +110,11 @@ public class ExecutableLookupTests
     }
 
     [Test]
-    public void An_absolute_path_is_used_as_given_and_a_missing_one_is_not_found()
+    public async Task An_absolute_path_is_used_as_given_and_a_missing_one_is_not_found()
     {
         IgnoreOnWindows();
         var node = Path.Combine(_root, "node");
-        Script(node, "exit 0");
+        await Script(node, "exit 0").ConfigureAwait(false);
 
         ExecutableLookup.Resolve(node, "", pathExt: null, windows: false).Should().Be(node);
         ExecutableLookup
@@ -143,16 +148,18 @@ public class ExecutableLookupTests
     }
 
     [Test]
-    public void A_missing_executable_is_reported_by_name()
+    public async Task A_missing_executable_is_reported_by_name()
     {
         var runner = new NodeRunner("trax-no-such-binary-zzz", _ => null);
 
-        runner.IsAvailable().Should().BeFalse();
-        runner
-            .Invoking(r => r.Run("x.mjs", []))
-            .Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage("'trax-no-such-binary-zzz' was not found on PATH*--node*");
+        (await runner.IsAvailableAsync().ConfigureAwait(false)).Should().BeFalse();
+        (
+            await runner
+                .Invoking(async r => await r.RunAsync("x.mjs", []).ConfigureAwait(false))
+                .Should()
+                .ThrowAsync<InvalidOperationException>()
+                .ConfigureAwait(false)
+        ).WithMessage("'trax-no-such-binary-zzz' was not found on PATH*--node*");
     }
 
     [Test]
@@ -282,10 +289,10 @@ public class ExecutableLookupTests
     }
 
     [Test]
-    public void Off_Windows_a_file_named_like_a_shim_is_an_ordinary_executable()
+    public async Task Off_Windows_a_file_named_like_a_shim_is_an_ordinary_executable()
     {
         IgnoreOnWindows();
-        Script(Path.Combine(_root, "node.cmd"), "exit 0");
+        await Script(Path.Combine(_root, "node.cmd"), "exit 0").ConfigureAwait(false);
 
         ExecutableLookup
             .Resolve("node.cmd", _root, pathExt: null, windows: false)
@@ -316,9 +323,9 @@ public class ExecutableLookupTests
             Assert.Ignore("Plants a shell script; the Windows rules are pinned without one below.");
     }
 
-    private static void Script(string path, string body)
+    private static async Task Script(string path, string body)
     {
-        File.WriteAllText(path, $"#!/bin/sh\n{body}\n");
+        await File.WriteAllTextAsync(path, $"#!/bin/sh\n{body}\n").ConfigureAwait(false);
         if (!OperatingSystem.IsWindows())
             File.SetUnixFileMode(
                 path,

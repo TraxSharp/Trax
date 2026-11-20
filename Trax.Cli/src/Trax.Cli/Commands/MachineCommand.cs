@@ -12,13 +12,19 @@ namespace Trax.Cli.Commands;
 /// </summary>
 internal static class MachineCommand
 {
-    public static Command Create() =>
-        new("machine", "Generate and check state-machine artifacts from a compiled Trax machine.")
+    public static async Task<Command> CreateAsync()
+    {
+        // The --lang help lists the languages the bundled twin generator writes, read from the assembly.
+        var langHelp = await TwinLanguages.HelpAsync().ConfigureAwait(false);
+        return new(
+            "machine",
+            "Generate and check state-machine artifacts from a compiled Trax machine."
+        )
         {
             CreateNew(),
-            CreateGenerate(),
-            CreateCheck(),
-            CreateShow(),
+            CreateGenerate(langHelp),
+            CreateCheck(langHelp),
+            CreateShow(langHelp),
             CreateMigrate(),
             CreateFromGherkin(),
             CreateRun(),
@@ -27,6 +33,7 @@ internal static class MachineCommand
             CreateExplain(),
             CreateDiagram(),
         };
+    }
 
     private static Command CreateNew()
     {
@@ -63,42 +70,43 @@ internal static class MachineCommand
             withEffectOption,
             forceOption,
         };
-        command.SetAction(parseResult =>
-            RunNew(
-                parseResult.GetRequiredValue(nameArgument),
-                parseResult.GetValue(outputOption)?.FullName ?? Directory.GetCurrentDirectory(),
-                parseResult.GetValue(namespaceOption),
-                parseResult.GetValue(withEffectOption),
-                parseResult.GetValue(forceOption)
-            )
+        command.SetAction(
+            (parseResult, _) =>
+                RunNewAsync(
+                    parseResult.GetRequiredValue(nameArgument),
+                    parseResult.GetValue(outputOption)?.FullName ?? Directory.GetCurrentDirectory(),
+                    parseResult.GetValue(namespaceOption),
+                    parseResult.GetValue(withEffectOption),
+                    parseResult.GetValue(forceOption),
+                    parseResult.InvocationConfiguration.Output,
+                    parseResult.InvocationConfiguration.Error
+                )
         );
         return command;
     }
 
-    internal static int RunNew(
+    internal static async Task<int> RunNewAsync(
         string name,
         string outputDir,
         string? @namespace,
         bool withEffect,
-        bool force
+        bool force,
+        TextWriter stdout,
+        TextWriter stderr
     )
     {
         try
         {
-            var path = MachineScaffolder.Write(
-                name,
-                outputDir,
-                @namespace ?? "Machines",
-                withEffect,
-                force
-            );
-            Console.WriteLine($"Scaffolded {path}");
-            Console.WriteLine(NewNextSteps());
+            var path = await MachineScaffolder
+                .WriteAsync(name, outputDir, @namespace ?? "Machines", withEffect, force)
+                .ConfigureAwait(false);
+            await stdout.WriteLineAsync($"Scaffolded {path}").ConfigureAwait(false);
+            await stdout.WriteLineAsync(NewNextSteps()).ConfigureAwait(false);
             return 0;
         }
         catch (InvalidOperationException ex)
         {
-            Console.Error.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
     }
@@ -133,9 +141,9 @@ internal static class MachineCommand
         );
     }
 
-    private static Command CreateGenerate()
+    private static Command CreateGenerate(string langHelp)
     {
-        var o = MachineOptions.Create();
+        var o = MachineOptions.Create(langHelp);
         var command = new Command(
             "generate",
             "Export the IR from a compiled machine, or read it from a host's client manifest, and generate its typed view (TypeScript or C#) and/or differential corpus."
@@ -155,29 +163,32 @@ internal static class MachineCommand
             o.Lang,
             o.Namespace,
         };
-        command.SetAction(parseResult =>
-            RunGenerate(
-                parseResult.GetValue(o.Assembly)?.FullName,
-                parseResult.GetValue(o.Machine),
-                parseResult.GetValue(o.IrOut)?.FullName,
-                parseResult.GetValue(o.TwinOut)?.FullName,
-                parseResult.GetValue(o.CorpusOut)?.FullName,
-                parseResult.GetValue(o.EngineSrc)?.FullName,
-                parseResult.GetValue(o.ImportStyle),
-                parseResult.GetValue(o.Specifier),
-                parseResult.GetValue(o.ToolsDir)?.FullName,
-                new NodeRunner(parseResult.GetValue(o.Node) ?? "node"),
-                parseResult.GetValue(o.Lang),
-                parseResult.GetValue(o.Namespace),
-                parseResult.GetValue(o.Manifest)?.FullName
-            )
+        command.SetAction(
+            (parseResult, _) =>
+                RunGenerateAsync(
+                    parseResult.GetValue(o.Assembly)?.FullName,
+                    parseResult.GetValue(o.Machine),
+                    parseResult.GetValue(o.IrOut)?.FullName,
+                    parseResult.GetValue(o.TwinOut)?.FullName,
+                    parseResult.GetValue(o.CorpusOut)?.FullName,
+                    parseResult.GetValue(o.EngineSrc)?.FullName,
+                    parseResult.GetValue(o.ImportStyle),
+                    parseResult.GetValue(o.Specifier),
+                    parseResult.GetValue(o.ToolsDir)?.FullName,
+                    new NodeRunner(parseResult.GetValue(o.Node) ?? "node"),
+                    parseResult.InvocationConfiguration.Output,
+                    parseResult.InvocationConfiguration.Error,
+                    parseResult.GetValue(o.Lang),
+                    parseResult.GetValue(o.Namespace),
+                    parseResult.GetValue(o.Manifest)?.FullName
+                )
         );
         return command;
     }
 
-    private static Command CreateCheck()
+    private static Command CreateCheck(string langHelp)
     {
-        var o = MachineOptions.Create();
+        var o = MachineOptions.Create(langHelp);
         var command = new Command(
             "check",
             "Regenerate to a temp location and fail (exit 1) if any committed artifact has drifted."
@@ -197,29 +208,32 @@ internal static class MachineCommand
             o.Lang,
             o.Namespace,
         };
-        command.SetAction(parseResult =>
-            RunCheck(
-                parseResult.GetValue(o.Assembly)?.FullName,
-                parseResult.GetValue(o.Machine),
-                parseResult.GetValue(o.IrOut)?.FullName,
-                parseResult.GetValue(o.TwinOut)?.FullName,
-                parseResult.GetValue(o.CorpusOut)?.FullName,
-                parseResult.GetValue(o.EngineSrc)?.FullName,
-                parseResult.GetValue(o.ImportStyle),
-                parseResult.GetValue(o.Specifier),
-                parseResult.GetValue(o.ToolsDir)?.FullName,
-                new NodeRunner(parseResult.GetValue(o.Node) ?? "node"),
-                parseResult.GetValue(o.Lang),
-                parseResult.GetValue(o.Namespace),
-                parseResult.GetValue(o.Manifest)?.FullName
-            )
+        command.SetAction(
+            (parseResult, _) =>
+                RunCheckAsync(
+                    parseResult.GetValue(o.Assembly)?.FullName,
+                    parseResult.GetValue(o.Machine),
+                    parseResult.GetValue(o.IrOut)?.FullName,
+                    parseResult.GetValue(o.TwinOut)?.FullName,
+                    parseResult.GetValue(o.CorpusOut)?.FullName,
+                    parseResult.GetValue(o.EngineSrc)?.FullName,
+                    parseResult.GetValue(o.ImportStyle),
+                    parseResult.GetValue(o.Specifier),
+                    parseResult.GetValue(o.ToolsDir)?.FullName,
+                    new NodeRunner(parseResult.GetValue(o.Node) ?? "node"),
+                    parseResult.InvocationConfiguration.Output,
+                    parseResult.InvocationConfiguration.Error,
+                    parseResult.GetValue(o.Lang),
+                    parseResult.GetValue(o.Namespace),
+                    parseResult.GetValue(o.Manifest)?.FullName
+                )
         );
         return command;
     }
 
-    private static Command CreateShow()
+    private static Command CreateShow(string langHelp)
     {
-        var o = MachineOptions.Create(assemblyRequired: true);
+        var o = MachineOptions.Create(langHelp, assemblyRequired: true);
         var formatOption = new Option<string?>("--format")
         {
             Description =
@@ -239,15 +253,17 @@ internal static class MachineCommand
             formatOption,
             asciiOption,
         };
-        command.SetAction(parseResult =>
-            RunShow(
-                parseResult.GetRequiredValue(o.Assembly).FullName,
-                parseResult.GetValue(o.Machine),
-                parseResult.GetValue(formatOption),
-                parseResult.GetValue(asciiOption),
-                Console.Out,
-                UseColor()
-            )
+        command.SetAction(
+            (parseResult, _) =>
+                RunShowAsync(
+                    parseResult.GetRequiredValue(o.Assembly).FullName,
+                    parseResult.GetValue(o.Machine),
+                    parseResult.GetValue(formatOption),
+                    parseResult.GetValue(asciiOption),
+                    parseResult.InvocationConfiguration.Output,
+                    parseResult.InvocationConfiguration.Error,
+                    UseColor()
+                )
         );
         return command;
     }
@@ -257,12 +273,13 @@ internal static class MachineCommand
         !Console.IsOutputRedirected
         && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("NO_COLOR"));
 
-    internal static int RunShow(
+    internal static async Task<int> RunShowAsync(
         string assemblyPath,
         string? machineName,
         string? format,
         bool ascii,
         TextWriter output,
+        TextWriter stderr,
         bool color = false
     )
     {
@@ -288,12 +305,14 @@ internal static class MachineCommand
                 // The engine refuses a malformed machine when it is built, which exporting triggers.
                 throw new InvalidOperationException(ex.Message, ex);
             }
-            output.Write(MachineRenderer.Render(ir, parsedFormat, ascii, color));
+            await output
+                .WriteAsync(MachineRenderer.Render(ir, parsedFormat, ascii, color))
+                .ConfigureAwait(false);
             return 0;
         }
         catch (InvalidOperationException ex)
         {
-            Console.Error.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
     }
@@ -333,23 +352,25 @@ internal static class MachineCommand
             outOption,
             checkOption,
         };
-        command.SetAction(parseResult =>
-        {
-            var features = parseResult.GetRequiredValue(featuresOption).FullName;
-            return RunFromGherkin(
-                features,
-                parseResult.GetValue(glossaryOption)?.FullName,
-                parseResult.GetRequiredValue(outOption).FullName,
-                parseResult.GetValue(checkOption),
-                Console.Out,
-                Console.Error,
-                Trains(parseResult, trainsOption)
-            );
-        });
+        command.SetAction(
+            (parseResult, _) =>
+            {
+                var features = parseResult.GetRequiredValue(featuresOption).FullName;
+                return RunFromGherkinAsync(
+                    features,
+                    parseResult.GetValue(glossaryOption)?.FullName,
+                    parseResult.GetRequiredValue(outOption).FullName,
+                    parseResult.GetValue(checkOption),
+                    parseResult.InvocationConfiguration.Output,
+                    parseResult.InvocationConfiguration.Error,
+                    Trains(parseResult, trainsOption)
+                );
+            }
+        );
         return command;
     }
 
-    internal static int RunFromGherkin(
+    internal static async Task<int> RunFromGherkinAsync(
         string featuresDir,
         string? glossaryPath,
         string outDir,
@@ -373,62 +394,76 @@ internal static class MachineCommand
                     )
             )
             {
-                stderr.WriteLine(
-                    $"--glossary {glossaryPath} is inside --out {outDir}, which from-gherkin owns and would remove "
-                        + "it from. Keep a hand-written glossary outside --out, or write the lexicon it elaborates from."
-                );
+                await stderr
+                    .WriteLineAsync(
+                        $"--glossary {glossaryPath} is inside --out {outDir}, which from-gherkin owns and would remove "
+                            + "it from. Keep a hand-written glossary outside --out, or write the lexicon it elaborates from."
+                    )
+                    .ConfigureAwait(false);
                 return 1;
             }
-            var result = FeatureDirectory.Derive(featuresDir, glossaryPath, trains);
+            var result = await FeatureDirectory
+                .DeriveAsync(featuresDir, glossaryPath, trains)
+                .ConfigureAwait(false);
             foreach (var step in result.UiSteps)
-                stdout.WriteLine($"not derived (about the UI): {step}");
+                await stdout
+                    .WriteLineAsync($"not derived (about the UI): {step}")
+                    .ConfigureAwait(false);
             // A warning is printed and stops nothing, --check included.
             foreach (var warning in result.Warnings)
-                stderr.WriteLine($"warning: {warning}");
+                await stderr.WriteLineAsync($"warning: {warning}").ConfigureAwait(false);
             if (result.Problems.Count > 0)
             {
                 foreach (var problem in result.Problems)
-                    stderr.WriteLine(problem);
-                stderr.WriteLine(
-                    $"{result.Problems.Count} problem(s); nothing was {(check ? "checked" : "written")}."
-                );
+                    await stderr.WriteLineAsync(problem).ConfigureAwait(false);
+                await stderr
+                    .WriteLineAsync(
+                        $"{result.Problems.Count} problem(s); nothing was {(check ? "checked" : "written")}."
+                    )
+                    .ConfigureAwait(false);
                 return 1;
             }
             if (check)
             {
-                var drift = FeatureDirectory.Check(outDir, result.Files);
+                var drift = await FeatureDirectory
+                    .CheckAsync(outDir, result.Files)
+                    .ConfigureAwait(false);
                 foreach (var line in drift)
-                    stderr.WriteLine(line);
+                    await stderr.WriteLineAsync(line).ConfigureAwait(false);
                 if (drift.Count > 0)
                 {
-                    stderr.WriteLine(
-                        "Run `trax machine from-gherkin` without --check and commit what it writes."
-                    );
+                    await stderr
+                        .WriteLineAsync(
+                            "Run `trax machine from-gherkin` without --check and commit what it writes."
+                        )
+                        .ConfigureAwait(false);
                     return 1;
                 }
-                stdout.WriteLine($"{outDir} is up to date.");
+                await stdout.WriteLineAsync($"{outDir} is up to date.").ConfigureAwait(false);
                 return 0;
             }
-            var changes = FeatureDirectory.Write(outDir, result.Files);
+            var changes = await FeatureDirectory
+                .WriteAsync(outDir, result.Files)
+                .ConfigureAwait(false);
             foreach (var line in changes)
-                stdout.WriteLine(line);
+                await stdout.WriteLineAsync(line).ConfigureAwait(false);
             if (changes.Count == 0)
-                stdout.WriteLine($"{outDir} is up to date.");
+                await stdout.WriteLineAsync($"{outDir} is up to date.").ConfigureAwait(false);
             return 0;
         }
         catch (FeatureMachinesException ex)
         {
-            stderr.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
         catch (IOException ex)
         {
-            stderr.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
         catch (UnauthorizedAccessException ex)
         {
-            stderr.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
     }
@@ -510,30 +545,32 @@ internal static class MachineCommand
             dryRunOption,
             failFastOption,
         };
-        command.SetAction(parseResult =>
-        {
-            var features = parseResult.GetRequiredValue(featuresOption).FullName;
-            return RunRun(
-                new RunArguments(
-                    features,
-                    parseResult.GetValue(glossaryOption)?.FullName,
-                    parseResult.GetRequiredValue(machinesOption).FullName,
-                    parseResult.GetValue(locationsArgument) ?? [],
-                    parseResult.GetValue(tagsOption),
-                    parseResult.GetValue(nameOption) ?? [],
-                    parseResult.GetValue(formatOption) ?? "pretty",
-                    parseResult.GetValue(reportOption)?.FullName,
-                    parseResult.GetValue(strictOption),
-                    parseResult.GetValue(dryRunOption),
-                    parseResult.GetValue(failFastOption)
-                )
-                {
-                    Trains = Trains(parseResult, runTrainsOption),
-                },
-                Console.Out,
-                Console.Error
-            );
-        });
+        command.SetAction(
+            (parseResult, _) =>
+            {
+                var features = parseResult.GetRequiredValue(featuresOption).FullName;
+                return RunRunAsync(
+                    new RunArguments(
+                        features,
+                        parseResult.GetValue(glossaryOption)?.FullName,
+                        parseResult.GetRequiredValue(machinesOption).FullName,
+                        parseResult.GetValue(locationsArgument) ?? [],
+                        parseResult.GetValue(tagsOption),
+                        parseResult.GetValue(nameOption) ?? [],
+                        parseResult.GetValue(formatOption) ?? "pretty",
+                        parseResult.GetValue(reportOption)?.FullName,
+                        parseResult.GetValue(strictOption),
+                        parseResult.GetValue(dryRunOption),
+                        parseResult.GetValue(failFastOption)
+                    )
+                    {
+                        Trains = Trains(parseResult, runTrainsOption),
+                    },
+                    parseResult.InvocationConfiguration.Output,
+                    parseResult.InvocationConfiguration.Error
+                );
+            }
+        );
         return command;
     }
 
@@ -555,20 +592,21 @@ internal static class MachineCommand
         public IReadOnlyList<string> Trains { get; init; } = [];
     }
 
-    internal static int RunRun(RunArguments args, TextWriter stdout, TextWriter stderr)
+    internal static async Task<int> RunRunAsync(
+        RunArguments args,
+        TextWriter stdout,
+        TextWriter stderr
+    )
     {
         try
         {
-            var read = FeatureDirectory.ReadFeatures(
-                args.FeaturesDir,
-                args.GlossaryPath,
-                args.Trains
-            );
+            var read = await FeatureDirectory
+                .ReadFeaturesAsync(args.FeaturesDir, args.GlossaryPath, args.Trains)
+                .ConfigureAwait(false);
             var (glossary, features) = (read.Glossary.Inner, read.Features);
-            var (host, irs) = Trax
+            var (host, irs) = await Trax
                 .StateMachine.Persistence.FromIr.IrDirectory.ReadAsync(args.MachinesDir)
-                .GetAwaiter()
-                .GetResult();
+                .ConfigureAwait(false);
             var locations = new List<(string File, long Line)>();
             foreach (var location in args.Locations)
             {
@@ -583,9 +621,11 @@ internal static class MachineCommand
                     || line < 1
                 )
                 {
-                    stderr.WriteLine(
-                        $"'{location}' is not file:line, such as ordering.feature:12."
-                    );
+                    await stderr
+                        .WriteLineAsync(
+                            $"'{location}' is not file:line, such as ordering.feature:12."
+                        )
+                        .ConfigureAwait(false);
                     return 1;
                 }
                 locations.Add((location[..colon].Replace('\\', '/'), line));
@@ -602,9 +642,11 @@ internal static class MachineCommand
                     }
                     catch (ArgumentException ex)
                     {
-                        stderr.WriteLine(
-                            $"--name '{name}' is not a regular expression: {ex.Message}"
-                        );
+                        await stderr
+                            .WriteLineAsync(
+                                $"--name '{name}' is not a regular expression: {ex.Message}"
+                            )
+                            .ConfigureAwait(false);
                         return 1;
                     }
             if (args.Tags is { } tags)
@@ -614,11 +656,11 @@ internal static class MachineCommand
                 }
                 catch (FormatException ex)
                 {
-                    stderr.WriteLine($"--tags {ex.Message}");
+                    await stderr.WriteLineAsync($"--tags {ex.Message}").ConfigureAwait(false);
                     return 1;
                 }
 
-            var report = FeatureRun
+            var report = await FeatureRun
                 .RunAsync(
                     glossary,
                     features,
@@ -628,19 +670,19 @@ internal static class MachineCommand
                     args.DryRun,
                     args.FailFast
                 )
-                .GetAwaiter()
-                .GetResult();
+                .ConfigureAwait(false);
             foreach (var problem in report.Problems)
-                stderr.WriteLine(problem);
+                await stderr.WriteLineAsync(problem.ToString()).ConfigureAwait(false);
             var text = RunReportWriter.Write(report, args.Format);
             if (args.ReportPath is { } path)
-                File.WriteAllText(
-                    path,
-                    text,
-                    new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
-                );
+                await File.WriteAllTextAsync(
+                        path,
+                        text,
+                        new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
+                    )
+                    .ConfigureAwait(false);
             else
-                stdout.Write(text);
+                await stdout.WriteAsync(text).ConfigureAwait(false);
 
             // A selection that runs nothing is never a pass: no scenario matched (a typo in a tag or a location), or
             // every one it matched is @host, which only the host bindings run. A @host scenario beside one that ran is
@@ -659,41 +701,45 @@ internal static class MachineCommand
                     )
                 );
             if (report.Scenarios.Count == 0)
-                stderr.WriteLine("No scenario matched.");
+                await stderr.WriteLineAsync("No scenario matched.").ConfigureAwait(false);
             else if (!ran)
-                stderr.WriteLine(
-                    $"Every scenario selected ({report.Scenarios.Count}) is tagged @host, which only the host bindings run, so nothing ran."
-                );
+                await stderr
+                    .WriteLineAsync(
+                        $"Every scenario selected ({report.Scenarios.Count}) is tagged @host, which only the host bindings run, so nothing ran."
+                    )
+                    .ConfigureAwait(false);
             return passed ? 0 : 1;
         }
         catch (System.Text.RegularExpressions.RegexMatchTimeoutException ex)
         {
-            stderr.WriteLine(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"--name '{ex.Pattern}' took longer than {ex.MatchTimeout.TotalSeconds:0.#} s to match a scenario's name; give a simpler expression."
+            await stderr
+                .WriteLineAsync(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"--name '{ex.Pattern}' took longer than {ex.MatchTimeout.TotalSeconds:0.#} s to match a scenario's name; give a simpler expression."
+                    )
                 )
-            );
+                .ConfigureAwait(false);
             return 1;
         }
         catch (FeatureMachinesException ex)
         {
-            stderr.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
         catch (InvalidOperationException ex)
         {
-            stderr.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
         catch (IOException ex)
         {
-            stderr.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
         catch (UnauthorizedAccessException ex)
         {
-            stderr.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
     }
@@ -770,23 +816,25 @@ internal static class MachineCommand
             kindOption,
             outOption,
         };
-        command.SetAction(parseResult =>
-        {
-            var (features, glossary, trains) = FeaturePaths(parseResult, paths);
-            return RunMissing(
-                features,
-                glossary,
-                parseResult.GetValue(kindOption) ?? [],
-                parseResult.GetValue(outOption)?.FullName,
-                Console.Out,
-                Console.Error,
-                trains
-            );
-        });
+        command.SetAction(
+            (parseResult, _) =>
+            {
+                var (features, glossary, trains) = FeaturePaths(parseResult, paths);
+                return RunMissingAsync(
+                    features,
+                    glossary,
+                    parseResult.GetValue(kindOption) ?? [],
+                    parseResult.GetValue(outOption)?.FullName,
+                    parseResult.InvocationConfiguration.Output,
+                    parseResult.InvocationConfiguration.Error,
+                    trains
+                );
+            }
+        );
         return command;
     }
 
-    internal static int RunMissing(
+    internal static async Task<int> RunMissingAsync(
         string featuresDir,
         string? glossaryPath,
         IReadOnlyList<string> kinds,
@@ -798,16 +846,19 @@ internal static class MachineCommand
     {
         try
         {
-            var read = FeatureDirectory.ReadFeatures(featuresDir, glossaryPath, trains);
-            var (gaps, problems) = Missing
+            var read = await FeatureDirectory
+                .ReadFeaturesAsync(featuresDir, glossaryPath, trains)
+                .ConfigureAwait(false);
+            var (gaps, problems) = await Missing
                 .FindAsync(read.Glossary.Inner, read.Features)
-                .GetAwaiter()
-                .GetResult();
+                .ConfigureAwait(false);
             if (problems.Count > 0)
             {
                 foreach (var problem in problems)
-                    stderr.WriteLine(problem);
-                stderr.WriteLine("The features do not derive: fix these first.");
+                    await stderr.WriteLineAsync(problem.ToString()).ConfigureAwait(false);
+                await stderr
+                    .WriteLineAsync("The features do not derive: fix these first.")
+                    .ConfigureAwait(false);
                 return 1;
             }
             var wanted = gaps.Where(g =>
@@ -817,37 +868,40 @@ internal static class MachineCommand
                 .ToList();
             foreach (var gap in wanted)
             {
-                stdout.WriteLine($"# {gap.Message}");
-                stdout.Write(gap.Stub ?? "#   (no scenario can be written for this one)\n");
-                stdout.WriteLine();
+                await stdout.WriteLineAsync($"# {gap.Message}").ConfigureAwait(false);
+                await stdout
+                    .WriteAsync(gap.Stub ?? "#   (no scenario can be written for this one)\n")
+                    .ConfigureAwait(false);
+                await stdout.WriteLineAsync().ConfigureAwait(false);
             }
-            stdout.WriteLine($"{wanted.Count} gap(s).");
+            await stdout.WriteLineAsync($"{wanted.Count} gap(s).").ConfigureAwait(false);
             if (outPath is not null)
             {
                 var file = new System.Text.StringBuilder("Feature: Missing scenarios\n");
                 foreach (var gap in wanted.Where(g => g.Stub is not null))
                     file.Append($"\n  # {gap.Message}\n").Append(gap.Stub);
-                File.WriteAllText(
-                    outPath,
-                    file.ToString(),
-                    new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
-                );
+                await File.WriteAllTextAsync(
+                        outPath,
+                        file.ToString(),
+                        new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
+                    )
+                    .ConfigureAwait(false);
             }
             return 0;
         }
         catch (FeatureMachinesException ex)
         {
-            stderr.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
         catch (IOException ex)
         {
-            stderr.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
         catch (UnauthorizedAccessException ex)
         {
-            stderr.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
     }
@@ -866,22 +920,24 @@ internal static class MachineCommand
             paths.Trains,
             unusedOption,
         };
-        command.SetAction(parseResult =>
-        {
-            var (features, glossary, trains) = FeaturePaths(parseResult, paths);
-            return RunUsage(
-                features,
-                glossary,
-                parseResult.GetValue(unusedOption),
-                Console.Out,
-                Console.Error,
-                trains
-            );
-        });
+        command.SetAction(
+            (parseResult, _) =>
+            {
+                var (features, glossary, trains) = FeaturePaths(parseResult, paths);
+                return RunUsageAsync(
+                    features,
+                    glossary,
+                    parseResult.GetValue(unusedOption),
+                    parseResult.InvocationConfiguration.Output,
+                    parseResult.InvocationConfiguration.Error,
+                    trains
+                );
+            }
+        );
         return command;
     }
 
-    internal static int RunUsage(
+    internal static async Task<int> RunUsageAsync(
         string featuresDir,
         string? glossaryPath,
         bool unusedOnly,
@@ -892,33 +948,39 @@ internal static class MachineCommand
     {
         try
         {
-            var read = FeatureDirectory.ReadFeatures(featuresDir, glossaryPath, trains);
+            var read = await FeatureDirectory
+                .ReadFeaturesAsync(featuresDir, glossaryPath, trains)
+                .ConfigureAwait(false);
             var (phrases, problems) = Usage.Find(read.Glossary.Inner, read.Features);
             foreach (var problem in problems)
-                stderr.WriteLine(problem);
+                await stderr.WriteLineAsync(problem.ToString()).ConfigureAwait(false);
             foreach (var use in phrases.Where(p => !unusedOnly || p.Steps.Count == 0))
             {
-                stdout.WriteLine($"{use.Part} \"{use.Phrase}\": {use.Steps.Count}");
+                await stdout
+                    .WriteLineAsync($"{use.Part} \"{use.Phrase}\": {use.Steps.Count}")
+                    .ConfigureAwait(false);
                 foreach (var (file, line) in use.Steps)
-                    stdout.WriteLine(
-                        string.Create(CultureInfo.InvariantCulture, $"  {file}:{line}")
-                    );
+                    await stdout
+                        .WriteLineAsync(
+                            string.Create(CultureInfo.InvariantCulture, $"  {file}:{line}")
+                        )
+                        .ConfigureAwait(false);
             }
             return problems.Count == 0 ? 0 : 1;
         }
         catch (FeatureMachinesException ex)
         {
-            stderr.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
         catch (IOException ex)
         {
-            stderr.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
         catch (UnauthorizedAccessException ex)
         {
-            stderr.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
     }
@@ -941,22 +1003,24 @@ internal static class MachineCommand
             paths.Trains,
             scenarioOption,
         };
-        command.SetAction(parseResult =>
-        {
-            var (features, glossary, trains) = FeaturePaths(parseResult, paths);
-            return RunExplain(
-                features,
-                glossary,
-                parseResult.GetValue(scenarioOption),
-                Console.Out,
-                Console.Error,
-                trains
-            );
-        });
+        command.SetAction(
+            (parseResult, _) =>
+            {
+                var (features, glossary, trains) = FeaturePaths(parseResult, paths);
+                return RunExplainAsync(
+                    features,
+                    glossary,
+                    parseResult.GetValue(scenarioOption),
+                    parseResult.InvocationConfiguration.Output,
+                    parseResult.InvocationConfiguration.Error,
+                    trains
+                );
+            }
+        );
         return command;
     }
 
-    internal static int RunExplain(
+    internal static async Task<int> RunExplainAsync(
         string featuresDir,
         string? glossaryPath,
         string? scenario,
@@ -967,14 +1031,18 @@ internal static class MachineCommand
     {
         try
         {
-            var result = FeatureDirectory.Derive(featuresDir, glossaryPath, trains);
+            var result = await FeatureDirectory
+                .DeriveAsync(featuresDir, glossaryPath, trains)
+                .ConfigureAwait(false);
             if (result.Problems.Count > 0)
             {
                 foreach (var problem in result.Problems)
-                    stderr.WriteLine(problem);
-                stderr.WriteLine(
-                    $"{result.Problems.Count} problem(s): the features do not derive, so there is nothing to explain."
-                );
+                    await stderr.WriteLineAsync(problem).ConfigureAwait(false);
+                await stderr
+                    .WriteLineAsync(
+                        $"{result.Problems.Count} problem(s): the features do not derive, so there is nothing to explain."
+                    )
+                    .ConfigureAwait(false);
                 return 1;
             }
             var shown = ScenarioExplanation
@@ -991,36 +1059,42 @@ internal static class MachineCommand
                 .ToList();
             if (scenario is not null && shown.Count == 0)
             {
-                stderr.WriteLine($"No scenario that derived anything matches '{scenario}'.");
+                await stderr
+                    .WriteLineAsync($"No scenario that derived anything matches '{scenario}'.")
+                    .ConfigureAwait(false);
                 return 1;
             }
             foreach (var s in shown)
             {
-                stdout.WriteLine(
-                    string.Create(CultureInfo.InvariantCulture, $"{s.File}:{s.Line} {s.Name}")
-                );
+                await stdout
+                    .WriteLineAsync(
+                        string.Create(CultureInfo.InvariantCulture, $"{s.File}:{s.Line} {s.Name}")
+                    )
+                    .ConfigureAwait(false);
                 foreach (var fact in s.Facts)
-                    stdout.WriteLine($"  {fact}");
+                    await stdout.WriteLineAsync($"  {fact}").ConfigureAwait(false);
             }
             foreach (var step in result.UiSteps)
-                stdout.WriteLine($"not derived (about the UI): {step}");
+                await stdout
+                    .WriteLineAsync($"not derived (about the UI): {step}")
+                    .ConfigureAwait(false);
             foreach (var warning in result.Warnings)
-                stderr.WriteLine($"warning: {warning}");
+                await stderr.WriteLineAsync($"warning: {warning}").ConfigureAwait(false);
             return 0;
         }
         catch (FeatureMachinesException ex)
         {
-            stderr.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
         catch (IOException ex)
         {
-            stderr.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
         catch (UnauthorizedAccessException ex)
         {
-            stderr.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
     }
@@ -1051,19 +1125,20 @@ internal static class MachineCommand
             formatOption,
             outOption,
         };
-        command.SetAction(parseResult =>
-            RunDiagram(
-                parseResult.GetRequiredValue(machinesOption).FullName,
-                parseResult.GetValue(formatOption) ?? "html",
-                parseResult.GetValue(outOption)?.FullName,
-                Console.Out,
-                Console.Error
-            )
+        command.SetAction(
+            (parseResult, _) =>
+                RunDiagramAsync(
+                    parseResult.GetRequiredValue(machinesOption).FullName,
+                    parseResult.GetValue(formatOption) ?? "html",
+                    parseResult.GetValue(outOption)?.FullName,
+                    parseResult.InvocationConfiguration.Output,
+                    parseResult.InvocationConfiguration.Error
+                )
         );
         return command;
     }
 
-    internal static int RunDiagram(
+    internal static async Task<int> RunDiagramAsync(
         string machinesDir,
         string format,
         string? outPath,
@@ -1073,34 +1148,34 @@ internal static class MachineCommand
     {
         try
         {
-            var (host, irs) = Trax
+            var (host, irs) = await Trax
                 .StateMachine.Persistence.FromIr.IrDirectory.ReadAsync(machinesDir)
-                .GetAwaiter()
-                .GetResult();
+                .ConfigureAwait(false);
             var text = BoardWriter.Write(Trax.StateMachine.Features.Board.Draw(irs, host), format);
             if (outPath is null)
-                stdout.Write(text);
+                await stdout.WriteAsync(text).ConfigureAwait(false);
             else
-                File.WriteAllText(
-                    outPath,
-                    text,
-                    new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
-                );
+                await File.WriteAllTextAsync(
+                        outPath,
+                        text,
+                        new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
+                    )
+                    .ConfigureAwait(false);
             return 0;
         }
         catch (InvalidOperationException ex)
         {
-            stderr.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
         catch (IOException ex)
         {
-            stderr.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
         catch (UnauthorizedAccessException ex)
         {
-            stderr.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
     }
@@ -1111,24 +1186,28 @@ internal static class MachineCommand
             "migrate",
             "Scaffold a forward migration by diffing the context schema (not implemented yet)."
         );
-        command.SetAction(_ => RunMigrate());
+        command.SetAction(
+            (parseResult, _) => RunMigrateAsync(parseResult.InvocationConfiguration.Error)
+        );
         return command;
     }
 
     // Migrations are not implemented, so the command fails: a CI step that runs it must not pass.
-    internal static int RunMigrate()
+    internal static async Task<int> RunMigrateAsync(TextWriter stderr)
     {
-        Console.Error.WriteLine(
-            "trax machine migrate is not implemented yet: a machine's IR does not carry migrations. A stored "
-                + "snapshot whose version does not match the current machine is rejected as a typed "
-                + "version-mismatch and the client starts fresh."
-        );
+        await stderr
+            .WriteLineAsync(
+                "trax machine migrate is not implemented yet: a machine's IR does not carry migrations. A stored "
+                    + "snapshot whose version does not match the current machine is rejected as a typed "
+                    + "version-mismatch and the client starts fresh."
+            )
+            .ConfigureAwait(false);
         return 1;
     }
 
     // Returns the process exit code (0 success, 1 failure). The action returns it so InvokeAsync propagates it;
     // setting Environment.ExitCode would not work here because Program returns InvokeAsync's result, which wins.
-    internal static int RunGenerate(
+    internal static async Task<int> RunGenerateAsync(
         string? assemblyPath,
         string? machineName,
         string? irOut,
@@ -1139,6 +1218,8 @@ internal static class MachineCommand
         string? specifier,
         string? toolsDir,
         INodeRunner node,
+        TextWriter stdout,
+        TextWriter stderr,
         string? lang = null,
         string? @namespace = null,
         string? manifestPath = null
@@ -1146,37 +1227,44 @@ internal static class MachineCommand
     {
         try
         {
-            var machine = Source(assemblyPath, manifestPath, machineName);
-            var result = new MachineGenerator(node).Generate(
-                new MachineGenerateOptions(
-                    machine,
-                    irOut,
-                    twinOut,
-                    corpusOut,
-                    engineSrc,
-                    importStyle,
-                    specifier,
-                    toolsDir,
-                    lang,
-                    @namespace
+            var machine = await SourceAsync(assemblyPath, manifestPath, machineName)
+                .ConfigureAwait(false);
+            var result = await new MachineGenerator(node)
+                .GenerateAsync(
+                    new MachineGenerateOptions(
+                        machine,
+                        irOut,
+                        twinOut,
+                        corpusOut,
+                        engineSrc,
+                        importStyle,
+                        specifier,
+                        toolsDir,
+                        lang,
+                        @namespace
+                    )
                 )
-            );
+                .ConfigureAwait(false);
 
             foreach (var artifact in result.Written)
-                Console.WriteLine($"  {artifact.Kind, -9} {artifact.Path}");
-            Console.WriteLine(
-                $"Generated {result.Written.Count} artifact(s) for '{machine.Name}'."
-            );
+                await stdout
+                    .WriteLineAsync($"  {artifact.Kind, -9} {artifact.Path}")
+                    .ConfigureAwait(false);
+            await stdout
+                .WriteLineAsync(
+                    $"Generated {result.Written.Count} artifact(s) for '{machine.Name}'."
+                )
+                .ConfigureAwait(false);
             return 0;
         }
         catch (InvalidOperationException ex)
         {
-            Console.Error.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
     }
 
-    internal static int RunCheck(
+    internal static async Task<int> RunCheckAsync(
         string? assemblyPath,
         string? machineName,
         string? irOut,
@@ -1187,6 +1275,8 @@ internal static class MachineCommand
         string? specifier,
         string? toolsDir,
         INodeRunner node,
+        TextWriter stdout,
+        TextWriter stderr,
         string? lang = null,
         string? @namespace = null,
         string? manifestPath = null
@@ -1194,21 +1284,24 @@ internal static class MachineCommand
     {
         try
         {
-            var machine = Source(assemblyPath, manifestPath, machineName);
-            var result = new MachineGenerator(node).Check(
-                new MachineGenerateOptions(
-                    machine,
-                    irOut,
-                    twinOut,
-                    corpusOut,
-                    engineSrc,
-                    importStyle,
-                    specifier,
-                    toolsDir,
-                    lang,
-                    @namespace
+            var machine = await SourceAsync(assemblyPath, manifestPath, machineName)
+                .ConfigureAwait(false);
+            var result = await new MachineGenerator(node)
+                .CheckAsync(
+                    new MachineGenerateOptions(
+                        machine,
+                        irOut,
+                        twinOut,
+                        corpusOut,
+                        engineSrc,
+                        importStyle,
+                        specifier,
+                        toolsDir,
+                        lang,
+                        @namespace
+                    )
                 )
-            );
+                .ConfigureAwait(false);
 
             foreach (var check in result.Checks)
             {
@@ -1219,23 +1312,29 @@ internal static class MachineCommand
                     DriftStatus.Missing => "MISSING",
                     _ => "?",
                 };
-                Console.WriteLine($"  {label, -8}{check.Kind, -9} {check.Path}");
+                await stdout
+                    .WriteLineAsync($"  {label, -8}{check.Kind, -9} {check.Path}")
+                    .ConfigureAwait(false);
             }
 
             if (result.IsClean)
             {
-                Console.WriteLine($"All artifacts for '{machine.Name}' are up to date.");
+                await stdout
+                    .WriteLineAsync($"All artifacts for '{machine.Name}' are up to date.")
+                    .ConfigureAwait(false);
                 return 0;
             }
 
-            Console.Error.WriteLine(
-                "State-machine artifacts are stale. Run 'trax machine generate' to update them."
-            );
+            await stderr
+                .WriteLineAsync(
+                    "State-machine artifacts are stale. Run 'trax machine generate' to update them."
+                )
+                .ConfigureAwait(false);
             return 1;
         }
         catch (InvalidOperationException ex)
         {
-            Console.Error.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
     }
@@ -1244,7 +1343,7 @@ internal static class MachineCommand
     /// The machine whose IR <c>generate</c> and <c>check</c> read: compiled into <paramref name="assemblyPath"/>, or
     /// in the client manifest at <paramref name="manifestPath"/>. Exactly one of the two.
     /// </summary>
-    internal static MachineIr Source(
+    internal static async Task<MachineIr> SourceAsync(
         string? assemblyPath,
         string? manifestPath,
         string? machineName
@@ -1252,7 +1351,9 @@ internal static class MachineCommand
         (assemblyPath, manifestPath) switch
         {
             (not null, null) => MachineIr.Of(MachineLoader.Load(assemblyPath, machineName)),
-            (null, not null) => MachineIr.FromManifest(manifestPath, machineName),
+            (null, not null) => await MachineIr
+                .FromManifestAsync(manifestPath, machineName)
+                .ConfigureAwait(false),
             (null, null) => throw new InvalidOperationException(
                 "Pass --assembly with the compiled machine, or --manifest with a host's client manifest."
             ),
@@ -1279,7 +1380,7 @@ internal static class MachineCommand
         Option<string?> Namespace
     )
     {
-        public static MachineOptions Create(bool assemblyRequired = false) =>
+        public static MachineOptions Create(string langHelp, bool assemblyRequired = false) =>
             new(
                 new Option<FileInfo>("--assembly")
                 {
@@ -1335,7 +1436,7 @@ internal static class MachineCommand
                     Description =
                         "The node executable: an absolute path, or a name looked up on PATH (default: node). Never resolved from the current directory; a relative path is refused, and on Windows so is a .cmd or .bat shim.",
                 },
-                new Option<string?>("--lang") { Description = TwinLanguages.Help() },
+                new Option<string?>("--lang") { Description = langHelp },
                 new Option<string?>("--namespace")
                 {
                     Description =

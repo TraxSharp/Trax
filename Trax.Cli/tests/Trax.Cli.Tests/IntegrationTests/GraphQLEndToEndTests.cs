@@ -32,10 +32,12 @@ public class GraphQLEndToEndTests
     #region SimpleSchema
 
     [Test]
-    public void GenerateTrainsLibrary_SimpleGraphql_AllExpectedFilesExist()
+    public async Task GenerateTrainsLibrary_SimpleGraphql_AllExpectedFilesExist()
     {
-        var schema = _parser.Parse(FixturePath("simple.graphql"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser.ParseAsync(FixturePath("simple.graphql")).ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         // Trains library files
         File.Exists(Path.Combine(_outputDir, "TestProject.Trains.csproj")).Should().BeTrue();
@@ -61,12 +63,15 @@ public class GraphQLEndToEndTests
     }
 
     [Test]
-    public void GenerateTrainsLibrary_SimpleGraphql_ManifestNamesContainsOperations()
+    public async Task GenerateTrainsLibrary_SimpleGraphql_ManifestNamesContainsOperations()
     {
-        var schema = _parser.Parse(FixturePath("simple.graphql"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser.ParseAsync(FixturePath("simple.graphql")).ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
-        var content = File.ReadAllText(Path.Combine(_outputDir, "ManifestNames.cs"));
+        var content = await File.ReadAllTextAsync(Path.Combine(_outputDir, "ManifestNames.cs"))
+            .ConfigureAwait(false);
 
         content.Should().Contain("GetPlayer");
         content.Should().Contain("CreatePlayer");
@@ -75,10 +80,12 @@ public class GraphQLEndToEndTests
     }
 
     [Test]
-    public void GenerateTrainsLibrary_SimpleGraphql_QueryTrainHasTraxQueryAttribute()
+    public async Task GenerateTrainsLibrary_SimpleGraphql_QueryTrainHasTraxQueryAttribute()
     {
-        var schema = _parser.Parse(FixturePath("simple.graphql"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser.ParseAsync(FixturePath("simple.graphql")).ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var trainFile = Path.Combine(
             _outputDir,
@@ -87,16 +94,18 @@ public class GraphQLEndToEndTests
             "GetPlayer",
             "GetPlayerTrain.cs"
         );
-        var content = File.ReadAllText(trainFile);
+        var content = await File.ReadAllTextAsync(trainFile).ConfigureAwait(false);
 
         content.Should().Contain("[TraxQuery");
     }
 
     [Test]
-    public void GenerateTrainsLibrary_SimpleGraphql_MutationTrainHasTraxMutationAttribute()
+    public async Task GenerateTrainsLibrary_SimpleGraphql_MutationTrainHasTraxMutationAttribute()
     {
-        var schema = _parser.Parse(FixturePath("simple.graphql"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser.ParseAsync(FixturePath("simple.graphql")).ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var trainFile = Path.Combine(
             _outputDir,
@@ -105,7 +114,7 @@ public class GraphQLEndToEndTests
             "CreatePlayer",
             "CreatePlayerTrain.cs"
         );
-        var content = File.ReadAllText(trainFile);
+        var content = await File.ReadAllTextAsync(trainFile).ConfigureAwait(false);
 
         content.Should().Contain("[TraxMutation");
     }
@@ -115,10 +124,14 @@ public class GraphQLEndToEndTests
     #region NestedTypes
 
     [Test]
-    public void GenerateTrainsLibrary_NestedTypesGraphql_ModelsContainsSharedTypes()
+    public async Task GenerateTrainsLibrary_NestedTypesGraphql_ModelsContainsSharedTypes()
     {
-        var schema = _parser.Parse(FixturePath("nested-types.graphql"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("nested-types.graphql"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var modelsDir = Path.Combine(_outputDir, "Models");
         File.Exists(Path.Combine(modelsDir, "Order.cs")).Should().BeTrue();
@@ -131,15 +144,17 @@ public class GraphQLEndToEndTests
     #region Enums
 
     [Test]
-    public void GenerateTrainsLibrary_EnumsGraphql_ModelsContainsStatusEnum()
+    public async Task GenerateTrainsLibrary_EnumsGraphql_ModelsContainsStatusEnum()
     {
-        var schema = _parser.Parse(FixturePath("enums.graphql"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser.ParseAsync(FixturePath("enums.graphql")).ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var enumFile = Path.Combine(_outputDir, "Models", "Status.cs");
         File.Exists(enumFile).Should().BeTrue();
 
-        var content = File.ReadAllText(enumFile);
+        var content = await File.ReadAllTextAsync(enumFile).ConfigureAwait(false);
         content.Should().Contain("PENDING");
         content.Should().Contain("ACTIVE");
         content.Should().Contain("COMPLETED");
@@ -151,10 +166,14 @@ public class GraphQLEndToEndTests
     #region TypeCollision
 
     [Test]
-    public void GenerateTrainsLibrary_TypeCollision_DisambiguatedOperationDirsExist()
+    public async Task GenerateTrainsLibrary_TypeCollision_DisambiguatedOperationDirsExist()
     {
-        var schema = _parser.Parse(FixturePath("type-collision.graphql"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("type-collision.graphql"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         // AllChats query collides with AllChats type → AllChatsQuery
         var allChatsDir = Path.Combine(_outputDir, "Trains", "AllChats", "AllChatsQuery");
@@ -168,10 +187,14 @@ public class GraphQLEndToEndTests
     }
 
     [Test]
-    public void GenerateTrainsLibrary_TypeCollision_NonCollidingOperationDirsUnchanged()
+    public async Task GenerateTrainsLibrary_TypeCollision_NonCollidingOperationDirsUnchanged()
     {
-        var schema = _parser.Parse(FixturePath("type-collision.graphql"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("type-collision.graphql"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         // GetPlayer doesn't collide
         var getPlayerDir = Path.Combine(_outputDir, "Trains", "Players", "GetPlayer");
@@ -183,10 +206,14 @@ public class GraphQLEndToEndTests
     }
 
     [Test]
-    public void GenerateTrainsLibrary_TypeCollision_OutputTypeRefUsesGlobalQualification()
+    public async Task GenerateTrainsLibrary_TypeCollision_OutputTypeRefUsesGlobalQualification()
     {
-        var schema = _parser.Parse(FixturePath("type-collision.graphql"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("type-collision.graphql"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var interfaceFile = Path.Combine(
             _outputDir,
@@ -195,17 +222,21 @@ public class GraphQLEndToEndTests
             "AllChatsQuery",
             "IAllChatsQueryTrain.cs"
         );
-        var content = File.ReadAllText(interfaceFile);
+        var content = await File.ReadAllTextAsync(interfaceFile).ConfigureAwait(false);
 
         // Should use global:: qualification to avoid CS0118
         content.Should().Contain("global::TestProject.Trains.Models.AllChats");
     }
 
     [Test]
-    public void GenerateTrainsLibrary_TypeCollision_TrainImplUsesGlobalQualification()
+    public async Task GenerateTrainsLibrary_TypeCollision_TrainImplUsesGlobalQualification()
     {
-        var schema = _parser.Parse(FixturePath("type-collision.graphql"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("type-collision.graphql"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var trainFile = Path.Combine(
             _outputDir,
@@ -214,16 +245,20 @@ public class GraphQLEndToEndTests
             "AllChatsQuery",
             "AllChatsQueryTrain.cs"
         );
-        var content = File.ReadAllText(trainFile);
+        var content = await File.ReadAllTextAsync(trainFile).ConfigureAwait(false);
 
         content.Should().Contain("global::TestProject.Trains.Models.AllChats");
     }
 
     [Test]
-    public void GenerateTrainsLibrary_TypeCollision_JunctionUsesGlobalQualification()
+    public async Task GenerateTrainsLibrary_TypeCollision_JunctionUsesGlobalQualification()
     {
-        var schema = _parser.Parse(FixturePath("type-collision.graphql"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("type-collision.graphql"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var junctionFile = Path.Combine(
             _outputDir,
@@ -233,18 +268,23 @@ public class GraphQLEndToEndTests
             "Junctions",
             "AllChatsQueryJunction.cs"
         );
-        var content = File.ReadAllText(junctionFile);
+        var content = await File.ReadAllTextAsync(junctionFile).ConfigureAwait(false);
 
         content.Should().Contain("global::TestProject.Trains.Models.AllChats");
     }
 
     [Test]
-    public void GenerateTrainsLibrary_TypeCollision_ManifestNamesUseDisambiguatedNames()
+    public async Task GenerateTrainsLibrary_TypeCollision_ManifestNamesUseDisambiguatedNames()
     {
-        var schema = _parser.Parse(FixturePath("type-collision.graphql"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("type-collision.graphql"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
-        var content = File.ReadAllText(Path.Combine(_outputDir, "ManifestNames.cs"));
+        var content = await File.ReadAllTextAsync(Path.Combine(_outputDir, "ManifestNames.cs"))
+            .ConfigureAwait(false);
 
         content.Should().Contain("AllChatsQuery");
         content.Should().Contain("ChatHistoriesQuery");
@@ -253,10 +293,14 @@ public class GraphQLEndToEndTests
     }
 
     [Test]
-    public void GenerateTrainsLibrary_TypeCollision_ModelFilesStillGenerated()
+    public async Task GenerateTrainsLibrary_TypeCollision_ModelFilesStillGenerated()
     {
-        var schema = _parser.Parse(FixturePath("type-collision.graphql"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("type-collision.graphql"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var modelsDir = Path.Combine(_outputDir, "Models");
         File.Exists(Path.Combine(modelsDir, "AllChats.cs")).Should().BeTrue();
@@ -271,13 +315,17 @@ public class GraphQLEndToEndTests
     #region Nullable
 
     [Test]
-    public void GenerateTrainsLibrary_NullableGraphql_InputFieldsHaveNullableMarker()
+    public async Task GenerateTrainsLibrary_NullableGraphql_InputFieldsHaveNullableMarker()
     {
-        var schema = _parser.Parse(FixturePath("nullable.graphql"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("nullable.graphql"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var inputFile = Path.Combine(_outputDir, "Trains", "Searchs", "Search", "SearchInput.cs");
-        var content = File.ReadAllText(inputFile);
+        var content = await File.ReadAllTextAsync(inputFile).ConfigureAwait(false);
 
         content.Should().Contain("?");
     }

@@ -27,11 +27,13 @@ public class OpenApiParserFixTests
     #region NonFatalErrors
 
     [Test]
-    public void Parse_SchemaWithNonFatalErrors_StillReturnsOperations()
+    public async Task Parse_SchemaWithNonFatalErrors_StillReturnsOperations()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("non-fatal-errors.yaml"));
+        var schema = await parser
+            .ParseAsync(FixturePath("non-fatal-errors.yaml"))
+            .ConfigureAwait(false);
 
         schema.Operations.Should().HaveCount(2);
         schema.Operations.Select(o => o.Name).Should().Contain("ListItems");
@@ -39,22 +41,26 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_SchemaWithNonFatalErrors_StillReturnsTypes()
+    public async Task Parse_SchemaWithNonFatalErrors_StillReturnsTypes()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("non-fatal-errors.yaml"));
+        var schema = await parser
+            .ParseAsync(FixturePath("non-fatal-errors.yaml"))
+            .ConfigureAwait(false);
 
         schema.Types.Should().Contain(t => t.Name == "Item");
         schema.Types.Should().Contain(t => t.Name == "Issue");
     }
 
     [Test]
-    public void Parse_SchemaWithNonFatalErrors_ItemTypeHasFields()
+    public async Task Parse_SchemaWithNonFatalErrors_ItemTypeHasFields()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("non-fatal-errors.yaml"));
+        var schema = await parser
+            .ParseAsync(FixturePath("non-fatal-errors.yaml"))
+            .ConfigureAwait(false);
 
         var item = schema.Types.Single(t =>
             string.Equals(t.Name, "Item", StringComparison.Ordinal)
@@ -64,13 +70,14 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_SchemaWithNonFatalErrors_DoesNotThrow()
+    public async Task Parse_SchemaWithNonFatalErrors_DoesNotThrow()
     {
         var parser = new OpenApiSchemaParser();
 
-        var act = () => parser.Parse(FixturePath("non-fatal-errors.yaml"));
+        var act = async () =>
+            await parser.ParseAsync(FixturePath("non-fatal-errors.yaml")).ConfigureAwait(false);
 
-        act.Should().NotThrow();
+        await act.Should().NotThrowAsync().ConfigureAwait(false);
     }
 
     #endregion
@@ -78,11 +85,13 @@ public class OpenApiParserFixTests
     #region InlineEnums
 
     [Test]
-    public void Parse_InlineEnumsInParameters_NamedFromParameterName()
+    public async Task Parse_InlineEnumsInParameters_NamedFromParameterName()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("inline-enums.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("inline-enums.json"))
+            .ConfigureAwait(false);
 
         var listItems = schema.Operations.Single(o =>
             string.Equals(o.Name, "ListItems", StringComparison.Ordinal)
@@ -96,11 +105,13 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_InlineEnumsInParameters_MultipleEnumsGetDistinctNames()
+    public async Task Parse_InlineEnumsInParameters_MultipleEnumsGetDistinctNames()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("inline-enums.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("inline-enums.json"))
+            .ConfigureAwait(false);
 
         var listItems = schema.Operations.Single(o =>
             string.Equals(o.Name, "ListItems", StringComparison.Ordinal)
@@ -118,11 +129,13 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_InlineEnumsInRequestBody_NamedFromPropertyName()
+    public async Task Parse_InlineEnumsInRequestBody_NamedFromPropertyName()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("inline-enums.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("inline-enums.json"))
+            .ConfigureAwait(false);
 
         var createItem = schema.Operations.Single(o =>
             string.Equals(o.Name, "CreateItem", StringComparison.Ordinal)
@@ -135,11 +148,13 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_InlineEnumsInComponentSchema_NamedFromPropertyName()
+    public async Task Parse_InlineEnumsInComponentSchema_NamedFromPropertyName()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("inline-enums.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("inline-enums.json"))
+            .ConfigureAwait(false);
 
         var itemType = schema.Types.Single(t =>
             string.Equals(t.Name, "Item", StringComparison.Ordinal)
@@ -152,11 +167,13 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_InlineEnums_EnumValuesAreRegistered()
+    public async Task Parse_InlineEnums_EnumValuesAreRegistered()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("inline-enums.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("inline-enums.json"))
+            .ConfigureAwait(false);
 
         var statusEnum = schema.Enums.SingleOrDefault(e =>
             string.Equals(e.Name, "Status", StringComparison.Ordinal)
@@ -166,11 +183,13 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_InlineEnums_PriorityEnumValuesAreRegistered()
+    public async Task Parse_InlineEnums_PriorityEnumValuesAreRegistered()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("inline-enums.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("inline-enums.json"))
+            .ConfigureAwait(false);
 
         var priorityEnum = schema.Enums.SingleOrDefault(e =>
             string.Equals(e.Name, "Priority", StringComparison.Ordinal)
@@ -180,21 +199,25 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_InlineEnums_NoUnnamedEnumInResults()
+    public async Task Parse_InlineEnums_NoUnnamedEnumInResults()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("inline-enums.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("inline-enums.json"))
+            .ConfigureAwait(false);
 
         schema.Enums.Should().NotContain(e => e.Name == "UnnamedEnum");
     }
 
     [Test]
-    public void Parse_InlineEnums_NonEnumParametersUnaffected()
+    public async Task Parse_InlineEnums_NonEnumParametersUnaffected()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("inline-enums.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("inline-enums.json"))
+            .ConfigureAwait(false);
 
         var listItems = schema.Operations.Single(o =>
             string.Equals(o.Name, "ListItems", StringComparison.Ordinal)
@@ -207,11 +230,13 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_InlineEnums_SameValuesAcrossParameterAndSchema_ReusesEnum()
+    public async Task Parse_InlineEnums_SameValuesAcrossParameterAndSchema_ReusesEnum()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("inline-enums.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("inline-enums.json"))
+            .ConfigureAwait(false);
 
         // Both the "status" query parameter and the Item.status property use
         // enum [active, inactive, archived] — they should resolve to the same enum name
@@ -237,11 +262,13 @@ public class OpenApiParserFixTests
     #region PropertyNameCollision
 
     [Test]
-    public void Parse_PropertyNameMatchesTypeName_KeptAsNamed()
+    public async Task Parse_PropertyNameMatchesTypeName_KeptAsNamed()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(InvalidFixturePath("property-collision.json"));
+        var schema = await parser
+            .ParseAsync(InvalidFixturePath("property-collision.json"))
+            .ConfigureAwait(false);
 
         var notificationType = schema.Types.Single(t =>
             string.Equals(t.Name, "Notification", StringComparison.Ordinal)
@@ -252,11 +279,13 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_PropertyNameMatchesTypeName_MultipleTypes()
+    public async Task Parse_PropertyNameMatchesTypeName_MultipleTypes()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(InvalidFixturePath("property-collision.json"));
+        var schema = await parser
+            .ParseAsync(InvalidFixturePath("property-collision.json"))
+            .ConfigureAwait(false);
 
         var testimonialType = schema.Types.Single(t =>
             string.Equals(t.Name, "Testimonial", StringComparison.Ordinal)
@@ -265,11 +294,13 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_PropertyNameDoesNotMatchTypeName_NotSuffixed()
+    public async Task Parse_PropertyNameDoesNotMatchTypeName_NotSuffixed()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(InvalidFixturePath("property-collision.json"));
+        var schema = await parser
+            .ParseAsync(InvalidFixturePath("property-collision.json"))
+            .ConfigureAwait(false);
 
         var notificationType = schema.Types.Single(t =>
             string.Equals(t.Name, "Notification", StringComparison.Ordinal)
@@ -281,11 +312,13 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_PropertyCollision_OtherFieldsOnTestimonialUnaffected()
+    public async Task Parse_PropertyCollision_OtherFieldsOnTestimonialUnaffected()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(InvalidFixturePath("property-collision.json"));
+        var schema = await parser
+            .ParseAsync(InvalidFixturePath("property-collision.json"))
+            .ConfigureAwait(false);
 
         var testimonialType = schema.Types.Single(t =>
             string.Equals(t.Name, "Testimonial", StringComparison.Ordinal)
@@ -299,11 +332,13 @@ public class OpenApiParserFixTests
     #region ArrayComponentSchemas
 
     [Test]
-    public void Parse_ArrayTypeComponentSchema_CreatesWrapperTypeWithItemsField()
+    public async Task Parse_ArrayTypeComponentSchema_CreatesWrapperTypeWithItemsField()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("array-component.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("array-component.json"))
+            .ConfigureAwait(false);
 
         var voteTally = schema.Types.SingleOrDefault(t =>
             string.Equals(t.Name, "VoteTallyResponse", StringComparison.Ordinal)
@@ -315,11 +350,13 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_ArrayTypeComponentSchema_IsNotBuiltIn()
+    public async Task Parse_ArrayTypeComponentSchema_IsNotBuiltIn()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("array-component.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("array-component.json"))
+            .ConfigureAwait(false);
 
         var voteTally = schema.Types.Single(t =>
             string.Equals(t.Name, "VoteTallyResponse", StringComparison.Ordinal)
@@ -328,11 +365,13 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_ArrayTypeComponentSchemaWithRef_ItemsFieldReferencesRefType()
+    public async Task Parse_ArrayTypeComponentSchemaWithRef_ItemsFieldReferencesRefType()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("array-component.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("array-component.json"))
+            .ConfigureAwait(false);
 
         var scoreboard = schema.Types.SingleOrDefault(t =>
             string.Equals(t.Name, "Scoreboard", StringComparison.Ordinal)
@@ -344,11 +383,13 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_ArrayTypeComponentSchema_ReferencedFromResponse_OperationUsesTypeName()
+    public async Task Parse_ArrayTypeComponentSchema_ReferencedFromResponse_OperationUsesTypeName()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("array-component.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("array-component.json"))
+            .ConfigureAwait(false);
 
         var voteTally = schema.Operations.Single(o =>
             string.Equals(o.Name, "VoteTally", StringComparison.Ordinal)
@@ -358,11 +399,13 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_ArrayTypeComponentSchema_InlineObjectItems_PromotedToNamedType()
+    public async Task Parse_ArrayTypeComponentSchema_InlineObjectItems_PromotedToNamedType()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("array-component.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("array-component.json"))
+            .ConfigureAwait(false);
 
         // VoteTallyResponse has inline object items with properties — should be promoted
         var voteTally = schema.Types.Single(t =>
@@ -372,11 +415,13 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_ArrayTypeComponentSchema_InlineObjectItems_PromotedTypeHasFields()
+    public async Task Parse_ArrayTypeComponentSchema_InlineObjectItems_PromotedTypeHasFields()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("array-component.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("array-component.json"))
+            .ConfigureAwait(false);
 
         var itemType = schema.Types.SingleOrDefault(t =>
             string.Equals(t.Name, "VoteTallyResponseItem", StringComparison.Ordinal)
@@ -387,11 +432,13 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_ArrayTypeComponentSchema_InlineObjectItems_EnumFieldResolved()
+    public async Task Parse_ArrayTypeComponentSchema_InlineObjectItems_EnumFieldResolved()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("array-component.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("array-component.json"))
+            .ConfigureAwait(false);
 
         var itemType = schema.Types.Single(t =>
             string.Equals(t.Name, "VoteTallyResponseItem", StringComparison.Ordinal)
@@ -405,11 +452,13 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_ArrayTypeComponentSchema_RegularObjectSchemasStillWork()
+    public async Task Parse_ArrayTypeComponentSchema_RegularObjectSchemasStillWork()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("array-component.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("array-component.json"))
+            .ConfigureAwait(false);
 
         var scoreEntry = schema.Types.SingleOrDefault(t =>
             string.Equals(t.Name, "ScoreEntry", StringComparison.Ordinal)
@@ -424,11 +473,13 @@ public class OpenApiParserFixTests
     #region InlineObjectPromotion
 
     [Test]
-    public void Parse_InlineObjectInArrayResponse_PromotedToNamedType()
+    public async Task Parse_InlineObjectInArrayResponse_PromotedToNamedType()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("inline-object-array.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("inline-object-array.json"))
+            .ConfigureAwait(false);
 
         var listEvents = schema.Operations.Single(o =>
             string.Equals(o.Name, "ListEvents", StringComparison.Ordinal)
@@ -437,11 +488,13 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_InlineObjectInArrayResponse_PromotedTypeHasAllFields()
+    public async Task Parse_InlineObjectInArrayResponse_PromotedTypeHasAllFields()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("inline-object-array.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("inline-object-array.json"))
+            .ConfigureAwait(false);
 
         var itemType = schema.Types.SingleOrDefault(t =>
             string.Equals(t.Name, "ListEventsItem", StringComparison.Ordinal)
@@ -453,11 +506,13 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_InlineObjectInArrayResponse_FieldTypesResolved()
+    public async Task Parse_InlineObjectInArrayResponse_FieldTypesResolved()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("inline-object-array.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("inline-object-array.json"))
+            .ConfigureAwait(false);
 
         var itemType = schema.Types.Single(t =>
             string.Equals(t.Name, "ListEventsItem", StringComparison.Ordinal)
@@ -477,11 +532,13 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_InlineObjectInProperty_PromotedToNamedType()
+    public async Task Parse_InlineObjectInProperty_PromotedToNamedType()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("inline-object-array.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("inline-object-array.json"))
+            .ConfigureAwait(false);
 
         // The "metadata" property on Event is an inline object
         var eventType = schema.Types.SingleOrDefault(t =>
@@ -500,11 +557,13 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_ArrayWithRefItems_StillUsesRefTypeName()
+    public async Task Parse_ArrayWithRefItems_StillUsesRefTypeName()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("inline-object-array.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("inline-object-array.json"))
+            .ConfigureAwait(false);
 
         var listSpeakers = schema.Operations.Single(o =>
             string.Equals(o.Name, "ListSpeakers", StringComparison.Ordinal)
@@ -513,11 +572,13 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_ArrayWithNoItemProperties_FallsBackToObject()
+    public async Task Parse_ArrayWithNoItemProperties_FallsBackToObject()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("inline-object-array.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("inline-object-array.json"))
+            .ConfigureAwait(false);
 
         // RawData returns array of bare objects (no properties) — should remain List<object>
         var getRaw = schema.Operations.Single(o =>
@@ -527,11 +588,13 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_InlineObjectWithOnlyBareObjectProperties_NotPromoted()
+    public async Task Parse_InlineObjectWithOnlyBareObjectProperties_NotPromoted()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("bare-object-properties.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("bare-object-properties.json"))
+            .ConfigureAwait(false);
 
         // SearchResult.hit has only bare object properties (_source: type: object)
         // Should NOT be promoted — remains as "object"
@@ -545,22 +608,26 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_InlineObjectWithOnlyBareObjectProperties_NoNamedTypeCreated()
+    public async Task Parse_InlineObjectWithOnlyBareObjectProperties_NoNamedTypeCreated()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("bare-object-properties.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("bare-object-properties.json"))
+            .ConfigureAwait(false);
 
         // No "Hit" type should be created
         schema.Types.Should().NotContain(t => t.Name == "Hit");
     }
 
     [Test]
-    public void Parse_InlineObjectWithMixedProperties_StillPromoted()
+    public async Task Parse_InlineObjectWithMixedProperties_StillPromoted()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("bare-object-properties.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("bare-object-properties.json"))
+            .ConfigureAwait(false);
 
         // SearchResult.mixed has { name: string, data: object } — not all bare objects
         // Should be promoted to a named type
@@ -574,11 +641,13 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_InlineObjectWithMixedProperties_PromotedTypeHasFields()
+    public async Task Parse_InlineObjectWithMixedProperties_PromotedTypeHasFields()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("bare-object-properties.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("bare-object-properties.json"))
+            .ConfigureAwait(false);
 
         var searchResult = schema.Types.Single(t =>
             string.Equals(t.Name, "SearchResult", StringComparison.Ordinal)
@@ -601,66 +670,74 @@ public class OpenApiParserFixTests
     #region HttpVerbStripping
 
     [Test]
-    public void Parse_OperationIdWithGetPrefix_PrefixStripped()
+    public async Task Parse_OperationIdWithGetPrefix_PrefixStripped()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("array-component.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("array-component.json"))
+            .ConfigureAwait(false);
 
         // getVoteTally → VoteTally (no type collision)
         schema.Operations.Should().Contain(o => o.Name == "VoteTally");
     }
 
     [Test]
-    public void Parse_OperationIdWithGetPrefix_CollidesWithType_PrefixKept()
+    public async Task Parse_OperationIdWithGetPrefix_CollidesWithType_PrefixKept()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("petstore.json"));
+        var schema = await parser.ParseAsync(FixturePath("petstore.json")).ConfigureAwait(false);
 
         // getPet → would strip to "Pet" but Pet is a model type → keeps "GetPet"
         schema.Operations.Should().Contain(o => o.Name == "GetPet");
     }
 
     [Test]
-    public void Parse_OperationIdWithDeletePrefix_CollidesWithType_PrefixKept()
+    public async Task Parse_OperationIdWithDeletePrefix_CollidesWithType_PrefixKept()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("petstore.json"));
+        var schema = await parser.ParseAsync(FixturePath("petstore.json")).ConfigureAwait(false);
 
         // deletePet → would strip to "Pet" but Pet is a model type → keeps "DeletePet"
         schema.Operations.Should().Contain(o => o.Name == "DeletePet");
     }
 
     [Test]
-    public void Parse_OperationIdWithNonHttpVerb_NotStripped()
+    public async Task Parse_OperationIdWithNonHttpVerb_NotStripped()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("inline-enums.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("inline-enums.json"))
+            .ConfigureAwait(false);
 
         // listItems → "List" isn't an HTTP verb → stays "ListItems"
         schema.Operations.Should().Contain(o => o.Name == "ListItems");
     }
 
     [Test]
-    public void Parse_OperationIdWithGetPrefix_NoCollision_Stripped()
+    public async Task Parse_OperationIdWithGetPrefix_NoCollision_Stripped()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("inline-object-array.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("inline-object-array.json"))
+            .ConfigureAwait(false);
 
         // getRawData → "RawData" (no type named RawData) → stripped
         schema.Operations.Should().Contain(o => o.Name == "RawData");
     }
 
     [Test]
-    public void Parse_SynthesizedName_CollidingNames_KeepPrefix()
+    public async Task Parse_SynthesizedName_CollidingNames_KeepPrefix()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("duplicate-names.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("duplicate-names.json"))
+            .ConfigureAwait(false);
 
         // Multiple paths synthesize to "Users" → collision → all keep HTTP verb prefix
         schema.Operations.Should().Contain(o => o.Name == "GetUsers");
@@ -672,33 +749,39 @@ public class OpenApiParserFixTests
     #region DuplicateOperationNames
 
     [Test]
-    public void Parse_DuplicateSynthesizedNames_AllOperationsPresent()
+    public async Task Parse_DuplicateSynthesizedNames_AllOperationsPresent()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("duplicate-names.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("duplicate-names.json"))
+            .ConfigureAwait(false);
 
         // /users GET, /users POST, /users/{userId} GET, /users/{userId} DELETE, /users/{userId}/posts GET
         schema.Operations.Should().HaveCount(5);
     }
 
     [Test]
-    public void Parse_DuplicateSynthesizedNames_AllNamesAreUnique()
+    public async Task Parse_DuplicateSynthesizedNames_AllNamesAreUnique()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("duplicate-names.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("duplicate-names.json"))
+            .ConfigureAwait(false);
 
         var names = schema.Operations.Select(o => o.Name).ToList();
         names.Should().OnlyHaveUniqueItems();
     }
 
     [Test]
-    public void Parse_DuplicateSynthesizedNames_CollidingNamesKeepPrefix()
+    public async Task Parse_DuplicateSynthesizedNames_CollidingNamesKeepPrefix()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("duplicate-names.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("duplicate-names.json"))
+            .ConfigureAwait(false);
 
         // /users GET and /users POST both strip to "Users" → collision → keep prefixes
         schema.Operations.Should().Contain(o => o.Name == "GetUsers");
@@ -706,44 +789,52 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_DuplicateSynthesizedNames_SecondGetDisambiguatedByPathParam()
+    public async Task Parse_DuplicateSynthesizedNames_SecondGetDisambiguatedByPathParam()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("duplicate-names.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("duplicate-names.json"))
+            .ConfigureAwait(false);
 
         // /users/{userId} GET → "GetUsers" collides → disambiguated to "GetUsersByUserId"
         schema.Operations.Should().Contain(o => o.Name == "GetUsersByUserId");
     }
 
     [Test]
-    public void Parse_DuplicateSynthesizedNames_DeleteKeepsPrefix()
+    public async Task Parse_DuplicateSynthesizedNames_DeleteKeepsPrefix()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("duplicate-names.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("duplicate-names.json"))
+            .ConfigureAwait(false);
 
         // /users/{userId} DELETE → "DeleteUsers" (prefix kept due to collision)
         schema.Operations.Should().Contain(o => o.Name == "DeleteUsers");
     }
 
     [Test]
-    public void Parse_DuplicateSynthesizedNames_SubpathOperationsDistinct()
+    public async Task Parse_DuplicateSynthesizedNames_SubpathOperationsDistinct()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("duplicate-names.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("duplicate-names.json"))
+            .ConfigureAwait(false);
 
         // /users/{userId}/posts GET → stripped "UsersPosts" is unique → no prefix needed
         schema.Operations.Should().Contain(o => o.Name == "UsersPosts");
     }
 
     [Test]
-    public void Parse_DuplicateSynthesizedNames_HttpPathsPreserved()
+    public async Task Parse_DuplicateSynthesizedNames_HttpPathsPreserved()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("duplicate-names.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("duplicate-names.json"))
+            .ConfigureAwait(false);
 
         // Even though names keep prefixes, each operation keeps its original path
         var getUsers = schema.Operations.Single(o =>
@@ -758,12 +849,12 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_WithExplicitOperationIds_NoDuplication()
+    public async Task Parse_WithExplicitOperationIds_NoDuplication()
     {
         // petstore.json has explicit operationIds — getPet and deletePet become Pet and Pet2
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("petstore.json"));
+        var schema = await parser.ParseAsync(FixturePath("petstore.json")).ConfigureAwait(false);
 
         var names = schema.Operations.Select(o => o.Name).ToList();
         names.Should().OnlyHaveUniqueItems();
@@ -774,11 +865,13 @@ public class OpenApiParserFixTests
     #region DottedSchemaNames
 
     [Test]
-    public void Parse_DottedSchemaNames_TypesHaveSimplifiedNames()
+    public async Task Parse_DottedSchemaNames_TypesHaveSimplifiedNames()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("dotted-names.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("dotted-names.json"))
+            .ConfigureAwait(false);
 
         schema.Types.Should().Contain(t => t.Name == "UserDto");
         schema.Types.Should().Contain(t => t.Name == "UserListDto");
@@ -787,21 +880,25 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_DottedSchemaNames_NoDotsInTypeNames()
+    public async Task Parse_DottedSchemaNames_NoDotsInTypeNames()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("dotted-names.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("dotted-names.json"))
+            .ConfigureAwait(false);
 
         schema.Types.Should().AllSatisfy(t => t.Name.Should().NotContain("."));
     }
 
     [Test]
-    public void Parse_DottedSchemaNames_RefFieldsResolveToSimplifiedNames()
+    public async Task Parse_DottedSchemaNames_RefFieldsResolveToSimplifiedNames()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("dotted-names.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("dotted-names.json"))
+            .ConfigureAwait(false);
 
         var userListType = schema.Types.Single(t =>
             string.Equals(t.Name, "UserListDto", StringComparison.Ordinal)
@@ -813,22 +910,26 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_DottedSchemaNames_EmptySchemaStillResolved()
+    public async Task Parse_DottedSchemaNames_EmptySchemaStillResolved()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("dotted-names.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("dotted-names.json"))
+            .ConfigureAwait(false);
 
         // EmptyResponse has no properties but should still be in the types list
         schema.Types.Should().Contain(t => t.Name == "EmptyResponse");
     }
 
     [Test]
-    public void Parse_DottedSchemaNames_RootPathGetsRootName()
+    public async Task Parse_DottedSchemaNames_RootPathGetsRootName()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("dotted-names.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("dotted-names.json"))
+            .ConfigureAwait(false);
 
         var rootOp = schema.Operations.SingleOrDefault(o =>
             string.Equals(o.HttpPath, "/", StringComparison.Ordinal)
@@ -838,11 +939,13 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_DottedSchemaNames_DotInPathSegmentHandled()
+    public async Task Parse_DottedSchemaNames_DotInPathSegmentHandled()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("dotted-names.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("dotted-names.json"))
+            .ConfigureAwait(false);
 
         var calendarOp = schema.Operations.SingleOrDefault(o =>
             string.Equals(o.HttpPath, "/events/calendar.ics", StringComparison.Ordinal)
@@ -852,11 +955,13 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_DottedSchemaNames_CommaInTagBecomesValidGroup()
+    public async Task Parse_DottedSchemaNames_CommaInTagBecomesValidGroup()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("dotted-names.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("dotted-names.json"))
+            .ConfigureAwait(false);
 
         var reportsOp = schema.Operations.Single(o =>
             string.Equals(o.HttpPath, "/reports", StringComparison.Ordinal)
@@ -866,11 +971,13 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_DottedSchemaNames_EmptySchemaParamResolvedToObject()
+    public async Task Parse_DottedSchemaNames_EmptySchemaParamResolvedToObject()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("dotted-names.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("dotted-names.json"))
+            .ConfigureAwait(false);
 
         var searchOp = schema.Operations.Single(o =>
             string.Equals(o.HttpPath, "/search", StringComparison.Ordinal)
@@ -883,11 +990,13 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_DottedSchemaNames_DescriptionNewlinesCollapsed()
+    public async Task Parse_DottedSchemaNames_DescriptionNewlinesCollapsed()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("dotted-names.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("dotted-names.json"))
+            .ConfigureAwait(false);
 
         // The notes POST has a multiline summary — verify it's captured
         var notesOp = schema.Operations.Single(o =>

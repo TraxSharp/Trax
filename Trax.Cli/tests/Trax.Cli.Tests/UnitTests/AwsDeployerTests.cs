@@ -148,10 +148,13 @@ public class AwsDeployerTests
         var dir = Path.Combine(Path.GetTempPath(), $"trax-secret-{Guid.NewGuid():N}");
         Directory.CreateDirectory(Path.Combine(dir, "Orders"));
         Directory.CreateDirectory(Path.Combine(dir, "Orders.Worker"));
-        File.WriteAllText(Path.Combine(dir, "Orders/Orders.csproj"), "<Project />");
-        File.WriteAllText(Path.Combine(dir, "Orders.Worker/Orders.Worker.csproj"), "<Project />");
+        await File.WriteAllTextAsync(Path.Combine(dir, "Orders/Orders.csproj"), "<Project />");
+        await File.WriteAllTextAsync(
+            Path.Combine(dir, "Orders.Worker/Orders.Worker.csproj"),
+            "<Project />"
+        );
         var path = Path.Combine(dir, DeployFile.FileName);
-        File.WriteAllText(path, AwsStackTemplateTests.File_().Write());
+        await File.WriteAllTextAsync(path, AwsStackTemplateTests.File_().Write());
         var aws = new FakeAws();
         DeployAwsCommands.Client = _ => aws;
         try
@@ -161,7 +164,9 @@ public class AwsDeployerTests
                     path,
                     "production",
                     "Other__Key",
-                    () => "x",
+                    () => Task.FromResult("x"),
+                    TextWriter.Null,
+                    TextWriter.Null,
                     CancellationToken.None
                 )
             )
@@ -172,7 +177,9 @@ public class AwsDeployerTests
                     path,
                     "production",
                     "Stripe__ApiKey",
-                    () => "sk_live",
+                    () => Task.FromResult("sk_live"),
+                    TextWriter.Null,
+                    TextWriter.Null,
                     CancellationToken.None
                 )
             )
@@ -182,7 +189,10 @@ public class AwsDeployerTests
         }
         finally
         {
-            DeployAwsCommands.Client = region => new AwsDeployClient(region);
+            DeployAwsCommands.Client = region => new AwsDeployClient(
+                region,
+                DeployAwsCommands.Clock
+            );
             Directory.Delete(dir, recursive: true);
         }
     }
@@ -214,9 +224,15 @@ public class AwsDeployerTests
     }
 
     [Test]
-    public void An_image_tag_starts_with_the_time() =>
-        AwsDeployer
-            .ImageTag(Path.GetTempPath(), new DateTime(2026, 10, 20, 12, 0, 0, DateTimeKind.Utc))
+    public async Task An_image_tag_starts_with_the_time() =>
+        (
+            await AwsDeployer
+                .ImageTagAsync(
+                    Path.GetTempPath(),
+                    new DateTime(2026, 10, 20, 12, 0, 0, DateTimeKind.Utc)
+                )
+                .ConfigureAwait(false)
+        )
             .Should()
             .StartWith("20261020-120000");
 
@@ -224,12 +240,16 @@ public class AwsDeployerTests
     {
         public List<string> Published { get; } = [];
 
-        public void Publish(
+        public Task PublishAsync(
             string projectPath,
             string repositoryUri,
             string tag,
             RegistryLogin login
-        ) => Published.Add(repositoryUri[(repositoryUri.LastIndexOf('/') + 1)..]);
+        )
+        {
+            Published.Add(repositoryUri[(repositoryUri.LastIndexOf('/') + 1)..]);
+            return Task.CompletedTask;
+        }
     }
 
     internal sealed class FakeAws : IAwsDeployClient

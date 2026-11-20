@@ -252,19 +252,23 @@ public class DeployComposeTests
     }
 
     [Test]
-    public void Deploy_writes_the_stack_beside_the_file_from_what_the_hosts_report()
+    public async Task Deploy_writes_the_stack_beside_the_file_from_what_the_hosts_report()
     {
-        var path = Write(File_());
+        var path = await WriteAsync(File_()).ConfigureAwait(false);
         var exporter = new FakeExporter(Exports(), _dir);
 
-        var exit = DeployCommand.Run(
-            "compose",
-            path,
-            outDir: null,
-            build: false,
-            exporter,
-            (_, _) => { }
-        );
+        var exit = await DeployCommand
+            .RunAsync(
+                "compose",
+                path,
+                outDir: null,
+                build: false,
+                exporter,
+                (_, _) => Task.CompletedTask,
+                TextWriter.Null,
+                TextWriter.Null
+            )
+            .ConfigureAwait(false);
 
         exit.Should().Be(0);
         File.Exists(Path.Combine(_dir, "compose.yaml")).Should().BeTrue();
@@ -281,65 +285,84 @@ public class DeployComposeTests
     }
 
     [Test]
-    public void Deploy_does_not_overwrite_a_compose_file_it_did_not_write()
+    public async Task Deploy_does_not_overwrite_a_compose_file_it_did_not_write()
     {
-        var path = Write(File_());
-        File.WriteAllText(Path.Combine(_dir, "compose.yaml"), "services: {}\n");
+        var path = await WriteAsync(File_()).ConfigureAwait(false);
+        await File.WriteAllTextAsync(Path.Combine(_dir, "compose.yaml"), "services: {}\n")
+            .ConfigureAwait(false);
 
-        var exit = DeployCommand.Run(
-            "compose",
-            path,
-            outDir: null,
-            build: false,
-            new FakeExporter(Exports(), _dir),
-            (_, _) => { }
-        );
-
-        exit.Should().Be(1);
-        File.ReadAllText(Path.Combine(_dir, "compose.yaml")).Should().Be("services: {}\n");
-    }
-
-    [Test]
-    public void Deploy_builds_each_image_under_its_service_name_when_asked()
-    {
-        var path = Write(File_());
-        var built = new List<(string Project, string Image)>();
-
-        DeployCommand
-            .Run(
+        var exit = await DeployCommand
+            .RunAsync(
                 "compose",
                 path,
                 outDir: null,
-                build: true,
+                build: false,
                 new FakeExporter(Exports(), _dir),
-                (p, i) => built.Add((p, i))
+                (_, _) => Task.CompletedTask,
+                TextWriter.Null,
+                TextWriter.Null
             )
+            .ConfigureAwait(false);
+
+        exit.Should().Be(1);
+        (await File.ReadAllTextAsync(Path.Combine(_dir, "compose.yaml")).ConfigureAwait(false))
             .Should()
-            .Be(0);
+            .Be("services: {}\n");
+    }
+
+    [Test]
+    public async Task Deploy_builds_each_image_under_its_service_name_when_asked()
+    {
+        var path = await WriteAsync(File_()).ConfigureAwait(false);
+        var built = new List<(string Project, string Image)>();
+
+        (
+            await DeployCommand
+                .RunAsync(
+                    "compose",
+                    path,
+                    outDir: null,
+                    build: true,
+                    new FakeExporter(Exports(), _dir),
+                    (p, i) =>
+                    {
+                        built.Add((p, i));
+                        return Task.CompletedTask;
+                    },
+                    TextWriter.Null,
+                    TextWriter.Null
+                )
+                .ConfigureAwait(false)
+        ).Should().Be(0);
 
         built.Select(b => b.Image).Should().Equal("orders-hub", "orders-worker");
     }
 
     [Test]
-    public void A_target_trax_does_not_deploy_to_is_refused() =>
-        DeployCommand
-            .Run(
-                "gcp",
-                Write(File_()),
-                outDir: null,
-                build: false,
-                new FakeExporter(Exports(), _dir),
-                (_, _) => { }
-            )
+    public async Task A_target_trax_does_not_deploy_to_is_refused() =>
+        (
+            await DeployCommand
+                .RunAsync(
+                    "gcp",
+                    await WriteAsync(File_()).ConfigureAwait(false),
+                    outDir: null,
+                    build: false,
+                    new FakeExporter(Exports(), _dir),
+                    (_, _) => Task.CompletedTask,
+                    TextWriter.Null,
+                    TextWriter.Null
+                )
+                .ConfigureAwait(false)
+        )
             .Should()
             .Be(1);
 
     [Test]
-    public void The_file_reads_back_what_it_wrote()
+    public async Task The_file_reads_back_what_it_wrote()
     {
-        var path = Write(File_());
+        var path = await WriteAsync(File_()).ConfigureAwait(false);
 
-        var read = DeployFile.Read(path);
+        var read = await DeployFile.ReadAsync(path).ConfigureAwait(false);
 
         read.Should().BeEquivalentTo(File_());
     }
@@ -362,32 +385,43 @@ public class DeployComposeTests
         "*'Auth:Authority' is not an environment name*"
     )]
     [TestCase("""{ "version": 2, "app": "orders", "services": {} }""", "*version 2*")]
-    public void A_file_that_cannot_be_deployed_is_refused_naming_the_problem(
+    public async Task A_file_that_cannot_be_deployed_is_refused_naming_the_problem(
         string json,
         string message
     )
     {
         var path = Path.Combine(_dir, DeployFile.FileName);
-        File.WriteAllText(path, json);
+        await File.WriteAllTextAsync(path, json);
 
-        var act = () => DeployFile.Read(path);
+        var act = async () => await DeployFile.ReadAsync(path).ConfigureAwait(false);
 
-        act.Should().Throw<InvalidOperationException>().WithMessage(message);
+        (
+            await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage(message);
     }
 
     [Test]
-    public void Init_names_each_Trax_host_under_the_directory_and_skips_tests()
+    public async Task Init_names_each_Trax_host_under_the_directory_and_skips_tests()
     {
-        WriteProject("Orders/Orders.csproj", "Microsoft.NET.Sdk.Web", "Trax.Api");
-        WriteProject(
-            "Orders.Worker/Orders.Worker.csproj",
-            "Microsoft.NET.Sdk.Worker",
-            "Trax.Scheduler",
-            exe: true
-        );
-        WriteProject("Orders.Trains/Orders.Trains.csproj", "Microsoft.NET.Sdk", "Trax.Effect");
-        WriteProject("tests/Orders.Tests/Orders.Tests.csproj", "Microsoft.NET.Sdk.Web", "Trax.Api");
-        WriteProject("Unrelated/Unrelated.csproj", "Microsoft.NET.Sdk.Web", "Newtonsoft.Json");
+        await WriteProject("Orders/Orders.csproj", "Microsoft.NET.Sdk.Web", "Trax.Api")
+            .ConfigureAwait(false);
+        await WriteProject(
+                "Orders.Worker/Orders.Worker.csproj",
+                "Microsoft.NET.Sdk.Worker",
+                "Trax.Scheduler",
+                exe: true
+            )
+            .ConfigureAwait(false);
+        await WriteProject("Orders.Trains/Orders.Trains.csproj", "Microsoft.NET.Sdk", "Trax.Effect")
+            .ConfigureAwait(false);
+        await WriteProject(
+                "tests/Orders.Tests/Orders.Tests.csproj",
+                "Microsoft.NET.Sdk.Web",
+                "Trax.Api"
+            )
+            .ConfigureAwait(false);
+        await WriteProject("Unrelated/Unrelated.csproj", "Microsoft.NET.Sdk.Web", "Newtonsoft.Json")
+            .ConfigureAwait(false);
 
         var file = DeployInit.Create(_dir, "orders");
 
@@ -397,22 +431,57 @@ public class DeployComposeTests
     }
 
     [Test]
-    public void Init_calls_a_lone_host_the_hub()
+    public async Task Init_calls_a_lone_host_the_hub()
     {
-        WriteProject("App/App.csproj", "Microsoft.NET.Sdk.Web", "Trax.Api");
+        await WriteProject("App/App.csproj", "Microsoft.NET.Sdk.Web", "Trax.Api")
+            .ConfigureAwait(false);
 
         DeployInit.Create(_dir, "orders").Services.Keys.Should().Equal("hub");
     }
 
     [Test]
-    public void Init_does_not_replace_an_existing_file_without_force()
+    public async Task Init_does_not_replace_an_existing_file_without_force()
     {
-        WriteProject("App/App.csproj", "Microsoft.NET.Sdk.Web", "Trax.Api");
-        File.WriteAllText(Path.Combine(_dir, DeployFile.FileName), "{}");
+        await WriteProject("App/App.csproj", "Microsoft.NET.Sdk.Web", "Trax.Api")
+            .ConfigureAwait(false);
+        await File.WriteAllTextAsync(Path.Combine(_dir, DeployFile.FileName), "{}")
+            .ConfigureAwait(false);
 
-        DeployCommand.Init(_dir, "orders", force: false).Should().Be(1);
-        File.ReadAllText(Path.Combine(_dir, DeployFile.FileName)).Should().Be("{}");
-        DeployCommand.Init(_dir, "orders", force: true).Should().Be(0);
+        (
+            await DeployCommand
+                .InitAsync(
+                    _dir,
+                    "orders",
+                    force: false,
+                    "compose",
+                    region: null,
+                    domain: null,
+                    TextWriter.Null,
+                    TextWriter.Null
+                )
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .Be(1);
+        (await File.ReadAllTextAsync(Path.Combine(_dir, DeployFile.FileName)).ConfigureAwait(false))
+            .Should()
+            .Be("{}");
+        (
+            await DeployCommand
+                .InitAsync(
+                    _dir,
+                    "orders",
+                    force: true,
+                    "compose",
+                    region: null,
+                    domain: null,
+                    TextWriter.Null,
+                    TextWriter.Null
+                )
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .Be(0);
     }
 
     [Test]
@@ -440,26 +509,27 @@ public class DeployComposeTests
         psi.Environment["X"].Should().Be("y");
     }
 
-    private string Write(DeployFile file)
+    private async Task<string> WriteAsync(DeployFile file)
     {
         var path = Path.Combine(_dir, DeployFile.FileName);
-        File.WriteAllText(path, file.Write());
+        await File.WriteAllTextAsync(path, file.Write()).ConfigureAwait(false);
         return path;
     }
 
-    private void WriteProject(string relative, string sdk, string reference, bool exe = false)
+    private async Task WriteProject(string relative, string sdk, string reference, bool exe = false)
     {
         var path = Path.Combine(_dir, relative);
         Directory.CreateDirectory(Path.GetDirectoryName(path).NotNull());
-        File.WriteAllText(
-            path,
-            $"""
-            <Project Sdk="{sdk}">
-              <PropertyGroup>{(exe ? "<OutputType>Exe</OutputType>" : "")}</PropertyGroup>
-              <ItemGroup><PackageReference Include="{reference}" /></ItemGroup>
-            </Project>
-            """
-        );
+        await File.WriteAllTextAsync(
+                path,
+                $"""
+                <Project Sdk="{sdk}">
+                  <PropertyGroup>{(exe ? "<OutputType>Exe</OutputType>" : "")}</PropertyGroup>
+                  <ItemGroup><PackageReference Include="{reference}" /></ItemGroup>
+                </Project>
+                """
+            )
+            .ConfigureAwait(false);
     }
 
     private sealed class FakeExporter(
@@ -471,17 +541,19 @@ public class DeployComposeTests
 
         public IReadOnlyDictionary<string, string>? Environment { get; private set; }
 
-        public DeployManifest Export(
+        public Task<DeployManifest> ExportAsync(
             string projectPath,
             IReadOnlyDictionary<string, string> environment
         )
         {
             Asked.Add(projectPath);
             Environment = environment;
-            return Path.GetRelativePath(dir, projectPath)
-                .StartsWith("Orders.Worker", StringComparison.Ordinal)
-                ? byService["worker"]
-                : byService["hub"];
+            return Task.FromResult(
+                Path.GetRelativePath(dir, projectPath)
+                    .StartsWith("Orders.Worker", StringComparison.Ordinal)
+                    ? byService["worker"]
+                    : byService["hub"]
+            );
         }
     }
 }

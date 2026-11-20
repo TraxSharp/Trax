@@ -43,17 +43,16 @@ internal static class FeatureDirectory
 
     /// <summary>Reads the lexicon and every <c>*.feature</c> under the features directory, and derives.</summary>
     /// <exception cref="FeatureMachinesException">A path is wrong, or the lexicon or glossary is not one.</exception>
-    internal static Result Derive(
+    internal static async Task<Result> DeriveAsync(
         string featuresDir,
         string? glossaryPath,
         IReadOnlyList<string>? trains = null
     )
     {
-        var read = ReadFeatures(featuresDir, glossaryPath, trains);
-        var derived = FeatureDerivation
+        var read = await ReadFeaturesAsync(featuresDir, glossaryPath, trains).ConfigureAwait(false);
+        var derived = await FeatureDerivation
             .DeriveAsync(read.Glossary.Inner, read.Features)
-            .GetAwaiter()
-            .GetResult();
+            .ConfigureAwait(false);
         return Derived(derived, read);
     }
 
@@ -64,7 +63,7 @@ internal static class FeatureDirectory
     /// lexicon, so a hand-kept copy beside it could only disagree.
     /// </summary>
     /// <exception cref="FeatureMachinesException">A path is wrong, or the lexicon or glossary is not one.</exception>
-    internal static Read ReadFeatures(
+    internal static async Task<Read> ReadFeaturesAsync(
         string featuresDir,
         string? glossaryPath,
         IReadOnlyList<string>? trains = null
@@ -83,25 +82,30 @@ internal static class FeatureDirectory
             );
         var (glossary, json) = glossaryPath is null
             ? FromLexicon(featuresDir, trains ?? [])
-            : (FromJson(glossaryPath), null);
+            : (await FromJsonAsync(glossaryPath).ConfigureAwait(false), null);
 
         // Relative, '/'-separated and sorted, so the output and its provenance read the same on every machine.
-        var features = Directory
-            .EnumerateFiles(featuresDir, "*.feature", SearchOption.AllDirectories)
-            .Select(path =>
+        var features = new List<(string Path, string Text)>();
+        foreach (
+            var path in Directory.EnumerateFiles(
+                featuresDir,
+                "*.feature",
+                SearchOption.AllDirectories
+            )
+        )
+            features.Add(
                 (
                     Path: Path.GetRelativePath(featuresDir, path).Replace('\\', '/'),
-                    Text: File.ReadAllText(path)
+                    Text: await File.ReadAllTextAsync(path).ConfigureAwait(false)
                 )
-            )
-            .OrderBy(f => f.Path, StringComparer.Ordinal)
-            .ToList();
+            );
+        features.Sort((a, b) => string.CompareOrdinal(a.Path, b.Path));
         if (features.Count == 0)
             throw new FeatureMachinesException($"{featuresDir} holds no .feature files.");
         return new Read(glossary, json, features);
     }
 
-    private static FeatureGlossary FromJson(string glossaryPath)
+    private static async Task<FeatureGlossary> FromJsonAsync(string glossaryPath)
     {
         if (!File.Exists(glossaryPath))
             throw new FeatureMachinesException(
@@ -111,7 +115,9 @@ internal static class FeatureDirectory
             );
         try
         {
-            return FeatureGlossary.Read(File.ReadAllText(glossaryPath));
+            return FeatureGlossary.Read(
+                await File.ReadAllTextAsync(glossaryPath).ConfigureAwait(false)
+            );
         }
         catch (FormatException ex)
         {
@@ -184,7 +190,7 @@ internal static class FeatureDirectory
 
     /// <summary>Writes the files and removes the IR of every machine that no longer derives.</summary>
     /// <returns>What changed, one line per file.</returns>
-    internal static IReadOnlyList<string> Write(
+    internal static async Task<IReadOnlyList<string>> WriteAsync(
         string outDir,
         IReadOnlyDictionary<string, string> files
     )
@@ -211,10 +217,17 @@ internal static class FeatureDirectory
         foreach (var (name, text) in files)
         {
             var path = Path.Combine(outDir, name);
-            var before = File.Exists(path) ? Lf(File.ReadAllText(path)) : null;
+            var before = File.Exists(path)
+                ? Lf(await File.ReadAllTextAsync(path).ConfigureAwait(false))
+                : null;
             if (string.Equals(before, text, StringComparison.Ordinal))
                 continue;
-            File.WriteAllText(path, text, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            await File.WriteAllTextAsync(
+                    path,
+                    text,
+                    new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
+                )
+                .ConfigureAwait(false);
             changes.Add($"{(before is null ? "wrote" : "updated")} {name}");
         }
         foreach (var stale in existing.Where(n => !files.ContainsKey(n)))
@@ -226,7 +239,7 @@ internal static class FeatureDirectory
     }
 
     /// <summary>Every file that differs from what was derived: missing, stale, or no longer derived.</summary>
-    internal static IReadOnlyList<string> Check(
+    internal static async Task<IReadOnlyList<string>> CheckAsync(
         string outDir,
         IReadOnlyDictionary<string, string> files
     )
@@ -238,7 +251,13 @@ internal static class FeatureDirectory
             var path = Path.Combine(outDir, name);
             if (!File.Exists(path))
                 drift.Add($"{name} is missing");
-            else if (!string.Equals(Lf(File.ReadAllText(path)), text, StringComparison.Ordinal))
+            else if (
+                !string.Equals(
+                    Lf(await File.ReadAllTextAsync(path).ConfigureAwait(false)),
+                    text,
+                    StringComparison.Ordinal
+                )
+            )
                 drift.Add(
                     string.Equals(name, AccessFileName, StringComparison.Ordinal)
                         ? $"{name} is stale: who may do what has changed"

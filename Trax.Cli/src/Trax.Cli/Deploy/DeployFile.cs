@@ -156,7 +156,7 @@ internal sealed partial class DeployFile
     /// Reads the file at <paramref name="path"/> and checks it. Throws <see cref="InvalidOperationException"/> naming
     /// the first problem.
     /// </summary>
-    public static DeployFile Read(string path)
+    public static async Task<DeployFile> ReadAsync(string path)
     {
         if (!File.Exists(path))
             throw new InvalidOperationException(
@@ -166,8 +166,10 @@ internal sealed partial class DeployFile
         try
         {
             file =
-                JsonSerializer.Deserialize<DeployFile>(File.ReadAllText(path), Json)
-                ?? throw new InvalidOperationException($"{path} is empty.");
+                JsonSerializer.Deserialize<DeployFile>(
+                    await File.ReadAllTextAsync(path).ConfigureAwait(false),
+                    Json
+                ) ?? throw new InvalidOperationException($"{path} is empty.");
         }
         catch (JsonException ex)
         {

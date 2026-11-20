@@ -9,15 +9,21 @@ namespace Trax.Cli.Generator;
 public partial class TraxProjectGenerator
 {
     private readonly CodeRenderer _renderer = new();
-    private readonly Action<string, string> _scaffoldHub;
+    private readonly Func<string, string, Task> _scaffoldHub;
 
     public TraxProjectGenerator()
-        : this(RunDotnetNew) { }
+        : this(RunDotnetNewAsync) { }
 
     /// <summary>Takes the step that scaffolds the hub (name, directory), so a test can make it fail.</summary>
-    internal TraxProjectGenerator(Action<string, string> scaffoldHub) => _scaffoldHub = scaffoldHub;
+    internal TraxProjectGenerator(Func<string, string, Task> scaffoldHub) =>
+        _scaffoldHub = scaffoldHub;
 
-    public void Generate(ApiSchema schema, string outputDir, string projectName, bool force)
+    public async Task GenerateAsync(
+        ApiSchema schema,
+        string outputDir,
+        string projectName,
+        bool force
+    )
     {
         // Before the output directory is touched, so a refused schema deletes nothing.
         SchemaNames.Validate(schema, projectName);
@@ -45,7 +51,7 @@ public partial class TraxProjectGenerator
         try
         {
             Directory.CreateDirectory(staging);
-            GenerateInto(schema, staging, projectName);
+            await GenerateIntoAsync(schema, staging, projectName).ConfigureAwait(false);
         }
         catch
         {
@@ -77,28 +83,30 @@ public partial class TraxProjectGenerator
         TryDeleteDirectory(previous);
     }
 
-    private void GenerateInto(ApiSchema schema, string outputDir, string projectName)
+    private async Task GenerateIntoAsync(ApiSchema schema, string outputDir, string projectName)
     {
         // 1. Scaffold the hub project via dotnet new
         var hubProjectName = $"{projectName}.Hub";
         var hubDir = Path.Combine(outputDir, hubProjectName);
-        _scaffoldHub(hubProjectName, hubDir);
+        await _scaffoldHub(hubProjectName, hubDir).ConfigureAwait(false);
 
         // 2. Create the trains library
         var trainsProjectName = $"{projectName}.Trains";
         var trainsDir = Path.Combine(outputDir, trainsProjectName);
-        GenerateTrainsLibrary(
-            schema,
-            trainsDir,
-            projectName,
-            HubPackageVersions(hubDir, hubProjectName)
-        );
+        await GenerateTrainsLibraryAsync(
+                schema,
+                trainsDir,
+                projectName,
+                HubPackageVersions(hubDir, hubProjectName)
+            )
+            .ConfigureAwait(false);
 
         // 3. Add ProjectReference from hub to trains library
-        AddProjectReference(hubDir, hubProjectName, trainsProjectName);
+        await AddProjectReferenceAsync(hubDir, hubProjectName, trainsProjectName)
+            .ConfigureAwait(false);
 
         // 4. Patch hub Program.cs to scan the trains assembly
-        PatchProgramCs(hubDir, projectName);
+        await PatchProgramCsAsync(hubDir, projectName).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -268,7 +276,7 @@ public partial class TraxProjectGenerator
         }
     }
 
-    internal void GenerateTrainsLibrary(
+    internal async Task GenerateTrainsLibraryAsync(
         ApiSchema schema,
         string trainsDir,
         string projectName,
@@ -296,18 +304,24 @@ public partial class TraxProjectGenerator
         }
 
         // Write trains csproj
-        WriteFile(
-            Path.Combine(trainsDir, $"{trainsProjectName}.csproj"),
-            packageVersions is null
-                ? _renderer.RenderTrainsCsproj()
-                : _renderer.RenderTrainsCsproj(packageVersions)
-        );
+        await WriteFileAsync(
+                Path.Combine(trainsDir, $"{trainsProjectName}.csproj"),
+                await (
+                    packageVersions is null
+                        ? _renderer.RenderTrainsCsprojAsync()
+                        : _renderer.RenderTrainsCsprojAsync(packageVersions)
+                ).ConfigureAwait(false)
+            )
+            .ConfigureAwait(false);
 
         // Write ManifestNames.cs
-        WriteFile(
-            Path.Combine(trainsDir, "ManifestNames.cs"),
-            _renderer.RenderManifestNames(schema.Operations, projectName)
-        );
+        await WriteFileAsync(
+                Path.Combine(trainsDir, "ManifestNames.cs"),
+                await _renderer
+                    .RenderManifestNamesAsync(schema.Operations, projectName)
+                    .ConfigureAwait(false)
+            )
+            .ConfigureAwait(false);
 
         // Write GraphQLNamespaces.cs
         var groups = schema
@@ -320,10 +334,13 @@ public partial class TraxProjectGenerator
 
         if (groups.Count > 0)
         {
-            WriteFile(
-                Path.Combine(trainsDir, "GraphQLNamespaces.cs"),
-                _renderer.RenderGraphQLNamespaces(groups, projectName)
-            );
+            await WriteFileAsync(
+                    Path.Combine(trainsDir, "GraphQLNamespaces.cs"),
+                    await _renderer
+                        .RenderGraphQLNamespacesAsync(groups, projectName)
+                        .ConfigureAwait(false)
+                )
+                .ConfigureAwait(false);
         }
 
         // Write shared types in Models/
@@ -334,10 +351,13 @@ public partial class TraxProjectGenerator
 
             var modelsDir = Path.Combine(trainsDir, "Models");
             Directory.CreateDirectory(modelsDir);
-            WriteFile(
-                Path.Combine(modelsDir, $"{apiType.Name}.cs"),
-                _renderer.RenderTypeRecord(apiType, projectName, group: null)
-            );
+            await WriteFileAsync(
+                    Path.Combine(modelsDir, $"{apiType.Name}.cs"),
+                    await _renderer
+                        .RenderTypeRecordAsync(apiType, projectName, group: null)
+                        .ConfigureAwait(false)
+                )
+                .ConfigureAwait(false);
         }
 
         // Write enums in Models/
@@ -345,10 +365,11 @@ public partial class TraxProjectGenerator
         {
             var modelsDir = Path.Combine(trainsDir, "Models");
             Directory.CreateDirectory(modelsDir);
-            WriteFile(
-                Path.Combine(modelsDir, $"{apiEnum.Name}.cs"),
-                _renderer.RenderEnum(apiEnum, projectName)
-            );
+            await WriteFileAsync(
+                    Path.Combine(modelsDir, $"{apiEnum.Name}.cs"),
+                    await _renderer.RenderEnumAsync(apiEnum, projectName).ConfigureAwait(false)
+                )
+                .ConfigureAwait(false);
         }
 
         // Write trains
@@ -359,44 +380,57 @@ public partial class TraxProjectGenerator
             var junctionDir = Path.Combine(trainDir, "Junctions");
             Directory.CreateDirectory(junctionDir);
 
-            WriteFile(
-                Path.Combine(trainDir, $"I{operation.Name}Train.cs"),
-                _renderer.RenderTrainInterface(operation, projectName)
-            );
+            await WriteFileAsync(
+                    Path.Combine(trainDir, $"I{operation.Name}Train.cs"),
+                    await _renderer
+                        .RenderTrainInterfaceAsync(operation, projectName)
+                        .ConfigureAwait(false)
+                )
+                .ConfigureAwait(false);
 
-            WriteFile(
-                Path.Combine(trainDir, $"{operation.Name}Train.cs"),
-                _renderer.RenderTrainImplementation(operation, projectName)
-            );
+            await WriteFileAsync(
+                    Path.Combine(trainDir, $"{operation.Name}Train.cs"),
+                    await _renderer
+                        .RenderTrainImplementationAsync(operation, projectName)
+                        .ConfigureAwait(false)
+                )
+                .ConfigureAwait(false);
 
-            WriteFile(
-                Path.Combine(trainDir, $"{operation.InputType.Name}.cs"),
-                _renderer.RenderInput(operation, projectName)
-            );
+            await WriteFileAsync(
+                    Path.Combine(trainDir, $"{operation.InputType.Name}.cs"),
+                    await _renderer.RenderInputAsync(operation, projectName).ConfigureAwait(false)
+                )
+                .ConfigureAwait(false);
 
             if (!operation.OutputType.IsBuiltIn && operation.OutputType.Fields.Count > 0)
             {
-                WriteFile(
-                    Path.Combine(trainDir, $"{operation.OutputType.Name}.cs"),
-                    _renderer.RenderOutput(operation, projectName)
-                );
+                await WriteFileAsync(
+                        Path.Combine(trainDir, $"{operation.OutputType.Name}.cs"),
+                        await _renderer
+                            .RenderOutputAsync(operation, projectName)
+                            .ConfigureAwait(false)
+                    )
+                    .ConfigureAwait(false);
             }
 
-            WriteFile(
-                Path.Combine(junctionDir, $"{operation.Name}Junction.cs"),
-                _renderer.RenderJunction(operation, projectName)
-            );
+            await WriteFileAsync(
+                    Path.Combine(junctionDir, $"{operation.Name}Junction.cs"),
+                    await _renderer
+                        .RenderJunctionAsync(operation, projectName)
+                        .ConfigureAwait(false)
+                )
+                .ConfigureAwait(false);
         }
     }
 
-    internal static void AddProjectReference(
+    internal static async Task AddProjectReferenceAsync(
         string apiDir,
         string apiProjectName,
         string trainsProjectName
     )
     {
         var csprojPath = Path.Combine(apiDir, $"{apiProjectName}.csproj");
-        var content = File.ReadAllText(csprojPath);
+        var content = await File.ReadAllTextAsync(csprojPath).ConfigureAwait(false);
 
         content = content.Replace(
             "</Project>",
@@ -410,7 +444,7 @@ public partial class TraxProjectGenerator
             StringComparison.Ordinal
         );
 
-        File.WriteAllText(csprojPath, content);
+        await File.WriteAllTextAsync(csprojPath, content).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -419,7 +453,7 @@ public partial class TraxProjectGenerator
     /// the template's last <c>using</c> is a statement inside a block. A template that no longer has the scan
     /// is refused, since the hub would otherwise build and register none of the generated trains.
     /// </summary>
-    internal static void PatchProgramCs(string hubDir, string projectName)
+    internal static async Task PatchProgramCsAsync(string hubDir, string projectName)
     {
         const string scan = "typeof(Program).Assembly";
         var programPath = Path.Combine(hubDir, "Program.cs");
@@ -429,7 +463,7 @@ public partial class TraxProjectGenerator
                     + "registered. The installed trax-hub template does not match this version of trax."
             );
 
-        var content = File.ReadAllText(programPath);
+        var content = await File.ReadAllTextAsync(programPath).ConfigureAwait(false);
         if (!content.Contains(scan, StringComparison.Ordinal))
             throw new InvalidOperationException(
                 $"The hub's Program.cs ({programPath}) has no '{scan}' to add the trains assembly to, so the "
@@ -443,23 +477,25 @@ public partial class TraxProjectGenerator
             StringComparison.Ordinal
         );
 
-        File.WriteAllText(programPath, content);
+        await File.WriteAllTextAsync(programPath, content).ConfigureAwait(false);
     }
 
-    private static void RunDotnetNew(string name, string outputDir)
+    private static async Task RunDotnetNewAsync(string name, string outputDir)
     {
-        var (exitCode, _, stderr) = ChildProcess.Run(
-            new ProcessStartInfo
-            {
-                FileName =
-                    Dotnet()
-                    ?? throw new InvalidOperationException(
-                        "'dotnet' was not found on PATH. Install the .NET SDK."
-                    ),
-                ArgumentList = { "new", "trax-hub", "-n", name, "-o", outputDir },
-                UseShellExecute = false,
-            }
-        );
+        var (exitCode, _, stderr) = await ChildProcess
+            .RunAsync(
+                new ProcessStartInfo
+                {
+                    FileName =
+                        Dotnet()
+                        ?? throw new InvalidOperationException(
+                            "'dotnet' was not found on PATH. Install the .NET SDK."
+                        ),
+                    ArgumentList = { "new", "trax-hub", "-n", name, "-o", outputDir },
+                    UseShellExecute = false,
+                }
+            )
+            .ConfigureAwait(false);
 
         if (exitCode != 0)
             throw new InvalidOperationException(DotnetNewFailure(exitCode, stderr));
@@ -498,7 +534,7 @@ public partial class TraxProjectGenerator
         return (resolve ?? ExecutableLookup.Resolve)("dotnet");
     }
 
-    public static bool IsDotnetAvailable()
+    public static async Task<bool> IsDotnetAvailableAsync()
     {
         try
         {
@@ -515,8 +551,10 @@ public partial class TraxProjectGenerator
             };
 
             using var process = Process.Start(psi);
-            process?.WaitForExit();
-            return process?.ExitCode == 0;
+            if (process is null)
+                return false;
+            await process.WaitForExitAsync().ConfigureAwait(false);
+            return process.ExitCode == 0;
         }
         catch
         {
@@ -524,12 +562,12 @@ public partial class TraxProjectGenerator
         }
     }
 
-    private static void WriteFile(string path, string content)
+    private static async Task WriteFileAsync(string path, string content)
     {
         var dir = Path.GetDirectoryName(path);
         if (dir != null)
             Directory.CreateDirectory(dir);
 
-        File.WriteAllText(path, content);
+        await File.WriteAllTextAsync(path, content).ConfigureAwait(false);
     }
 }

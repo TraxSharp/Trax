@@ -39,15 +39,16 @@ internal static class LexiconCommand
             pathsArgument,
             checkOption,
         };
-        command.SetAction(parseResult =>
-            RunFormat(
-                parseResult.GetValue(pathsArgument) is { Length: > 0 } paths
-                    ? paths
-                    : [Directory.GetCurrentDirectory()],
-                parseResult.GetValue(checkOption),
-                Console.Out,
-                Console.Error
-            )
+        command.SetAction(
+            (parseResult, _) =>
+                RunFormatAsync(
+                    parseResult.GetValue(pathsArgument) is { Length: > 0 } paths
+                        ? paths
+                        : [Directory.GetCurrentDirectory()],
+                    parseResult.GetValue(checkOption),
+                    parseResult.InvocationConfiguration.Output,
+                    parseResult.InvocationConfiguration.Error
+                )
         );
         return command;
     }
@@ -74,7 +75,7 @@ internal static class LexiconCommand
         }
     }
 
-    internal static int RunFormat(
+    internal static async Task<int> RunFormatAsync(
         IReadOnlyList<string> paths,
         bool check,
         TextWriter stdout,
@@ -90,13 +91,15 @@ internal static class LexiconCommand
                 files.Add(path);
             else
             {
-                stderr.WriteLine($"{path} does not exist.");
+                await stderr.WriteLineAsync($"{path} does not exist.").ConfigureAwait(false);
                 return 1;
             }
         }
         if (files.Count == 0)
         {
-            stderr.WriteLine($"No lexicon (*{Lexicon.Extension}) in {string.Join(", ", paths)}.");
+            await stderr
+                .WriteLineAsync($"No lexicon (*{Lexicon.Extension}) in {string.Join(", ", paths)}.")
+                .ConfigureAwait(false);
             return 1;
         }
 
@@ -106,11 +109,11 @@ internal static class LexiconCommand
             string text;
             try
             {
-                text = File.ReadAllText(file);
+                text = await File.ReadAllTextAsync(file).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                stderr.WriteLine(ex.Message);
+                await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
                 failed = true;
                 continue;
             }
@@ -118,12 +121,14 @@ internal static class LexiconCommand
             if (formatted is null)
             {
                 foreach (var problem in problems)
-                    stderr.WriteLine(
-                        string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"{file}:{problem.Line}: {problem.Message}"
+                    await stderr
+                        .WriteLineAsync(
+                            string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"{file}:{problem.Line}: {problem.Message}"
+                            )
                         )
-                    );
+                        .ConfigureAwait(false);
                 failed = true;
                 continue;
             }
@@ -137,30 +142,33 @@ internal static class LexiconCommand
                 continue;
             if (check)
             {
-                stderr.WriteLine($"{file} is not in its layout.");
+                await stderr.WriteLineAsync($"{file} is not in its layout.").ConfigureAwait(false);
                 failed = true;
                 continue;
             }
             try
             {
-                File.WriteAllText(
-                    file,
-                    formatted,
-                    new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
-                );
+                await File.WriteAllTextAsync(
+                        file,
+                        formatted,
+                        new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
+                    )
+                    .ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                stderr.WriteLine(ex.Message);
+                await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
                 failed = true;
                 continue;
             }
-            stdout.WriteLine($"formatted {file}");
+            await stdout.WriteLineAsync($"formatted {file}").ConfigureAwait(false);
         }
         if (failed && check)
-            stderr.WriteLine(
-                "Run `trax lexicon format` without --check and commit what it writes."
-            );
+            await stderr
+                .WriteLineAsync(
+                    "Run `trax lexicon format` without --check and commit what it writes."
+                )
+                .ConfigureAwait(false);
         return failed ? 1 : 0;
     }
 }
