@@ -19,17 +19,19 @@ namespace Trax.Docs.Tests.Tests;
     "Trax.Docs/adr/0050-docs-pages-are-typed-and-their-code-is-checked-against-the-code.md"
 )]
 [TestFixture]
-public class DocsRunOnEveryFolderTheyReadTests
+public partial class DocsRunOnEveryFolderTheyReadTests
 {
     private const string Adr =
         "Trax.Docs/adr/0050-docs-pages-are-typed-and-their-code-is-checked-against-the-code.md";
 
     private const string Config = ".github/ci/packages.json";
 
-    private static readonly Regex FromMarker = new(
+    [GeneratedRegex(
         @"^\s*(```|~~~).*\bfrom=(?<path>[^\s#]+)",
-        RegexOptions.Compiled | RegexOptions.Multiline
-    );
+        RegexOptions.Multiline,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex FromMarker { get; }
 
     [Test]
     public void Every_FolderTheDocsRead_IsUpstreamOfTraxDocs()
@@ -38,7 +40,10 @@ public class DocsRunOnEveryFolderTheyReadTests
         var folders = Folders();
 
         var offenders = FoldersRead(folders)
-            .Where(read => read.Folder != "Trax.Docs" && !upstream.Contains(read.Folder))
+            .Where(read =>
+                !string.Equals(read.Folder, "Trax.Docs", StringComparison.Ordinal)
+                && !upstream.Contains(read.Folder)
+            )
             .Select(read => $"{read.Folder} ({read.Why})")
             .Order(StringComparer.Ordinal)
             .ToList();
@@ -58,7 +63,7 @@ public class DocsRunOnEveryFolderTheyReadTests
     [Test]
     public void UpstreamOf_TakesTheClosure()
     {
-        var packages = new Dictionary<string, string[]>
+        var packages = new Dictionary<string, string[]>(StringComparer.Ordinal)
         {
             ["A"] = [],
             ["B"] = ["A"],

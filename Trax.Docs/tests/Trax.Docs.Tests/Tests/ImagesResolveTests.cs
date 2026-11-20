@@ -14,19 +14,23 @@ namespace Trax.Docs.Tests.Tests;
 /// </summary>
 [Property("adr", "Trax.Docs/adr/0008-documentation-conventions-are-linted.md")]
 [TestFixture]
-public class ImagesResolveTests
+public partial class ImagesResolveTests
 {
     private const string ImagesPath = "/docs-images/";
 
     // A markdown image: ![alt](target) or ![alt](<target> "title").
-    private static readonly Regex Image = new(
+    [GeneratedRegex(
         @"!\[(?<alt>[^\]]*)\]\(\s*<?(?<target>[^)\s>]+)>?(?:\s+""[^""]*"")?\s*\)",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Image { get; }
 
-    private static readonly Regex Fence = new(@"^\s*(```|~~~)", RegexOptions.Compiled);
+    [GeneratedRegex(@"^\s*(```|~~~)", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Fence { get; }
 
-    private static readonly Regex InlineCode = new(@"`[^`]*`", RegexOptions.Compiled);
+    [GeneratedRegex(@"`[^`]*`", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex InlineCode { get; }
 
     [Test]
     public void Every_Image_IsAFigure_ThatExists_WithAltText()
@@ -92,7 +96,7 @@ public class ImagesResolveTests
     /// <summary>The images on a page with their line numbers, skipping code.</summary>
     private static IEnumerable<(int Line, string Alt, string Target)> Images(string content)
     {
-        var lines = content.Replace("\r\n", "\n").Split('\n');
+        var lines = content.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
         var inFence = false;
         for (var i = 0; i < lines.Length; i++)
         {

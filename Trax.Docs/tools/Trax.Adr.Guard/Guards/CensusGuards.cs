@@ -11,23 +11,27 @@ namespace Trax.Adr.Guard.Guards;
 /// to be answered rather than left open.
 /// </para>
 /// </summary>
-public static class CensusGuards
+public static partial class CensusGuards
 {
     public const string OptOutMarker = "Not ADR-enforcing:";
 
-    private static readonly Regex ClassDeclaration = new(
+    [GeneratedRegex(
         @"\bclass\s+(?<name>[A-Za-z0-9]*Tests)\b",
-        RegexOptions.Compiled | RegexOptions.Singleline
-    );
+        RegexOptions.Singleline,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ClassDeclaration { get; }
 
     /// <summary>
     /// A citation of any ADR, local or central: <c>docs/adr/0003-x.md</c> or
     /// <c>Trax.Docs/adr/0003-x.md</c>. The <c>central</c> group marks the second.
     /// </summary>
-    private static readonly Regex AdrCitation = new(
+    [GeneratedRegex(
         @"(?<central>Trax\.Docs/)?adr/(?<file>\d{4}-[a-z0-9-]+\.md)",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex AdrCitation { get; }
 
     public static GuardResult EveryGuardIsClassified(IReadOnlyList<Adr> adrs, GuardOptions options)
     {
@@ -55,10 +59,10 @@ public static class CensusGuards
 
         // Each claim with the ADR making it, because a claim is answered by the class that
         // names that ADR back, not by every class sharing the claimed name.
-        var claims = adrs.Select(a => (Adr: a, Section: a.Section(ExemplarGuards.Heading)))
-            .Where(x => x.Section is not null)
-            .SelectMany(x =>
-                ExemplarGuards.Claims(x.Section!).Select(c => (Name: c, x.Adr.FileName))
+        var claims = adrs.SelectMany(a =>
+                a.Section(ExemplarGuards.Heading) is { } section
+                    ? ExemplarGuards.Claims(section).Select(c => (Name: c, a.FileName))
+                    : Enumerable.Empty<(string Name, string FileName)>()
             )
             .ToList();
 
@@ -89,10 +93,11 @@ public static class CensusGuards
                 // A claim credits only the class that answers it: the one in this file carrying
                 // the claiming ADR's attribute. Crediting by bare name let a second class sharing
                 // the name ride on the first's claim, neither named by a decision nor opted out.
-                var answersAClaim = claims.Any(c =>
-                    c.Name == guard
+                var answersAClaim = claims.Exists(c =>
+                    string.Equals(c.Name, guard, StringComparison.Ordinal)
                     && declarations.Any(d =>
-                        d.Name == guard && d.Adr.EndsWith(c.FileName, StringComparison.Ordinal)
+                        string.Equals(d.Name, guard, StringComparison.Ordinal)
+                        && d.Adr.EndsWith(c.FileName, StringComparison.Ordinal)
                     )
                 );
                 var credited = answersAClaim || CitesAnAdr(docstring, local, options);
@@ -147,8 +152,13 @@ public static class CensusGuards
     /// </summary>
     private static IEnumerable<(string Name, string Docstring)> GuardClasses(string source)
     {
-        var lines = CSharp.WithoutLiterals(source).Replace("\r\n", "\n").Split('\n');
-        var blanked = CSharp.WithoutCommentsAndLiterals(source).Replace("\r\n", "\n");
+        var lines = CSharp
+            .WithoutLiterals(source)
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Split('\n');
+        var blanked = CSharp
+            .WithoutCommentsAndLiterals(source)
+            .Replace("\r\n", "\n", StringComparison.Ordinal);
 
         foreach (Match match in ClassDeclaration.Matches(blanked))
         {
@@ -193,7 +203,7 @@ public static class CensusGuards
             break;
         }
 
-        return string.Join("\n", doc);
+        return string.Join('\n', doc);
     }
 
     /// <summary>
@@ -252,8 +262,14 @@ public static class CensusGuards
         if (stop >= 0)
             after = after[..stop];
 
-        var cleaned = Regex.Replace(after, @"///|<[^>]+>", " ");
-        cleaned = Regex.Replace(cleaned, @"\s+", " ").Trim();
+        var cleaned = DocCommentMarkup.Replace(after, " ");
+        cleaned = Whitespace.Replace(cleaned, " ").Trim();
         return cleaned.Length > 300 ? cleaned[..300] : cleaned;
     }
+
+    [GeneratedRegex(@"///|<[^>]+>", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex DocCommentMarkup { get; }
+
+    [GeneratedRegex(@"\s+", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Whitespace { get; }
 }

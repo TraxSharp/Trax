@@ -22,16 +22,18 @@ namespace Trax.Docs.Tests.Tests;
     "Trax.Docs/adr/0050-docs-pages-are-typed-and-their-code-is-checked-against-the-code.md"
 )]
 [TestFixture]
-public class CodeLinksToDocsResolveTests
+public partial class CodeLinksToDocsResolveTests
 {
     private const string Adr =
         "Trax.Docs/adr/0050-docs-pages-are-typed-and-their-code-is-checked-against-the-code.md";
 
     // A trailing period or slash is the sentence's or the URL's, not the page's.
-    private static readonly Regex DocsLink = new(
+    [GeneratedRegex(
         @"https://traxsharp\.net(?<path>/docs(?:/[A-Za-z0-9_\-]+)*)/?(?:#(?<anchor>[A-Za-z0-9_\-]+))?",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex DocsLink { get; }
 
     [Test]
     public void Every_DocsLink_InCode_Resolves()
@@ -74,7 +76,10 @@ public class CodeLinksToDocsResolveTests
                 f.Path.EndsWith("ClientApp/src/lib/vocabulary.ts", StringComparison.Ordinal)
             )
             .SelectMany(f => Links(f.Path, File.ReadAllText(f.Full)))
-            .Where(l => l.Path == "/docs/reference/glossary" && l.Anchor is not null)
+            .Where(l =>
+                string.Equals(l.Path, "/docs/reference/glossary", StringComparison.Ordinal)
+                && l.Anchor is not null
+            )
             .ToList();
 
         glossaryLinks
@@ -119,7 +124,7 @@ public class CodeLinksToDocsResolveTests
         string source
     )
     {
-        var lines = source.Replace("\r\n", "\n").Split('\n');
+        var lines = source.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
         for (var i = 0; i < lines.Length; i++)
             foreach (Match m in DocsLink.Matches(lines[i]))
                 yield return (

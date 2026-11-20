@@ -31,8 +31,10 @@ public class SourceLinksBackTests
     {
         var unlinked = RepoRoot
             .PublishedPages()
-            .Where(DocsSite.IsSdkReferenceLeaf)
-            .Where(page => IsUnlinked(page, FrontMatter.OfPage(page).List("source"), ReadSource))
+            .Where(page =>
+                DocsSite.IsSdkReferenceLeaf(page)
+                && IsUnlinked(page, FrontMatter.OfPage(page).List("source"), ReadSource)
+            )
             .ToHashSet(StringComparer.Ordinal);
 
         var known = Ratchet.Entries(KnownUnlinkedFile);
@@ -113,9 +115,11 @@ public class SourceLinksBackTests
             return false;
 
         var link = new Regex(
-            Regex.Escape("https://traxsharp.net" + DocsSite.PathOf(page)) + @"(?![A-Za-z0-9_/\-])"
+            Regex.Escape("https://traxsharp.net" + DocsSite.PathOf(page)) + @"(?![A-Za-z0-9_/\-])",
+            RegexOptions.None,
+            TimeSpan.FromSeconds(1)
         );
-        return !texts.Any(link.IsMatch);
+        return !texts.Exists(link.IsMatch);
     }
 
     private static string? ReadSource(string relative)

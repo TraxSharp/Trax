@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Trax.Skills.Publish;
 
 const string usage = """
@@ -7,45 +8,49 @@ const string usage = """
       trax-skills marketplace     (prints .claude-plugin/marketplace.json as main holds it)
     """;
 
+using var outputs = ToolOutput.Create();
+var output = outputs.CreateLogger("trax-skills");
+
 if (args is ["marketplace"])
 {
-    Console.Write(Stager.MarketplaceJson());
+    // The manifest ends with a newline, which the logger writes after each line.
+    output.Say(Stager.MarketplaceJson().TrimEnd('\n'));
     return 0;
 }
 
 if (args.Length == 0 || args[0] is not ("check" or "stage") || args.Length % 2 == 0)
-    return Fail("expected a command and pairs of options");
+    return Fail(output, "expected a command and pairs of options");
 
 var options = new Dictionary<string, string>(StringComparer.Ordinal);
 for (var i = 1; i < args.Length; i += 2)
     options[args[i]] = args[i + 1];
 
 if (!options.TryGetValue("--skills", out var skills))
-    return Fail("--skills is required");
+    return Fail(output, "--skills is required");
 
 IReadOnlyList<SkillProblem> problems;
-if (args[0] == "check")
+if (string.Equals(args[0], "check", StringComparison.Ordinal))
     problems = SkillRules.Check(skills);
 else if (
     options.TryGetValue("--version", out var version)
     && options.TryGetValue("--license", out var license)
-    && options.TryGetValue("--out", out var output)
+    && options.TryGetValue("--out", out var outDir)
 )
-    problems = Stager.Stage(skills, version, license, output);
+    problems = await Stager.StageAsync(skills, version, license, outDir).ConfigureAwait(false);
 else
-    return Fail("stage needs --version, --license and --out");
+    return Fail(output, "stage needs --version, --license and --out");
 
 foreach (var problem in problems)
-    Console.Error.WriteLine(problem);
+    output.Fail(problem.ToString());
 if (problems.Count > 0)
     return 1;
 
-Console.WriteLine($"{args[0]}: {SkillRules.Folders(skills).Count} skills, no problems");
+output.Say($"{args[0]}: {SkillRules.Folders(skills).Count} skills, no problems");
 return 0;
 
-static int Fail(string why)
+static int Fail(ILogger output, string why)
 {
-    Console.Error.WriteLine(why);
-    Console.Error.WriteLine(usage);
+    output.Fail(why);
+    output.Fail(usage);
     return 2;
 }

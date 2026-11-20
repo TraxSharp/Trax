@@ -124,7 +124,10 @@ public class FrontMatterTests
         if (!Areas.Contains(area, StringComparer.Ordinal))
             return $"area '{area}' is not one of {string.Join(", ", Areas)}";
 
-        if (DocsSite.IsSdkReferenceLeaf(page) && type != "reference")
+        if (
+            DocsSite.IsSdkReferenceLeaf(page)
+            && !string.Equals(type, "reference", StringComparison.Ordinal)
+        )
             return $"an sdk-reference page is `type: reference`, not '{type}'";
 
         return null;

@@ -31,14 +31,14 @@ public static class Cli
         {
             var flag = args[i];
 
-            if (flag == "--require-repos-key")
+            if (string.Equals(flag, "--require-repos-key", StringComparison.Ordinal))
             {
                 requireRepos = true;
                 continue;
             }
 
             if (i + 1 >= args.Length)
-                return new Parsed(null, $"'{flag}' needs a value.");
+                return new Parsed(Options: null, $"'{flag}' needs a value.");
 
             var value = args[++i];
             switch (flag)
@@ -62,22 +62,25 @@ public static class Cli
                     censusRoot = value.Replace('\\', '/').Trim('/');
                     break;
                 default:
-                    return new Parsed(null, $"Unknown option '{flag}'.");
+                    return new Parsed(Options: null, $"Unknown option '{flag}'.");
             }
         }
 
         if (!Directory.Exists(repo))
-            return new Parsed(null, $"Repository '{repo}' does not exist.");
+            return new Parsed(Options: null, $"Repository '{repo}' does not exist.");
 
         if (areas.Count == 0)
             return new Parsed(
-                null,
+                Options: null,
                 "--known-areas is required. The area vocabulary is closed on purpose: one that "
                     + "grows freely stops discriminating."
             );
 
         if (requireRepos && repos.Count == 0)
-            return new Parsed(null, "--require-repos-key needs --known-repos to validate against.");
+            return new Parsed(
+                Options: null,
+                "--require-repos-key needs --known-repos to validate against."
+            );
 
         return new Parsed(
             new GuardOptions
@@ -90,7 +93,7 @@ public static class Cli
                 RequireReposKey = requireRepos,
                 CensusRoot = censusRoot,
             },
-            null
+            Error: null
         );
     }
 

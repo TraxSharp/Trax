@@ -6,13 +6,19 @@ namespace Trax.Skills.Publish.Tests.Tests;
 public class StagerTests
 {
     [Test]
-    public void Stage_StampsTheVersion_AndDropsTheInternalMarker()
+    public async Task Stage_StampsTheVersion_AndDropsTheInternalMarker()
     {
         using var skills = new TempSkills()
             .Skill("trax", body: "# Trax\n\nRead [more](more.md).\n")
             .File_("trax/more.md", "more");
 
-        Stager.Stage(skills.Skills, "1.70.0", skills.License, skills.Out).Should().BeEmpty();
+        (
+            await Stager
+                .StageAsync(skills.Skills, "1.70.0", skills.License, skills.Out)
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .BeEmpty();
 
         var staged = File.ReadAllText(Path.Combine(skills.Out, "skills", "trax", "SKILL.md"));
         staged
@@ -26,11 +32,17 @@ public class StagerTests
     }
 
     [Test]
-    public void Stage_WritesThePluginAtTheReleaseVersion_AndNoMarketplace()
+    public async Task Stage_WritesThePluginAtTheReleaseVersion_AndNoMarketplace()
     {
         using var skills = new TempSkills().Skill("trax").Skill("trax-upgrade");
 
-        Stager.Stage(skills.Skills, "1.70.0", skills.License, skills.Out).Should().BeEmpty();
+        (
+            await Stager
+                .StageAsync(skills.Skills, "1.70.0", skills.License, skills.Out)
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .BeEmpty();
 
         var plugin = JsonNode.Parse(
             File.ReadAllText(Path.Combine(skills.Out, ".claude-plugin", "plugin.json"))
@@ -61,24 +73,33 @@ public class StagerTests
     }
 
     [Test]
-    public void Stage_RefusesASkillThatBreaksARule_AndWritesNothing()
+    public async Task Stage_RefusesASkillThatBreaksARule_AndWritesNothing()
     {
         using var skills = new TempSkills().Skill("trax", metadata: "");
 
-        Stager.Stage(skills.Skills, "1.70.0", skills.License, skills.Out).Should().ContainSingle();
+        (
+            await Stager
+                .StageAsync(skills.Skills, "1.70.0", skills.License, skills.Out)
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .ContainSingle();
         Directory.Exists(skills.Out).Should().BeFalse();
     }
 
     [TestCase(false)]
     [TestCase(true)]
-    public void Stage_RefusesALinkInASkill_AndStagesNothingItPointsAt(bool folder)
+    public async Task Stage_RefusesALinkInASkill_AndStagesNothingItPointsAt(bool folder)
     {
         using var skills = new TempSkills().Skill("trax");
         var (file, dir) = skills.Outside();
         skills.Link(folder ? "trax/more" : "trax/extra.md", folder ? dir : file, folder);
 
-        Stager
-            .Stage(skills.Skills, "1.70.0", skills.License, skills.Out)
+        (
+            await Stager
+                .StageAsync(skills.Skills, "1.70.0", skills.License, skills.Out)
+                .ConfigureAwait(false)
+        )
             .Should()
             .ContainSingle()
             .Which.Message.Should()
@@ -89,12 +110,15 @@ public class StagerTests
     [TestCase("v1.70.0")]
     [TestCase("1.70")]
     [TestCase("main")]
-    public void Stage_RefusesAVersionThatIsNotARelease(string version)
+    public async Task Stage_RefusesAVersionThatIsNotARelease(string version)
     {
         using var skills = new TempSkills().Skill("trax");
 
-        Stager
-            .Stage(skills.Skills, version, skills.License, skills.Out)
+        (
+            await Stager
+                .StageAsync(skills.Skills, version, skills.License, skills.Out)
+                .ConfigureAwait(false)
+        )
             .Should()
             .ContainSingle()
             .Which.Message.Should()
@@ -102,11 +126,14 @@ public class StagerTests
     }
 
     [Test]
-    public void Stage_RefusesNoSkills_AndANonEmptyOutput()
+    public async Task Stage_RefusesNoSkills_AndANonEmptyOutput()
     {
         using var skills = new TempSkills();
-        Stager
-            .Stage(skills.Skills, "1.70.0", skills.License, skills.Out)
+        (
+            await Stager
+                .StageAsync(skills.Skills, "1.70.0", skills.License, skills.Out)
+                .ConfigureAwait(false)
+        )
             .Should()
             .ContainSingle()
             .Which.Message.Should()
@@ -115,8 +142,11 @@ public class StagerTests
         skills.Skill("trax");
         Directory.CreateDirectory(skills.Out);
         File.WriteAllText(Path.Combine(skills.Out, "stale"), "");
-        Stager
-            .Stage(skills.Skills, "1.70.0", skills.License, skills.Out)
+        (
+            await Stager
+                .StageAsync(skills.Skills, "1.70.0", skills.License, skills.Out)
+                .ConfigureAwait(false)
+        )
             .Should()
             .ContainSingle()
             .Which.Message.Should()

@@ -16,7 +16,7 @@ public class ApiDashboardPageTests
         File.ReadAllText(
                 RepoRoot.Combine("sdk-reference", "api-dashboard", "use-trax-api-dashboard.md")
             )
-            .Replace("\r\n", "\n");
+            .Replace("\r\n", "\n", StringComparison.Ordinal);
 
     private static string Flat() =>
         string.Join(' ', Page().Split((char[])[' ', '\n'], StringSplitOptions.RemoveEmptyEntries));

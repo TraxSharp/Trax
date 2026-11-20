@@ -13,29 +13,35 @@ public class LifecycleGuardTests
         ["effect"]
     );
 
-    private static IReadOnlyList<Adr> Load(TempAdrRepo repo) => AdrCorpus.Discover(repo.Options());
+    private static async Task<IReadOnlyList<Adr>> LoadAsync(TempAdrRepo repo) =>
+        await AdrCorpus.DiscoverAsync(repo.Options()).ConfigureAwait(false);
 
     #region Status section
 
     [Test]
-    public void StatusSection_AgreeingWithFrontmatter_Passes()
+    public async Task StatusSection_AgreeingWithFrontmatter_Passes()
     {
         using var repo = TempAdrRepo.Valid();
 
-        LifecycleGuards.StatusSection(Load(repo)).Passed.Should().BeTrue();
+        LifecycleGuards
+            .StatusSection((await LoadAsync(repo).ConfigureAwait(false)))
+            .Passed.Should()
+            .BeTrue();
     }
 
     [Test]
-    public void StatusSection_Missing_Fails()
+    public async Task StatusSection_Missing_Fails()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(
             First.FileName,
-            Sample.Adr().Replace("## Status\n\n**Accepted.**\n\n", string.Empty)
+            Sample
+                .Adr()
+                .Replace("## Status\n\n**Accepted.**\n\n", string.Empty, StringComparison.Ordinal)
         );
 
         LifecycleGuards
-            .StatusSection(Load(repo))
+            .StatusSection((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -43,13 +49,13 @@ public class LifecycleGuardTests
     }
 
     [Test]
-    public void StatusSection_DisagreeingWithFrontmatter_Fails()
+    public async Task StatusSection_DisagreeingWithFrontmatter_Fails()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(First.FileName, Sample.Adr(status: "proposed", statusSection: "**Accepted.**"));
 
         LifecycleGuards
-            .StatusSection(Load(repo))
+            .StatusSection((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -57,16 +63,19 @@ public class LifecycleGuardTests
     }
 
     [Test]
-    public void StatusSection_WithProseBeforeTheStatus_Fails()
+    public async Task StatusSection_WithProseBeforeTheStatus_Fails()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(First.FileName, Sample.Adr(statusSection: "After some thought, **Accepted.**"));
 
-        LifecycleGuards.StatusSection(Load(repo)).Offenders.Should().ContainSingle();
+        LifecycleGuards
+            .StatusSection((await LoadAsync(repo).ConfigureAwait(false)))
+            .Offenders.Should()
+            .ContainSingle();
     }
 
     [Test]
-    public void StatusSection_WithTrailingExplanation_Passes()
+    public async Task StatusSection_WithTrailingExplanation_Passes()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(
@@ -76,7 +85,10 @@ public class LifecycleGuardTests
             )
         );
 
-        LifecycleGuards.StatusSection(Load(repo)).Passed.Should().BeTrue();
+        LifecycleGuards
+            .StatusSection((await LoadAsync(repo).ConfigureAwait(false)))
+            .Passed.Should()
+            .BeTrue();
     }
 
     #endregion
@@ -112,23 +124,23 @@ public class LifecycleGuardTests
     }
 
     [Test]
-    public void Supersessions_WrittenFromBothSides_Passes()
+    public async Task Supersessions_WrittenFromBothSides_Passes()
     {
         using var repo = Superseded();
 
-        var result = LifecycleGuards.Supersessions(Load(repo));
+        var result = LifecycleGuards.Supersessions((await LoadAsync(repo).ConfigureAwait(false)));
 
         result.Offenders.Should().BeEmpty();
         result.Passed.Should().BeTrue();
     }
 
     [Test]
-    public void Supersessions_WithNoForwardLink_Fails()
+    public async Task Supersessions_WithNoForwardLink_Fails()
     {
         using var repo = Superseded(oldStatusSection: "**Superseded by** a later decision.");
 
         LifecycleGuards
-            .Supersessions(Load(repo))
+            .Supersessions((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -136,12 +148,12 @@ public class LifecycleGuardTests
     }
 
     [Test]
-    public void Supersessions_WhereTheSupersederSaysNothing_Fails()
+    public async Task Supersessions_WhereTheSupersederSaysNothing_Fails()
     {
         using var repo = Superseded(newStatusSection: "**Accepted.**");
 
         LifecycleGuards
-            .Supersessions(Load(repo))
+            .Supersessions((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -149,12 +161,12 @@ public class LifecycleGuardTests
     }
 
     [Test]
-    public void Supersessions_NamingAnAdrThatDoesNotExist_Fails()
+    public async Task Supersessions_NamingAnAdrThatDoesNotExist_Fails()
     {
         using var repo = Superseded(oldStatus: "superseded-by-0009");
 
         LifecycleGuards
-            .Supersessions(Load(repo))
+            .Supersessions((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -162,11 +174,11 @@ public class LifecycleGuardTests
     }
 
     [Test]
-    public void Supersessions_WhenThereAreNone_InspectsTheCorpusRatherThanNothing()
+    public async Task Supersessions_WhenThereAreNone_InspectsTheCorpusRatherThanNothing()
     {
         using var repo = TempAdrRepo.Valid();
 
-        var result = LifecycleGuards.Supersessions(Load(repo));
+        var result = LifecycleGuards.Supersessions((await LoadAsync(repo).ConfigureAwait(false)));
 
         result.Offenders.Should().BeEmpty();
         result
@@ -179,15 +191,18 @@ public class LifecycleGuardTests
     #region Changelog
 
     [Test]
-    public void Changelog_WithOneEntry_Passes()
+    public async Task Changelog_WithOneEntry_Passes()
     {
         using var repo = TempAdrRepo.Valid();
 
-        LifecycleGuards.Changelog(Load(repo)).Passed.Should().BeTrue();
+        LifecycleGuards
+            .Changelog((await LoadAsync(repo).ConfigureAwait(false)))
+            .Passed.Should()
+            .BeTrue();
     }
 
     [Test]
-    public void Changelog_NewestFirst_Passes()
+    public async Task Changelog_NewestFirst_Passes()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(
@@ -197,11 +212,14 @@ public class LifecycleGuardTests
             )
         );
 
-        LifecycleGuards.Changelog(Load(repo)).Passed.Should().BeTrue();
+        LifecycleGuards
+            .Changelog((await LoadAsync(repo).ConfigureAwait(false)))
+            .Passed.Should()
+            .BeTrue();
     }
 
     [Test]
-    public void Changelog_OldestFirst_Fails()
+    public async Task Changelog_OldestFirst_Fails()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(
@@ -212,7 +230,7 @@ public class LifecycleGuardTests
         );
 
         LifecycleGuards
-            .Changelog(Load(repo))
+            .Changelog((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -220,13 +238,13 @@ public class LifecycleGuardTests
     }
 
     [Test]
-    public void Changelog_Missing_Fails()
+    public async Task Changelog_Missing_Fails()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(First.FileName, Sample.Adr().Split("## Changelog")[0]);
 
         LifecycleGuards
-            .Changelog(Load(repo))
+            .Changelog((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -234,13 +252,13 @@ public class LifecycleGuardTests
     }
 
     [Test]
-    public void Changelog_Empty_Fails()
+    public async Task Changelog_Empty_Fails()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(First.FileName, Sample.Adr(changelog: string.Empty));
 
         LifecycleGuards
-            .Changelog(Load(repo))
+            .Changelog((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -251,13 +269,13 @@ public class LifecycleGuardTests
     [TestCase("- **2026-09-11** Recorded.")]
     [TestCase("- **11-09-2026**: Recorded.")]
     [TestCase("- **2026-09-11**:")]
-    public void Changelog_MalformedEntry_Fails(string entry)
+    public async Task Changelog_MalformedEntry_Fails(string entry)
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(First.FileName, Sample.Adr(changelog: entry));
 
         LifecycleGuards
-            .Changelog(Load(repo))
+            .Changelog((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()

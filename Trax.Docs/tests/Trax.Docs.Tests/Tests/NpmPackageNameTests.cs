@@ -21,7 +21,9 @@ public class NpmPackageNameTests
 
         foreach (var file in RepoRoot.MarkdownFiles())
         {
-            var lines = File.ReadAllText(file).Replace("\r\n", "\n").Split('\n');
+            var lines = File.ReadAllText(file)
+                .Replace("\r\n", "\n", StringComparison.Ordinal)
+                .Split('\n');
             for (var i = 0; i < lines.Length; i++)
             {
                 if (lines[i].Contains("@trax/", StringComparison.Ordinal))

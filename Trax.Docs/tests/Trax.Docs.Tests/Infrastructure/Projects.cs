@@ -6,14 +6,16 @@ namespace Trax.Docs.Tests.Infrastructure;
 /// The packages Trax ships, read from the checkout: what an SDK reference page's
 /// <c>package:</c> can name, and the public API baseline each one is checked against.
 /// </summary>
-internal static class Projects
+internal static partial class Projects
 {
     private static readonly Lazy<IReadOnlyDictionary<string, Package>> Cached = new(Load);
 
-    private static readonly Regex AssemblyName = new(
+    [GeneratedRegex(
         @"<AssemblyName>(?<name>[^<]+)</AssemblyName>",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex AssemblyName { get; }
 
     /// <summary>A packable project: its csproj, and the baseline of its public API when one exists.</summary>
     public sealed record Package(string Name, string Project, string? Baseline);

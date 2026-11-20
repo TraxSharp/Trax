@@ -21,7 +21,7 @@ namespace Trax.Docs.Tests.Tests;
 /// </summary>
 [Property("adr", "Trax.Docs/adr/0008-documentation-conventions-are-linted.md")]
 [TestFixture]
-public class PublicApiIsDocumentedTests
+public partial class PublicApiIsDocumentedTests
 {
     /// <summary>
     /// The undocumented public API that predates this guard, one <c>Assembly T:Type</c> or
@@ -48,23 +48,30 @@ public class PublicApiIsDocumentedTests
         "CompareTo",
     };
 
-    private static readonly Regex TypeDeclaration = new(
+    [GeneratedRegex(
         @"^(?:\[.*\]\s*)*(?:public|protected) (?:(?:static|sealed|abstract|readonly|partial|ref|unsafe|new)\s+)*"
             + @"(?<kind>record struct|record class|record|class|struct|interface|enum|delegate)\s+(?<decl>.*)$",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex TypeDeclaration { get; }
 
-    private static readonly Regex LeadingIdentifier = new(
+    [GeneratedRegex(
         @"^(?<name>[A-Za-z_]\w*)(?<rest>.*)$",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex LeadingIdentifier { get; }
 
-    private static readonly Regex LastIdentifier = new(
+    [GeneratedRegex(
         @"(?<name>[A-Za-z_]\w*)\s*$",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex LastIdentifier { get; }
 
-    private static readonly Regex Word = new(@"[A-Za-z_][A-Za-z0-9_]*", RegexOptions.Compiled);
+    [GeneratedRegex(@"[A-Za-z_][A-Za-z0-9_]*", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Word { get; }
 
     [Test]
     public void Every_PublicApi_IsNamed_OnAPublishedPage()
@@ -85,11 +92,11 @@ public class PublicApiIsDocumentedTests
 
         var offenders = undocumented
             .Where(k => !known.Contains(k))
-            .OrderBy(k => k, StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
             .ToList();
         var stale = known
             .Where(k => !undocumented.Contains(k))
-            .OrderBy(k => k, StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
             .ToList();
 
         offenders
@@ -214,7 +221,7 @@ public class PublicApiIsDocumentedTests
         {
             if (entry.IsType)
             {
-                if (entry.Name == "_Imports")
+                if (string.Equals(entry.Name, "_Imports", StringComparison.Ordinal))
                 {
                     exemptTypes.Add(entry.Path);
                     continue;
@@ -255,7 +262,7 @@ public class PublicApiIsDocumentedTests
     {
         var stack = new List<(int Indent, string Name, string Kind)>();
 
-        foreach (var raw in baseline.Replace("\r\n", "\n").Split('\n'))
+        foreach (var raw in baseline.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'))
         {
             var line = raw.TrimEnd();
             var text = line.Trim();
@@ -281,7 +288,7 @@ public class PublicApiIsDocumentedTests
             {
                 var kind = type.Groups["kind"].Value;
                 var decl = type.Groups["decl"].Value;
-                if (kind == "delegate")
+                if (string.Equals(kind, "delegate", StringComparison.Ordinal))
                 {
                     if (NameBeforeParameters(decl) is { } delegateName)
                         yield return new Entry(true, owner, delegateName, "");
@@ -309,7 +316,7 @@ public class PublicApiIsDocumentedTests
 
     private static string? MemberName(string text, string ownerKind, string ownerName)
     {
-        if (ownerKind == "enum")
+        if (string.Equals(ownerKind, "enum", StringComparison.Ordinal))
             return
                 LastIdentifier.Match(text.Split('=')[0].TrimEnd(',')).Groups["name"].Value
                     is { Length: > 0 } v
@@ -318,7 +325,7 @@ public class PublicApiIsDocumentedTests
 
         text = Regex.Replace(text, @"^(?:\[[^\]]*\]\s*)+", "");
 
-        var isInterface = ownerKind == "interface";
+        var isInterface = string.Equals(ownerKind, "interface", StringComparison.Ordinal);
         if (
             !isInterface
             && !text.StartsWith("public ", StringComparison.Ordinal)
@@ -342,7 +349,7 @@ public class PublicApiIsDocumentedTests
         var equals = text.IndexOf(" = ", StringComparison.Ordinal);
         var head = equals >= 0 ? text[..equals] : text;
 
-        var brace = head.IndexOf('{');
+        var brace = head.IndexOf('{', StringComparison.Ordinal);
         var name =
             NameBeforeParameters(brace >= 0 ? head[..brace] : head)
             ?? LastIdentifier

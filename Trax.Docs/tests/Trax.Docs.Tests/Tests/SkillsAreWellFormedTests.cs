@@ -82,7 +82,7 @@ public class SkillsAreWellFormedTests
             .Should()
             .BeTrue($"`/plugin marketplace add TraxSharp/Trax` reads {path}. See {Adr}.");
         File.ReadAllText(path)
-            .Replace("\r\n", "\n")
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
             .Should()
             .Be(
                 Stager.MarketplaceJson(),
@@ -127,7 +127,7 @@ public class SkillsAreWellFormedTests
             return null;
 
         var path = target[Site.Length..];
-        var hash = path.IndexOf('#');
+        var hash = path.IndexOf('#', StringComparison.Ordinal);
         var anchor = hash < 0 ? null : path[(hash + 1)..];
         var file = site.Resolve(hash < 0 ? path : path[..hash]);
         if (file is null)

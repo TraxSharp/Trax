@@ -37,7 +37,7 @@ internal static class RepoRoot
     /// <c>scripts/sync-docs.sh</c>.
     /// </summary>
     public static bool IsPublished(string relative) =>
-        System.IO.Path.GetFileName(relative) != "README.md"
+        !string.Equals(System.IO.Path.GetFileName(relative), "README.md", StringComparison.Ordinal)
         && !relative.StartsWith("adr/", StringComparison.Ordinal)
         && !relative.StartsWith(".claude/", StringComparison.Ordinal)
         && !relative.StartsWith("skills/", StringComparison.Ordinal)

@@ -10,24 +10,35 @@ namespace Trax.Docs.Tests.Tests;
 /// </summary>
 [Property("adr", "Trax.Docs/adr/0008-documentation-conventions-are-linted.md")]
 [TestFixture]
-public class NoJekyllSyntaxTests
+public partial class NoJekyllSyntaxTests
 {
-    private static readonly (string Description, Regex Pattern)[] BannedPatterns = new[]
-    {
-        (
-            "{{ site.baseurl }} (Jekyll baseurl template)",
-            new Regex(@"\{\{\s*site\.baseurl\s*\}\}", RegexOptions.Compiled)
-        ),
-        ("{% link ... %} (Jekyll link tag)", new Regex(@"\{%\s*link\s+", RegexOptions.Compiled)),
-        (
-            "{% include ... %} (Jekyll include tag)",
-            new Regex(@"\{%\s*include\s+", RegexOptions.Compiled)
-        ),
-        (
-            "{: .classname } (kramdown IAL)",
-            new Regex(@"\{:\s*\.[A-Za-z0-9_-]+\s*\}", RegexOptions.Compiled)
-        ),
-    };
+    private static readonly (string Description, Regex Pattern)[] BannedPatterns =
+    [
+        ("{{ site.baseurl }} (Jekyll baseurl template)", SiteBaseUrl),
+        ("{% link ... %} (Jekyll link tag)", LinkTag),
+        ("{% include ... %} (Jekyll include tag)", IncludeTag),
+        ("{: .classname } (kramdown IAL)", KramdownAttributes),
+    ];
+
+    [GeneratedRegex(
+        @"\{\{\s*site\.baseurl\s*\}\}",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex SiteBaseUrl { get; }
+
+    [GeneratedRegex(@"\{%\s*link\s+", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex LinkTag { get; }
+
+    [GeneratedRegex(@"\{%\s*include\s+", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex IncludeTag { get; }
+
+    [GeneratedRegex(
+        @"\{:\s*\.[A-Za-z0-9_-]+\s*\}",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex KramdownAttributes { get; }
 
     [Test]
     public void DocsMarkdown_ContainsNo_JekyllOrKramdownSyntax()
@@ -41,7 +52,9 @@ public class NoJekyllSyntaxTests
             if (rel.EndsWith("NoJekyllSyntaxTests.cs", StringComparison.Ordinal))
                 continue;
 
-            var lines = File.ReadAllText(file).Replace("\r\n", "\n").Split('\n');
+            var lines = File.ReadAllText(file)
+                .Replace("\r\n", "\n", StringComparison.Ordinal)
+                .Split('\n');
             for (var i = 0; i < lines.Length; i++)
             {
                 foreach (var (desc, pattern) in BannedPatterns)

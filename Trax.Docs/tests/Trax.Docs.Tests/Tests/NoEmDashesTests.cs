@@ -19,10 +19,12 @@ public class NoEmDashesTests
 
         foreach (var file in RepoRoot.MarkdownFiles())
         {
-            var lines = File.ReadAllText(file).Replace("\r\n", "\n").Split('\n');
+            var lines = File.ReadAllText(file)
+                .Replace("\r\n", "\n", StringComparison.Ordinal)
+                .Split('\n');
             for (var i = 0; i < lines.Length; i++)
             {
-                if (lines[i].Contains('—'))
+                if (lines[i].Contains('—', StringComparison.Ordinal))
                     offenders.Add($"{RepoRoot.Relative(file)}:{i + 1}  -> {lines[i].Trim()}");
             }
         }

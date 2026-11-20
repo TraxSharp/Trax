@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Adr.Guard.Guards;
 
 /// <summary>
@@ -5,23 +7,28 @@ namespace Trax.Adr.Guard.Guards;
 /// tooling reads; the <c>## Status</c> section is what a human reads first, and it is the
 /// only place a supersession has room to be explained.
 /// </summary>
-public static class LifecycleGuards
+public static partial class LifecycleGuards
 {
     public const string StatusHeading = "Status";
     public const string ChangelogHeading = "Changelog";
 
-    private static readonly Regex MarkdownLink = new(
+    [GeneratedRegex(
         @"\[[^\]]*\]\(\.\/(?<file>\d{4}-[a-z0-9-]+\.md)\)",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex MarkdownLink { get; }
 
-    private static readonly Regex ChangelogEntry = new(
+    [GeneratedRegex(
         @"^[-*+]\s+\*\*(?<date>\d{4}-\d{2}-\d{2})\*\*:\s*\S",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ChangelogEntry { get; }
 
     /// <summary>Any list marker, so a '*' bullet is checked rather than silently skipped.</summary>
-    private static readonly Regex ListItem = new(@"^[-*+]\s", RegexOptions.Compiled);
+    [GeneratedRegex(@"^[-*+]\s", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex ListItem { get; }
 
     public static GuardResult StatusSection(IReadOnlyList<Adr> adrs)
     {
@@ -203,7 +210,15 @@ public static class LifecycleGuards
             }
 
             var impossible = dates
-                .Where(d => !DateOnly.TryParseExact(d, "yyyy-MM-dd", out _))
+                .Where(d =>
+                    !DateOnly.TryParseExact(
+                        d,
+                        "yyyy-MM-dd",
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.None,
+                        out _
+                    )
+                )
                 .ToList();
             if (impossible.Count > 0)
             {
@@ -214,7 +229,7 @@ public static class LifecycleGuards
                 continue;
             }
 
-            var sorted = dates.OrderByDescending(d => d, StringComparer.Ordinal).ToList();
+            var sorted = dates.OrderDescending(StringComparer.Ordinal).ToList();
             if (!dates.SequenceEqual(sorted, StringComparer.Ordinal))
                 offenders.Add(
                     $"{adr.RelativePath}: changelog is not newest first: {string.Join(", ", dates)}"

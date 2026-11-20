@@ -24,15 +24,17 @@ namespace Trax.Docs.Snippets.Tests.Tests;
     "Trax.Docs/adr/0050-docs-pages-are-typed-and-their-code-is-checked-against-the-code.md"
 )]
 [TestFixture]
-public class TestExcerptsNameTheirPagesTests
+public partial class TestExcerptsNameTheirPagesTests
 {
     private const string Adr =
         "Trax.Docs/adr/0050-docs-pages-are-typed-and-their-code-is-checked-against-the-code.md";
 
-    private static readonly Regex ShownOn = new(
+    [GeneratedRegex(
         @"^\s*//\s*Shown on https://traxsharp\.net(?<page>/docs(?:/[A-Za-z0-9_\-]+)*)/?\s*$",
-        RegexOptions.Compiled | RegexOptions.Multiline
-    );
+        RegexOptions.Multiline,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ShownOn { get; }
 
     [Test]
     public void Every_ExcerptOfALibraryTest_IsNamedByTheTest()
@@ -42,7 +44,7 @@ public class TestExcerptsNameTheirPagesTests
             .Select(e =>
                 $"{e.Location}: {e.File} has no `// Shown on https://traxsharp.net{e.Page}`"
             )
-            .Distinct()
+            .Distinct(StringComparer.Ordinal)
             .ToList();
 
         offenders
@@ -119,14 +121,14 @@ public class TestExcerptsNameTheirPagesTests
         return segments.Length > 2
             && segments[0].StartsWith("Trax.", StringComparison.Ordinal)
             && segments[0] is not ("Trax.Samples" or "Trax.Docs")
-            && segments[1] == "tests";
+            && string.Equals(segments[1], "tests", StringComparison.Ordinal);
     }
 
     private static string UrlPath(string page)
     {
         var path = page.Replace('\\', '/');
         path = path.EndsWith(".md", StringComparison.Ordinal) ? path[..^3] : path;
-        return path == "index" ? "/docs" : "/docs/" + path;
+        return string.Equals(path, "index", StringComparison.Ordinal) ? "/docs" : "/docs/" + path;
     }
 
     private static IReadOnlySet<string> PagesNamedBy(string repoRelative)
@@ -138,8 +140,8 @@ public class TestExcerptsNameTheirPagesTests
             ? ShownOn
                 .Matches(File.ReadAllText(file))
                 .Select(m => m.Groups["page"].Value)
-                .ToHashSet()
-            : new HashSet<string>();
+                .ToHashSet(StringComparer.Ordinal)
+            : new HashSet<string>(StringComparer.Ordinal);
     }
 
     /// <summary>The C# files under each library folder's <c>tests/</c>, repository-relative.</summary>

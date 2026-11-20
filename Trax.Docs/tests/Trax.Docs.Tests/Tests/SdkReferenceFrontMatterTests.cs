@@ -27,7 +27,7 @@ namespace Trax.Docs.Tests.Tests;
     "Trax.Docs/adr/0050-docs-pages-are-typed-and-their-code-is-checked-against-the-code.md"
 )]
 [TestFixture]
-public class SdkReferenceFrontMatterTests
+public partial class SdkReferenceFrontMatterTests
 {
     private const string Adr =
         "Trax.Docs/adr/0050-docs-pages-are-typed-and-their-code-is-checked-against-the-code.md";
@@ -38,52 +38,70 @@ public class SdkReferenceFrontMatterTests
 
     private static readonly string[] Surfaces = ["graphql", "typescript"];
 
-    private static readonly Regex Namespace = new(
+    [GeneratedRegex(
         @"^namespace (?<name>[A-Za-z_][\w.]*)\s*$",
-        RegexOptions.Compiled | RegexOptions.Multiline
-    );
+        RegexOptions.Multiline,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Namespace { get; }
 
-    private static readonly Regex Word = new(@"[A-Za-z_][A-Za-z0-9_]*", RegexOptions.Compiled);
+    [GeneratedRegex(@"[A-Za-z_][A-Za-z0-9_]*", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Word { get; }
 
-    private static readonly Regex FenceOpen = new(
+    [GeneratedRegex(
         @"^(?<indent>[ \t]*)(?<fence>`{3,}|~{3,})(?<info>.*)$",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex FenceOpen { get; }
 
-    private static readonly Regex Heading = new(
+    [GeneratedRegex(
         @"^ {0,3}#{1,2}[ \t]+(?<text>.*?)(?:[ \t]+#+)?[ \t]*$",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Heading { get; }
 
-    private static readonly Regex TypeDeclaration = new(
+    [GeneratedRegex(
         @"\b(?:class|interface|record(?:[ \t]+(?:struct|class))?|struct|enum)[ \t]+(?<name>[A-Za-z_]\w*)",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex TypeDeclaration { get; }
 
-    private static readonly Regex DelegateDeclaration = new(
+    [GeneratedRegex(
         @"\bdelegate[ \t]+[^;(]*?(?<name>[A-Za-z_]\w*)[ \t]*(?:<[^()<>]*(?:<[^()<>]*>[^()<>]*)*>)?[ \t]*\(",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex DelegateDeclaration { get; }
 
     // A name, its type parameters (one level of nesting), then its parameter list:
     // `Schedule<TTrain>(`. The type parameters hold no `<` or `>` of their own, or
     // `Task<Manifest> ScheduleAsync<T>(` would read as one name, `Task`.
-    private static readonly Regex BeforeParameters = new(
+    [GeneratedRegex(
         @"\b(?<name>[A-Za-z_]\w*)[ \t]*(?:<[^()<>]*(?:<[^()<>]*>[^()<>]*)*>)?[ \t]*\(",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex BeforeParameters { get; }
 
-    private static readonly Regex BeforeAccessors = new(
+    [GeneratedRegex(
         @"(?<name>[A-Za-z_]\w*)[ \t]*\{[ \t]*(?:get|set|init)\b",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex BeforeAccessors { get; }
 
-    private static readonly Regex LastWord = new(@"(?<word>[A-Za-z_]\w*)$", RegexOptions.Compiled);
+    [GeneratedRegex(@"(?<word>[A-Za-z_]\w*)$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex LastWord { get; }
 
-    private static readonly Regex Literal = new(
+    [GeneratedRegex(
         @"""(?:[^""\\]|\\.)*""|'(?:[^'\\]|\\.)'",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Literal { get; }
 
     /// <summary>
     /// Words that are never a declared name, and the words after which a name followed by
@@ -544,9 +562,14 @@ public class SdkReferenceFrontMatterTests
             missing.Add("package");
         else if (Projects.Packable.TryGetValue(package, out var found))
             project = found;
-        else if (!(surface == "typescript" && npm.Contains(package)))
+        else if (
+            !(
+                string.Equals(surface, "typescript", StringComparison.Ordinal)
+                && npm.Contains(package)
+            )
+        )
             wrong.Add(
-                surface == "typescript"
+                string.Equals(surface, "typescript", StringComparison.Ordinal)
                     ? $"package {package} is neither a packable project nor an npm package in the repository"
                     : $"package {package} is not a packable project (a csproj under a Trax.*/src/ or Trax.*/dotnet/src/ folder)"
             );
@@ -572,7 +595,11 @@ public class SdkReferenceFrontMatterTests
             missing.Add("source");
         foreach (var source in sources)
         {
-            if (source.StartsWith('/') || source.Contains('\\') || source.Split('/').Contains(".."))
+            if (
+                source.StartsWith('/')
+                || source.Contains('\\', StringComparison.Ordinal)
+                || source.Split('/').Contains("..")
+            )
                 wrong.Add(
                     $"source {source} is not a forward-slash path relative to the repository root"
                 );
@@ -590,7 +617,7 @@ public class SdkReferenceFrontMatterTests
     private static List<(int Line, string Code)> SignatureFences(string markdown)
     {
         var fences = new List<(int, string)>();
-        var lines = markdown.Replace("\r\n", "\n").Split('\n');
+        var lines = markdown.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
         var inSignature = false;
 
         for (var i = 0; i < lines.Length; i++)
@@ -605,11 +632,13 @@ public class SdkReferenceFrontMatterTests
 
             var fence = open.Groups["fence"].Value;
             var info = open.Groups["info"].Value.Trim();
-            if (fence[0] == '`' && info.Contains('`'))
+            if (fence[0] == '`' && info.Contains('`', StringComparison.Ordinal))
                 continue;
 
             var closing = new Regex(
-                $@"^[ \t]*{Regex.Escape(fence[0].ToString())}{{{fence.Length},}}[ \t]*$"
+                $@"^[ \t]*{Regex.Escape(fence[0].ToString())}{{{fence.Length},}}[ \t]*$",
+                RegexOptions.None,
+                TimeSpan.FromSeconds(1)
             );
             var body = new List<string>();
             var j = i + 1;
@@ -636,7 +665,7 @@ public class SdkReferenceFrontMatterTests
     /// </summary>
     private static HashSet<string> DeclaredNames(string code)
     {
-        var lines = code.Replace("\r\n", "\n")
+        var lines = code.Replace("\r\n", "\n", StringComparison.Ordinal)
             .Split('\n')
             .Select(l => Literal.Replace(l, "\"\""))
             .Select(l =>

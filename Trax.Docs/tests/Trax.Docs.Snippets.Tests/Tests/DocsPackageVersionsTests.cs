@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 
 namespace Trax.Docs.Snippets.Tests.Tests;
 
@@ -24,31 +25,40 @@ namespace Trax.Docs.Snippets.Tests.Tests;
 /// </summary>
 [Property("adr", "Trax.Docs/adr/0008-documentation-conventions-are-linted.md")]
 [TestFixture]
-public class DocsPackageVersionsTests
+public partial class DocsPackageVersionsTests
 {
-    private static readonly Regex TraxReference = new(
+    [GeneratedRegex(
         @"<Package(?:Reference|Version)\s+Include=""(?<id>Trax\.[^""]+)""\s+Version=""(?<version>[^""]+)""",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex TraxReference { get; }
 
     /// <summary><c>dotnet tool install Trax.Cli --version x.y.z</c>, <c>dotnet add package Trax.X --version x.y.z</c>.</summary>
-    private static readonly Regex TraxCommand = new(
+    [GeneratedRegex(
         @"dotnet\s+(?:tool\s+install|add\s+package)\s+(?:--global\s+)?(?<id>Trax\.\S+)\s+--version\s+(?<version>\S+)",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex TraxCommand { get; }
 
-    private static readonly Regex ExactVersion = new(@"^\d+\.\d+\.\d+$", RegexOptions.Compiled);
+    [GeneratedRegex(@"^\d+\.\d+\.\d+$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex ExactVersion { get; }
 
-    private static readonly Regex ReleaseTag = new(
+    [GeneratedRegex(
         @"^v(?<version>\d+\.\d+\.\d+)$",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ReleaseTag { get; }
 
     /// <summary>A package's project: <c>Trax.X/src/Id/Id.csproj</c> or <c>Trax.X/dotnet/src/Id/Id.csproj</c>.</summary>
-    private static readonly Regex PackageProject = new(
+    [GeneratedRegex(
         @"^Trax\.[^/]+/(?:dotnet/)?src/(?<id>[^/]+)/\k<id>\.csproj$",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex PackageProject { get; }
 
     [Test]
     public void TraxVersionsOnPages_AreOneExactVersion()
@@ -144,16 +154,28 @@ public class DocsPackageVersionsTests
             if (page.StartsWith("adr/", StringComparison.Ordinal))
                 continue;
 
-            var lines = File.ReadAllText(file).Replace("\r\n", "\n").Split('\n');
+            var lines = File.ReadAllText(file)
+                .Replace("\r\n", "\n", StringComparison.Ordinal)
+                .Split('\n');
             for (var i = 0; i < lines.Length; i++)
             {
                 foreach (Match m in TraxReference.Matches(lines[i]))
-                    found.Add(($"{page}:{i + 1}", m.Groups["id"].Value, m.Groups["version"].Value));
+                    found.Add(
+                        (
+                            string.Create(CultureInfo.InvariantCulture, $"{page}:{i + 1}"),
+                            m.Groups["id"].Value,
+                            m.Groups["version"].Value
+                        )
+                    );
                 foreach (Match m in TraxCommand.Matches(lines[i]))
                     // A placeholder such as `--version <the Trax version>` names no version.
                     if (!m.Groups["version"].Value.StartsWith('<'))
                         found.Add(
-                            ($"{page}:{i + 1}", m.Groups["id"].Value, m.Groups["version"].Value)
+                            (
+                                string.Create(CultureInfo.InvariantCulture, $"{page}:{i + 1}"),
+                                m.Groups["id"].Value,
+                                m.Groups["version"].Value
+                            )
                         );
             }
         }

@@ -8,8 +8,10 @@ namespace Trax.Adr.Guard.Tests.Tests;
 [TestFixture]
 public class AuditRegressionTests
 {
-    private static IReadOnlyList<Adr> Load(TempAdrRepo repo, GuardOptions? options = null) =>
-        AdrCorpus.Discover(options ?? repo.Options());
+    private static async Task<IReadOnlyList<Adr>> LoadAsync(
+        TempAdrRepo repo,
+        GuardOptions? options = null
+    ) => await AdrCorpus.DiscoverAsync(options ?? repo.Options()).ConfigureAwait(false);
 
     /// <summary>
     /// A quoted format template satisfied the exemplars check while the document's real
@@ -17,7 +19,7 @@ public class AuditRegressionTests
     /// the ADR format.
     /// </summary>
     [Test]
-    public void FencedTemplate_DoesNotSatisfy_TheExemplarsCheck()
+    public async Task FencedTemplate_DoesNotSatisfy_TheExemplarsCheck()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(
@@ -31,7 +33,7 @@ public class AuditRegressionTests
         );
 
         ExemplarGuards
-            .SectionPresent(Load(repo))
+            .SectionPresent((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -39,7 +41,7 @@ public class AuditRegressionTests
     }
 
     [Test]
-    public void FencedClassName_IsNotReadAsAnEnforcementClaim()
+    public async Task FencedClassName_IsNotReadAsAnEnforcementClaim()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(
@@ -50,8 +52,20 @@ public class AuditRegressionTests
             )
         );
 
-        ExemplarGuards.NamedGuardsResolve(Load(repo), repo.Options()).Offenders.Should().BeEmpty();
-        ExemplarGuards.SectionPresent(Load(repo)).Passed.Should().BeTrue();
+        (
+            await ExemplarGuards
+                .NamedGuardsResolveAsync(
+                    (await LoadAsync(repo).ConfigureAwait(false)),
+                    repo.Options()
+                )
+                .ConfigureAwait(false)
+        )
+            .Offenders.Should()
+            .BeEmpty();
+        ExemplarGuards
+            .SectionPresent((await LoadAsync(repo).ConfigureAwait(false)))
+            .Passed.Should()
+            .BeTrue();
     }
 
     /// <summary>
@@ -60,11 +74,13 @@ public class AuditRegressionTests
     /// exists to catch, and it applied to the two exemplar checks specifically.
     /// </summary>
     [Test]
-    public void ACheckWithNothingToInspect_ReportsZero_NotAFabricatedOne()
+    public async Task ACheckWithNothingToInspect_ReportsZero_NotAFabricatedOne()
     {
         using var repo = TempAdrRepo.Valid();
 
-        var resolve = ExemplarGuards.NamedGuardsResolve(Load(repo), repo.Options());
+        var resolve = await ExemplarGuards
+            .NamedGuardsResolveAsync((await LoadAsync(repo).ConfigureAwait(false)), repo.Options())
+            .ConfigureAwait(false);
 
         resolve.Inspected.Should().Be(0, "the baseline corpus names no local guard");
         resolve.NothingToCheck.Should().BeTrue();
@@ -89,7 +105,7 @@ public class AuditRegressionTests
     /// were checked in both directions.
     /// </summary>
     [Test]
-    public void FullList_TagColumnsAreChecked_NotJustTheTitle()
+    public async Task FullList_TagColumnsAreChecked_NotJustTheTitle()
     {
         using var repo = TempAdrRepo.Valid();
         // Only the full-list row is edited. The By-area table still agrees with the
@@ -99,12 +115,16 @@ public class AuditRegressionTests
                 .Index(central: false, Sample.DefaultSpec)
                 .Replace(
                     "| Tests are deterministic | testing |",
-                    "| Tests are deterministic | migrations |"
+                    "| Tests are deterministic | migrations |",
+                    StringComparison.Ordinal
                 )
         );
 
-        IndexGuards
-            .FullList(Load(repo), repo.Options())
+        (
+            await IndexGuards
+                .FullListAsync((await LoadAsync(repo).ConfigureAwait(false)), repo.Options())
+                .ConfigureAwait(false)
+        )
             .Offenders.Should()
             .Contain(o => o.Contains("omits areas testing"));
     }
@@ -116,7 +136,7 @@ public class AuditRegressionTests
     /// and cite-back.
     /// </summary>
     [Test]
-    public void Census_DoesNotCreditAClassHiddenInTheElsewhereParagraph()
+    public async Task Census_DoesNotCreditAClassHiddenInTheElsewhereParagraph()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(
@@ -132,7 +152,10 @@ public class AuditRegressionTests
         );
 
         CensusGuards
-            .EveryGuardIsClassified(Load(repo), repo.Options(censusRoot: "tests/Some.Tests.Meta"))
+            .EveryGuardIsClassified(
+                (await LoadAsync(repo).ConfigureAwait(false)),
+                repo.Options(censusRoot: "tests/Some.Tests.Meta")
+            )
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -145,7 +168,7 @@ public class AuditRegressionTests
     /// taking a real claim with it: resolution and cite-back both went quiet rather than red.
     /// </summary>
     [Test]
-    public void FencedElsewhereExample_DoesNotDeleteTheClaimBelowIt()
+    public async Task FencedElsewhereExample_DoesNotDeleteTheClaimBelowIt()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(
@@ -157,7 +180,9 @@ public class AuditRegressionTests
             )
         );
 
-        var resolve = ExemplarGuards.NamedGuardsResolve(Load(repo), repo.Options());
+        var resolve = await ExemplarGuards
+            .NamedGuardsResolveAsync((await LoadAsync(repo).ConfigureAwait(false)), repo.Options())
+            .ConfigureAwait(false);
 
         resolve.NothingToCheck.Should().BeFalse("the section makes one claim, in prose");
         resolve
@@ -196,11 +221,20 @@ public class AuditRegressionTests
     private const string Adr0001 = "0001-tests-are-deterministic.md";
 
     [Test]
-    public void CiteBack_InDocstringAndFailureMessage_Passes()
+    public async Task CiteBack_InDocstringAndFailureMessage_Passes()
     {
         using var repo = WithClaimedGuard(Guard($"See {Adr0001}.", $"See {Adr0001}."));
 
-        ExemplarGuards.NamedGuardsCiteBack(Load(repo), repo.Options()).Passed.Should().BeTrue();
+        (
+            await ExemplarGuards
+                .NamedGuardsCiteBackAsync(
+                    (await LoadAsync(repo).ConfigureAwait(false)),
+                    repo.Options()
+                )
+                .ConfigureAwait(false)
+        )
+            .Passed.Should()
+            .BeTrue();
     }
 
     /// <summary>
@@ -208,12 +242,18 @@ public class AuditRegressionTests
     /// while the failure message told the reader it had to be in two specific places.
     /// </summary>
     [Test]
-    public void CiteBack_InDocstringOnly_Fails()
+    public async Task CiteBack_InDocstringOnly_Fails()
     {
         using var repo = WithClaimedGuard(Guard($"See {Adr0001}.", "no citation here"));
 
-        ExemplarGuards
-            .NamedGuardsCiteBack(Load(repo), repo.Options())
+        (
+            await ExemplarGuards
+                .NamedGuardsCiteBackAsync(
+                    (await LoadAsync(repo).ConfigureAwait(false)),
+                    repo.Options()
+                )
+                .ConfigureAwait(false)
+        )
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -226,20 +266,35 @@ public class AuditRegressionTests
     /// the person who trips the guard reads, so it is the half that still has to be there.
     /// </summary>
     [Test]
-    public void CiteBack_InAFailureMessageOnly_Passes()
+    public async Task CiteBack_InAFailureMessageOnly_Passes()
     {
         using var repo = WithClaimedGuard(Guard("no citation here", $"See {Adr0001}."));
 
-        ExemplarGuards.NamedGuardsCiteBack(Load(repo), repo.Options()).Passed.Should().BeTrue();
+        (
+            await ExemplarGuards
+                .NamedGuardsCiteBackAsync(
+                    (await LoadAsync(repo).ConfigureAwait(false)),
+                    repo.Options()
+                )
+                .ConfigureAwait(false)
+        )
+            .Passed.Should()
+            .BeTrue();
     }
 
     [Test]
-    public void CiteBack_Absent_Fails()
+    public async Task CiteBack_Absent_Fails()
     {
         using var repo = WithClaimedGuard(Guard("nothing", "nothing"));
 
-        ExemplarGuards
-            .NamedGuardsCiteBack(Load(repo), repo.Options())
+        (
+            await ExemplarGuards
+                .NamedGuardsCiteBackAsync(
+                    (await LoadAsync(repo).ConfigureAwait(false)),
+                    repo.Options()
+                )
+                .ConfigureAwait(false)
+        )
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -255,7 +310,7 @@ public class AuditRegressionTests
     /// over raw file text: a commented-out declaration counted as the real thing.
     /// </summary>
     [Test]
-    public void CommentedOutClass_DoesNotSatisfyAnEnforcementClaim()
+    public async Task CommentedOutClass_DoesNotSatisfyAnEnforcementClaim()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(
@@ -267,8 +322,14 @@ public class AuditRegressionTests
             "namespace Some.Tests.Meta;\n\n// public class PhantomGuardTests { }\npublic class RealTests { }\n"
         );
 
-        ExemplarGuards
-            .NamedGuardsResolve(Load(repo), repo.Options())
+        (
+            await ExemplarGuards
+                .NamedGuardsResolveAsync(
+                    (await LoadAsync(repo).ConfigureAwait(false)),
+                    repo.Options()
+                )
+                .ConfigureAwait(false)
+        )
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -276,7 +337,7 @@ public class AuditRegressionTests
     }
 
     [Test]
-    public void ClassInsideARawStringLiteral_DoesNotSatisfyAnEnforcementClaim()
+    public async Task ClassInsideARawStringLiteral_DoesNotSatisfyAnEnforcementClaim()
     {
         var quote = new string('"', 3);
         using var repo = TempAdrRepo.Valid();
@@ -290,8 +351,14 @@ public class AuditRegressionTests
                 + $"    const string T = {quote}\n        public class TemplatedTests {{ }}\n        {quote};\n}}\n"
         );
 
-        ExemplarGuards
-            .NamedGuardsResolve(Load(repo), repo.Options())
+        (
+            await ExemplarGuards
+                .NamedGuardsResolveAsync(
+                    (await LoadAsync(repo).ConfigureAwait(false)),
+                    repo.Options()
+                )
+                .ConfigureAwait(false)
+        )
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -304,7 +371,7 @@ public class AuditRegressionTests
     /// assertions kept its ADR's enforcement claim intact.
     /// </summary>
     [Test]
-    public void CiteBack_InAnOrdinaryComment_DoesNotCountAsAFailureMessage()
+    public async Task CiteBack_InAnOrdinaryComment_DoesNotCountAsAFailureMessage()
     {
         using var repo = WithClaimedGuard(
             $$"""
@@ -319,8 +386,14 @@ public class AuditRegressionTests
             """
         );
 
-        ExemplarGuards
-            .NamedGuardsCiteBack(Load(repo), repo.Options())
+        (
+            await ExemplarGuards
+                .NamedGuardsCiteBackAsync(
+                    (await LoadAsync(repo).ConfigureAwait(false)),
+                    repo.Options()
+                )
+                .ConfigureAwait(false)
+        )
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -331,7 +404,7 @@ public class AuditRegressionTests
 
     /// <summary>A dotted name is prose. The suffix rule must not be what decides it.</summary>
     [Test]
-    public void DottedClassName_IsProse_EvenWithTheTestsSuffix()
+    public async Task DottedClassName_IsProse_EvenWithTheTestsSuffix()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(
@@ -342,7 +415,19 @@ public class AuditRegressionTests
             )
         );
 
-        ExemplarGuards.NamedGuardsResolve(Load(repo), repo.Options()).Offenders.Should().BeEmpty();
-        ExemplarGuards.SectionPresent(Load(repo)).Passed.Should().BeTrue();
+        (
+            await ExemplarGuards
+                .NamedGuardsResolveAsync(
+                    (await LoadAsync(repo).ConfigureAwait(false)),
+                    repo.Options()
+                )
+                .ConfigureAwait(false)
+        )
+            .Offenders.Should()
+            .BeEmpty();
+        ExemplarGuards
+            .SectionPresent((await LoadAsync(repo).ConfigureAwait(false)))
+            .Passed.Should()
+            .BeTrue();
     }
 }

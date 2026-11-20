@@ -5,7 +5,7 @@ namespace Trax.Adr.Guard.Guards;
 /// models and migrations that demonstrate it. This section is what lets an ADR stay
 /// short, because anything it would otherwise have to explain goes here as a link.
 /// </summary>
-public static class ExemplarGuards
+public static partial class ExemplarGuards
 {
     public const string Heading = "Exemplars";
 
@@ -27,15 +27,15 @@ public static class ExemplarGuards
     /// names something in another repository and is read as prose, and a cited test FILE
     /// keeps its <c>.cs</c> extension so it is not mistaken for an enforcement claim.
     /// </summary>
-    private static readonly Regex ClaimedGuard = new(
+    [GeneratedRegex(
         @"`(?<name>[A-Z][A-Za-z0-9]*Tests)`",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ClaimedGuard { get; }
 
-    private static readonly Regex ClassDeclaration = new(
-        @"\bclass\s+(?<name>\w+)\b",
-        RegexOptions.Compiled
-    );
+    [GeneratedRegex(@"\bclass\s+(?<name>\w+)\b", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex ClassDeclaration { get; }
 
     /// <summary>
     /// The declaration an ADR's claim resolves against: an NUnit property carrying the ADR
@@ -54,10 +54,12 @@ public static class ExemplarGuards
     /// in one list (<c>[Property("adr", "a"), Property("adr", "b")]</c>). Only an attribute line
     /// is read for them, so a string that merely mentions one is not a declaration.
     /// </para>
-    private static readonly Regex GuardProperty = new(
+    [GeneratedRegex(
         @"\bProperty\(\s*""adr""\s*,\s*""(?<adr>[^""]+)""\s*\)",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex GuardProperty { get; }
 
     /// <summary>Whether a line of code is an attribute naming an ADR.</summary>
     private static bool IsAdrAttribute(string line) =>
@@ -68,7 +70,19 @@ public static class ExemplarGuards
 
     /// <summary>Whether every <c>[</c> in an attribute's text so far has been closed.</summary>
     private static bool Closed(string attribute) =>
-        attribute.Count(c => c == '[') <= attribute.Count(c => c == ']');
+        Occurrences(attribute, '[') <= Occurrences(attribute, ']');
+
+    private static int Occurrences(string text, char wanted)
+    {
+        var count = 0;
+        foreach (var c in text)
+        {
+            if (c == wanted)
+                count++;
+        }
+
+        return count;
+    }
 
     public static GuardResult SectionPresent(IReadOnlyList<Adr> adrs)
     {
@@ -144,9 +158,12 @@ public static class ExemplarGuards
     /// A named guard must still exist. A rename breaks this loudly, which is the point:
     /// an ADR claiming enforcement that no longer exists is worse than one claiming none.
     /// </summary>
-    public static GuardResult NamedGuardsResolve(IReadOnlyList<Adr> adrs, GuardOptions options)
+    public static async Task<GuardResult> NamedGuardsResolveAsync(
+        IReadOnlyList<Adr> adrs,
+        GuardOptions options
+    )
     {
-        var (classes, declared) = Scan(options);
+        var (classes, declared) = await ScanAsync(options).ConfigureAwait(false);
         var offenders = new List<string>();
         var inspected = 0;
 
@@ -162,13 +179,17 @@ public static class ExemplarGuards
 
                 var answering = declared
                     .Where(d =>
-                        d.Name == claim && d.Adr.EndsWith(adr.FileName, StringComparison.Ordinal)
+                        string.Equals(d.Name, claim, StringComparison.Ordinal)
+                        && d.Adr.EndsWith(adr.FileName, StringComparison.Ordinal)
                     )
                     .ToList();
 
                 if (answering.Count == 1)
                 {
-                    var idle = WhyItRunsNothing(File.ReadAllText(answering[0].File), claim);
+                    var idle = WhyItRunsNothing(
+                        await File.ReadAllTextAsync(answering[0].File).ConfigureAwait(false),
+                        claim
+                    );
                     if (idle is not null)
                         offenders.Add(
                             $"{AdrCorpus.Relative(answering[0].File, options)}: '{claim}' is named by "
@@ -228,9 +249,12 @@ public static class ExemplarGuards
     /// looking.
     /// </para>
     /// </summary>
-    public static GuardResult NamedGuardsCiteBack(IReadOnlyList<Adr> adrs, GuardOptions options)
+    public static async Task<GuardResult> NamedGuardsCiteBackAsync(
+        IReadOnlyList<Adr> adrs,
+        GuardOptions options
+    )
     {
-        var (classes, declared) = Scan(options);
+        var (classes, declared) = await ScanAsync(options).ConfigureAwait(false);
         var offenders = new List<string>();
         var inspected = 0;
 
@@ -247,7 +271,8 @@ public static class ExemplarGuards
                 // so the class doing the work could be left uncited while another answered for it.
                 var answering = declared
                     .Where(d =>
-                        d.Name == claim && d.Adr.EndsWith(adr.FileName, StringComparison.Ordinal)
+                        string.Equals(d.Name, claim, StringComparison.Ordinal)
+                        && d.Adr.EndsWith(adr.FileName, StringComparison.Ordinal)
                     )
                     .ToList();
                 // With no class claiming it back, resolution reports the missing attribute and this
@@ -262,7 +287,10 @@ public static class ExemplarGuards
                     continue;
 
                 inspected++;
-                var problem = CitationProblem(File.ReadAllText(sourcePath), adr.FileName);
+                var problem = CitationProblem(
+                    await File.ReadAllTextAsync(sourcePath).ConfigureAwait(false),
+                    adr.FileName
+                );
                 if (problem is not null)
                     offenders.Add(
                         $"{AdrCorpus.Relative(sourcePath, options)}: '{claim}' is named by "
@@ -298,7 +326,7 @@ public static class ExemplarGuards
     /// </summary>
     private static string? CitationProblem(string source, string fileName)
     {
-        var text = source.Replace("\r\n", "\n");
+        var text = source.Replace("\r\n", "\n", StringComparison.Ordinal);
         var code = CSharp.WithoutCommentsAndLiterals(text);
         var literals = CSharp.WithoutLiterals(text);
         var followed = new HashSet<string>(StringComparer.Ordinal);
@@ -332,27 +360,31 @@ public static class ExemplarGuards
                 .Any(r => ReachesAnAssertion(r, depth + 1));
         }
 
-        return citations.Any(c => ReachesAnAssertion(c, 0))
+        return citations.Exists(c => ReachesAnAssertion(c, 0))
             ? null
             : "does not name it in a failure message: not in an assertion's arguments, nor in a "
                 + "value an assertion uses. The attribute, a comment and the docstring do not count.";
     }
 
     /// <summary>A call that asserts: NUnit, a fluent assertion library, or a helper named for it.</summary>
-    private static readonly Regex Assertion = new(
+    [GeneratedRegex(
         @"\b\w*Assert\w*\s*\.\s*\w+\s*[<(]|\bAssert\w*\s*\(|\.\s*Should\w*\s*\(|\bFailWith\s*\("
             + @"|\bAssertionScope\b|\bthrow\s+new\s+\w*Assertion\w*Exception\b",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Assertion { get; }
 
     /// <summary>
     /// The member or local a statement declares: <c>Name(...) =&gt;</c>, <c>Name =&gt;</c> or
     /// <c>Name = ...</c>. Read from blanked code, so nothing inside a literal is mistaken for one.
     /// </summary>
-    private static readonly Regex Declaration = new(
+    [GeneratedRegex(
         @"(?<name>[A-Za-z_]\w*)\s*(?:\([^()]*\)\s*)?=>|(?<name>[A-Za-z_]\w*)\s*=(?![=>])",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Declaration { get; }
 
     private static string? DeclaredName(string statement)
     {
@@ -384,7 +416,7 @@ public static class ExemplarGuards
         string name
     ) =>
         Regex
-            .Matches(text, $@"\b{Regex.Escape(name)}\b")
+            .Matches(text, $@"\b{Regex.Escape(name)}\b", RegexOptions.None, TimeSpan.FromSeconds(1))
             .Select(m => m.Index)
             .Where(at => code[at] != ' ' || (literals[at] == ' ' && at > 0 && text[at - 1] == '{'));
 
@@ -399,8 +431,15 @@ public static class ExemplarGuards
     /// </summary>
     public static string? WhyItRunsNothing(string source, string className)
     {
-        var code = CSharp.WithoutCommentsAndLiterals(source.Replace("\r\n", "\n"));
-        var declaration = Regex.Match(code, $@"\bclass\s+{Regex.Escape(className)}\b");
+        var code = CSharp.WithoutCommentsAndLiterals(
+            source.Replace("\r\n", "\n", StringComparison.Ordinal)
+        );
+        var declaration = Regex.Match(
+            code,
+            $@"\bclass\s+{Regex.Escape(className)}\b",
+            RegexOptions.None,
+            TimeSpan.FromSeconds(1)
+        );
         if (!declaration.Success)
             return null; // resolution reports a missing class on its own
 
@@ -417,20 +456,24 @@ public static class ExemplarGuards
         if (tests.Count == 0)
             return "it declares no [Test], [TestCase], [TestCaseSource], [Theory] or [Fact] method.";
 
-        return tests.All(Skipped)
+        return tests.TrueForAll(Skipped)
             ? "every test it declares is marked [Explicit], [Ignore] or Skip, so CI never runs one."
             : null;
     }
 
-    private static readonly Regex TestAttribute = new(
+    [GeneratedRegex(
         @"(?<=[\[,]\s*)(?:Test|TestCase|TestCaseSource|Theory|Fact)(?:Attribute)?(?=\s*[(\],])",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex TestAttribute { get; }
 
-    private static readonly Regex SkipAttribute = new(
+    [GeneratedRegex(
         @"(?<=[\[,]\s*)(?:Explicit|Ignore)(?:Attribute)?(?=\s*[(\],])|\bSkip\s*=",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex SkipAttribute { get; }
 
     private static bool Skipped(string header) => SkipAttribute.IsMatch(header);
 
@@ -475,7 +518,7 @@ public static class ExemplarGuards
     /// credited it to the census while hiding it from resolution and cite-back at once.
     /// </para>
     /// </summary>
-    public static List<string> Claims(string section) =>
+    public static IReadOnlyList<string> Claims(string section) =>
         ClaimedGuard
             .Matches(WithoutParagraph(Markdown.WithoutFences(section), ElsewhereMarker))
             .Select(m => m.Groups["name"].Value)
@@ -505,14 +548,14 @@ public static class ExemplarGuards
         if (stop >= 0)
             after = after[..stop];
 
-        return Regex.Replace(after, @"\s+", " ").Trim();
+        return Whitespace.Replace(after, " ").Trim();
     }
 
     /// <summary>Every class an ADR could claim, and every class that claims an ADR back.</summary>
-    private static (
+    private static async Task<(
         Dictionary<string, string> Classes,
         List<(string Name, string Adr, string File)> Declared
-    ) Scan(GuardOptions options)
+    )> ScanAsync(GuardOptions options)
     {
         var map = new Dictionary<string, string>(StringComparer.Ordinal);
         var declared = new List<(string, string, string)>();
@@ -532,7 +575,7 @@ public static class ExemplarGuards
                 if (relative.Split('/').Any(p => p is "bin" or "obj"))
                     continue;
 
-                var raw = File.ReadAllText(file);
+                var raw = await File.ReadAllTextAsync(file).ConfigureAwait(false);
                 foreach (
                     Match match in ClassDeclaration.Matches(CSharp.WithoutCommentsAndLiterals(raw))
                 )
@@ -551,7 +594,7 @@ public static class ExemplarGuards
     /// names. Public because the census must credit a class by its declaration, not by a name
     /// another class may share.
     /// </summary>
-    public static List<(string Name, string Adr)> Declarations(string raw)
+    public static IReadOnlyList<(string Name, string Adr)> Declarations(string raw)
     {
         var declared = new List<(string, string)>();
 
@@ -563,7 +606,7 @@ public static class ExemplarGuards
         var pending = new List<string>();
         string? open = null;
         var openLines = 0;
-        foreach (var rawLine in raw.Replace("\r\n", "\n").Split('\n'))
+        foreach (var rawLine in raw.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'))
         {
             if (CSharp.Classify(rawLine) != CSharp.LineKind.Code)
                 continue;
@@ -617,4 +660,7 @@ public static class ExemplarGuards
 
         return declared;
     }
+
+    [GeneratedRegex(@"\s+", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Whitespace { get; }
 }

@@ -13,7 +13,8 @@ namespace Trax.Docs.Tests.Tests;
 public class StateMachinePagesTests
 {
     private static string Page(string relative) =>
-        File.ReadAllText(RepoRoot.Combine(relative.Split('/'))).Replace("\r\n", "\n");
+        File.ReadAllText(RepoRoot.Combine(relative.Split('/')))
+            .Replace("\r\n", "\n", StringComparison.Ordinal);
 
     [Test]
     public void Invoking_trains_says_a_scheduler_must_dispatch_the_run()

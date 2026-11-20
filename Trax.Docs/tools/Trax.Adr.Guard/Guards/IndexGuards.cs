@@ -5,16 +5,18 @@ namespace Trax.Adr.Guard.Guards;
 /// An index nothing verifies is the failure mode this whole corpus exists to avoid: it
 /// looks authoritative and quietly stops being true.
 /// </summary>
-public static class IndexGuards
+public static partial class IndexGuards
 {
     public const string ByRepoHeading = "By repo";
     public const string ByAreaHeading = "By area";
     public const string FullListHeading = "All of them";
 
-    private static readonly Regex RowLink = new(
+    [GeneratedRegex(
         @"\[[^\]]*\]\(\.\/(?<file>\d{4}-[a-z0-9-]+\.md)\)",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex RowLink { get; }
 
     public static GuardResult Exists(IReadOnlyList<Adr> adrs, GuardOptions options)
     {
@@ -36,14 +38,14 @@ public static class IndexGuards
     }
 
     /// <summary>Every ADR appears in the tag table under each tag it declares, and nowhere else.</summary>
-    public static GuardResult TagTable(
+    public static async Task<GuardResult> TagTableAsync(
         IReadOnlyList<Adr> adrs,
         GuardOptions options,
         string heading,
         string frontmatterKey
     )
     {
-        var index = ReadIndex(options);
+        var index = await ReadIndexAsync(options).ConfigureAwait(false);
         var offenders = new List<string>();
         var name = $"index/{frontmatterKey}-table";
 
@@ -106,9 +108,12 @@ public static class IndexGuards
     }
 
     /// <summary>The full table lists every ADR exactly once, with its title and its tags.</summary>
-    public static GuardResult FullList(IReadOnlyList<Adr> adrs, GuardOptions options)
+    public static async Task<GuardResult> FullListAsync(
+        IReadOnlyList<Adr> adrs,
+        GuardOptions options
+    )
     {
-        var index = ReadIndex(options);
+        var index = await ReadIndexAsync(options).ConfigureAwait(false);
         var offenders = new List<string>();
         const string name = "index/full-list";
         var rule =
@@ -178,10 +183,14 @@ public static class IndexGuards
         + "directions: an ADR missing from its row fails, and a row naming an ADR that does not "
         + "declare that tag fails too.";
 
-    private static string? ReadIndex(GuardOptions options)
+    private static async Task<string?> ReadIndexAsync(GuardOptions options)
     {
         var path = AdrCorpus.IndexPath(options);
-        return File.Exists(path) ? File.ReadAllText(path).Replace("\r\n", "\n") : null;
+        if (!File.Exists(path))
+            return null;
+
+        var text = await File.ReadAllTextAsync(path).ConfigureAwait(false);
+        return text.Replace("\r\n", "\n", StringComparison.Ordinal);
     }
 
     private static Dictionary<string, HashSet<string>> ParseTagRows(string section)

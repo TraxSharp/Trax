@@ -27,22 +27,28 @@ namespace Trax.Docs.Tests.Tests;
 /// </summary>
 [Property("adr", "Trax.Docs/adr/0008-documentation-conventions-are-linted.md")]
 [TestFixture]
-public class InternalLinksResolveTests
+public partial class InternalLinksResolveTests
 {
     // An inline markdown link or image target: [text](target) or [text](<target> "title").
-    private static readonly Regex Link = new(
+    [GeneratedRegex(
         @"\]\(\s*<?(?<target>[^)\s>]+)>?(?:\s+""[^""]*"")?\s*\)",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Link { get; }
 
-    private static readonly Regex Scheme = new(
+    [GeneratedRegex(
         @"^[a-zA-Z][a-zA-Z0-9+.\-]*:",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Scheme { get; }
 
-    private static readonly Regex Fence = new(@"^\s*(```|~~~)", RegexOptions.Compiled);
+    [GeneratedRegex(@"^\s*(```|~~~)", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Fence { get; }
 
-    private static readonly Regex InlineCode = new(@"`[^`]*`", RegexOptions.Compiled);
+    [GeneratedRegex(@"`[^`]*`", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex InlineCode { get; }
 
     /// <summary>
     /// Pre-existing broken links, keyed by <c>page -> target</c> (an offender line without its
@@ -83,7 +89,9 @@ public class InternalLinksResolveTests
             }
         }
 
-        var stale = KnownBrokenLinks.Except(allowed).OrderBy(k => k, StringComparer.Ordinal);
+        var stale = KnownBrokenLinks
+            .Except(allowed, StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal);
 
         offenders
             .Should()
@@ -142,7 +150,7 @@ public class InternalLinksResolveTests
         if (!target.StartsWith('/'))
             return isPublished ? "relative link; write it as /docs/..." : null;
 
-        var hash = target.IndexOf('#');
+        var hash = target.IndexOf('#', StringComparison.Ordinal);
         var path = hash < 0 ? target : target[..hash];
         var anchor = hash < 0 ? null : target[(hash + 1)..];
 
@@ -154,7 +162,7 @@ public class InternalLinksResolveTests
             return "no published page at this path, and no page claims it in redirect_from";
 
         if (anchor is not null && !site.HeadingIds(file).Contains(Uri.UnescapeDataString(anchor)))
-            return file == DocsSite.FileFor(path)
+            return string.Equals(file, DocsSite.FileFor(path), StringComparison.Ordinal)
                 ? "no such heading on the target page"
                 : $"no such heading on {file}, where this path redirects";
 
@@ -164,7 +172,7 @@ public class InternalLinksResolveTests
     /// <summary>The links on a page with their line numbers, skipping code.</summary>
     private static IEnumerable<(int Line, string Target)> Links(string content)
     {
-        var lines = content.Replace("\r\n", "\n").Split('\n');
+        var lines = content.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
         var inFence = false;
         for (var i = 0; i < lines.Length; i++)
         {

@@ -107,7 +107,11 @@ public class MarkdownTests
     [Test]
     public void TableRows_WithALinkInTheHeader_StillSkipsIt()
     {
-        var table = Table.Replace("| Area | ADRs |", "| Area | ADRs [0009](./0009-x.md) |");
+        var table = Table.Replace(
+            "| Area | ADRs |",
+            "| Area | ADRs [0009](./0009-x.md) |",
+            StringComparison.Ordinal
+        );
 
         Markdown.TableRows(table, 2).Should().ContainSingle();
     }

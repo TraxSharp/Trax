@@ -62,7 +62,13 @@ public class BookSampleIsTheBookTests
             var path = Path.Combine(Sample, file);
             if (!File.Exists(path))
                 offenders.Add($"{file}  is missing (printed by {fence.Location})");
-            else if (Normalized(File.ReadAllText(path)) != Normalized(fence.Code))
+            else if (
+                !string.Equals(
+                    Normalized(File.ReadAllText(path)),
+                    Normalized(fence.Code),
+                    StringComparison.Ordinal
+                )
+            )
                 offenders.Add($"{file}  differs from {fence.Location}");
         }
 
@@ -85,7 +91,7 @@ public class BookSampleIsTheBookTests
         var allowed = NotPrintedByTheBook.Select(p => Glob(p.Pattern)).ToList();
 
         var offenders = SampleFiles()
-            .Where(f => !printed.Contains(f) && !allowed.Any(a => a.IsMatch(f)))
+            .Where(f => !printed.Contains(f) && !allowed.Exists(a => a.IsMatch(f)))
             .ToList();
 
         offenders
@@ -105,7 +111,7 @@ public class BookSampleIsTheBookTests
     {
         var files = SampleFiles();
         var unused = NotPrintedByTheBook
-            .Where(p => !files.Any(Glob(p.Pattern).IsMatch))
+            .Where(p => !files.Exists(Glob(p.Pattern).IsMatch))
             .Select(p => p.Pattern)
             .ToList();
 
@@ -126,20 +132,23 @@ public class BookSampleIsTheBookTests
             .EnumerateFiles(Sample, "*", SearchOption.AllDirectories)
             .Where(f => !skipped.Any(x => f.Contains(x, StringComparison.Ordinal)))
             .Select(f => Path.GetRelativePath(Sample, f).Replace('\\', '/'))
-            .OrderBy(f => f, StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
             .ToList();
     }
 
-    private static string Normalized(string text) => text.Replace("\r\n", "\n").TrimEnd('\n');
+    private static string Normalized(string text) =>
+        text.Replace("\r\n", "\n", StringComparison.Ordinal).TrimEnd('\n');
 
     private static Regex Glob(string pattern) =>
         new(
             "^"
                 + Regex
                     .Escape(pattern)
-                    .Replace(@"\*\*/", "(?:.*/)?")
-                    .Replace(@"\*\*", ".*")
-                    .Replace(@"\*", "[^/]*")
-                + "$"
+                    .Replace(@"\*\*/", "(?:.*/)?", StringComparison.Ordinal)
+                    .Replace(@"\*\*", ".*", StringComparison.Ordinal)
+                    .Replace(@"\*", "[^/]*", StringComparison.Ordinal)
+                + "$",
+            RegexOptions.None,
+            TimeSpan.FromSeconds(1)
         );
 }

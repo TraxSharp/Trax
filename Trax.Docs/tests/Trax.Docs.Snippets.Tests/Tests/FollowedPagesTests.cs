@@ -105,11 +105,11 @@ public class FollowedPagesTests
             .SelectMany(u => u.Fences)
             .Where(f => f.File is null)
             .Select(f => $"{f.Location}  names no file")
-            .Distinct();
+            .Distinct(StringComparer.Ordinal);
         var twice = units.SelectMany(u =>
             u.Fences.Where(f => f.File is not null)
-                .GroupBy(f => f.File)
-                .Where(g => g.Count() > 1)
+                .GroupBy(f => f.File, StringComparer.Ordinal)
+                .Where(g => g.Skip(1).Any())
                 .Select(g => $"{u.Page} [{u.Group}]  names {g.Key} {g.Count()} times")
         );
         var offenders = unnamed.Concat(twice).ToList();

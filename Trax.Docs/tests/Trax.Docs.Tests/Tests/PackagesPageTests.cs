@@ -11,7 +11,7 @@ namespace Trax.Docs.Tests.Tests;
 /// </summary>
 [TestFixture]
 [Property("adr", "Trax.Docs/adr/0008-documentation-conventions-are-linted.md")]
-public class PackagesPageTests
+public partial class PackagesPageTests
 {
     private const string Adr = "Trax.Docs/adr/0008-documentation-conventions-are-linted.md";
 
@@ -77,10 +77,12 @@ public class PackagesPageTests
         "Trax.Samples.Templates",
     ];
 
-    private static readonly Regex NuGetLink = new(
+    [GeneratedRegex(
         @"\]\(https://www\.nuget\.org/packages/(?<id>Trax\.[A-Za-z0-9.]+)\)",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex NuGetLink { get; }
 
     private static HashSet<string> LinkedPackages()
     {
@@ -107,10 +109,12 @@ public class PackagesPageTests
             );
     }
 
-    private static readonly Regex StatedCount = new(
+    [GeneratedRegex(
         @"Trax ships as (?<count>\d+) NuGet packages",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex StatedCount { get; }
 
     [Test]
     public void PackagesPage_StatesTheNumberOfPackagesItLists()

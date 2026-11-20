@@ -65,7 +65,9 @@ internal sealed class DocsSite
 
     /// <summary>The <c>/docs</c> path a published page is served at.</summary>
     public static string PathOf(string page) =>
-        page == "index.md" ? "/docs" : "/docs/" + page[..^".md".Length];
+        string.Equals(page, "index.md", StringComparison.Ordinal)
+            ? "/docs"
+            : "/docs/" + page[..^".md".Length];
 
     /// <summary>
     /// The page a reader lands on at <paramref name="path"/>: the page itself, or the page whose

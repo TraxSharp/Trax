@@ -3,18 +3,22 @@ namespace Trax.Adr.Guard.Tests.Tests;
 [TestFixture]
 public class HygieneGuardTests
 {
-    private static IReadOnlyList<Adr> Load(TempAdrRepo repo) => AdrCorpus.Discover(repo.Options());
+    private static async Task<IReadOnlyList<Adr>> LoadAsync(TempAdrRepo repo) =>
+        await AdrCorpus.DiscoverAsync(repo.Options()).ConfigureAwait(false);
 
     [Test]
-    public void NoEmDashes_CleanCorpus_Passes()
+    public async Task NoEmDashes_CleanCorpus_Passes()
     {
         using var repo = TempAdrRepo.Valid();
 
-        HygieneGuards.NoEmDashes(Load(repo), repo.Options()).Passed.Should().BeTrue();
+        HygieneGuards
+            .NoEmDashes((await LoadAsync(repo).ConfigureAwait(false)), repo.Options())
+            .Passed.Should()
+            .BeTrue();
     }
 
     [Test]
-    public void NoEmDashes_InAnAdr_Fails_WithFileAndLine()
+    public async Task NoEmDashes_InAnAdr_Fails_WithFileAndLine()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(
@@ -23,7 +27,7 @@ public class HygieneGuardTests
         );
 
         HygieneGuards
-            .NoEmDashes(Load(repo), repo.Options())
+            .NoEmDashes((await LoadAsync(repo).ConfigureAwait(false)), repo.Options())
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -31,7 +35,7 @@ public class HygieneGuardTests
     }
 
     [Test]
-    public void NoEmDashes_InTheIndex_Fails_BecauseTheIndexIsPartOfTheCorpus()
+    public async Task NoEmDashes_InTheIndex_Fails_BecauseTheIndexIsPartOfTheCorpus()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Index(
@@ -39,7 +43,7 @@ public class HygieneGuardTests
         );
 
         HygieneGuards
-            .NoEmDashes(Load(repo), repo.Options())
+            .NoEmDashes((await LoadAsync(repo).ConfigureAwait(false)), repo.Options())
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -47,7 +51,7 @@ public class HygieneGuardTests
     }
 
     [Test]
-    public void NoEmDashes_DoesNotFlagAHyphenOrEnDash()
+    public async Task NoEmDashes_DoesNotFlagAHyphenOrEnDash()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(
@@ -55,28 +59,40 @@ public class HygieneGuardTests
             Sample.Adr(statusSection: "**Accepted.** Use --locked-mode, and see pages 3–5.")
         );
 
-        HygieneGuards.NoEmDashes(Load(repo), repo.Options()).Passed.Should().BeTrue();
+        HygieneGuards
+            .NoEmDashes((await LoadAsync(repo).ConfigureAwait(false)), repo.Options())
+            .Passed.Should()
+            .BeTrue();
     }
 
     [Test]
-    public void TitlePresent_WhenTheHeadingIsThere_Passes()
+    public async Task TitlePresent_WhenTheHeadingIsThere_Passes()
     {
         using var repo = TempAdrRepo.Valid();
 
-        HygieneGuards.TitlePresent(Load(repo)).Passed.Should().BeTrue();
+        HygieneGuards
+            .TitlePresent((await LoadAsync(repo).ConfigureAwait(false)))
+            .Passed.Should()
+            .BeTrue();
     }
 
     [Test]
-    public void TitlePresent_WhenTheHeadingIsMissing_Fails()
+    public async Task TitlePresent_WhenTheHeadingIsMissing_Fails()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(
             Sample.DefaultSpec.FileName,
-            Sample.Adr().Replace($"# {Sample.DefaultSpec.Title}", $"## {Sample.DefaultSpec.Title}")
+            Sample
+                .Adr()
+                .Replace(
+                    $"# {Sample.DefaultSpec.Title}",
+                    $"## {Sample.DefaultSpec.Title}",
+                    StringComparison.Ordinal
+                )
         );
 
         HygieneGuards
-            .TitlePresent(Load(repo))
+            .TitlePresent((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()

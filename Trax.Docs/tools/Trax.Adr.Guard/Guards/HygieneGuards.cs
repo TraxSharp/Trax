@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Adr.Guard.Guards;
 
 /// <summary>
@@ -21,8 +23,13 @@ public static class HygieneGuards
             var lines = adr.Text.Split('\n');
             for (var i = 0; i < lines.Length; i++)
             {
-                if (lines[i].Contains(EmDash))
-                    offenders.Add($"{adr.RelativePath}:{i + 1} -> {lines[i].Trim()}");
+                if (lines[i].Contains(EmDash, StringComparison.Ordinal))
+                    offenders.Add(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{adr.RelativePath}:{i + 1} -> {lines[i].Trim()}"
+                        )
+                    );
             }
         }
 
@@ -30,12 +37,19 @@ public static class HygieneGuards
         if (File.Exists(index))
         {
             inspected++;
-            var lines = File.ReadAllText(index).Replace("\r\n", "\n").Split('\n');
+            var lines = File.ReadAllText(index)
+                .Replace("\r\n", "\n", StringComparison.Ordinal)
+                .Split('\n');
             var relative = AdrCorpus.Relative(index, options);
             for (var i = 0; i < lines.Length; i++)
             {
-                if (lines[i].Contains(EmDash))
-                    offenders.Add($"{relative}:{i + 1} -> {lines[i].Trim()}");
+                if (lines[i].Contains(EmDash, StringComparison.Ordinal))
+                    offenders.Add(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{relative}:{i + 1} -> {lines[i].Trim()}"
+                        )
+                    );
             }
         }
 

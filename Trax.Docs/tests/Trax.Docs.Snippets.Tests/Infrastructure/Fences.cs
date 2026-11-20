@@ -1,81 +1,6 @@
+using System.Globalization;
+
 namespace Trax.Docs.Snippets.Tests.Infrastructure;
-
-/// <summary>
-/// A fenced code block in a markdown page, with where it sits and what its info string asks for.
-/// </summary>
-/// <param name="Page">The page, relative to the docs root, with forward slashes.</param>
-/// <param name="OpenLine">The 1-based line of the opening fence.</param>
-/// <param name="Language">The first word of the info string, empty when there is none.</param>
-/// <param name="Groups">
-/// The compilations this fence joins. Empty when the fence is not marked <c>compile</c>. A bare
-/// <c>compile</c> puts the fence in a compilation of its own.
-/// </param>
-/// <param name="Code">The fence's content, with the fence's own indentation removed.</param>
-public sealed record Fence(
-    string Page,
-    int OpenLine,
-    string Language,
-    IReadOnlyList<string> Groups,
-    string Code
-)
-{
-    /// <summary>Whether the info string carries <c>fragment</c>.</summary>
-    public bool IsFragment { get; init; }
-
-    /// <summary>
-    /// The file a <c>from=</c> marker names, relative to the repository root (the folder holding
-    /// Trax.Docs). Null when the fence carries no <c>from=</c>.
-    /// </summary>
-    public string? From { get; init; }
-
-    /// <summary>The region a <c>from=path#region</c> marker names. Null for the whole file.</summary>
-    public string? FromRegion { get; init; }
-
-    /// <summary>
-    /// The file a <c>file=</c> word names: the path of the file the fence shows, in the reader's
-    /// project. A page that follows another compiles with that page's fences, and a fence here
-    /// replaces the one there that names the same file. Null when the fence names none.
-    /// </summary>
-    public string? File { get; init; }
-
-    /// <summary>
-    /// The text of the last level 1 or level 2 heading above the fence, or null when there is
-    /// none. A level 3 heading does not change it, so a fence under <c>### Runtime</c> inside
-    /// <c>## Signatures</c> is still a signature fence.
-    /// </summary>
-    public string? Section { get; init; }
-
-    /// <summary>The 1-based line of the fence's first line of code.</summary>
-    public int FirstCodeLine => OpenLine + 1;
-
-    public bool IsCompiled => Groups.Count > 0;
-
-    /// <summary>
-    /// The markers the fence carries: <c>compile</c>, <c>fragment</c> and <c>from=</c>, each
-    /// at most once however many groups it names.
-    /// </summary>
-    public IReadOnlyList<string> Markers
-    {
-        get
-        {
-            var markers = new List<string>();
-            if (IsCompiled)
-                markers.Add(Fences.Marker);
-            if (IsFragment)
-                markers.Add(Fences.FragmentMarker);
-            if (From is not null)
-                markers.Add(Fences.FromMarker);
-            return markers;
-        }
-    }
-
-    public bool IsCSharp => Language is "csharp" or "cs" or "c#";
-
-    /// <summary>Whether the fence sits under a <c>## Signature</c> or <c>## Signatures</c> heading.</summary>
-    public bool IsUnderSignature => Section is "Signature" or "Signatures";
-
-    public string Location => $"{Page}:{OpenLine}";
-}
 
 /// <summary>
 /// Finds the fenced code blocks in a markdown page.
@@ -98,7 +23,7 @@ public sealed record Fence(
 /// which lets a later page replace it (see <see cref="SnippetUnit"/>).
 /// </para>
 /// </summary>
-public static class Fences
+public static partial class Fences
 {
     public const string Marker = "compile";
 
@@ -112,19 +37,23 @@ public static class Fences
     /// </summary>
     public const string FileWord = "file=";
 
-    private static readonly Regex Opening = new(
+    [GeneratedRegex(
         @"^(?<indent>[ \t]*)(?<fence>`{3,}|~{3,})(?<info>.*)$",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Opening { get; }
 
-    private static readonly Regex Heading = new(
+    [GeneratedRegex(
         @"^ {0,3}#{1,2}[ \t]+(?<text>.*?)(?:[ \t]+#+)?[ \t]*$",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Heading { get; }
 
     public static IEnumerable<Fence> In(string page, string markdown)
     {
-        var lines = markdown.Replace("\r\n", "\n").Split('\n');
+        var lines = markdown.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
         string? section = null;
 
         for (var i = 0; i < lines.Length; i++)
@@ -143,12 +72,14 @@ public static class Fences
 
             // A backtick fence cannot carry a backtick in its info string; that line is inline
             // code, not a fence.
-            if (fence[0] == '`' && info.Contains('`'))
+            if (fence[0] == '`' && info.Contains('`', StringComparison.Ordinal))
                 continue;
 
             var indent = open.Groups["indent"].Value.Length;
             var closing = new Regex(
-                $@"^[ \t]*{Regex.Escape(fence[0].ToString())}{{{fence.Length},}}[ \t]*$"
+                $@"^[ \t]*{Regex.Escape(fence[0].ToString())}{{{fence.Length},}}[ \t]*$",
+                RegexOptions.None,
+                TimeSpan.FromSeconds(1)
             );
 
             var body = new List<string>();
@@ -165,14 +96,14 @@ public static class Fences
             var from = markers
                 .FirstOrDefault(w => w.StartsWith(FromMarker, StringComparison.Ordinal))
                 ?[FromMarker.Length..];
-            var hash = from?.IndexOf('#') ?? -1;
+            var hash = from?.IndexOf('#', StringComparison.Ordinal) ?? -1;
 
             yield return new Fence(
                 page,
                 i + 1,
                 language,
                 GroupsOf(markers, i + 1),
-                string.Join("\n", body)
+                string.Join('\n', body)
             )
             {
                 IsFragment = markers.Contains(FragmentMarker, StringComparer.Ordinal),
@@ -211,8 +142,8 @@ public static class Fences
         var groups = new List<string>();
         foreach (var word in words)
         {
-            if (word == Marker)
-                groups.Add($"line {openLine}");
+            if (string.Equals(word, Marker, StringComparison.Ordinal))
+                groups.Add(string.Create(CultureInfo.InvariantCulture, $"line {openLine}"));
             else if (word.StartsWith(Marker + "=", StringComparison.Ordinal))
                 groups.AddRange(
                     word[(Marker.Length + 1)..]

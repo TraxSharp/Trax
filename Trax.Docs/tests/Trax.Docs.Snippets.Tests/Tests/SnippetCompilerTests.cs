@@ -15,7 +15,7 @@ public class SnippetCompilerTests
             .In("page.md", markdown)
             .Where(f => f.IsCompiled)
             .SelectMany(f => f.Groups.Select(g => (Fence: f, Group: g)))
-            .GroupBy(x => x.Group)
+            .GroupBy(x => x.Group, StringComparer.Ordinal)
             .Select(g => new SnippetUnit("page.md", g.Key, g.Select(x => x.Fence).ToList()))
             .ToList();
 
@@ -180,7 +180,7 @@ public class SnippetCompilerTests
     public void SnippetContextNone_IsReadFromTheFrontMatterOnly(string markdown, bool optsOut) =>
         SnippetCompiler.OptsOutOfSharedContextIn(markdown).Should().Be(optsOut);
 
-    private static readonly Dictionary<string, string> Chapters = new()
+    private static readonly Dictionary<string, string> Chapters = new(StringComparer.Ordinal)
     {
         ["two.md"] = "one.md",
         ["three.md"] = "two.md",
@@ -208,7 +208,7 @@ public class SnippetCompilerTests
             )
         );
 
-        var two = units.Single(u => u.Page == "two.md");
+        var two = units.Single(u => string.Equals(u.Page, "two.md", StringComparison.Ordinal));
         two.Fences.Select(f => f.Page).Should().Equal("one.md", "two.md");
         SnippetCompiler.Diagnose(two).Should().BeEmpty();
     }
@@ -231,7 +231,7 @@ public class SnippetCompilerTests
             )
         );
 
-        var three = units.Single(u => u.Page == "three.md");
+        var three = units.Single(u => string.Equals(u.Page, "three.md", StringComparison.Ordinal));
         three.Fences.Select(f => f.Page).Should().Equal("two.md", "three.md");
         SnippetCompiler.Diagnose(three).Should().BeEmpty();
     }
@@ -244,13 +244,20 @@ public class SnippetCompilerTests
             ("two.md", "```csharp compile=app file=B.cs\npublic record B;\n```\n")
         );
 
-        units.Single(u => u.Page == "one.md").Fences.Should().ContainSingle();
+        units
+            .Single(u => string.Equals(u.Page, "one.md", StringComparison.Ordinal))
+            .Fences.Should()
+            .ContainSingle();
     }
 
     [Test]
     public void ChainThatComesBack_Throws()
     {
-        var act = () => SnippetUnit.ChainOf("a.md", page => page == "a.md" ? "b.md" : "a.md");
+        var act = () =>
+            SnippetUnit.ChainOf(
+                "a.md",
+                page => string.Equals(page, "a.md", StringComparison.Ordinal) ? "b.md" : "a.md"
+            );
 
         act.Should().Throw<InvalidOperationException>().WithMessage("*comes back to a.md*");
     }
@@ -403,11 +410,14 @@ public class SnippetCompilerTests
                     )
                     .ToList(),
                 page => Chapters.GetValueOrDefault(page),
-                page => page == "two.md" ? [("Trains/", "Core/Trains/")] : []
+                page =>
+                    string.Equals(page, "two.md", StringComparison.Ordinal)
+                        ? [("Trains/", "Core/Trains/")]
+                        : []
             )
             .ToList();
 
-        var two = units.Single(u => u.Page == "two.md");
+        var two = units.Single(u => string.Equals(u.Page, "two.md", StringComparison.Ordinal));
         two.Fences.Should().ContainSingle().Which.Page.Should().Be("two.md");
         SnippetCompiler.Diagnose(two).Should().BeEmpty();
     }
@@ -445,7 +455,7 @@ public class SnippetCompilerTests
             )
             .ToList();
 
-        var worker = units.Single(u => u.Group == "worker");
+        var worker = units.Single(u => string.Equals(u.Group, "worker", StringComparison.Ordinal));
         worker.App.Should().ContainSingle();
         SnippetCompiler.Diagnose(worker).Should().BeEmpty();
     }

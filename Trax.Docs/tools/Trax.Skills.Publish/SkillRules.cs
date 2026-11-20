@@ -1,16 +1,10 @@
 namespace Trax.Skills.Publish;
 
-/// <summary>A rule a skill folder breaks, and which folder.</summary>
-public sealed record SkillProblem(string Skill, string Message)
-{
-    public override string ToString() => $"{Skill}: {Message}";
-}
-
 /// <summary>
 /// The rules a skill under <c>Trax.Docs/skills/</c> is held to before a release publishes it.
 /// See <c>Trax.Docs/adr/0056-agent-skills-are-written-in-the-docs-and-published-from-a-release.md</c>.
 /// </summary>
-public static class SkillRules
+public static partial class SkillRules
 {
     /// <summary>The skills CLI's and Claude Code's limit on a skill name.</summary>
     public const int MaxNameLength = 64;
@@ -27,8 +21,15 @@ public static class SkillRules
     /// <summary>The metadata that keeps a source skill out of <c>npx skills add TraxSharp/Trax</c>.</summary>
     public const string InternalKey = "internal";
 
-    private static readonly Regex Name = new("^[a-z0-9]+(-[a-z0-9]+)*$");
-    private static readonly Regex Link = new(@"\]\((?<target>[^)\s]+)\)");
+    [GeneratedRegex(
+        "^[a-z0-9]+(-[a-z0-9]+)*$",
+        RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Name { get; }
+
+    [GeneratedRegex(@"\]\((?<target>[^)\s]+)\)", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Link { get; }
 
     /// <summary>Every skill folder directly under <paramref name="skillsRoot"/>, by name.</summary>
     public static IReadOnlyList<string> Folders(string skillsRoot) =>
@@ -98,13 +99,13 @@ public static class SkillRules
             return problems;
         }
 
-        foreach (var key in front.Keys.Where(k => !Keys.Contains(k)))
+        foreach (var key in front.Keys.Where(k => !Keys.Contains(k, StringComparer.Ordinal)))
             Add($"frontmatter key '{key}' is not one of: {string.Join(", ", Keys)}, metadata");
 
         var name = front.Scalar("name");
         if (name is null)
             Add("frontmatter has no 'name'");
-        else if (name != skill)
+        else if (!string.Equals(name, skill, StringComparison.Ordinal))
             Add($"'name' is '{name}' but the folder is '{skill}'; the skills CLI installs by name");
         else if (!Name.IsMatch(name) || name.Length > MaxNameLength)
             Add(
@@ -118,17 +119,31 @@ public static class SkillRules
             Add(
                 $"'description' is {description.Length} characters; the limit is {MaxDescriptionLength}"
             );
-        else if (description.Contains('<') || description.Contains('>'))
+        else if (
+            description.Contains('<', StringComparison.Ordinal)
+            || description.Contains('>', StringComparison.Ordinal)
+        )
             Add("'description' contains '<' or '>', which Claude Code rejects");
 
-        if (front.Metadata.GetValueOrDefault(InternalKey) != "true")
+        if (
+            !string.Equals(
+                front.Metadata.GetValueOrDefault(InternalKey),
+                "true",
+                StringComparison.Ordinal
+            )
+        )
             Add(
                 $"metadata has no '{InternalKey}: true'. Without it `npx skills add TraxSharp/Trax` "
                     + "offers this skill from main, before any release ships it"
             );
         if (front.Metadata.ContainsKey(VersionKey))
             Add($"metadata carries '{VersionKey}'; the release writes it");
-        foreach (var key in front.Metadata.Keys.Where(k => k != InternalKey && k != VersionKey))
+        foreach (
+            var key in front.Metadata.Keys.Where(k =>
+                !string.Equals(k, InternalKey, StringComparison.Ordinal)
+                && !string.Equals(k, VersionKey, StringComparison.Ordinal)
+            )
+        )
             Add($"metadata key '{key}' is not one the release knows");
 
         foreach (var target in RelativeLinks(text))
@@ -156,7 +171,7 @@ public static class SkillRules
     {
         var options = new EnumerationOptions
         {
-            AttributesToSkip = 0,
+            AttributesToSkip = FileAttributes.None,
             RecurseSubdirectories = false,
             IgnoreInaccessible = false,
         };
@@ -195,7 +210,7 @@ public static class SkillRules
     public static IEnumerable<string> Links(string markdown)
     {
         var inFence = false;
-        foreach (var line in markdown.Replace("\r\n", "\n").Split('\n'))
+        foreach (var line in markdown.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'))
         {
             if (line.TrimStart().StartsWith("```", StringComparison.Ordinal))
                 inFence = !inFence;

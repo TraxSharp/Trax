@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Docs.Snippets.Tests.Tests;
 
 /// <summary>
@@ -23,7 +25,7 @@ namespace Trax.Docs.Snippets.Tests.Tests;
     "Trax.Docs/adr/0050-docs-pages-are-typed-and-their-code-is-checked-against-the-code.md"
 )]
 [TestFixture]
-public class CompiledSnippetsTests
+public partial class CompiledSnippetsTests
 {
     private static IEnumerable<TestCaseData> Units() =>
         SnippetUnit.InDocs().Select(unit => new TestCaseData(unit).SetName(unit.ToString()));
@@ -109,15 +111,27 @@ public class CompiledSnippetsTests
             .EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)
             .Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))
             .Where(f =>
-                f == SnippetCompiler.SharedFile
+                string.Equals(f, SnippetCompiler.SharedFile, StringComparison.Ordinal)
                 || (
-                    Path.GetFileName(f) == SnippetCompiler.SectionFile
-                    && !f.StartsWith("sdk-reference/", StringComparison.Ordinal)
+                    string.Equals(
+                        Path.GetFileName(f),
+                        SnippetCompiler.SectionFile,
+                        StringComparison.Ordinal
+                    ) && !f.StartsWith("sdk-reference/", StringComparison.Ordinal)
                 )
             )
             .SelectMany(f =>
                 File.ReadAllLines(Path.Combine(root, f))
-                    .Select((line, i) => (Line: line, At: $"Context/{f}:{i + 1}"))
+                    .Select(
+                        (line, i) =>
+                            (
+                                Line: line,
+                                At: string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"Context/{f}:{i + 1}"
+                                )
+                            )
+                    )
                     .Where(x => TraxGlobalUsing.IsMatch(x.Line))
                     .Select(x => $"{x.At}  {x.Line.Trim()}")
             )
@@ -139,18 +153,26 @@ public class CompiledSnippetsTests
     private const string Adr =
         "Trax.Docs/adr/0050-docs-pages-are-typed-and-their-code-is-checked-against-the-code.md";
 
-    private static readonly Regex TraxGlobalUsing = new(
+    [GeneratedRegex(
         @"^\s*global\s+using\s+(?:static\s+)?(?:\w+\s*=\s*)?(?:global::)?Trax\b",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex TraxGlobalUsing { get; }
 
     /// <summary>Whether a context file, relative to Context/, joins some compiled page.</summary>
     private static bool Serves(string file, IReadOnlySet<string> pages)
     {
-        if (file == SnippetCompiler.SharedFile)
+        if (string.Equals(file, SnippetCompiler.SharedFile, StringComparison.Ordinal))
             return true;
 
-        if (Path.GetFileName(file) == SnippetCompiler.SectionFile)
+        if (
+            string.Equals(
+                Path.GetFileName(file),
+                SnippetCompiler.SectionFile,
+                StringComparison.Ordinal
+            )
+        )
         {
             var dir = file[..^SnippetCompiler.SectionFile.Length];
             return pages.Any(p => p.StartsWith(dir, StringComparison.Ordinal));

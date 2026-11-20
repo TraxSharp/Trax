@@ -8,12 +8,13 @@ namespace Trax.Adr.Guard.Tests.Tests;
 [TestFixture]
 public class ScannerHardeningTests
 {
-    private static IReadOnlyList<Adr> Load(TempAdrRepo repo) => AdrCorpus.Discover(repo.Options());
+    private static async Task<IReadOnlyList<Adr>> LoadAsync(TempAdrRepo repo) =>
+        await AdrCorpus.DiscoverAsync(repo.Options()).ConfigureAwait(false);
 
     #region C# scanning
 
     [Test]
-    public void ClassInsideABlockComment_DoesNotSatisfyAnEnforcementClaim()
+    public async Task ClassInsideABlockComment_DoesNotSatisfyAnEnforcementClaim()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(Sample.DefaultSpec.FileName, Sample.Adr(exemplars: "- `PhantomTests` pins this."));
@@ -22,8 +23,14 @@ public class ScannerHardeningTests
             "namespace Some.Tests.Meta;\n\n/* public class PhantomTests { } */\npublic class RealTests { }\n"
         );
 
-        ExemplarGuards
-            .NamedGuardsResolve(Load(repo), repo.Options())
+        (
+            await ExemplarGuards
+                .NamedGuardsResolveAsync(
+                    (await LoadAsync(repo).ConfigureAwait(false)),
+                    repo.Options()
+                )
+                .ConfigureAwait(false)
+        )
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -35,7 +42,7 @@ public class ScannerHardeningTests
     /// declared after it. An entirely unclassified guard then passed the census.
     /// </summary>
     [Test]
-    public void SingleLineRawString_DoesNotHideLaterClassesFromTheCensus()
+    public async Task SingleLineRawString_DoesNotHideLaterClassesFromTheCensus()
     {
         var quote = new string('"', 3);
         using var repo = TempAdrRepo.Valid();
@@ -47,7 +54,10 @@ public class ScannerHardeningTests
         );
 
         var offenders = CensusGuards
-            .EveryGuardIsClassified(Load(repo), repo.Options(censusRoot: "tests/Some.Tests.Meta"))
+            .EveryGuardIsClassified(
+                (await LoadAsync(repo).ConfigureAwait(false)),
+                repo.Options(censusRoot: "tests/Some.Tests.Meta")
+            )
             .Offenders;
 
         offenders.Should().Contain(o => o.Contains("TotallyUnclassifiedTests"));
@@ -57,7 +67,7 @@ public class ScannerHardeningTests
     }
 
     [Test]
-    public void MultiLineClassDeclaration_IsSeenByTheCensusAndByResolution()
+    public async Task MultiLineClassDeclaration_IsSeenByTheCensusAndByResolution()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Write(
@@ -66,7 +76,10 @@ public class ScannerHardeningTests
         );
 
         CensusGuards
-            .EveryGuardIsClassified(Load(repo), repo.Options(censusRoot: "tests/Some.Tests.Meta"))
+            .EveryGuardIsClassified(
+                (await LoadAsync(repo).ConfigureAwait(false)),
+                repo.Options(censusRoot: "tests/Some.Tests.Meta")
+            )
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -83,7 +96,7 @@ public class ScannerHardeningTests
     /// census reported it classified.
     /// </summary>
     [Test]
-    public void OptOutMarkerInsideAnAttributeLiteral_DoesNotAnswerForTheClassBelowIt()
+    public async Task OptOutMarkerInsideAnAttributeLiteral_DoesNotAnswerForTheClassBelowIt()
     {
         var quote = new string('"', 3);
         using var repo = TempAdrRepo.Valid();
@@ -97,7 +110,10 @@ public class ScannerHardeningTests
         );
 
         CensusGuards
-            .EveryGuardIsClassified(Load(repo), repo.Options(censusRoot: "tests/Some.Tests.Meta"))
+            .EveryGuardIsClassified(
+                (await LoadAsync(repo).ConfigureAwait(false)),
+                repo.Options(censusRoot: "tests/Some.Tests.Meta")
+            )
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -122,7 +138,7 @@ public class ScannerHardeningTests
     }
 
     [Test]
-    public void ClaimInAnIndentedCodeBlock_IsAnExampleNotAClaim()
+    public async Task ClaimInAnIndentedCodeBlock_IsAnExampleNotAClaim()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(
@@ -133,8 +149,20 @@ public class ScannerHardeningTests
             )
         );
 
-        ExemplarGuards.NamedGuardsResolve(Load(repo), repo.Options()).Offenders.Should().BeEmpty();
-        ExemplarGuards.SectionPresent(Load(repo)).Passed.Should().BeTrue();
+        (
+            await ExemplarGuards
+                .NamedGuardsResolveAsync(
+                    (await LoadAsync(repo).ConfigureAwait(false)),
+                    repo.Options()
+                )
+                .ConfigureAwait(false)
+        )
+            .Offenders.Should()
+            .BeEmpty();
+        ExemplarGuards
+            .SectionPresent((await LoadAsync(repo).ConfigureAwait(false)))
+            .Passed.Should()
+            .BeTrue();
     }
 
     #endregion
@@ -142,7 +170,7 @@ public class ScannerHardeningTests
     #region Corpus discovery and frontmatter
 
     [Test]
-    public void AdrInASubdirectory_IsStillChecked()
+    public async Task AdrInASubdirectory_IsStillChecked()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Write(
@@ -151,7 +179,7 @@ public class ScannerHardeningTests
         );
 
         FrontmatterGuards
-            .Parseable(Load(repo))
+            .Parseable((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -159,7 +187,7 @@ public class ScannerHardeningTests
     }
 
     [Test]
-    public void SelfSupersession_IsRejected()
+    public async Task SelfSupersession_IsRejected()
     {
         using var repo = TempAdrRepo.Valid();
         var spec = Sample.DefaultSpec;
@@ -172,7 +200,7 @@ public class ScannerHardeningTests
         );
 
         LifecycleGuards
-            .Supersessions(Load(repo))
+            .Supersessions((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -181,13 +209,13 @@ public class ScannerHardeningTests
 
     [TestCase("Date: 2026-09-11", "'date' is not an accepted key")]
     [TestCase("deadline: soon", "unexpected key(s) deadline")]
-    public void UnexpectedFrontmatterKey_IsRejected(string line, string expected)
+    public async Task UnexpectedFrontmatterKey_IsRejected(string line, string expected)
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(Sample.DefaultSpec.FileName, Sample.Adr(extraFrontmatter: line));
 
         FrontmatterGuards
-            .NoDateKey(Load(repo))
+            .NoDateKey((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -195,7 +223,7 @@ public class ScannerHardeningTests
     }
 
     [Test]
-    public void ChangelogWithAStarBullet_IsChecked_NotSkipped()
+    public async Task ChangelogWithAStarBullet_IsChecked_NotSkipped()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(
@@ -204,7 +232,7 @@ public class ScannerHardeningTests
         );
 
         LifecycleGuards
-            .Changelog(Load(repo))
+            .Changelog((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -212,13 +240,13 @@ public class ScannerHardeningTests
     }
 
     [Test]
-    public void ImpossibleChangelogDate_IsRejected()
+    public async Task ImpossibleChangelogDate_IsRejected()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(Sample.DefaultSpec.FileName, Sample.Adr(changelog: "- **9999-99-99**: Recorded."));
 
         LifecycleGuards
-            .Changelog(Load(repo))
+            .Changelog((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -226,7 +254,7 @@ public class ScannerHardeningTests
     }
 
     [Test]
-    public void LowercaseReadme_IsFoundAsTheIndex()
+    public async Task LowercaseReadme_IsFoundAsTheIndex()
     {
         using var repo = new TempAdrRepo();
         var spec = Sample.DefaultSpec;
@@ -234,7 +262,10 @@ public class ScannerHardeningTests
         repo.Write("docs/adr/readme.md", Sample.Index(central: false, spec));
 
         IndexGuards
-            .Exists(AdrCorpus.Discover(repo.Options()), repo.Options())
+            .Exists(
+                (await AdrCorpus.DiscoverAsync(repo.Options()).ConfigureAwait(false)),
+                repo.Options()
+            )
             .Passed.Should()
             .BeTrue("casing must not decide this differently on macOS and on Linux CI");
     }
