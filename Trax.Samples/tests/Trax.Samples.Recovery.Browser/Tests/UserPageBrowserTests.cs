@@ -75,10 +75,8 @@ public partial class UserPageBrowserTests
             );
     }
 
-    [GeneratedRegex(
-        "^(Recovered|Completed)$",
-        RegexOptions.ExplicitCapture,
-        matchTimeoutMilliseconds: 1000
-    )]
+    // Playwright takes only the pattern and its case, line and single-line flags, so the group
+    // is non-capturing rather than ExplicitCapture.
+    [GeneratedRegex("^(?:Recovered|Completed)$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     private static partial Regex RecoveredOrCompleted { get; }
 }

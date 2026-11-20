@@ -88,7 +88,7 @@ public sealed class ConsoleHost : IAsyncDisposable
     {
         await DropTraxSchemaAsync().ConfigureAwait(false);
         var app = Build();
-        await app.StartAsync(app.Lifetime.ApplicationStarted).ConfigureAwait(false);
+        await app.StartAsync(CancellationToken.None).ConfigureAwait(false);
         var address = new Uri(
             app.Services.GetRequiredService<IServer>()
                 .Features.Get<IServerAddressesFeature>()
@@ -130,7 +130,7 @@ public sealed class ConsoleHost : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        await _app.StopAsync(_app.Lifetime.ApplicationStarted).ConfigureAwait(false);
+        await _app.StopAsync(CancellationToken.None).ConfigureAwait(false);
         await _app.DisposeAsync().ConfigureAwait(false);
         NpgsqlConnection.ClearAllPools();
     }

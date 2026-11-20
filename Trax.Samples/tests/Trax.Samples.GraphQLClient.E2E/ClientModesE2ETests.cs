@@ -34,7 +34,7 @@ public class ClientModesE2ETests
         PlayerSchemaConfiguration.Configure(builder.Services.AddGraphQLServer());
         _server = builder.Build();
         _server.NotNull().MapGraphQL("/graphql");
-        await _server.NotNull().StartAsync(_server.NotNull().Lifetime.ApplicationStarted);
+        await _server.NotNull().StartAsync(CancellationToken.None);
 
         var services = new ServiceCollection();
         services
@@ -59,16 +59,10 @@ public class ClientModesE2ETests
     {
         var raw = await _executor
             .NotNull()
-            .Run(
-                new GetPlayerByRawStringRequest { Id = "player-1" },
-                _server.NotNull().Lifetime.ApplicationStarted
-            );
+            .Run(new GetPlayerByRawStringRequest { Id = "player-1" }, CancellationToken.None);
         var resource = await _executor
             .NotNull()
-            .Run(
-                new GetPlayerByResourceRequest { Id = "player-1" },
-                _server.NotNull().Lifetime.ApplicationStarted
-            );
+            .Run(new GetPlayerByResourceRequest { Id = "player-1" }, CancellationToken.None);
 
         raw.Name.Should().Be("Aragorn");
         resource.Should().BeEquivalentTo(raw);
@@ -79,16 +73,10 @@ public class ClientModesE2ETests
     {
         var raw = await _executor
             .NotNull()
-            .Run(
-                new GetPlayerByRawStringRequest { Id = "player-1" },
-                _server.NotNull().Lifetime.ApplicationStarted
-            );
+            .Run(new GetPlayerByRawStringRequest { Id = "player-1" }, CancellationToken.None);
         var typed = await _executor
             .NotNull()
-            .Run(
-                new GetPlayerByTypedRequest { Id = "player-1" },
-                _server.NotNull().Lifetime.ApplicationStarted
-            );
+            .Run(new GetPlayerByTypedRequest { Id = "player-1" }, CancellationToken.None);
 
         typed.Id.Should().Be(raw.Id);
         typed.Name.Should().Be(raw.Name);
@@ -101,10 +89,7 @@ public class ClientModesE2ETests
     {
         var nested = await _executor
             .NotNull()
-            .Run(
-                new LookupPlayerByNestedPathRequest { Id = "player-1" },
-                _server.NotNull().Lifetime.ApplicationStarted
-            );
+            .Run(new LookupPlayerByNestedPathRequest { Id = "player-1" }, CancellationToken.None);
 
         nested.Should().NotBeNull();
         nested.NotNull().Name.Should().Be("Aragorn");

@@ -79,6 +79,7 @@ public class DependencyDirectionTests
         "Trax.Api",
         "Trax.Cli",
         "Trax.Samples",
+        "Trax.Analyzers",
     };
 
     // Packages whose id carries no family prefix, and the family whose folder ships them.
@@ -165,7 +166,13 @@ public class DependencyDirectionTests
         IEnumerable<(string Path, XDocument Project)> projects
     )
     {
-        var allowed = new HashSet<string>(AllowedUpstream[repo], StringComparer.Ordinal) { repo };
+        // Trax.Analyzers is analysis, not a dependency: every folder builds under it
+        // (Trax.Docs/adr/0061), so any folder may reference it.
+        var allowed = new HashSet<string>(AllowedUpstream[repo], StringComparer.Ordinal)
+        {
+            repo,
+            "Trax.Analyzers",
+        };
         var offenders = new List<string>();
         foreach (var (path, project) in projects)
         {

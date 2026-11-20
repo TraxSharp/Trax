@@ -605,8 +605,8 @@ public partial class TopicMapBrowserTests
         await Expect(page.WizardState)
             .ToHaveTextAsync(
                 new Regex(
-                    $"^({Regex.Escape(Building)}|{Built})$",
-                    RegexOptions.ExplicitCapture,
+                    $"^(?:{Regex.Escape(Building)}|{Built})$",
+                    RegexOptions.None,
                     TimeSpan.FromSeconds(1)
                 ),
                 new() { Timeout = BrowserTimeouts.Render.Ms() }

@@ -137,12 +137,21 @@ internal static class ScaffoldFeed
             .ConfigureAwait(false);
         var templatesNupkg = Directory.GetFiles(root, "*.nupkg").Single();
 
-        // The Trax packages the templates pin are exactly the ones a scaffold can resolve, and
-        // every one of them is in the restore graph of the template projects, so each is
-        // already restored.
+        // The Trax packages the templates pin are exactly the ones a scaffold can resolve. Each
+        // is in the restore graph of the template projects, so it is already restored, except
+        // Trax.Analyzers: the strict option's package, whose project the repository's own build
+        // never references. It is restored here, from its lockfile.
         var projects = (await PinnedTraxPackagesAsync(templatesNupkg).ConfigureAwait(false))
             .Select(id => TraxProject(id))
             .ToList();
+        foreach (
+            var project in projects.Where(p =>
+                !File.Exists(
+                    Path.Combine(Path.GetDirectoryName(p).NotNull(), "obj", "project.assets.json")
+                )
+            )
+        )
+            await Run(root, "restore", project, "--locked-mode").ConfigureAwait(false);
 
         var traversal = Path.Combine(root, "pack-trax.proj");
         await File.WriteAllTextAsync(
