@@ -143,7 +143,7 @@ public class TopicMapMachineTests : RecoveryTestFixture
                 await row.ExecuteUpdateAsync(x =>
                     x.SetProperty(d => d.State, nameof(TopicMapState.BuildCancelled))
                         .SetProperty(d => d.DueAt, (DateTimeOffset?)null)
-                        .SetProperty(d => d.ServerRecord, true)
+                        .SetProperty(d => d.ServerRecord, valueExpression: true)
                 );
             if (from == TopicMapState.Expired)
             {
@@ -263,16 +263,18 @@ public class TopicMapMachineTests : RecoveryTestFixture
 
         // Nor can host code acting for the draft's owner fire it, whatever role it holds.
         string owner;
-        using (var scope = SharedRecoverySetup.Factory.Services.CreateScope())
+        var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             owner = (
                 await scope
                     .ServiceProvider.GetRequiredService<IDataContext>()
                     .SnapshotDrafts.AsNoTracking()
                     .SingleAsync(d => d.Id == _draft.Id && d.Machine == TopicMapMachine.MachineId)
             ).UserKey!;
-        using (var scope = SharedRecoverySetup.Factory.Services.CreateScope())
+        var advanceScope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
+        await using (advanceScope.ConfigureAwait(false))
             (
-                await scope
+                await advanceScope
                     .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
                     .Service(TopicMapMachine.MachineId)!
                     .Advance(

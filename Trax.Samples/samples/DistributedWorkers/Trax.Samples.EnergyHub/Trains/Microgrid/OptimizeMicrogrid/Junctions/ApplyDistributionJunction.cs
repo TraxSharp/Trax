@@ -14,7 +14,7 @@ public class ApplyDistributionJunction(ILogger<ApplyDistributionJunction> logger
             input.GridZone
         );
 
-        await Task.Delay(250).ConfigureAwait(false);
+        await Task.Delay(250, CancellationToken).ConfigureAwait(false);
 
         logger.LogInformation(
             "[{GridZone}] Distribution applied — 60% solar direct, 25% battery, 15% grid import",

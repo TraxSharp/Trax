@@ -15,9 +15,9 @@ public abstract class HubTestFixture
     /// <summary>The operator demo key the hub registers in Development.</summary>
     protected const string OperatorKey = Hub.DemoKeys.OperatorKey;
 
-    protected IServiceScope Scope { get; private set; } = null!;
+    protected AsyncServiceScope Scope { get; private set; }
 
-    protected IServiceScope WorkerScope { get; private set; } = null!;
+    protected AsyncServiceScope WorkerScope { get; private set; }
 
     protected ITrainBus TrainBus { get; private set; } = null!;
 
@@ -26,10 +26,10 @@ public abstract class HubTestFixture
     [SetUp]
     public virtual async Task SetUp()
     {
-        Scope = SharedHubSetup.Factory.Services.CreateScope();
+        Scope = SharedHubSetup.Factory.Services.CreateAsyncScope();
 
         // Trains run on the worker, so a test that runs one directly does it there.
-        WorkerScope = SharedHubSetup.Worker.Services.CreateScope();
+        WorkerScope = SharedHubSetup.Worker.Services.CreateAsyncScope();
         TrainBus = WorkerScope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         var dataContextFactory =
@@ -40,13 +40,13 @@ public abstract class HubTestFixture
     }
 
     [TearDown]
-    public void TearDown()
+    public async Task TearDown()
     {
         if (DataContext is IDisposable disposable)
             disposable.Dispose();
 
-        WorkerScope.Dispose();
-        Scope.Dispose();
+        await WorkerScope.DisposeAsync().ConfigureAwait(false);
+        await Scope.DisposeAsync().ConfigureAwait(false);
     }
 
     protected void EnableManifestManager()

@@ -121,7 +121,7 @@ builder.Services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
 // requests, in Development only.
 var requirePersisted =
     !builder.Environment.IsDevelopment()
-    || builder.Configuration.GetValue("Board:RequirePersistedOperations", true);
+    || builder.Configuration.GetValue("Board:RequirePersistedOperations", defaultValue: true);
 builder.Services.AddTraxGraphQL(graphql =>
     graphql
         .ExposeOperationQueries()

@@ -103,16 +103,27 @@ public partial class SampleTrainGraphTests
     }
 
     [Test]
-    public void EverySampleProjectWithATrain_IsReadHere()
+    public async Task EverySampleProjectWithATrain_IsReadHere()
     {
         var loaded = SampleAssemblies()
             .Select(a => a.GetName().Name)
             .ToHashSet(StringComparer.Ordinal);
         var samples = Path.Combine(SamplesRoot.Value, "samples");
 
-        Directory
-            .EnumerateFiles(samples, "*.csproj", SearchOption.AllDirectories)
-            .Where(project => DeclaresATrain(Path.GetDirectoryName(project)!))
+        var withTrains = new List<string>();
+        foreach (
+            var project in Directory.EnumerateFiles(
+                samples,
+                "*.csproj",
+                SearchOption.AllDirectories
+            )
+        )
+        {
+            if (await DeclaresATrainAsync(Path.GetDirectoryName(project)!).ConfigureAwait(false))
+                withTrains.Add(project);
+        }
+
+        withTrains
             .Select(Path.GetFileNameWithoutExtension)
             .Where(name => !loaded.Contains(name))
             .Should()
@@ -153,23 +164,17 @@ public partial class SampleTrainGraphTests
     private static string Render(ChainGraph graph)
     {
         using var canonical = JsonDocument.Parse(graph.ToJson());
-        using var buffer = new MemoryStream();
-
-        using (
-            var json = new Utf8JsonWriter(
-                buffer,
-                new JsonWriterOptions
-                {
-                    Indented = true,
-                    NewLine = "\n",
-                    Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-                }
-            )
-        )
-            canonical.WriteTo(json);
-
-        return Encoding.UTF8.GetString(buffer.ToArray()) + "\n";
+        return JsonSerializer.Serialize(canonical.RootElement, RenderOptions) + "\n";
     }
+
+    private static readonly JsonSerializerOptions RenderOptions = new()
+    {
+        WriteIndented = true,
+        NewLine = "\n",
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
+    };
 
     private static ChainGraph GraphOf(Type train)
     {
@@ -181,7 +186,7 @@ public partial class SampleTrainGraphTests
         var chain = (ChainRecorder)
             train
                 .GetMethod(nameof(Train<,>.DeclaredChain), Type.EmptyTypes)!
-                .Invoke(instance, null)!;
+                .Invoke(instance, parameters: null)!;
 
         return ChainGraph.From(chain, train, arguments[0], arguments[1]);
     }
@@ -221,20 +226,28 @@ public partial class SampleTrainGraphTests
             .Select(name => Assembly.Load(new AssemblyName(name!)));
     }
 
-    private static bool DeclaresATrain(string projectDirectory) =>
-        Directory
-            .EnumerateFiles(projectDirectory, "*.cs", SearchOption.AllDirectories)
-            .Any(file =>
-                !file.Contains(
-                    $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
-                    StringComparison.Ordinal
+    private static async Task<bool> DeclaresATrainAsync(string projectDirectory)
+    {
+        foreach (
+            var file in Directory
+                .EnumerateFiles(projectDirectory, "*.cs", SearchOption.AllDirectories)
+                .Where(file =>
+                    !file.Contains(
+                        $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
+                        StringComparison.Ordinal
+                    )
+                    && !file.Contains(
+                        $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                        StringComparison.Ordinal
+                    )
                 )
-                && !file.Contains(
-                    $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
-                    StringComparison.Ordinal
-                )
-                && DefinesATrain.IsMatch(File.ReadAllText(file))
-            );
+        )
+        {
+            if (DefinesATrain.IsMatch(await File.ReadAllTextAsync(file).ConfigureAwait(false)))
+                return true;
+        }
+        return false;
+    }
 
     private static string FindSamplesRoot()
     {

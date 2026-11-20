@@ -64,7 +64,8 @@ public class CombineSignals(IDbContextFactory<TopicMapDbContext> contexts, DemoP
             {
                 await db
                     .TopicPairs.Where(p => p.RunId == slice.RunId)
-                    .ExecuteDeleteAsync(CancellationToken);
+                    .ExecuteDeleteAsync(CancellationToken)
+                    .ConfigureAwait(false);
                 db.TopicPairs.AddRange(
                     onTheMap.Select(l => new TopicPair
                     {
@@ -77,8 +78,8 @@ public class CombineSignals(IDbContextFactory<TopicMapDbContext> contexts, DemoP
                         Score = l.Score,
                     })
                 );
-                await db.SaveChangesAsync(CancellationToken);
-                await transaction.CommitAsync(CancellationToken);
+                await db.SaveChangesAsync(CancellationToken).ConfigureAwait(false);
+                await transaction.CommitAsync(CancellationToken).ConfigureAwait(false);
 
                 return new CombinedSignals(
                     slice.RunId,

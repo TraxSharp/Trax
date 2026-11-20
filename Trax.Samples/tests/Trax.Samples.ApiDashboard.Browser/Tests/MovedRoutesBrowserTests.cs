@@ -94,6 +94,6 @@ public class MovedRoutesBrowserTests : ConsoleTest
                 CultureInfo.InvariantCulture
             ),
             "op" => (await Seed.PersistedOperationAsync().ConfigureAwait(false)).Id,
-            _ => throw new ArgumentOutOfRangeException(nameof(token), token, null),
+            _ => throw new ArgumentOutOfRangeException(nameof(token), token, message: null),
         };
 }

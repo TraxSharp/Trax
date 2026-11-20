@@ -17,7 +17,7 @@ public partial class RabbitMqExchangePerSampleTests
     private const string DefaultExchange = "trax.lifecycle";
 
     [Test]
-    public void Every_rabbitmq_sample_names_an_exchange_no_other_sample_uses()
+    public async Task Every_rabbitmq_sample_names_an_exchange_no_other_sample_uses()
     {
         var samples = Path.Combine(RepoRoot.Path, "samples");
         var offenders = new List<string>();
@@ -29,11 +29,12 @@ public partial class RabbitMqExchangePerSampleTests
         )
         {
             var sample = Path.GetFileName(folder);
-            var files = SourceFiles
-                .CSharp(Path.Combine("samples", sample))
-                .Select(f => (File: f, Text: File.ReadAllText(f)))
-                .Select(f => (f.File, f.Text, Code: SourceText.StripCommentsAndStrings(f.Text)))
-                .ToList();
+            var files = new List<(string File, string Text, string Code)>();
+            foreach (var f in SourceFiles.CSharp(Path.Combine("samples", sample)))
+            {
+                var text = await File.ReadAllTextAsync(f).ConfigureAwait(false);
+                files.Add((f, text, SourceText.StripCommentsAndStrings(text)));
+            }
 
             var calls = files
                 .SelectMany(f =>

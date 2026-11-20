@@ -17,13 +17,21 @@ public class ValidateInviteJunction(ChatDbContext db, TraxPrincipal caller, Chat
 {
     public override async Task<InviteToChatRoomInput> Run(InviteToChatRoomInput input)
     {
-        if (!await db.ChatRooms.AnyAsync(r => r.Id == input.ChatRoomId).ConfigureAwait(false))
+        if (
+            !await db
+                .ChatRooms.AnyAsync(
+                    r => r.Id == input.ChatRoomId,
+                    cancellationToken: CancellationToken
+                )
+                .ConfigureAwait(false)
+        )
             throw new TrainException($"Chat room {input.ChatRoomId} does not exist.");
 
         if (
             !await db
-                .ChatParticipants.AnyAsync(p =>
-                    p.ChatRoomId == input.ChatRoomId && p.UserId == caller.Id
+                .ChatParticipants.AnyAsync(
+                    p => p.ChatRoomId == input.ChatRoomId && p.UserId == caller.Id,
+                    cancellationToken: CancellationToken
                 )
                 .ConfigureAwait(false)
         )
@@ -37,8 +45,9 @@ public class ValidateInviteJunction(ChatDbContext db, TraxPrincipal caller, Chat
 
         if (
             await db
-                .ChatParticipants.AnyAsync(p =>
-                    p.ChatRoomId == input.ChatRoomId && p.UserId == input.UserId
+                .ChatParticipants.AnyAsync(
+                    p => p.ChatRoomId == input.ChatRoomId && p.UserId == input.UserId,
+                    cancellationToken: CancellationToken
                 )
                 .ConfigureAwait(false)
         )

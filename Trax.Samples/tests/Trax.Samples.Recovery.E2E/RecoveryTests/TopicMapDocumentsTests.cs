@@ -49,7 +49,7 @@ public class TopicMapDocumentsTests : RecoveryTestFixture
         var served = (
             await services
                 .GetRequiredService<IPersistedOperationStore>()
-                .ListAsync(null, CancellationToken.None)
+                .ListAsync(tenantKey: null, CancellationToken.None)
         )
             .Where(o =>
                 o.IsActive
@@ -89,10 +89,10 @@ public class TopicMapDocumentsTests : RecoveryTestFixture
             CancellationToken.None
         );
 
-        (await store.GetAsync(id, null, CancellationToken.None))
+        (await store.GetAsync(id, tenantKey: null, CancellationToken.None))
             .Should()
             .BeNull("the page no longer sends it, so the host stops serving it");
-        (await store.ListAsync(null, CancellationToken.None))
+        (await store.ListAsync(tenantKey: null, CancellationToken.None))
             .Single(o => string.Equals(o.Id, id, StringComparison.Ordinal))
             .IsActive.Should()
             .BeFalse("it is kept, deactivated, as the record of what was served");

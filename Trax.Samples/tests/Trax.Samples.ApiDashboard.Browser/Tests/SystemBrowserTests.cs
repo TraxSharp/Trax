@@ -59,7 +59,7 @@ public partial class SystemBrowserTests : ConsoleTest
             .Expect(scheduler.Button(scheduler.Loop("Job dispatcher"), "Pause job dispatcher"))
             .ToBeVisibleAsync(new() { Timeout = Render });
         await Assertions.Expect(badge).ToHaveCountAsync(0, new() { Timeout = Render });
-        Config().JobDispatcherEnabled.Should().BeTrue();
+        (await ConfigAsync().ConfigureAwait(false)).JobDispatcherEnabled.Should().BeTrue();
         Checks
             .Sent.Count(s =>
                 string.Equals(s.OperationName, "UpdateScheduler", StringComparison.Ordinal)
@@ -73,11 +73,11 @@ public partial class SystemBrowserTests : ConsoleTest
     [Covers("mutation:UpdateScheduler")]
     public async Task A_section_saves_only_its_own_fields()
     {
-        var before = Config();
+        var before = await ConfigAsync().ConfigureAwait(false);
         try
         {
             var scheduler = new SchedulerPage(Console);
-            await scheduler.OpenAsync(Caller.Operator);
+            await scheduler.OpenAsync(Caller.Operator).ConfigureAwait(false);
             var retry = scheduler.Section("Retry");
             var retries = retry.GetByLabel("Default max retries", new() { Exact = true });
             await Assertions
@@ -85,7 +85,8 @@ public partial class SystemBrowserTests : ConsoleTest
                 .ToHaveValueAsync(
                     string.Create(CultureInfo.InvariantCulture, $"{before.DefaultMaxRetries}"),
                     new() { Timeout = Render }
-                );
+                )
+                .ConfigureAwait(false);
 
             var update = Page.WaitForRequestAsync(
                 r =>
@@ -96,31 +97,37 @@ public partial class SystemBrowserTests : ConsoleTest
                     ) == true,
                 new() { Timeout = Render }
             );
-            await retries.FillAsync(
-                string.Create(CultureInfo.InvariantCulture, $"{before.DefaultMaxRetries + 1}")
-            );
-            await scheduler.Button(retry, "Save retry").ClickAsync();
+            await retries
+                .FillAsync(
+                    string.Create(CultureInfo.InvariantCulture, $"{before.DefaultMaxRetries + 1}")
+                )
+                .ConfigureAwait(false);
+            await scheduler.Button(retry, "Save retry").ClickAsync().ConfigureAwait(false);
 
-            var input = (await update)
+            var input = (await update.ConfigureAwait(false))
                 .PostDataJSON()!
                 .Value.GetProperty("variables")
                 .GetProperty("input");
             input.EnumerateObject().Select(p => p.Name).Should().Equal(["defaultMaxRetries"]);
 
             await Wait.UntilAsync(
-                () => Task.FromResult(Config().DefaultMaxRetries == before.DefaultMaxRetries + 1),
-                BrowserTimeouts.Server,
-                "the host runs with the saved retry count"
-            );
-            var after = Config();
+                    async () =>
+                        (await ConfigAsync().ConfigureAwait(false)).DefaultMaxRetries
+                        == before.DefaultMaxRetries + 1,
+                    BrowserTimeouts.Server,
+                    "the host runs with the saved retry count"
+                )
+                .ConfigureAwait(false);
+            var after = await ConfigAsync().ConfigureAwait(false);
             after.JobDispatcherEnabled.Should().Be(before.JobDispatcherEnabled);
             after.DefaultRetryDelay.Should().Be(before.DefaultRetryDelay);
         }
         finally
         {
             await UpdateAsync(
-                new UpdateSchedulerConfigInput(DefaultMaxRetries: before.DefaultMaxRetries)
-            );
+                    new UpdateSchedulerConfigInput(DefaultMaxRetries: before.DefaultMaxRetries)
+                )
+                .ConfigureAwait(false);
         }
     }
 
@@ -182,10 +189,13 @@ public partial class SystemBrowserTests : ConsoleTest
         await Assertions.Expect(Page.GetByText("Polling interval")).ToHaveCountAsync(0);
     }
 
-    private static SchedulerConfigSnapshot Config()
+    private static async Task<SchedulerConfigSnapshot> ConfigAsync()
     {
-        using var scope = Host.Services.CreateScope();
-        return scope.ServiceProvider.GetRequiredService<IOperationsService>().GetSchedulerConfig();
+        var scope = Host.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+            return scope
+                .ServiceProvider.GetRequiredService<IOperationsService>()
+                .GetSchedulerConfig();
     }
 
     private static async Task UpdateAsync(UpdateSchedulerConfigInput input)

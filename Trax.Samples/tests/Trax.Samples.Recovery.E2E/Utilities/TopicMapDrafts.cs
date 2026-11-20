@@ -31,7 +31,7 @@ public static class TopicMapDrafts
                     "machines",
                     new[] { TopicMapMachine.MachineId, OrderMachine.MachineId }
                 );
-                await command.ExecuteNonQueryAsync();
+                await command.ExecuteNonQueryAsync().ConfigureAwait(false);
             }
         }
     }

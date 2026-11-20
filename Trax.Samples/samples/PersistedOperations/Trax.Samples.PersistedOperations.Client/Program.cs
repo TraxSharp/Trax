@@ -38,7 +38,7 @@ try
 {
     // Upload the manifest. On a re-run this puts greet_v1 back to CASUAL: the response shape is
     // the same, so the guardrail accepts it like any other fix.
-    foreach (var op in LoadManifest())
+    foreach (var op in await LoadManifestAsync().ConfigureAwait(false))
     {
         await UploadAsync(operatorHttp, op.Id, op.Document).ConfigureAwait(false);
         Console.WriteLine($"Uploaded {op.Id}");
@@ -189,16 +189,20 @@ static string DescribeError(JsonElement error)
         : message ?? error.GetRawText();
 }
 
-static IEnumerable<ManifestEntry> LoadManifest()
+static async Task<List<ManifestEntry>> LoadManifestAsync()
 {
     var path = Path.Combine(AppContext.BaseDirectory, "manifest.json");
-    using var stream = File.OpenRead(path);
-    var doc = JsonDocument.Parse(stream);
-    foreach (var entry in doc.RootElement.GetProperty("operations").EnumerateArray())
+    var stream = File.OpenRead(path);
+    await using (stream.ConfigureAwait(false))
     {
-        yield return new ManifestEntry(
-            entry.GetProperty("id").GetString()!,
-            entry.GetProperty("document").GetString()!
-        );
+        using var doc = await JsonDocument.ParseAsync(stream).ConfigureAwait(false);
+        return doc
+            .RootElement.GetProperty("operations")
+            .EnumerateArray()
+            .Select(entry => new ManifestEntry(
+                entry.GetProperty("id").GetString()!,
+                entry.GetProperty("document").GetString()!
+            ))
+            .ToList();
     }
 }

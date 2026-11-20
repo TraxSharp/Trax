@@ -52,7 +52,9 @@ public sealed class JunctionEventStream : IAsyncDisposable
                     : new { type = "connection_init", payload = (object)new { apiKey } }
             )
             .ConfigureAwait(false);
-        var ack = await stream.ReceiveAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        var ack = await stream
+            .ReceiveAsync(TimeSpan.FromSeconds(5), stream._stop.Token)
+            .ConfigureAwait(false);
         if (
             !string.Equals(
                 ack.GetProperty("type").GetString(),
@@ -62,7 +64,7 @@ public sealed class JunctionEventStream : IAsyncDisposable
         )
             throw new InvalidOperationException($"Expected connection_ack, got {ack}");
 
-        stream._reader = Task.Run(stream.ReadLoop);
+        stream._reader = Task.Run(stream.ReadLoop, CancellationToken.None);
         return stream;
     }
 
@@ -134,11 +136,16 @@ public sealed class JunctionEventStream : IAsyncDisposable
     private async Task SendAsync(object message)
     {
         var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(message));
-        await _sending.WaitAsync().ConfigureAwait(false);
+        await _sending.WaitAsync(_stop.Token).ConfigureAwait(false);
         try
         {
             await _socket
-                .SendAsync(bytes, WebSocketMessageType.Text, true, CancellationToken.None)
+                .SendAsync(
+                    bytes,
+                    WebSocketMessageType.Text,
+                    endOfMessage: true,
+                    CancellationToken.None
+                )
                 .ConfigureAwait(false);
         }
         finally
@@ -164,7 +171,7 @@ public sealed class JunctionEventStream : IAsyncDisposable
             result = await _socket.ReceiveAsync(buffer, cts.Token).ConfigureAwait(false);
             if (result.MessageType == WebSocketMessageType.Close)
                 throw new WebSocketException("Closed by the server.");
-            ms.Write(buffer, 0, result.Count);
+            await ms.WriteAsync(buffer, 0, result.Count, cancellationToken).ConfigureAwait(false);
         } while (!result.EndOfMessage);
 
         return JsonSerializer.Deserialize<JsonElement>(ms.ToArray());

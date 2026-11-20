@@ -21,7 +21,8 @@ public abstract class ApiTestFixture
     /// </summary>
     protected static async Task<int> NewBookAsync()
     {
-        using var scope = SharedBookwormSetup.Factory.Services.CreateScope();
+        var scope = SharedBookwormSetup.Factory.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var catalog = scope.ServiceProvider.GetRequiredService<ICatalogDbContext>();
         var book = new Book
         {

@@ -87,7 +87,7 @@ public sealed class ConsoleHost : IAsyncDisposable
     {
         await DropTraxSchemaAsync().ConfigureAwait(false);
         var app = Build();
-        await app.StartAsync().ConfigureAwait(false);
+        await app.StartAsync(app.Lifetime.ApplicationStarted).ConfigureAwait(false);
         var address = new Uri(
             app.Services.GetRequiredService<IServer>()
                 .Features.Get<IServerAddressesFeature>()!
@@ -99,7 +99,8 @@ public sealed class ConsoleHost : IAsyncDisposable
     /// <summary>Runs <paramref name="query"/> on a fresh data context, so it sees what the host committed.</summary>
     public async Task<T> QueryAsync<T>(Func<IDataContext, Task<T>> query)
     {
-        using var scope = Services.CreateScope();
+        var scope = Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var dataContext = await scope
             .ServiceProvider.GetRequiredService<IDataContextProviderFactory>()
             .CreateDbContextAsync(CancellationToken.None)
@@ -127,7 +128,7 @@ public sealed class ConsoleHost : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        await _app.StopAsync().ConfigureAwait(false);
+        await _app.StopAsync(_app.Lifetime.ApplicationStarted).ConfigureAwait(false);
         await _app.DisposeAsync().ConfigureAwait(false);
         NpgsqlConnection.ClearAllPools();
     }
@@ -202,7 +203,9 @@ public sealed class ConsoleHost : IAsyncDisposable
                 .GateOperations(roles: OperatorRole)
                 .RequireAuthorization()
                 .UsePersistedOperations(po =>
-                    po.SingleNode().RequirePersisted(true).GateManagement(roles: ApiAdminRole)
+                    po.SingleNode()
+                        .RequirePersisted(require: true)
+                        .GateManagement(roles: ApiAdminRole)
                 )
         );
 
@@ -225,7 +228,7 @@ public sealed class ConsoleHost : IAsyncDisposable
             var command = new NpgsqlCommand("DROP SCHEMA IF EXISTS trax CASCADE;", connection);
             await using (command.ConfigureAwait(false))
             {
-                await command.ExecuteNonQueryAsync();
+                await command.ExecuteNonQueryAsync().ConfigureAwait(false);
             }
         }
     }

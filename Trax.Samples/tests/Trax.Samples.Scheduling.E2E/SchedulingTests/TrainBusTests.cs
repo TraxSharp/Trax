@@ -15,7 +15,8 @@ public class TrainBusTests : SchedulingTestFixture
     [Test]
     public async Task Scheduled_train_runs_on_the_train_bus_and_returns_its_output()
     {
-        using var scope = Services.CreateScope();
+        var scope = Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var bus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
         RateFeed.SpikesEnabled = false;
 
@@ -37,7 +38,8 @@ public class TrainBusTests : SchedulingTestFixture
     [Test]
     public async Task Dormant_activation_outside_a_scheduled_run_does_nothing()
     {
-        using var scope = Services.CreateScope();
+        var scope = Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var bus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
         var alert = await Db.Manifest(ManifestNames.AlertRateSpike);
         // A threshold of zero makes any move a spike, so the junction asks to activate.

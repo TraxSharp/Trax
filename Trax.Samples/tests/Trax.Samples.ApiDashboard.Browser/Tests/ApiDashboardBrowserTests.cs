@@ -29,7 +29,8 @@ public class ApiDashboardBrowserTests : ConsoleTest
     [OneTimeSetUp]
     public async Task StartTheGate()
     {
-        using var scope = Host.Services.CreateScope();
+        var scope = Host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         _gate = (
             await scope
                 .ServiceProvider.GetRequiredService<IMachineInstances>()

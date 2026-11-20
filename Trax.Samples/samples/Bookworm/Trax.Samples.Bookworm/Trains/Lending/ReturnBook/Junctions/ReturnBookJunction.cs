@@ -16,7 +16,12 @@ public class ReturnBookJunction(ILendingDbContext lending)
     public override async Task<ReturnBookOutput> Run(ReturnBookInput input)
     {
         var loan =
-            await lending.Loans.FirstOrDefaultAsync(l => l.Id == input.LoanId).ConfigureAwait(false)
+            await lending
+                .Loans.FirstOrDefaultAsync(
+                    l => l.Id == input.LoanId,
+                    cancellationToken: CancellationToken
+                )
+                .ConfigureAwait(false)
             ?? throw new TrainException(
                 string.Create(CultureInfo.InvariantCulture, $"Loan {input.LoanId} not found.")
             );
@@ -31,7 +36,7 @@ public class ReturnBookJunction(ILendingDbContext lending)
 
         var returnedAt = DateTime.UtcNow;
         loan.ReturnedAt = returnedAt;
-        await lending.SaveChangesAsync().ConfigureAwait(false);
+        await lending.SaveChangesAsync(CancellationToken).ConfigureAwait(false);
 
         return new ReturnBookOutput { LoanId = loan.Id, ReturnedAt = returnedAt };
     }

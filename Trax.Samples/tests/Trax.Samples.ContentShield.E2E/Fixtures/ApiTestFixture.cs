@@ -13,7 +13,7 @@ public abstract class ApiTestFixture
     /// <summary>The moderator demo key the API registers in Development.</summary>
     protected const string ModeratorKey = Api.DemoKeys.ModeratorKey;
 
-    protected IServiceScope Scope { get; private set; } = null!;
+    protected AsyncServiceScope Scope { get; private set; }
 
     protected IDataContext DataContext { get; private set; } = null!;
 
@@ -22,7 +22,7 @@ public abstract class ApiTestFixture
     [SetUp]
     public virtual async Task SetUp()
     {
-        Scope = SharedApiSetup.Factory.Services.CreateScope();
+        Scope = SharedApiSetup.Factory.Services.CreateAsyncScope();
         DataContext = (IDataContext)
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>().Create();
 
@@ -33,12 +33,12 @@ public abstract class ApiTestFixture
     }
 
     [TearDown]
-    public void TearDown()
+    public async Task TearDown()
     {
         if (DataContext is IDisposable disposable)
             disposable.Dispose();
 
-        Scope.Dispose();
+        await Scope.DisposeAsync().ConfigureAwait(false);
     }
 
     protected static HttpClient GetHttpClient() => SharedApiSetup.Factory.CreateClient();

@@ -43,9 +43,9 @@ public class ExtensionMethodNamingTests
     };
 
     [Test]
-    public void Public_Extension_Methods_In_ExtensionsFolders_Contain_TraxInName()
+    public async Task Public_Extension_Methods_In_ExtensionsFolders_Contain_TraxInName()
     {
-        var offenders = HostingExtensions()
+        var offenders = (await HostingExtensionsAsync().ConfigureAwait(false))
             .Where(e =>
                 !e.Name.Contains("Trax", StringComparison.Ordinal)
                 && !KnownExceptions.Contains(e.Name)
@@ -68,9 +68,11 @@ public class ExtensionMethodNamingTests
     }
 
     [Test]
-    public void KnownExceptions_AreNotStale()
+    public async Task KnownExceptions_AreNotStale()
     {
-        var declared = HostingExtensions().Select(e => e.Name).ToHashSet(StringComparer.Ordinal);
+        var declared = (await HostingExtensionsAsync().ConfigureAwait(false))
+            .Select(e => e.Name)
+            .ToHashSet(StringComparer.Ordinal);
         var stale = KnownExceptions.Where(name => !declared.Contains(name)).ToList();
 
         stale
@@ -88,8 +90,11 @@ public class ExtensionMethodNamingTests
     /// under <see cref="SourceRoots"/>. Both tests read it, so the allowlist is checked against
     /// exactly the set the convention applies to.
     /// </summary>
-    private static IEnumerable<(string Source, string Name, string Receiver)> HostingExtensions()
+    private static async Task<
+        List<(string Source, string Name, string Receiver)>
+    > HostingExtensionsAsync()
     {
+        var found = new List<(string Source, string Name, string Receiver)>();
         foreach (var file in SourceFiles.CSharp(SourceRoots))
         {
             if (
@@ -100,7 +105,9 @@ public class ExtensionMethodNamingTests
             )
                 continue;
 
-            var tree = CSharpSyntaxTree.ParseText(File.ReadAllText(file));
+            var tree = CSharpSyntaxTree.ParseText(
+                await File.ReadAllTextAsync(file).ConfigureAwait(false)
+            );
             var root = tree.GetCompilationUnitRoot();
 
             foreach (var method in root.DescendantNodes().OfType<MethodDeclarationSyntax>())
@@ -129,8 +136,9 @@ public class ExtensionMethodNamingTests
                 if (!HostingTypes.Contains(paramType))
                     continue;
 
-                yield return (file, name, paramType);
+                found.Add((file, name, paramType));
             }
         }
+        return found;
     }
 }

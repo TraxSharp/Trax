@@ -126,7 +126,7 @@ public class GraphQLWebSocketClient : IAsyncDisposable
             .SendAsync(
                 new ArraySegment<byte>(bytes),
                 WebSocketMessageType.Text,
-                true,
+                endOfMessage: true,
                 CancellationToken.None
             )
             .ConfigureAwait(false);
@@ -146,7 +146,7 @@ public class GraphQLWebSocketClient : IAsyncDisposable
                 result = await _webSocket
                     .ReceiveAsync(new ArraySegment<byte>(buffer), cts.Token)
                     .ConfigureAwait(false);
-                ms.Write(buffer, 0, result.Count);
+                await ms.WriteAsync(buffer, 0, result.Count, cts.Token).ConfigureAwait(false);
             } while (!result.EndOfMessage);
 
             if (result.MessageType == WebSocketMessageType.Close)

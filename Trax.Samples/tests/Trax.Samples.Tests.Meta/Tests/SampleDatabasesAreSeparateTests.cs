@@ -14,7 +14,7 @@ namespace Trax.Samples.Tests.Meta.Tests;
 public partial class SampleDatabasesAreSeparateTests
 {
     /// <summary>Every database each sample folder names, keyed by database.</summary>
-    private static Dictionary<string, HashSet<string>> FoldersByDatabase()
+    private static async Task<Dictionary<string, HashSet<string>>> FoldersByDatabaseAsync()
     {
         var samples = Path.Combine(RepoRoot.Path, "samples");
         var files = Directory
@@ -35,7 +35,11 @@ public partial class SampleDatabasesAreSeparateTests
         foreach (var file in files)
         {
             var folder = Path.GetRelativePath(samples, file).Split(Path.DirectorySeparatorChar)[0];
-            foreach (Match match in Database.Matches(File.ReadAllText(file)))
+            foreach (
+                Match match in Database.Matches(
+                    await File.ReadAllTextAsync(file).ConfigureAwait(false)
+                )
+            )
             {
                 var db = match.Groups["db"].Value;
                 if (!byDatabase.TryGetValue(db, out var folders))
@@ -47,9 +51,9 @@ public partial class SampleDatabasesAreSeparateTests
     }
 
     [Test]
-    public void No_two_samples_share_a_database()
+    public async Task No_two_samples_share_a_database()
     {
-        var byDatabase = FoldersByDatabase();
+        var byDatabase = await FoldersByDatabaseAsync().ConfigureAwait(false);
         byDatabase.Should().NotBeEmpty("the Postgres samples name their databases");
 
         var shared = byDatabase
@@ -67,9 +71,11 @@ public partial class SampleDatabasesAreSeparateTests
     }
 
     [Test]
-    public void Docker_compose_creates_every_sample_database()
+    public async Task Docker_compose_creates_every_sample_database()
     {
-        var compose = File.ReadAllText(Path.Combine(RepoRoot.Path, "docker-compose.yml"));
+        var compose = await File.ReadAllTextAsync(
+            Path.Combine(RepoRoot.Path, "docker-compose.yml")
+        );
         var created = PostgresDatabases
             .Match(compose)
             .Groups["dbs"]
@@ -77,7 +83,9 @@ public partial class SampleDatabasesAreSeparateTests
             .Append(PostgresDb.Match(compose).Groups["db"].Value)
             .ToHashSet(StringComparer.Ordinal);
 
-        var missing = FoldersByDatabase().Keys.Where(db => !created.Contains(db)).ToList();
+        var missing = (await FoldersByDatabaseAsync().ConfigureAwait(false))
+            .Keys.Where(db => !created.Contains(db))
+            .ToList();
 
         missing
             .Should()

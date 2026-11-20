@@ -19,10 +19,16 @@ public sealed class Hooks
     private static CheckInApiFactory? s_factory;
 
     [BeforeTestRun]
-    public static void Start()
+    public static async Task Start()
     {
         s_factory = new CheckInApiFactory();
         var client = s_factory.CreateClient();
+        var manifest = ClientManifest.Read(
+            await File.ReadAllTextAsync(
+                    Path.Combine(AppContext.BaseDirectory, "client", "manifest.json")
+                )
+                .ConfigureAwait(false)
+        );
         TraxFeatures.Configure(o =>
         {
             o.Host = s_factory.Services;
@@ -33,9 +39,7 @@ public sealed class Hooks
                     [typeof(Trax.Samples.CheckIn.Trains.IIssueBoardingPassTrain).Assembly]
                 )!
                 .GlossaryOrThrow();
-            o.Manifest = ClientManifest.Read(
-                File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "client", "manifest.json"))
-            );
+            o.Manifest = manifest;
             o.Credential = DemoFeatureCredentials.PerPerson(DemoTokens.Issuer);
         });
     }

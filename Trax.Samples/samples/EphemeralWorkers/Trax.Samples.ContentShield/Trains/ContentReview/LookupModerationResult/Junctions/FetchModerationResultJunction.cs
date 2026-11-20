@@ -17,7 +17,7 @@ public class FetchModerationResultJunction(ILogger<FetchModerationResultJunction
             input.ContentId
         );
 
-        await Task.Delay(50).ConfigureAwait(false);
+        await Task.Delay(50, CancellationToken).ConfigureAwait(false);
 
         return new ModerationResult
         {

@@ -195,11 +195,12 @@ if (app.Environment.IsDevelopment())
         .AllowAnonymous();
 }
 
-app.Run();
+await app.RunAsync().ConfigureAwait(false);
 
 static async Task SeedAsync(IServiceProvider services)
 {
-    using var scope = services.CreateScope();
+    var scope = services.CreateAsyncScope();
+    await using var scopeDisposal = scope.ConfigureAwait(false);
     var db = scope.ServiceProvider.GetRequiredService<INewsroomDbContext>();
 
     if (await db.Articles.AnyAsync().ConfigureAwait(false))

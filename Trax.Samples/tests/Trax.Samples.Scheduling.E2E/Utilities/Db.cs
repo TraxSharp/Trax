@@ -28,7 +28,8 @@ public sealed class Db(IServiceProvider services)
         CancellationToken cancellationToken = default
     )
     {
-        using var scope = services.CreateScope();
+        var scope = services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var dataContext = await factory
             .CreateDbContextAsync(cancellationToken)
@@ -47,9 +48,10 @@ public sealed class Db(IServiceProvider services)
         Query(dc => dc.Manifests.AsNoTracking().SingleAsync(m => m.ExternalId == externalId));
 
     /// <summary>The highest metadata id so far: a marker that later runs are newer than.</summary>
-    public Task<long> LatestMetadataId() =>
-        Query(dc => dc.Metadatas.AsNoTracking().MaxAsync(m => (long?)m.Id))
-            .ContinueWith(t => t.Result ?? 0);
+    public async Task<long> LatestMetadataId() =>
+        await Query(dc => dc.Metadatas.AsNoTracking().MaxAsync(m => (long?)m.Id))
+            .ConfigureAwait(false)
+        ?? 0;
 
     public async Task<IReadOnlyList<Metadata>> Runs(long manifestId, long afterId) =>
         await Query(dc =>
@@ -101,7 +103,8 @@ public sealed class Db(IServiceProvider services)
                     return runs.Count >= count;
                 },
                 timeout,
-                PollInterval
+                PollInterval,
+                budget.Token
             )
             .ConfigureAwait(false);
 
@@ -171,7 +174,8 @@ public sealed class Db(IServiceProvider services)
                     return deadLetter is not null;
                 },
                 timeout,
-                PollInterval
+                PollInterval,
+                budget.Token
             )
             .ConfigureAwait(false);
 

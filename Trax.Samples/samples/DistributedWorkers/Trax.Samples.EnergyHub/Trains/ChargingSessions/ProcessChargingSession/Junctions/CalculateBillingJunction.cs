@@ -14,7 +14,7 @@ public class CalculateBillingJunction(ILogger<CalculateBillingJunction> logger)
             input.SessionType
         );
 
-        await Task.Delay(150).ConfigureAwait(false);
+        await Task.Delay(150, CancellationToken).ConfigureAwait(false);
 
         var sessions = 12;
         var revenue = 23.52m;

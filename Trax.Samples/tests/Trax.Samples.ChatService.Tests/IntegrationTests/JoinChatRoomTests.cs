@@ -13,7 +13,7 @@ public class JoinChatRoomTests
     [Test]
     public async Task ValidateJoin_RoomDoesNotExist_Throws()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
         var junction = new ValidateJoinJunction(db, ChatUsers.Bob);
 
         var act = () => junction.Run(new JoinChatRoomInput { ChatRoomId = Guid.NewGuid() });
@@ -24,7 +24,7 @@ public class JoinChatRoomTests
     [Test]
     public async Task ValidateJoin_CallerAlreadyParticipant_Throws()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
         var roomId = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice);
         var junction = new ValidateJoinJunction(db, ChatUsers.Alice);
 
@@ -36,7 +36,7 @@ public class JoinChatRoomTests
     [Test]
     public async Task ValidateJoin_NewParticipant_ReturnsInput()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
         var roomId = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice);
         var input = new JoinChatRoomInput { ChatRoomId = roomId };
 
@@ -48,7 +48,7 @@ public class JoinChatRoomTests
     [Test]
     public async Task AddParticipant_AddsTheCaller()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
         var roomId = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice);
         var junction = new AddParticipantJunction(
             db,

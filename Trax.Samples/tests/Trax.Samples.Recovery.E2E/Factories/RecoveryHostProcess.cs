@@ -240,7 +240,7 @@ public sealed partial class RecoveryHostProcess : IAsyncDisposable
         catch (OperationCanceledException)
         {
             process.Kill(entireProcessTree: true);
-            await process.WaitForExitAsync().ConfigureAwait(false);
+            await process.WaitForExitAsync(cancel.Token).ConfigureAwait(false);
             lock (output)
                 return (-1, $"Killed after {timeout}.\n{output}");
         }

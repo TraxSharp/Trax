@@ -19,7 +19,7 @@ public abstract class ChatApiTestFixture
 
     protected ChatDbContext ChatDb { get; private set; } = null!;
 
-    private IServiceScope Scope { get; set; } = null!;
+    private AsyncServiceScope Scope { get; set; }
 
     [OneTimeSetUp]
     public void OneTimeSetUp()
@@ -37,7 +37,7 @@ public abstract class ChatApiTestFixture
     [SetUp]
     public virtual async Task SetUp()
     {
-        Scope = SharedChatApiSetup.Factory.Services.CreateScope();
+        Scope = SharedChatApiSetup.Factory.Services.CreateAsyncScope();
 
         var dataContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
@@ -49,14 +49,14 @@ public abstract class ChatApiTestFixture
     }
 
     [TearDown]
-    public void TearDown()
+    public async Task TearDown()
     {
-        ChatDb.Dispose();
+        await ChatDb.DisposeAsync();
 
         if (DataContext is IDisposable disposable)
             disposable.Dispose();
 
-        Scope.Dispose();
+        await Scope.DisposeAsync().ConfigureAwait(false);
     }
 
     protected static string AliceKey => ApiKeyDefaults.AliceKey;

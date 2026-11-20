@@ -240,7 +240,7 @@ public sealed class RecoveryPage
         {
             var bridge = new WebSocketBridge(page);
             page.OnMessage(frame => bridge._toHost.Writer.TryWrite(frame.Text ?? ""));
-            page.OnClose((_, _) => bridge._closed.Cancel());
+            page.OnClose((_, _) => _ = bridge._closed.CancelAsync());
             _ = bridge.RunAsync(host);
         }
 
@@ -301,7 +301,9 @@ public sealed class RecoveryPage
                         .ConfigureAwait(false);
                     if (received.MessageType == WebSocketMessageType.Close)
                         break;
-                    message.Write(buffer, 0, received.Count);
+                    await message
+                        .WriteAsync(buffer, 0, received.Count, CancellationToken.None)
+                        .ConfigureAwait(false);
                     if (!received.EndOfMessage)
                         continue;
                     _page.Send(
@@ -312,7 +314,7 @@ public sealed class RecoveryPage
             }
             finally
             {
-                _closed.Cancel();
+                await _closed.CancelAsync().ConfigureAwait(false);
             }
         }
     }

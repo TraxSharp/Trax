@@ -130,7 +130,7 @@ public sealed partial class StateMachineClient(GraphQLClient graphQL)
         response
             .HasErrors.Should()
             .BeTrue($"the host serves no document sent as text: {response.Raw}");
-        return new SnapshotResult(null, NotServed, response.Raw);
+        return new SnapshotResult(Wire: null, NotServed, response.Raw);
     }
 
     /// <summary>
@@ -166,13 +166,13 @@ public sealed partial class StateMachineClient(GraphQLClient graphQL)
     public async Task<SnapshotResult> LoadAsync(Caller caller, string machine, Guid id)
     {
         if (DocumentOf(machine, "get") is not { } get)
-            return new SnapshotResult(null, NotServed, "");
+            return new SnapshotResult(Wire: null, NotServed, "");
 
         var response = await graphQL.SendIdAsync(get.Id, caller, new { id }).ConfigureAwait(false);
         response.HasErrors.Should().BeFalse($"get as {caller} should not error: {response.Raw}");
         var read = response.GetData("machines", machine, "get");
         return read.ValueKind == JsonValueKind.Null
-            ? new SnapshotResult(null, "NOT_FOUND", response.Raw)
+            ? new SnapshotResult(Wire: null, "NOT_FOUND", response.Raw)
             : Result(machine, read, response.Raw);
     }
 
@@ -214,7 +214,7 @@ public sealed partial class StateMachineClient(GraphQLClient graphQL)
                 !document.Document.Contains($"${v}:", StringComparison.Ordinal)
             )
         )
-            return new SnapshotResult(null, NotServed, "");
+            return new SnapshotResult(Wire: null, NotServed, "");
 
         var response = await graphQL
             .SendIdAsync(document.Id, caller, variables)
@@ -230,7 +230,7 @@ public sealed partial class StateMachineClient(GraphQLClient graphQL)
     private static SnapshotResult Result(string machine, JsonElement answer, string raw)
     {
         if (answer.GetProperty("problem") is { ValueKind: JsonValueKind.Object } problem)
-            return new SnapshotResult(null, problem.GetProperty("code").GetString(), raw);
+            return new SnapshotResult(Wire: null, problem.GetProperty("code").GetString(), raw);
 
         var context = new JsonObject();
         if (answer.TryGetProperty("context", out var fields))
@@ -245,7 +245,7 @@ public sealed partial class StateMachineClient(GraphQLClient graphQL)
             ["state"] = answer.GetProperty("state").GetString(),
             ["context"] = context,
         }.ToJsonString();
-        return new SnapshotResult(wire, null, raw)
+        return new SnapshotResult(wire, ProblemCode: null, raw)
         {
             Id = answer.GetProperty("id") is { ValueKind: JsonValueKind.String } id
                 ? Guid.Parse(id.GetString()!)

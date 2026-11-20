@@ -96,7 +96,7 @@ builder.Services.AddTraxGraphQL(graphql =>
         .ExposeOperationQueries()
         .GateOperations(roles: CheckInRoles.Operator)
         .UsePersistedOperations(persisted =>
-            persisted.SingleNode().RequirePersisted(true).DisableIntrospection()
+            persisted.SingleNode().RequirePersisted(require: true).DisableIntrospection()
         )
 );
 builder.Services.AddHealthChecks().AddTraxHealthCheck();

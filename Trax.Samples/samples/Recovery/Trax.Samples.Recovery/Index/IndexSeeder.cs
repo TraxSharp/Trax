@@ -33,23 +33,27 @@ public static class IndexSeeder
             var db = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
             await using (db.ConfigureAwait(false))
             {
-                await using var transaction = await db.Database.BeginTransactionAsync(
-                    cancellationToken
-                );
+                var transaction = await db
+                    .Database.BeginTransactionAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                await using (transaction.ConfigureAwait(false))
+                {
+                    var added = 0;
+                    foreach (var record in IndexFixture.Records)
+                        added += await db
+                            .Database.ExecuteSqlInterpolatedAsync(
+                                $"""
+                                INSERT INTO topic_map.source_records ("Source", "SourceId", "Month", "Payload")
+                                VALUES ({record.Source}, {record.SourceId}, {record.Month}, {record.Payload}::jsonb)
+                                ON CONFLICT ("Source", "SourceId") DO NOTHING
+                                """,
+                                cancellationToken
+                            )
+                            .ConfigureAwait(false);
 
-                var added = 0;
-                foreach (var record in IndexFixture.Records)
-                    added += await db.Database.ExecuteSqlInterpolatedAsync(
-                        $"""
-                        INSERT INTO topic_map.source_records ("Source", "SourceId", "Month", "Payload")
-                        VALUES ({record.Source}, {record.SourceId}, {record.Month}, {record.Payload}::jsonb)
-                        ON CONFLICT ("Source", "SourceId") DO NOTHING
-                        """,
-                        cancellationToken
-                    );
-
-                await transaction.CommitAsync(cancellationToken);
-                return added;
+                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                    return added;
+                }
             }
         }
     }

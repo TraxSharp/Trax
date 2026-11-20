@@ -30,7 +30,7 @@ public class AddInviteeJunction(
                 JoinedAt = now,
             }
         );
-        await db.SaveChangesAsync().ConfigureAwait(false);
+        await db.SaveChangesAsync(CancellationToken).ConfigureAwait(false);
 
         logger.LogInformation(
             "User {CallerId} added {UserId} to room {ChatRoomId}",

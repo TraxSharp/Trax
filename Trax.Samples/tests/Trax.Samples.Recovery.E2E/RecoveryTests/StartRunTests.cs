@@ -30,7 +30,8 @@ public class StartRunTests : RecoveryTestFixture
         var faults = services.GetRequiredService<FaultInjector>();
         var before = await LastManifestIdAsync(dataContexts);
 
-        using var scope = services.CreateScope();
+        var scope = services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var start = new ScheduleDemoRun(
             scope.ServiceProvider.GetRequiredService<ITraxScheduler>(),
             services.GetRequiredService<CaseFiles>(),
@@ -56,7 +57,7 @@ public class StartRunTests : RecoveryTestFixture
             .Manifests.AsNoTracking()
             .Where(m => m.Id > before && m.ExternalId.StartsWith("recovery-"))
             .Select(m => m.ExternalId)
-            .SingleAsync();
+            .SingleAsync(cancellationToken: start.CancellationToken);
         faults
             .IsArmed(scheduled["recovery-".Length..])
             .Should()

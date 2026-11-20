@@ -14,7 +14,7 @@ public class SubmitToUbossJunction(ILogger<SubmitToUbossJunction> logger)
             input.RatePerKwh
         );
 
-        await Task.Delay(300).ConfigureAwait(false);
+        await Task.Delay(300, CancellationToken).ConfigureAwait(false);
 
         var kwhSold = 47.3;
         var revenue = (decimal)kwhSold * input.RatePerKwh;

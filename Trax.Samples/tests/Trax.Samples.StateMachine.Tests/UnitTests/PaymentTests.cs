@@ -54,7 +54,7 @@ public class PaymentTests
     {
         var charge = new LoggingCharge(
             new SimulatedPaymentProvider(),
-            new FixedPrincipal(null),
+            new FixedPrincipal(key: null),
             NullLogger<LoggingCharge>.Instance
         );
 

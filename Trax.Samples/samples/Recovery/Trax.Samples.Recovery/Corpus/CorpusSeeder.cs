@@ -35,7 +35,8 @@ public static class CorpusSeeder
                 var present = await db
                     .Works.Where(w => ids.Contains(w.Id))
                     .Select(w => w.Id)
-                    .ToListAsync(cancellationToken);
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
 
                 var missing = CorpusFixture
                     .Works.Where(w => !present.Contains(w.Id))
@@ -56,7 +57,7 @@ public static class CorpusSeeder
                     return 0;
 
                 db.Works.AddRange(missing);
-                await db.SaveChangesAsync(cancellationToken);
+                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
                 return missing.Count;
             }
         }

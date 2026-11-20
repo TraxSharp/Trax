@@ -39,7 +39,8 @@ public class FlagSpikeJunction(IDormantDependentContext dormants, ILogger<FlagSp
                     {
                         BaseCurrency = reading.BaseCurrency,
                         ChangePercent = reading.ChangePercent,
-                    }
+                    },
+                    CancellationToken
                 )
                 .ConfigureAwait(false);
         }

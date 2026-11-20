@@ -93,10 +93,13 @@ public class ProductionPostureTests
         }
     }
 
-    private static string BookingsViewId()
+    private static async Task<string> BookingsViewId()
     {
         using var manifest = JsonDocument.Parse(
-            File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "client", "manifest.json"))
+            await File.ReadAllTextAsync(
+                    Path.Combine(AppContext.BaseDirectory, "client", "manifest.json")
+                )
+                .ConfigureAwait(false)
         );
         return manifest
             .RootElement.GetProperty("views")

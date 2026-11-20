@@ -40,15 +40,15 @@ public sealed class TicketMachine : Machine<TicketState, TicketTrigger>
     );
 
     private static readonly Reduction DropClaim = SetAll(
-        Set((TicketContext c) => c.ClaimedBy).ToValue(null),
-        Set((TicketContext c) => c.ClaimedAt).ToValue(null)
+        Set((TicketContext c) => c.ClaimedBy).ToValue(value: null),
+        Set((TicketContext c) => c.ClaimedAt).ToValue(value: null)
     );
 
     // Moving a ticket to another lane ends the claim on it and leaves a note.
     private static Reduction Moved(params Reduction[] more) =>
         SetAll([
-            Set((TicketContext c) => c.ClaimedBy).ToValue(null),
-            Set((TicketContext c) => c.ClaimedAt).ToValue(null),
+            Set((TicketContext c) => c.ClaimedBy).ToValue(value: null),
+            Set((TicketContext c) => c.ClaimedAt).ToValue(value: null),
             Set((TicketContext c) => c.Note).FromInput((NoteInput i) => i.Note),
             Set((TicketContext c) => c.By).FromInput((NoteInput i) => i.By),
             .. more,

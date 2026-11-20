@@ -134,11 +134,15 @@ app.UseForwardedHeaders();
 
 // -- Create the application tables (demo bootstrap) ----------------------------
 // Fine for the in-memory database. With Postgres, use EF Core migrations instead.
-using (var scope = app.Services.CreateScope())
+var scope = app.Services.CreateAsyncScope();
+await using (scope.ConfigureAwait(false))
 {
     var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
-    using var db = factory.CreateDbContext();
-    db.Database.EnsureCreated();
+    var db = factory.CreateDbContext();
+    await using (db.ConfigureAwait(false))
+    {
+        await db.Database.EnsureCreatedAsync().ConfigureAwait(false);
+    }
 }
 
 // -- Middleware and endpoints ------------------------------------------------

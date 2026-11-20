@@ -167,7 +167,7 @@ if (app.Environment.IsDevelopment())
         }
     );
 
-app.Run();
+await app.RunAsync().ConfigureAwait(false);
 
 namespace Trax.Samples.SignalRBroadcaster
 {

@@ -45,7 +45,8 @@ public class HelloWorldTrainTests
 
         await bus.RunAsync<Unit>(new HelloWorldInput { Name = name });
 
-        using var scope = _provider.CreateScope();
+        var scope = _provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var data = scope.ServiceProvider.GetRequiredService<IDataContext>();
         var run = data
             .Metadatas.Where(m => m.Name == typeof(IHelloWorldTrain).FullName)

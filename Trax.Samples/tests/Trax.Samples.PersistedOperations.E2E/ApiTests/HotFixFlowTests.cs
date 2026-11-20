@@ -62,7 +62,7 @@ public class HotFixFlowTests : ApiTestBase
             .Should()
             .Be("SHAPE_DIFF_VIOLATION");
 
-        (await Store.GetAsync("greet_v1", null, CancellationToken.None))!
+        (await Store.GetAsync("greet_v1", tenantKey: null, CancellationToken.None))!
             .Document.Should()
             .Be(GreetDocuments.Formal);
         using var after = await AppCallsAsync("greet_v1", "Alice");
@@ -86,10 +86,10 @@ public class HotFixFlowTests : ApiTestBase
         // Drive the storage through Upsert → Upsert (rewrite) → Deactivate → Restore, then
         // assert the history table holds exactly four rows in that ChangeType order.
         const string id = "history_check_v1";
-        await Store.UpsertAsync(id, GreetDocuments.Casual, null, CancellationToken.None);
-        await Store.UpsertAsync(id, GreetDocuments.Formal, null, CancellationToken.None);
-        await Store.DeactivateAsync(id, null, "test cleanup", CancellationToken.None);
-        await Store.RestoreAsync(id, null, CancellationToken.None);
+        await Store.UpsertAsync(id, GreetDocuments.Casual, options: null, CancellationToken.None);
+        await Store.UpsertAsync(id, GreetDocuments.Formal, options: null, CancellationToken.None);
+        await Store.DeactivateAsync(id, tenantKey: null, "test cleanup", CancellationToken.None);
+        await Store.RestoreAsync(id, tenantKey: null, CancellationToken.None);
 
         var factory =
             SharedApiSetup.Factory!.Services.GetRequiredService<IDataContextProviderFactory>();
@@ -118,10 +118,15 @@ public class HotFixFlowTests : ApiTestBase
         await Store.UpsertAsync(
             "lifecycle_v1",
             GreetDocuments.Casual,
-            null,
+            options: null,
             CancellationToken.None
         );
-        await Store.DeactivateAsync("lifecycle_v1", null, "test", CancellationToken.None);
+        await Store.DeactivateAsync(
+            "lifecycle_v1",
+            tenantKey: null,
+            "test",
+            CancellationToken.None
+        );
 
         var resp = await PostAsync(
             new { id = "lifecycle_v1", variables = GreetDocuments.Variables("X") }
@@ -129,7 +134,7 @@ public class HotFixFlowTests : ApiTestBase
         var body = await resp.Content.ReadAsStringAsync();
         GraphQLErrors.FirstCode(body).Should().Be(GraphQLErrors.UnknownPersistedOperation, body);
 
-        await Store.RestoreAsync("lifecycle_v1", null, CancellationToken.None);
+        await Store.RestoreAsync("lifecycle_v1", tenantKey: null, CancellationToken.None);
 
         using var doc = await PostJsonAsync(
             new { id = "lifecycle_v1", variables = GreetDocuments.Variables("Y") }

@@ -14,12 +14,12 @@ public partial class DocumentedExamplesTests : ApiTestFixture
     [Test]
     public async Task Every_try_it_example_in_the_api_header_succeeds()
     {
-        var examples = TryItExamples();
+        var examples = await TryItExamplesAsync().ConfigureAwait(false);
         examples.Should().HaveCountGreaterThanOrEqualTo(3, "the header documents three examples");
 
         foreach (var (body, apiKey) in examples)
         {
-            var result = await GetGraphQLClient().SendRawAsync(body, apiKey);
+            var result = await GetGraphQLClient().SendRawAsync(body, apiKey).ConfigureAwait(false);
 
             result
                 .HasErrors.Should()
@@ -30,9 +30,9 @@ public partial class DocumentedExamplesTests : ApiTestFixture
         }
     }
 
-    private static List<(string Body, string? ApiKey)> TryItExamples()
+    private static async Task<List<(string Body, string? ApiKey)>> TryItExamplesAsync()
     {
-        var source = File.ReadAllText(ApiProgramPath());
+        var source = await File.ReadAllTextAsync(ApiProgramPath()).ConfigureAwait(false);
         var header = source[..source.IndexOf("\nusing ", StringComparison.Ordinal)];
 
         // Each example is one curl command continued over comment lines ending in a backslash.

@@ -109,7 +109,7 @@ public class RestartTests
             .ConfigureAwait(false);
 
     private static async Task<long> CountAsync(string table) =>
-        await ScalarAsync<long>($"SELECT count(*) FROM {table}", null).ConfigureAwait(false);
+        await ScalarAsync<long>($"SELECT count(*) FROM {table}", id: null).ConfigureAwait(false);
 
     private static async Task<T?> ScalarAsync<T>(string sql, Guid? id)
     {
@@ -122,7 +122,9 @@ public class RestartTests
             {
                 if (id is { } value)
                     command.Parameters.AddWithValue("id", value);
-                return await command.ExecuteScalarAsync() is T result ? result : default;
+                return await command.ExecuteScalarAsync().ConfigureAwait(false) is T result
+                    ? result
+                    : default;
             }
         }
     }

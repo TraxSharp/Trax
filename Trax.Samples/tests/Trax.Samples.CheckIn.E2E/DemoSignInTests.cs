@@ -17,7 +17,7 @@ public class DemoSignInTests
     private static readonly FeatureActor Passenger = new(
         "passenger",
         [CheckInRoles.Passenger],
-        false
+        AnyAuthenticated: false
     );
 
     [Test]

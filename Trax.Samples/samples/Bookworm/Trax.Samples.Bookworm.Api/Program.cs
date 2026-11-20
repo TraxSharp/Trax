@@ -122,11 +122,12 @@ app.UseAuthorization();
 app.UseTraxGraphQL();
 app.MapHealthChecks("/trax/health");
 
-app.Run();
+await app.RunAsync().ConfigureAwait(false);
 
 static async Task SeedAsync(IServiceProvider services)
 {
-    using var scope = services.CreateScope();
+    var scope = services.CreateAsyncScope();
+    await using var scopeDisposal = scope.ConfigureAwait(false);
     var catalog = scope.ServiceProvider.GetRequiredService<ICatalogDbContext>();
     var lending = scope.ServiceProvider.GetRequiredService<ILendingDbContext>();
 

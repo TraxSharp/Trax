@@ -106,14 +106,14 @@ public sealed partial class TopicMapDraft(GraphQLClient graphQL, string apiKey, 
             )
             .ConfigureAwait(false);
         return response.HasErrors
-            ? new Result(null, NotServed, null)
+            ? new Result(Snapshot: null, NotServed, Id: null)
             : new Result(
-                null,
+                Snapshot: null,
                 response
                     .GetData("dispatch", "stateMachine", "saveSnapshot", "output", "problem")
                     .GetProperty("code")
                     .GetString(),
-                null
+                Id: null
             );
     }
 
@@ -125,7 +125,7 @@ public sealed partial class TopicMapDraft(GraphQLClient graphQL, string apiKey, 
     {
         var field = JsonNamingPolicy.CamelCase.ConvertName(trigger);
         if (!GraphQLName.IsMatch(field))
-            return new Result(null, NotServed, null);
+            return new Result(Snapshot: null, NotServed, Id: null);
 
         var args = $"id: {Literal(Id.ToString())}";
         if (input is not null)
@@ -149,7 +149,7 @@ public sealed partial class TopicMapDraft(GraphQLClient graphQL, string apiKey, 
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         var read = response.GetData("machines", Field, "get");
         return read.ValueKind == JsonValueKind.Null
-            ? new Result(null, "NOT_FOUND", null)
+            ? new Result(Snapshot: null, "NOT_FOUND", Id: null)
             : Parse(read);
     }
 
@@ -203,7 +203,7 @@ public sealed partial class TopicMapDraft(GraphQLClient graphQL, string apiKey, 
             )
             .ConfigureAwait(false);
         if (response.HasErrors)
-            return new Result(null, NotServed, null);
+            return new Result(Snapshot: null, NotServed, Id: null);
         return Parse(response.GetData("machines", Field, field));
     }
 
@@ -215,7 +215,7 @@ public sealed partial class TopicMapDraft(GraphQLClient graphQL, string apiKey, 
             ? Guid.Parse(minted.GetString()!)
             : (Guid?)null;
         if (answer.GetProperty("problem") is { ValueKind: JsonValueKind.Object } problem)
-            return new Result(null, problem.GetProperty("code").GetString(), id);
+            return new Result(Snapshot: null, problem.GetProperty("code").GetString(), id);
 
         var context = new JsonObject();
         foreach (var field in answer.GetProperty("context").EnumerateObject())
@@ -223,7 +223,7 @@ public sealed partial class TopicMapDraft(GraphQLClient graphQL, string apiKey, 
                 context[field.Name] = JsonNode.Parse(field.Value.GetRawText());
         return new Result(
             JsonNode.Parse(Snapshot(answer.GetProperty("state").GetString()!, context))!.AsObject(),
-            null,
+            Problem: null,
             id
         );
     }

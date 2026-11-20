@@ -102,7 +102,7 @@ public sealed class GraphQLWebSocketClient : IAsyncDisposable
             JsonSerializer.Serialize(message, JsonSerializerOptions.Web)
         );
         await _socket
-            .SendAsync(bytes, WebSocketMessageType.Text, true, CancellationToken.None)
+            .SendAsync(bytes, WebSocketMessageType.Text, endOfMessage: true, CancellationToken.None)
             .ConfigureAwait(false);
     }
 
@@ -121,7 +121,7 @@ public sealed class GraphQLWebSocketClient : IAsyncDisposable
                     throw new WebSocketClosedException(
                         $"closed by the server: {result.CloseStatus} {result.CloseStatusDescription}"
                     );
-                ms.Write(buffer, 0, result.Count);
+                await ms.WriteAsync(buffer, 0, result.Count, cts.Token).ConfigureAwait(false);
             } while (!result.EndOfMessage);
         }
         catch (OperationCanceledException inner)

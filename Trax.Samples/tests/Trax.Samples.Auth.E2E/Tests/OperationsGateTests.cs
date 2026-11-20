@@ -106,8 +106,9 @@ public class OperationsGateTests : AuthTestFixture
             .IsRefused.Should()
             .BeTrue("queueTrain applies the train's own [TraxAuthorize] on top of the gate");
 
-        using var scope = SharedAuthSetup.Factory.Services.CreateScope();
-        using var trax = (IDataContext)
+        var scope = SharedAuthSetup.Factory.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
+        await using var trax = (IDataContext)
             scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>().Create();
         (await trax.WorkQueues.CountAsync(w => w.TrainName.Contains("IPublishArticleTrain")))
             .Should()

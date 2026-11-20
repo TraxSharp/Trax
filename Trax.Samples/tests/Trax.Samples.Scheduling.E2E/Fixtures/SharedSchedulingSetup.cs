@@ -58,7 +58,7 @@ public class SharedSchedulingSetup
             var command = new NpgsqlCommand("DROP SCHEMA IF EXISTS trax CASCADE;", connection);
             await using (command.ConfigureAwait(false))
             {
-                await command.ExecuteNonQueryAsync();
+                await command.ExecuteNonQueryAsync().ConfigureAwait(false);
             }
         }
     }

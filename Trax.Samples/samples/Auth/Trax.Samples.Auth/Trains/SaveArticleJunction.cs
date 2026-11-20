@@ -25,7 +25,7 @@ public class SaveArticleJunction(TraxPrincipal caller, INewsroomDbContext db)
         };
 
         db.Articles.Add(article);
-        await db.SaveChangesAsync().ConfigureAwait(false);
+        await db.SaveChangesAsync(CancellationToken).ConfigureAwait(false);
 
         return new PublishArticleOutput(article.Id, article.AuthorId);
     }

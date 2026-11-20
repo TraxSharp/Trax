@@ -113,7 +113,8 @@ public class ForwardMigrationTests : StateMachineTestFixture
     /// </summary>
     private static async Task StoreVersion1Draft(Guid id, string state, params string[] items)
     {
-        using var scope = SharedStateMachineSetup.Factory.Services.CreateScope();
+        var scope = SharedStateMachineSetup.Factory.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var store = scope.ServiceProvider.GetRequiredService<ISnapshotStore>();
 
         var inserted = await store

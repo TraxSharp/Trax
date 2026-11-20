@@ -17,8 +17,9 @@ public class FetchMessagesJunction(ChatDbContext db, TraxPrincipal caller)
     {
         if (
             !await db
-                .ChatParticipants.AnyAsync(p =>
-                    p.ChatRoomId == input.ChatRoomId && p.UserId == caller.Id
+                .ChatParticipants.AnyAsync(
+                    p => p.ChatRoomId == input.ChatRoomId && p.UserId == caller.Id,
+                    cancellationToken: CancellationToken
                 )
                 .ConfigureAwait(false)
         )
@@ -45,7 +46,7 @@ public class FetchMessagesJunction(ChatDbContext db, TraxPrincipal caller)
                 Content = m.Content,
                 SentAt = m.SentAt,
             })
-            .ToListAsync()
+            .ToListAsync(cancellationToken: CancellationToken)
             .ConfigureAwait(false);
 
         messages.Reverse();

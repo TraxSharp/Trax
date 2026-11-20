@@ -100,7 +100,8 @@ public abstract class StateMachineTestFixture
     protected static async Task SeedAsync(Caller caller, Guid id, string wire)
     {
         var node = JsonNode.Parse(wire)!.AsObject();
-        using var scope = SharedStateMachineSetup.Factory.Services.CreateScope();
+        var scope = SharedStateMachineSetup.Factory.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var written = await scope
             .ServiceProvider.GetRequiredService<ISnapshotStore>()
             .Upsert(

@@ -69,7 +69,11 @@ public class ScheduleDemoRun(
                     .ConfigureAwait(false),
                 Scenario.TopicMap => await ScheduleTopicMap(runId, externalId, input)
                     .ConfigureAwait(false),
-                _ => throw new ArgumentOutOfRangeException(nameof(input), input.Scenario, null),
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(input),
+                    input.Scenario,
+                    message: null
+                ),
             };
 
             // The page follows the first run, so a start that never sees it queued fails here.
@@ -142,7 +146,8 @@ public class ScheduleDemoRun(
             new RefundInput { RunId = runId, OrderId = orderId },
             TimeSpan.Zero,
             // Every run of the manifest, each retry included, is the caller's to follow.
-            options => options.MaxRetries(MaxRetries).StartedBy(caller.GetCurrentPrincipalId())
+            options => options.MaxRetries(MaxRetries).StartedBy(caller.GetCurrentPrincipalId()),
+            CancellationToken
         );
     }
 
@@ -171,7 +176,8 @@ public class ScheduleDemoRun(
             },
             TimeSpan.Zero,
             // Every run of the manifest, each retry included, is the caller's to follow.
-            options => options.MaxRetries(MaxRetries).StartedBy(caller.GetCurrentPrincipalId())
+            options => options.MaxRetries(MaxRetries).StartedBy(caller.GetCurrentPrincipalId()),
+            CancellationToken
         );
     }
 }

@@ -21,7 +21,7 @@ public abstract class ResolveWorks(DemoPace pace, string matched, bool unsure)
                 !string.Equals(matched, Resolutions.Created, StringComparison.Ordinal)
                 && matches.TryGetValue(work.SourceId, out var match)
                     ? new ResolvedWork(work, matched, match.ExistingWorkId)
-                    : new ResolvedWork(work, Resolutions.Created, null)
+                    : new ResolvedWork(work, Resolutions.Created, ExistingWorkId: null)
             )
             .ToList();
 

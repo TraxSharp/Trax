@@ -15,5 +15,5 @@ public static class PlayerSchemaConfiguration
         builder
             .AddQueryType<PlayerQuery>()
             .AddMutationType<PlayerMutation>()
-            .DisableIntrospection(false);
+            .DisableIntrospection(disable: false);
 }

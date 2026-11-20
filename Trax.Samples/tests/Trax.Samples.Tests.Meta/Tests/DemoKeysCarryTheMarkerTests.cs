@@ -18,12 +18,13 @@ public partial class DemoKeysCarryTheMarkerTests
     private const string Marker = "do-not-use-in-production";
 
     [Test]
-    public void EveryRegisteredDemoKey_CarriesTheMarker()
+    public async Task EveryRegisteredDemoKey_CarriesTheMarker()
     {
-        var files = SourceFiles
-            .CSharp("samples", "templates")
-            .Select(path => new SourceFile(path, File.ReadAllText(path)))
-            .ToList();
+        var files = new List<SourceFile>();
+        foreach (var path in SourceFiles.CSharp("samples", "templates"))
+            files.Add(
+                new SourceFile(path, await File.ReadAllTextAsync(path).ConfigureAwait(false))
+            );
         var constants = Constants(files);
 
         var offenders = new List<string>();

@@ -51,7 +51,8 @@ public class SharedHubSetup
 
     private async Task WaitForManifestsSeeded()
     {
-        using var scope = Factory.Services.CreateScope();
+        var scope = Factory.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var dc = (IDataContext)factory.Create();
 

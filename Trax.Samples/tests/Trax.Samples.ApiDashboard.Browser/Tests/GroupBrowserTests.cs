@@ -203,7 +203,7 @@ public class GroupBrowserTests : ConsoleTest
             await using var scope = Host.Services.CreateAsyncScope();
             await scope
                 .ServiceProvider.GetRequiredService<IOperationsService>()
-                .SetAllManifestGroupsEnabledAsync(true, CancellationToken.None);
+                .SetAllManifestGroupsEnabledAsync(enabled: true, CancellationToken.None);
         }
     }
 

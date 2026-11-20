@@ -33,7 +33,7 @@ public class ClientModesE2ETests
         PlayerSchemaConfiguration.Configure(builder.Services.AddGraphQLServer());
         _server = builder.Build();
         _server.MapGraphQL("/graphql");
-        await _server.StartAsync();
+        await _server.StartAsync(_server.Lifetime.ApplicationStarted);
 
         var services = new ServiceCollection();
         services
@@ -54,8 +54,14 @@ public class ClientModesE2ETests
     [Test]
     public async Task Raw_string_and_resource_modes_return_the_same_player()
     {
-        var raw = await _executor.Run(new GetPlayerByRawStringRequest { Id = "player-1" });
-        var resource = await _executor.Run(new GetPlayerByResourceRequest { Id = "player-1" });
+        var raw = await _executor.Run(
+            new GetPlayerByRawStringRequest { Id = "player-1" },
+            _server.Lifetime.ApplicationStarted
+        );
+        var resource = await _executor.Run(
+            new GetPlayerByResourceRequest { Id = "player-1" },
+            _server.Lifetime.ApplicationStarted
+        );
 
         raw.Name.Should().Be("Aragorn");
         resource.Should().BeEquivalentTo(raw);
@@ -64,8 +70,14 @@ public class ClientModesE2ETests
     [Test]
     public async Task Typed_mode_returns_the_same_player_as_the_raw_string()
     {
-        var raw = await _executor.Run(new GetPlayerByRawStringRequest { Id = "player-1" });
-        var typed = await _executor.Run(new GetPlayerByTypedRequest { Id = "player-1" });
+        var raw = await _executor.Run(
+            new GetPlayerByRawStringRequest { Id = "player-1" },
+            _server.Lifetime.ApplicationStarted
+        );
+        var typed = await _executor.Run(
+            new GetPlayerByTypedRequest { Id = "player-1" },
+            _server.Lifetime.ApplicationStarted
+        );
 
         typed.Id.Should().Be(raw.Id);
         typed.Name.Should().Be(raw.Name);
@@ -76,7 +88,10 @@ public class ClientModesE2ETests
     [Test]
     public async Task Typed_mode_reads_through_the_discover_path()
     {
-        var nested = await _executor.Run(new LookupPlayerByNestedPathRequest { Id = "player-1" });
+        var nested = await _executor.Run(
+            new LookupPlayerByNestedPathRequest { Id = "player-1" },
+            _server.Lifetime.ApplicationStarted
+        );
 
         nested.Should().NotBeNull();
         nested!.Name.Should().Be("Aragorn");

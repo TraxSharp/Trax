@@ -505,22 +505,30 @@ public partial class TopicMapBrowserTests
     public async Task ADeployWithANewIR_ShowsClientOutdated()
     {
         // The page as it was built before a deploy changed the machine: the same code, an older IR hash.
-        var hash = CommittedIrHash();
+        var hash = await CommittedIrHashAsync().ConfigureAwait(false);
         var older = new string(hash.Reverse().ToArray());
-        await using var open = await BrowserSetup.NewPageAsync(
-            replace: (_, js) => js.Replace(hash, older, StringComparison.Ordinal)
-        );
-        var page = open.Recovery;
-        await page.Page.GotoAsync(RecoveryPage.PageOrigin + "/");
-        await RecoveryPage.ShowTheTopicMapAsync(page.Page);
+        var open = await BrowserSetup
+            .NewPageAsync(replace: (_, js) => js.Replace(hash, older, StringComparison.Ordinal))
+            .ConfigureAwait(false);
+        await using (open.ConfigureAwait(false))
+        {
+            var page = open.Recovery;
+            await page.Page.GotoAsync(RecoveryPage.PageOrigin + "/").ConfigureAwait(false);
+            await RecoveryPage.ShowTheTopicMapAsync(page.Page).ConfigureAwait(false);
 
-        await Expect(page.Page.GetByText("CLIENT_OUTDATED"))
-            .ToBeVisibleAsync(new() { Timeout = BrowserTimeouts.Render.Ms() });
-        var afterRefusal = page.GraphQLRequests.Count;
-        await Expect(page.Page.GetByRole(AriaRole.Button, new() { Name = "Next" }))
-            .Not.ToBeVisibleAsync(new() { Timeout = BrowserTimeouts.Render.Ms() });
-        page.GraphQLRequests.Count.Should()
-            .Be(afterRefusal, $"an outdated client stops and makes no further requests ({Adr})");
+            await Expect(page.Page.GetByText("CLIENT_OUTDATED"))
+                .ToBeVisibleAsync(new() { Timeout = BrowserTimeouts.Render.Ms() })
+                .ConfigureAwait(false);
+            var afterRefusal = page.GraphQLRequests.Count;
+            await Expect(page.Page.GetByRole(AriaRole.Button, new() { Name = "Next" }))
+                .Not.ToBeVisibleAsync(new() { Timeout = BrowserTimeouts.Render.Ms() })
+                .ConfigureAwait(false);
+            page.GraphQLRequests.Count.Should()
+                .Be(
+                    afterRefusal,
+                    $"an outdated client stops and makes no further requests ({Adr})"
+                );
+        }
     }
 
     [Test]
@@ -761,17 +769,18 @@ public partial class TopicMapBrowserTests
         return response.Root.GetRawText();
     }
 
-    private static string CommittedIrHash()
+    private static async Task<string> CommittedIrHashAsync()
     {
-        var twin = File.ReadAllText(
-            Path.Combine(
-                RecoveryClientBuild.ClientFolder,
-                "src",
-                "trax",
-                "topic-map",
-                "topic-map.machine.g.ts"
+        var twin = await File.ReadAllTextAsync(
+                Path.Combine(
+                    RecoveryClientBuild.ClientFolder,
+                    "src",
+                    "trax",
+                    "topic-map",
+                    "topic-map.machine.g.ts"
+                )
             )
-        );
+            .ConfigureAwait(false);
         return IrHash.Match(twin).Groups["hash"].Value;
     }
 

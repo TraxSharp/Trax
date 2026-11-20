@@ -60,8 +60,8 @@ builder.Services.AddTraxGraphQL(graphql =>
         .ExposeOperationMutations()
         .GateOperations(roles: DemoKeys.OperatorRole)
         .UsePersistedOperations(opts =>
-            opts.RequirePersisted(true)
-                .LogNonPersistedRequests(true)
+            opts.RequirePersisted(require: true)
+                .LogNonPersistedRequests(log: true)
                 // One process serves this endpoint and writes the store, so an upload reaches
                 // every cached copy without a broadcast. A second node needs
                 // UseRabbitMqInvalidation(...) instead; the host refuses to start with neither.
@@ -96,4 +96,4 @@ app.UseTraxGraphQL();
 if (isDevelopment)
     app.UseTraxApiDashboard(dashboard => dashboard.AllowAnonymousShell());
 
-app.Run();
+await app.RunAsync().ConfigureAwait(false);

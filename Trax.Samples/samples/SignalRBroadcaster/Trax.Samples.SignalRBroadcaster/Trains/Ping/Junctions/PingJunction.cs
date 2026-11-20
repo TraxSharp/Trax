@@ -9,7 +9,7 @@ public class PingJunction(ILogger<PingJunction> logger) : Junction<PingInput, Pi
     public override async Task<PingOutput> Run(PingInput input)
     {
         logger.LogInformation("[{Source}] ping ({Outcome})", input.Source, input.Outcome);
-        await Task.Delay(input.DelayMs).ConfigureAwait(false);
+        await Task.Delay(input.DelayMs, CancellationToken).ConfigureAwait(false);
 
         return input.Outcome switch
         {

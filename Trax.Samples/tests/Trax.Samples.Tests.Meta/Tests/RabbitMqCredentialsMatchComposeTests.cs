@@ -23,24 +23,33 @@ public partial class RabbitMqCredentialsMatchComposeTests
     }
 
     [Test]
-    public void Every_rabbitmq_connection_string_uses_the_compose_and_ci_user()
+    public async Task Every_rabbitmq_connection_string_uses_the_compose_and_ci_user()
     {
-        var compose = File.ReadAllText(Path.Combine(RepoRoot.Path, "docker-compose.yml"));
+        var compose = await File.ReadAllTextAsync(
+            Path.Combine(RepoRoot.Path, "docker-compose.yml")
+        );
         var composeUser = FromEnv(compose, "RABBITMQ_DEFAULT_USER", "RABBITMQ_DEFAULT_PASS");
 
         var offenders = new List<string>();
         // Every workflow that starts a broker, at the root of the repository Trax.Samples lives in.
-        var workflows = Directory
-            .EnumerateFiles(MonorepoRoot.Combine(".github", "workflows"), "*.yml")
-            .Where(w =>
-                File.ReadAllText(w).Contains("RABBITMQ_DEFAULT_USER", StringComparison.Ordinal)
+        var workflows = new List<string>();
+        foreach (
+            var w in Directory.EnumerateFiles(MonorepoRoot.Combine(".github", "workflows"), "*.yml")
+        )
+        {
+            if (
+                (await File.ReadAllTextAsync(w).ConfigureAwait(false)).Contains(
+                    "RABBITMQ_DEFAULT_USER",
+                    StringComparison.Ordinal
+                )
             )
-            .ToList();
+                workflows.Add(w);
+        }
         workflows.Should().NotBeEmpty("CI starts a RabbitMQ broker for the samples' tests");
         foreach (var workflow in workflows)
         {
             var ciUser = FromEnv(
-                File.ReadAllText(workflow),
+                await File.ReadAllTextAsync(workflow).ConfigureAwait(false),
                 "RABBITMQ_DEFAULT_USER",
                 "RABBITMQ_DEFAULT_PASS"
             );
@@ -70,7 +79,11 @@ public partial class RabbitMqCredentialsMatchComposeTests
 
         foreach (var file in files)
         {
-            foreach (Match match in AmqpUri.Matches(File.ReadAllText(file)))
+            foreach (
+                Match match in AmqpUri.Matches(
+                    await File.ReadAllTextAsync(file).ConfigureAwait(false)
+                )
+            )
             {
                 var used = (match.Groups["user"].Value, match.Groups["pass"].Value);
                 if (used != composeUser)

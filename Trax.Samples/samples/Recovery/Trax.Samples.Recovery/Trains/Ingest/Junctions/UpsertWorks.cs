@@ -36,25 +36,27 @@ public class UpsertWorks(
             await using (transaction.ConfigureAwait(false))
             {
                 foreach (var (work, resolution, existing) in partition.Works)
-                    await db.Database.ExecuteSqlInterpolatedAsync(
-                        $"""
-                        INSERT INTO topic_map.ingested_works
-                            ("Source", "SourceId", "Month", "Doi", "Title", "Abstract", "Year", "Authors",
-                             "References", "ContentHash", "Resolution", "ExistingWorkId")
-                        VALUES ({partition.Source}, {work.SourceId}, {partition.Month}, {work.Doi},
-                                {work.Title}, {work.Abstract}, {work.Year}, {work.Authors.ToArray()},
-                                {work.References.ToArray()}, {work.ContentHash}, {resolution}, {existing})
-                        ON CONFLICT ("Source", "SourceId") DO UPDATE SET
-                            "Month" = excluded."Month", "Doi" = excluded."Doi", "Title" = excluded."Title",
-                            "Abstract" = excluded."Abstract", "Year" = excluded."Year",
-                            "Authors" = excluded."Authors", "References" = excluded."References",
-                            "ContentHash" = excluded."ContentHash", "Resolution" = excluded."Resolution",
-                            "ExistingWorkId" = excluded."ExistingWorkId"
-                        """,
-                        CancellationToken
-                    );
+                    await db
+                        .Database.ExecuteSqlInterpolatedAsync(
+                            $"""
+                            INSERT INTO topic_map.ingested_works
+                                ("Source", "SourceId", "Month", "Doi", "Title", "Abstract", "Year", "Authors",
+                                 "References", "ContentHash", "Resolution", "ExistingWorkId")
+                            VALUES ({partition.Source}, {work.SourceId}, {partition.Month}, {work.Doi},
+                                    {work.Title}, {work.Abstract}, {work.Year}, {work.Authors.ToArray()},
+                                    {work.References.ToArray()}, {work.ContentHash}, {resolution}, {existing})
+                            ON CONFLICT ("Source", "SourceId") DO UPDATE SET
+                                "Month" = excluded."Month", "Doi" = excluded."Doi", "Title" = excluded."Title",
+                                "Abstract" = excluded."Abstract", "Year" = excluded."Year",
+                                "Authors" = excluded."Authors", "References" = excluded."References",
+                                "ContentHash" = excluded."ContentHash", "Resolution" = excluded."Resolution",
+                                "ExistingWorkId" = excluded."ExistingWorkId"
+                            """,
+                            CancellationToken
+                        )
+                        .ConfigureAwait(false);
 
-                await transaction.CommitAsync(CancellationToken);
+                await transaction.CommitAsync(CancellationToken).ConfigureAwait(false);
 
                 return new UpsertedPartition(
                     partition.Source,

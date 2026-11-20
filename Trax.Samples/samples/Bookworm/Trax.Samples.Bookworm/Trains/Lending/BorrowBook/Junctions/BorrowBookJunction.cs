@@ -26,11 +26,18 @@ public class BorrowBookJunction(
     {
         var member =
             await lending
-                .Members.FirstOrDefaultAsync(m => m.PrincipalId == caller.PrincipalId)
+                .Members.FirstOrDefaultAsync(
+                    m => m.PrincipalId == caller.PrincipalId,
+                    cancellationToken: CancellationToken
+                )
                 .ConfigureAwait(false)
             ?? throw new TrainException("Your credential is not linked to a library member.");
 
-        if (!await catalog.Books.AnyAsync(b => b.Id == input.BookId).ConfigureAwait(false))
+        if (
+            !await catalog
+                .Books.AnyAsync(b => b.Id == input.BookId, cancellationToken: CancellationToken)
+                .ConfigureAwait(false)
+        )
             throw new TrainException(
                 string.Create(
                     CultureInfo.InvariantCulture,
@@ -42,7 +49,10 @@ public class BorrowBookJunction(
         // steps outside the owner filter. It returns a yes or no and no row.
         var onLoan = await lending
             .Loans.IgnoreQueryFilters()
-            .AnyAsync(l => l.BookId == input.BookId && l.ReturnedAt == null)
+            .AnyAsync(
+                l => l.BookId == input.BookId && l.ReturnedAt == null,
+                cancellationToken: CancellationToken
+            )
             .ConfigureAwait(false);
         if (onLoan)
             throw new TrainException(
@@ -63,7 +73,7 @@ public class BorrowBookJunction(
 
         try
         {
-            await lending.SaveChangesAsync().ConfigureAwait(false);
+            await lending.SaveChangesAsync(CancellationToken).ConfigureAwait(false);
         }
         catch (DbUpdateException ex)
             when (ex.InnerException

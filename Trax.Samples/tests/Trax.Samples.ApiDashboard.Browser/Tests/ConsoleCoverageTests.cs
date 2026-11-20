@@ -34,9 +34,9 @@ public partial class ConsoleCoverageTests
     };
 
     [Test]
-    public void Every_route_and_mutation_has_a_browser_test()
+    public async Task Every_route_and_mutation_has_a_browser_test()
     {
-        var console = Surface();
+        var console = await SurfaceAsync().ConfigureAwait(false);
         var covered = CoveredByTests();
 
         var uncovered = console
@@ -71,9 +71,9 @@ public partial class ConsoleCoverageTests
 
     /// <summary>The guard reads something on each side, so an empty read cannot pass it.</summary>
     [Test]
-    public void The_guard_reads_the_routes_the_operations_and_the_tests()
+    public async Task The_guard_reads_the_routes_the_operations_and_the_tests()
     {
-        var console = Surface();
+        var console = await SurfaceAsync().ConfigureAwait(false);
         console.Should().Contain("route:/runs/:id").And.Contain("route:/executions/:id");
         console.Should().Contain("mutation:RequeueDeadLetter");
         console.Should().Contain("mutation:UploadPersistedOperation");
@@ -86,10 +86,11 @@ public partial class ConsoleCoverageTests
     /// Everything the console offers: <c>route:</c> each path in AppRoutes.tsx and each moved path,
     /// <c>mutation:</c> and <c>subscription:</c> each operation by its name.
     /// </summary>
-    private static HashSet<string> Surface()
+    private static async Task<HashSet<string>> SurfaceAsync()
     {
         var clientApp = ClientApp();
-        var routes = File.ReadAllText(Path.Combine(clientApp, "src", "AppRoutes.tsx"));
+        var routes = await File.ReadAllTextAsync(Path.Combine(clientApp, "src", "AppRoutes.tsx"))
+            .ConfigureAwait(false);
         var surface = new HashSet<string>(StringComparer.Ordinal);
         foreach (Match m in RoutePath.Matches(routes))
             surface.Add($"route:{m.Groups["path"].Value}");
@@ -107,7 +108,9 @@ public partial class ConsoleCoverageTests
             var m = Operation.Match(
                 string.Join(
                     '\n',
-                    File.ReadAllLines(file).Where(l => !l.TrimStart().StartsWith('#'))
+                    (await File.ReadAllLinesAsync(file).ConfigureAwait(false)).Where(l =>
+                        !l.TrimStart().StartsWith('#')
+                    )
                 )
             );
             if (

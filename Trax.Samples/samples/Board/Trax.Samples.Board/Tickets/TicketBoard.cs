@@ -112,7 +112,7 @@ public sealed class TicketBoard(IMachineInstances instances, IDataContextProvide
             return $"{ticket.Id} is not claimed by {(worker is null ? "anyone" : Name(worker))}; claim it first";
         if (Lapsed(ticket))
         {
-            await Fire(ticket.Id, TicketTrigger.Release, null, ct).ConfigureAwait(false);
+            await Fire(ticket.Id, TicketTrigger.Release, input: null, ct).ConfigureAwait(false);
             return $"the claim on {ticket.Id} ran out; claim it again";
         }
         return null;

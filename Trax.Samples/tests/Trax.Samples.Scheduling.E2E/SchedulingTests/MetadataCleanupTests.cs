@@ -89,7 +89,8 @@ public class MetadataCleanupTests : SchedulingTestFixture
     /// </summary>
     private static async Task RunCleanup()
     {
-        using var scope = Services.CreateScope();
+        var scope = Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var cleanup = scope.ServiceProvider.GetRequiredService<IMetadataCleanupTrain>();
         await cleanup.Run(new MetadataCleanupRequest()).ConfigureAwait(false);
     }

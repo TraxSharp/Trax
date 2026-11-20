@@ -16,19 +16,29 @@ namespace Trax.Samples.Auth.Auth;
 public static class DemoCredentials
 {
     /// <summary>Editor with a verified email: may publish.</summary>
-    public static readonly DemoUser Alice = new("alice", "Alice", true, AuthRoles.Editor);
+    public static readonly DemoUser Alice = new(
+        "alice",
+        "Alice",
+        EmailVerified: true,
+        AuthRoles.Editor
+    );
 
     /// <summary>Editor whose email is not verified: has the role, fails the policy.</summary>
-    public static readonly DemoUser Erin = new("erin", "Erin", false, AuthRoles.Editor);
+    public static readonly DemoUser Erin = new(
+        "erin",
+        "Erin",
+        EmailVerified: false,
+        AuthRoles.Editor
+    );
 
     /// <summary>Signed-in reader with no special role.</summary>
-    public static readonly DemoUser Bob = new("bob", "Bob", true, AuthRoles.Reader);
+    public static readonly DemoUser Bob = new("bob", "Bob", EmailVerified: true, AuthRoles.Reader);
 
     /// <summary>Operator and auditor: uses the operations namespace and reads the audit trail.</summary>
     public static readonly DemoUser Oscar = new(
         "oscar",
         "Oscar",
-        true,
+        EmailVerified: true,
         AuthRoles.Operator,
         AuthRoles.Auditor
     );

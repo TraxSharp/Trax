@@ -17,8 +17,9 @@ public class ValidateSenderJunction(ChatDbContext db, TraxPrincipal caller)
 
         if (
             !await db
-                .ChatParticipants.AnyAsync(p =>
-                    p.ChatRoomId == input.ChatRoomId && p.UserId == caller.Id
+                .ChatParticipants.AnyAsync(
+                    p => p.ChatRoomId == input.ChatRoomId && p.UserId == caller.Id,
+                    cancellationToken: CancellationToken
                 )
                 .ConfigureAwait(false)
         )

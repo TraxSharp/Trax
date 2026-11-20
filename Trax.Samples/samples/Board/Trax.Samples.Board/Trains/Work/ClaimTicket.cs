@@ -56,7 +56,7 @@ public class ClaimTicket(TraxPrincipal caller, TicketBoard board)
             return Package(lane, ticket);
         if (ticket.Context.ClaimedBy is not null && TicketBoard.Lapsed(ticket))
             await board
-                .Fire(ticket.Id, TicketTrigger.Release, null, CancellationToken)
+                .Fire(ticket.Id, TicketTrigger.Release, input: null, CancellationToken)
                 .ConfigureAwait(false);
 
         var claimed = await board

@@ -60,16 +60,16 @@ public class TemplateEnvironmentTests
             var noProxy = Start<T>("Development");
             await using (noProxy.ConfigureAwait(false))
             {
-                (await ForwardedScheme(behindProxy, "10.0.4.5"))
+                (await ForwardedScheme(behindProxy, "10.0.4.5").ConfigureAwait(false))
                     .Should()
                     .Be(
                         "https",
                         "a request from the load balancer's network carries the caller's scheme"
                     );
-                (await ForwardedScheme(behindProxy, "192.0.2.7"))
+                (await ForwardedScheme(behindProxy, "192.0.2.7").ConfigureAwait(false))
                     .Should()
                     .Be("http", "anyone outside the proxy networks could otherwise claim https");
-                (await ForwardedScheme(noProxy, "10.0.4.5"))
+                (await ForwardedScheme(noProxy, "10.0.4.5").ConfigureAwait(false))
                     .Should()
                     .Be("http", "with no proxy networks set the host reads no forwarded header");
             }
@@ -96,30 +96,32 @@ public class TemplateEnvironmentTests
     }
 
     [Test]
-    public void The_hub_template_refuses_to_start_outside_Development_without_a_database() =>
+    public Task The_hub_template_refuses_to_start_outside_Development_without_a_database() =>
         RefusesWithoutADatabase<Hub.Data.AppDbContext>();
 
     [Test]
-    public void The_scheduler_template_refuses_to_start_outside_Development_without_a_database() =>
+    public Task The_scheduler_template_refuses_to_start_outside_Development_without_a_database() =>
         RefusesWithoutADatabase<Scheduler.Trains.HelloWorld.HelloWorldInput>();
 
     [Test]
-    public void The_api_template_refuses_to_start_outside_Development_without_a_database() =>
+    public Task The_api_template_refuses_to_start_outside_Development_without_a_database() =>
         RefusesWithoutADatabase<Api.Data.AppDbContext>();
 
-    private static void RefusesWithoutADatabase<T>()
+    private static async Task RefusesWithoutADatabase<T>()
         where T : class
     {
-        using var factory = Start<T>("Production", allowInMemory: false);
+        var factory = Start<T>("Production", allowInMemory: false);
+        await using (factory.ConfigureAwait(false))
+        {
+            var act = () => factory.CreateClient();
 
-        var act = () => factory.CreateClient();
-
-        act.Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage(
-                "*ConnectionStrings:Trax*",
-                "a template outside Development refuses the in-memory provider, which loses every run on restart"
-            );
+            act.Should()
+                .Throw<InvalidOperationException>()
+                .WithMessage(
+                    "*ConnectionStrings:Trax*",
+                    "a template outside Development refuses the in-memory provider, which loses every run on restart"
+                );
+        }
     }
 
     [Test]

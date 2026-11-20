@@ -5,7 +5,7 @@ using Trax.Samples.GraphQLClient.BillingServer;
 // It listens on http://localhost:5314 in Development (Properties/launchSettings.json). The Gateway
 // starts this server in-process on 5311 instead, so the two can run side by side.
 // Serves GraphQL at /trax/graphql (discover.billing.getInvoice) and health at /trax/health.
-BillingServerHost.Build(args).Run();
+await BillingServerHost.Build(args).RunAsync().ConfigureAwait(false);
 
 namespace Trax.Samples.GraphQLClient.BillingServer
 {

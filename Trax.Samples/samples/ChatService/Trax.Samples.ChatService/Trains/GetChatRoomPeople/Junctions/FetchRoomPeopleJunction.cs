@@ -22,7 +22,7 @@ public class FetchRoomPeopleJunction(
         var members = await db
             .ChatParticipants.Where(p => p.ChatRoomId == input.ChatRoomId)
             .Select(p => p.UserId)
-            .ToListAsync()
+            .ToListAsync(cancellationToken: CancellationToken)
             .ConfigureAwait(false);
 
         if (!members.Contains(caller.Id))

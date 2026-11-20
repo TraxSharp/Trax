@@ -94,7 +94,7 @@ builder.Services.AddTraxGraphQL(graphql =>
     graphql.UsePersistedOperations(persisted =>
         persisted
             .SingleNode()
-            .RequirePersisted(true)
+            .RequirePersisted(require: true)
             .DisableIntrospection()
             .ClientDocuments(Path.Combine(AppContext.BaseDirectory, "trax.documents.json"))
     )

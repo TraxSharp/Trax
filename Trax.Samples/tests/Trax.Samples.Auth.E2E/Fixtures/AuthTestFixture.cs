@@ -74,7 +74,8 @@ public abstract class AuthTestFixture
             .WaitUntilAsync(
                 async () =>
                 {
-                    using var scope = SharedAuthSetup.Factory.Services.CreateScope();
+                    var scope = SharedAuthSetup.Factory.Services.CreateAsyncScope();
+                    await using var scopeDisposal = scope.ConfigureAwait(false);
                     var db = scope.ServiceProvider.GetRequiredService<INewsroomDbContext>();
                     rows = await db
                         .AuditRecords.AsNoTracking()
@@ -105,7 +106,8 @@ public abstract class AuthTestFixture
 
     protected static async Task<int> CountArticlesTitled(string title)
     {
-        using var scope = SharedAuthSetup.Factory.Services.CreateScope();
+        var scope = SharedAuthSetup.Factory.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var db = scope.ServiceProvider.GetRequiredService<INewsroomDbContext>();
         return await db.Articles.CountAsync(a => a.Title == title).ConfigureAwait(false);
     }

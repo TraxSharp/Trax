@@ -57,7 +57,10 @@ public sealed class Restaurant(FaultInjector faults, DemoPace pace)
             if (faults.TryFire(orderId, CrashPoint.RestaurantClosed))
                 throw new InvalidOperationException($"{Name} is closed.");
 
-            Keep(owner, new TabletCall(orderId, attempt, startedAt, DateTimeOffset.UtcNow, null));
+            Keep(
+                owner,
+                new TabletCall(orderId, attempt, startedAt, DateTimeOffset.UtcNow, Problem: null)
+            );
         }
         catch (Exception e) when (e is TimeoutException or InvalidOperationException)
         {

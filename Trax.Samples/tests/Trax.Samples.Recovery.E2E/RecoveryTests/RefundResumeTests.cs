@@ -73,7 +73,7 @@ public class RefundResumeTests : RecoveryTestFixture
 
         // On GraphQL, at the step the page's button names.
         var overGraphQL = await ResumeOverGraphQLAsync(failed, Notify);
-        await ShouldHaveRunOnlyNotify(overGraphQL, null, "resumeExecution on GraphQL");
+        await ShouldHaveRunOnlyNotify(overGraphQL, result: null, "resumeExecution on GraphQL");
         var result = await OutputAsync(overGraphQL);
 
         // From the dashboard, after the latest checkpoint, as its Resume button asks, on the
@@ -213,13 +213,14 @@ public class RefundResumeTests : RecoveryTestFixture
     private async Task<long> ResumeAsTheDashboardAsync(long failed)
     {
         OperationResult result;
-        using (var scope = SharedRecoverySetup.Factory.Services.CreateScope())
+        var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var trusted = scope.ServiceProvider.GetRequiredService<ITrustedExecutionScope>();
             using (trusted.BeginTrusted("dashboard"))
                 result = await scope
                     .ServiceProvider.GetRequiredService<IOperationsService>()
-                    .ResumeExecutionAsync(failed, null, CancellationToken.None)
+                    .ResumeExecutionAsync(failed, from: null, CancellationToken.None)
                     .ConfigureAwait(false);
         }
         result.Success.Should().BeTrue(result.Message);

@@ -119,7 +119,8 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 // ── Auto-migrate chat schema ────────────────────────────────────────────────
-using (var scope = app.Services.CreateScope())
+var scope = app.Services.CreateAsyncScope();
+await using (scope.ConfigureAwait(false))
 {
     var db = scope.ServiceProvider.GetRequiredService<ChatDbContext>();
     await db.Database.MigrateAsync().ConfigureAwait(false);
@@ -132,7 +133,7 @@ app.UseAuthorization();
 app.UseTraxGraphQL();
 app.MapHealthChecks("/trax/health");
 
-app.Run();
+await app.RunAsync().ConfigureAwait(false);
 
 // The display name is what other participants see beside a message.
 static TraxPrincipal ChatUser((string Id, string Name) person) =>

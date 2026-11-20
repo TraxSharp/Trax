@@ -26,12 +26,15 @@ public static class DraftRows
             await using (command.ConfigureAwait(false))
             {
                 command.Parameters.AddWithValue("prefix", prefix);
-                await using var reader = await command.ExecuteReaderAsync();
-                if (!await reader.ReadAsync())
-                    throw new InvalidOperationException(
-                        $"No topic-map instance has an id starting {prefix}."
-                    );
-                return (reader.GetGuid(0), reader.GetInt64(1), reader.GetString(2));
+                var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+                await using (reader.ConfigureAwait(false))
+                {
+                    if (!await reader.ReadAsync().ConfigureAwait(false))
+                        throw new InvalidOperationException(
+                            $"No topic-map instance has an id starting {prefix}."
+                        );
+                    return (reader.GetGuid(0), reader.GetInt64(1), reader.GetString(2));
+                }
             }
         }
     }
@@ -85,7 +88,7 @@ public static class DraftRows
             await using (command.ConfigureAwait(false))
             {
                 command.Parameters.AddWithValue("id", id);
-                (await command.ExecuteNonQueryAsync())
+                (await command.ExecuteNonQueryAsync().ConfigureAwait(false))
                     .Should()
                     .Be(1, "the instance is in a state with a timer, so its due_at is set");
             }
@@ -133,7 +136,7 @@ public static class DraftRows
             await using (command.ConfigureAwait(false))
             {
                 command.Parameters.AddWithValue("id", id);
-                var value = await command.ExecuteScalarAsync();
+                var value = await command.ExecuteScalarAsync().ConfigureAwait(false);
                 return value is DBNull ? null : value;
             }
         }

@@ -20,9 +20,9 @@ public sealed class PlayerStore
             ["player-2"] = new Player(
                 "player-2",
                 "Bilbo",
-                null,
+                Level: null,
                 Rank.Bronze,
-                null,
+                Guild: null,
                 Array.Empty<Item>()
             ),
         };

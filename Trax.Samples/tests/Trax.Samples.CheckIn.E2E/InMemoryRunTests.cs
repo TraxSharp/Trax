@@ -25,29 +25,35 @@ public class InMemoryRunTests
 
     private static FeatureGlossary Glossary => Lexicon.GlossaryOrThrow();
 
-    private static FeatureFile[] Files =>
-        Directory
-            .GetFiles(Features, "*.feature")
-            .Order(StringComparer.Ordinal)
-            .Select(p => new FeatureFile(Path.GetFileName(p), File.ReadAllText(p)))
-            .ToArray();
+    private static async Task<FeatureFile[]> FilesAsync()
+    {
+        var files = new List<FeatureFile>();
+        foreach (var p in Directory.GetFiles(Features, "*.feature").Order(StringComparer.Ordinal))
+            files.Add(
+                new FeatureFile(
+                    Path.GetFileName(p),
+                    await File.ReadAllTextAsync(p).ConfigureAwait(false)
+                )
+            );
+        return [.. files];
+    }
+
+    private static Task<string> ReadAsync(params string[] path) =>
+        File.ReadAllTextAsync(Path.Combine(path));
 
     [Test]
-    public void Every_scenario_passes_on_the_committed_machines()
+    public async Task Every_scenario_passes_on_the_committed_machines()
     {
-        var irs = Directory
-            .GetFiles(Machines, "*.ir.json")
-            .ToDictionary(
-                p => Path.GetFileName(p)[..^".ir.json".Length],
-                File.ReadAllText,
-                StringComparer.Ordinal
-            );
+        var irs = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var p in Directory.GetFiles(Machines, "*.ir.json"))
+            irs[Path.GetFileName(p)[..^".ir.json".Length]] = await ReadAsync(p)
+                .ConfigureAwait(false);
 
         var report = FeatureMachines.Run(
             Glossary,
-            Files,
+            await FilesAsync().ConfigureAwait(false),
             irs,
-            File.ReadAllText(Path.Combine(Machines, "host.json"))
+            await ReadAsync(Machines, "host.json").ConfigureAwait(false)
         );
 
         report.Problems.Should().BeEmpty();
@@ -65,25 +71,32 @@ public class InMemoryRunTests
     }
 
     [Test]
-    public void The_committed_machines_are_what_the_features_derive()
+    public async Task The_committed_machines_are_what_the_features_derive()
     {
-        var derived = FeatureMachines.Derive(Glossary, Files);
+        var derived = FeatureMachines.Derive(Glossary, await FilesAsync().ConfigureAwait(false));
 
         derived.Succeeded.Should().BeTrue(string.Join('\n', derived.Problems));
         foreach (var (id, ir) in derived.Irs)
-            Lf(File.ReadAllText(Path.Combine(Machines, id + ".ir.json")))
+            Lf(await ReadAsync(Machines, id + ".ir.json").ConfigureAwait(false))
                 .Should()
                 .Be(ir + "\n", $"{id}.ir.json is stale: run trax machine from-gherkin");
-        Lf(File.ReadAllText(Path.Combine(Machines, "host.json"))).Should().Be(derived.Host + "\n");
-        Lf(File.ReadAllText(Path.Combine(Machines, "access.txt"))).Should().Be(derived.Access);
-        Lf(File.ReadAllText(Path.Combine(Machines, "glossary.json")))
+        Lf(await ReadAsync(Machines, "host.json").ConfigureAwait(false))
+            .Should()
+            .Be(derived.Host + "\n");
+        Lf(await ReadAsync(Machines, "access.txt").ConfigureAwait(false))
+            .Should()
+            .Be(derived.Access);
+        Lf(await ReadAsync(Machines, "glossary.json").ConfigureAwait(false))
             .Should()
             .Be(Lexicon.Json, "glossary.json is stale: run trax machine from-gherkin");
     }
 
     [Test]
-    public void Nothing_the_lexicon_names_is_left_out_of_the_features() =>
-        FeatureMachines.Missing(Glossary, Files).Should().BeEmpty();
+    public async Task Nothing_the_lexicon_names_is_left_out_of_the_features() =>
+        FeatureMachines
+            .Missing(Glossary, await FilesAsync().ConfigureAwait(false))
+            .Should()
+            .BeEmpty();
 
     // A checkout with CRLF line endings holds the same files, as trax machine from-gherkin --check reads them.
     private static string Lf(string text) => text.Replace("\r\n", "\n", StringComparison.Ordinal);

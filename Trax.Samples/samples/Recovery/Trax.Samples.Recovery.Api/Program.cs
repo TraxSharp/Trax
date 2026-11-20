@@ -219,7 +219,7 @@ builder.Services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
 // the setting is ignored and only registered documents run.
 var requirePersisted =
     !builder.Environment.IsDevelopment()
-    || builder.Configuration.GetValue("Recovery:RequirePersistedOperations", true);
+    || builder.Configuration.GetValue("Recovery:RequirePersistedOperations", defaultValue: true);
 builder.Services.AddTraxGraphQL(graphql =>
     graphql
         // operations.junctionRuns, requeueExecution(askAfresh:), triggerManifest(askAfresh:),

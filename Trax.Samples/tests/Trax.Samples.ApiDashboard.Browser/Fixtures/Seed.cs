@@ -558,7 +558,7 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
             store.UpsertAsync(
                 $"{name}.v1",
                 $"query {name} {{ operations {{ hosts {{ name }} }} }}",
-                null,
+                options: null,
                 CancellationToken.None
             )
         );
@@ -594,14 +594,17 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
         _undo.Push(() => host.MachineSweep.StartAsync(CancellationToken.None));
     }
 
-    private Task SetDispatcherAsync(bool enabled) =>
-        InScope<IOperationsService, OperationResult>(o =>
+    private async Task SetDispatcherAsync(bool enabled)
+    {
+        var result = await InScope<IOperationsService, OperationResult>(o =>
                 o.UpdateSchedulerConfigAsync(
                     new UpdateSchedulerConfigInput(JobDispatcherEnabled: enabled),
                     CancellationToken.None
                 )
             )
-            .ContinueWith(t => t.Result.Success.Should().BeTrue(t.Result.Message));
+            .ConfigureAwait(false);
+        result.Success.Should().BeTrue(result.Message);
+    }
 
     private async Task<MachineInstance> StartRelayAsync(string key)
     {

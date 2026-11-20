@@ -12,11 +12,11 @@ public class IssuePayment(FaultInjector faults, DemoPace pace)
 {
     public override async Task<RefundOutcome> Run(RefundCase refund)
     {
-        await Task.Delay(pace.StepDelay).ConfigureAwait(false);
+        await Task.Delay(pace.StepDelay, CancellationToken).ConfigureAwait(false);
 
         if (faults.TryFire(refund.RunId, CrashPoint.RefundTrack))
         {
-            await Task.Delay(pace.StepDelay).ConfigureAwait(false);
+            await Task.Delay(pace.StepDelay, CancellationToken).ConfigureAwait(false);
             throw new TimeoutException(
                 "The payment provider did not answer in time (timeout injected by the demo)."
             );

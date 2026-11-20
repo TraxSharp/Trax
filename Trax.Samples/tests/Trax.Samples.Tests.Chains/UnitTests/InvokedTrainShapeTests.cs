@@ -73,7 +73,7 @@ public class InvokedTrainShapeTests
         var chain = (ChainRecorder)
             train
                 .GetMethod(nameof(Train<,>.DeclaredChain), Type.EmptyTypes)!
-                .Invoke(Activator.CreateInstance(train), null)!;
+                .Invoke(Activator.CreateInstance(train), parameters: null)!;
         return ChainGraph.From(chain, train, arguments[0], arguments[1]);
     }
 

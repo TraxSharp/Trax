@@ -47,9 +47,10 @@ public partial class FeatureCoverageTableTests
 
     private sealed record Claim(int Line, string Feature, string Class, string Repo, string Path);
 
-    private static List<Row> Rows()
+    private static async Task<List<Row>> RowsAsync()
     {
-        var lines = File.ReadAllLines(RepoRoot.Combine("README.md"));
+        var lines = await File.ReadAllLinesAsync(RepoRoot.Combine("README.md"))
+            .ConfigureAwait(false);
         var start = Array.FindIndex(
             lines,
             l => string.Equals(l.Trim(), Heading, StringComparison.Ordinal)
@@ -78,8 +79,8 @@ public partial class FeatureCoverageTableTests
         return rows;
     }
 
-    private static List<Claim> Claims() =>
-        Rows()
+    private static async Task<List<Claim>> ClaimsAsync() =>
+        (await RowsAsync().ConfigureAwait(false))
             .SelectMany(r =>
                 TestLink
                     .Matches(r.ProvedBy)
@@ -95,8 +96,8 @@ public partial class FeatureCoverageTableTests
             )
             .ToList();
 
-    private static List<FeatureClaim> FeatureClaims() =>
-        Rows()
+    private static async Task<List<FeatureClaim>> FeatureClaimsAsync() =>
+        (await RowsAsync().ConfigureAwait(false))
             .SelectMany(r =>
                 FeatureLink
                     .Matches(r.ProvedBy)
@@ -112,7 +113,9 @@ public partial class FeatureCoverageTableTests
     /// What is wrong with each feature-file link: a path outside a sample's <c>features/</c> or <c>specs/</c>, link
     /// text that is not the file's name, a file that does not exist, or one that declares no <c>Feature:</c>.
     /// </summary>
-    private static List<string> FeatureLinkProblems(IEnumerable<FeatureClaim> claims)
+    private static async Task<List<string>> FeatureLinkProblemsAsync(
+        IEnumerable<FeatureClaim> claims
+    )
     {
         var problems = new List<string>();
         foreach (var claim in claims)
@@ -133,7 +136,9 @@ public partial class FeatureCoverageTableTests
                 problems.Add($"{at}: the link text is not the file's name");
             else if (!File.Exists(file))
                 problems.Add($"{at} does not exist");
-            else if (!FeatureKeyword.IsMatch(File.ReadAllText(file)))
+            else if (
+                !FeatureKeyword.IsMatch(await File.ReadAllTextAsync(file).ConfigureAwait(false))
+            )
                 problems.Add($"{at} declares no Feature:");
         }
         return problems;
@@ -164,8 +169,8 @@ public partial class FeatureCoverageTableTests
             });
 
     [Test]
-    public void TheReadmeHasAFeatureCoverageTable() =>
-        Rows()
+    public async Task TheReadmeHasAFeatureCoverageTable() =>
+        (await RowsAsync().ConfigureAwait(false))
             .Should()
             .NotBeEmpty(
                 $"README.md must carry a '{Heading}' section with a table of features and the "
@@ -173,9 +178,9 @@ public partial class FeatureCoverageTableTests
             );
 
     [Test]
-    public void EveryRow_NamesATestClassOrSaysThereIsNone()
+    public async Task EveryRow_NamesATestClassOrSaysThereIsNone()
     {
-        var offenders = Rows()
+        var offenders = (await RowsAsync().ConfigureAwait(false))
             .Where(r =>
                 !TestLink.IsMatch(r.ProvedBy)
                 && !FeatureLink.IsMatch(r.ProvedBy)
@@ -199,9 +204,9 @@ public partial class FeatureCoverageTableTests
     }
 
     [Test]
-    public void EveryLink_HasTheShapeOfATestClassInATraxRepo()
+    public async Task EveryLink_HasTheShapeOfATestClassInATraxRepo()
     {
-        var offenders = Claims()
+        var offenders = (await ClaimsAsync().ConfigureAwait(false))
             .Where(c =>
                 !KnownRepos.Contains(c.Repo)
                 || !c.Path.StartsWith("tests/", StringComparison.Ordinal)
@@ -231,9 +236,9 @@ public partial class FeatureCoverageTableTests
     }
 
     [Test]
-    public void EveryClassNamedForThisRepo_IsDeclaredInTheLinkedFile()
+    public async Task EveryClassNamedForThisRepo_IsDeclaredInTheLinkedFile()
     {
-        var claims = Claims()
+        var claims = (await ClaimsAsync().ConfigureAwait(false))
             .Where(c => string.Equals(c.Repo, ThisRepo, StringComparison.Ordinal))
             .ToList();
         claims.Should().NotBeEmpty($"the table names no class in this repo. See {Adr}.");
@@ -253,7 +258,9 @@ public partial class FeatureCoverageTableTests
                 continue;
             }
 
-            var code = SourceText.StripCommentsAndStrings(File.ReadAllText(file));
+            var code = SourceText.StripCommentsAndStrings(
+                await File.ReadAllTextAsync(file).ConfigureAwait(false)
+            );
             if (
                 !Regex.IsMatch(
                     code,
@@ -281,16 +288,16 @@ public partial class FeatureCoverageTableTests
     }
 
     [Test]
-    public void EveryFeatureFileLinked_ExistsInASample()
+    public async Task EveryFeatureFileLinked_ExistsInASample()
     {
-        var claims = FeatureClaims();
+        var claims = await FeatureClaimsAsync().ConfigureAwait(false);
         claims
             .Should()
             .NotBeEmpty(
                 $"the table links no feature file; the CheckIn sample's row links its own. See {Adr}."
             );
 
-        var problems = FeatureLinkProblems(claims);
+        var problems = await FeatureLinkProblemsAsync(claims).ConfigureAwait(false);
         problems
             .Should()
             .BeEmpty(
@@ -302,24 +309,42 @@ public partial class FeatureCoverageTableTests
     }
 
     [Test]
-    public void AFeatureLink_ToAMissingFileOrOutsideASamplesFeatures_IsAProblem()
+    public async Task AFeatureLink_ToAMissingFileOrOutsideASamplesFeatures_IsAProblem()
     {
-        FeatureLinkProblems([new(1, "gate.feature", "samples/CheckIn/features/gate.feature")])
+        (
+            await FeatureLinkProblemsAsync([
+                    new(1, "gate.feature", "samples/CheckIn/features/gate.feature"),
+                ])
+                .ConfigureAwait(false)
+        )
             .Should()
             .BeEmpty("the CheckIn sample's gate.feature exists and declares a Feature:");
-        FeatureLinkProblems([new(1, "gone.feature", "samples/CheckIn/features/gone.feature")])
+        (
+            await FeatureLinkProblemsAsync([
+                    new(1, "gone.feature", "samples/CheckIn/features/gone.feature"),
+                ])
+                .ConfigureAwait(false)
+        )
             .Should()
             .ContainSingle()
             .Which.Should()
             .EndWith("does not exist");
-        FeatureLinkProblems([
-                new(1, "gate.feature", "samples/CheckIn/features/checking-in.feature"),
-            ])
+        (
+            await FeatureLinkProblemsAsync([
+                    new(1, "gate.feature", "samples/CheckIn/features/checking-in.feature"),
+                ])
+                .ConfigureAwait(false)
+        )
             .Should()
             .ContainSingle()
             .Which.Should()
             .EndWith("the link text is not the file's name");
-        FeatureLinkProblems([new(1, "gate.feature", "tests/Trax.Samples.CheckIn.E2E/gate.feature")])
+        (
+            await FeatureLinkProblemsAsync([
+                    new(1, "gate.feature", "tests/Trax.Samples.CheckIn.E2E/gate.feature"),
+                ])
+                .ConfigureAwait(false)
+        )
             .Should()
             .ContainSingle()
             .Which.Should()
@@ -327,13 +352,13 @@ public partial class FeatureCoverageTableTests
     }
 
     [Test]
-    public void EveryE2EProject_IsNamedByARow()
+    public async Task EveryE2EProject_IsNamedByARow()
     {
-        var linked = Claims()
+        var linked = (await ClaimsAsync().ConfigureAwait(false))
             .Where(c => string.Equals(c.Repo, ThisRepo, StringComparison.Ordinal))
             .Select(c => c.Path.Split('/')[1])
             .ToHashSet(StringComparer.Ordinal);
-        var linkedFeatures = FeatureClaims()
+        var linkedFeatures = (await FeatureClaimsAsync().ConfigureAwait(false))
             .Select(c => Path.GetFullPath(RepoRoot.Combine(c.Path.Split('/'))))
             .ToHashSet(StringComparer.Ordinal);
 

@@ -25,7 +25,7 @@ public class LogGreetingJunction(ILogger<LogGreetingJunction> logger)
             timestamp
         );
 
-        await Task.Delay(100).ConfigureAwait(false);
+        await Task.Delay(100, CancellationToken).ConfigureAwait(false);
 
         logger.LogInformation("HelloWorld train completed successfully for {Name}", input.Name);
 

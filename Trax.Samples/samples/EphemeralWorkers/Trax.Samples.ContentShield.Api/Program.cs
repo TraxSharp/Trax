@@ -206,7 +206,7 @@ app.MapHealthChecks("/trax/health");
 if (app.Environment.IsDevelopment())
     app.UseTraxApiDashboard(dashboard => dashboard.AllowAnonymousShell());
 
-app.Run();
+await app.RunAsync().ConfigureAwait(false);
 
 namespace Trax.Samples.ContentShield.Api
 {

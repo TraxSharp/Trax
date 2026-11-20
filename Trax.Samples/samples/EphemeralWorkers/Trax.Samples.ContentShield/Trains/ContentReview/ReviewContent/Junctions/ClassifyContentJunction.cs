@@ -18,7 +18,7 @@ public class ClassifyContentJunction(ILogger<ClassifyContentJunction> logger)
             input.ContentId
         );
 
-        await Task.Delay(300).ConfigureAwait(false);
+        await Task.Delay(300, CancellationToken).ConfigureAwait(false);
 
         var category = string.Equals(input.ContentType, "video", StringComparison.Ordinal)
             ? "violence"

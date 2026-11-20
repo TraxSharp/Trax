@@ -37,8 +37,9 @@ public class ScaffoldedTemplateRestoreTests
         Directory.CreateDirectory(_workDir);
 
         var packed = await ScaffoldFeed.Get();
-        ScaffoldFeed.WriteNuGetConfig(_workDir, packed);
-        await Run(_workDir, "new", "install", packed.TemplatesNupkg, "--debug:custom-hive", _hive);
+        await ScaffoldFeed.WriteNuGetConfig(_workDir, packed).ConfigureAwait(false);
+        await Run(_workDir, "new", "install", packed.TemplatesNupkg, "--debug:custom-hive", _hive)
+            .ConfigureAwait(false);
     }
 
     [OneTimeTearDown]

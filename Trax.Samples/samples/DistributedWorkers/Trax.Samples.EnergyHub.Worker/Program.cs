@@ -93,7 +93,7 @@ builder.Services.AddTraxWorker(opts =>
 
 var app = builder.Build();
 
-app.Run();
+await app.RunAsync().ConfigureAwait(false);
 
 namespace Trax.Samples.EnergyHub.Worker
 {

@@ -18,10 +18,15 @@ public class AdditionalCoverageTests : ApiTestBase
         await Store.UpsertAsync(
             "deactivated_v1",
             GreetDocuments.Casual,
-            null,
+            options: null,
             CancellationToken.None
         );
-        await Store.DeactivateAsync("deactivated_v1", null, "test", CancellationToken.None);
+        await Store.DeactivateAsync(
+            "deactivated_v1",
+            tenantKey: null,
+            "test",
+            CancellationToken.None
+        );
 
         using var doc = await PostJsonAsync(
             new { id = "deactivated_v1", variables = GreetDocuments.Variables("x") }
@@ -60,7 +65,7 @@ public class AdditionalCoverageTests : ApiTestBase
 
         var a = await Store.GetAsync("tenant_scope_v1", "tenant-a", CancellationToken.None);
         var b = await Store.GetAsync("tenant_scope_v1", "tenant-b", CancellationToken.None);
-        var none = await Store.GetAsync("tenant_scope_v1", null, CancellationToken.None);
+        var none = await Store.GetAsync("tenant_scope_v1", tenantKey: null, CancellationToken.None);
 
         a.Should().NotBeNull();
         b.Should().NotBeNull();
@@ -73,7 +78,12 @@ public class AdditionalCoverageTests : ApiTestBase
     [Test]
     public async Task ContentTypeWithCharset_AcceptedAndProducesCorrectTrainOutput()
     {
-        await Store.UpsertAsync("content_v1", GreetDocuments.Casual, null, CancellationToken.None);
+        await Store.UpsertAsync(
+            "content_v1",
+            GreetDocuments.Casual,
+            options: null,
+            CancellationToken.None
+        );
 
         var json = "{\"id\":\"content_v1\",\"variables\":{\"name\":\"Charset\"}}";
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -108,8 +118,18 @@ public class AdditionalCoverageTests : ApiTestBase
         // The Trax endpoint does not execute JSON-array batches: HotChocolate answers HC0009
         // "Invalid GraphQL Request" before enforcement runs. Enforcement lives inside the
         // execution pipeline now, so no batch reaches it, and none executes.
-        await Store.UpsertAsync("batch_a_v1", GreetDocuments.Casual, null, CancellationToken.None);
-        await Store.UpsertAsync("batch_b_v1", GreetDocuments.Casual, null, CancellationToken.None);
+        await Store.UpsertAsync(
+            "batch_a_v1",
+            GreetDocuments.Casual,
+            options: null,
+            CancellationToken.None
+        );
+        await Store.UpsertAsync(
+            "batch_b_v1",
+            GreetDocuments.Casual,
+            options: null,
+            CancellationToken.None
+        );
 
         var json =
             "[{\"id\":\"batch_a_v1\",\"variables\":{\"name\":\"Anna\"}},"
@@ -131,7 +151,7 @@ public class AdditionalCoverageTests : ApiTestBase
         await Store.UpsertAsync(
             "batch_persisted_v1",
             GreetDocuments.Casual,
-            null,
+            options: null,
             CancellationToken.None
         );
 
@@ -152,7 +172,12 @@ public class AdditionalCoverageTests : ApiTestBase
     [Test]
     public async Task SamePersistedOperation_DifferentVariables_DispatchesEachToTrain()
     {
-        await Store.UpsertAsync("multivar_v1", GreetDocuments.Casual, null, CancellationToken.None);
+        await Store.UpsertAsync(
+            "multivar_v1",
+            GreetDocuments.Casual,
+            options: null,
+            CancellationToken.None
+        );
 
         foreach (var name in new[] { "Anna", "Beth", "Carl", "Diane" })
         {
@@ -171,7 +196,7 @@ public class AdditionalCoverageTests : ApiTestBase
         await Store.UpsertAsync(
             "shape_e2e_v1",
             GreetDocuments.Casual,
-            null,
+            options: null,
             CancellationToken.None
         );
 
@@ -180,7 +205,7 @@ public class AdditionalCoverageTests : ApiTestBase
             Store.UpsertAsync(
                 "shape_e2e_v1",
                 GreetDocuments.RenamedField,
-                null,
+                options: null,
                 CancellationToken.None
             );
 
