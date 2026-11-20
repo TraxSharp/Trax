@@ -1,8 +1,5 @@
 namespace Trax.Samples.ChatService.People;
 
-/// <summary>Someone the chat knows, by the id Trax gives their principal (<c>TraxApiKey:bob</c>).</summary>
-public record ChatPerson(string UserId, string DisplayName);
-
 /// <summary>
 /// The people a room member can invite. The host builds it from the same list it registers
 /// credentials from, so an invite names a real caller and the server, not the client, supplies the

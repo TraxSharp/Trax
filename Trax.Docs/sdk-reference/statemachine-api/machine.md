@@ -308,7 +308,7 @@ Every advance and rehydrate returns a typed result, never an exception: see
 
 The turnstile from the State Machine sample:
 
-```csharp from=Trax.Samples/samples/StateMachine/Trax.Samples.StateMachine/Machines.cs
+```csharp from=Trax.Samples/samples/StateMachine/Trax.Samples.StateMachine/TurnstileMachine.cs
 [TraxMachine]
 public sealed class TurnstileMachine : Machine<TurnstileState, TurnstileTrigger>
 {

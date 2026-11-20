@@ -16,7 +16,7 @@ A library API over two domains, each with its own project, PostgreSQL schema and
 - **Lending integrity.** A book must exist in the catalog and be on the shelf to be borrowed; a
   partial unique index on open loans stops two concurrent borrows of one book.
 - **The architecture guards, adopted as a consumer would** (Samples ADR 0002):
-  `tests/Trax.Samples.Tests.Reflection/BookwormArchitectureGuards.cs` subclasses the guard
+  the `Bookworm*Guards.cs` files in `tests/Trax.Samples.Tests.Reflection/` subclass the guard
   fixtures from `Trax.Effect.Data.Testing`, `Trax.Api.GraphQL.Testing` and `Trax.Mediator.Testing`,
   including the owner-scope census.
 

@@ -169,9 +169,6 @@ if (app.Environment.IsDevelopment())
 
 app.Run();
 
-/// <summary>The body of <c>POST /pings</c>.</summary>
-public record PingRequest(PingOutcome Outcome = PingOutcome.Succeed);
-
 namespace Trax.Samples.SignalRBroadcaster
 {
     public partial class Program;

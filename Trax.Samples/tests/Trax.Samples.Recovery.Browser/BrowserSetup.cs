@@ -69,13 +69,3 @@ public class BrowserSetup
         Npgsql.NpgsqlConnection.ClearAllPools();
     }
 }
-
-/// <summary>A <see cref="RecoveryPage"/> whose context closes when it is disposed.</summary>
-public sealed class OpenPage(RecoveryPage page) : IAsyncDisposable
-{
-    public RecoveryPage Recovery { get; } = page;
-
-    public Task OpenTheWizardAsync() => Recovery.OpenTheWizardAsync();
-
-    public ValueTask DisposeAsync() => new(Recovery.Context.CloseAsync());
-}

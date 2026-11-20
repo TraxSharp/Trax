@@ -140,7 +140,7 @@ var reduce = Set((PaidContext p) => p.Receipt).FromInput((PayInput i) => i.Recei
 
 On a transition, from the State Machine sample:
 
-```csharp from=Trax.Samples/samples/StateMachine/Trax.Samples.StateMachine/Machines.cs
+```csharp from=Trax.Samples/samples/StateMachine/Trax.Samples.StateMachine/TurnstileMachine.cs
 .When(Input((CoinInput i) => i.Coin).IsOneOf("quarter", "dollar"))
 .Because("Only a quarter or a dollar is accepted.")
 .Reduce(Set((UnlockedContext u) => u.PaidWith).FromInput((CoinInput i) => i.Coin))

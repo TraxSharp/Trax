@@ -168,6 +168,3 @@ public class ConsolePage(IPage page, Uri origin)
             .ConfigureAwait(false);
     }
 }
-
-/// <summary>What signing in started: the first GraphQL request, and the acknowledged socket's URL.</summary>
-public sealed record Connection(Task<IRequest> FirstRequest, Task<string> Acknowledged);

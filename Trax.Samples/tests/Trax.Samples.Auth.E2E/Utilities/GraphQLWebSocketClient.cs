@@ -144,7 +144,3 @@ public sealed class GraphQLWebSocketClient : IAsyncDisposable
         _socket.Dispose();
     }
 }
-
-public sealed class ConnectionRejectedException(string message) : Exception(message);
-
-public sealed class WebSocketClosedException(string message) : Exception(message);

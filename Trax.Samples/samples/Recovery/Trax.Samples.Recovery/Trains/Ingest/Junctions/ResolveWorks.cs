@@ -28,17 +28,3 @@ public abstract class ResolveWorks(DemoPace pace, string matched, bool unsure)
         return new ResolvedPartition(evidence.Source, evidence.Month, unsure, works);
     }
 }
-
-/// <summary>The <c>Yes</c> track: each close match is the corpus work it matches, and is linked to it.</summary>
-public class MergeIntoExisting(DemoPace pace)
-    : ResolveWorks(pace, Resolutions.Merged, unsure: false);
-
-/// <summary>The <c>No</c> track: the close matches are different papers, and are created as new.</summary>
-public class CreateAsNew(DemoPace pace) : ResolveWorks(pace, Resolutions.Created, unsure: false);
-
-/// <summary>
-/// The <c>Unsure</c> track: the close matches are kept aside for a person, with the corpus work
-/// each might be.
-/// </summary>
-public class HoldForReview(DemoPace pace)
-    : ResolveWorks(pace, Resolutions.NeedsReview, unsure: true);

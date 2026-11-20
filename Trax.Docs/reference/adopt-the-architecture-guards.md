@@ -15,7 +15,7 @@ source:
 
 What each guard checks, and every option, is on [Architecture Guards](/docs/reference/architecture-guards).
 The [Bookworm](/docs/samples/bookworm) sample subclasses all three fixtures, owner-scope census
-included, in `Trax.Samples/tests/Trax.Samples.Tests.Reflection/BookwormArchitectureGuards.cs`, and
+included, in the `Bookworm*Guards.cs` files of `Trax.Samples/tests/Trax.Samples.Tests.Reflection/`, and
 the [Recovery](/docs/samples/recovery) suites run the database check after each test.
 
 ## Subclass the fixtures
@@ -27,16 +27,12 @@ the [Recovery](/docs/samples/recovery) suites run the database check after each 
 2. Subclass the fixture for each concern and supply its configuration. The fixtures carry the
    `[Test]` methods; you write no test bodies. Bookworm's, less the owner-scope census:
 
-   ```csharp from=Trax.Samples/tests/Trax.Samples.Tests.Reflection/BookwormArchitectureGuards.cs
-   using System.Reflection;
+   ```csharp from=Trax.Samples/tests/Trax.Samples.Tests.Reflection/BookwormDataLayerGuards.cs
    using Microsoft.EntityFrameworkCore;
    using Microsoft.EntityFrameworkCore.Metadata;
    using NUnit.Framework;
-   using Trax.Api.GraphQL.DataLoaders.CrossSchema;
-   using Trax.Api.GraphQL.Testing;
    using Trax.Core.Testing;
    using Trax.Effect.Data.Testing;
-   using Trax.Mediator.Testing;
    // ...
    [TestFixture]
    public sealed class BookwormDataLayerGuards : DomainDataLayerGuardFixture
@@ -47,7 +43,14 @@ the [Recovery](/docs/samples/recovery) suites run the database check after each 
            [typeof(CatalogDbContext), typeof(LendingDbContext)];
    // ...
    }
+   ```
 
+   ```csharp from=Trax.Samples/tests/Trax.Samples.Tests.Reflection/BookwormCrossSchemaGuards.cs
+   using NUnit.Framework;
+   using Trax.Api.GraphQL.DataLoaders.CrossSchema;
+   using Trax.Api.GraphQL.Testing;
+   using Trax.Core.Testing;
+   // ...
    [TestFixture]
    public sealed class BookwormCrossSchemaGuards : CrossSchemaGuardFixture
    {
@@ -55,7 +58,13 @@ the [Recovery](/docs/samples/recovery) suites run the database check after each 
 
        protected override IReadOnlyList<CrossSchemaEdge> Edges => CrossSchemaEdges.All;
    }
+   ```
 
+   ```csharp from=Trax.Samples/tests/Trax.Samples.Tests.Reflection/BookwormTrainGuards.cs
+   using System.Reflection;
+   using NUnit.Framework;
+   using Trax.Mediator.Testing;
+   // ...
    [TestFixture]
    public sealed class BookwormTrainGuards : TrainGuardFixture
    {
@@ -85,7 +94,7 @@ For a context whose rows belong to a user, give the data-layer fixture the conte
 types the census reads. Building the model needs no database, only a provider. Bookworm's lending
 context, whose members see only their own loans:
 
-```csharp from=Trax.Samples/tests/Trax.Samples.Tests.Reflection/BookwormArchitectureGuards.cs
+```csharp from=Trax.Samples/tests/Trax.Samples.Tests.Reflection/BookwormDataLayerGuards.cs
     // The lending model, built offline (no database, no caller), for the owner-scope census.
     protected override IReadOnlyList<IReadOnlyModel> OwnerScopedModels
     {

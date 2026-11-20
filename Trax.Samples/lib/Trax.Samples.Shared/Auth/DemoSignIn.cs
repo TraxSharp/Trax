@@ -6,9 +6,6 @@ using Trax.Api.Auth.Jwt;
 
 namespace Trax.Samples.Shared.Auth;
 
-/// <summary>What a page sends to sign one person in: a name and a role, nothing else.</summary>
-public sealed record DemoSignInRequest(string Name, string Role);
-
 /// <summary>
 /// Registers and maps a <see cref="DemoTokenIssuer"/>, in Development only (ADR <c>Trax.Docs/adr/0035</c>). Outside
 /// Development both calls do nothing: the host has no sign-in and no token endpoint, so a token signed with the demo

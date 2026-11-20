@@ -10,18 +10,6 @@ using Trax.StateMachine.Persistence;
 
 namespace Trax.Samples.Board.Tickets;
 
-/// <summary>A ticket as the board holds it: its state and its context.</summary>
-public sealed record Ticket(TicketState State, TicketContext Context)
-{
-    public string Id => Context.Id;
-
-    public Report Report => Reports.All[Context.Report];
-
-    /// <summary>The lane the ticket is in, or null for Done and Closed.</summary>
-    public string? Lane =>
-        TicketMachine.Lanes.FirstOrDefault(l => l.Value == State).Key is { } lane ? lane : null;
-}
-
 /// <summary>
 /// Reads the board and moves tickets on it, as the host. Every train that touches a ticket goes through here, so each
 /// move is the ticket machine's own transition, checked by its guards, and nothing else writes a ticket.
@@ -156,14 +144,4 @@ public sealed class TicketBoard(IMachineInstances instances, IDataContextProvide
             AdvanceOutcome.LoadError e => e.Message,
             _ => outcome.ToString(),
         };
-}
-
-/// <summary>Reads a context the way the machines write it, for code that builds an invoked run's input.</summary>
-internal static class ContextReading
-{
-    public static string String(this JsonObject ctx, string field) =>
-        ctx[field]?.GetValue<string>() ?? "";
-
-    public static decimal Number(this JsonObject ctx, string field) =>
-        ctx[field]?.GetValue<decimal>() ?? 0m;
 }

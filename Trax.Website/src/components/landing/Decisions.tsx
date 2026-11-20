@@ -23,7 +23,8 @@ export default function Decisions() {
         folder: "Recovery",
         files: [
           { path: "Trax.Samples.Recovery/Trains/Refund/ApproveRefundTrain.cs", label: "the refund: two questions and a checkpoint" },
-          { path: "Trax.Samples.Recovery/Trains/Refund/RefundModel.cs", label: "the questions the model is asked" },
+          { path: "Trax.Samples.Recovery/Trains/Refund/Problem.cs", label: "the first question the model is asked" },
+          { path: "Trax.Samples.Recovery/Trains/Refund/ApproveRefund.cs", label: "the second question the model is asked" },
           { path: "Trax.Samples.Recovery/Model/DemoDecider.cs", label: "the stand-in decision model" },
           { path: "Trax.Samples.Recovery.Api/Program.cs", label: "the host: decision recording, step events, the scheduler" },
         ],

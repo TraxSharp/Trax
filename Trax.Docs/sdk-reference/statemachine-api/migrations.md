@@ -78,7 +78,7 @@ cannot upgrade the same draft differently.
 The State Machine sample's `checkout` version 2 adds a denormalised `total`. A version 1 draft has none, so it would
 fail version 2 validation; the migration backfills it:
 
-```csharp from=Trax.Samples/samples/StateMachine/Trax.Samples.StateMachine/Machines.cs
+```csharp from=Trax.Samples/samples/StateMachine/Trax.Samples.StateMachine/CheckoutMachine.cs
 m.Id("checkout")
     .Version(2)
     .StartsAt(CheckoutState.Cart, Fresh)

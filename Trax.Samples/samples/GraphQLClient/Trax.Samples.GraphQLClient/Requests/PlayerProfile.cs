@@ -13,7 +13,3 @@ public sealed record PlayerProfile(
     GuildSummary? Guild,
     IReadOnlyList<ItemSummary> Inventory
 );
-
-public sealed record GuildSummary(string Id, string Name);
-
-public sealed record ItemSummary(string Id, string Name, string Category);

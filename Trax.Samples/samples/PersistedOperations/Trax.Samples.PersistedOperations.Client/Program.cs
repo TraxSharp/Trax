@@ -17,6 +17,7 @@
 
 using System.Net.Http.Json;
 using System.Text.Json;
+using Trax.Samples.PersistedOperations.Client;
 
 const string ApiUrl = "http://localhost:5240/trax/graphql/";
 
@@ -194,5 +195,3 @@ static IEnumerable<ManifestEntry> LoadManifest()
         );
     }
 }
-
-internal sealed record ManifestEntry(string Id, string Document);

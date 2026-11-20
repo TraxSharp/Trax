@@ -72,12 +72,3 @@ public sealed class Restaurant(FaultInjector faults, DemoPace pace)
             _calls.TryDequeue(out _);
     }
 }
-
-/// <summary>One call to the restaurant's tablet: answered when <see cref="Problem"/> is null.</summary>
-public sealed record TabletCall(
-    string OrderId,
-    int Attempt,
-    DateTimeOffset StartedAt,
-    DateTimeOffset EndedAt,
-    string? Problem
-);

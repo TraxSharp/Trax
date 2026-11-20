@@ -46,6 +46,7 @@ using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Mediator.Extensions;
+using Trax.Samples.Auth;
 using Trax.Samples.Auth.Audit;
 using Trax.Samples.Auth.Auth;
 using Trax.Samples.Auth.Data;
@@ -223,9 +224,6 @@ static async Task SeedAsync(IServiceProvider services)
     );
     await db.SaveChangesAsync().ConfigureAwait(false);
 }
-
-/// <summary>A production API key as configuration holds it: never the key itself.</summary>
-internal sealed record ConfiguredApiKey(string Id, string Salt, string Hash, string[] Roles);
 
 namespace Trax.Samples.Auth
 {

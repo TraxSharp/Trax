@@ -61,12 +61,3 @@ public sealed class CaseFiles
         throw new InvalidOperationException($"Run {runId} has no case file.");
     }
 }
-
-/// <summary>An order as the order system holds it.</summary>
-public sealed record Order(
-    string OrderId,
-    decimal Amount,
-    string Reason,
-    int PriorRefunds,
-    string CustomerEmail
-);

@@ -23,7 +23,7 @@ as any consumer would adopt them.
 | Owner-scoped rows: a member reads their own member row and loans, a librarian reads all, an anonymous caller none | `LendingDbContext` query filters, `TraxLendingCaller` |
 | Trains that act as the caller and refuse what they must: a missing book, a book on loan, another member's loan | `Trains/Lending` |
 | A partial unique index that stops two concurrent borrows of one book | `LendingDbContext` |
-| The guard fixtures, the owner-scope census included, adopted by a consumer | `tests/Trax.Samples.Tests.Reflection/BookwormArchitectureGuards.cs` |
+| The guard fixtures, the owner-scope census included, adopted by a consumer | `tests/Trax.Samples.Tests.Reflection/Bookworm*Guards.cs` |
 
 ## Run
 
@@ -283,7 +283,7 @@ entity.HasIndex(e => e.BookId).IsUnique().HasFilter("returned_at IS NULL");
 
 ### The guards, adopted
 
-```csharp from=Trax.Samples/tests/Trax.Samples.Tests.Reflection/BookwormArchitectureGuards.cs
+```csharp from=Trax.Samples/tests/Trax.Samples.Tests.Reflection/BookwormDataLayerGuards.cs
 [TestFixture]
 public sealed class BookwormDataLayerGuards : DomainDataLayerGuardFixture
 {

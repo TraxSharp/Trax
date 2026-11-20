@@ -295,12 +295,3 @@ public sealed class PageChecks
             );
     }
 }
-
-/// <summary>One GraphQL operation the page sent: by <see cref="Id"/>, or as <see cref="Text"/>.</summary>
-public sealed record GraphQLSent(
-    string Transport,
-    string? OperationName,
-    string? Id,
-    string? Text,
-    string Raw
-);

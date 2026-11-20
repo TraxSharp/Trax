@@ -133,7 +133,7 @@ second irreversible action, run by a machine of its own: see
 
 The transition binds the effect, from the State Machine sample:
 
-```csharp from=Trax.Samples/samples/StateMachine/Trax.Samples.StateMachine/Machines.cs
+```csharp from=Trax.Samples/samples/StateMachine/Trax.Samples.StateMachine/CheckoutMachine.cs
 .On(CheckoutTrigger.Pay)
 .AnyAuthenticated()
 .WithInput<PayInput>()
