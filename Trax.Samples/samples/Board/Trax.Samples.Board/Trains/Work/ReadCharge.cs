@@ -14,7 +14,7 @@ public class ReadCharge(TicketBoard board) : Junction<ChargeInput, ChargeOutput>
     {
         var ticket =
             await board.Find(input.TicketId, CancellationToken).ConfigureAwait(false)
-            ?? throw new ArgumentException($"There is no ticket {input.TicketId}.");
+            ?? throw new ArgumentException($"There is no ticket {input.TicketId}.", nameof(input));
         return new ChargeOutput
         {
             Subtotal = input.Subtotal,

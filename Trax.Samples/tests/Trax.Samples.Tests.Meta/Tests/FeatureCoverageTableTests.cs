@@ -194,7 +194,7 @@ public partial class FeatureCoverageTableTests
                     + "feature file as [`name.feature`](https://github.com/TraxSharp/Trax/blob/main/"
                     + "Trax.Samples/samples/<Sample>/features/name.feature), or say "
                     + $"'{NoE2E}' when no end-to-end test exists anywhere. See {Adr}:\n"
-                    + string.Join("\n", offenders)
+                    + string.Join('\n', offenders)
             );
     }
 
@@ -226,7 +226,7 @@ public partial class FeatureCoverageTableTests
                 "a feature-coverage link names a class ending in 'Tests', in a Trax repo, at "
                     + "tests/.../<Class>.cs, so a reader can find it and this guard can check it. "
                     + $"See {Adr}:\n"
-                    + string.Join("\n", offenders)
+                    + string.Join('\n', offenders)
             );
     }
 
@@ -276,7 +276,7 @@ public partial class FeatureCoverageTableTests
                 "every test class the feature-coverage table names in this repo must exist where "
                     + "the row links it; fix the row when a test moves or is renamed, and drop the "
                     + $"feature's claim only with a replacement. See {Adr}:\n"
-                    + string.Join("\n", offenders)
+                    + string.Join('\n', offenders)
             );
     }
 
@@ -297,7 +297,7 @@ public partial class FeatureCoverageTableTests
                 "a feature-coverage link to a feature file names the file, under the sample's features/ "
                     + "or specs/ folder, and the file declares a Feature:. Fix the row when a feature file "
                     + $"moves or is renamed. See {Adr}:\n"
-                    + string.Join("\n", problems)
+                    + string.Join('\n', problems)
             );
     }
 
@@ -339,10 +339,10 @@ public partial class FeatureCoverageTableTests
 
         var unlisted = Directory
             .EnumerateDirectories(RepoRoot.Combine("tests"))
-            // A folder a retired project left behind (bin/ and obj/ only) is not a suite.
-            .Where(dir => Directory.EnumerateFiles(dir, "*.csproj").Any())
             .Where(dir =>
-                Path.GetFileName(dir).EndsWith(".E2E", StringComparison.Ordinal)
+                // A folder a retired project left behind (bin/ and obj/ only) is not a suite.
+                Directory.EnumerateFiles(dir, "*.csproj").Any()
+                && Path.GetFileName(dir).EndsWith(".E2E", StringComparison.Ordinal)
                 && !linked.Contains(Path.GetFileName(dir))
                 && !CompiledFeatureFiles(dir).Any(linkedFeatures.Contains)
             )
@@ -357,7 +357,7 @@ public partial class FeatureCoverageTableTests
                 "every E2E suite proves a feature, so the feature-coverage table must name at least "
                     + "one of its classes, or link a feature file it compiles as ReqnrollFeatureFiles. "
                     + $"See {Adr}. Unlisted:\n"
-                    + string.Join("\n", unlisted)
+                    + string.Join('\n', unlisted)
             );
     }
 

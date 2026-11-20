@@ -11,4 +11,4 @@ using static Trax.StateMachine.Rules;
 namespace Trax.Samples.StateMachine;
 
 /// <summary>The irreversible effect on <c>Pay</c>: charge the order. Bound inline via <c>RunsOnce&lt;ICharge&gt;</c>.</summary>
-public interface ICharge : ISnapshotEffect { }
+public interface ICharge : ISnapshotEffect;

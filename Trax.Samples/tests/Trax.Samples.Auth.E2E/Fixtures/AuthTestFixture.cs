@@ -64,7 +64,10 @@ public abstract class AuthTestFixture
     /// The audit rows for one operation, waiting for the background writer to flush them. Each
     /// test names its operation uniquely, so it reads only its own rows.
     /// </summary>
-    protected static async Task<List<AuditRecord>> AuditFor(string operationName, int expected = 1)
+    protected static async Task<IReadOnlyList<AuditRecord>> AuditFor(
+        string operationName,
+        int expected = 1
+    )
     {
         List<AuditRecord> rows = [];
         var arrived = await Polling

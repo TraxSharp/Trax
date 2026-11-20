@@ -105,7 +105,7 @@ public class InvokedTrainShapeTests
 
         foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
-            if (property.GetCustomAttribute<TraxSensitiveAttribute>() is not null)
+            if (property.IsDefined(typeof(TraxSensitiveAttribute)))
                 yield return $"{type.Name}.{property.Name}";
             foreach (var found in SensitiveMembers(property.PropertyType, seen))
                 yield return found;

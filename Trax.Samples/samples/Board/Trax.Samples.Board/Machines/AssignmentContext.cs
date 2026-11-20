@@ -27,7 +27,7 @@ public sealed record AssignmentContext
 
     public bool? Inclusive { get; init; }
 
-    public List<decimal>? Subtotals { get; init; }
+    public IReadOnlyList<decimal>? Subtotals { get; init; }
 
     public string? Decision { get; init; }
 

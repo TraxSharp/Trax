@@ -108,7 +108,7 @@ public partial class E2EDatabaseProvisioningTests
                 "every E2E factory must target the CI Postgres port and a provisioned database. A "
                     + "factory pointing elsewhere skips and reports green while testing nothing. See "
                     + "docs/adr/0001-a-sample-e2e-database-must-be-one-ci-provisions.md:\n"
-                    + string.Join("\n", offenders)
+                    + string.Join('\n', offenders)
             );
     }
 

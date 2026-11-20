@@ -57,14 +57,18 @@ public partial class EmbeddingSimilarity(DemoPace pace)
                 .Select(pair => new PairSignal(
                     pair.A.Id,
                     pair.B.Id,
-                    Math.Round(Cosine(vectors[pair.A.Id], vectors[pair.B.Id]), 3)
+                    Math.Round(
+                        Cosine(vectors[pair.A.Id], vectors[pair.B.Id]),
+                        3,
+                        MidpointRounding.ToEven
+                    )
                 ))
                 .ToList()
         );
     }
 
     /// <summary>The paper's word counts: lower case, four letters or more, a plural's "s" dropped.</summary>
-    public static Dictionary<string, int> Vector(string text)
+    public static IReadOnlyDictionary<string, int> Vector(string text)
     {
         var counts = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var raw in NotALetter.Split(text.ToLowerInvariant()))
@@ -83,7 +87,10 @@ public partial class EmbeddingSimilarity(DemoPace pace)
     [GeneratedRegex("[^a-z]+", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     private static partial Regex NotALetter { get; }
 
-    private static double Cosine(Dictionary<string, int> a, Dictionary<string, int> b)
+    private static double Cosine(
+        IReadOnlyDictionary<string, int> a,
+        IReadOnlyDictionary<string, int> b
+    )
     {
         double dot = 0;
         foreach (var (word, count) in a)

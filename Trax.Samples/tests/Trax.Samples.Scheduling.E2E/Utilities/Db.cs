@@ -51,16 +51,17 @@ public sealed class Db(IServiceProvider services)
         Query(dc => dc.Metadatas.AsNoTracking().MaxAsync(m => (long?)m.Id))
             .ContinueWith(t => t.Result ?? 0);
 
-    public Task<List<Metadata>> Runs(long manifestId, long afterId) =>
-        Query(dc =>
-            dc.Metadatas.AsNoTracking()
-                .Where(m => m.ManifestId == manifestId && m.Id > afterId)
-                .OrderBy(m => m.Id)
-                .ToListAsync()
-        );
+    public async Task<IReadOnlyList<Metadata>> Runs(long manifestId, long afterId) =>
+        await Query(dc =>
+                dc.Metadatas.AsNoTracking()
+                    .Where(m => m.ManifestId == manifestId && m.Id > afterId)
+                    .OrderBy(m => m.Id)
+                    .ToListAsync()
+            )
+            .ConfigureAwait(false);
 
     /// <summary>Waits for <paramref name="count"/> runs of a manifest, newer than <paramref name="afterId"/>, to reach <paramref name="state"/>.</summary>
-    public async Task<List<Metadata>> WaitForRuns(
+    public async Task<IReadOnlyList<Metadata>> WaitForRuns(
         long manifestId,
         TrainState state,
         int count,
@@ -116,10 +117,7 @@ public sealed class Db(IServiceProvider services)
                         CultureInfo.InvariantCulture,
                         $"within {timeout.TotalSeconds}s; saw "
                     )
-                    + string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"[{string.Join(", ", all.Select(r => $"{r.Id}:{r.TrainState}"))}]."
-                    )
+                    + $"[{string.Join(", ", all.Select(r => string.Create(CultureInfo.InvariantCulture, $"{r.Id}:{r.TrainState}")))}]."
             );
         }
 

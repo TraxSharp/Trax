@@ -6,4 +6,4 @@ using Trax.StateMachine.Persistence;
 
 namespace Trax.Samples.StateMachine;
 
-public interface IListMachines : IServiceTrain<ListMachinesInput, ListMachinesOutput> { }
+public interface IListMachines : IServiceTrain<ListMachinesInput, ListMachinesOutput>;

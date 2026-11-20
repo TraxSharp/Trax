@@ -47,7 +47,7 @@ public class CombineSignals(IDbContextFactory<TopicMapDbContext> contexts, DemoP
                     pair.Value,
                     shared,
                     sharedAuthors,
-                    Math.Round(score, 3)
+                    Math.Round(score, 3, MidpointRounding.ToEven)
                 );
             })
             .ToList();

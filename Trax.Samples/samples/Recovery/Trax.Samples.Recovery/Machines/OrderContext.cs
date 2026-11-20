@@ -10,7 +10,7 @@ namespace Trax.Samples.Recovery.Machines;
 /// <summary>The order, one shape in every state: what is in the cart, and what it costs.</summary>
 public sealed record OrderContext
 {
-    public List<string>? Items { get; init; }
+    public IReadOnlyList<string>? Items { get; init; }
 
     public decimal? Total { get; init; }
 }

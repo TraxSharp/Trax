@@ -18,7 +18,7 @@ public static class PartitionMachines
     public static readonly TimeSpan Timeout = TimeSpan.FromSeconds(60);
 
     /// <summary>Every instance of the machine, by partition.</summary>
-    public static async Task<List<SnapshotDraft>> AllAsync()
+    public static async Task<IReadOnlyList<SnapshotDraft>> AllAsync()
     {
         var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
         await using (scope.ConfigureAwait(false))
@@ -82,7 +82,7 @@ public static class PartitionMachines
         var settled = await Polling
             .WaitUntilAsync(
                 async () =>
-                    (await AllAsync().ConfigureAwait(false)).TrueForAll(x => x.InvokeToken is null),
+                    (await AllAsync().ConfigureAwait(false)).All(x => x.InvokeToken is null),
                 Timeout,
                 TimeSpan.FromMilliseconds(100)
             )

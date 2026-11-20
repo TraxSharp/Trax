@@ -19,7 +19,11 @@ public sealed class TicketBoard(IMachineInstances instances, IDataContextProvide
     /// <summary>How long a claim holds a ticket before another worker may take it.</summary>
     public static readonly TimeSpan Lease = TimeSpan.FromMinutes(10);
 
-    private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web)
+    {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
+    };
 
     public async Task<Ticket?> Find(string ticketId, CancellationToken ct)
     {

@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Samples.Tests.Meta.Tests;
 
 /// <summary>
@@ -76,7 +78,12 @@ public partial class SamplePortsTests
                 if (port == ViteDevServer)
                     continue;
                 if (!InRange(port))
-                    offenders.Add($"{RepoRoot.Relative(file)}: port {port} is outside the ranges");
+                    offenders.Add(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{RepoRoot.Relative(file)}: port {port} is outside the ranges"
+                        )
+                    );
                 if (!foldersByPort.TryGetValue(port, out var folders))
                     foldersByPort[port] = folders = [];
                 folders.Add(folder);
@@ -84,7 +91,12 @@ public partial class SamplePortsTests
         }
 
         foreach (var (port, folders) in foldersByPort.Where(kv => kv.Value.Count > 1))
-            offenders.Add($"port {port} is used by {string.Join(", ", folders)}");
+            offenders.Add(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"port {port} is used by {string.Join(", ", folders)}"
+                )
+            );
 
         foldersByPort.Should().NotBeEmpty("the samples listen on ports");
         offenders

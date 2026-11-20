@@ -97,8 +97,3 @@ if (isDevelopment)
     app.UseTraxApiDashboard(dashboard => dashboard.AllowAnonymousShell());
 
 app.Run();
-
-/// <summary>
-/// Visible to <c>WebApplicationFactory&lt;Program&gt;</c> for E2E tests.
-/// </summary>
-public partial class Program;

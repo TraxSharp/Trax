@@ -9,7 +9,19 @@ namespace Trax.Samples.StateMachine.Tests.UnitTests;
 /// </summary>
 public class CheckoutTotalAuthorityTests
 {
-    private static readonly Guid Id = Guid.Parse("b0000000-0000-0000-0000-000000000003");
+    private static readonly Guid Id = new Guid(
+        0xb0000000,
+        0x0000,
+        0x0000,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x03
+    ); // b0000000-0000-0000-0000-000000000003
 
     [Test]
     public async Task A_draft_whose_total_disagrees_with_its_items_is_refused()

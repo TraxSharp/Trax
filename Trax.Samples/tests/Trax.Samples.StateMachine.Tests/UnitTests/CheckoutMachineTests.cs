@@ -9,7 +9,19 @@ namespace Trax.Samples.StateMachine.Tests.UnitTests;
 /// </summary>
 public class CheckoutMachineTests
 {
-    private static readonly Guid Id = Guid.Parse("b0000000-0000-0000-0000-000000000002");
+    private static readonly Guid Id = new Guid(
+        0xb0000000,
+        0x0000,
+        0x0000,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x02
+    ); // b0000000-0000-0000-0000-000000000002
     private const string User = "alice";
 
     private static ISnapshotDraftService Service(InMemorySnapshotStore store) =>

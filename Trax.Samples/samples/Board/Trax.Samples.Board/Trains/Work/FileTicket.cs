@@ -13,10 +13,11 @@ public class FileTicket(TicketBoard board) : Junction<FileTicketInput, TicketVie
     public override async Task<TicketView> Run(FileTicketInput input)
     {
         if (string.IsNullOrWhiteSpace(input.Id) || input.Id.Length > 40)
-            throw new ArgumentException("A ticket id is 1 to 40 characters.");
+            throw new ArgumentException("A ticket id is 1 to 40 characters.", nameof(input));
         if (!Reports.All.TryGetValue(input.Report, out var report))
             throw new ArgumentException(
-                $"There is no report {input.Report}; the shop knows {string.Join(", ", Reports.All.Keys)}."
+                $"There is no report {input.Report}; the shop knows {string.Join(", ", Reports.All.Keys)}.",
+                nameof(input)
             );
         return Lanes.View(
             await board.File(input.Id, report, CancellationToken).ConfigureAwait(false)

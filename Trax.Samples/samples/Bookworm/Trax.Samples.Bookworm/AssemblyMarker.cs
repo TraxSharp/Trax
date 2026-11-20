@@ -5,4 +5,4 @@ namespace Trax.Samples.Bookworm;
 /// discovery (<c>AddMediator(typeof(AssemblyMarker).Assembly)</c>,
 /// <c>AddTypeExtensions(typeof(AssemblyMarker).Assembly)</c>).
 /// </summary>
-public sealed class AssemblyMarker;
+public static class AssemblyMarker;

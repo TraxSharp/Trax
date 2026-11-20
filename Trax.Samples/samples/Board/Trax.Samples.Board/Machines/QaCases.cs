@@ -12,5 +12,5 @@ namespace Trax.Samples.Board.Machines;
 /// <summary>Subtotals QA wants the patched rules run on.</summary>
 public sealed record QaCases
 {
-    public List<decimal> Subtotals { get; init; } = [];
+    public IReadOnlyList<decimal> Subtotals { get; init; } = [];
 }

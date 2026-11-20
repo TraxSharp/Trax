@@ -66,7 +66,7 @@ public class ComposePortsBindLoopbackTests
                     + "each with 127.0.0.1: so the service, and the password written beside it, is "
                     + "reachable only from this machine. See "
                     + "docs/adr/0005-sample-infrastructure-listens-on-loopback-only.md:\n"
-                    + string.Join("\n", offenders)
+                    + string.Join('\n', offenders)
             );
     }
 

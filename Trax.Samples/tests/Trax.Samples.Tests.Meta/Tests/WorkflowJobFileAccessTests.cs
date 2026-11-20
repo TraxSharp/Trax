@@ -82,7 +82,7 @@ public class WorkflowJobFileAccessTests
                 line.StartsWith("  ", StringComparison.Ordinal)
                 && line.Length > 2
                 && !char.IsWhiteSpace(line[2])
-                && line.TrimEnd().EndsWith(":", StringComparison.Ordinal);
+                && line.TrimEnd().EndsWith(':');
 
             if (isJobHeader)
                 jobs.Add((line.Trim().TrimEnd(':'), []));

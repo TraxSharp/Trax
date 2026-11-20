@@ -49,7 +49,7 @@ public sealed class RecoveryPage
     public IPage Page { get; }
 
     /// <summary>Every GraphQL request the page sent over HTTP, in order.</summary>
-    public List<IRequest> GraphQLRequests { get; } = [];
+    public IList<IRequest> GraphQLRequests { get; } = [];
 
     /// <summary>
     /// Opens a context and a page with the routes in place. <paramref name="host"/> is read on every request,
@@ -124,7 +124,7 @@ public sealed class RecoveryPage
                 "The wizard did not render. The page says:\n"
                     + await Page.Locator("body").InnerTextAsync().ConfigureAwait(false)
                     + "\nIts console and failed requests:\n"
-                    + string.Join("\n", Diagnostics),
+                    + string.Join('\n', Diagnostics),
                 ex
             );
         }
@@ -145,7 +145,7 @@ public sealed class RecoveryPage
     }
 
     /// <summary>What the page logged and which of its requests failed, for a harness failure's message.</summary>
-    public List<string> Diagnostics { get; } = [];
+    public IList<string> Diagnostics { get; } = [];
 
     /// <summary>The wizard's current step, as the page labels it.</summary>
     public ILocator WizardState => Page.Locator(".wizard-state");
@@ -160,7 +160,7 @@ public sealed class RecoveryPage
     public ILocator ReviewDeadline => Page.Locator(".review-deadline");
 
     /// <summary>The GraphQL requests sent since <paramref name="from"/>, whose body names <paramref name="field"/>.</summary>
-    public List<IRequest> RequestsNaming(string field, int from = 0)
+    public IReadOnlyList<IRequest> RequestsNaming(string field, int from = 0)
     {
         lock (GraphQLRequests)
             return GraphQLRequests

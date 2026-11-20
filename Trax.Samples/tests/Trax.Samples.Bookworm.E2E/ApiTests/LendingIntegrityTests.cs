@@ -90,7 +90,7 @@ public class LendingIntegrityTests : ApiTestFixture
         // The librarian reads every loan and member, so it can check who the loan was recorded for.
         var doc = await GraphQL.PostAsync(
             "{ discover { lending { loans(where: { id: { eq: "
-                + loanId
+                + loanId.ToString(CultureInfo.InvariantCulture)
                 + " } }) { nodes { memberId } } members { nodes { id name } } } } }",
             ApiKeyDefaults.LibrarianKey
         );

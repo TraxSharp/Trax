@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Metadata;
@@ -20,7 +21,7 @@ public class SyncMailboxTrain(Holds holds) : ServiceTrain<KeyedInput, Unit>, ISy
     protected override bool DeferQueuePromotion => true;
 
     protected override Task OnQueue(Metadata metadata, CancellationToken ct) =>
-        holds.WaitAsync(TrainInput.Key, ct);
+        holds.WaitAsync(TrainInput.NotNull().Key, ct);
 
     protected override async Task<Either<Exception, Unit>> Junctions() => Resolve();
 }

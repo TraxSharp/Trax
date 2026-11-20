@@ -59,11 +59,12 @@ internal static class Dotnet
         {
             await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException inner)
         {
             process.Kill(entireProcessTree: true);
             throw new TimeoutException(
-                $"dotnet {string.Join(' ', args)} did not finish within {ProcessTimeout}"
+                $"dotnet {string.Join(' ', args)} did not finish within {ProcessTimeout}",
+                inner
             );
         }
 

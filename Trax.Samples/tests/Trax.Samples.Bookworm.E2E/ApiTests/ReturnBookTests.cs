@@ -50,7 +50,7 @@ public class ReturnBookTests : ApiTestFixture
         // pagination can't hide it) shows a non-null returnedAt.
         var readBack = await GraphQL.PostAsync(
             "{ discover { lending { loans(where: { id: { eq: "
-                + loanId
+                + loanId.ToString(CultureInfo.InvariantCulture)
                 + " } }) { nodes { id returnedAt } } } } }",
             ApiKeyDefaults.MemberKey
         );

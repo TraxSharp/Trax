@@ -46,7 +46,7 @@ public static class FeatureShelf
             [new FeatureFile("shelving.feature", Feature)]
         );
         if (!derived.Succeeded)
-            throw new InvalidOperationException(string.Join("\n", derived.Problems));
+            throw new InvalidOperationException(string.Join('\n', derived.Problems));
         var directory = Path.Combine(Path.GetTempPath(), $"trax-console-shelf-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
         foreach (var (id, ir) in derived.Irs)

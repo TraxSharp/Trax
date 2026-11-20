@@ -71,7 +71,9 @@ public sealed class DemoDecider(DemoPace pace) : IDecider
     {
         var probability = evidence.Amount <= 250m ? 0.93 : 0.62;
         probability -= 0.35 * evidence.PriorRefunds;
-        return new YesNoAnswer(Math.Round(Math.Clamp(probability, 0.02, 0.98), 2))
+        return new YesNoAnswer(
+            Math.Round(Math.Clamp(probability, 0.02, 0.98), 2, MidpointRounding.ToEven)
+        )
         {
             Model = ModelName,
         };
@@ -82,7 +84,9 @@ public sealed class DemoDecider(DemoPace pace) : IDecider
     private static YesNoAnswer SameTopic(CoCitationEvidence evidence)
     {
         var linked = evidence.Papers == 0 ? 0 : (double)evidence.LinkedPapers / evidence.Papers;
-        return new YesNoAnswer(Math.Round(Math.Clamp(0.1 + 0.9 * linked, 0.02, 0.98), 2))
+        return new YesNoAnswer(
+            Math.Round(Math.Clamp(0.1 + 0.9 * linked, 0.02, 0.98), 2, MidpointRounding.ToEven)
+        )
         {
             Model = ModelName,
         };

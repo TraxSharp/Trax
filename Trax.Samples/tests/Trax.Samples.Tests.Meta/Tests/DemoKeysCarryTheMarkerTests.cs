@@ -59,7 +59,7 @@ public partial class DemoKeysCarryTheMarkerTests
                 $"every demo API key must contain \"{Marker}\", so Trax.Api refuses to start a "
                     + "host outside Development with it registered. See "
                     + "Trax.Docs/adr/0035-demo-credentials-exist-only-in-development.md:\n"
-                    + string.Join("\n", offenders)
+                    + string.Join('\n', offenders)
             );
     }
 

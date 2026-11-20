@@ -34,7 +34,11 @@ public class FindExistingMatches(ITopicMapDbContext db, DemoPace pace)
                     work.SourceId,
                     existing.Id,
                     existing.Title,
-                    Math.Round(TitleWords.Jaccard(words, TitleWords.Of(existing.Title)), 3)
+                    Math.Round(
+                        TitleWords.Jaccard(words, TitleWords.Of(existing.Title)),
+                        3,
+                        MidpointRounding.ToEven
+                    )
                 ))
                 .OrderByDescending(m => m.Similarity)
                 .ThenBy(m => m.ExistingWorkId, StringComparer.Ordinal)

@@ -185,7 +185,11 @@ public sealed partial class TopicMapDraft(GraphQLClient graphQL, string apiKey, 
         return last!;
     }
 
-    private static readonly JsonSerializerOptions Camel = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions Camel = new(JsonSerializerDefaults.Web)
+    {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
+    };
 
     [GeneratedRegex("^[_A-Za-z][_0-9A-Za-z]*$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     private static partial Regex GraphQLName { get; }

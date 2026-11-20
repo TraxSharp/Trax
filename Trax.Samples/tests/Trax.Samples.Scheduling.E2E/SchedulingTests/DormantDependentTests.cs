@@ -45,7 +45,7 @@ public class DormantDependentTests : SchedulingTestFixture
         // A spike activated before the feed went calm may still be on its way.
         await Db.WaitUntil(
             async () =>
-                (await Db.Runs(alert.Id, 0).ConfigureAwait(false)).TrueForAll(r =>
+                (await Db.Runs(alert.Id, 0).ConfigureAwait(false)).All(r =>
                     r.TrainState is not (TrainState.Pending or TrainState.InProgress)
                 ),
             TimeSpan.FromSeconds(15),

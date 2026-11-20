@@ -7,4 +7,4 @@ using Trax.StateMachine.Persistence;
 
 namespace Trax.Samples.StateMachine;
 
-public interface IListCharges : IServiceTrain<ListChargesInput, ListChargesOutput> { }
+public interface IListCharges : IServiceTrain<ListChargesInput, ListChargesOutput>;

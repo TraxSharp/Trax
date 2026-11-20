@@ -8,6 +8,8 @@ public class GraphQLClient(HttpClient httpClient)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,

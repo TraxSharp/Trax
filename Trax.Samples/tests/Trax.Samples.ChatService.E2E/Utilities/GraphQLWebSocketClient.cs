@@ -10,6 +10,8 @@ public class GraphQLWebSocketClient : IAsyncDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true,
     };
@@ -156,13 +158,14 @@ public class GraphQLWebSocketClient : IAsyncDisposable
             ms.Position = 0;
             return JsonSerializer.Deserialize<JsonElement>(ms.ToArray(), JsonOptions);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException inner)
         {
             throw new TimeoutException(
                 string.Create(
                     CultureInfo.InvariantCulture,
                     $"No WebSocket message received within {timeout.TotalSeconds}s"
-                )
+                ),
+                inner
             );
         }
     }

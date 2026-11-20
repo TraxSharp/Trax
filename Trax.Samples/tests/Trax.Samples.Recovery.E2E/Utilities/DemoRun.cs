@@ -15,7 +15,7 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
     public string RunId { get; private set; } = "";
     public long ManifestId { get; private set; }
     public string ManifestExternalId { get; private set; } = "";
-    public List<long> Attempts { get; } = [];
+    public IList<long> Attempts { get; } = [];
 
     /// <summary>Starts a run through the sample's <c>startRun</c> mutation.</summary>
     public async Task StartAsync(
@@ -86,7 +86,7 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
     }
 
     /// <summary>The manifest's executions, oldest first.</summary>
-    public async Task<List<long>> ExecutionIdsAsync()
+    public async Task<IReadOnlyList<long>> ExecutionIdsAsync()
     {
         var response = await graphQL
             .SendAsync(
@@ -142,7 +142,7 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
     }
 
     /// <summary>The stored steps of the execution, read through <c>operations.junctionRuns</c>.</summary>
-    public async Task<List<JsonElement>> StoredStepsAsync(long metadataId)
+    public async Task<IReadOnlyList<JsonElement>> StoredStepsAsync(long metadataId)
     {
         var response = await graphQL
             .SendAsync(
@@ -166,17 +166,17 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
     /// The run's timeline as the page builds it: the live steps merged with the stored ones by
     /// position, keeping whichever is further along (rows trail the stream slightly).
     /// </summary>
-    public async Task<List<JsonElement>> TimelineAsync(long metadataId)
+    public async Task<IReadOnlyList<JsonElement>> TimelineAsync(long metadataId)
     {
         // A finished run's last rows may still be on their way to the table.
-        List<JsonElement> stored = [];
+        IReadOnlyList<JsonElement> stored = [];
         var settled = await Polling
             .WaitUntilAsync(
                 async () =>
                 {
                     stored = await StoredStepsAsync(metadataId).ConfigureAwait(false);
                     return stored.Count > 0
-                        && stored.TrueForAll(s =>
+                        && stored.All(s =>
                             !string.Equals(
                                 s.GetProperty("state").GetString(),
                                 "IN_PROGRESS",

@@ -9,6 +9,12 @@ InventoryServerHost.Build(args).Run();
 
 namespace Trax.Samples.GraphQLClient.InventoryServer
 {
-    // Exposes the entry point to WebApplicationFactory<Program> in the E2E suite.
-    public partial class Program;
+    /// <summary>
+    /// Names this assembly for <c>WebApplicationFactory&lt;Program&gt;</c> in the E2E suite. It is
+    /// never created: the host is the top-level program above.
+    /// </summary>
+    public sealed class Program
+    {
+        private Program() { }
+    }
 }

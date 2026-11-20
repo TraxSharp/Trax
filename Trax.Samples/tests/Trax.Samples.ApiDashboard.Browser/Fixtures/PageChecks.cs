@@ -147,13 +147,14 @@ public sealed class PageChecks
         {
             return await seen.WaitAsync(BrowserTimeouts.Server).ConfigureAwait(false);
         }
-        catch (TimeoutException)
+        catch (TimeoutException inner)
         {
             throw new TimeoutException(
                 string.Create(
                     CultureInfo.InvariantCulture,
                     $"Expected {what} within {BrowserTimeouts.Server.TotalSeconds:0} s."
-                )
+                ),
+                inner
             );
         }
     }

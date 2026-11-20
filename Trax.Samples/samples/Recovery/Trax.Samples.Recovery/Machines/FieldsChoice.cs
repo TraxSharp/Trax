@@ -13,5 +13,5 @@ namespace Trax.Samples.Recovery.Machines;
 public sealed record FieldsChoice
 {
     [MinLength(1)]
-    public List<string> Fields { get; init; } = [];
+    public IReadOnlyList<string> Fields { get; init; } = [];
 }

@@ -21,6 +21,9 @@ namespace Trax.Testing.Red;
 /// </remarks>
 /// <param name="because">What the test is waiting for, shown in its result message.</param>
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = false)]
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal sealed class RedAttribute(string because) : Attribute, IWrapTestMethod, IApplyToTest
 {
     /// <summary>The category every red test carries.</summary>

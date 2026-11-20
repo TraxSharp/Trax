@@ -13,7 +13,7 @@ namespace Trax.Samples.StateMachine;
 /// <summary>The checkout's context in <c>Cart</c> and <c>Review</c>: the items, their total in cents, and no receipt yet.</summary>
 public sealed record CheckoutContext
 {
-    public List<string> Items { get; init; } = [];
+    public IReadOnlyList<string> Items { get; init; } = [];
 
     public string? Receipt { get; init; }
 

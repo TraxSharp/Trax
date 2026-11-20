@@ -26,9 +26,9 @@ public class IngestedWork
 
     public int Year { get; set; }
 
-    public List<string> Authors { get; set; } = [];
+    public string[] Authors { get; set; } = [];
 
-    public List<string> References { get; set; } = [];
+    public string[] References { get; set; } = [];
 
     /// <summary>
     /// A SHA-256 of the normalised content, so a later step can tell which works changed since

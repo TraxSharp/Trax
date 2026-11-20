@@ -45,7 +45,7 @@ public sealed class Hooks
     /// (a boarding pass that cannot be issued, or is called off). It runs in memory (<see cref="InMemoryRunTests"/>), not here.
     /// </summary>
     [BeforeScenario("in-memory")]
-    public static void InMemoryOnly() =>
+    public void InMemoryOnly() =>
         Assert.Ignore(
             "Runs in memory only: the host's boarding pass train neither fails nor is called off by itself."
         );

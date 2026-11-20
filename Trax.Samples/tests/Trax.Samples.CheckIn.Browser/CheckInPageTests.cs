@@ -132,7 +132,7 @@ public partial class CheckInPageTests
         catch (PlaywrightException ex)
         {
             throw new AssertionException(
-                $"{name} could not sign in:\n{string.Join("\n", BrowserSetup.Seen)}",
+                $"{name} could not sign in:\n{string.Join('\n', BrowserSetup.Seen)}",
                 ex
             );
         }

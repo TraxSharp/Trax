@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Metadata;
@@ -17,7 +18,8 @@ namespace Trax.Samples.ApiDashboard.Browser.Host;
 
 public class ReconcileAccountTrain : ServiceTrain<KeyedInput, Unit>, IReconcileAccountTrain
 {
-    protected override string? QueueSubjectKey(Metadata metadata) => $"account:{TrainInput.Key}";
+    protected override string? QueueSubjectKey(Metadata metadata) =>
+        $"account:{TrainInput.NotNull().Key}";
 
     protected override Task<Either<Exception, Unit>> Junctions() =>
         Chain<WaitForLedger>().Resolve();

@@ -69,7 +69,7 @@ public class InMemoryRunTests
     {
         var derived = FeatureMachines.Derive(Glossary, Files);
 
-        derived.Succeeded.Should().BeTrue(string.Join("\n", derived.Problems));
+        derived.Succeeded.Should().BeTrue(string.Join('\n', derived.Problems));
         foreach (var (id, ir) in derived.Irs)
             Lf(File.ReadAllText(Path.Combine(Machines, id + ".ir.json")))
                 .Should()

@@ -13,7 +13,7 @@ namespace Trax.Samples.StateMachine;
 /// <summary>The checkout's context in <c>Paid</c>: the same, with the charge's receipt.</summary>
 public sealed record PaidContext
 {
-    public List<string> Items { get; init; } = [];
+    public IReadOnlyList<string> Items { get; init; } = [];
 
     public string Receipt { get; init; } = "";
 

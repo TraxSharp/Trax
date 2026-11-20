@@ -89,7 +89,7 @@ public class StartRunTests : RecoveryTestFixture
                 }
             );
 
-        await starting.Should().ThrowAsync<SchedulingSeen.Stopped>();
+        await starting.Should().ThrowAsync<SchedulingSeen.StoppedException>();
         seen.RunId.Should().NotBeNull("the start schedules the manifest");
         seen.ArmedWhenScheduled.Should()
             .BeTrue(
@@ -161,10 +161,10 @@ public class StartRunTests : RecoveryTestFixture
                 throw new NotSupportedException(targetMethod?.Name);
             RunId = input.RunId;
             ArmedWhenScheduled = Faults.IsArmed(input.RunId);
-            return Task.FromException<Trax.Effect.Models.Manifest.Manifest>(new Stopped());
+            return Task.FromException<Trax.Effect.Models.Manifest.Manifest>(new StoppedException());
         }
 
-        public sealed class Stopped : Exception;
+        public sealed class StoppedException : Exception;
     }
 
     // Stands in for the scheduler never queueing the first run within the start's wait.

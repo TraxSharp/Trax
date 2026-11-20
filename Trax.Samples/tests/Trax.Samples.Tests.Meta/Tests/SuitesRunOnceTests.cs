@@ -68,7 +68,7 @@ public class SuitesRunOnceTests
                 );
         }
 
-        problems.Should().BeEmpty(string.Join("\n", problems));
+        problems.Should().BeEmpty(string.Join('\n', problems));
     }
 
     private static List<string> SharedProjects(string solution)

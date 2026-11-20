@@ -124,13 +124,14 @@ public sealed class GraphQLWebSocketClient : IAsyncDisposable
                 ms.Write(buffer, 0, result.Count);
             } while (!result.EndOfMessage);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException inner)
         {
             throw new TimeoutException(
                 string.Create(
                     CultureInfo.InvariantCulture,
                     $"No WebSocket message within {timeout.TotalSeconds}s."
-                )
+                ),
+                inner
             );
         }
 

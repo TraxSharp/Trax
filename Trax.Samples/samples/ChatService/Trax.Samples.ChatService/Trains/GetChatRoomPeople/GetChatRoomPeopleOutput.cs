@@ -2,5 +2,5 @@ namespace Trax.Samples.ChatService.Trains.GetChatRoomPeople;
 
 public record GetChatRoomPeopleOutput
 {
-    public required List<ChatRoomPerson> People { get; init; }
+    public required IReadOnlyList<ChatRoomPerson> People { get; init; }
 }

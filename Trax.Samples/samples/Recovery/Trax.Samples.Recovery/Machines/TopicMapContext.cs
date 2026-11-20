@@ -16,7 +16,7 @@ namespace Trax.Samples.Recovery.Machines;
 /// </summary>
 public sealed record TopicMapContext
 {
-    public List<string>? Fields { get; init; }
+    public IReadOnlyList<string>? Fields { get; init; }
 
     public int? FromYear { get; init; }
 

@@ -59,10 +59,13 @@ public static class RecoveryClientBuild
         {
             await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException inner)
         {
             process.Kill(entireProcessTree: true);
-            throw new TimeoutException($"vite build did not finish in {BuildTimeout}:\n{log}");
+            throw new TimeoutException(
+                $"vite build did not finish in {BuildTimeout}:\n{log}",
+                inner
+            );
         }
         await reading.ConfigureAwait(false);
 

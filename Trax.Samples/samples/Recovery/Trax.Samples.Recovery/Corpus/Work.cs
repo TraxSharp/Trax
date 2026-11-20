@@ -21,10 +21,10 @@ public class Work
     /// <summary>The field the index files it under.</summary>
     public string Field { get; set; } = "";
 
-    public List<string> Authors { get; set; } = [];
+    public string[] Authors { get; set; } = [];
 
     /// <summary>The ids of the works it cites. Most are outside this corpus, as in a real index.</summary>
-    public List<string> References { get; set; } = [];
+    public string[] References { get; set; } = [];
 
-    public List<string> Concepts { get; set; } = [];
+    public string[] Concepts { get; set; } = [];
 }
