@@ -56,7 +56,18 @@ dotnet new trax-hub --name MyCompany.Hub
 ```
 
 Each command creates a directory with the namespaces, file names and `.csproj` set to your
-project name. The templates take no other parameters.
+project name. The one other parameter is `--strict`.
+
+### The strict option
+
+```bash
+dotnet new trax-hub --name MyCompany.Hub --strict
+```
+
+`--strict` adds `<PackageReference Include="Trax.Analyzers" PrivateAssets="all" />` to the project and to its test
+project. The build then holds both to the analyzer profile Trax builds its own code under: every rule the profile
+turns on is an error, and the clock, `Random.Shared`, `System.Console` and the null-forgiving operator are banned.
+The generated code passes it. Without `--strict` (the default) the projects reference no analyzers.
 
 Package versions live in the generated `Directory.Packages.props` (Central Package Management),
 one line per package, so the `.csproj` files carry no versions. They are the versions the template

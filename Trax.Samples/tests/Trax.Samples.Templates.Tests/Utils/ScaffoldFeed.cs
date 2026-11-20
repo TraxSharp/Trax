@@ -224,16 +224,34 @@ internal static class ScaffoldFeed
         }
     }
 
+    // A package is the csproj of its name, unless a project names it with <PackageId>: Trax.Analyzers
+    // is packed by Trax.Analyzers.Package, beside the Trax.Analyzers project that holds the rules.
     private static string TraxProject(string id)
     {
         var monorepo = Path.GetDirectoryName(RepoRoot()).NotNull();
-        return Directory
-                .EnumerateDirectories(monorepo, "Trax.*")
-                .SelectMany(f => new[] { f, Path.Combine(f, "dotnet") })
-                .Select(folder => Path.Combine(folder, "src", id, id + ".csproj"))
+        var sources = Directory
+            .EnumerateDirectories(monorepo, "Trax.*")
+            .SelectMany(f => new[] { Path.Combine(f, "src"), Path.Combine(f, "dotnet", "src") })
+            .Where(Directory.Exists)
+            .ToList();
+        var named = sources
+            .SelectMany(src =>
+                Directory.EnumerateFiles(src, "*.csproj", SearchOption.AllDirectories)
+            )
+            .Where(csproj =>
+                XDocument
+                    .Load(csproj)
+                    .Descendants("PackageId")
+                    .Any(e => string.Equals(e.Value.Trim(), id, StringComparison.Ordinal))
+            )
+            .ToList();
+        if (named.Count == 1)
+            return named[0];
+        return sources
+                .Select(src => Path.Combine(src, id, id + ".csproj"))
                 .SingleOrDefault(File.Exists)
             ?? throw new InvalidOperationException(
-                $"The templates pin {id}, but no folder in the repository has src/{id}/{id}.csproj."
+                $"The templates pin {id}, but no project in the repository packs it."
             );
     }
 }

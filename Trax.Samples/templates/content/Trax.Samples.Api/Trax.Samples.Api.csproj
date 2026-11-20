@@ -28,4 +28,12 @@
     <PackageReference Include="Trax.Api.Auth.ApiKey" />
     <PackageReference Include="Trax.Api.GraphQL" />
   </ItemGroup>
+
+  <!--#if (strict) -->
+  <!-- Trax.Analyzers: the analyzer profile Trax builds its own code under, every rule an error.
+       https://traxsharp.net/docs/reference/templates#the-strict-option -->
+  <ItemGroup>
+    <PackageReference Include="Trax.Analyzers" PrivateAssets="all" />
+  </ItemGroup>
+  <!--#endif -->
 </Project>

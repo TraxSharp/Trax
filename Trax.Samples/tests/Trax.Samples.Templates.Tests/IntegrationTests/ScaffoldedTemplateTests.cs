@@ -132,6 +132,67 @@ public class ScaffoldedTemplateTests
     [TestCase("trax-hub")]
     [TestCase("trax-scheduler")]
     [TestCase("trax-api")]
+    public async Task Scaffold_ByDefault_DoesNotReferenceTheAnalyzers(string shortName)
+    {
+        var dir = await Scaffold(shortName);
+
+        foreach (var project in Projects(dir))
+            (await File.ReadAllTextAsync(project))
+                .Should()
+                .NotContain(
+                    "Trax.Analyzers",
+                    $"a default {shortName} scaffold leaves the analyzers out"
+                );
+    }
+
+    [TestCase("trax-hub")]
+    [TestCase("trax-scheduler")]
+    [TestCase("trax-api")]
+    public async Task Scaffold_Strict_BuildsUnderTheAnalyzerProfile(string shortName)
+    {
+        var dir = Path.Combine(_workDir.NotNull(), shortName, "Strict", "App");
+        await Run(
+            _workDir.NotNull(),
+            "new",
+            shortName,
+            "--name",
+            "App",
+            "--output",
+            dir,
+            "--strict",
+            "--debug:custom-hive",
+            _hive.NotNull()
+        );
+
+        foreach (var project in Projects(dir))
+            (await File.ReadAllTextAsync(project))
+                .Should()
+                .Contain(
+                    "<PackageReference Include=\"Trax.Analyzers\" PrivateAssets=\"all\" />",
+                    $"{shortName} --strict references the analyzers in {Path.GetFileName(project)}"
+                );
+        foreach (var project in Projects(dir))
+        {
+            var build = await Run(dir, allowFailure: true, "build", project, "-warnaserror");
+            build
+                .ExitCode.Should()
+                .Be(
+                    0,
+                    $"a {shortName} --strict scaffold builds clean under the profile:\n{build.Output}"
+                );
+        }
+    }
+
+    // The application and its test project.
+    private static string[] Projects(string dir) =>
+        [
+            Path.Combine(dir, "App.csproj"),
+            Path.Combine(dir, "tests", "App.Tests", "App.Tests.csproj"),
+        ];
+
+    [TestCase("trax-hub")]
+    [TestCase("trax-scheduler")]
+    [TestCase("trax-api")]
     public async Task Scaffold_Readme_LinksToTheDocs(string shortName)
     {
         var dir = await Scaffold(shortName);

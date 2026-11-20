@@ -19,4 +19,7 @@ dotnet test tests/MyApp.Tests
 Each template stores runs in memory, so it needs no database, and ships a README and a test project. The console
 and the demo API keys exist only in Development.
 
+`--strict` adds `Trax.Analyzers` to the project and its tests, so the build holds them to the analyzer profile Trax
+holds its own code to: `dotnet new trax-hub -n MyApp --strict`.
+
 Docs: <https://traxsharp.net/docs/getting-started> · Source: <https://github.com/TraxSharp/Trax/tree/main/Trax.Samples>
