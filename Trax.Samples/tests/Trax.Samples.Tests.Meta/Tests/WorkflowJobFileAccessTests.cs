@@ -25,21 +25,22 @@ public class WorkflowJobFileAccessTests
     private static IEnumerable<string> WorkflowFiles() =>
         Directory
             .EnumerateFiles(MonorepoRoot.Combine(".github", "workflows"), "*.yml")
-            .OrderBy(p => p, StringComparer.Ordinal);
+            .Order(StringComparer.Ordinal);
 
     [TestCaseSource(nameof(WorkflowFiles))]
     public void EveryJobReadingARepoFile_ChecksTheRepoOut(string workflowPath)
     {
         var offenders = Jobs(File.ReadAllLines(workflowPath))
             .Where(job =>
-                job.Lines.Any(line =>
+                job.Lines.Exists(line =>
                     RepoPathInputs.Any(input =>
-                        line.Replace(" ", string.Empty).Contains(input, StringComparison.Ordinal)
+                        line.Replace(" ", string.Empty, StringComparison.Ordinal)
+                            .Contains(input, StringComparison.Ordinal)
                     )
                 )
-            )
-            .Where(job =>
-                !job.Lines.Any(line => line.Contains("actions/checkout", StringComparison.Ordinal))
+                && !job.Lines.Exists(line =>
+                    line.Contains("actions/checkout", StringComparison.Ordinal)
+                )
             )
             .Select(job => job.Name)
             .ToList();

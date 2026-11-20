@@ -7,7 +7,7 @@ public class TraceParcel(DemoPace pace) : EffectJunction<RefundCase, RefundEvide
 {
     public override async Task<RefundEvidence> Run(RefundCase refund)
     {
-        await Task.Delay(pace.StepDelay);
+        await Task.Delay(pace.StepDelay).ConfigureAwait(false);
         return new RefundEvidence(
             refund.RunId,
             refund.OrderId,

@@ -25,7 +25,13 @@ public class PlaywrightVersionTests
         var nuget = XDocument
             .Load(MonorepoRoot.Combine("Directory.Packages.props"))
             .Descendants("PackageVersion")
-            .SingleOrDefault(e => (string?)e.Attribute("Include") == "Microsoft.Playwright")
+            .SingleOrDefault(e =>
+                string.Equals(
+                    (string?)e.Attribute("Include"),
+                    "Microsoft.Playwright",
+                    StringComparison.Ordinal
+                )
+            )
             ?.Attribute("Version")
             ?.Value;
         var screenshots = JsonNode.Parse(

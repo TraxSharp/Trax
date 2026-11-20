@@ -52,10 +52,10 @@ public class SharedApiSetup
     public static async Task ClearAsync(IServiceProvider services)
     {
         var factory = services.GetRequiredService<IDataContextProviderFactory>();
-        var ctx = await factory.CreateDbContextAsync(CancellationToken.None);
-        await ctx.PersistedOperationHistories.ExecuteDeleteAsync();
-        await ctx.PersistedOperations.ExecuteDeleteAsync();
+        var ctx = await factory.CreateDbContextAsync(CancellationToken.None).ConfigureAwait(false);
+        await ctx.PersistedOperationHistories.ExecuteDeleteAsync().ConfigureAwait(false);
+        await ctx.PersistedOperations.ExecuteDeleteAsync().ConfigureAwait(false);
         if (ctx is IAsyncDisposable async)
-            await async.DisposeAsync();
+            await async.DisposeAsync().ConfigureAwait(false);
     }
 }

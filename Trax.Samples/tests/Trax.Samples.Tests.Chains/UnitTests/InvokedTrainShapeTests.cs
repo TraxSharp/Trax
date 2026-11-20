@@ -36,8 +36,8 @@ public class InvokedTrainShapeTests
         var junctions = train
             .Assembly.GetTypes()
             .Where(t => t is { IsClass: true, IsAbstract: false, IsNested: false })
-            .GroupBy(t => t.Name)
-            .ToDictionary(g => g.Key, g => g.Single());
+            .GroupBy(t => t.Name, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Single(), StringComparer.Ordinal);
         var graph = GraphOf(train);
 
         graph.Refusals.Should().BeEmpty();

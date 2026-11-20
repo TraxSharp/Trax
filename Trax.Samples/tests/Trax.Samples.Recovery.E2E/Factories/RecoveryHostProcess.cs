@@ -121,13 +121,13 @@ public sealed class RecoveryHostProcess : IAsyncDisposable
         Uri address;
         try
         {
-            address = await listening.Task.WaitAsync(StartTimeout);
+            address = await listening.Task.WaitAsync(StartTimeout).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is TimeoutException or InvalidOperationException)
         {
             if (!process.HasExited)
                 process.Kill(entireProcessTree: true);
-            await process.WaitForExitAsync();
+            await process.WaitForExitAsync().ConfigureAwait(false);
             process.Dispose();
             string wrote;
             lock (output)
@@ -139,27 +139,31 @@ public sealed class RecoveryHostProcess : IAsyncDisposable
         }
 
         var host = new RecoveryHostProcess(process, output, address);
-        var healthy = await Polling.WaitUntilAsync(
-            async () =>
-            {
-                if (process.HasExited)
-                    return true;
-                try
+        var healthy = await Polling
+            .WaitUntilAsync(
+                async () =>
                 {
-                    using var response = await host.Http.GetAsync("/trax/health");
-                    return response.StatusCode == HttpStatusCode.OK;
-                }
-                catch (HttpRequestException)
-                {
-                    return false;
-                }
-            },
-            StartTimeout,
-            TimeSpan.FromMilliseconds(250)
-        );
+                    if (process.HasExited)
+                        return true;
+                    try
+                    {
+                        using var response = await host
+                            .Http.GetAsync("/trax/health")
+                            .ConfigureAwait(false);
+                        return response.StatusCode == HttpStatusCode.OK;
+                    }
+                    catch (HttpRequestException)
+                    {
+                        return false;
+                    }
+                },
+                StartTimeout,
+                TimeSpan.FromMilliseconds(250)
+            )
+            .ConfigureAwait(false);
         if (!healthy || process.HasExited)
         {
-            await host.DisposeAsync();
+            await host.DisposeAsync().ConfigureAwait(false);
             throw new InvalidOperationException(
                 $"The Recovery host did not start on {address}. It wrote:\n{host.Output}"
             );
@@ -172,12 +176,12 @@ public sealed class RecoveryHostProcess : IAsyncDisposable
     {
         if (!_process.HasExited)
             _process.Kill(entireProcessTree: true);
-        await _process.WaitForExitAsync();
+        await _process.WaitForExitAsync().ConfigureAwait(false);
     }
 
     public async ValueTask DisposeAsync()
     {
-        await KillAsync();
+        await KillAsync().ConfigureAwait(false);
         _process.Dispose();
         Http.Dispose();
     }
@@ -236,12 +240,12 @@ public sealed class RecoveryHostProcess : IAsyncDisposable
         using var cancel = new CancellationTokenSource(timeout);
         try
         {
-            await process.WaitForExitAsync(cancel.Token);
+            await process.WaitForExitAsync(cancel.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
             process.Kill(entireProcessTree: true);
-            await process.WaitForExitAsync();
+            await process.WaitForExitAsync().ConfigureAwait(false);
             lock (output)
                 return (-1, $"Killed after {timeout}.\n{output}");
         }

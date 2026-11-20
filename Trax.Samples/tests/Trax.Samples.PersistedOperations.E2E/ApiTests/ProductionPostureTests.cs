@@ -145,22 +145,23 @@ public class ProductionPostureTests
         using (http)
         {
             var resp = await http.PostAsJsonAsync(
-                "/trax/graphql/",
-                new
-                {
-                    query = UploadMutation,
-                    variables = new
+                    "/trax/graphql/",
+                    new
                     {
-                        input = new
+                        query = UploadMutation,
+                        variables = new
                         {
-                            id,
-                            document = GreetDocuments.Casual,
-                            bypassShapeDiff = false,
+                            input = new
+                            {
+                                id,
+                                document = GreetDocuments.Casual,
+                                bypassShapeDiff = false,
+                            },
                         },
-                    },
-                }
-            );
-            return await resp.Content.ReadAsStringAsync();
+                    }
+                )
+                .ConfigureAwait(false);
+            return await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
         }
     }
 }

@@ -7,7 +7,7 @@ public class AuthorOverlap(DemoPace pace) : EffectJunction<CorpusSlice, AuthorSi
 {
     public override async Task<AuthorSignal> Run(CorpusSlice slice)
     {
-        await Task.Delay(pace.StepDelay, CancellationToken);
+        await Task.Delay(pace.StepDelay, CancellationToken).ConfigureAwait(false);
 
         return new AuthorSignal(
             PaperPairs

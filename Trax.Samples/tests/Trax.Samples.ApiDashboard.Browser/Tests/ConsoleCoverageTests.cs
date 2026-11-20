@@ -27,7 +27,7 @@ public partial class ConsoleCoverageTests
     private static readonly IReadOnlyDictionary<string, string> Excluded = new Dictionary<
         string,
         string
-    >
+    >(StringComparer.Ordinal)
     {
         ["route:/dev/mock-overlay"] =
             "the mock's scenario switcher: it exists only in the mock and the demo, never on a host's console",
@@ -111,7 +111,10 @@ public partial class ConsoleCoverageTests
                         File.ReadAllLines(file).Where(l => !l.TrimStart().StartsWith('#'))
                     )
                 );
-            if (m.Success && m.Groups["kind"].Value != "query")
+            if (
+                m.Success
+                && !string.Equals(m.Groups["kind"].Value, "query", StringComparison.Ordinal)
+            )
                 surface.Add($"{m.Groups["kind"].Value}:{m.Groups["name"].Value}");
         }
 

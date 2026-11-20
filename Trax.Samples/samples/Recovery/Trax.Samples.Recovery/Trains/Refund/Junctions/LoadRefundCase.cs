@@ -13,7 +13,7 @@ public class LoadRefundCase(CaseFiles caseFiles, DemoPace pace)
 {
     public override async Task<RefundCase> Run(RefundInput input)
     {
-        await Task.Delay(pace.StepDelay);
+        await Task.Delay(pace.StepDelay).ConfigureAwait(false);
         var order = caseFiles.OrderFor(input.RunId);
         return new RefundCase
         {

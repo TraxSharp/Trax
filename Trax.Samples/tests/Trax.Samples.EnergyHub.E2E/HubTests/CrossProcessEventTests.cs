@@ -54,7 +54,13 @@ public class CrossProcessEventTests : HubTestFixture
             if (!payload.TryGetProperty("data", out var data))
                 continue;
             var completed = data.GetProperty("onTrainCompleted");
-            if (completed.GetProperty("externalId").GetString() != externalId)
+            if (
+                !string.Equals(
+                    completed.GetProperty("externalId").GetString(),
+                    externalId,
+                    StringComparison.Ordinal
+                )
+            )
                 continue;
 
             completed

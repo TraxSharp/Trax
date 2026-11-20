@@ -9,20 +9,22 @@ public class JoinChatRoomTests : ChatApiTestFixture
 {
     private async Task<string> CreateRoom()
     {
-        var result = await GraphQL.SendAsync(
-            """
-            mutation {
-                dispatch {
-                    createChatRoom(
-                        input: { name: "Join Test Room" }
-                    ) {
-                        output { chatRoomId }
+        var result = await GraphQL
+            .SendAsync(
+                """
+                mutation {
+                    dispatch {
+                        createChatRoom(
+                            input: { name: "Join Test Room" }
+                        ) {
+                            output { chatRoomId }
+                        }
                     }
                 }
-            }
-            """,
-            apiKey: AliceKey
-        );
+                """,
+                apiKey: AliceKey
+            )
+            .ConfigureAwait(false);
 
         result.HasErrors.Should().BeFalse();
         return result

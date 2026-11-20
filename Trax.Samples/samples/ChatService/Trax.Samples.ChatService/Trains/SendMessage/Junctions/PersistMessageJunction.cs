@@ -19,9 +19,11 @@ public class PersistMessageJunction(
 {
     public override async Task<SendMessageOutput> Run(SendMessageInput input)
     {
-        var participant = await db.ChatParticipants.FirstAsync(p =>
-            p.ChatRoomId == input.ChatRoomId && p.UserId == caller.Id
-        );
+        var participant = await db
+            .ChatParticipants.FirstAsync(p =>
+                p.ChatRoomId == input.ChatRoomId && p.UserId == caller.Id
+            )
+            .ConfigureAwait(false);
 
         var message = new ChatMessage
         {
@@ -34,7 +36,7 @@ public class PersistMessageJunction(
         };
 
         db.ChatMessages.Add(message);
-        await db.SaveChangesAsync();
+        await db.SaveChangesAsync().ConfigureAwait(false);
 
         logger.LogInformation(
             "Message {MessageId} sent by {UserId} in room {ChatRoomId}",

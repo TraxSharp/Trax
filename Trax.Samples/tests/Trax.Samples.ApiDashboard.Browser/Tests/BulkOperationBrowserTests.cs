@@ -30,7 +30,7 @@ public class BulkOperationBrowserTests : ConsoleTest
         // An earlier test's runs of this train were released when it ended; wait until they have finished, so
         // the filter matches this test's three.
         await Wait.UntilAsync(
-            async () => await ActiveRunsOf(train) == held.Count,
+            async () => await ActiveRunsOf(train).ConfigureAwait(false) == held.Count,
             BrowserTimeouts.Server,
             $"only this test's runs of {train} are in progress"
         );
@@ -46,8 +46,11 @@ public class BulkOperationBrowserTests : ConsoleTest
 
         var started = Page.WaitForRequestAsync(
             r =>
-                r.Url.EndsWith("/trax/graphql")
-                && r.PostData?.Contains("\"operationName\":\"StartBulkOperation\"") == true,
+                r.Url.EndsWith("/trax/graphql", StringComparison.Ordinal)
+                && r.PostData?.Contains(
+                    "\"operationName\":\"StartBulkOperation\"",
+                    StringComparison.Ordinal
+                ) == true,
             new() { Timeout = Render }
         );
         await runs.CancelAllMatching(held.Count).ClickAsync(new() { Timeout = Render });
@@ -117,11 +120,15 @@ public class BulkOperationBrowserTests : ConsoleTest
             .ToBeVisibleAsync(new() { Timeout = Render });
 
         Checks
-            .Sent.Count(s => s.OperationName == "StartBulkOperation")
+            .Sent.Count(s =>
+                string.Equals(s.OperationName, "StartBulkOperation", StringComparison.Ordinal)
+            )
             .Should()
             .Be(1, "one confirmation starts one operation");
         Checks
-            .Sent.Count(s => s.OperationName == "CancelExecutions")
+            .Sent.Count(s =>
+                string.Equals(s.OperationName, "CancelExecutions", StringComparison.Ordinal)
+            )
             .Should()
             .Be(0, "the selection is not what is cancelled");
     }

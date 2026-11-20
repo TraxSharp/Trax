@@ -30,11 +30,14 @@ public sealed record LiveTrainEvent(
             ShortName(message.TrainName),
             message.EventType,
             message.Timestamp,
-            message.EventType == "Failed" ? ClientReason(message) : null
+            string.Equals(message.EventType, "Failed", StringComparison.Ordinal)
+                ? ClientReason(message)
+                : null
         );
 
     private static string ClientReason(TrainLifecycleEventMessage message) =>
-        message.FailureException == nameof(TrainException) && message.FailureReason is not null
+        string.Equals(message.FailureException, nameof(TrainException), StringComparison.Ordinal)
+        && message.FailureReason is not null
             ? message.FailureReason
             : MaskedReason;
 

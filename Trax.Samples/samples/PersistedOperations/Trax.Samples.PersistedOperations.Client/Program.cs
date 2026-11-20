@@ -38,39 +38,41 @@ try
     // the same, so the guardrail accepts it like any other fix.
     foreach (var op in LoadManifest())
     {
-        await UploadAsync(operatorHttp, op.Id, op.Document);
+        await UploadAsync(operatorHttp, op.Id, op.Document).ConfigureAwait(false);
         Console.WriteLine($"Uploaded {op.Id}");
     }
 
     // 1. The app calls by id.
     Console.WriteLine("\n1. The app calls greet_v1 for Alice");
-    Expect(await GreetAsync(app), "Hey Alice!");
+    Expect(await GreetAsync(app).ConfigureAwait(false), "Hey Alice!");
 
     var inline = await app.PostAsJsonAsync(
-        string.Empty,
-        new
-        {
-            query = "query { discover { greeting { greet(input: { name: \"Eve\", style: FORMAL }) { greeting } } } }",
-        }
-    );
-    var inlineBody = await inline.Content.ReadAsStringAsync();
+            string.Empty,
+            new
+            {
+                query = "query { discover { greeting { greet(input: { name: \"Eve\", style: FORMAL }) { greeting } } } }",
+            }
+        )
+        .ConfigureAwait(false);
+    var inlineBody = await inline.Content.ReadAsStringAsync().ConfigureAwait(false);
     if (!inlineBody.Contains("PERSISTED_OPERATION_REQUIRED", StringComparison.Ordinal))
         throw new InvalidOperationException($"The server ran an inline query: {inlineBody}");
     Console.WriteLine($"   An inline query is refused: {inlineBody}");
 
     // 2. The operator fixes greet_v1; the app does not change.
-    await UploadAsync(operatorHttp, "greet_v1", FormalFix);
+    await UploadAsync(operatorHttp, "greet_v1", FormalFix).ConfigureAwait(false);
     Console.WriteLine("\n2. The operator re-uploads greet_v1 with style FORMAL");
-    Expect(await GreetAsync(app), "Good day, Alice.");
+    Expect(await GreetAsync(app).ConfigureAwait(false), "Good day, Alice.");
 
     // 3. An upload that renames the field the app reads is refused.
-    var refusal = await TryUploadAsync(operatorHttp, "greet_v1", RenamedField);
+    var refusal = await TryUploadAsync(operatorHttp, "greet_v1", RenamedField)
+        .ConfigureAwait(false);
     if (refusal is null)
         throw new InvalidOperationException(
             "The server accepted an upload that renames the field the app reads."
         );
     Console.WriteLine($"\n3. Renaming greeting to message is refused: {refusal}");
-    Expect(await GreetAsync(app), "Good day, Alice.");
+    Expect(await GreetAsync(app).ConfigureAwait(false), "Good day, Alice.");
 }
 catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException)
 {
@@ -86,10 +88,11 @@ return 0;
 static async Task<string> GreetAsync(HttpClient app)
 {
     var resp = await app.PostAsJsonAsync(
-        string.Empty,
-        new { id = "greet_v1", variables = new { name = "Alice" } }
-    );
-    var raw = await resp.Content.ReadAsStringAsync();
+            string.Empty,
+            new { id = "greet_v1", variables = new { name = "Alice" } }
+        )
+        .ConfigureAwait(false);
+    var raw = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
     using var doc = JsonDocument.Parse(raw);
     return
         doc.RootElement.TryGetProperty("data", out var data)
@@ -106,13 +109,13 @@ static async Task<string> GreetAsync(HttpClient app)
 static void Expect(string actual, string expected)
 {
     Console.WriteLine($"   greet_v1 answers: {actual}");
-    if (actual != expected)
+    if (!string.Equals(actual, expected, StringComparison.Ordinal))
         throw new InvalidOperationException($"Expected \"{expected}\", got {actual}");
 }
 
 static async Task UploadAsync(HttpClient http, string id, string document)
 {
-    var error = await TryUploadAsync(http, id, document);
+    var error = await TryUploadAsync(http, id, document).ConfigureAwait(false);
     if (error is not null)
         throw new InvalidOperationException($"uploadPersistedOperation failed for '{id}': {error}");
 }
@@ -131,8 +134,8 @@ static async Task<string?> TryUploadAsync(HttpClient http, string id, string doc
         }
         """;
     var body = new { query = mutation, variables = new { input = new { id, document } } };
-    var resp = await http.PostAsJsonAsync(string.Empty, body);
-    var raw = await resp.Content.ReadAsStringAsync();
+    var resp = await http.PostAsJsonAsync(string.Empty, body).ConfigureAwait(false);
+    var raw = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
 
     JsonDocument doc;
     try

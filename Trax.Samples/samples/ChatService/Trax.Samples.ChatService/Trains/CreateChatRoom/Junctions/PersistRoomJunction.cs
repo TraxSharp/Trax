@@ -40,7 +40,7 @@ public class PersistRoomJunction(
 
         db.ChatRooms.Add(room);
         db.ChatParticipants.Add(participant);
-        await db.SaveChangesAsync();
+        await db.SaveChangesAsync().ConfigureAwait(false);
 
         logger.LogInformation(
             "Created chat room {RoomId} '{Name}' with creator {UserId}",

@@ -415,20 +415,22 @@ public class ChatServiceE2ETests : ChatApiTestFixture
 
     private async Task<string> CreateRoom(string name = "E2E Test Room")
     {
-        var result = await GraphQL.SendAsync(
-            $$"""
-            mutation {
-                dispatch {
-                    createChatRoom(
-                        input: { name: "{{name}}" }
-                    ) {
-                        output { chatRoomId }
+        var result = await GraphQL
+            .SendAsync(
+                $$"""
+                mutation {
+                    dispatch {
+                        createChatRoom(
+                            input: { name: "{{name}}" }
+                        ) {
+                            output { chatRoomId }
+                        }
                     }
                 }
-            }
-            """,
-            apiKey: AliceKey
-        );
+                """,
+                apiKey: AliceKey
+            )
+            .ConfigureAwait(false);
 
         result.HasErrors.Should().BeFalse();
         return result

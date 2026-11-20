@@ -54,7 +54,8 @@ public abstract class AuthTestFixture
 
     protected async Task<string> MintAsync(string user)
     {
-        var minted = await Http.GetFromJsonAsync<MintedToken>($"/dev/token/{user}");
+        var minted = await Http.GetFromJsonAsync<MintedToken>($"/dev/token/{user}")
+            .ConfigureAwait(false);
         return minted!.Token;
     }
 
@@ -65,21 +66,24 @@ public abstract class AuthTestFixture
     protected static async Task<List<AuditRecord>> AuditFor(string operationName, int expected = 1)
     {
         List<AuditRecord> rows = [];
-        var arrived = await Polling.WaitUntilAsync(
-            async () =>
-            {
-                using var scope = SharedAuthSetup.Factory.Services.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<INewsroomDbContext>();
-                rows = await db
-                    .AuditRecords.AsNoTracking()
-                    .Where(r => r.OperationName == operationName)
-                    .OrderBy(r => r.Id)
-                    .ToListAsync();
-                return rows.Count >= expected;
-            },
-            TimeSpan.FromSeconds(15),
-            TimeSpan.FromMilliseconds(100)
-        );
+        var arrived = await Polling
+            .WaitUntilAsync(
+                async () =>
+                {
+                    using var scope = SharedAuthSetup.Factory.Services.CreateScope();
+                    var db = scope.ServiceProvider.GetRequiredService<INewsroomDbContext>();
+                    rows = await db
+                        .AuditRecords.AsNoTracking()
+                        .Where(r => r.OperationName == operationName)
+                        .OrderBy(r => r.Id)
+                        .ToListAsync()
+                        .ConfigureAwait(false);
+                    return rows.Count >= expected;
+                },
+                TimeSpan.FromSeconds(15),
+                TimeSpan.FromMilliseconds(100)
+            )
+            .ConfigureAwait(false);
 
         arrived
             .Should()
@@ -94,7 +98,7 @@ public abstract class AuthTestFixture
     {
         using var scope = SharedAuthSetup.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<INewsroomDbContext>();
-        return await db.Articles.CountAsync(a => a.Title == title);
+        return await db.Articles.CountAsync(a => a.Title == title).ConfigureAwait(false);
     }
 
     private sealed record MintedToken(string Token);

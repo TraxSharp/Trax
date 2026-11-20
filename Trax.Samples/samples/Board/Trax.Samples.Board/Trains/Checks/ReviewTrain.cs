@@ -24,26 +24,30 @@ public class RecordReview(InvokedRun run, TicketBoard board)
 {
     public override async Task<CheckResult> Run(ReviewCheck check)
     {
-        var ticket = await board.Find(check.TicketId, CancellationToken);
+        var ticket = await board.Find(check.TicketId, CancellationToken).ConfigureAwait(false);
         if (
-            await board.RefuseUnlessHeld(ticket, run.UserKey, "review", CancellationToken) is
+            await board
+                .RefuseUnlessHeld(ticket, run.UserKey, "review", CancellationToken)
+                .ConfigureAwait(false) is
             { } refusal
         )
             return CheckResult.Refuse(refusal);
 
-        var approve = check.Decision == "approve";
-        var moved = await board.Fire(
-            ticket!.Id,
-            approve ? TicketTrigger.Approved : TicketTrigger.SentBack,
-            new NoteInput
-            {
-                By = TicketBoard.Name(run.UserKey),
-                Note = approve
-                    ? $"approved by {TicketBoard.Name(run.UserKey)}"
-                    : $"sent back: {check.Reason}",
-            },
-            CancellationToken
-        );
+        var approve = string.Equals(check.Decision, "approve", StringComparison.Ordinal);
+        var moved = await board
+            .Fire(
+                ticket!.Id,
+                approve ? TicketTrigger.Approved : TicketTrigger.SentBack,
+                new NoteInput
+                {
+                    By = TicketBoard.Name(run.UserKey),
+                    Note = approve
+                        ? $"approved by {TicketBoard.Name(run.UserKey)}"
+                        : $"sent back: {check.Reason}",
+                },
+                CancellationToken
+            )
+            .ConfigureAwait(false);
         return moved is AdvanceOutcome.Advanced
             ? CheckResult.Accept(approve ? "approved; done" : "sent back to Fix")
             : CheckResult.Refuse(TicketBoard.Why(moved));

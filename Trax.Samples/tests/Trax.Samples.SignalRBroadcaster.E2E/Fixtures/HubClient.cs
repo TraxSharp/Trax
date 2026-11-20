@@ -54,7 +54,7 @@ public sealed class HubClient : IAsyncDisposable
             if (hit is not null)
                 return hit;
             // determinism: polling interval while waiting, bounded by the deadline above.
-            await Task.Delay(50);
+            await Task.Delay(50).ConfigureAwait(false);
         }
 
         throw new TimeoutException(
@@ -75,7 +75,7 @@ public sealed class HubClient : IAsyncDisposable
                 HandleCookies = false,
             }
         );
-        var response = await client.PostAsync("/demo/sign-in", content: null);
+        var response = await client.PostAsync("/demo/sign-in", content: null).ConfigureAwait(false);
         response.StatusCode.Should().Be(HttpStatusCode.Redirect);
 
         return string.Join(

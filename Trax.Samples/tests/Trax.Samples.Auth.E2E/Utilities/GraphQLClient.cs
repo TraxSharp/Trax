@@ -24,8 +24,8 @@ public class GraphQLClient(HttpClient httpClient)
         };
         caller.Apply(request);
 
-        using var response = await httpClient.SendAsync(request);
-        var body = await response.Content.ReadAsStringAsync();
+        using var response = await httpClient.SendAsync(request).ConfigureAwait(false);
+        var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
 
         if (string.IsNullOrWhiteSpace(body))
             throw new InvalidOperationException(
@@ -58,8 +58,12 @@ public class GraphQLResponse(JsonElement root, HttpStatusCode statusCode)
             .All(e =>
                 e.TryGetProperty("extensions", out var ext)
                 && ext.TryGetProperty("code", out var code)
-                && code.GetString() == "TRAX_AUTHORIZATION"
-                && e.GetProperty("message").GetString() == "Not authorized."
+                && string.Equals(code.GetString(), "TRAX_AUTHORIZATION", StringComparison.Ordinal)
+                && string.Equals(
+                    e.GetProperty("message").GetString(),
+                    "Not authorized.",
+                    StringComparison.Ordinal
+                )
             );
 
     public string? FirstErrorMessage =>

@@ -25,10 +25,12 @@ public class MetadataCleanupTests : RecoveryTestFixture
         var swept = await Polling.WaitUntilAsync(
             async () =>
             {
-                var response = await GraphQL.SendAsync(
-                    $$"""{ operations { executions(trainName: "{{ManifestManager}}", order: OLDEST, take: 1) { items { startTime } } } }""",
-                    OperatorKey
-                );
+                var response = await GraphQL
+                    .SendAsync(
+                        $$"""{ operations { executions(trainName: "{{ManifestManager}}", order: OLDEST, take: 1) { items { startTime } } } }""",
+                        OperatorKey
+                    )
+                    .ConfigureAwait(false);
                 if (response.HasErrors)
                     return false;
                 var items = response.GetData("operations", "executions", "items");

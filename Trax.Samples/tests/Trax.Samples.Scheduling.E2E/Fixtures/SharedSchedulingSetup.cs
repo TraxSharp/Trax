@@ -35,7 +35,7 @@ public class SharedSchedulingSetup
         Db = new Db(Factory.Services);
 
         var seeded = await Polling.WaitUntilAsync(
-            async () => await Db.Query(dc => dc.Manifests.CountAsync()) == 6,
+            async () => await Db.Query(dc => dc.Manifests.CountAsync()).ConfigureAwait(false) == 6,
             TimeSpan.FromSeconds(30),
             TimeSpan.FromMilliseconds(200)
         );
@@ -51,14 +51,15 @@ public class SharedSchedulingSetup
 
     private static async Task DropTraxSchema()
     {
-        await using var connection = new NpgsqlConnection(
-            SchedulingHostFactory.TestConnectionString
-        );
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(
-            "DROP SCHEMA IF EXISTS trax CASCADE;",
-            connection
-        );
-        await command.ExecuteNonQueryAsync();
+        var connection = new NpgsqlConnection(SchedulingHostFactory.TestConnectionString);
+        await using (connection.ConfigureAwait(false))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            var command = new NpgsqlCommand("DROP SCHEMA IF EXISTS trax CASCADE;", connection);
+            await using (command.ConfigureAwait(false))
+            {
+                await command.ExecuteNonQueryAsync();
+            }
+        }
     }
 }

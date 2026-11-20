@@ -12,8 +12,8 @@ public class ChatCallerIdentityTests : ChatApiTestFixture
 {
     private async Task<string> AliceRoomWithOneMessage()
     {
-        var roomId = await CreateRoomAsAsync(AliceKey, "Private");
-        var sent = await SendMessageAsAsync(AliceKey, roomId, "alice only");
+        var roomId = await CreateRoomAsAsync(AliceKey, "Private").ConfigureAwait(false);
+        var sent = await SendMessageAsAsync(AliceKey, roomId, "alice only").ConfigureAwait(false);
         sent.HasErrors.Should().BeFalse(sent.FirstErrorMessage);
         return roomId;
     }

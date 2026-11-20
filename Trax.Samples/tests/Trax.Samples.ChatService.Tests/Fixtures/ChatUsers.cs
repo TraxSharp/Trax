@@ -45,7 +45,7 @@ public static class ChatUsers
                     JoinedAt = DateTime.UtcNow,
                 }
             );
-        await db.SaveChangesAsync();
+        await db.SaveChangesAsync().ConfigureAwait(false);
         db.ChangeTracker.Clear();
         return room.Id;
     }

@@ -27,7 +27,7 @@ internal sealed class GetProductJunction : Junction<GetProductInput, GetProductO
     private static readonly IReadOnlyDictionary<string, GetProductOutput> Catalog = new Dictionary<
         string,
         GetProductOutput
-    >
+    >(StringComparer.Ordinal)
     {
         ["SKU-1"] = new("SKU-1", "Mechanical Keyboard", 42),
         ["SKU-2"] = new("SKU-2", "Wireless Mouse", 17),

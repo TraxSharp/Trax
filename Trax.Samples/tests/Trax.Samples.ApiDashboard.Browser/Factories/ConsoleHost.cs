@@ -55,6 +55,7 @@ public sealed class ConsoleHost : IAsyncDisposable
         {
             Port = int.TryParse(
                 Environment.GetEnvironmentVariable("TRAX_TEST_PG_PORT"),
+                System.Globalization.CultureInfo.InvariantCulture,
                 out var port
             )
                 ? port
@@ -84,9 +85,9 @@ public sealed class ConsoleHost : IAsyncDisposable
     /// <summary>Starts the host on an empty <c>trax</c> schema, so every run sees a first start.</summary>
     public static async Task<ConsoleHost> StartAsync()
     {
-        await DropTraxSchemaAsync();
+        await DropTraxSchemaAsync().ConfigureAwait(false);
         var app = Build();
-        await app.StartAsync();
+        await app.StartAsync().ConfigureAwait(false);
         var address = new Uri(
             app.Services.GetRequiredService<IServer>()
                 .Features.Get<IServerAddressesFeature>()!
@@ -101,10 +102,11 @@ public sealed class ConsoleHost : IAsyncDisposable
         using var scope = Services.CreateScope();
         var dataContext = await scope
             .ServiceProvider.GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(CancellationToken.None);
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
         try
         {
-            return await query(dataContext);
+            return await query(dataContext).ConfigureAwait(false);
         }
         finally
         {
@@ -119,12 +121,14 @@ public sealed class ConsoleHost : IAsyncDisposable
     public IHostedService MachineSweep =>
         Services
             .GetServices<IHostedService>()
-            .Single(s => s.GetType().Name == "InvokeOutcomeReconciler");
+            .Single(s =>
+                string.Equals(s.GetType().Name, "InvokeOutcomeReconciler", StringComparison.Ordinal)
+            );
 
     public async ValueTask DisposeAsync()
     {
-        await _app.StopAsync();
-        await _app.DisposeAsync();
+        await _app.StopAsync().ConfigureAwait(false);
+        await _app.DisposeAsync().ConfigureAwait(false);
         NpgsqlConnection.ClearAllPools();
     }
 
@@ -137,7 +141,7 @@ public sealed class ConsoleHost : IAsyncDisposable
         builder.Logging.SetMinimumLevel(LogLevel.Warning);
         // Two configured categories, so the scheduler page has log levels to show and change.
         builder.Configuration.AddInMemoryCollection(
-            new Dictionary<string, string?>
+            new Dictionary<string, string?>(StringComparer.Ordinal)
             {
                 ["Logging:LogLevel:Default"] = "Warning",
                 [$"Logging:LogLevel:{LoggedCategory}"] = "Warning",
@@ -214,12 +218,15 @@ public sealed class ConsoleHost : IAsyncDisposable
 
     private static async Task DropTraxSchemaAsync()
     {
-        await using var connection = new NpgsqlConnection(ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(
-            "DROP SCHEMA IF EXISTS trax CASCADE;",
-            connection
-        );
-        await command.ExecuteNonQueryAsync();
+        var connection = new NpgsqlConnection(ConnectionString);
+        await using (connection.ConfigureAwait(false))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            var command = new NpgsqlCommand("DROP SCHEMA IF EXISTS trax CASCADE;", connection);
+            await using (command.ConfigureAwait(false))
+            {
+                await command.ExecuteNonQueryAsync();
+            }
+        }
     }
 }

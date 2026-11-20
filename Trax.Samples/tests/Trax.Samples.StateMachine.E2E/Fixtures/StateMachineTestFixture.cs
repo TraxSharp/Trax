@@ -85,8 +85,10 @@ public abstract class StateMachineTestFixture
     protected async Task<Guid> CheckoutAtReview(params string[] items)
     {
         var id = Guid.NewGuid();
-        await SeedAsync(Alice, id, CheckoutWire("Review", items));
-        (await Machines.LoadAsync(Alice, Checkout, id)).State.Should().Be("Review");
+        await SeedAsync(Alice, id, CheckoutWire("Review", items)).ConfigureAwait(false);
+        (await Machines.LoadAsync(Alice, Checkout, id).ConfigureAwait(false))
+            .State.Should()
+            .Be("Review");
         return id;
     }
 
@@ -111,7 +113,8 @@ public abstract class StateMachineTestFixture
                     State = node["state"]!.GetValue<string>(),
                     Context = node["context"]!.AsObject().DeepClone().AsObject(),
                 }
-            );
+            )
+            .ConfigureAwait(false);
         written.Should().BeTrue();
     }
 

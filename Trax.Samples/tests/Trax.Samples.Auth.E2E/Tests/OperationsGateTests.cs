@@ -127,7 +127,7 @@ public class OperationsGateTests : AuthTestFixture
         echo.HasErrors.Should().BeFalse(echo.Raw);
 
         var seen = await Polling.WaitUntilAsync(
-            async () => await NewestEchoExecutionAsync() > marker,
+            async () => await NewestEchoExecutionAsync().ConfigureAwait(false) > marker,
             TimeSpan.FromSeconds(10),
             TimeSpan.FromMilliseconds(100)
         );
@@ -138,10 +138,12 @@ public class OperationsGateTests : AuthTestFixture
     /// <summary>The id of the newest echo execution the operator can list, or <c>null</c>.</summary>
     private async Task<long?> NewestEchoExecutionAsync()
     {
-        var result = await GraphQL.SendAsync(
-            """{ operations { executions(take: 1, trainName: "Trax.Samples.Auth.Trains.IEchoTrain") { items { id } } } }""",
-            OscarKey
-        );
+        var result = await GraphQL
+            .SendAsync(
+                """{ operations { executions(take: 1, trainName: "Trax.Samples.Auth.Trains.IEchoTrain") { items { id } } } }""",
+                OscarKey
+            )
+            .ConfigureAwait(false);
         result.HasErrors.Should().BeFalse(result.Raw);
         var items = result.GetData("operations", "executions", "items");
         return items.GetArrayLength() == 0 ? null : items[0].GetProperty("id").GetInt64();
@@ -167,16 +169,24 @@ public class OperationsGateTests : AuthTestFixture
         var listed = await Polling.WaitUntilAsync(
             async () =>
             {
-                var result = await GraphQL.SendAsync(
-                    """{ operations { executions(take: 50, trainName: "Trax.Samples.Auth.Trains.IPublishArticleTrain") { items { id externalId } } } }""",
-                    OscarKey
-                );
+                var result = await GraphQL
+                    .SendAsync(
+                        """{ operations { executions(take: 50, trainName: "Trax.Samples.Auth.Trains.IPublishArticleTrain") { items { id externalId } } } }""",
+                        OscarKey
+                    )
+                    .ConfigureAwait(false);
                 if (result.HasErrors)
                     return false;
                 id = result
                     .GetData("operations", "executions", "items")
                     .EnumerateArray()
-                    .Where(i => i.GetProperty("externalId").GetString() == externalId)
+                    .Where(i =>
+                        string.Equals(
+                            i.GetProperty("externalId").GetString(),
+                            externalId,
+                            StringComparison.Ordinal
+                        )
+                    )
                     .Select(i => (long?)i.GetProperty("id").GetInt64())
                     .FirstOrDefault();
                 return id is not null;

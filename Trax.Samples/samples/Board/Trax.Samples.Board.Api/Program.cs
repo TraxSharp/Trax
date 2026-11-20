@@ -164,7 +164,7 @@ if (app.Environment.IsDevelopment())
     app.UseTraxApiDashboard(dashboard => dashboard.AllowAnonymousShell());
 
 // Serves, or writes the client manifest and exits when started with --trax-export-client <path>.
-await app.RunTraxAsync(args);
+await app.RunTraxAsync(args).ConfigureAwait(false);
 
 namespace Trax.Samples.Board.Api
 {

@@ -259,8 +259,8 @@ var app = builder.Build();
 // manifest (--trax-export-client) opens no database, so it seeds nothing.
 if (!TraxClientExport.Requested)
 {
-    await CorpusSeeder.SeedAsync(app.Services);
-    await IndexSeeder.SeedAsync(app.Services);
+    await CorpusSeeder.SeedAsync(app.Services).ConfigureAwait(false);
+    await IndexSeeder.SeedAsync(app.Services).ConfigureAwait(false);
 }
 
 app.UseCors();
@@ -276,7 +276,7 @@ if (app.Environment.IsDevelopment())
     app.UseTraxApiDashboard(dashboard => dashboard.AllowAnonymousShell());
 
 // Serves, or writes the client manifest and exits when started with --trax-export-client <path>.
-await app.RunTraxAsync(args);
+await app.RunTraxAsync(args).ConfigureAwait(false);
 
 namespace Trax.Samples.Recovery.Api
 {

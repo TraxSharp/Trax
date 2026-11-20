@@ -46,9 +46,12 @@ public class ApiDashboardBrowserTests : ConsoleTest
         // The footer's read of the Trax version the host runs, through the gated endpoint, by its id.
         var graphQL = Page.WaitForResponseAsync(
             r =>
-                r.Url.EndsWith("/trax/graphql")
-                && r.Request.Method == "POST"
-                && r.Request.PostData?.Contains("\"operationName\":\"ServerVersion\"") == true,
+                r.Url.EndsWith("/trax/graphql", StringComparison.Ordinal)
+                && string.Equals(r.Request.Method, "POST", StringComparison.Ordinal)
+                && r.Request.PostData?.Contains(
+                    "\"operationName\":\"ServerVersion\"",
+                    StringComparison.Ordinal
+                ) == true,
             new() { Timeout = Render.Ms() }
         );
         // Deep link, no credential yet: the app asks for one.
@@ -105,7 +108,7 @@ public class ApiDashboardBrowserTests : ConsoleTest
         string drawn
     )
     {
-        var url = Console.Url(route.Replace("{gate}", $"{_gate}"));
+        var url = Console.Url(route.Replace("{gate}", $"{_gate}", StringComparison.Ordinal));
         var document = await Page.GotoAsync(url);
         document!.Status.Should().Be(200, $"{url} is a route of the app, not a missing file");
 

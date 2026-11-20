@@ -123,8 +123,17 @@ public class StartRunTests : RecoveryTestFixture
 
     private static async Task<long> LastManifestIdAsync(IDataContextProviderFactory dataContexts)
     {
-        await using var context = await dataContexts.CreateDbContextAsync(CancellationToken.None);
-        return await context.Manifests.AsNoTracking().MaxAsync(m => (long?)m.Id) ?? 0;
+        var context = await dataContexts
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using (context.ConfigureAwait(false))
+        {
+            return await context
+                    .Manifests.AsNoTracking()
+                    .MaxAsync(m => (long?)m.Id)
+                    .ConfigureAwait(false)
+                ?? 0;
+        }
     }
 
     private sealed class Operator : ICurrentPrincipalProvider
@@ -143,8 +152,11 @@ public class StartRunTests : RecoveryTestFixture
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
             if (
-                targetMethod?.Name != nameof(ITraxScheduler.ScheduleOnceAsync)
-                || args?.OfType<RefundInput>().FirstOrDefault() is not { } input
+                !string.Equals(
+                    targetMethod?.Name,
+                    nameof(ITraxScheduler.ScheduleOnceAsync),
+                    StringComparison.Ordinal
+                ) || args?.OfType<RefundInput>().FirstOrDefault() is not { } input
             )
                 throw new NotSupportedException(targetMethod?.Name);
             RunId = input.RunId;

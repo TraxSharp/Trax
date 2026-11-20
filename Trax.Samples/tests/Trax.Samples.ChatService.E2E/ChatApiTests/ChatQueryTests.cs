@@ -8,20 +8,22 @@ public class ChatQueryTests : ChatApiTestFixture
 {
     private async Task<string> CreateRoomAndSendMessages(string roomName, int messageCount)
     {
-        var createResult = await GraphQL.SendAsync(
-            $$"""
-            mutation {
-                dispatch {
-                    createChatRoom(
-                        input: { name: "{{roomName}}" }
-                    ) {
-                        output { chatRoomId }
+        var createResult = await GraphQL
+            .SendAsync(
+                $$"""
+                mutation {
+                    dispatch {
+                        createChatRoom(
+                            input: { name: "{{roomName}}" }
+                        ) {
+                            output { chatRoomId }
+                        }
                     }
                 }
-            }
-            """,
-            apiKey: AliceKey
-        );
+                """,
+                apiKey: AliceKey
+            )
+            .ConfigureAwait(false);
 
         createResult.HasErrors.Should().BeFalse();
         var chatRoomId = createResult
@@ -31,20 +33,22 @@ public class ChatQueryTests : ChatApiTestFixture
 
         for (var i = 1; i <= messageCount; i++)
         {
-            var sendResult = await GraphQL.SendAsync(
-                $$"""
-                mutation {
-                    dispatch {
-                        sendMessage(
-                            input: { chatRoomId: "{{chatRoomId}}", content: "Message {{i}}" }
-                        ) {
-                            externalId
+            var sendResult = await GraphQL
+                .SendAsync(
+                    $$"""
+                    mutation {
+                        dispatch {
+                            sendMessage(
+                                input: { chatRoomId: "{{chatRoomId}}", content: "Message {{i}}" }
+                            ) {
+                                externalId
+                            }
                         }
                     }
-                }
-                """,
-                apiKey: AliceKey
-            );
+                    """,
+                    apiKey: AliceKey
+                )
+                .ConfigureAwait(false);
 
             sendResult.HasErrors.Should().BeFalse();
         }

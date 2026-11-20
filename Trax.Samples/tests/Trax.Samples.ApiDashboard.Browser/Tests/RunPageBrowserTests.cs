@@ -95,7 +95,11 @@ public class RunPageBrowserTests : ConsoleTest
                 new System.Text.RegularExpressions.Regex(@"/runs/queued/\d+$"),
                 new() { Timeout = Render }
             );
-        var resumes = Checks.Sent.Where(s => s.OperationName == "ResumeExecution").ToList();
+        var resumes = Checks
+            .Sent.Where(s =>
+                string.Equals(s.OperationName, "ResumeExecution", StringComparison.Ordinal)
+            )
+            .ToList();
         resumes.Should().ContainSingle("one click sends one resume");
         resumes[0]
             .Raw.Should()

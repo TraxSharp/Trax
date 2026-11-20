@@ -16,7 +16,7 @@ public class FetchDataJunction(ILogger<FetchDataJunction> logger)
         logger.LogInformation("Looking up record {Id}", input.Id);
 
         // Replace this with your actual data access logic.
-        await Task.Delay(50);
+        await Task.Delay(50).ConfigureAwait(false);
 
         return new LookupOutput
         {

@@ -14,56 +14,61 @@ public class ReadDecisionJournal(IDataContextProviderFactory dataContexts, IRunS
         // Only the caller who started the run reads its decisions; any other run answers as one with none recorded.
         // The execution read is the caller's own latest under the id, never another one recorded under the same id.
         if (
-            await starters.LatestExecutionStartedByCurrentCallerAsync(
-                input.RunId,
-                CancellationToken
-            )
+            await starters
+                .LatestExecutionStartedByCurrentCallerAsync(input.RunId, CancellationToken)
+                .ConfigureAwait(false)
             is not { } metadataId
         )
             return new DecisionJournalOutput { RunId = input.RunId, Decisions = [] };
 
-        await using var context = await dataContexts.CreateDbContextAsync(CancellationToken);
-
-        var metadata = await context
-            .Metadatas.AsNoTracking()
-            .Where(m => m.Id == metadataId)
-            .Select(m => new
-            {
-                m.Id,
-                m.ReplayDecisionsOf,
-                m.ReplayAbandoned,
-            })
-            .FirstOrDefaultAsync(CancellationToken);
-        if (metadata is null)
-            return new DecisionJournalOutput { RunId = input.RunId, Decisions = [] };
-
-        var rows = await context
-            .RecordedDecisions.AsNoTracking()
-            .Where(d => d.MetadataId == metadata.Id)
-            .OrderBy(d => d.Id)
-            .ToListAsync(CancellationToken);
-
-        return new DecisionJournalOutput
+        var context = await dataContexts
+            .CreateDbContextAsync(CancellationToken)
+            .ConfigureAwait(false);
+        await using (context.ConfigureAwait(false))
         {
-            RunId = input.RunId,
-            ReplayDecisionsOf = metadata?.ReplayDecisionsOf,
-            ReplayAbandoned = metadata?.ReplayAbandoned ?? false,
-            Decisions = rows.Select(d => new RecordedDecisionView
+            var metadata = await context
+                .Metadatas.AsNoTracking()
+                .Where(m => m.Id == metadataId)
+                .Select(m => new
                 {
-                    QuestionKey = d.QuestionKey,
-                    Occurrence = d.Occurrence,
-                    Kind = d.Kind,
-                    Replayed = d.Replayed,
-                    ReplayRefused = ReplayRefused(d.Answer),
-                    Model = d.Model,
-                    Decider = d.Decider?[(d.Decider.LastIndexOf('.') + 1)..],
-                    Question = d.Question,
-                    Answer = d.Answer,
-                    StateHash = d.StateHash is { Length: > 15 } hash ? hash[..15] : d.StateHash,
-                    DecidedAt = d.DecidedAt,
+                    m.Id,
+                    m.ReplayDecisionsOf,
+                    m.ReplayAbandoned,
                 })
-                .ToList(),
-        };
+                .FirstOrDefaultAsync(CancellationToken)
+                .ConfigureAwait(false);
+            if (metadata is null)
+                return new DecisionJournalOutput { RunId = input.RunId, Decisions = [] };
+
+            var rows = await context
+                .RecordedDecisions.AsNoTracking()
+                .Where(d => d.MetadataId == metadata.Id)
+                .OrderBy(d => d.Id)
+                .ToListAsync(CancellationToken)
+                .ConfigureAwait(false);
+
+            return new DecisionJournalOutput
+            {
+                RunId = input.RunId,
+                ReplayDecisionsOf = metadata?.ReplayDecisionsOf,
+                ReplayAbandoned = metadata?.ReplayAbandoned ?? false,
+                Decisions = rows.Select(d => new RecordedDecisionView
+                    {
+                        QuestionKey = d.QuestionKey,
+                        Occurrence = d.Occurrence,
+                        Kind = d.Kind,
+                        Replayed = d.Replayed,
+                        ReplayRefused = ReplayRefused(d.Answer),
+                        Model = d.Model,
+                        Decider = d.Decider?[(d.Decider.LastIndexOf('.') + 1)..],
+                        Question = d.Question,
+                        Answer = d.Answer,
+                        StateHash = d.StateHash is { Length: > 15 } hash ? hash[..15] : d.StateHash,
+                        DecidedAt = d.DecidedAt,
+                    })
+                    .ToList(),
+            };
+        }
     }
 
     private static string? ReplayRefused(string? answerJson)

@@ -43,9 +43,13 @@ public partial class EmbeddingSimilarity(DemoPace pace)
 
     public override async Task<EmbeddingSignal> Run(CorpusSlice slice)
     {
-        await Task.Delay(pace.StepDelay, CancellationToken);
+        await Task.Delay(pace.StepDelay, CancellationToken).ConfigureAwait(false);
 
-        var vectors = slice.Papers.ToDictionary(p => p.Id, p => Vector($"{p.Title} {p.Abstract}"));
+        var vectors = slice.Papers.ToDictionary(
+            p => p.Id,
+            p => Vector($"{p.Title} {p.Abstract}"),
+            StringComparer.Ordinal
+        );
 
         return new EmbeddingSignal(
             PaperPairs
@@ -65,7 +69,10 @@ public partial class EmbeddingSimilarity(DemoPace pace)
         var counts = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var raw in NotALetter().Split(text.ToLowerInvariant()))
         {
-            var word = raw.Length > 4 && raw.EndsWith('s') && !raw.EndsWith("ss") ? raw[..^1] : raw;
+            var word =
+                raw.Length > 4 && raw.EndsWith('s') && !raw.EndsWith("ss", StringComparison.Ordinal)
+                    ? raw[..^1]
+                    : raw;
             if (word.Length < 4 || Stopwords.Contains(word))
                 continue;
             counts[word] = counts.GetValueOrDefault(word) + 1;

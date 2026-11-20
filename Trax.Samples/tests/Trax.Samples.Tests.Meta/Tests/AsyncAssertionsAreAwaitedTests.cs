@@ -84,7 +84,9 @@ public class AsyncAssertionsAreAwaitedTests
     /// </summary>
     private static IEnumerable<int> UnawaitedLines(string source)
     {
-        var stripped = SourceText.StripCommentsAndStrings(source.Replace("\r\n", "\n"));
+        var stripped = SourceText.StripCommentsAndStrings(
+            source.Replace("\r\n", "\n", StringComparison.Ordinal)
+        );
         foreach (Match match in AsyncAssertion.Matches(stripped))
         {
             var start = stripped.LastIndexOfAny([';', '{', '}'], match.Index) + 1;

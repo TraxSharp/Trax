@@ -18,7 +18,7 @@ public class ComposeNoticeJunction(ILogger<ComposeNoticeJunction> logger)
             input.UserId
         );
 
-        await Task.Delay(100);
+        await Task.Delay(100).ConfigureAwait(false);
 
         logger.LogInformation(
             "Notice composed from template: violation-{ViolationType}",

@@ -25,31 +25,38 @@ public sealed class GraphQLWebSocketClient : IAsyncDisposable
         var client = new GraphQLWebSocketClient();
         wsClient.ConfigureRequest = request =>
             request.Headers["Sec-WebSocket-Protocol"] = "graphql-transport-ws";
-        client._socket = await wsClient.ConnectAsync(
-            new Uri("ws://localhost/trax/graphql"),
-            CancellationToken.None
-        );
+        client._socket = await wsClient
+            .ConnectAsync(new Uri("ws://localhost/trax/graphql"), CancellationToken.None)
+            .ConfigureAwait(false);
 
-        await client.SendAsync(
-            payload is null
-                ? new { type = "connection_init" }
-                : new { type = "connection_init", payload }
-        );
+        await client
+            .SendAsync(
+                payload is null
+                    ? new { type = "connection_init" }
+                    : new { type = "connection_init", payload }
+            )
+            .ConfigureAwait(false);
 
         JsonElement ack;
         try
         {
-            ack = await client.ReceiveAsync(TimeSpan.FromSeconds(10));
+            ack = await client.ReceiveAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         }
         catch (WebSocketClosedException closed)
         {
-            await client.DisposeAsync();
+            await client.DisposeAsync().ConfigureAwait(false);
             throw new ConnectionRejectedException(closed.Message);
         }
 
-        if (ack.GetProperty("type").GetString() != "connection_ack")
+        if (
+            !string.Equals(
+                ack.GetProperty("type").GetString(),
+                "connection_ack",
+                StringComparison.Ordinal
+            )
+        )
         {
-            await client.DisposeAsync();
+            await client.DisposeAsync().ConfigureAwait(false);
             throw new ConnectionRejectedException(ack.GetRawText());
         }
 
@@ -76,7 +83,7 @@ public sealed class GraphQLWebSocketClient : IAsyncDisposable
             if (remaining <= TimeSpan.Zero)
                 throw new TimeoutException($"No WebSocket message within {timeout.TotalSeconds}s.");
 
-            var message = await ReceiveRawAsync(remaining);
+            var message = await ReceiveRawAsync(remaining).ConfigureAwait(false);
             var type = message.GetProperty("type").GetString();
             if (type is not ("ping" or "pong"))
                 return message;
@@ -88,7 +95,9 @@ public sealed class GraphQLWebSocketClient : IAsyncDisposable
         var bytes = Encoding.UTF8.GetBytes(
             JsonSerializer.Serialize(message, JsonSerializerOptions.Web)
         );
-        await _socket.SendAsync(bytes, WebSocketMessageType.Text, true, CancellationToken.None);
+        await _socket
+            .SendAsync(bytes, WebSocketMessageType.Text, true, CancellationToken.None)
+            .ConfigureAwait(false);
     }
 
     private async Task<JsonElement> ReceiveRawAsync(TimeSpan timeout)
@@ -101,7 +110,7 @@ public sealed class GraphQLWebSocketClient : IAsyncDisposable
             WebSocketReceiveResult result;
             do
             {
-                result = await _socket.ReceiveAsync(buffer, cts.Token);
+                result = await _socket.ReceiveAsync(buffer, cts.Token).ConfigureAwait(false);
                 if (result.MessageType == WebSocketMessageType.Close)
                     throw new WebSocketClosedException(
                         $"closed by the server: {result.CloseStatus} {result.CloseStatusDescription}"
@@ -123,11 +132,9 @@ public sealed class GraphQLWebSocketClient : IAsyncDisposable
         {
             try
             {
-                await _socket.CloseAsync(
-                    WebSocketCloseStatus.NormalClosure,
-                    "done",
-                    CancellationToken.None
-                );
+                await _socket
+                    .CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None)
+                    .ConfigureAwait(false);
             }
             catch (WebSocketException)
             {

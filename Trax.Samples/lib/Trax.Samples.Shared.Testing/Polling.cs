@@ -28,13 +28,13 @@ public static class Polling
 
         while (stopwatch.Elapsed < timeout)
         {
-            if (await condition())
+            if (await condition().ConfigureAwait(false))
                 return true;
 
-            await Task.Delay(interval, cancellationToken);
+            await Task.Delay(interval, cancellationToken).ConfigureAwait(false);
         }
 
-        return await condition();
+        return await condition().ConfigureAwait(false);
     }
 
     /// <summary>Synchronous-condition overload of <see cref="WaitUntilAsync(Func{Task{bool}}, TimeSpan, TimeSpan?, CancellationToken)"/>.</summary>

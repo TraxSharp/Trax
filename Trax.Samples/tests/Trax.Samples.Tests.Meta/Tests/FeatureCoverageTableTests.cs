@@ -65,7 +65,10 @@ public class FeatureCoverageTableTests
     private static List<Row> Rows()
     {
         var lines = File.ReadAllLines(RepoRoot.Combine("README.md"));
-        var start = Array.FindIndex(lines, l => l.Trim() == Heading);
+        var start = Array.FindIndex(
+            lines,
+            l => string.Equals(l.Trim(), Heading, StringComparison.Ordinal)
+        );
         if (start < 0)
             return new List<Row>();
 
@@ -81,7 +84,7 @@ public class FeatureCoverageTableTests
             var cells = line.Trim('|').Split('|').Select(c => c.Trim()).ToArray();
             if (
                 cells.Length < 3
-                || cells[1] == "Feature"
+                || string.Equals(cells[1], "Feature", StringComparison.Ordinal)
                 || cells.All(c => c.All(ch => ch is '-' or ':'))
             )
                 continue;
@@ -136,7 +139,9 @@ public class FeatureCoverageTableTests
                 || claim.Path.Split('/').Any(segment => segment is "." or "..")
             )
                 problems.Add($"{at} is not under samples/<Sample>/features/ or specs/");
-            else if (Path.GetFileName(claim.Path) != claim.File)
+            else if (
+                !string.Equals(Path.GetFileName(claim.Path), claim.File, StringComparison.Ordinal)
+            )
                 problems.Add($"{at}: the link text is not the file's name");
             else if (!File.Exists(file))
                 problems.Add($"{at} does not exist");
@@ -160,7 +165,10 @@ public class FeatureCoverageTableTests
                 );
                 var dir = Path.GetDirectoryName(full)!;
                 var name = Path.GetFileName(full);
-                if (!name.Contains('*') && !name.Contains('?'))
+                if (
+                    !name.Contains('*', StringComparison.Ordinal)
+                    && !name.Contains('?', StringComparison.Ordinal)
+                )
                     return [full];
                 return Directory.Exists(dir)
                     ? Directory.EnumerateFiles(dir, name).Select(Path.GetFullPath)
@@ -208,7 +216,11 @@ public class FeatureCoverageTableTests
                 !KnownRepos.Contains(c.Repo)
                 || !c.Path.StartsWith("tests/", StringComparison.Ordinal)
                 || !c.Class.EndsWith("Tests", StringComparison.Ordinal)
-                || Path.GetFileName(c.Path) != c.Class + ".cs"
+                || !string.Equals(
+                    Path.GetFileName(c.Path),
+                    c.Class + ".cs",
+                    StringComparison.Ordinal
+                )
             )
             .Select(c => $"README.md line {c.Line}: {c.Class} -> {c.Repo}/{c.Path}")
             .ToList();
@@ -226,7 +238,9 @@ public class FeatureCoverageTableTests
     [Test]
     public void EveryClassNamedForThisRepo_IsDeclaredInTheLinkedFile()
     {
-        var claims = Claims().Where(c => c.Repo == ThisRepo).ToList();
+        var claims = Claims()
+            .Where(c => string.Equals(c.Repo, ThisRepo, StringComparison.Ordinal))
+            .ToList();
         claims.Should().NotBeEmpty($"the table names no class in this repo. See {Adr}.");
 
         var offenders = new List<string>();
@@ -306,7 +320,7 @@ public class FeatureCoverageTableTests
     public void EveryE2EProject_IsNamedByARow()
     {
         var linked = Claims()
-            .Where(c => c.Repo == ThisRepo)
+            .Where(c => string.Equals(c.Repo, ThisRepo, StringComparison.Ordinal))
             .Select(c => c.Path.Split('/')[1])
             .ToHashSet(StringComparer.Ordinal);
         var linkedFeatures = FeatureClaims()
@@ -317,12 +331,14 @@ public class FeatureCoverageTableTests
             .EnumerateDirectories(RepoRoot.Combine("tests"))
             // A folder a retired project left behind (bin/ and obj/ only) is not a suite.
             .Where(dir => Directory.EnumerateFiles(dir, "*.csproj").Any())
-            .Where(dir => Path.GetFileName(dir).EndsWith(".E2E", StringComparison.Ordinal))
-            .Where(dir => !linked.Contains(Path.GetFileName(dir)))
-            .Where(dir => !CompiledFeatureFiles(dir).Any(linkedFeatures.Contains))
+            .Where(dir =>
+                Path.GetFileName(dir).EndsWith(".E2E", StringComparison.Ordinal)
+                && !linked.Contains(Path.GetFileName(dir))
+                && !CompiledFeatureFiles(dir).Any(linkedFeatures.Contains)
+            )
             .Select(Path.GetFileName)
             .OfType<string>()
-            .OrderBy(name => name, StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
             .ToList();
 
         unlisted

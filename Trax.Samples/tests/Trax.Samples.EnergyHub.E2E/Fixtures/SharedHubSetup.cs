@@ -59,10 +59,10 @@ public class SharedHubSetup
         while (DateTime.UtcNow < deadline)
         {
             dc.Reset();
-            var count = await dc.Manifests.AsNoTracking().CountAsync();
+            var count = await dc.Manifests.AsNoTracking().CountAsync().ConfigureAwait(false);
             if (count > 0)
                 return;
-            await Task.Delay(250);
+            await Task.Delay(250).ConfigureAwait(false);
         }
 
         throw new TimeoutException("Manifests were not seeded within 15 seconds.");

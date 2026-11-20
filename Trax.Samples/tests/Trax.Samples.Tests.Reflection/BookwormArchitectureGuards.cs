@@ -55,7 +55,7 @@ public sealed class BookwormDataLayerGuards : DomainDataLayerGuardFixture
         {
             OwnerType = typeof(Member),
             PrincipalAccessorType = typeof(ILendingCaller),
-            FilterBypassAllowlist = new Dictionary<string, string>
+            FilterBypassAllowlist = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 [
                     "samples/Bookworm/Trax.Samples.Bookworm/Trains/Lending/BorrowBook/Junctions/BorrowBookJunction.cs"

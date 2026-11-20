@@ -38,15 +38,15 @@ public abstract class ApiTestBase
     /// POST a GraphQL request body, return the raw response.
     /// </summary>
     protected async Task<HttpResponseMessage> PostAsync(object body) =>
-        await Http.PostAsJsonAsync("/trax/graphql/", body);
+        await Http.PostAsJsonAsync("/trax/graphql/", body).ConfigureAwait(false);
 
     /// <summary>
     /// POST and parse the response body as JSON.
     /// </summary>
     protected async Task<JsonDocument> PostJsonAsync(object body)
     {
-        var resp = await PostAsync(body);
-        var text = await resp.Content.ReadAsStringAsync();
+        var resp = await PostAsync(body).ConfigureAwait(false);
+        var text = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
         return JsonDocument.Parse(text);
     }
 
@@ -57,10 +57,11 @@ public abstract class ApiTestBase
     {
         using var app = SharedApiSetup.Factory.CreateClient();
         var resp = await app.PostAsJsonAsync(
-            "/trax/graphql/",
-            new { id, variables = GreetDocuments.Variables(name) }
-        );
-        return JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+                "/trax/graphql/",
+                new { id, variables = GreetDocuments.Variables(name) }
+            )
+            .ConfigureAwait(false);
+        return JsonDocument.Parse(await resp.Content.ReadAsStringAsync().ConfigureAwait(false));
     }
 
     /// <summary>Uploads a document through the management mutation, as the operator.</summary>
@@ -104,7 +105,7 @@ public abstract class ApiTestBase
     /// <summary>Uploads a document and asserts the upload succeeded.</summary>
     protected async Task UploadAsync(string id, string document, bool bypassShapeDiff = false)
     {
-        using var json = await UploadRawAsync(id, document, bypassShapeDiff);
+        using var json = await UploadRawAsync(id, document, bypassShapeDiff).ConfigureAwait(false);
         var payload = UploadPayload(json);
         payload.GetProperty("success").GetBoolean().Should().BeTrue(payload.GetRawText());
     }

@@ -17,16 +17,22 @@ public static class TopicMapDrafts
     /// </summary>
     public static async Task ClearAsync(string connectionString)
     {
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(
-            "DELETE FROM trax.snapshot_draft WHERE machine = ANY(@machines)",
-            connection
-        );
-        command.Parameters.AddWithValue(
-            "machines",
-            new[] { TopicMapMachine.MachineId, OrderMachine.MachineId }
-        );
-        await command.ExecuteNonQueryAsync();
+        var connection = new NpgsqlConnection(connectionString);
+        await using (connection.ConfigureAwait(false))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            var command = new NpgsqlCommand(
+                "DELETE FROM trax.snapshot_draft WHERE machine = ANY(@machines)",
+                connection
+            );
+            await using (command.ConfigureAwait(false))
+            {
+                command.Parameters.AddWithValue(
+                    "machines",
+                    new[] { TopicMapMachine.MachineId, OrderMachine.MachineId }
+                );
+                await command.ExecuteNonQueryAsync();
+            }
+        }
     }
 }

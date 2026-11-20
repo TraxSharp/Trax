@@ -116,21 +116,23 @@ public class ForwardMigrationTests : StateMachineTestFixture
         using var scope = SharedStateMachineSetup.Factory.Services.CreateScope();
         var store = scope.ServiceProvider.GetRequiredService<ISnapshotStore>();
 
-        var inserted = await store.Insert(
-            AliceUserKey,
-            id,
-            new Snapshot
-            {
-                Machine = Checkout,
-                Version = 1,
-                State = state,
-                Context = new JsonObject
+        var inserted = await store
+            .Insert(
+                AliceUserKey,
+                id,
+                new Snapshot
                 {
-                    ["items"] = new JsonArray(items.Select(i => (JsonNode?)i).ToArray()),
-                    ["receipt"] = null,
-                },
-            }
-        );
+                    Machine = Checkout,
+                    Version = 1,
+                    State = state,
+                    Context = new JsonObject
+                    {
+                        ["items"] = new JsonArray(items.Select(i => (JsonNode?)i).ToArray()),
+                        ["receipt"] = null,
+                    },
+                }
+            )
+            .ConfigureAwait(false);
 
         inserted.Should().BeTrue();
     }

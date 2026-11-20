@@ -23,12 +23,20 @@ public class SuitesRunOnceTests
         )!;
         var testArgs =
             (string?)
-                config["packages"]!.AsArray().Single(p => (string?)p!["folder"] == "Trax.Samples")![
-                    "dotnet"
-                ]!["test-args"]
+                config["packages"]!
+                    .AsArray()
+                    .Single(p =>
+                        string.Equals(
+                            (string?)p!["folder"],
+                            "Trax.Samples",
+                            StringComparison.Ordinal
+                        )
+                    )!["dotnet"]!["test-args"]
             ?? "";
         var suites = (config["suites"]?.AsArray() ?? [])
-            .Where(s => (string?)s!["folder"] == "Trax.Samples")
+            .Where(s =>
+                string.Equals((string?)s!["folder"], "Trax.Samples", StringComparison.Ordinal)
+            )
             .Select(s => (string)s!["project"]!)
             .ToList();
 
@@ -68,7 +76,7 @@ public class SuitesRunOnceTests
         var dir = Path.GetDirectoryName(RepoRoot.Combine(solution))!;
         var own = ProjectsIn(RepoRoot.Combine(solution), dir);
         var folders = ProjectsIn(RepoRoot.Combine("Trax.Samples.slnx"), RepoRoot.Path);
-        return own.Intersect(folders).Select(RepoRoot.Relative).ToList();
+        return own.Intersect(folders, StringComparer.Ordinal).Select(RepoRoot.Relative).ToList();
     }
 
     private static HashSet<string> ProjectsIn(string solution, string dir) =>

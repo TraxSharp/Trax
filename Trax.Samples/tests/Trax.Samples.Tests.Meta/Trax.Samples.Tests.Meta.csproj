@@ -21,6 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../../../Trax.Core/src/Trax.Core/Trax.Core.csproj" />
     <ProjectReference Include="../../../Trax.Core/src/Trax.Core.Testing/Trax.Core.Testing.csproj" />
   </ItemGroup>
 </Project>

@@ -80,40 +80,46 @@ public class BrowserSetup
     /// <summary>A browser context on the built page: its files from <see cref="Dist"/>, its API calls to the host.</summary>
     public static async Task<IPage> NewPageAsync()
     {
-        var context = await Browser.NewContextAsync();
-        await context.RouteAsync(
-            $"{Api.ToString().TrimEnd('/')}/**",
-            async route =>
-            {
-                var path = new Uri(route.Request.Url).AbsolutePath.TrimStart('/');
-                if (
-                    path.StartsWith("trax/", StringComparison.Ordinal)
-                    || path.StartsWith("dev/", StringComparison.Ordinal)
-                )
+        var context = await Browser.NewContextAsync().ConfigureAwait(false);
+        await context
+            .RouteAsync(
+                $"{Api.ToString().TrimEnd('/')}/**",
+                async route =>
                 {
-                    await route.ContinueAsync();
-                    return;
-                }
-                var file = Path.Combine(Dist, path.Length == 0 ? "index.html" : path);
-                if (!File.Exists(file))
-                    file = Path.Combine(Dist, "index.html");
-                await route.FulfillAsync(
-                    new()
+                    var path = new Uri(route.Request.Url).AbsolutePath.TrimStart('/');
+                    if (
+                        path.StartsWith("trax/", StringComparison.Ordinal)
+                        || path.StartsWith("dev/", StringComparison.Ordinal)
+                    )
                     {
-                        BodyBytes = await File.ReadAllBytesAsync(file),
-                        ContentType =
-                            file.EndsWith(".js") ? "text/javascript"
-                            : file.EndsWith(".css") ? "text/css"
-                            : "text/html",
+                        await route.ContinueAsync().ConfigureAwait(false);
+                        return;
                     }
-                );
-            }
-        );
-        var page = await context.NewPageAsync();
+                    var file = Path.Combine(Dist, path.Length == 0 ? "index.html" : path);
+                    if (!File.Exists(file))
+                        file = Path.Combine(Dist, "index.html");
+                    await route
+                        .FulfillAsync(
+                            new()
+                            {
+                                BodyBytes = await File.ReadAllBytesAsync(file)
+                                    .ConfigureAwait(false),
+                                ContentType =
+                                    file.EndsWith(".js", StringComparison.Ordinal)
+                                        ? "text/javascript"
+                                    : file.EndsWith(".css", StringComparison.Ordinal) ? "text/css"
+                                    : "text/html",
+                            }
+                        )
+                        .ConfigureAwait(false);
+                }
+            )
+            .ConfigureAwait(false);
+        var page = await context.NewPageAsync().ConfigureAwait(false);
         page.Console += (_, message) => Seen.Enqueue($"console: {message.Text}");
         page.RequestFailed += (_, request) =>
             Seen.Enqueue($"failed: {request.Url} {request.Failure}");
-        await page.GotoAsync(Api.ToString());
+        await page.GotoAsync(Api.ToString()).ConfigureAwait(false);
         return page;
     }
 
@@ -174,7 +180,7 @@ public class BrowserSetup
                 );
             try
             {
-                var status = (await http.GetAsync("/trax/health")).StatusCode;
+                var status = (await http.GetAsync("/trax/health").ConfigureAwait(false)).StatusCode;
                 if (status == HttpStatusCode.OK)
                     return;
                 last = status.ToString();
@@ -188,7 +194,7 @@ public class BrowserSetup
                 last = "timed out";
             }
             // determinism: polls the starting host until it answers, bounded by the deadline above.
-            await Task.Delay(250);
+            await Task.Delay(250).ConfigureAwait(false);
         }
         throw new TimeoutException(
             $"The CheckIn host did not answer /trax/health within a minute (last: {last}):\n{HostLog}"
@@ -222,8 +228,8 @@ public class BrowserSetup
             Drain(process.StandardOutput, log),
             Drain(process.StandardError, log)
         );
-        await process.WaitForExitAsync();
-        await reading;
+        await process.WaitForExitAsync().ConfigureAwait(false);
+        await reading.ConfigureAwait(false);
         if (process.ExitCode != 0 || !File.Exists(Path.Combine(output, "index.html")))
             throw new InvalidOperationException($"vite build failed ({process.ExitCode}):\n{log}");
         return output;
@@ -231,7 +237,7 @@ public class BrowserSetup
 
     private static async Task Drain(StreamReader reader, StringBuilder log)
     {
-        while (await reader.ReadLineAsync() is { } line)
+        while (await reader.ReadLineAsync().ConfigureAwait(false) is { } line)
             lock (log)
                 log.AppendLine(line);
     }

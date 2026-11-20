@@ -30,7 +30,13 @@ internal static class Dotnet
         string workingDirectory,
         bool allowFailure,
         params string[] args
-    ) => Run(workingDirectory, new Dictionary<string, string>(), allowFailure, args);
+    ) =>
+        Run(
+            workingDirectory,
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            allowFailure,
+            args
+        );
 
     /// <summary>Runs dotnet to completion with <paramref name="environment"/> added to its own.</summary>
     public static async Task<(int ExitCode, string Output)> Run(
@@ -50,7 +56,7 @@ internal static class Dotnet
         using var timeout = new CancellationTokenSource(ProcessTimeout);
         try
         {
-            await process.WaitForExitAsync(timeout.Token);
+            await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -60,7 +66,7 @@ internal static class Dotnet
             );
         }
 
-        var output = await stdout + await stderr;
+        var output = await stdout.ConfigureAwait(false) + await stderr.ConfigureAwait(false);
         if (!allowFailure && process.ExitCode != 0)
             throw new InvalidOperationException(
                 $"dotnet {string.Join(' ', args)} exited {process.ExitCode}:\n{output}"
@@ -85,7 +91,7 @@ internal static class Dotnet
             psi.Environment[name] = value;
 
         var running = new RunningProcess(Process.Start(psi)!, args);
-        await running.WaitFor(ready);
+        await running.WaitFor(ready).ConfigureAwait(false);
         return running;
     }
 
@@ -122,7 +128,7 @@ internal sealed class RunningProcess : IAsyncDisposable
     private readonly Process _process;
     private readonly string[] _args;
     private readonly StringBuilder _output = new();
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
 
     public RunningProcess(Process process, string[] args)
     {
@@ -159,7 +165,7 @@ internal sealed class RunningProcess : IAsyncDisposable
                         + $"{Dotnet.ProcessTimeout}:\n{Output}"
                 );
             // determinism: polls for the condition, bounded by ProcessTimeout above.
-            await Task.Delay(TimeSpan.FromMilliseconds(200));
+            await Task.Delay(TimeSpan.FromMilliseconds(200)).ConfigureAwait(false);
         }
     }
 
@@ -167,7 +173,7 @@ internal sealed class RunningProcess : IAsyncDisposable
     {
         if (!_process.HasExited)
             _process.Kill(entireProcessTree: true);
-        await _process.WaitForExitAsync();
+        await _process.WaitForExitAsync().ConfigureAwait(false);
         _process.Dispose();
     }
 

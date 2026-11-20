@@ -44,12 +44,13 @@ public class DeadLetterOperationsTests : SchedulingTestFixture
         await Db.WaitUntil(
             async () =>
                 await Db.Query(dc =>
-                    dc.DeadLetters.AnyAsync(d =>
-                        d.Id == outage.DeadLetter.Id
-                        && d.Status == DeadLetterStatus.Retried
-                        && d.RetryMetadataId == rerun.Id
+                        dc.DeadLetters.AnyAsync(d =>
+                            d.Id == outage.DeadLetter.Id
+                            && d.Status == DeadLetterStatus.Retried
+                            && d.RetryMetadataId == rerun.Id
+                        )
                     )
-                ),
+                    .ConfigureAwait(false),
             TimeSpan.FromSeconds(10),
             "the dead letter is marked Retried and linked to the run its requeue started"
         );

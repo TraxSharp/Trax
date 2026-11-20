@@ -28,7 +28,7 @@ namespace Trax.Samples.ChatService.Hooks;
 /// </summary>
 public class ChatLifecycleHook(ITopicEventSender eventSender) : ITrainLifecycleHook
 {
-    private static readonly Dictionary<string, string> TrainEventTypes = new()
+    private static readonly Dictionary<string, string> TrainEventTypes = new(StringComparer.Ordinal)
     {
         [typeof(ISendMessageTrain).FullName!] = "MessageSent",
         [typeof(ICreateChatRoomTrain).FullName!] = "RoomCreated",
@@ -69,6 +69,8 @@ public class ChatLifecycleHook(ITopicEventSender eventSender) : ITrainLifecycleH
             TrainExternalId: metadata.ExternalId
         );
 
-        await eventSender.SendAsync(ChatSubscriptions.Topic(chatRoomId), chatEvent, ct);
+        await eventSender
+            .SendAsync(ChatSubscriptions.Topic(chatRoomId), chatEvent, ct)
+            .ConfigureAwait(false);
     }
 }

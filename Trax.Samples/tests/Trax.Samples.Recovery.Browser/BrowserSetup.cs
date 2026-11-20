@@ -45,13 +45,17 @@ public class BrowserSetup
 
     /// <summary>A fresh browser context on the built page, forwarding to the current host.</summary>
     public static async Task<OpenPage> NewPageAsync(Func<string, string, string>? replace = null) =>
-        new(await RecoveryPage.OpenAsync(Browser, Dist, () => HostAddress, replace));
+        new(
+            await RecoveryPage
+                .OpenAsync(Browser, Dist, () => HostAddress, replace)
+                .ConfigureAwait(false)
+        );
 
     /// <summary>Starts a new host on the same database, after a test killed the last one.</summary>
     public static async Task RestartHostAsync()
     {
-        await Host.DisposeAsync();
-        Host = await RecoveryBrowserHost.StartAsync();
+        await Host.DisposeAsync().ConfigureAwait(false);
+        Host = await RecoveryBrowserHost.StartAsync().ConfigureAwait(false);
     }
 
     [OneTimeTearDown]

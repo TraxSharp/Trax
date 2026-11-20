@@ -119,7 +119,7 @@ app.UseAuthorization();
 app.UseTraxGraphQL();
 app.MapHealthChecks("/trax/health");
 
-await app.RunTraxAsync(args);
+await app.RunTraxAsync(args).ConfigureAwait(false);
 
 namespace Trax.Samples.StateMachine.Api
 {

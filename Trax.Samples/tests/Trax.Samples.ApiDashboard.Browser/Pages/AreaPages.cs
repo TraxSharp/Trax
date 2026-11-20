@@ -20,10 +20,11 @@ public abstract class AreaPage(ConsolePage console, string route, string heading
     /// <summary>Loads the area, signs in as <paramref name="caller"/>, and waits for its heading.</summary>
     public async Task OpenAsync(Caller caller)
     {
-        await Console.OpenAsync(Route, caller);
+        await Console.OpenAsync(Route, caller).ConfigureAwait(false);
         await Assertions
             .Expect(Heading)
-            .ToBeVisibleAsync(new() { Timeout = BrowserTimeouts.Render.Ms() });
+            .ToBeVisibleAsync(new() { Timeout = BrowserTimeouts.Render.Ms() })
+            .ConfigureAwait(false);
     }
 
     /// <summary>The row of the item with this id, by the checkbox the console labels <c>Select #id</c>.</summary>
@@ -90,14 +91,15 @@ public sealed class RunsPage(ConsolePage console) : AreaPage(console, "runs", "R
     /// </summary>
     public async Task<ILocator> FindAsync(string externalId, string train)
     {
-        await ExternalIdFilter.FillAsync(externalId);
+        await ExternalIdFilter.FillAsync(externalId).ConfigureAwait(false);
         var row = Console.RowLinked(train);
         // The list reloads once the filter settles; then only this run's row is left.
         await Assertions
             .Expect(
                 Page.GetByRole(AriaRole.Row).Filter(new() { Has = Page.GetByRole(AriaRole.Link) })
             )
-            .ToHaveCountAsync(1, new() { Timeout = BrowserTimeouts.Render.Ms() });
+            .ToHaveCountAsync(1, new() { Timeout = BrowserTimeouts.Render.Ms() })
+            .ConfigureAwait(false);
         return row;
     }
 }
@@ -161,13 +163,15 @@ public sealed class DeadLettersPage(ConsolePage console)
 
     /// <summary>Shows only the dead letters awaiting an operator.</summary>
     public async Task ShowAwaitingAsync() =>
-        await StatusFilter.SelectOptionAsync(
-            new SelectOptionValue { Label = "Awaiting intervention" }
-        );
+        await StatusFilter
+            .SelectOptionAsync(new SelectOptionValue { Label = "Awaiting intervention" })
+            .ConfigureAwait(false);
 
     /// <summary>Shows every dead letter as its own row instead of grouped by train and reason.</summary>
     public async Task ShowAsListAsync() =>
-        await Page.GetByRole(AriaRole.Button, new() { Name = "List", Exact = true }).ClickAsync();
+        await Page.GetByRole(AriaRole.Button, new() { Name = "List", Exact = true })
+            .ClickAsync()
+            .ConfigureAwait(false);
 
     /// <summary>
     /// The header row of the group of dead letters of <paramref name="train"/> (its short name) that were
@@ -191,13 +195,16 @@ public sealed class DeadLettersPage(ConsolePage console)
                 AriaRole.Button,
                 new() { Name = $"Show {train}, {reason}", Exact = true }
             )
-            .ClickAsync();
+            .ClickAsync()
+            .ConfigureAwait(false);
 
     /// <summary>Requeues one dead letter from its row, confirming in the console's dialog.</summary>
     public async Task RequeueAsync(long id)
     {
-        await Button(Row(id), "Requeue").ClickAsync();
-        await Console.ConfirmAsync("Requeue dead letter", $"Requeue dead letter #{id}?");
+        await Button(Row(id), "Requeue").ClickAsync().ConfigureAwait(false);
+        await Console
+            .ConfirmAsync("Requeue dead letter", $"Requeue dead letter #{id}?")
+            .ConfigureAwait(false);
     }
 }
 
@@ -231,8 +238,10 @@ public sealed class ManifestDetailPage(ConsolePage console, long id, string head
     /// <summary>Switches the manifest off, confirming in the console's dialog.</summary>
     public async Task DisableAsync()
     {
-        await EnabledSwitch.ClickAsync();
-        await Console.ConfirmAsync("Disable manifest", "does not run on its schedule");
+        await EnabledSwitch.ClickAsync().ConfigureAwait(false);
+        await Console
+            .ConfirmAsync("Disable manifest", "does not run on its schedule")
+            .ConfigureAwait(false);
     }
 }
 
@@ -402,8 +411,8 @@ public sealed class SchedulerPage(ConsolePage console)
     public async Task SwitchAsync(string verb, string loop, string contains)
     {
         var action = $"{verb} {loop.ToLowerInvariant()}";
-        await Button(Loop(loop), action).ClickAsync();
-        await Console.ConfirmAsync(action, contains);
+        await Button(Loop(loop), action).ClickAsync().ConfigureAwait(false);
+        await Console.ConfirmAsync(action, contains).ConfigureAwait(false);
     }
 }
 

@@ -14,7 +14,10 @@ public class LogGreetingJunction(ILogger<LogGreetingJunction> logger)
 {
     public override async Task<Unit> Run(HelloWorldInput input)
     {
-        var timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss UTC");
+        var timestamp = DateTime.UtcNow.ToString(
+            "yyyy-MM-dd HH:mm:ss UTC",
+            System.Globalization.CultureInfo.InvariantCulture
+        );
 
         logger.LogInformation(
             "Hello, {Name}! This train ran at {Timestamp}",
@@ -22,7 +25,7 @@ public class LogGreetingJunction(ILogger<LogGreetingJunction> logger)
             timestamp
         );
 
-        await Task.Delay(100);
+        await Task.Delay(100).ConfigureAwait(false);
 
         logger.LogInformation("HelloWorld train completed successfully for {Name}", input.Name);
 

@@ -70,7 +70,7 @@ public sealed class OrderMachine : Machine<OrderState, OrderTrigger>
     public const string MachineId = "order";
 
     /// <summary>What the kitchen makes, and its price.</summary>
-    public static readonly Dictionary<string, decimal> Menu = new()
+    public static readonly Dictionary<string, decimal> Menu = new(StringComparer.Ordinal)
     {
         ["Margherita"] = 12m,
         ["Pepperoni"] = 14m,

@@ -128,16 +128,18 @@ public class AskAfreshTests : RecoveryTestFixture
 
     private async Task<long> RequeueAsync(long metadataId, bool askAfresh)
     {
-        var response = await GraphQL.SendAsync(
-            $$"""
+        var response = await GraphQL
+            .SendAsync(
+                $$"""
             mutation { operations {
               requeueExecution(id: {{metadataId}}, askAfresh: {{(
                 askAfresh ? "true" : "false"
             )}}) { success message id }
             } }
             """,
-            OperatorKey
-        );
+                OperatorKey
+            )
+            .ConfigureAwait(false);
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         var result = response.GetData("operations", "requeueExecution");
         result
@@ -149,22 +151,26 @@ public class AskAfreshTests : RecoveryTestFixture
         // The response's id is the work queue entry; the run's id appears once it is dispatched.
         var entryId = result.GetProperty("id").GetInt64();
         long runId = 0;
-        var dispatched = await Trax.Samples.Shared.Testing.Polling.WaitUntilAsync(
-            async () =>
-            {
-                var entry = await GraphQL.SendAsync(
-                    $$"""{ operations { workQueue { detail(id: {{entryId}}) { metadataId } } } }""",
-                    OperatorKey
-                );
-                var id = entry.GetData("operations", "workQueue", "detail", "metadataId");
-                if (id.ValueKind != System.Text.Json.JsonValueKind.Number)
-                    return false;
-                runId = id.GetInt64();
-                return true;
-            },
-            TimeSpan.FromSeconds(30),
-            TimeSpan.FromMilliseconds(100)
-        );
+        var dispatched = await Shared
+            .Testing.Polling.WaitUntilAsync(
+                async () =>
+                {
+                    var entry = await GraphQL
+                        .SendAsync(
+                            $$"""{ operations { workQueue { detail(id: {{entryId}}) { metadataId } } } }""",
+                            OperatorKey
+                        )
+                        .ConfigureAwait(false);
+                    var id = entry.GetData("operations", "workQueue", "detail", "metadataId");
+                    if (id.ValueKind != System.Text.Json.JsonValueKind.Number)
+                        return false;
+                    runId = id.GetInt64();
+                    return true;
+                },
+                TimeSpan.FromSeconds(30),
+                TimeSpan.FromMilliseconds(100)
+            )
+            .ConfigureAwait(false);
         dispatched.Should().BeTrue("the requeued entry should be dispatched");
         return runId;
     }

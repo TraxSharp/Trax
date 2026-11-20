@@ -66,12 +66,14 @@ public abstract class ChatApiTestFixture
     /// <summary>Creates a room as the caller holding <paramref name="apiKey"/> and returns its id.</summary>
     protected async Task<string> CreateRoomAsAsync(string apiKey, string name = "Room")
     {
-        var created = await GraphQL.SendAsync(
-            $$"""
-            mutation { dispatch { createChatRoom(input: { name: "{{name}}" }) { output { chatRoomId } } } }
-            """,
-            apiKey: apiKey
-        );
+        var created = await GraphQL
+            .SendAsync(
+                $$"""
+                mutation { dispatch { createChatRoom(input: { name: "{{name}}" }) { output { chatRoomId } } } }
+                """,
+                apiKey: apiKey
+            )
+            .ConfigureAwait(false);
         created.HasErrors.Should().BeFalse(created.FirstErrorMessage);
         return created
             .GetData("dispatch", "createChatRoom", "output")
@@ -82,12 +84,14 @@ public abstract class ChatApiTestFixture
     /// <summary>Joins a room as the caller holding <paramref name="apiKey"/>.</summary>
     protected async Task JoinRoomAsAsync(string apiKey, string chatRoomId)
     {
-        var joined = await GraphQL.SendAsync(
-            $$"""
-            mutation { dispatch { joinChatRoom(input: { chatRoomId: "{{chatRoomId}}" }) { output { joinedAt } } } }
-            """,
-            apiKey: apiKey
-        );
+        var joined = await GraphQL
+            .SendAsync(
+                $$"""
+                mutation { dispatch { joinChatRoom(input: { chatRoomId: "{{chatRoomId}}" }) { output { joinedAt } } } }
+                """,
+                apiKey: apiKey
+            )
+            .ConfigureAwait(false);
         joined.HasErrors.Should().BeFalse(joined.FirstErrorMessage);
     }
 
@@ -107,15 +111,15 @@ public abstract class ChatApiTestFixture
     private async Task CleanData()
     {
         // Clean chat domain data (FK order: messages → participants → rooms)
-        await ChatDb.ChatMessages.ExecuteDeleteAsync();
-        await ChatDb.ChatParticipants.ExecuteDeleteAsync();
-        await ChatDb.ChatRooms.ExecuteDeleteAsync();
+        await ChatDb.ChatMessages.ExecuteDeleteAsync().ConfigureAwait(false);
+        await ChatDb.ChatParticipants.ExecuteDeleteAsync().ConfigureAwait(false);
+        await ChatDb.ChatRooms.ExecuteDeleteAsync().ConfigureAwait(false);
 
         // Clean Trax execution data
-        await DataContext.Logs.ExecuteDeleteAsync();
-        await DataContext.WorkQueues.ExecuteDeleteAsync();
-        await DataContext.DeadLetters.ExecuteDeleteAsync();
-        await DataContext.Metadatas.ExecuteDeleteAsync();
+        await DataContext.Logs.ExecuteDeleteAsync().ConfigureAwait(false);
+        await DataContext.WorkQueues.ExecuteDeleteAsync().ConfigureAwait(false);
+        await DataContext.DeadLetters.ExecuteDeleteAsync().ConfigureAwait(false);
+        await DataContext.Metadatas.ExecuteDeleteAsync().ConfigureAwait(false);
         DataContext.Reset();
     }
 }

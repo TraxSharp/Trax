@@ -17,7 +17,7 @@ public abstract class WeighCoCitation(
 {
     public override async Task<CoCitationSignal> Run(CoCitationEvidence evidence)
     {
-        await Task.Delay(pace.StepDelay, CancellationToken);
+        await Task.Delay(pace.StepDelay, CancellationToken).ConfigureAwait(false);
 
         if (faults.TryFire(evidence.RunId, CrashPoint.CoCitation))
             throw new TimeoutException(

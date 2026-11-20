@@ -32,7 +32,7 @@ public sealed class RecordingCharge : ICharge
     /// no other test uses in its cart, so it sees only its own charges.
     /// </summary>
     public IReadOnlyList<Charged> For(string item) =>
-        _charges.Where(c => c.Items.Contains(item)).ToList();
+        _charges.Where(c => c.Items.Contains(item, StringComparer.Ordinal)).ToList();
 
     private static IReadOnlyList<string> Items(Snapshot snapshot) =>
         snapshot.Context["items"]!.AsArray().Select(i => i!.GetValue<string>()).ToList();

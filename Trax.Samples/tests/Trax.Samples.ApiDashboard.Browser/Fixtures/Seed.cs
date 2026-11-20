@@ -59,27 +59,29 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
         try
         {
             var manifest = await ScheduleAsync<IImportFeedTrain>(
-                key,
-                o =>
-                {
-                    o.MaxRetries(0);
-                    if (group is not null)
-                        o.Group(group);
-                }
-            );
-            await InScope<ITraxScheduler>(s => s.TriggerAsync(key));
+                    key,
+                    o =>
+                    {
+                        o.MaxRetries(0);
+                        if (group is not null)
+                            o.Group(group);
+                    }
+                )
+                .ConfigureAwait(false);
+            await InScope<ITraxScheduler>(s => s.TriggerAsync(key)).ConfigureAwait(false);
             return await Wait.ForAsync(
-                () =>
-                    host.QueryAsync(dc =>
-                        dc.DeadLetters.AsNoTracking()
-                            .FirstOrDefaultAsync(d =>
-                                d.ManifestId == manifest.Id
-                                && d.Status == DeadLetterStatus.AwaitingIntervention
-                            )
-                    ),
-                BrowserTimeouts.Server,
-                $"the scheduler dead-letters {key}"
-            );
+                    () =>
+                        host.QueryAsync(dc =>
+                            dc.DeadLetters.AsNoTracking()
+                                .FirstOrDefaultAsync(d =>
+                                    d.ManifestId == manifest.Id
+                                    && d.Status == DeadLetterStatus.AwaitingIntervention
+                                )
+                        ),
+                    BrowserTimeouts.Server,
+                    $"the scheduler dead-letters {key}"
+                )
+                .ConfigureAwait(false);
         }
         finally
         {
@@ -90,8 +92,8 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
     /// <summary>Two dead letters of two manifests that failed the same way: their reasons are the same text.</summary>
     public async Task<(DeadLetter First, DeadLetter Second)> DeadLettersSharingAReasonAsync()
     {
-        var first = await DeadLetterAsync();
-        var second = await DeadLetterAsync();
+        var first = await DeadLetterAsync().ConfigureAwait(false);
+        var second = await DeadLetterAsync().ConfigureAwait(false);
         second.Reason.Should().Be(first.Reason, "both failed once against no retries");
         return (first, second);
     }
@@ -106,25 +108,29 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
         Outages.Down(key);
         try
         {
-            var run = await QueueAndWaitAsync<ISettleClaimTrain>(key, TrainState.Failed);
+            var run = await QueueAndWaitAsync<ISettleClaimTrain>(key, TrainState.Failed)
+                .ConfigureAwait(false);
             await Wait.UntilAsync(
-                () => host.QueryAsync(dc => dc.Checkpoints.AnyAsync(c => c.MetadataId == run.Id)),
-                BrowserTimeouts.Server,
-                $"run {run.Id} stores its checkpoint"
-            );
+                    () =>
+                        host.QueryAsync(dc => dc.Checkpoints.AnyAsync(c => c.MetadataId == run.Id)),
+                    BrowserTimeouts.Server,
+                    $"run {run.Id} stores its checkpoint"
+                )
+                .ConfigureAwait(false);
             // Steps are stored by a background writer, after the run has ended.
             await Wait.UntilAsync(
-                () =>
-                    host.QueryAsync(dc =>
-                        dc.JunctionRuns.AnyAsync(j =>
-                            j.MetadataId == run.Id
-                            && j.Name == nameof(NotifyClaimant)
-                            && j.State == JunctionRunState.Failed
-                        )
-                    ),
-                BrowserTimeouts.Server,
-                $"run {run.Id} records its failed step"
-            );
+                    () =>
+                        host.QueryAsync(dc =>
+                            dc.JunctionRuns.AnyAsync(j =>
+                                j.MetadataId == run.Id
+                                && j.Name == nameof(NotifyClaimant)
+                                && j.State == JunctionRunState.Failed
+                            )
+                        ),
+                    BrowserTimeouts.Server,
+                    $"run {run.Id} records its failed step"
+                )
+                .ConfigureAwait(false);
             return run;
         }
         finally
@@ -141,19 +147,20 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
     public async Task<(MachineInstance Instance, Metadata Run)> RunInvokedByMachineAsync()
     {
         var key = NewKey("parcel");
-        var instance = await StartRelayAsync(key);
+        var instance = await StartRelayAsync(key).ConfigureAwait(false);
         var run = await Wait.ForAsync(
-            () =>
-                host.QueryAsync(dc =>
-                    dc.Metadatas.AsNoTracking()
-                        .FirstOrDefaultAsync(m =>
-                            m.InvokingInstanceId == instance.Id
-                            && m.TrainState == TrainState.Completed
-                        )
-                ),
-            BrowserTimeouts.Server,
-            $"{RelayMachine.Id} {instance.Id} invokes its run and the run completes"
-        );
+                () =>
+                    host.QueryAsync(dc =>
+                        dc.Metadatas.AsNoTracking()
+                            .FirstOrDefaultAsync(m =>
+                                m.InvokingInstanceId == instance.Id
+                                && m.TrainState == TrainState.Completed
+                            )
+                    ),
+                BrowserTimeouts.Server,
+                $"{RelayMachine.Id} {instance.Id} invokes its run and the run completes"
+            )
+            .ConfigureAwait(false);
         return (instance, run);
     }
 
@@ -165,29 +172,33 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
     {
         var key = NewKey("mailbox");
         Holds.Hold(key);
-        var after = await host.QueryAsync(dc => dc.WorkQueues.MaxAsync(w => (long?)w.Id)) ?? 0;
+        var after =
+            await host.QueryAsync(dc => dc.WorkQueues.MaxAsync(w => (long?)w.Id))
+                .ConfigureAwait(false)
+            ?? 0;
         var queued = InScope<ITrainExecutionService, QueueTrainResult>(q =>
             q.QueueAsync(TrainName<ISyncMailboxTrain>(), Input(key))
         );
         _undo.Push(async () =>
         {
             Holds.Release(key);
-            await queued.WaitAsync(BrowserTimeouts.Server);
+            await queued.WaitAsync(BrowserTimeouts.Server).ConfigureAwait(false);
         });
         return await Wait.ForAsync(
-            () =>
-                host.QueryAsync(dc =>
-                    dc.WorkQueues.AsNoTracking()
-                        .FirstOrDefaultAsync(w =>
-                            w.Id > after
-                            && w.TrainName == TrainName<ISyncMailboxTrain>()
-                            && w.ConfirmedAt == null
-                            && w.Status == WorkQueueStatus.Queued
-                        )
-                ),
-            BrowserTimeouts.Server,
-            $"the staged entry for {key} is written"
-        );
+                () =>
+                    host.QueryAsync(dc =>
+                        dc.WorkQueues.AsNoTracking()
+                            .FirstOrDefaultAsync(w =>
+                                w.Id > after
+                                && w.TrainName == TrainName<ISyncMailboxTrain>()
+                                && w.ConfirmedAt == null
+                                && w.Status == WorkQueueStatus.Queued
+                            )
+                    ),
+                BrowserTimeouts.Server,
+                $"the staged entry for {key} is written"
+            )
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -203,13 +214,16 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
             Holds.Release(key);
             return Task.CompletedTask;
         });
-        var holding = await QueueAndWaitAsync<IReconcileAccountTrain>(key, TrainState.InProgress);
+        var holding = await QueueAndWaitAsync<IReconcileAccountTrain>(key, TrainState.InProgress)
+            .ConfigureAwait(false);
         var second = await InScope<ITrainExecutionService, QueueTrainResult>(q =>
-            q.QueueAsync(TrainName<IReconcileAccountTrain>(), Input(key))
-        );
+                q.QueueAsync(TrainName<IReconcileAccountTrain>(), Input(key))
+            )
+            .ConfigureAwait(false);
         var blocked = await host.QueryAsync(dc =>
-            dc.WorkQueues.AsNoTracking().SingleAsync(w => w.Id == second.WorkQueueId)
-        );
+                dc.WorkQueues.AsNoTracking().SingleAsync(w => w.Id == second.WorkQueueId)
+            )
+            .ConfigureAwait(false);
         blocked.Status.Should().Be(WorkQueueStatus.Queued);
         return (blocked, holding);
     }
@@ -230,7 +244,10 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
                 Holds.Release(key);
                 return Task.CompletedTask;
             });
-            runs.Add(await QueueAndWaitAsync<IReconcileAccountTrain>(key, TrainState.InProgress));
+            runs.Add(
+                await QueueAndWaitAsync<IReconcileAccountTrain>(key, TrainState.InProgress)
+                    .ConfigureAwait(false)
+            );
         }
         return runs;
     }
@@ -248,7 +265,8 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
             Holds.Release(key);
             return Task.CompletedTask;
         });
-        var run = await QueueAndWaitAsync<IReconcileAccountTrain>(key, TrainState.InProgress);
+        var run = await QueueAndWaitAsync<IReconcileAccountTrain>(key, TrainState.InProgress)
+            .ConfigureAwait(false);
         return (run, () => Holds.Release(key));
     }
 
@@ -281,7 +299,7 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
             ),
         };
         foreach (var handler in host.Services.GetServices<IJunctionEventHandler>())
-            await handler.HandleAsync(message, CancellationToken.None);
+            await handler.HandleAsync(message, CancellationToken.None).ConfigureAwait(false);
     }
 
     /// <summary>The name of the step <see cref="ProbeJunctionEventAsync{TTrain}"/> publishes.</summary>
@@ -324,25 +342,27 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
             return Task.CompletedTask;
         });
         var manifest = await ScheduleAsync<IReconcileAccountTrain>(
-            key,
-            o =>
-            {
-                if (group is not null)
-                    o.Group(group);
-            }
-        );
-        await InScope<ITraxScheduler>(s => s.TriggerAsync(key));
+                key,
+                o =>
+                {
+                    if (group is not null)
+                        o.Group(group);
+                }
+            )
+            .ConfigureAwait(false);
+        await InScope<ITraxScheduler>(s => s.TriggerAsync(key)).ConfigureAwait(false);
         var run = await Wait.ForAsync(
-            () =>
-                host.QueryAsync(dc =>
-                    dc.Metadatas.AsNoTracking()
-                        .FirstOrDefaultAsync(m =>
-                            m.ManifestId == manifest.Id && m.TrainState == TrainState.InProgress
-                        )
-                ),
-            BrowserTimeouts.Server,
-            $"the triggered run of {key} is in progress"
-        );
+                () =>
+                    host.QueryAsync(dc =>
+                        dc.Metadatas.AsNoTracking()
+                            .FirstOrDefaultAsync(m =>
+                                m.ManifestId == manifest.Id && m.TrainState == TrainState.InProgress
+                            )
+                    ),
+                BrowserTimeouts.Server,
+                $"the triggered run of {key} is in progress"
+            )
+            .ConfigureAwait(false);
         return (manifest, run);
     }
 
@@ -350,8 +370,8 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
     public async Task<(ManifestGroup Group, Manifest Manifest)> GroupOfOneAsync()
     {
         var name = NewKey("group");
-        var manifest = await OnDemandManifestAsync(name);
-        return (await GroupNamedAsync(name), manifest);
+        var manifest = await OnDemandManifestAsync(name).ConfigureAwait(false);
+        return (await GroupNamedAsync(name).ConfigureAwait(false), manifest);
     }
 
     /// <summary>The group the host stores under <paramref name="name"/>.</summary>
@@ -371,19 +391,20 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
             Holds.Release(key);
             return Task.CompletedTask;
         });
-        var instance = await StartRelayAsync(key);
+        var instance = await StartRelayAsync(key).ConfigureAwait(false);
         var run = await Wait.ForAsync(
-            () =>
-                host.QueryAsync(dc =>
-                    dc.Metadatas.AsNoTracking()
-                        .FirstOrDefaultAsync(m =>
-                            m.InvokingInstanceId == instance.Id
-                            && m.TrainState == TrainState.InProgress
-                        )
-                ),
-            BrowserTimeouts.Server,
-            $"{RelayMachine.Id} {instance.Id}'s run is in progress"
-        );
+                () =>
+                    host.QueryAsync(dc =>
+                        dc.Metadatas.AsNoTracking()
+                            .FirstOrDefaultAsync(m =>
+                                m.InvokingInstanceId == instance.Id
+                                && m.TrainState == TrainState.InProgress
+                            )
+                    ),
+                BrowserTimeouts.Server,
+                $"{RelayMachine.Id} {instance.Id}'s run is in progress"
+            )
+            .ConfigureAwait(false);
         return (instance, run);
     }
 
@@ -393,24 +414,27 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
     /// </summary>
     public async Task<MachineInstance> OverdueTimerAsync()
     {
-        await StopMachineSweepAsync();
+        await StopMachineSweepAsync().ConfigureAwait(false);
         var instance = await InScope<IMachineInstances, MachineInstance>(m =>
-            m.Start<ReminderMachine>(MachineKey.Of(NewKey("reminder")))
-        );
+                m.Start<ReminderMachine>(MachineKey.Of(NewKey("reminder")))
+            )
+            .ConfigureAwait(false);
         await Wait.UntilAsync(
-            () =>
-                host.QueryAsync(async dc =>
-                    await dc
-                        .SnapshotDrafts.AsNoTracking()
-                        .Where(d => d.Id == instance.Id)
-                        .Select(d => d.DueAt)
-                        .SingleAsync()
-                        is { } due
-                    && due.AddSeconds(2) < DateTimeOffset.UtcNow
-                ),
-            BrowserTimeouts.Server,
-            $"{ReminderMachine.Id} {instance.Id}'s timer is past due"
-        );
+                () =>
+                    host.QueryAsync(async dc =>
+                        await dc
+                            .SnapshotDrafts.AsNoTracking()
+                            .Where(d => d.Id == instance.Id)
+                            .Select(d => d.DueAt)
+                            .SingleAsync()
+                            .ConfigureAwait(false)
+                            is { } due
+                        && due.AddSeconds(2) < DateTimeOffset.UtcNow
+                    ),
+                BrowserTimeouts.Server,
+                $"{ReminderMachine.Id} {instance.Id}'s timer is past due"
+            )
+            .ConfigureAwait(false);
         return instance;
     }
 
@@ -424,27 +448,30 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
         WorkQueue Entry
     )> InstanceWaitingOnAnEndedRunAsync()
     {
-        await StopMachineSweepAsync();
-        await PausedDispatcherAsync();
-        var instance = await StartRelayAsync(NewKey("parcel"));
+        await StopMachineSweepAsync().ConfigureAwait(false);
+        await PausedDispatcherAsync().ConfigureAwait(false);
+        var instance = await StartRelayAsync(NewKey("parcel")).ConfigureAwait(false);
         var entry = await Wait.ForAsync(
-            () =>
-                host.QueryAsync(dc =>
-                    dc.WorkQueues.AsNoTracking()
-                        .FirstOrDefaultAsync(w => w.InvokingInstanceId == instance.Id)
-                ),
-            BrowserTimeouts.Server,
-            $"{RelayMachine.Id} {instance.Id} queues its run"
-        );
+                () =>
+                    host.QueryAsync(dc =>
+                        dc.WorkQueues.AsNoTracking()
+                            .FirstOrDefaultAsync(w => w.InvokingInstanceId == instance.Id)
+                    ),
+                BrowserTimeouts.Server,
+                $"{RelayMachine.Id} {instance.Id} queues its run"
+            )
+            .ConfigureAwait(false);
         var cancelled = await InScope<IOperationsService, OperationResult>(o =>
-            o.CancelWorkQueueEntryAsync(entry.Id, CancellationToken.None)
-        );
+                o.CancelWorkQueueEntryAsync(entry.Id, CancellationToken.None)
+            )
+            .ConfigureAwait(false);
         cancelled.Success.Should().BeTrue(cancelled.Message);
         return (
             instance,
             await host.QueryAsync(dc =>
-                dc.WorkQueues.AsNoTracking().SingleAsync(w => w.Id == entry.Id)
-            )
+                    dc.WorkQueues.AsNoTracking().SingleAsync(w => w.Id == entry.Id)
+                )
+                .ConfigureAwait(false)
         );
     }
 
@@ -453,8 +480,9 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
     {
         var key = MachineKey.Of(NewKey("lane"));
         var instance = await InScope<IMachineInstances, MachineInstance>(m =>
-            m.Start<GateMachine>(key)
-        );
+                m.Start<GateMachine>(key)
+            )
+            .ConfigureAwait(false);
         return (instance, key);
     }
 
@@ -468,11 +496,12 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
     public async Task<Manifest> DisabledManifestAsync()
     {
         var key = NewKey("disabled");
-        var manifest = await ScheduleAsync<IImportFeedTrain>(key);
-        await InScope<ITraxScheduler>(s => s.DisableAsync(key));
+        var manifest = await ScheduleAsync<IImportFeedTrain>(key).ConfigureAwait(false);
+        await InScope<ITraxScheduler>(s => s.DisableAsync(key)).ConfigureAwait(false);
         return await host.QueryAsync(dc =>
-            dc.Manifests.AsNoTracking().SingleAsync(m => m.Id == manifest.Id)
-        );
+                dc.Manifests.AsNoTracking().SingleAsync(m => m.Id == manifest.Id)
+            )
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -489,9 +518,10 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
     {
         var group = NewKey("off");
         await ScheduleAsync<IImportFeedTrain>(
-            NewKey("feed"),
-            o => o.Group(group, g => g.Enabled(false))
-        );
+                NewKey("feed"),
+                o => o.Group(group, g => g.Enabled(false))
+            )
+            .ConfigureAwait(false);
         return group;
     }
 
@@ -502,14 +532,14 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
     public async Task<string> FailingGroupAsync()
     {
         var group = NewKey("failing");
-        await DeadLetterAsync(group);
+        await DeadLetterAsync(group).ConfigureAwait(false);
         return group;
     }
 
     /// <summary>The job dispatcher switched off, as an operator does from the settings; on again on dispose.</summary>
     public async Task PausedDispatcherAsync()
     {
-        await SetDispatcherAsync(enabled: false);
+        await SetDispatcherAsync(enabled: false).ConfigureAwait(false);
         _undo.Push(() => SetDispatcherAsync(enabled: true));
     }
 
@@ -534,7 +564,7 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
         {
             try
             {
-                await undo();
+                await undo().ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -553,7 +583,7 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
         if (_sweepStopped)
             return;
         _sweepStopped = true;
-        await host.MachineSweep.StopAsync(CancellationToken.None);
+        await host.MachineSweep.StopAsync(CancellationToken.None).ConfigureAwait(false);
         _undo.Push(() => host.MachineSweep.StartAsync(CancellationToken.None));
     }
 
@@ -570,11 +600,13 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
     {
         var machineKey = MachineKey.Of(key);
         var instance = await InScope<IMachineInstances, MachineInstance>(m =>
-            m.Start<RelayMachine>(machineKey, new JsonObject { ["key"] = key })
-        );
+                m.Start<RelayMachine>(machineKey, new JsonObject { ["key"] = key })
+            )
+            .ConfigureAwait(false);
         await InScope<IMachineInstances, AdvanceOutcome>(m =>
-            m.Advance<RelayMachine>(machineKey, nameof(RelayTrigger.Send))
-        );
+                m.Advance<RelayMachine>(machineKey, nameof(RelayTrigger.Send))
+            )
+            .ConfigureAwait(false);
         return instance;
     }
 
@@ -597,19 +629,21 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
     private async Task<Metadata> QueueAndWaitAsync<TTrain>(string key, TrainState state)
     {
         var queued = await InScope<ITrainExecutionService, QueueTrainResult>(q =>
-            q.QueueAsync(TrainName<TTrain>(), Input(key))
-        );
+                q.QueueAsync(TrainName<TTrain>(), Input(key))
+            )
+            .ConfigureAwait(false);
         return await Wait.ForAsync(
-            () =>
-                host.QueryAsync(dc =>
-                    dc.Metadatas.AsNoTracking()
-                        .FirstOrDefaultAsync(m =>
-                            m.ExternalId == queued.ExternalId && m.TrainState == state
-                        )
-                ),
-            BrowserTimeouts.Server,
-            $"the run of {TrainName<TTrain>()} about {key} reaches {state}"
-        );
+                () =>
+                    host.QueryAsync(dc =>
+                        dc.Metadatas.AsNoTracking()
+                            .FirstOrDefaultAsync(m =>
+                                m.ExternalId == queued.ExternalId && m.TrainState == state
+                            )
+                    ),
+                BrowserTimeouts.Server,
+                $"the run of {TrainName<TTrain>()} about {key} reaches {state}"
+            )
+            .ConfigureAwait(false);
     }
 
     private static string TrainName<TTrain>() => typeof(TTrain).FullName!;
@@ -620,20 +654,27 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
     private async Task InScope<TService>(Func<TService, Task> act)
         where TService : notnull
     {
-        await using var scope = host.Services.CreateAsyncScope();
-        using var trusted = scope
-            .ServiceProvider.GetRequiredService<ITrustedExecutionScope>()
-            .BeginTrusted("browser test seed");
-        await act(scope.ServiceProvider.GetRequiredService<TService>());
+        var scope = host.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            using var trusted = scope
+                .ServiceProvider.GetRequiredService<ITrustedExecutionScope>()
+                .BeginTrusted("browser test seed");
+            await act(scope.ServiceProvider.GetRequiredService<TService>()).ConfigureAwait(false);
+        }
     }
 
     private async Task<T> InScope<TService, T>(Func<TService, Task<T>> act)
         where TService : notnull
     {
-        await using var scope = host.Services.CreateAsyncScope();
-        using var trusted = scope
-            .ServiceProvider.GetRequiredService<ITrustedExecutionScope>()
-            .BeginTrusted("browser test seed");
-        return await act(scope.ServiceProvider.GetRequiredService<TService>());
+        var scope = host.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            using var trusted = scope
+                .ServiceProvider.GetRequiredService<ITrustedExecutionScope>()
+                .BeginTrusted("browser test seed");
+            return await act(scope.ServiceProvider.GetRequiredService<TService>())
+                .ConfigureAwait(false);
+        }
     }
 }

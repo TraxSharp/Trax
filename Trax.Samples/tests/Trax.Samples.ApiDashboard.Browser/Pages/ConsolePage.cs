@@ -67,8 +67,9 @@ public class ConsolePage(IPage page, Uri origin)
     {
         await Dialog(title)
             .GetByLabel($"Type {typed} to confirm", new() { Exact = true })
-            .FillAsync(typed, new() { Timeout = BrowserTimeouts.Render.Ms() });
-        await ConfirmAsync(title, contains);
+            .FillAsync(typed, new() { Timeout = BrowserTimeouts.Render.Ms() })
+            .ConfigureAwait(false);
+        await ConfirmAsync(title, contains).ConfigureAwait(false);
     }
 
     /// <summary>Writes <paramref name="note"/> in the note dialog titled <paramref name="title"/> and sends it.</summary>
@@ -77,18 +78,23 @@ public class ConsolePage(IPage page, Uri origin)
         var dialog = Dialog(title);
         await dialog
             .GetByRole(AriaRole.Textbox)
-            .FillAsync(note, new() { Timeout = BrowserTimeouts.Render.Ms() });
+            .FillAsync(note, new() { Timeout = BrowserTimeouts.Render.Ms() })
+            .ConfigureAwait(false);
         await dialog
             .GetByRole(AriaRole.Button, new() { Name = confirm, Exact = true })
-            .ClickAsync();
+            .ClickAsync()
+            .ConfigureAwait(false);
     }
 
     /// <summary>Waits until the page has sent <paramref name="operation"/>, and returns the request.</summary>
     public Task<IRequest> SendsAsync(string operation) =>
         Page.WaitForRequestAsync(
             r =>
-                r.Url.EndsWith("/trax/graphql")
-                && r.PostData?.Contains($"\"operationName\":\"{operation}\"") == true,
+                r.Url.EndsWith("/trax/graphql", StringComparison.Ordinal)
+                && r.PostData?.Contains(
+                    $"\"operationName\":\"{operation}\"",
+                    StringComparison.Ordinal
+                ) == true,
             new() { Timeout = BrowserTimeouts.Render.Ms() }
         );
 
@@ -96,12 +102,16 @@ public class ConsolePage(IPage page, Uri origin)
     public Task<IResponse> AnsweredAsync(string operation) =>
         Page.WaitForResponseAsync(
             r =>
-                r.Url.EndsWith("/trax/graphql")
-                && r.Request.PostData?.Contains($"\"operationName\":\"{operation}\"") == true,
+                r.Url.EndsWith("/trax/graphql", StringComparison.Ordinal)
+                && r.Request.PostData?.Contains(
+                    $"\"operationName\":\"{operation}\"",
+                    StringComparison.Ordinal
+                ) == true,
             new() { Timeout = BrowserTimeouts.Render.Ms() }
         );
 
-    public async Task<IResponse?> GotoAsync(string route = "") => await Page.GotoAsync(Url(route));
+    public async Task<IResponse?> GotoAsync(string route = "") =>
+        await Page.GotoAsync(Url(route)).ConfigureAwait(false);
 
     /// <summary>
     /// Signs in through the key prompt, as on every load (the key is never stored). Returns the first GraphQL
@@ -115,24 +125,30 @@ public class ConsolePage(IPage page, Uri origin)
         Page.WebSocket += (_, socket) =>
             socket.FrameReceived += (_, frame) =>
             {
-                if (frame.Text?.Contains("\"connection_ack\"") == true)
+                if (frame.Text?.Contains("\"connection_ack\"", StringComparison.Ordinal) == true)
                     acknowledged.TrySetResult(socket.Url);
             };
 
-        await KeyPrompt.FillAsync(caller.Key, new() { Timeout = BrowserTimeouts.Render.Ms() });
+        await KeyPrompt
+            .FillAsync(caller.Key, new() { Timeout = BrowserTimeouts.Render.Ms() })
+            .ConfigureAwait(false);
         var request = Page.WaitForRequestAsync(
-            r => r.Url.EndsWith("/trax/graphql") && r.Method == "POST",
+            r =>
+                r.Url.EndsWith("/trax/graphql", StringComparison.Ordinal)
+                && string.Equals(r.Method, "POST", StringComparison.Ordinal),
             new() { Timeout = BrowserTimeouts.Render.Ms() }
         );
-        await Page.GetByRole(AriaRole.Button, new() { Name = "Connect" }).ClickAsync();
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Connect" })
+            .ClickAsync()
+            .ConfigureAwait(false);
         return new Connection(request, acknowledged.Task);
     }
 
     /// <summary>Loads <paramref name="route"/> and signs in as <paramref name="caller"/>.</summary>
     public async Task<Connection> OpenAsync(string route, Caller caller)
     {
-        await GotoAsync(route);
-        return await ConnectAsync(caller);
+        await GotoAsync(route).ConfigureAwait(false);
+        return await ConnectAsync(caller).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -144,8 +160,12 @@ public class ConsolePage(IPage page, Uri origin)
         var dialog = Page.GetByRole(AriaRole.Dialog, new() { Name = title, Exact = true });
         await Assertions
             .Expect(dialog)
-            .ToContainTextAsync(contains, new() { Timeout = BrowserTimeouts.Render.Ms() });
-        await dialog.GetByRole(AriaRole.Button, new() { Name = title, Exact = true }).ClickAsync();
+            .ToContainTextAsync(contains, new() { Timeout = BrowserTimeouts.Render.Ms() })
+            .ConfigureAwait(false);
+        await dialog
+            .GetByRole(AriaRole.Button, new() { Name = title, Exact = true })
+            .ClickAsync()
+            .ConfigureAwait(false);
     }
 }
 

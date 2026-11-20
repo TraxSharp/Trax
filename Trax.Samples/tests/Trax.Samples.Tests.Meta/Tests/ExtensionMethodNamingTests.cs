@@ -46,8 +46,10 @@ public class ExtensionMethodNamingTests
     public void Public_Extension_Methods_In_ExtensionsFolders_Contain_TraxInName()
     {
         var offenders = HostingExtensions()
-            .Where(e => !e.Name.Contains("Trax", StringComparison.Ordinal))
-            .Where(e => !KnownExceptions.Contains(e.Name))
+            .Where(e =>
+                !e.Name.Contains("Trax", StringComparison.Ordinal)
+                && !KnownExceptions.Contains(e.Name)
+            )
             .Select(e => $"{RepoRoot.Relative(e.Source)} -> {e.Name} (extends {e.Receiver})")
             .ToList();
 

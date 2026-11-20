@@ -17,26 +17,30 @@ public class ValidateInviteJunction(ChatDbContext db, TraxPrincipal caller, Chat
 {
     public override async Task<InviteToChatRoomInput> Run(InviteToChatRoomInput input)
     {
-        if (!await db.ChatRooms.AnyAsync(r => r.Id == input.ChatRoomId))
+        if (!await db.ChatRooms.AnyAsync(r => r.Id == input.ChatRoomId).ConfigureAwait(false))
             throw new TrainException($"Chat room {input.ChatRoomId} does not exist.");
 
         if (
-            !await db.ChatParticipants.AnyAsync(p =>
-                p.ChatRoomId == input.ChatRoomId && p.UserId == caller.Id
-            )
+            !await db
+                .ChatParticipants.AnyAsync(p =>
+                    p.ChatRoomId == input.ChatRoomId && p.UserId == caller.Id
+                )
+                .ConfigureAwait(false)
         )
             throw new TrainException($"You are not a participant in room {input.ChatRoomId}.");
 
-        if (input.UserId == caller.Id)
+        if (string.Equals(input.UserId, caller.Id, StringComparison.Ordinal))
             throw new TrainException("You are already in this room.");
 
         if (directory.Find(input.UserId) is null)
             throw new TrainException($"There is no one called {input.UserId} to invite.");
 
         if (
-            await db.ChatParticipants.AnyAsync(p =>
-                p.ChatRoomId == input.ChatRoomId && p.UserId == input.UserId
-            )
+            await db
+                .ChatParticipants.AnyAsync(p =>
+                    p.ChatRoomId == input.ChatRoomId && p.UserId == input.UserId
+                )
+                .ConfigureAwait(false)
         )
             throw new TrainException($"{input.UserId} is already a participant in this room.");
 

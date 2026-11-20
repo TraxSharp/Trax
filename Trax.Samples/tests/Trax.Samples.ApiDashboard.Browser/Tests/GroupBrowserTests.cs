@@ -210,13 +210,14 @@ public class GroupBrowserTests : ConsoleTest
     private async Task<ManifestGroupsPage> OpenFilteredAsync(string name)
     {
         var list = new ManifestGroupsPage(Console);
-        await list.OpenAsync(Caller.Operator);
-        await list.NameFilter.FillAsync(name);
+        await list.OpenAsync(Caller.Operator).ConfigureAwait(false);
+        await list.NameFilter.FillAsync(name).ConfigureAwait(false);
         await Assertions
             .Expect(
                 Page.GetByRole(AriaRole.Row).Filter(new() { Has = Page.GetByRole(AriaRole.Link) })
             )
-            .ToHaveCountAsync(1, new() { Timeout = Render });
+            .ToHaveCountAsync(1, new() { Timeout = Render })
+            .ConfigureAwait(false);
         return list;
     }
 
@@ -225,8 +226,14 @@ public class GroupBrowserTests : ConsoleTest
 
     private static Task<bool> Queued(long manifest) =>
         Host.QueryAsync(async dc =>
-            await dc.WorkQueues.AsNoTracking().AnyAsync(w => w.ManifestId == manifest)
-            || await dc.Metadatas.AsNoTracking().AnyAsync(m => m.ManifestId == manifest)
+            await dc
+                .WorkQueues.AsNoTracking()
+                .AnyAsync(w => w.ManifestId == manifest)
+                .ConfigureAwait(false)
+            || await dc
+                .Metadatas.AsNoTracking()
+                .AnyAsync(m => m.ManifestId == manifest)
+                .ConfigureAwait(false)
         );
 
     private static Task<bool> CancellationRequested(long run) =>

@@ -24,7 +24,9 @@ public record ProviderCharge
 /// </summary>
 public sealed class SimulatedPaymentProvider
 {
-    private readonly ConcurrentDictionary<string, List<ProviderCharge>> _charges = new();
+    private readonly ConcurrentDictionary<string, List<ProviderCharge>> _charges = new(
+        StringComparer.Ordinal
+    );
 
     public ProviderCharge Charge(string customer, long amountCents, int items)
     {

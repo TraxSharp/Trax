@@ -113,9 +113,9 @@ builder.Services.AddHealthChecks().AddTraxHealthCheck();
 var app = builder.Build();
 
 // ── Create each domain's schema + tables, then seed demo data ────────────
-await app.Services.EnsureSchemaCreatedAsync<CatalogDbContext>();
-await app.Services.EnsureSchemaCreatedAsync<LendingDbContext>();
-await SeedAsync(app.Services);
+await app.Services.EnsureSchemaCreatedAsync<CatalogDbContext>().ConfigureAwait(false);
+await app.Services.EnsureSchemaCreatedAsync<LendingDbContext>().ConfigureAwait(false);
+await SeedAsync(app.Services).ConfigureAwait(false);
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -130,12 +130,12 @@ static async Task SeedAsync(IServiceProvider services)
     var catalog = scope.ServiceProvider.GetRequiredService<ICatalogDbContext>();
     var lending = scope.ServiceProvider.GetRequiredService<ILendingDbContext>();
 
-    if (!await catalog.Books.AnyAsync())
+    if (!await catalog.Books.AnyAsync().ConfigureAwait(false))
     {
         var tolkien = new Author { Name = "J.R.R. Tolkien" };
         var leguin = new Author { Name = "Ursula K. Le Guin" };
         catalog.Authors.AddRange(tolkien, leguin);
-        await catalog.SaveChangesAsync();
+        await catalog.SaveChangesAsync().ConfigureAwait(false);
 
         catalog.Books.AddRange(
             new Book
@@ -151,11 +151,11 @@ static async Task SeedAsync(IServiceProvider services)
                 AuthorId = leguin.Id,
             }
         );
-        await catalog.SaveChangesAsync();
+        await catalog.SaveChangesAsync().ConfigureAwait(false);
     }
 
     // Startup has no caller, so the owner filter would hide every member: seeding reads past it.
-    if (!await lending.Members.IgnoreQueryFilters().AnyAsync())
+    if (!await lending.Members.IgnoreQueryFilters().AnyAsync().ConfigureAwait(false))
     {
         var member = new Member
         {
@@ -170,9 +170,13 @@ static async Task SeedAsync(IServiceProvider services)
             PrincipalId = TraxPrincipalId.Qualify(TraxApiKey.SchemeName, "other-member"),
         };
         lending.Members.AddRange(member, otherMember);
-        await lending.SaveChangesAsync();
+        await lending.SaveChangesAsync().ConfigureAwait(false);
 
-        var firstBookId = await catalog.Books.OrderBy(b => b.Id).Select(b => b.Id).FirstAsync();
+        var firstBookId = await catalog
+            .Books.OrderBy(b => b.Id)
+            .Select(b => b.Id)
+            .FirstAsync()
+            .ConfigureAwait(false);
         lending.Loans.Add(
             new Loan
             {
@@ -181,7 +185,7 @@ static async Task SeedAsync(IServiceProvider services)
                 BorrowedAt = DateTime.UtcNow,
             }
         );
-        await lending.SaveChangesAsync();
+        await lending.SaveChangesAsync().ConfigureAwait(false);
     }
 }
 

@@ -34,8 +34,11 @@ public class DeadLetterBrowserTests : ConsoleTest
 
         var requeue = Page.WaitForRequestAsync(
             r =>
-                r.Url.EndsWith("/trax/graphql")
-                && r.PostData?.Contains("\"operationName\":\"RequeueDeadLetter\"") == true,
+                r.Url.EndsWith("/trax/graphql", StringComparison.Ordinal)
+                && r.PostData?.Contains(
+                    "\"operationName\":\"RequeueDeadLetter\"",
+                    StringComparison.Ordinal
+                ) == true,
             new() { Timeout = BrowserTimeouts.Render.Ms() }
         );
         await deadLetters.RequeueAsync(deadLetter.Id);
@@ -69,7 +72,9 @@ public class DeadLetterBrowserTests : ConsoleTest
             .Be(DeadLetterStatus.Retried);
 
         Checks
-            .Sent.Count(s => s.OperationName == "RequeueDeadLetter")
+            .Sent.Count(s =>
+                string.Equals(s.OperationName, "RequeueDeadLetter", StringComparison.Ordinal)
+            )
             .Should()
             .Be(1, "one click sends one requeue");
     }
@@ -126,7 +131,12 @@ public class DeadLetterBrowserTests : ConsoleTest
             (await DeadLetter(d.Id)).Status.Should().Be(DeadLetterStatus.Retried);
             (await QueuedFor(d.Id)).Should().BeTrue($"dead letter {d.Id} queued a run");
         }
-        Checks.Sent.Count(s => s.OperationName == "RequeueDeadLetters").Should().Be(1);
+        Checks
+            .Sent.Count(s =>
+                string.Equals(s.OperationName, "RequeueDeadLetters", StringComparison.Ordinal)
+            )
+            .Should()
+            .Be(1);
     }
 
     [Test]
@@ -331,16 +341,19 @@ public class DeadLetterBrowserTests : ConsoleTest
     private async Task<DeadLettersPage> OpenAwaitingListAsync()
     {
         var page = new DeadLettersPage(Console);
-        await page.OpenAsync(Caller.Operator);
-        await page.ShowAwaitingAsync();
-        await page.ShowAsListAsync();
+        await page.OpenAsync(Caller.Operator).ConfigureAwait(false);
+        await page.ShowAwaitingAsync().ConfigureAwait(false);
+        await page.ShowAsListAsync().ConfigureAwait(false);
         return page;
     }
 
     private static async Task SelectAsync(DeadLettersPage page, params long[] ids)
     {
         foreach (var id in ids)
-            await page.Row(id).GetByRole(AriaRole.Checkbox).CheckAsync(new() { Timeout = Render });
+            await page.Row(id)
+                .GetByRole(AriaRole.Checkbox)
+                .CheckAsync(new() { Timeout = Render })
+                .ConfigureAwait(false);
     }
 
     private static Task<Trax.Effect.Models.DeadLetter.DeadLetter> DeadLetter(long id) =>

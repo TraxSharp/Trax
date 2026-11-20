@@ -43,7 +43,12 @@ public class RestartTests
 
             (
                 await Polling.WaitUntilAsync(
-                    async () => await RunStateAsync(draftId) == "in_progress",
+                    async () =>
+                        string.Equals(
+                            await RunStateAsync(draftId).ConfigureAwait(false),
+                            "in_progress",
+                            StringComparison.Ordinal
+                        ),
                     TopicMapDraft.Patience,
                     TimeSpan.FromMilliseconds(100)
                 )
@@ -88,29 +93,37 @@ public class RestartTests
     // The state of the latest run the draft's Building state queued, as Postgres spells it.
     private static async Task<string?> RunStateAsync(Guid draftId) =>
         await ScalarAsync<string>(
-            """
-            SELECT train_state::text FROM trax.metadata
-            WHERE invoking_instance_id = @id ORDER BY id DESC LIMIT 1
-            """,
-            draftId
-        );
+                """
+                SELECT train_state::text FROM trax.metadata
+                WHERE invoking_instance_id = @id ORDER BY id DESC LIMIT 1
+                """,
+                draftId
+            )
+            .ConfigureAwait(false);
 
     private static async Task<string?> DraftStateAsync(Guid draftId) =>
         await ScalarAsync<string>(
-            "SELECT state FROM trax.snapshot_draft WHERE id = @id AND machine = 'topic-map'",
-            draftId
-        );
+                "SELECT state FROM trax.snapshot_draft WHERE id = @id AND machine = 'topic-map'",
+                draftId
+            )
+            .ConfigureAwait(false);
 
     private static async Task<long> CountAsync(string table) =>
-        await ScalarAsync<long>($"SELECT count(*) FROM {table}", null);
+        await ScalarAsync<long>($"SELECT count(*) FROM {table}", null).ConfigureAwait(false);
 
     private static async Task<T?> ScalarAsync<T>(string sql, Guid? id)
     {
-        await using var connection = new NpgsqlConnection(RecoveryHostProcess.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(sql, connection);
-        if (id is { } value)
-            command.Parameters.AddWithValue("id", value);
-        return await command.ExecuteScalarAsync() is T result ? result : default;
+        var connection = new NpgsqlConnection(RecoveryHostProcess.ConnectionString);
+        await using (connection.ConfigureAwait(false))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            var command = new NpgsqlCommand(sql, connection);
+            await using (command.ConfigureAwait(false))
+            {
+                if (id is { } value)
+                    command.Parameters.AddWithValue("id", value);
+                return await command.ExecuteScalarAsync() is T result ? result : default;
+            }
+        }
     }
 }

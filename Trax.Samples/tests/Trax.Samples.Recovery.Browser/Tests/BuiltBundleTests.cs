@@ -92,5 +92,15 @@ public class BuiltBundleTests
         requires["anonymous"]!.GetValue<bool>()
         || requires["roleSets"]!
             .AsArray()
-            .All(set => set!.AsArray().Any(r => r!.GetValue<string>() == RecoveryRoles.User));
+            .All(set =>
+                set!
+                    .AsArray()
+                    .Any(r =>
+                        string.Equals(
+                            r!.GetValue<string>(),
+                            RecoveryRoles.User,
+                            StringComparison.Ordinal
+                        )
+                    )
+            );
 }

@@ -41,10 +41,12 @@ public class E2EDatabaseProvisioningTests
         )!;
         var rows = config["packages"]!
             .AsArray()
-            .Where(p => (string?)p!["folder"] == "Trax.Samples")
+            .Where(p =>
+                string.Equals((string?)p!["folder"], "Trax.Samples", StringComparison.Ordinal)
+            )
             .Concat(
                 (config["suites"]?.AsArray() ?? []).Where(s =>
-                    (string?)s!["folder"] == "Trax.Samples"
+                    string.Equals((string?)s!["folder"], "Trax.Samples", StringComparison.Ordinal)
                 )
             )
             .Select(p => p!["dotnet"]!);
@@ -86,13 +88,13 @@ public class E2EDatabaseProvisioningTests
             if (!hostPorts.Contains(port))
                 offenders.Add(
                     $"{rel}: connection port {port} is not mapped to the CI Postgres service "
-                        + $"(mapped host ports: {string.Join(", ", hostPorts.OrderBy(p => p))})."
+                        + $"(mapped host ports: {string.Join(", ", hostPorts.Order(StringComparer.Ordinal))})."
                 );
             else if (!provisioned.Contains(db))
                 offenders.Add(
                     $"{rel}: database '{db}' is not provisioned in CI. Add it to the "
                         + "Trax.Samples databases, or its suite's, in .github/ci/packages.json (provisioned: "
-                        + $"{string.Join(", ", provisioned.OrderBy(d => d))})."
+                        + $"{string.Join(", ", provisioned.Order(StringComparer.Ordinal))})."
                 );
         }
 

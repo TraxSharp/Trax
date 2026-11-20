@@ -69,7 +69,12 @@ public class QueueBrowserTests : ConsoleTest
             .ToContainTextAsync("Cancelled", new() { Timeout = Render });
         (await StatusOf(first.Id)).Should().Be(WorkQueueStatus.Cancelled);
         (await StatusOf(second.Id)).Should().Be(WorkQueueStatus.Cancelled);
-        Checks.Sent.Count(s => s.OperationName == "CancelWorkQueueEntries").Should().Be(1);
+        Checks
+            .Sent.Count(s =>
+                string.Equals(s.OperationName, "CancelWorkQueueEntries", StringComparison.Ordinal)
+            )
+            .Should()
+            .Be(1);
     }
 
     [Test]
@@ -121,7 +126,10 @@ public class QueueBrowserTests : ConsoleTest
         await Assertions
             .Expect(Page)
             .ToHaveURLAsync(new Regex(@"/runs/queued/\d+$"), new() { Timeout = Render });
-        var id = long.Parse(Page.Url[(Page.Url.LastIndexOf('/') + 1)..]);
+        var id = long.Parse(
+            Page.Url[(Page.Url.LastIndexOf('/') + 1)..],
+            System.Globalization.CultureInfo.InvariantCulture
+        );
         var stored = await Host.QueryAsync(dc =>
             dc.WorkQueues.AsNoTracking().SingleAsync(w => w.Id == id)
         );

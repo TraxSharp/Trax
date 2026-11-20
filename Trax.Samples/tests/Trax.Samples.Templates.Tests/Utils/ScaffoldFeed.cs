@@ -33,10 +33,10 @@ internal static class ScaffoldFeed
     /// <summary>Packs everything once per test run and returns where it is.</summary>
     public static async Task<Packed> Get()
     {
-        await Gate.WaitAsync();
+        await Gate.WaitAsync().ConfigureAwait(false);
         try
         {
-            return _packed ??= await Pack();
+            return _packed ??= await Pack().ConfigureAwait(false);
         }
         finally
         {
@@ -110,7 +110,7 @@ internal static class ScaffoldFeed
         Directory.CreateDirectory(feed);
         try
         {
-            return await PackInto(root, feed, version);
+            return await PackInto(root, feed, version).ConfigureAwait(false);
         }
         catch
         {
@@ -127,7 +127,8 @@ internal static class ScaffoldFeed
             "templates",
             "Trax.Samples.Templates.csproj"
         );
-        await Run(root, "pack", templatesProject, "--output", root, $"-p:Version={version}");
+        await Run(root, "pack", templatesProject, "--output", root, $"-p:Version={version}")
+            .ConfigureAwait(false);
         var templatesNupkg = Directory.GetFiles(root, "*.nupkg").Single();
 
         // The Trax packages the templates pin are exactly the ones a scaffold can resolve, and
@@ -167,15 +168,16 @@ internal static class ScaffoldFeed
             ).ToString()
         );
         await Run(
-            root,
-            "msbuild",
-            traversal,
-            "-t:PackTrax",
-            "-m",
-            "-nodeReuse:false",
-            "-nologo",
-            "-v:minimal"
-        );
+                root,
+                "msbuild",
+                traversal,
+                "-t:PackTrax",
+                "-m",
+                "-nodeReuse:false",
+                "-nologo",
+                "-v:minimal"
+            )
+            .ConfigureAwait(false);
 
         return new Packed(root, feed, templatesNupkg, version);
     }
@@ -188,7 +190,9 @@ internal static class ScaffoldFeed
     {
         using var zip = ZipFile.OpenRead(templatesNupkg);
         return zip
-            .Entries.Where(e => e.Name == "Directory.Packages.props")
+            .Entries.Where(e =>
+                string.Equals(e.Name, "Directory.Packages.props", StringComparison.Ordinal)
+            )
             .SelectMany(e =>
             {
                 using var stream = e.Open();

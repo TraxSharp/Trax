@@ -33,8 +33,11 @@ public class SystemBrowserTests : ConsoleTest
 
         var update = Page.WaitForRequestAsync(
             r =>
-                r.Url.EndsWith("/trax/graphql")
-                && r.PostData?.Contains("\"operationName\":\"UpdateScheduler\"") == true,
+                r.Url.EndsWith("/trax/graphql", StringComparison.Ordinal)
+                && r.PostData?.Contains(
+                    "\"operationName\":\"UpdateScheduler\"",
+                    StringComparison.Ordinal
+                ) == true,
             new() { Timeout = Render }
         );
         await scheduler.SwitchAsync("Resume", "Job dispatcher", "starts again");
@@ -56,7 +59,9 @@ public class SystemBrowserTests : ConsoleTest
         await Assertions.Expect(badge).ToHaveCountAsync(0, new() { Timeout = Render });
         Config().JobDispatcherEnabled.Should().BeTrue();
         Checks
-            .Sent.Count(s => s.OperationName == "UpdateScheduler")
+            .Sent.Count(s =>
+                string.Equals(s.OperationName, "UpdateScheduler", StringComparison.Ordinal)
+            )
             .Should()
             .Be(1, "one confirmed click sends one update");
     }
@@ -79,8 +84,11 @@ public class SystemBrowserTests : ConsoleTest
 
             var update = Page.WaitForRequestAsync(
                 r =>
-                    r.Url.EndsWith("/trax/graphql")
-                    && r.PostData?.Contains("\"operationName\":\"UpdateScheduler\"") == true,
+                    r.Url.EndsWith("/trax/graphql", StringComparison.Ordinal)
+                    && r.PostData?.Contains(
+                        "\"operationName\":\"UpdateScheduler\"",
+                        StringComparison.Ordinal
+                    ) == true,
                 new() { Timeout = Render }
             );
             await retries.FillAsync($"{before.DefaultMaxRetries + 1}");
@@ -177,10 +185,14 @@ public class SystemBrowserTests : ConsoleTest
 
     private static async Task UpdateAsync(UpdateSchedulerConfigInput input)
     {
-        await using var scope = Host.Services.CreateAsyncScope();
-        var result = await scope
-            .ServiceProvider.GetRequiredService<IOperationsService>()
-            .UpdateSchedulerConfigAsync(input, CancellationToken.None);
-        result.Success.Should().BeTrue(result.Message);
+        var scope = Host.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var result = await scope
+                .ServiceProvider.GetRequiredService<IOperationsService>()
+                .UpdateSchedulerConfigAsync(input, CancellationToken.None)
+                .ConfigureAwait(false);
+            result.Success.Should().BeTrue(result.Message);
+        }
     }
 }

@@ -29,7 +29,7 @@ public class ScaffoldedTemplateTests
 
     private string _workDir = null!;
     private string _hive = null!;
-    private readonly Dictionary<string, Task<string>> _scaffolds = new();
+    private readonly Dictionary<string, Task<string>> _scaffolds = new(StringComparer.Ordinal);
 
     [OneTimeSetUp]
     public async Task PackAndInstallTheTemplates()
@@ -86,7 +86,11 @@ public class ScaffoldedTemplateTests
             .ExitCode.Should()
             .Be(0, $"the container config of {shortName} computes:\n{config.Output}");
         using var json = System.Text.Json.JsonDocument.Parse(
-            config.Output[config.Output.IndexOf('{')..(config.Output.LastIndexOf('}') + 1)]
+            config.Output[
+                config.Output.IndexOf('{', StringComparison.Ordinal)..(
+                    config.Output.LastIndexOf('}') + 1
+                )
+            ]
         );
         json.RootElement.GetProperty("Properties")
             .GetProperty("ContainerRepository")
@@ -145,7 +149,7 @@ public class ScaffoldedTemplateTests
         // The launch profile sets Development; --urls only moves the port off the fixed one.
         await using var app = await Start(
             dir,
-            new Dictionary<string, string>(),
+            new Dictionary<string, string>(StringComparer.Ordinal),
             "Application started",
             "run",
             "--no-build",
@@ -183,7 +187,7 @@ public class ScaffoldedTemplateTests
         // export opens no database.
         var export = await Run(
             dir,
-            new Dictionary<string, string>
+            new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["ASPNETCORE_ENVIRONMENT"] = "Production",
                 ["ConnectionStrings__Trax"] =
@@ -224,7 +228,7 @@ public class ScaffoldedTemplateTests
 
         await using var app = await Start(
             dir,
-            new Dictionary<string, string>
+            new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["ASPNETCORE_ENVIRONMENT"] = "Production",
                 ["ASPNETCORE_URLS"] = url,
@@ -264,17 +268,18 @@ public class ScaffoldedTemplateTests
     {
         var dir = Path.Combine(_workDir, shortName, "App");
         await Run(
-            _workDir,
-            "new",
-            shortName,
-            "--name",
-            "App",
-            "--output",
-            dir,
-            "--debug:custom-hive",
-            _hive
-        );
-        await Run(dir, "build");
+                _workDir,
+                "new",
+                shortName,
+                "--name",
+                "App",
+                "--output",
+                dir,
+                "--debug:custom-hive",
+                _hive
+            )
+            .ConfigureAwait(false);
+        await Run(dir, "build").ConfigureAwait(false);
         return dir;
     }
 

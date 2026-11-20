@@ -56,14 +56,14 @@ public static class RecoveryClientBuild
         using var timeout = new CancellationTokenSource(BuildTimeout);
         try
         {
-            await process.WaitForExitAsync(timeout.Token);
+            await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
             process.Kill(entireProcessTree: true);
             throw new TimeoutException($"vite build did not finish in {BuildTimeout}:\n{log}");
         }
-        await reading;
+        await reading.ConfigureAwait(false);
 
         if (process.ExitCode != 0 || !File.Exists(Path.Combine(output, "index.html")))
             throw new InvalidOperationException(
@@ -74,7 +74,7 @@ public static class RecoveryClientBuild
 
     private static async Task Drain(StreamReader reader, StringBuilder log)
     {
-        while (await reader.ReadLineAsync() is { } line)
+        while (await reader.ReadLineAsync().ConfigureAwait(false) is { } line)
             lock (log)
                 log.AppendLine(line);
     }

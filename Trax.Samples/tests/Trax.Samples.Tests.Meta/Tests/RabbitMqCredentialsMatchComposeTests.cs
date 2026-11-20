@@ -60,10 +60,14 @@ public class RabbitMqCredentialsMatchComposeTests
             )
             .Concat(SourceFiles.CSharp("samples", "tests"))
             .Where(f =>
-                !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
-            )
-            .Where(f =>
-                !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
+                !f.Contains(
+                    $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
+                && !f.Contains(
+                    $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
             );
 
         foreach (var file in files)

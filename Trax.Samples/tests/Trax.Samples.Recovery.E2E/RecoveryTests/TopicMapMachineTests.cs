@@ -382,7 +382,9 @@ public class TopicMapMachineTests : RecoveryTestFixture
         long? run = null;
         (
             await Shared.Testing.Polling.WaitUntilAsync(
-                async () => (run = (await EntryAsync(entry.Id)).MetadataId) is not null,
+                async () =>
+                    (run = (await EntryAsync(entry.Id).ConfigureAwait(false)).MetadataId)
+                        is not null,
                 TopicMapDraft.Patience,
                 TimeSpan.FromMilliseconds(100)
             )
@@ -432,7 +434,7 @@ public class TopicMapMachineTests : RecoveryTestFixture
         params string[] path
     )
     {
-        var response = await GraphQL.SendAsync(mutation, OperatorKey);
+        var response = await GraphQL.SendAsync(mutation, OperatorKey).ConfigureAwait(false);
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         var payload = response.GetData(["operations", .. path]);
         return (
@@ -443,11 +445,15 @@ public class TopicMapMachineTests : RecoveryTestFixture
 
     private static async Task<Trax.Effect.Models.WorkQueue.WorkQueue> EntryAsync(long id)
     {
-        await using var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
-        return await scope
-            .ServiceProvider.GetRequiredService<IDataContext>()
-            .WorkQueues.AsNoTracking()
-            .SingleAsync(w => w.Id == id);
+        var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            return await scope
+                .ServiceProvider.GetRequiredService<IDataContext>()
+                .WorkQueues.AsNoTracking()
+                .SingleAsync(w => w.Id == id)
+                .ConfigureAwait(false);
+        }
     }
 
     [Test]
@@ -465,8 +471,11 @@ public class TopicMapMachineTests : RecoveryTestFixture
             .Be(nameof(TopicMapState.Building));
         var rebuilt = await Shared.Testing.Polling.WaitUntilAsync(
             async () =>
-                (await _draft.LoadAsync()).Context["mapId"]?.GetValue<string>() is { } id
-                && id != first,
+                (await _draft.LoadAsync().ConfigureAwait(false))
+                    .Context["mapId"]
+                    ?.GetValue<string>()
+                    is { } id
+                && !string.Equals(id, first, StringComparison.Ordinal),
             TopicMapDraft.Patience,
             TimeSpan.FromMilliseconds(200)
         );
@@ -543,35 +552,50 @@ public class TopicMapMachineTests : RecoveryTestFixture
 
     private async Task<Trax.Effect.Models.SnapshotDraft.SnapshotDraft> Row()
     {
-        await using var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
-        return await scope
-            .ServiceProvider.GetRequiredService<IDataContext>()
-            .SnapshotDrafts.AsNoTracking()
-            .SingleAsync(d => d.Id == _draft.Id && d.Machine == TopicMapMachine.MachineId);
+        var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            return await scope
+                .ServiceProvider.GetRequiredService<IDataContext>()
+                .SnapshotDrafts.AsNoTracking()
+                .SingleAsync(d => d.Id == _draft.Id && d.Machine == TopicMapMachine.MachineId)
+                .ConfigureAwait(false);
+        }
     }
 
     private async Task<List<Trax.Effect.Models.WorkQueue.WorkQueue>> Runs()
     {
-        await using var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
-        return await scope
-            .ServiceProvider.GetRequiredService<IDataContext>()
-            .WorkQueues.AsNoTracking()
-            .Where(w => w.InvokingInstanceId == _draft.Id)
-            .OrderBy(w => w.Id)
-            .ToListAsync();
+        var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            return await scope
+                .ServiceProvider.GetRequiredService<IDataContext>()
+                .WorkQueues.AsNoTracking()
+                .Where(w => w.InvokingInstanceId == _draft.Id)
+                .OrderBy(w => w.Id)
+                .ToListAsync()
+                .ConfigureAwait(false);
+        }
     }
 
     private static async Task<bool> RunCancelled(string externalId)
     {
-        await using var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<IDataContext>();
-        var entry = await db.WorkQueues.AsNoTracking().SingleAsync(w => w.ExternalId == externalId);
-        if (entry.Status == WorkQueueStatus.Cancelled)
-            return true;
-        return entry.MetadataId is { } id
-            && await db
-                .Metadatas.AsNoTracking()
-                .AnyAsync(m => m.Id == id && m.TrainState == TrainState.Cancelled);
+        var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var db = scope.ServiceProvider.GetRequiredService<IDataContext>();
+            var entry = await db
+                .WorkQueues.AsNoTracking()
+                .SingleAsync(w => w.ExternalId == externalId)
+                .ConfigureAwait(false);
+            if (entry.Status == WorkQueueStatus.Cancelled)
+                return true;
+            return entry.MetadataId is { } id
+                && await db
+                    .Metadatas.AsNoTracking()
+                    .AnyAsync(m => m.Id == id && m.TrainState == TrainState.Cancelled)
+                    .ConfigureAwait(false);
+        }
     }
 
     private static Task<TopicMapDbContext> TopicMapDb() =>

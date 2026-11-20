@@ -160,7 +160,7 @@ public class OrderMachineTests : RecoveryTestFixture
         await _order.PlaceOrderAsync();
         await _order.WaitForStateAsync(nameof(OrderState.Delivered));
 
-        var mine = (await TabletCallsAsync()).Select(OrderIdOf).ToHashSet();
+        var mine = (await TabletCallsAsync()).Select(OrderIdOf).ToHashSet(StringComparer.Ordinal);
         var theirs = (await TabletCallsAsync(DemoKeys.User)).Select(OrderIdOf).ToList();
 
         mine.Should().NotBeEmpty("the operator's order called the tablet");
@@ -214,34 +214,42 @@ public class OrderMachineTests : RecoveryTestFixture
 
     private async Task ArmAsync(string trouble, string key = OperatorKey)
     {
-        var response = await GraphQL.SendAsync(
-            "mutation($t: OrderTrouble!) { dispatch { orderTrouble(input: { trouble: $t }) { output { trouble } } } }",
-            key,
-            new { t = trouble }
-        );
+        var response = await GraphQL
+            .SendAsync(
+                "mutation($t: OrderTrouble!) { dispatch { orderTrouble(input: { trouble: $t }) { output { trouble } } } }",
+                key,
+                new { t = trouble }
+            )
+            .ConfigureAwait(false);
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
     }
 
     private async Task<List<long>> RunsAsync()
     {
-        await using var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
-        return await scope
-            .ServiceProvider.GetRequiredService<IDataContext>()
-            .Metadatas.Where(m =>
-                m.InvokingMachine == OrderMachine.MachineId && m.InvokingInstanceId == _order.Id
-            )
-            .Select(m => m.Id)
-            .ToListAsync();
+        var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            return await scope
+                .ServiceProvider.GetRequiredService<IDataContext>()
+                .Metadatas.Where(m =>
+                    m.InvokingMachine == OrderMachine.MachineId && m.InvokingInstanceId == _order.Id
+                )
+                .Select(m => m.Id)
+                .ToListAsync()
+                .ConfigureAwait(false);
+        }
     }
 
     private async Task<List<JsonElement>> StepsAsync()
     {
-        var run = (await RunsAsync()).Should().ContainSingle().Subject;
-        var response = await GraphQL.SendAsync(
-            "query($id: Long!) { operations { junctionRuns(metadataId: $id) { position name state } } }",
-            OperatorKey,
-            new { id = run }
-        );
+        var run = (await RunsAsync().ConfigureAwait(false)).Should().ContainSingle().Subject;
+        var response = await GraphQL
+            .SendAsync(
+                "query($id: Long!) { operations { junctionRuns(metadataId: $id) { position name state } } }",
+                OperatorKey,
+                new { id = run }
+            )
+            .ConfigureAwait(false);
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         return response
             .GetData("operations", "junctionRuns")
@@ -253,10 +261,12 @@ public class OrderMachineTests : RecoveryTestFixture
 
     private async Task<List<JsonElement>> TabletCallsAsync(string key = OperatorKey)
     {
-        var response = await GraphQL.SendAsync(
-            "{ discover { orders { tabletCalls { calls { orderId attempt problem } } } } }",
-            key
-        );
+        var response = await GraphQL
+            .SendAsync(
+                "{ discover { orders { tabletCalls { calls { orderId attempt problem } } } } }",
+                key
+            )
+            .ConfigureAwait(false);
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         return response
             .GetData("discover", "orders", "tabletCalls", "calls")

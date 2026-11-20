@@ -19,14 +19,15 @@ public class CrossProcessEventTests : ApiTestFixture
     private static async Task<GraphQLWebSocketClient> SubscribeAsync(string apiKey)
     {
         // With API-key auth registered every socket must carry a credential.
-        var socket = await GraphQLWebSocketClient.ConnectAsync(
-            SharedApiSetup.Factory.Server.CreateWebSocketClient(),
-            apiKey: apiKey
-        );
-        await socket.SubscribeAsync(
-            "completed",
-            "subscription { onTrainCompleted { externalId trainName output } }"
-        );
+        var socket = await GraphQLWebSocketClient
+            .ConnectAsync(SharedApiSetup.Factory.Server.CreateWebSocketClient(), apiKey: apiKey)
+            .ConfigureAwait(false);
+        await socket
+            .SubscribeAsync(
+                "completed",
+                "subscription { onTrainCompleted { externalId trainName output } }"
+            )
+            .ConfigureAwait(false);
         return socket;
     }
 
@@ -45,7 +46,8 @@ public class CrossProcessEventTests : ApiTestFixture
                 }
                 """,
                 apiKey: ModeratorKey
-            );
+            )
+            .ConfigureAwait(false);
         queued.HasErrors.Should().BeFalse(queued.FirstErrorMessage);
         return queued
             .GetData("dispatch", "sendViolationNotice")
@@ -69,11 +71,17 @@ public class CrossProcessEventTests : ApiTestFixture
             var remaining = deadline - DateTime.UtcNow;
             remaining.Should().BePositive("the runner's completion should reach the API");
 
-            var payload = await socket.ReceiveNextAsync(remaining);
+            var payload = await socket.ReceiveNextAsync(remaining).ConfigureAwait(false);
             if (!payload.TryGetProperty("data", out var data))
                 continue;
             var completed = data.GetProperty("onTrainCompleted");
-            if (completed.GetProperty("externalId").GetString() == externalId)
+            if (
+                string.Equals(
+                    completed.GetProperty("externalId").GetString(),
+                    externalId,
+                    StringComparison.Ordinal
+                )
+            )
                 return (completed, before);
             before.Add(completed);
         }

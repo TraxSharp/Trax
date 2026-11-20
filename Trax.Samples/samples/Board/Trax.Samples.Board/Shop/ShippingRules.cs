@@ -90,5 +90,5 @@ public static class Reports
             Policy: new ShippingRules(50m, Inclusive: true, 5.99m),
             EarlierCases: [20m, 49.99m, 75m]
         ),
-    }.ToDictionary(r => r.Key);
+    }.ToDictionary(r => r.Key, StringComparer.Ordinal);
 }

@@ -28,9 +28,11 @@ public class RunReproCase(InvokedRun run, TicketBoard board)
 {
     public override async Task<CheckResult> Run(ReproCheck check)
     {
-        var ticket = await board.Find(check.TicketId, CancellationToken);
+        var ticket = await board.Find(check.TicketId, CancellationToken).ConfigureAwait(false);
         if (
-            await board.RefuseUnlessHeld(ticket, run.UserKey, "reproduce", CancellationToken) is
+            await board
+                .RefuseUnlessHeld(ticket, run.UserKey, "reproduce", CancellationToken)
+                .ConfigureAwait(false) is
             { } refusal
         )
             return CheckResult.Refuse(refusal);
@@ -49,19 +51,21 @@ public class RunReproCase(InvokedRun run, TicketBoard board)
         if (charged == policy)
         {
             failed++;
-            var noted = await board.Fire(
-                ticket.Id,
-                TicketTrigger.NotReproduced,
-                new CaseInput
-                {
-                    By = TicketBoard.Name(run.UserKey),
-                    Note = $"{Money(check.Subtotal)} pays {Money(charged)}, as it should",
-                    Subtotal = check.Subtotal,
-                    Charged = charged,
-                    FailedCases = failed,
-                },
-                CancellationToken
-            );
+            var noted = await board
+                .Fire(
+                    ticket.Id,
+                    TicketTrigger.NotReproduced,
+                    new CaseInput
+                    {
+                        By = TicketBoard.Name(run.UserKey),
+                        Note = $"{Money(check.Subtotal)} pays {Money(charged)}, as it should",
+                        Subtotal = check.Subtotal,
+                        Charged = charged,
+                        FailedCases = failed,
+                    },
+                    CancellationToken
+                )
+                .ConfigureAwait(false);
             if (noted is not AdvanceOutcome.Advanced)
                 return CheckResult.Refuse(TicketBoard.Why(noted));
             return CheckResult.Refuse(
@@ -70,19 +74,21 @@ public class RunReproCase(InvokedRun run, TicketBoard board)
             );
         }
 
-        var moved = await board.Fire(
-            ticket.Id,
-            TicketTrigger.Reproduced,
-            new CaseInput
-            {
-                By = TicketBoard.Name(run.UserKey),
-                Note = $"repro: {Money(check.Subtotal)} pays {Money(charged)}",
-                Subtotal = check.Subtotal,
-                Charged = charged,
-                FailedCases = failed,
-            },
-            CancellationToken
-        );
+        var moved = await board
+            .Fire(
+                ticket.Id,
+                TicketTrigger.Reproduced,
+                new CaseInput
+                {
+                    By = TicketBoard.Name(run.UserKey),
+                    Note = $"repro: {Money(check.Subtotal)} pays {Money(charged)}",
+                    Subtotal = check.Subtotal,
+                    Charged = charged,
+                    FailedCases = failed,
+                },
+                CancellationToken
+            )
+            .ConfigureAwait(false);
         return moved is AdvanceOutcome.Advanced
             ? CheckResult.Accept(
                 $"{Money(check.Subtotal)} pays {Money(charged)}; the policy says {Money(policy)}: reproduced",

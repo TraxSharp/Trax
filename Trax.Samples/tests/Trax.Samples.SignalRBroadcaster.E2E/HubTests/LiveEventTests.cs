@@ -33,7 +33,8 @@ public class LiveEventTests
             e is { TrainName: "IPingTrain", EventType: "Started" }
         );
         var completed = await _client.WaitFor(e =>
-            e.EventType == "Completed" && e.ExternalId == started.ExternalId
+            string.Equals(e.EventType, "Completed", StringComparison.Ordinal)
+            && string.Equals(e.ExternalId, started.ExternalId, StringComparison.Ordinal)
         );
 
         completed.FailureReason.Should().BeNull();
@@ -44,7 +45,9 @@ public class LiveEventTests
     {
         await RunPing("FailForClients");
 
-        var failed = await _client.WaitFor(e => e.EventType == "Failed");
+        var failed = await _client.WaitFor(e =>
+            string.Equals(e.EventType, "Failed", StringComparison.Ordinal)
+        );
 
         failed.FailureReason.Should().Be("The ping target did not answer.");
     }
@@ -54,7 +57,9 @@ public class LiveEventTests
     {
         await RunPing("FailUnexpectedly");
 
-        var failed = await _client.WaitFor(e => e.EventType == "Failed");
+        var failed = await _client.WaitFor(e =>
+            string.Equals(e.EventType, "Failed", StringComparison.Ordinal)
+        );
 
         failed.FailureReason.Should().Be(LiveTrainEvent.MaskedReason);
         failed.FailureReason.Should().NotContain("10.0.4.17");
@@ -69,7 +74,7 @@ public class LiveEventTests
         };
         request.Headers.Add("Cookie", _cookie);
 
-        var response = await http.SendAsync(request);
+        var response = await http.SendAsync(request).ConfigureAwait(false);
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
     }
 }

@@ -27,9 +27,11 @@ public class RunQaSweep(InvokedRun run, TicketBoard board) : EffectJunction<QaCh
 {
     public override async Task<CheckResult> Run(QaCheck check)
     {
-        var ticket = await board.Find(check.TicketId, CancellationToken);
+        var ticket = await board.Find(check.TicketId, CancellationToken).ConfigureAwait(false);
         if (
-            await board.RefuseUnlessHeld(ticket, run.UserKey, "qa", CancellationToken) is
+            await board
+                .RefuseUnlessHeld(ticket, run.UserKey, "qa", CancellationToken)
+                .ConfigureAwait(false) is
             { } refusal
         )
             return CheckResult.Refuse(refusal);
@@ -56,12 +58,14 @@ public class RunQaSweep(InvokedRun run, TicketBoard board) : EffectJunction<QaCh
                     $"{Money(broken[0])} pays {Money(patched.Charge(broken[0]))} on the patched rules; the policy says {Money(report.Policy.Charge(broken[0]))}; sent back to Fix"
                 );
 
-        var moved = await board.Fire(
-            ticket.Id,
-            trigger,
-            new NoteInput { By = TicketBoard.Name(run.UserKey), Note = note },
-            CancellationToken
-        );
+        var moved = await board
+            .Fire(
+                ticket.Id,
+                trigger,
+                new NoteInput { By = TicketBoard.Name(run.UserKey), Note = note },
+                CancellationToken
+            )
+            .ConfigureAwait(false);
         return moved is AdvanceOutcome.Advanced
             ? CheckResult.Accept(message)
             : CheckResult.Refuse(TicketBoard.Why(moved));

@@ -32,7 +32,15 @@ public class GetChatRoomPeopleTests
 
         output.People.Should().HaveCount(2);
         output.People.Should().NotContain(p => p.UserId == ChatUsers.Alice.Id);
-        output.People.Single(p => p.UserId == ChatUsers.Bob.Id).IsMember.Should().BeTrue();
-        output.People.Single(p => p.UserId == ChatUsers.Charlie.Id).IsMember.Should().BeFalse();
+        output
+            .People.Single(p => string.Equals(p.UserId, ChatUsers.Bob.Id, StringComparison.Ordinal))
+            .IsMember.Should()
+            .BeTrue();
+        output
+            .People.Single(p =>
+                string.Equals(p.UserId, ChatUsers.Charlie.Id, StringComparison.Ordinal)
+            )
+            .IsMember.Should()
+            .BeFalse();
     }
 }

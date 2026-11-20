@@ -62,7 +62,9 @@ public class SourcePartitionMachineTests : RecoveryTestFixture
 
         foreach (var (source, month) in Partitions)
         {
-            var unsure = source == IndexFixture.Crossref && month == "2025-02";
+            var unsure =
+                string.Equals(source, IndexFixture.Crossref, StringComparison.Ordinal)
+                && string.Equals(month, "2025-02", StringComparison.Ordinal);
             var row = await PartitionMachines.WaitForStateAsync(
                 source,
                 month,
@@ -100,7 +102,7 @@ public class SourcePartitionMachineTests : RecoveryTestFixture
 
             await PartitionMachines.WaitForStateAsync(source, month, nameof(PartitionState.Failed));
             var instance = (await PartitionMachines.OfAsync(source, month))!;
-            var failedRun = (await RunsOfAsync(instance.Id)).Last();
+            var failedRun = (await RunsOfAsync(instance.Id))[^1];
             (await TrainStateOfAsync(failedRun.MetadataId))
                 .Should()
                 .Be(TrainState.Failed, "the scheduler never retries an invoked run");
@@ -109,7 +111,7 @@ public class SourcePartitionMachineTests : RecoveryTestFixture
                 .Should()
                 .Be((nameof(PartitionState.Ingesting), (string?)null));
             var retried = (await PartitionMachines.OfAsync(source, month))!;
-            var retryRun = (await RunsOfAsync(instance.Id)).Last();
+            var retryRun = (await RunsOfAsync(instance.Id))[^1];
             retryRun.ExternalId.Should().NotBe(failedRun.ExternalId, "a retry is a new run");
             retried.InvokeToken.Should().Be(retryRun.ExternalId);
 
@@ -243,13 +245,15 @@ public class SourcePartitionMachineTests : RecoveryTestFixture
     private async Task<JsonElement> DiscoverAsync(string? source = null)
     {
         var filter = source is null ? "{}" : $$"""{ source: "{{source}}" }""";
-        var response = await GraphQL.SendAsync(
-            $$"""
-            mutation { dispatch { discoverPartitions(input: {{filter}}) {
-              output { instancesStarted instancesSentToIngest partitions { source month } } } } }
-            """,
-            OperatorKey
-        );
+        var response = await GraphQL
+            .SendAsync(
+                $$"""
+                mutation { dispatch { discoverPartitions(input: {{filter}}) {
+                  output { instancesStarted instancesSentToIngest partitions { source month } } } } }
+                """,
+                OperatorKey
+            )
+            .ConfigureAwait(false);
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         return response.GetData("dispatch", "discoverPartitions", "output");
     }
@@ -260,13 +264,15 @@ public class SourcePartitionMachineTests : RecoveryTestFixture
         string action
     )
     {
-        var response = await GraphQL.SendAsync(
-            $$"""
-            mutation { dispatch { partitionAction(input: { source: "{{source}}", month: "{{month}}", action: {{action}} }) {
-              output { state problem } } } }
-            """,
-            OperatorKey
-        );
+        var response = await GraphQL
+            .SendAsync(
+                $$"""
+                mutation { dispatch { partitionAction(input: { source: "{{source}}", month: "{{month}}", action: {{action}} }) {
+                  output { state problem } } } }
+                """,
+                OperatorKey
+            )
+            .ConfigureAwait(false);
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         var output = response.GetData("dispatch", "partitionAction", "output");
         return (output.GetProperty("state").GetString(), output.GetProperty("problem").GetString());
@@ -275,38 +281,52 @@ public class SourcePartitionMachineTests : RecoveryTestFixture
     // Every ingest run a partition instance has queued, whenever it was queued.
     private async Task<int> IngestRunsAsync()
     {
-        var ids = (await PartitionMachines.AllAsync()).Select(x => x.Id).ToList();
-        await using var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
-        return await scope
-            .ServiceProvider.GetRequiredService<IDataContext>()
-            .WorkQueues.AsNoTracking()
-            .CountAsync(w =>
-                w.InvokingMachine == SourcePartitionMachine.MachineId
-                && w.InvokingInstanceId != null
-                && ids.Contains(w.InvokingInstanceId.Value)
-                && w.CreatedAt >= _started
-            );
+        var ids = (await PartitionMachines.AllAsync().ConfigureAwait(false))
+            .Select(x => x.Id)
+            .ToList();
+        var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            return await scope
+                .ServiceProvider.GetRequiredService<IDataContext>()
+                .WorkQueues.AsNoTracking()
+                .CountAsync(w =>
+                    w.InvokingMachine == SourcePartitionMachine.MachineId
+                    && w.InvokingInstanceId != null
+                    && ids.Contains(w.InvokingInstanceId.Value)
+                    && w.CreatedAt >= _started
+                )
+                .ConfigureAwait(false);
+        }
     }
 
     private static async Task<List<Trax.Effect.Models.WorkQueue.WorkQueue>> RunsOfAsync(Guid id)
     {
-        await using var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
-        return await scope
-            .ServiceProvider.GetRequiredService<IDataContext>()
-            .WorkQueues.AsNoTracking()
-            .Where(w => w.InvokingInstanceId == id)
-            .OrderBy(w => w.Id)
-            .ToListAsync();
+        var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            return await scope
+                .ServiceProvider.GetRequiredService<IDataContext>()
+                .WorkQueues.AsNoTracking()
+                .Where(w => w.InvokingInstanceId == id)
+                .OrderBy(w => w.Id)
+                .ToListAsync()
+                .ConfigureAwait(false);
+        }
     }
 
     private static async Task<TrainState?> TrainStateOfAsync(long? metadataId)
     {
-        await using var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
-        return await scope
-            .ServiceProvider.GetRequiredService<IDataContext>()
-            .Metadatas.AsNoTracking()
-            .Where(m => m.Id == metadataId)
-            .Select(m => (TrainState?)m.TrainState)
-            .SingleOrDefaultAsync();
+        var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            return await scope
+                .ServiceProvider.GetRequiredService<IDataContext>()
+                .Metadatas.AsNoTracking()
+                .Where(m => m.Id == metadataId)
+                .Select(m => (TrainState?)m.TrainState)
+                .SingleOrDefaultAsync()
+                .ConfigureAwait(false);
+        }
     }
 }

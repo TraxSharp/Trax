@@ -40,7 +40,12 @@ public sealed class CheckTraxInvariantsAttribute : Attribute, ITestAction
         // second (the manifest manager), so a run can be caught in progress that finishes a moment later. A run
         // still in progress once the host had time to finish it is stuck, and fails the test like any violation.
         var added = Added();
-        if (added.Count > 0 && added.All(v => v.Invariant == TraxInvariants.RunInProgress))
+        if (
+            added.Count > 0
+            && added.TrueForAll(v =>
+                string.Equals(v.Invariant, TraxInvariants.RunInProgress, StringComparison.Ordinal)
+            )
+        )
             Polling
                 .WaitUntilAsync(
                     () => Task.FromResult((added = Added()).Count == 0),

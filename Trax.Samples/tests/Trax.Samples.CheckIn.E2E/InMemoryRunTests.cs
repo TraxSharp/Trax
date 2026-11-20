@@ -36,7 +36,11 @@ public class InMemoryRunTests
     {
         var irs = Directory
             .GetFiles(Machines, "*.ir.json")
-            .ToDictionary(p => Path.GetFileName(p)[..^".ir.json".Length], File.ReadAllText);
+            .ToDictionary(
+                p => Path.GetFileName(p)[..^".ir.json".Length],
+                File.ReadAllText,
+                StringComparer.Ordinal
+            );
 
         var report = FeatureMachines.Run(
             Glossary,
@@ -78,5 +82,5 @@ public class InMemoryRunTests
         FeatureMachines.Missing(Glossary, Files).Should().BeEmpty();
 
     // A checkout with CRLF line endings holds the same files, as trax machine from-gherkin --check reads them.
-    private static string Lf(string text) => text.Replace("\r\n", "\n");
+    private static string Lf(string text) => text.Replace("\r\n", "\n", StringComparison.Ordinal);
 }

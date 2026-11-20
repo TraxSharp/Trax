@@ -26,7 +26,7 @@ public class GraphQLClient(HttpClient httpClient)
         if (apiKey is not null)
             request.Headers.Add("X-Api-Key", apiKey);
 
-        return await ReadAsync(request);
+        return await ReadAsync(request).ConfigureAwait(false);
     }
 
     /// <summary>Posts a request body exactly as written, the way <c>curl -d</c> sends it.</summary>
@@ -39,13 +39,13 @@ public class GraphQLClient(HttpClient httpClient)
         if (apiKey is not null)
             request.Headers.Add("X-Api-Key", apiKey);
 
-        return await ReadAsync(request);
+        return await ReadAsync(request).ConfigureAwait(false);
     }
 
     private async Task<GraphQLResponse> ReadAsync(HttpRequestMessage request)
     {
-        var response = await httpClient.SendAsync(request);
-        var body = await response.Content.ReadAsStringAsync();
+        var response = await httpClient.SendAsync(request).ConfigureAwait(false);
+        var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
 
         if (string.IsNullOrWhiteSpace(body))
         {

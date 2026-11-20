@@ -29,10 +29,12 @@ public sealed class Db(IServiceProvider services)
     {
         using var scope = services.CreateScope();
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        var dataContext = await factory.CreateDbContextAsync(cancellationToken);
+        var dataContext = await factory
+            .CreateDbContextAsync(cancellationToken)
+            .ConfigureAwait(false);
         try
         {
-            return await query(dataContext);
+            return await query(dataContext).ConfigureAwait(false);
         }
         finally
         {
@@ -68,39 +70,42 @@ public sealed class Db(IServiceProvider services)
         List<Metadata> runs = [];
         using var budget = new CancellationTokenSource(timeout);
 
-        var reached = await Polling.WaitUntilAsync(
-            async () =>
-            {
-                if (budget.IsCancellationRequested)
-                    return false;
-                try
+        var reached = await Polling
+            .WaitUntilAsync(
+                async () =>
                 {
-                    runs = await Query(
-                        dc =>
-                            dc.Metadatas.AsNoTracking()
-                                .Where(m =>
-                                    m.ManifestId == manifestId
-                                    && m.Id > afterId
-                                    && m.TrainState == state
-                                )
-                                .OrderBy(m => m.Id)
-                                .ToListAsync(budget.Token),
-                        budget.Token
-                    );
-                }
-                catch (OperationCanceledException)
-                {
-                    return false;
-                }
-                return runs.Count >= count;
-            },
-            timeout,
-            PollInterval
-        );
+                    if (budget.IsCancellationRequested)
+                        return false;
+                    try
+                    {
+                        runs = await Query(
+                                dc =>
+                                    dc.Metadatas.AsNoTracking()
+                                        .Where(m =>
+                                            m.ManifestId == manifestId
+                                            && m.Id > afterId
+                                            && m.TrainState == state
+                                        )
+                                        .OrderBy(m => m.Id)
+                                        .ToListAsync(budget.Token),
+                                budget.Token
+                            )
+                            .ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return false;
+                    }
+                    return runs.Count >= count;
+                },
+                timeout,
+                PollInterval
+            )
+            .ConfigureAwait(false);
 
         if (!reached)
         {
-            var all = await Runs(manifestId, afterId);
+            var all = await Runs(manifestId, afterId).ConfigureAwait(false);
             Assert.Fail(
                 $"Expected {count} {state} run(s) of manifest {manifestId} after metadata {afterId} "
                     + $"within {timeout.TotalSeconds}s; saw "
@@ -116,7 +121,7 @@ public sealed class Db(IServiceProvider services)
         TrainState state,
         long afterId,
         TimeSpan timeout
-    ) => (await WaitForRuns(manifestId, state, 1, afterId, timeout))[0];
+    ) => (await WaitForRuns(manifestId, state, 1, afterId, timeout).ConfigureAwait(false))[0];
 
     /// <summary>Waits for a dead letter of the manifest, newer than <paramref name="afterId"/>, in <paramref name="status"/>.</summary>
     public async Task<DeadLetter> WaitForDeadLetter(
@@ -129,35 +134,38 @@ public sealed class Db(IServiceProvider services)
         DeadLetter? deadLetter = null;
         using var budget = new CancellationTokenSource(timeout);
 
-        var reached = await Polling.WaitUntilAsync(
-            async () =>
-            {
-                if (budget.IsCancellationRequested)
-                    return false;
-                try
+        var reached = await Polling
+            .WaitUntilAsync(
+                async () =>
                 {
-                    deadLetter = await Query(
-                        dc =>
-                            dc.DeadLetters.AsNoTracking()
-                                .Where(d =>
-                                    d.ManifestId == manifestId
-                                    && d.Id > afterId
-                                    && d.Status == status
-                                )
-                                .OrderByDescending(d => d.Id)
-                                .FirstOrDefaultAsync(budget.Token),
-                        budget.Token
-                    );
-                }
-                catch (OperationCanceledException)
-                {
-                    return false;
-                }
-                return deadLetter is not null;
-            },
-            timeout,
-            PollInterval
-        );
+                    if (budget.IsCancellationRequested)
+                        return false;
+                    try
+                    {
+                        deadLetter = await Query(
+                                dc =>
+                                    dc.DeadLetters.AsNoTracking()
+                                        .Where(d =>
+                                            d.ManifestId == manifestId
+                                            && d.Id > afterId
+                                            && d.Status == status
+                                        )
+                                        .OrderByDescending(d => d.Id)
+                                        .FirstOrDefaultAsync(budget.Token),
+                                budget.Token
+                            )
+                            .ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return false;
+                    }
+                    return deadLetter is not null;
+                },
+                timeout,
+                PollInterval
+            )
+            .ConfigureAwait(false);
 
         reached
             .Should()
@@ -170,7 +178,9 @@ public sealed class Db(IServiceProvider services)
     /// <summary>Waits until <paramref name="condition"/> holds, failing the test with <paramref name="because"/> when it never does.</summary>
     public async Task WaitUntil(Func<Task<bool>> condition, TimeSpan timeout, string because)
     {
-        var reached = await Polling.WaitUntilAsync(condition, timeout, PollInterval);
+        var reached = await Polling
+            .WaitUntilAsync(condition, timeout, PollInterval)
+            .ConfigureAwait(false);
         reached.Should().BeTrue(because);
     }
 }

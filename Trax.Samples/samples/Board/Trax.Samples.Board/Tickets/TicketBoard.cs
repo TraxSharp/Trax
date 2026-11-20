@@ -36,42 +36,52 @@ public sealed class TicketBoard(IMachineInstances instances, IDataContextProvide
     public async Task<Ticket?> Find(string ticketId, CancellationToken ct)
     {
         var id = TicketMachine.IdFor(ticketId);
-        await using var db = await trax.CreateDbContextAsync(ct);
-        var row = await db
-            .SnapshotDrafts.AsNoTracking()
-            .Where(d =>
-                d.Machine == TicketMachine.MachineId
-                && d.OwnerKind == SnapshotOwnerKind.System
-                && d.Id == id
-            )
-            .Select(d => new { d.State, d.Context })
-            .FirstOrDefaultAsync(ct);
-        return row is null ? null : Read(row.State, row.Context);
+        var db = await trax.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var row = await db
+                .SnapshotDrafts.AsNoTracking()
+                .Where(d =>
+                    d.Machine == TicketMachine.MachineId
+                    && d.OwnerKind == SnapshotOwnerKind.System
+                    && d.Id == id
+                )
+                .Select(d => new { d.State, d.Context })
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
+            return row is null ? null : Read(row.State, row.Context);
+        }
     }
 
     public async Task<IReadOnlyList<Ticket>> All(CancellationToken ct)
     {
-        await using var db = await trax.CreateDbContextAsync(ct);
-        var rows = await db
-            .SnapshotDrafts.AsNoTracking()
-            .Where(d =>
-                d.Machine == TicketMachine.MachineId && d.OwnerKind == SnapshotOwnerKind.System
-            )
-            .Select(d => new { d.State, d.Context })
-            .ToListAsync(ct);
-        return rows.Select(r => Read(r.State, r.Context))
-            .OrderBy(t => t.Id, StringComparer.Ordinal)
-            .ToList();
+        var db = await trax.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var rows = await db
+                .SnapshotDrafts.AsNoTracking()
+                .Where(d =>
+                    d.Machine == TicketMachine.MachineId && d.OwnerKind == SnapshotOwnerKind.System
+                )
+                .Select(d => new { d.State, d.Context })
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+            return rows.Select(r => Read(r.State, r.Context))
+                .OrderBy(t => t.Id, StringComparer.Ordinal)
+                .ToList();
+        }
     }
 
     public async Task<Ticket> File(string ticketId, Report report, CancellationToken ct)
     {
-        await instances.Start<TicketMachine>(
-            TicketMachine.KeyFor(ticketId),
-            TicketMachine.ContextFor(ticketId, report.Key),
-            ct
-        );
-        return (await Find(ticketId, ct))!;
+        await instances
+            .Start<TicketMachine>(
+                TicketMachine.KeyFor(ticketId),
+                TicketMachine.ContextFor(ticketId, report.Key),
+                ct
+            )
+            .ConfigureAwait(false);
+        return (await Find(ticketId, ct).ConfigureAwait(false))!;
     }
 
     /// <summary>Fires one of the ticket machine's triggers, as the host.</summary>
@@ -101,13 +111,16 @@ public sealed class TicketBoard(IMachineInstances instances, IDataContextProvide
     {
         if (ticket is null)
             return "no such ticket";
-        if (ticket.Lane != lane)
+        if (!string.Equals(ticket.Lane, lane, StringComparison.Ordinal))
             return $"{ticket.Id} is in {ticket.State}, not in {lane}";
-        if (worker is null || ticket.Context.ClaimedBy != worker)
+        if (
+            worker is null
+            || !string.Equals(ticket.Context.ClaimedBy, worker, StringComparison.Ordinal)
+        )
             return $"{ticket.Id} is not claimed by {(worker is null ? "anyone" : Name(worker))}; claim it first";
         if (Lapsed(ticket))
         {
-            await Fire(ticket.Id, TicketTrigger.Release, null, ct);
+            await Fire(ticket.Id, TicketTrigger.Release, null, ct).ConfigureAwait(false);
             return $"the claim on {ticket.Id} ran out; claim it again";
         }
         return null;
@@ -118,7 +131,9 @@ public sealed class TicketBoard(IMachineInstances instances, IDataContextProvide
     /// and an assignment hold the whole key; a note shows the name.
     /// </summary>
     public static string Name(string? principal) =>
-        principal is null ? "" : principal[(principal.IndexOf(':') + 1)..];
+        principal is null
+            ? ""
+            : principal[(principal.IndexOf(':', StringComparison.Ordinal) + 1)..];
 
     public static bool Lapsed(Ticket ticket) =>
         ticket.Context.ClaimedAt is { } at

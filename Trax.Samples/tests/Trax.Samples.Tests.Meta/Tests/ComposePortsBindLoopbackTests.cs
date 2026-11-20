@@ -17,7 +17,7 @@ public class ComposePortsBindLoopbackTests
             .EnumerateFiles(RepoRoot.Path, "*.yml", SearchOption.AllDirectories)
             .Concat(Directory.EnumerateFiles(RepoRoot.Path, "*.yaml", SearchOption.AllDirectories))
             .Where(IsComposeFile)
-            .OrderBy(p => p, StringComparer.Ordinal);
+            .Order(StringComparer.Ordinal);
 
     private static bool IsComposeFile(string path)
     {

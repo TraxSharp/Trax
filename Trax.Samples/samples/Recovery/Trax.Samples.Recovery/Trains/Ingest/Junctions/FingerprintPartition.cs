@@ -17,7 +17,7 @@ public class FingerprintPartition(FaultInjector faults, DemoPace pace)
 {
     public override async Task<IngestPartitionResult> Run(UpsertedPartition partition)
     {
-        await Task.Delay(pace.StepDelay, CancellationToken);
+        await Task.Delay(pace.StepDelay, CancellationToken).ConfigureAwait(false);
         faults.Disarm(IndexFixture.PartitionKey(partition.Source, partition.Month));
 
         var lines = partition
@@ -29,7 +29,10 @@ public class FingerprintPartition(FaultInjector faults, DemoPace pace)
             SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n', lines)))
         );
 
-        int Count(string resolution) => partition.Works.Count(w => w.Resolution == resolution);
+        int Count(string resolution) =>
+            partition.Works.Count(w =>
+                string.Equals(w.Resolution, resolution, StringComparison.Ordinal)
+            );
 
         return new IngestPartitionResult(
             partition.Source,

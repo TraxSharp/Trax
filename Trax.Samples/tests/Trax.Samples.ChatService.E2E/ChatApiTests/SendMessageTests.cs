@@ -9,20 +9,22 @@ public class SendMessageTests : ChatApiTestFixture
 {
     private async Task<string> CreateRoomWithAlice()
     {
-        var result = await GraphQL.SendAsync(
-            """
-            mutation {
-                dispatch {
-                    createChatRoom(
-                        input: { name: "Message Test Room" }
-                    ) {
-                        output { chatRoomId }
+        var result = await GraphQL
+            .SendAsync(
+                """
+                mutation {
+                    dispatch {
+                        createChatRoom(
+                            input: { name: "Message Test Room" }
+                        ) {
+                            output { chatRoomId }
+                        }
                     }
                 }
-            }
-            """,
-            apiKey: AliceKey
-        );
+                """,
+                apiKey: AliceKey
+            )
+            .ConfigureAwait(false);
 
         result.HasErrors.Should().BeFalse();
         return result

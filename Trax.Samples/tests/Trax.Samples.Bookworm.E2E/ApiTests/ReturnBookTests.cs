@@ -17,7 +17,8 @@ public class ReturnBookTests : ApiTestFixture
     // Borrows a book no other test has on loan and returns the loan id, so each test owns the loan
     // it returns.
     private async Task<int> BorrowLoanAsync() =>
-        await BorrowAsync(await NewBookAsync(), ApiKeyDefaults.MemberKey);
+        await BorrowAsync(await NewBookAsync().ConfigureAwait(false), ApiKeyDefaults.MemberKey)
+            .ConfigureAwait(false);
 
     private static string ReturnMutation(int loanId) =>
         $"mutation {{ dispatch {{ lending {{ returnBook(input: {{ loanId: {loanId} }}) "

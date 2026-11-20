@@ -24,17 +24,20 @@ public class BorrowBookJunction(
     public override async Task<BorrowBookOutput> Run(BorrowBookInput input)
     {
         var member =
-            await lending.Members.FirstOrDefaultAsync(m => m.PrincipalId == caller.PrincipalId)
+            await lending
+                .Members.FirstOrDefaultAsync(m => m.PrincipalId == caller.PrincipalId)
+                .ConfigureAwait(false)
             ?? throw new TrainException("Your credential is not linked to a library member.");
 
-        if (!await catalog.Books.AnyAsync(b => b.Id == input.BookId))
+        if (!await catalog.Books.AnyAsync(b => b.Id == input.BookId).ConfigureAwait(false))
             throw new TrainException($"Book {input.BookId} is not in the catalog.");
 
         // Availability depends on every member's loans, not only the caller's, so this one read
         // steps outside the owner filter. It returns a yes or no and no row.
         var onLoan = await lending
             .Loans.IgnoreQueryFilters()
-            .AnyAsync(l => l.BookId == input.BookId && l.ReturnedAt == null);
+            .AnyAsync(l => l.BookId == input.BookId && l.ReturnedAt == null)
+            .ConfigureAwait(false);
         if (onLoan)
             throw new TrainException($"Book {input.BookId} is already on loan.");
 
@@ -49,7 +52,7 @@ public class BorrowBookJunction(
 
         try
         {
-            await lending.SaveChangesAsync();
+            await lending.SaveChangesAsync().ConfigureAwait(false);
         }
         catch (DbUpdateException ex)
             when (ex.InnerException

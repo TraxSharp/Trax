@@ -117,7 +117,7 @@ public class TurnstileTests : StateMachineTestFixture
         // The turnstile binds no effect, so its typed operations are its start, its read, its push, its discard and
         // its two events. Every test here sends these ids, so a manifest out of step with the host fails them all.
         StateMachineClient
-            .Manifest.Machines.Single(m => m.Id == Turnstile)
+            .Manifest.Machines.Single(m => string.Equals(m.Id, Turnstile, StringComparison.Ordinal))
             .Documents.Select(d => d.Operation)
             .Should()
             .BeEquivalentTo(["start", "get", "changed", "discard", "coin", "push"]);

@@ -26,7 +26,7 @@ public class AddParticipantJunction(
                 JoinedAt = now,
             }
         );
-        await db.SaveChangesAsync();
+        await db.SaveChangesAsync().ConfigureAwait(false);
 
         logger.LogInformation(
             "User {UserId} joined room {ChatRoomId}",

@@ -127,7 +127,7 @@ if (app.Environment.IsDevelopment())
     app.UseTraxApiDashboard(dashboard => dashboard.AllowAnonymousShell());
 }
 
-await app.RunTraxAsync(args);
+await app.RunTraxAsync(args).ConfigureAwait(false);
 
 namespace Trax.Samples.CheckIn.Api
 {

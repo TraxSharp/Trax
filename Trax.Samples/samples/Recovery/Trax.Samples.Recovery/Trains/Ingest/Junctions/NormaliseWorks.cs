@@ -18,7 +18,7 @@ public partial class NormaliseWorks(DemoPace pace)
 {
     public override async Task<NormalisedPartition> Run(FetchedPartition partition)
     {
-        await Task.Delay(pace.StepDelay, CancellationToken);
+        await Task.Delay(pace.StepDelay, CancellationToken).ConfigureAwait(false);
 
         var works = partition
             .Records.Select(record =>

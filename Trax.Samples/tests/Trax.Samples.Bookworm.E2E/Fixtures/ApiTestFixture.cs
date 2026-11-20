@@ -29,7 +29,7 @@ public abstract class ApiTestFixture
             AuthorId = 1,
         };
         catalog.Books.Add(book);
-        await catalog.SaveChangesAsync();
+        await catalog.SaveChangesAsync().ConfigureAwait(false);
         return book.Id;
     }
 
@@ -40,7 +40,7 @@ public abstract class ApiTestFixture
     /// <summary>Borrows <paramref name="bookId"/> as <paramref name="apiKey"/> and returns the loan id.</summary>
     protected async Task<int> BorrowAsync(int bookId, string apiKey)
     {
-        var doc = await GraphQL.PostAsync(Borrow(bookId), apiKey);
+        var doc = await GraphQL.PostAsync(Borrow(bookId), apiKey).ConfigureAwait(false);
         GraphQLClient.HasErrors(doc).Should().BeFalse(doc.RootElement.GetRawText());
         return doc
             .RootElement.GetProperty("data")

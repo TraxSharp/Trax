@@ -13,12 +13,13 @@ public abstract class ResolveWorks(DemoPace pace, string matched, bool unsure)
 {
     public override async Task<ResolvedPartition> Run(MatchEvidence evidence)
     {
-        await Task.Delay(pace.StepDelay, CancellationToken);
+        await Task.Delay(pace.StepDelay, CancellationToken).ConfigureAwait(false);
 
-        var matches = evidence.Candidates.ToDictionary(c => c.SourceId);
+        var matches = evidence.Candidates.ToDictionary(c => c.SourceId, StringComparer.Ordinal);
         var works = evidence
             .Works.Select(work =>
-                matched != Resolutions.Created && matches.TryGetValue(work.SourceId, out var match)
+                !string.Equals(matched, Resolutions.Created, StringComparison.Ordinal)
+                && matches.TryGetValue(work.SourceId, out var match)
                     ? new ResolvedWork(work, matched, match.ExistingWorkId)
                     : new ResolvedWork(work, Resolutions.Created, null)
             )

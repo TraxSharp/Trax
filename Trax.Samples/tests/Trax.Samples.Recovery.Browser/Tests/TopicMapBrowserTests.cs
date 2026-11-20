@@ -263,7 +263,12 @@ public class TopicMapBrowserTests
         // its key in memory only, so a fresh load asks for it again.
         (
             await Polling.WaitUntilAsync(
-                async () => await DraftRows.RunStateAsync(draft.Id) == "in_progress",
+                async () =>
+                    string.Equals(
+                        await DraftRows.RunStateAsync(draft.Id).ConfigureAwait(false),
+                        "in_progress",
+                        StringComparison.Ordinal
+                    ),
                 BrowserTimeouts.Server,
                 TimeSpan.FromMilliseconds(25)
             )
@@ -314,11 +319,15 @@ public class TopicMapBrowserTests
     // Loads the operations console at a route and connects with the operator key, which it asks for on every load.
     private static async Task OpenTheConsoleAsync(IPage console, string url)
     {
-        await console.GotoAsync(url);
+        await console.GotoAsync(url).ConfigureAwait(false);
         await console
             .GetByLabel("API key", new() { Exact = true })
-            .FillAsync(DemoKeysOperator, new() { Timeout = BrowserTimeouts.Render.Ms() });
-        await console.GetByRole(AriaRole.Button, new() { Name = "Connect" }).ClickAsync();
+            .FillAsync(DemoKeysOperator, new() { Timeout = BrowserTimeouts.Render.Ms() })
+            .ConfigureAwait(false);
+        await console
+            .GetByRole(AriaRole.Button, new() { Name = "Connect" })
+            .ClickAsync()
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -521,7 +530,12 @@ public class TopicMapBrowserTests
         var draft = await DraftAsync(page);
         (
             await Polling.WaitUntilAsync(
-                async () => await DraftRows.RunStateAsync(draft.Id) == "in_progress",
+                async () =>
+                    string.Equals(
+                        await DraftRows.RunStateAsync(draft.Id).ConfigureAwait(false),
+                        "in_progress",
+                        StringComparison.Ordinal
+                    ),
                 BrowserTimeouts.Server,
                 TimeSpan.FromMilliseconds(100)
             )
@@ -552,9 +566,13 @@ public class TopicMapBrowserTests
 
     private static async Task ChooseFieldsAsync(RecoveryPage page)
     {
-        await page.Page.GetByRole(AriaRole.Button, new() { Name = "Next" }).ClickAsync();
+        await page
+            .Page.GetByRole(AriaRole.Button, new() { Name = "Next" })
+            .ClickAsync()
+            .ConfigureAwait(false);
         await Expect(page.WizardState)
-            .ToHaveTextAsync(ChoosingRange, new() { Timeout = BrowserTimeouts.Render.Ms() });
+            .ToHaveTextAsync(ChoosingRange, new() { Timeout = BrowserTimeouts.Render.Ms() })
+            .ConfigureAwait(false);
     }
 
     private static async Task BuildAsync(RecoveryPage page)
@@ -566,37 +584,45 @@ public class TopicMapBrowserTests
                 StringComparison.Ordinal
             )
         );
-        await page.Page.GetByRole(AriaRole.Button, new() { Name = "Build the map" }).ClickAsync();
-        await answered;
+        await page
+            .Page.GetByRole(AriaRole.Button, new() { Name = "Build the map" })
+            .ClickAsync()
+            .ConfigureAwait(false);
+        await answered.ConfigureAwait(false);
         await Expect(page.WizardState)
             .ToHaveTextAsync(
                 new Regex($"^({Regex.Escape(Building)}|{Built})$"),
                 new() { Timeout = BrowserTimeouts.Render.Ms() }
-            );
+            )
+            .ConfigureAwait(false);
     }
 
     private static async Task<(Guid Id, long RowId, string State)> DraftAsync(RecoveryPage page)
     {
-        var shown = (await page.DraftId.TextContentAsync())!;
-        return await DraftRows.FindAsync(shown.Replace("draft", "").Trim());
+        var shown = (await page.DraftId.TextContentAsync().ConfigureAwait(false))!;
+        return await DraftRows
+            .FindAsync(shown.Replace("draft", "", StringComparison.Ordinal).Trim())
+            .ConfigureAwait(false);
     }
 
     // A request the page's own code would not make, sent from inside the page.
     private static async Task<JsonElement> PostAsync(RecoveryPage page, string key, string query)
     {
-        var body = await page.Page.EvaluateAsync<string>(
-            """
-            async ([url, key, query]) => {
-              const response = await fetch(url, {
-                method: "POST",
-                headers: { "content-type": "application/json", "X-Api-Key": key },
-                body: JSON.stringify({ query }),
-              });
-              return await response.text();
-            }
-            """,
-            new object[] { RecoveryPage.GraphQLUrl, key, query }
-        );
+        var body = await page
+            .Page.EvaluateAsync<string>(
+                """
+                async ([url, key, query]) => {
+                  const response = await fetch(url, {
+                    method: "POST",
+                    headers: { "content-type": "application/json", "X-Api-Key": key },
+                    body: JSON.stringify({ query }),
+                  });
+                  return await response.text();
+                }
+                """,
+                new object[] { RecoveryPage.GraphQLUrl, key, query }
+            )
+            .ConfigureAwait(false);
         return JsonDocument.Parse(body).RootElement.Clone();
     }
 
@@ -609,27 +635,33 @@ public class TopicMapBrowserTests
         object variables
     )
     {
-        var body = await page.Page.EvaluateAsync<string>(
-            """
-            async ([url, key, request]) => {
-              const response = await fetch(url, {
-                method: "POST",
-                headers: { "content-type": "application/json", "X-Api-Key": key },
-                body: request,
-              });
-              return await response.text();
-            }
-            """,
-            new object[]
-            {
-                RecoveryPage.GraphQLUrl,
-                key,
-                JsonSerializer.Serialize(
-                    new { id = await DocumentIdAsync(operation), variables },
-                    JsonSerializerOptions.Web
-                ),
-            }
-        );
+        var body = await page
+            .Page.EvaluateAsync<string>(
+                """
+                async ([url, key, request]) => {
+                  const response = await fetch(url, {
+                    method: "POST",
+                    headers: { "content-type": "application/json", "X-Api-Key": key },
+                    body: request,
+                  });
+                  return await response.text();
+                }
+                """,
+                new object[]
+                {
+                    RecoveryPage.GraphQLUrl,
+                    key,
+                    JsonSerializer.Serialize(
+                        new
+                        {
+                            id = await DocumentIdAsync(operation).ConfigureAwait(false),
+                            variables,
+                        },
+                        JsonSerializerOptions.Web
+                    ),
+                }
+            )
+            .ConfigureAwait(false);
         var response = JsonDocument.Parse(body).RootElement.Clone();
         var field = operation;
         response
@@ -646,9 +678,11 @@ public class TopicMapBrowserTests
     // The id of the topic map's document for an operation, from the committed client manifest the page is built from.
     private static async Task<string> DocumentIdAsync(string operation) =>
         ClientManifest
-            .Read(await File.ReadAllTextAsync(TopicMapArtifacts.ClientManifest))
-            .Machines.Single(m => m.Id == "topic-map")
-            .Documents.Single(d => d.Operation == operation)
+            .Read(
+                await File.ReadAllTextAsync(TopicMapArtifacts.ClientManifest).ConfigureAwait(false)
+            )
+            .Machines.Single(m => string.Equals(m.Id, "topic-map", StringComparison.Ordinal))
+            .Documents.Single(d => string.Equals(d.Operation, operation, StringComparison.Ordinal))
             .Id;
 
     private static GraphQLClient GraphQLForTest() => new(BrowserSetup.Host.Http);
@@ -679,19 +713,21 @@ public class TopicMapBrowserTests
     )
     {
         const string id = "browser-test-topic-map-instance-v1";
-        var upload = await UploadDocumentAsync(id, MachineInstanceDocument);
+        var upload = await UploadDocumentAsync(id, MachineInstanceDocument).ConfigureAwait(false);
         upload.Should().Contain("\"success\":true", upload);
-        using var response = await BrowserSetup.Host.Http.SendAsync(
-            new HttpRequestMessage(HttpMethod.Post, "/trax/graphql")
-            {
-                Content = JsonContent.Create(
-                    new { id, variables = new { id = draft.Id, rowId = draft.RowId } }
-                ),
-                Headers = { { "X-Api-Key", DemoKeysOperator } },
-            }
-        );
+        using var response = await BrowserSetup
+            .Host.Http.SendAsync(
+                new HttpRequestMessage(HttpMethod.Post, "/trax/graphql")
+                {
+                    Content = JsonContent.Create(
+                        new { id, variables = new { id = draft.Id, rowId = draft.RowId } }
+                    ),
+                    Headers = { { "X-Api-Key", DemoKeysOperator } },
+                }
+            )
+            .ConfigureAwait(false);
         var root = JsonDocument
-            .Parse(await response.Content.ReadAsStringAsync())
+            .Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false))
             .RootElement.Clone();
         root.TryGetProperty("errors", out var errors).Should().BeFalse(errors.ToString());
         return root.GetProperty("data").GetProperty("operations").GetProperty("machineInstance");
@@ -712,7 +748,8 @@ public class TopicMapBrowserTests
                 """,
                 DemoKeysOperator,
                 new { input = new { id, document } }
-            );
+            )
+            .ConfigureAwait(false);
         return response.Root.GetRawText();
     }
 

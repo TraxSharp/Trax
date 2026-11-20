@@ -112,8 +112,10 @@ public class HostTests
         if (apiKey is not null)
             client.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
 
-        var response = await client.PostAsJsonAsync("/trax/graphql", new { query });
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var response = await client
+            .PostAsJsonAsync("/trax/graphql", new { query })
+            .ConfigureAwait(false);
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
     }
 
     /// <summary>The <c>extensions.code</c> of every error in the response.</summary>

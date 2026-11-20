@@ -20,27 +20,37 @@ public static class IndexSeeder
     )
     {
         // EnsureSchemaCreatedAsync is for demos and tests; a real application uses migrations.
-        await services.EnsureSchemaCreatedAsync<TopicMapDbContext>(cancellationToken);
+        await services
+            .EnsureSchemaCreatedAsync<TopicMapDbContext>(cancellationToken)
+            .ConfigureAwait(false);
 
-        await using var scope = services.CreateAsyncScope();
-        var factory = scope.ServiceProvider.GetRequiredService<
-            IDbContextFactory<TopicMapDbContext>
-        >();
-        await using var db = await factory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var scope = services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var factory = scope.ServiceProvider.GetRequiredService<
+                IDbContextFactory<TopicMapDbContext>
+            >();
+            var db = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+            await using (db.ConfigureAwait(false))
+            {
+                await using var transaction = await db.Database.BeginTransactionAsync(
+                    cancellationToken
+                );
 
-        var added = 0;
-        foreach (var record in IndexFixture.Records)
-            added += await db.Database.ExecuteSqlInterpolatedAsync(
-                $"""
-                INSERT INTO topic_map.source_records ("Source", "SourceId", "Month", "Payload")
-                VALUES ({record.Source}, {record.SourceId}, {record.Month}, {record.Payload}::jsonb)
-                ON CONFLICT ("Source", "SourceId") DO NOTHING
-                """,
-                cancellationToken
-            );
+                var added = 0;
+                foreach (var record in IndexFixture.Records)
+                    added += await db.Database.ExecuteSqlInterpolatedAsync(
+                        $"""
+                        INSERT INTO topic_map.source_records ("Source", "SourceId", "Month", "Payload")
+                        VALUES ({record.Source}, {record.SourceId}, {record.Month}, {record.Payload}::jsonb)
+                        ON CONFLICT ("Source", "SourceId") DO NOTHING
+                        """,
+                        cancellationToken
+                    );
 
-        await transaction.CommitAsync(cancellationToken);
-        return added;
+                await transaction.CommitAsync(cancellationToken);
+                return added;
+            }
+        }
     }
 }

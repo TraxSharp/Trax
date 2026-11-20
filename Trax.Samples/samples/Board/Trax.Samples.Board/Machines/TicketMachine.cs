@@ -150,7 +150,7 @@ public sealed class TicketMachine : Machine<TicketState, TicketTrigger>
     public static readonly IReadOnlyDictionary<string, TicketState> Lanes = new Dictionary<
         string,
         TicketState
-    >
+    >(StringComparer.Ordinal)
     {
         ["triage"] = TicketState.Triage,
         ["reproduce"] = TicketState.Reproducing,

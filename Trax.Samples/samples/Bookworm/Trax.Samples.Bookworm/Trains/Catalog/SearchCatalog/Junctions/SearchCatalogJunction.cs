@@ -21,7 +21,8 @@ public class SearchCatalogJunction(ICatalogDbContext catalog)
                 Title = b.Title,
                 Isbn = b.Isbn,
             })
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
 
         return new SearchCatalogOutput { Books = books };
     }

@@ -149,4 +149,4 @@ app.MapHealthChecks("/trax/health");
 
 // Serves, or, for a deployment step, migrates the database (--trax-migrate) or reports what the
 // host needs from its deployment (--trax-export-deploy) and exits.
-await app.RunTraxAsync(args);
+await app.RunTraxAsync(args).ConfigureAwait(false);

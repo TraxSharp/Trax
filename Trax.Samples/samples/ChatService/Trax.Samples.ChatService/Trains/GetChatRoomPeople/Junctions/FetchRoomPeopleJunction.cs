@@ -22,14 +22,15 @@ public class FetchRoomPeopleJunction(
         var members = await db
             .ChatParticipants.Where(p => p.ChatRoomId == input.ChatRoomId)
             .Select(p => p.UserId)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
 
         if (!members.Contains(caller.Id))
             throw new TrainException($"You are not a participant in room {input.ChatRoomId}.");
 
         var people = directory
-            .All.Where(p => p.UserId != caller.Id)
-            .OrderBy(p => p.DisplayName)
+            .All.Where(p => !string.Equals(p.UserId, caller.Id, StringComparison.Ordinal))
+            .OrderBy(p => p.DisplayName, StringComparer.Ordinal)
             .Select(p => new ChatRoomPerson
             {
                 UserId = p.UserId,

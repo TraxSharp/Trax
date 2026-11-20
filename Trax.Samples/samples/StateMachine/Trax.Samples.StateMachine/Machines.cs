@@ -214,8 +214,11 @@ public sealed class CheckoutMachine : Machine<CheckoutState, CheckoutTrigger>
     private static bool TotalIsThePriceOfTheItems(JsonObject ctx) =>
         ctx["total"] is JsonValue total
         && total.GetValueKind() == JsonValueKind.Number
-        && total.ToJsonString()
-            == ((long)ItemsCount(ctx) * UnitPriceCents).ToString(CultureInfo.InvariantCulture);
+        && string.Equals(
+            total.ToJsonString(),
+            ((long)ItemsCount(ctx) * UnitPriceCents).ToString(CultureInfo.InvariantCulture),
+            StringComparison.Ordinal
+        );
 
     // AddItem's guard has already checked the input names an item.
     private static JsonObject AddToCart(JsonObject ctx, JsonNode? input)

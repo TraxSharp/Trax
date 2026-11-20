@@ -23,8 +23,14 @@ public class SampleDatabasesAreSeparateTests
             .EnumerateFiles(samples, "appsettings*.json", SearchOption.AllDirectories)
             .Concat(SourceFiles.CSharp("samples"))
             .Where(f =>
-                !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
-                && !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
+                !f.Contains(
+                    $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
+                && !f.Contains(
+                    $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
             );
 
         var byDatabase = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
@@ -50,7 +56,7 @@ public class SampleDatabasesAreSeparateTests
 
         var shared = byDatabase
             .Where(kv => kv.Value.Count > 1)
-            .Select(kv => $"{kv.Key}: {string.Join(", ", kv.Value.OrderBy(f => f))}")
+            .Select(kv => $"{kv.Key}: {string.Join(", ", kv.Value.Order(StringComparer.Ordinal))}")
             .ToList();
 
         shared

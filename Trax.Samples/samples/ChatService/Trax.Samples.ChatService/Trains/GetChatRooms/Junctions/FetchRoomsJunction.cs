@@ -21,7 +21,8 @@ public class FetchRoomsJunction(ChatDbContext db, TraxPrincipal caller)
                 LastMessageAt = p.ChatRoom.Messages.Max(m => (DateTime?)m.SentAt),
             })
             .OrderByDescending(r => r.LastMessageAt)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
 
         return new GetChatRoomsOutput { Rooms = rooms };
     }

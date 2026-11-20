@@ -101,7 +101,13 @@ public class ProductionPostureTests
         return manifest
             .RootElement.GetProperty("views")
             .EnumerateArray()
-            .Single(v => v.GetProperty("operation").GetString() == "bookings")
+            .Single(v =>
+                string.Equals(
+                    v.GetProperty("operation").GetString(),
+                    "bookings",
+                    StringComparison.Ordinal
+                )
+            )
             .GetProperty("id")
             .GetString()!;
     }
@@ -119,8 +125,8 @@ public class ProductionPostureTests
         };
         if (token is not null)
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        using var response = await client.SendAsync(request);
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        using var response = await client.SendAsync(request).ConfigureAwait(false);
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
     }
 
     private static JsonElement? Bookings(JsonDocument answer) =>

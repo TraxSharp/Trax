@@ -37,16 +37,18 @@ public class ClaimTicket(TraxPrincipal caller, TicketBoard board)
         var lane = Lanes.Find(input.Lane);
         if (lane is null)
             return Refused(input.Lane, "NOTHING_TO_CLAIM", $"there is no lane {input.Lane}");
-        if (!caller.Roles.Contains(lane.Role))
+        if (!caller.Roles.Contains(lane.Role, StringComparer.Ordinal))
             return Refused(
                 lane.Key,
                 "FORBIDDEN",
                 $"claiming from {lane.Key} needs the {lane.Role} role"
             );
 
-        var tickets = await board.All(CancellationToken);
+        var tickets = await board.All(CancellationToken).ConfigureAwait(false);
         var ticket = input.TicketId is { } id
-            ? tickets.FirstOrDefault(t => t.Id == id)
+            ? tickets.FirstOrDefault(t =>
+                string.Equals(t.Id, id, global::System.StringComparison.Ordinal)
+            )
             : tickets.FirstOrDefault(t =>
                 t.State == lane.State && (t.Context.ClaimedBy is null || TicketBoard.Lapsed(t))
             );
@@ -64,26 +66,33 @@ public class ClaimTicket(TraxPrincipal caller, TicketBoard board)
                 "NOTHING_TO_CLAIM",
                 $"{ticket.Id} is in {ticket.State}, not in {lane.Key}"
             );
-        if (ticket.Context.ClaimedBy == caller.Id && !TicketBoard.Lapsed(ticket))
+        if (
+            string.Equals(ticket.Context.ClaimedBy, caller.Id, StringComparison.Ordinal)
+            && !TicketBoard.Lapsed(ticket)
+        )
             return Package(lane, ticket);
         if (ticket.Context.ClaimedBy is not null && TicketBoard.Lapsed(ticket))
-            await board.Fire(ticket.Id, TicketTrigger.Release, null, CancellationToken);
+            await board
+                .Fire(ticket.Id, TicketTrigger.Release, null, CancellationToken)
+                .ConfigureAwait(false);
 
-        var claimed = await board.Fire(
-            ticket.Id,
-            TicketTrigger.Claim,
-            new ClaimInput
-            {
-                By = caller.Id,
-                At = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
-            },
-            CancellationToken
-        );
+        var claimed = await board
+            .Fire(
+                ticket.Id,
+                TicketTrigger.Claim,
+                new ClaimInput
+                {
+                    By = caller.Id,
+                    At = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+                },
+                CancellationToken
+            )
+            .ConfigureAwait(false);
         return claimed switch
         {
             AdvanceOutcome.Advanced => Package(
                 lane,
-                (await board.Find(ticket.Id, CancellationToken))!
+                (await board.Find(ticket.Id, CancellationToken).ConfigureAwait(false))!
             ),
             AdvanceOutcome.Rejected or AdvanceOutcome.Conflict => Refused(
                 lane.Key,

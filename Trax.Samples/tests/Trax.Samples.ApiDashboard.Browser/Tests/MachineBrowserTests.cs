@@ -195,7 +195,10 @@ public class MachineBrowserTests : ConsoleTest
         Page.WebSocket += (_, socket) =>
             socket.FrameSent += (_, frame) =>
             {
-                if (frame.Text?.Contains("\"subscribe\"") == true && frame.Text.Contains(feedId))
+                if (
+                    frame.Text?.Contains("\"subscribe\"", StringComparison.Ordinal) == true
+                    && frame.Text.Contains(feedId, StringComparison.Ordinal)
+                )
                     subscribed.TrySetResult();
             };
 
@@ -274,9 +277,12 @@ public class MachineBrowserTests : ConsoleTest
         // The link is drawn once the board's own read answers, which the diagram does not wait for.
         var boardRead = Page.WaitForResponseAsync(
             r =>
-                r.Url.EndsWith("/trax/graphql")
-                && r.Request.Method == "POST"
-                && r.Request.PostData?.Contains("\"operationName\":\"MachineBoard\"") == true,
+                r.Url.EndsWith("/trax/graphql", StringComparison.Ordinal)
+                && string.Equals(r.Request.Method, "POST", StringComparison.Ordinal)
+                && r.Request.PostData?.Contains(
+                    "\"operationName\":\"MachineBoard\"",
+                    StringComparison.Ordinal
+                ) == true,
             new() { Timeout = Render }
         );
         await page.OpenAsync(Caller.Operator);

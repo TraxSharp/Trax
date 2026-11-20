@@ -40,8 +40,8 @@ public class DependentManifestTests : SchedulingTestFixture
             // Let whatever was already dispatched finish, then mark.
             await Db.WaitUntil(
                 async () =>
-                    (await Db.Runs(refresh.Id, 0))
-                        .Concat(await Db.Runs(reprice.Id, 0))
+                    (await Db.Runs(refresh.Id, 0).ConfigureAwait(false))
+                        .Concat(await Db.Runs(reprice.Id, 0).ConfigureAwait(false))
                         .All(r =>
                             r.TrainState is not (TrainState.Pending or TrainState.InProgress)
                         ),
@@ -52,8 +52,8 @@ public class DependentManifestTests : SchedulingTestFixture
 
             var ran = await Samples.Shared.Testing.Polling.WaitUntilAsync(
                 async () =>
-                    (await Db.Runs(refresh.Id, marker)).Count > 0
-                    || (await Db.Runs(reprice.Id, marker)).Count > 1,
+                    (await Db.Runs(refresh.Id, marker).ConfigureAwait(false)).Count > 0
+                    || (await Db.Runs(reprice.Id, marker).ConfigureAwait(false)).Count > 1,
                 TimeSpan.FromSeconds(8),
                 TimeSpan.FromMilliseconds(250)
             );

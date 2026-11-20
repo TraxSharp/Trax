@@ -16,9 +16,11 @@ public class FetchMessagesJunction(ChatDbContext db, TraxPrincipal caller)
     public override async Task<GetChatHistoryOutput> Run(GetChatHistoryInput input)
     {
         if (
-            !await db.ChatParticipants.AnyAsync(p =>
-                p.ChatRoomId == input.ChatRoomId && p.UserId == caller.Id
-            )
+            !await db
+                .ChatParticipants.AnyAsync(p =>
+                    p.ChatRoomId == input.ChatRoomId && p.UserId == caller.Id
+                )
+                .ConfigureAwait(false)
         )
             throw new TrainException($"You are not a participant in room {input.ChatRoomId}.");
 
@@ -43,7 +45,8 @@ public class FetchMessagesJunction(ChatDbContext db, TraxPrincipal caller)
                 Content = m.Content,
                 SentAt = m.SentAt,
             })
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
 
         messages.Reverse();
         return new GetChatHistoryOutput { Messages = messages };

@@ -17,10 +17,9 @@ public class ChatEventSubscriptionTests : ChatApiTestFixture
             """;
 
     private static async Task<GraphQLWebSocketClient> ConnectAsync(string? apiKey) =>
-        await GraphQLWebSocketClient.ConnectAsync(
-            SharedChatApiSetup.Factory.Server.CreateWebSocketClient(),
-            apiKey: apiKey
-        );
+        await GraphQLWebSocketClient
+            .ConnectAsync(SharedChatApiSetup.Factory.Server.CreateWebSocketClient(), apiKey: apiKey)
+            .ConfigureAwait(false);
 
     /// <summary>
     /// Sends messages as <paramref name="senderKey"/> until <paramref name="sub"/> receives one, and
@@ -36,11 +35,12 @@ public class ChatEventSubscriptionTests : ChatApiTestFixture
     {
         for (var attempt = 0; attempt < 10; attempt++)
         {
-            var sent = await SendMessageAsAsync(senderKey, roomId, $"{content} {attempt}");
+            var sent = await SendMessageAsAsync(senderKey, roomId, $"{content} {attempt}")
+                .ConfigureAwait(false);
             sent.HasErrors.Should().BeFalse(sent.FirstErrorMessage);
             try
             {
-                return (await sub.ReceiveNextAsync(TimeSpan.FromSeconds(1)))
+                return (await sub.ReceiveNextAsync(TimeSpan.FromSeconds(1)).ConfigureAwait(false))
                     .GetProperty("data")
                     .GetProperty("onChatEvent");
             }
@@ -57,7 +57,7 @@ public class ChatEventSubscriptionTests : ChatApiTestFixture
     {
         try
         {
-            var message = await sub.ReceiveAnyAsync();
+            var message = await sub.ReceiveAnyAsync().ConfigureAwait(false);
             message.GetProperty("type").GetString().Should().NotBe("complete");
             return message.GetRawText();
         }
@@ -178,7 +178,7 @@ public class ChatEventSubscriptionTests : ChatApiTestFixture
 
         // Warm up until every lifecycle field has answered, by an event or a refusal, and Bob's
         // own room has delivered: from then on, anything Bob may receive reaches him.
-        var answered = new HashSet<string>();
+        var answered = new HashSet<string>(StringComparer.Ordinal);
         for (
             var attempt = 0;
             attempt < 10 && !answered.IsSupersetOf([.. lifecycleFields, "bobs-room"]);
@@ -233,7 +233,7 @@ public class ChatEventSubscriptionTests : ChatApiTestFixture
         {
             try
             {
-                messages.Add(await sub.ReceiveAnyAsync(remaining));
+                messages.Add(await sub.ReceiveAnyAsync(remaining).ConfigureAwait(false));
             }
             catch (TimeoutException)
             {

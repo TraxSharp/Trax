@@ -32,7 +32,7 @@ public sealed class TopicMapSweeper(
     IDataContextProviderFactory trax
 )
 {
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private HashSet<string> _unreferencedBefore = new(StringComparer.Ordinal);
 
     /// <summary>
@@ -42,45 +42,56 @@ public sealed class TopicMapSweeper(
     /// <returns>The run ids of the maps deleted.</returns>
     public async Task<IReadOnlyList<string>> SweepAsync(CancellationToken cancellationToken)
     {
-        var referenced = await ReferencedAsync(cancellationToken);
+        var referenced = await ReferencedAsync(cancellationToken).ConfigureAwait(false);
 
-        await using var db = await maps.CreateDbContextAsync(cancellationToken);
-        var written = await db
-            .TopicPairs.Select(p => p.RunId)
-            .Distinct()
-            .ToListAsync(cancellationToken);
-        var unreferenced = written.Where(id => !referenced.Contains(id)).ToHashSet();
-
-        List<string> doomed;
-        lock (_lock)
+        var db = await maps.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
-            doomed = unreferenced.Where(_unreferencedBefore.Contains).ToList();
-            _unreferencedBefore = unreferenced;
-            _unreferencedBefore.ExceptWith(doomed);
-        }
+            var written = await db
+                .TopicPairs.Select(p => p.RunId)
+                .Distinct()
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+            var unreferenced = written
+                .Where(id => !referenced.Contains(id))
+                .ToHashSet(StringComparer.Ordinal);
 
-        if (doomed.Count > 0)
-            await db
-                .TopicPairs.Where(p => doomed.Contains(p.RunId))
-                .ExecuteDeleteAsync(cancellationToken);
-        return doomed;
+            List<string> doomed;
+            lock (_lock)
+            {
+                doomed = unreferenced.Where(_unreferencedBefore.Contains).ToList();
+                _unreferencedBefore = unreferenced;
+                _unreferencedBefore.ExceptWith(doomed);
+            }
+
+            if (doomed.Count > 0)
+                await db
+                    .TopicPairs.Where(p => doomed.Contains(p.RunId))
+                    .ExecuteDeleteAsync(cancellationToken)
+                    .ConfigureAwait(false);
+            return doomed;
+        }
     }
 
     // Every map a stored topic-map draft points at, in whatever state it is.
     private async Task<HashSet<string>> ReferencedAsync(CancellationToken cancellationToken)
     {
-        await using var db = await trax.CreateDbContextAsync(cancellationToken);
-        var contexts = await db
-            .SnapshotDrafts.AsNoTracking()
-            .Where(d => d.Machine == TopicMapMachine.MachineId)
-            .Select(d => d.Context)
-            .ToListAsync(cancellationToken);
+        var db = await trax.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var contexts = await db
+                .SnapshotDrafts.AsNoTracking()
+                .Where(d => d.Machine == TopicMapMachine.MachineId)
+                .Select(d => d.Context)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
 
-        var referenced = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var context in contexts)
-            if (MapIdOf(context) is { } mapId)
-                referenced.Add(mapId);
-        return referenced;
+            var referenced = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var context in contexts)
+                if (MapIdOf(context) is { } mapId)
+                    referenced.Add(mapId);
+            return referenced;
+        }
     }
 
     private static string? MapIdOf(string context)
@@ -114,11 +125,11 @@ public sealed class TopicMapSweepService(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(interval);
-        while (await timer.WaitForNextTickAsync(stoppingToken))
+        while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
         {
             try
             {
-                var deleted = await sweeper.SweepAsync(stoppingToken);
+                var deleted = await sweeper.SweepAsync(stoppingToken).ConfigureAwait(false);
                 if (deleted.Count > 0)
                     logger.LogInformation(
                         "Deleted the pairs of {Count} topic map(s) no draft points at",

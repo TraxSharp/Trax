@@ -65,12 +65,22 @@ public class SamplePortsTests
             .Concat(Directory.EnumerateFiles(samples, "*.tsx", SearchOption.AllDirectories))
             .Concat(SourceFiles.CSharp("samples"))
             .Where(f =>
-                !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
-                && !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
-                && !f.Contains(
-                    $"{Path.DirectorySeparatorChar}node_modules{Path.DirectorySeparatorChar}"
+                !f.Contains(
+                    $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
                 )
-                && !f.Contains($"{Path.DirectorySeparatorChar}dist{Path.DirectorySeparatorChar}")
+                && !f.Contains(
+                    $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
+                && !f.Contains(
+                    $"{Path.DirectorySeparatorChar}node_modules{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
+                && !f.Contains(
+                    $"{Path.DirectorySeparatorChar}dist{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
             );
 
         var offenders = new List<string>();
@@ -88,7 +98,10 @@ public class SamplePortsTests
                     .ToList();
             foreach (var match in matches)
             {
-                var port = int.Parse(match.Groups["port"].Value);
+                var port = int.Parse(
+                    match.Groups["port"].Value,
+                    System.Globalization.CultureInfo.InvariantCulture
+                );
                 if (port == ViteDevServer)
                     continue;
                 if (!InRange(port))
@@ -107,7 +120,7 @@ public class SamplePortsTests
             .Should()
             .BeEmpty(
                 "every sample listens on a port of its own in 5200-5299 or 5310-5319. Offenders:\n  "
-                    + string.Join("\n  ", offenders.Distinct())
+                    + string.Join("\n  ", offenders.Distinct(StringComparer.Ordinal))
             );
     }
 }

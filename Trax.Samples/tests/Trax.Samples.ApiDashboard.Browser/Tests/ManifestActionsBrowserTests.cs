@@ -245,7 +245,12 @@ public class ManifestActionsBrowserTests : ConsoleTest
                 BrowserTimeouts.Server,
                 $"manifest {m.Id} is queued"
             );
-        Checks.Sent.Count(s => s.OperationName == "TriggerManifests").Should().Be(1);
+        Checks
+            .Sent.Count(s =>
+                string.Equals(s.OperationName, "TriggerManifests", StringComparison.Ordinal)
+            )
+            .Should()
+            .Be(1);
     }
 
     [Test]
@@ -273,7 +278,12 @@ public class ManifestActionsBrowserTests : ConsoleTest
             .ToContainTextAsync("Enabled", new() { Timeout = Render });
         (await Stored(first.Id)).IsEnabled.Should().BeTrue();
         (await Stored(second.Id)).IsEnabled.Should().BeTrue();
-        Checks.Sent.Count(s => s.OperationName == "SetManifestsEnabled").Should().Be(2);
+        Checks
+            .Sent.Count(s =>
+                string.Equals(s.OperationName, "SetManifestsEnabled", StringComparison.Ordinal)
+            )
+            .Should()
+            .Be(2);
     }
 
     [Test]
@@ -299,7 +309,10 @@ public class ManifestActionsBrowserTests : ConsoleTest
     private static async Task SelectAsync(ManifestsPage list, params long[] ids)
     {
         foreach (var id in ids)
-            await list.Row(id).GetByRole(AriaRole.Checkbox).CheckAsync(new() { Timeout = Render });
+            await list.Row(id)
+                .GetByRole(AriaRole.Checkbox)
+                .CheckAsync(new() { Timeout = Render })
+                .ConfigureAwait(false);
     }
 
     private static Task<Manifest> Stored(long id) =>
@@ -308,8 +321,14 @@ public class ManifestActionsBrowserTests : ConsoleTest
     // A trigger queues an entry, which the dispatcher may already have turned into a run.
     private static Task<bool> Queued(long manifest) =>
         Host.QueryAsync(async dc =>
-            await dc.WorkQueues.AsNoTracking().AnyAsync(w => w.ManifestId == manifest)
-            || await dc.Metadatas.AsNoTracking().AnyAsync(m => m.ManifestId == manifest)
+            await dc
+                .WorkQueues.AsNoTracking()
+                .AnyAsync(w => w.ManifestId == manifest)
+                .ConfigureAwait(false)
+            || await dc
+                .Metadatas.AsNoTracking()
+                .AnyAsync(m => m.ManifestId == manifest)
+                .ConfigureAwait(false)
         );
 
     private static Task<bool> CancellationRequested(long run) =>

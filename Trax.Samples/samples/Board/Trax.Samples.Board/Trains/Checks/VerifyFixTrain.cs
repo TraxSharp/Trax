@@ -28,9 +28,11 @@ public class RunFixCheck(InvokedRun run, TicketBoard board) : EffectJunction<Fix
 {
     public override async Task<CheckResult> Run(FixCheck check)
     {
-        var ticket = await board.Find(check.TicketId, CancellationToken);
+        var ticket = await board.Find(check.TicketId, CancellationToken).ConfigureAwait(false);
         if (
-            await board.RefuseUnlessHeld(ticket, run.UserKey, "fix", CancellationToken) is
+            await board
+                .RefuseUnlessHeld(ticket, run.UserKey, "fix", CancellationToken)
+                .ConfigureAwait(false) is
             { } refusal
         )
             return CheckResult.Refuse(refusal);
@@ -47,34 +49,38 @@ public class RunFixCheck(InvokedRun run, TicketBoard board) : EffectJunction<Fix
         {
             var why =
                 $"{Money(broken)} pays {Money(patched.Charge(broken))} with this patch; the policy says {Money(report.Policy.Charge(broken))}";
-            await board.Fire(
-                ticket.Id,
-                TicketTrigger.FixRejected,
-                new NoteInput
-                {
-                    By = TicketBoard.Name(run.UserKey),
-                    Note = $"patch refused: {why}",
-                },
-                CancellationToken
-            );
+            await board
+                .Fire(
+                    ticket.Id,
+                    TicketTrigger.FixRejected,
+                    new NoteInput
+                    {
+                        By = TicketBoard.Name(run.UserKey),
+                        Note = $"patch refused: {why}",
+                    },
+                    CancellationToken
+                )
+                .ConfigureAwait(false);
             return CheckResult.Refuse(why);
         }
 
         var patch = check.Inclusive
             ? $"free from {Money(check.FreeFrom)}"
             : $"free above {Money(check.FreeFrom)}";
-        var moved = await board.Fire(
-            ticket.Id,
-            TicketTrigger.Fixed,
-            new PatchInput
-            {
-                By = TicketBoard.Name(run.UserKey),
-                Note = $"fix: {patch}",
-                FreeFrom = check.FreeFrom,
-                Inclusive = check.Inclusive,
-            },
-            CancellationToken
-        );
+        var moved = await board
+            .Fire(
+                ticket.Id,
+                TicketTrigger.Fixed,
+                new PatchInput
+                {
+                    By = TicketBoard.Name(run.UserKey),
+                    Note = $"fix: {patch}",
+                    FreeFrom = check.FreeFrom,
+                    Inclusive = check.Inclusive,
+                },
+                CancellationToken
+            )
+            .ConfigureAwait(false);
         return moved is AdvanceOutcome.Advanced
             ? CheckResult.Accept(
                 $"{patch}: the repro case and {cases.Count - 1} cases from earlier fixes pass"

@@ -41,7 +41,15 @@ public class BroadcastViewTests : RecoveryTestFixture
 
         var seen = await Trax.Samples.Shared.Testing.Polling.WaitUntilAsync(
             () =>
-                viewer.StepsOf(first).Any(e => e.GetProperty("eventType").GetString() == "ROUTED"),
+                viewer
+                    .StepsOf(first)
+                    .Any(e =>
+                        string.Equals(
+                            e.GetProperty("eventType").GetString(),
+                            "ROUTED",
+                            StringComparison.Ordinal
+                        )
+                    ),
             TimeSpan.FromSeconds(10)
         );
         seen.Should().BeTrue("the viewer should receive the run's steps");

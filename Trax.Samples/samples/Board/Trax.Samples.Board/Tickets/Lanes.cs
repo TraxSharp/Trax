@@ -60,7 +60,8 @@ public static class Lanes
         ),
     ];
 
-    public static LaneSpec? Find(string key) => All.FirstOrDefault(l => l.Key == key);
+    public static LaneSpec? Find(string key) =>
+        All.FirstOrDefault(l => string.Equals(l.Key, key, StringComparison.Ordinal));
 
     public static TicketView View(Ticket ticket) =>
         new()

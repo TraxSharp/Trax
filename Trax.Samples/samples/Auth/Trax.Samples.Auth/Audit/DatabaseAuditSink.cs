@@ -20,33 +20,35 @@ public sealed class DatabaseAuditSink(
 {
     public async Task WriteAsync(IReadOnlyList<TraxAuditEntry> batch, CancellationToken ct)
     {
-        await using var db = await contexts.CreateDbContextAsync(ct);
-
-        foreach (var entry in batch)
+        var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
-            db.AuditRecords.Add(
-                new AuditRecord
-                {
-                    PrincipalId = entry.PrincipalId,
-                    PrincipalType = entry.PrincipalType,
-                    OperationName = entry.OperationName,
-                    Document = entry.Document,
-                    Success = entry.Success,
-                    ErrorText = entry.ErrorText,
-                    DurationMs = entry.DurationMs,
-                    Timestamp = entry.Timestamp.UtcDateTime,
-                }
-            );
+            foreach (var entry in batch)
+            {
+                db.AuditRecords.Add(
+                    new AuditRecord
+                    {
+                        PrincipalId = entry.PrincipalId,
+                        PrincipalType = entry.PrincipalType,
+                        OperationName = entry.OperationName,
+                        Document = entry.Document,
+                        Success = entry.Success,
+                        ErrorText = entry.ErrorText,
+                        DurationMs = entry.DurationMs,
+                        Timestamp = entry.Timestamp.UtcDateTime,
+                    }
+                );
 
-            logger.LogInformation(
-                "[audit] principal={Principal} op={Operation} success={Success} duration={DurationMs}ms",
-                entry.PrincipalId,
-                entry.OperationName ?? "(anonymous operation)",
-                entry.Success,
-                entry.DurationMs
-            );
+                logger.LogInformation(
+                    "[audit] principal={Principal} op={Operation} success={Success} duration={DurationMs}ms",
+                    entry.PrincipalId,
+                    entry.OperationName ?? "(anonymous operation)",
+                    entry.Success,
+                    entry.DurationMs
+                );
+            }
+
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
         }
-
-        await db.SaveChangesAsync(ct);
     }
 }

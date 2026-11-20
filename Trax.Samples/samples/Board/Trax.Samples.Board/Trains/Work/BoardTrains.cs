@@ -22,7 +22,12 @@ public class BoardTrain : ServiceTrain<BoardInput, BoardView>, IBoardTrain
 public class ReadBoard(TicketBoard board) : Junction<BoardInput, BoardView>
 {
     public override async Task<BoardView> Run(BoardInput input) =>
-        new() { Tickets = (await board.All(CancellationToken)).Select(Lanes.View).ToList() };
+        new()
+        {
+            Tickets = (await board.All(CancellationToken).ConfigureAwait(false))
+                .Select(Lanes.View)
+                .ToList(),
+        };
 }
 
 public interface IChargeTrain : IServiceTrain<ChargeInput, ChargeOutput>;
@@ -47,7 +52,7 @@ public class ReadCharge(TicketBoard board) : Junction<ChargeInput, ChargeOutput>
     public override async Task<ChargeOutput> Run(ChargeInput input)
     {
         var ticket =
-            await board.Find(input.TicketId, CancellationToken)
+            await board.Find(input.TicketId, CancellationToken).ConfigureAwait(false)
             ?? throw new ArgumentException($"There is no ticket {input.TicketId}.");
         return new ChargeOutput
         {
@@ -78,6 +83,8 @@ public class FileTicket(TicketBoard board) : Junction<FileTicketInput, TicketVie
             throw new ArgumentException(
                 $"There is no report {input.Report}; the shop knows {string.Join(", ", Reports.All.Keys)}."
             );
-        return Lanes.View(await board.File(input.Id, report, CancellationToken));
+        return Lanes.View(
+            await board.File(input.Id, report, CancellationToken).ConfigureAwait(false)
+        );
     }
 }

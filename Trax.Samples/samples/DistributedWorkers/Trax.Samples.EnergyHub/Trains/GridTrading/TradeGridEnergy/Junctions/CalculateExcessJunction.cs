@@ -13,7 +13,7 @@ public class CalculateExcessJunction(ILogger<CalculateExcessJunction> logger)
             input.MaxSellPercent
         );
 
-        await Task.Delay(200);
+        await Task.Delay(200).ConfigureAwait(false);
 
         logger.LogInformation(
             "Excess available: 47.3 kWh from solar surplus + battery above threshold"

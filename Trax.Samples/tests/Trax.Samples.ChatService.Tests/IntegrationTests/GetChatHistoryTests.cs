@@ -115,7 +115,7 @@ public class GetChatHistoryTests
 
     private static async Task<Guid> SeedRoomWithMessages(ChatDbContext db, int count)
     {
-        var roomId = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice);
+        var roomId = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice).ConfigureAwait(false);
         for (var i = 0; i < count; i++)
             db.ChatMessages.Add(
                 new ChatMessage
@@ -128,7 +128,7 @@ public class GetChatHistoryTests
                     SentAt = BaseTime.AddMinutes(i),
                 }
             );
-        await db.SaveChangesAsync();
+        await db.SaveChangesAsync().ConfigureAwait(false);
         return roomId;
     }
 }

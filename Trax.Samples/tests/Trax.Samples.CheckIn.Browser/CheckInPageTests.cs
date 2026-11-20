@@ -106,19 +106,28 @@ public class CheckInPageTests
         var source = page.GetByRole(AriaRole.Region, new() { Name = "Feature source" });
         await Assertions
             .Expect(source.GetByRole(AriaRole.Tab, new() { Selected = true }))
-            .ToHaveTextAsync(file, new() { Timeout = 15_000 });
-        await Assertions.Expect(source.Locator(".hit").First).ToContainTextAsync(step, Soon);
+            .ToHaveTextAsync(file, new() { Timeout = 15_000 })
+            .ConfigureAwait(false);
+        await Assertions
+            .Expect(source.Locator(".hit").First)
+            .ToContainTextAsync(step, Soon)
+            .ConfigureAwait(false);
     }
 
     private static async Task<IPage> SignInAsync(string name, string role)
     {
-        var page = await BrowserSetup.NewPageAsync();
-        await page.GetByLabel("Name").FillAsync(name);
-        await page.GetByLabel("Role").SelectOptionAsync(role);
-        await page.GetByRole(AriaRole.Button, new() { Name = "Sign in" }).ClickAsync();
+        var page = await BrowserSetup.NewPageAsync().ConfigureAwait(false);
+        await page.GetByLabel("Name").FillAsync(name).ConfigureAwait(false);
+        await page.GetByLabel("Role").SelectOptionAsync(role).ConfigureAwait(false);
+        await page.GetByRole(AriaRole.Button, new() { Name = "Sign in" })
+            .ClickAsync()
+            .ConfigureAwait(false);
         try
         {
-            await Assertions.Expect(page.GetByText($"Signed in as {name}")).ToBeVisibleAsync();
+            await Assertions
+                .Expect(page.GetByText($"Signed in as {name}"))
+                .ToBeVisibleAsync()
+                .ConfigureAwait(false);
         }
         catch (PlaywrightException ex)
         {

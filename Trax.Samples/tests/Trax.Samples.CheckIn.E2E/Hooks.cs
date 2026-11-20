@@ -54,7 +54,7 @@ public sealed class Hooks
     public static async Task Stop()
     {
         if (s_factory is not null)
-            await s_factory.DisposeAsync();
+            await s_factory.DisposeAsync().ConfigureAwait(false);
         Npgsql.NpgsqlConnection.ClearAllPools();
     }
 }

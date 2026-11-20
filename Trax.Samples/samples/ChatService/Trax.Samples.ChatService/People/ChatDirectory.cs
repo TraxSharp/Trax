@@ -10,7 +10,10 @@ public record ChatPerson(string UserId, string DisplayName);
 /// </summary>
 public class ChatDirectory(IEnumerable<ChatPerson> people)
 {
-    private readonly Dictionary<string, ChatPerson> _people = people.ToDictionary(p => p.UserId);
+    private readonly Dictionary<string, ChatPerson> _people = people.ToDictionary(
+        p => p.UserId,
+        StringComparer.Ordinal
+    );
 
     public IReadOnlyCollection<ChatPerson> All => _people.Values;
 

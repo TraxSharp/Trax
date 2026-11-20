@@ -23,7 +23,10 @@ public class ManifestOperationsTests : SchedulingTestFixture
         );
 
         var items = response.Data("operations", "manifests", "items").EnumerateArray().ToList();
-        var byId = items.ToDictionary(i => i.GetProperty("externalId").GetString()!);
+        var byId = items.ToDictionary(
+            i => i.GetProperty("externalId").GetString()!,
+            StringComparer.Ordinal
+        );
 
         byId.Keys.Should()
             .BeEquivalentTo(

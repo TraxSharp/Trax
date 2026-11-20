@@ -31,7 +31,9 @@ public class RabbitMqExchangePerSampleTests
         var foldersByName = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         var callers = 0;
 
-        foreach (var folder in Directory.EnumerateDirectories(samples).OrderBy(f => f))
+        foreach (
+            var folder in Directory.EnumerateDirectories(samples).Order(StringComparer.Ordinal)
+        )
         {
             var sample = Path.GetFileName(folder);
             var files = SourceFiles
@@ -70,7 +72,7 @@ public class RabbitMqExchangePerSampleTests
 
             foreach (var name in names)
             {
-                if (name == DefaultExchange)
+                if (string.Equals(name, DefaultExchange, StringComparison.Ordinal))
                     offenders.Add($"samples/{sample}: uses the shared default {DefaultExchange}");
                 if (!foldersByName.TryGetValue(name, out var folders))
                     foldersByName[name] = folders = [];

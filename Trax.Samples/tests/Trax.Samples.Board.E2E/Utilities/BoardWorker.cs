@@ -21,12 +21,14 @@ public sealed class BoardWorker(GraphQLClient graphQL, string apiKey)
     /// <summary>Claims a ticket in <paramref name="lane"/>: the work package, or its problem.</summary>
     public async Task<JsonElement> ClaimAsync(string lane, string? ticketId)
     {
-        var response = await graphQL.SendAsync(
-            "mutation($i: ClaimWorkInput!) { dispatch { claimWork(input: $i) { output { "
-                + "problem { code message } ticket { id state lane claimedBy } lane instructions tools events deadline } } } }",
-            apiKey,
-            new { i = new { lane, ticketId } }
-        );
+        var response = await graphQL
+            .SendAsync(
+                "mutation($i: ClaimWorkInput!) { dispatch { claimWork(input: $i) { output { "
+                    + "problem { code message } ticket { id state lane claimedBy } lane instructions tools events deadline } } } }",
+                apiKey,
+                new { i = new { lane, ticketId } }
+            )
+            .ConfigureAwait(false);
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         return response.GetData("dispatch", "claimWork", "output");
     }
@@ -34,12 +36,12 @@ public sealed class BoardWorker(GraphQLClient graphQL, string apiKey)
     /// <summary>Claims the ticket and starts an assignment on it; fails the test when the claim is refused.</summary>
     public async Task<Result> ClaimAndStartAsync(string lane, string ticketId)
     {
-        var package = await ClaimAsync(lane, ticketId);
+        var package = await ClaimAsync(lane, ticketId).ConfigureAwait(false);
         package
             .GetProperty("problem")
             .ValueKind.Should()
             .Be(JsonValueKind.Null, $"{lane} should be able to claim {ticketId}: {package}");
-        var started = await StartAsync(ticketId);
+        var started = await StartAsync(ticketId).ConfigureAwait(false);
         started.Problem.Should().BeNull();
         return started;
     }
@@ -47,10 +49,11 @@ public sealed class BoardWorker(GraphQLClient graphQL, string apiKey)
     public async Task<Result> StartAsync(string ticketId)
     {
         var result = await SendAsync(
-            $"mutation($i: AssignmentStartInput!, $r: String!) {{ machines {{ assignment {{ start(input: $i, requestId: $r) {{ {Answer} }} }} }} }}",
-            "start",
-            new { i = new { ticketId }, r = $"start-{Guid.NewGuid():N}" }
-        );
+                $"mutation($i: AssignmentStartInput!, $r: String!) {{ machines {{ assignment {{ start(input: $i, requestId: $r) {{ {Answer} }} }} }} }}",
+                "start",
+                new { i = new { ticketId }, r = $"start-{Guid.NewGuid():N}" }
+            )
+            .ConfigureAwait(false);
         if (result.Problem is null)
             _assignments[ticketId] = Guid.Parse(result.Answer.GetProperty("id").GetString()!);
         return result;
@@ -100,41 +103,47 @@ public sealed class BoardWorker(GraphQLClient graphQL, string apiKey)
     )
     {
         var sent = inputType is null
-            ? await SendAsync(ticketId, operation)
-            : await SendAsync(ticketId, operation, inputType, input!);
+            ? await SendAsync(ticketId, operation).ConfigureAwait(false)
+            : await SendAsync(ticketId, operation, inputType, input!).ConfigureAwait(false);
         sent.Problem.Should().BeNull($"{operation} should be accepted for checking");
         sent.State.Should().StartWith("Checking");
         Result? last = null;
-        var answered = await Polling.WaitUntilAsync(
-            async () =>
-            {
-                last = await GetAsync(_assignments[ticketId]);
-                return last.State is not null
-                    && !last.State.StartsWith("Checking", StringComparison.Ordinal);
-            },
-            Patience,
-            TimeSpan.FromMilliseconds(100)
-        );
+        var answered = await Polling
+            .WaitUntilAsync(
+                async () =>
+                {
+                    last = await GetAsync(_assignments[ticketId]).ConfigureAwait(false);
+                    return last.State is not null
+                        && !last.State.StartsWith("Checking", StringComparison.Ordinal);
+                },
+                Patience,
+                TimeSpan.FromMilliseconds(100)
+            )
+            .ConfigureAwait(false);
         answered.Should().BeTrue($"the check should answer; the assignment is in {last?.State}");
         return last!;
     }
 
     public async Task<JsonElement> TicketAsync(string ticketId)
     {
-        var response = await graphQL.SendAsync(
-            "query { discover { board { board { tickets { id state lane claimedBy note by } } } } }",
-            apiKey
-        );
+        var response = await graphQL
+            .SendAsync(
+                "query { discover { board { board { tickets { id state lane claimedBy note by } } } } }",
+                apiKey
+            )
+            .ConfigureAwait(false);
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         return response
             .GetData("discover", "board", "board", "tickets")
             .EnumerateArray()
-            .Single(t => t.GetProperty("id").GetString() == ticketId);
+            .Single(t =>
+                string.Equals(t.GetProperty("id").GetString(), ticketId, StringComparison.Ordinal)
+            );
     }
 
     private async Task<Result> SendAsync(string query, string field, object variables)
     {
-        var response = await graphQL.SendAsync(query, apiKey, variables);
+        var response = await graphQL.SendAsync(query, apiKey, variables).ConfigureAwait(false);
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         var answer = response.GetData("machines", "assignment", field);
         return new Result(answer);

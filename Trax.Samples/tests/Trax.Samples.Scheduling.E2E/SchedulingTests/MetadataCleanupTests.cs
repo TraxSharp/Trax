@@ -91,6 +91,6 @@ public class MetadataCleanupTests : SchedulingTestFixture
     {
         using var scope = Services.CreateScope();
         var cleanup = scope.ServiceProvider.GetRequiredService<IMetadataCleanupTrain>();
-        await cleanup.Run(new MetadataCleanupRequest());
+        await cleanup.Run(new MetadataCleanupRequest()).ConfigureAwait(false);
     }
 }

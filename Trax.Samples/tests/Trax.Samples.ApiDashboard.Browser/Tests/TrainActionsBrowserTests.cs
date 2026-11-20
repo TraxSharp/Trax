@@ -69,7 +69,10 @@ public class TrainActionsBrowserTests : ConsoleTest
         await Assertions
             .Expect(Page)
             .ToHaveURLAsync(new Regex(@"/runs/\d+$"), new() { Timeout = Render });
-        var id = long.Parse(Page.Url[(Page.Url.LastIndexOf('/') + 1)..]);
+        var id = long.Parse(
+            Page.Url[(Page.Url.LastIndexOf('/') + 1)..],
+            System.Globalization.CultureInfo.InvariantCulture
+        );
         // The run's input is stored with the run once it has ended.
         var run = await Wait.ForAsync(
             () =>
@@ -139,7 +142,10 @@ public class TrainActionsBrowserTests : ConsoleTest
         await Assertions
             .Expect(Page)
             .ToHaveURLAsync(new Regex(@"/runs/queued/\d+$"), new() { Timeout = Render });
-        var id = long.Parse(Page.Url[(Page.Url.LastIndexOf('/') + 1)..]);
+        var id = long.Parse(
+            Page.Url[(Page.Url.LastIndexOf('/') + 1)..],
+            System.Globalization.CultureInfo.InvariantCulture
+        );
         var entry = await Host.QueryAsync(dc =>
             dc.WorkQueues.AsNoTracking().SingleAsync(w => w.Id == id)
         );
@@ -150,9 +156,10 @@ public class TrainActionsBrowserTests : ConsoleTest
 
     private async Task OpenTrainsAsync()
     {
-        await Console.OpenAsync("trains", Caller.Operator);
+        await Console.OpenAsync("trains", Caller.Operator).ConfigureAwait(false);
         await Assertions
             .Expect(Console.Heading("Trains"))
-            .ToBeVisibleAsync(new() { Timeout = Render });
+            .ToBeVisibleAsync(new() { Timeout = Render })
+            .ConfigureAwait(false);
     }
 }

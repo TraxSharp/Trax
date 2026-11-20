@@ -16,7 +16,7 @@ public class LoadCorpus(ITopicMapDbContext db, DemoPace pace)
                 nameof(input)
             );
 
-        await Task.Delay(pace.StepDelay, CancellationToken);
+        await Task.Delay(pace.StepDelay, CancellationToken).ConfigureAwait(false);
 
         var fields = input.Fields.ToList();
         var works = await db
@@ -25,7 +25,8 @@ public class LoadCorpus(ITopicMapDbContext db, DemoPace pace)
                 fields.Contains(w.Field) && w.Year >= input.FromYear && w.Year <= input.ToYear
             )
             .OrderBy(w => w.Id)
-            .ToListAsync(CancellationToken);
+            .ToListAsync(CancellationToken)
+            .ConfigureAwait(false);
 
         if (works.Count < 2)
             throw new ArgumentException(

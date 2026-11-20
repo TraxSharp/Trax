@@ -23,14 +23,14 @@ public sealed class DemoDecider(DemoPace pace) : IDecider
         CancellationToken cancellationToken
     )
     {
-        await Task.Delay(Latency(), cancellationToken);
+        await Task.Delay(Latency(), cancellationToken).ConfigureAwait(false);
         return Answer(request);
     }
 
     /// <summary>The answers, without the latency.</summary>
     public static DecisionResult Answer(DecisionRequest request)
     {
-        var answers = new Dictionary<string, Answer>();
+        var answers = new Dictionary<string, Answer>(StringComparer.Ordinal);
         foreach (var question in request.Questions)
             answers[question.Key] = (request.State, question) switch
             {
@@ -48,14 +48,19 @@ public sealed class DemoDecider(DemoPace pace) : IDecider
     private static ChoiceAnswer NameProblem(RefundCase refund) =>
         refund.Reason.ToLowerInvariant() switch
         {
-            var r when r.Contains("broken") || r.Contains("damaged") => new ChoiceAnswer(
+            var r
+                when r.Contains("broken", StringComparison.Ordinal)
+                    || r.Contains("damaged", StringComparison.Ordinal) => new ChoiceAnswer(
                 nameof(Problem.Damaged),
                 0.91
             )
             {
                 Model = ModelName,
             },
-            var r when r.Contains("never arrived") => new ChoiceAnswer(nameof(Problem.Lost), 0.88)
+            var r when r.Contains("never arrived", StringComparison.Ordinal) => new ChoiceAnswer(
+                nameof(Problem.Lost),
+                0.88
+            )
             {
                 Model = ModelName,
             },

@@ -16,8 +16,8 @@ public sealed class GraphQLClient(HttpClient http, string? apiKey)
         if (apiKey is not null)
             request.Headers.Add("X-Api-Key", apiKey);
 
-        using var response = await http.SendAsync(request);
-        var body = await response.Content.ReadAsStringAsync();
+        using var response = await http.SendAsync(request).ConfigureAwait(false);
+        var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
         return new GraphQLResponse(
             JsonDocument.Parse(body).RootElement.Clone(),
             response.StatusCode,

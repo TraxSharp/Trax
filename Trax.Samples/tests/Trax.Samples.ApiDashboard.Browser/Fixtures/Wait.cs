@@ -9,7 +9,7 @@ public static class Wait
 
     public static async Task UntilAsync(Func<Task<bool>> condition, TimeSpan timeout, string what)
     {
-        var reached = await Polling.WaitUntilAsync(condition, timeout, Poll);
+        var reached = await Polling.WaitUntilAsync(condition, timeout, Poll).ConfigureAwait(false);
         reached.Should().BeTrue($"{what} within {timeout.TotalSeconds:0} s");
     }
 
@@ -18,7 +18,12 @@ public static class Wait
         where T : class
     {
         T? found = null;
-        await UntilAsync(async () => (found = await read()) is not null, timeout, what);
+        await UntilAsync(
+                async () => (found = await read().ConfigureAwait(false)) is not null,
+                timeout,
+                what
+            )
+            .ConfigureAwait(false);
         return found!;
     }
 }

@@ -43,13 +43,13 @@ public sealed class Restaurant(FaultInjector faults, DemoPace pace)
         {
             if (faults.TryFire(orderId, CrashPoint.TabletTimesOut))
             {
-                await Task.Delay(pace.TabletTimeout, cancellationToken);
+                await Task.Delay(pace.TabletTimeout, cancellationToken).ConfigureAwait(false);
                 throw new TimeoutException(
                     $"{Name}'s tablet did not answer in {pace.TabletTimeout.TotalSeconds:0.#} s."
                 );
             }
 
-            await Task.Delay(pace.StepDelay, cancellationToken);
+            await Task.Delay(pace.StepDelay, cancellationToken).ConfigureAwait(false);
             if (faults.TryFire(orderId, CrashPoint.RestaurantClosed))
                 throw new InvalidOperationException($"{Name} is closed.");
 

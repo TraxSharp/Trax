@@ -24,9 +24,9 @@ public class CombineSignals(IDbContextFactory<TopicMapDbContext> contexts, DemoP
     )
     {
         var (slice, embedding, coCitation, authors) = signals;
-        await Task.Delay(pace.StepDelay, CancellationToken);
+        await Task.Delay(pace.StepDelay, CancellationToken).ConfigureAwait(false);
 
-        var titles = slice.Papers.ToDictionary(p => p.Id, p => p.Title);
+        var titles = slice.Papers.ToDictionary(p => p.Id, p => p.Title, StringComparer.Ordinal);
         var references = coCitation.Pairs.ToDictionary(p => (p.WorkA, p.WorkB), p => (int)p.Value);
         var coauthors = authors.Pairs.ToDictionary(p => (p.WorkA, p.WorkB), p => (int)p.Value);
 
@@ -54,33 +54,40 @@ public class CombineSignals(IDbContextFactory<TopicMapDbContext> contexts, DemoP
 
         var onTheMap = links.Where(l => l.Score >= Threshold).ToList();
 
-        await using var db = await contexts.CreateDbContextAsync(CancellationToken);
-        await using var transaction = await db.Database.BeginTransactionAsync(CancellationToken);
-
-        await db
-            .TopicPairs.Where(p => p.RunId == slice.RunId)
-            .ExecuteDeleteAsync(CancellationToken);
-        db.TopicPairs.AddRange(
-            onTheMap.Select(l => new TopicPair
+        var db = await contexts.CreateDbContextAsync(CancellationToken).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var transaction = await db
+                .Database.BeginTransactionAsync(CancellationToken)
+                .ConfigureAwait(false);
+            await using (transaction.ConfigureAwait(false))
             {
-                RunId = slice.RunId,
-                WorkA = l.WorkA,
-                WorkB = l.WorkB,
-                Embedding = l.Embedding,
-                SharedReferences = l.SharedReferences,
-                SharedAuthors = l.SharedAuthors,
-                Score = l.Score,
-            })
-        );
-        await db.SaveChangesAsync(CancellationToken);
-        await transaction.CommitAsync(CancellationToken);
+                await db
+                    .TopicPairs.Where(p => p.RunId == slice.RunId)
+                    .ExecuteDeleteAsync(CancellationToken);
+                db.TopicPairs.AddRange(
+                    onTheMap.Select(l => new TopicPair
+                    {
+                        RunId = slice.RunId,
+                        WorkA = l.WorkA,
+                        WorkB = l.WorkB,
+                        Embedding = l.Embedding,
+                        SharedReferences = l.SharedReferences,
+                        SharedAuthors = l.SharedAuthors,
+                        Score = l.Score,
+                    })
+                );
+                await db.SaveChangesAsync(CancellationToken);
+                await transaction.CommitAsync(CancellationToken);
 
-        return new CombinedSignals(
-            slice.RunId,
-            slice.Papers.Count,
-            coCitation.Track,
-            onTheMap.Count,
-            links
-        );
+                return new CombinedSignals(
+                    slice.RunId,
+                    slice.Papers.Count,
+                    coCitation.Track,
+                    onTheMap.Count,
+                    links
+                );
+            }
+        }
     }
 }

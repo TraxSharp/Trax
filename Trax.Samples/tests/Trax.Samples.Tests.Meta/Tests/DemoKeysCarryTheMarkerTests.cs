@@ -183,7 +183,7 @@ public class DemoKeysCarryTheMarkerTests
 
         var type = parts[^2];
         foreach (Match alias in UsingAlias.Matches(site.Code))
-            if (alias.Groups["alias"].Value == type)
+            if (string.Equals(alias.Groups["alias"].Value, type, StringComparison.Ordinal))
                 type = alias.Groups["target"].Value;
 
         return constants.TryGetValue(type, out var members)

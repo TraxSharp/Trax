@@ -61,16 +61,18 @@ public class ScheduleDemoRun(
             manifest = input.Scenario switch
             {
                 Scenario.Refund => await ScheduleRefund(
-                    runId,
-                    externalId,
-                    input.OrderId ?? "A-1001"
-                ),
-                Scenario.TopicMap => await ScheduleTopicMap(runId, externalId, input),
+                        runId,
+                        externalId,
+                        input.OrderId ?? "A-1001"
+                    )
+                    .ConfigureAwait(false),
+                Scenario.TopicMap => await ScheduleTopicMap(runId, externalId, input)
+                    .ConfigureAwait(false),
                 _ => throw new ArgumentOutOfRangeException(nameof(input), input.Scenario, null),
             };
 
             // The page follows the first run, so a start that never sees it queued fails here.
-            firstRunId = await FirstRunOf(manifest.Id);
+            firstRunId = await FirstRunOf(manifest.Id).ConfigureAwait(false);
         }
         catch
         {
@@ -97,14 +99,18 @@ public class ScheduleDemoRun(
         var deadline = DateTime.UtcNow + FirstRunWait;
         while (true)
         {
-            await using (var context = await dataContexts.CreateDbContextAsync(CancellationToken))
+            var context = await dataContexts
+                .CreateDbContextAsync(CancellationToken)
+                .ConfigureAwait(false);
+            await using (context.ConfigureAwait(false))
             {
                 var queued = await context
                     .WorkQueues.AsNoTracking()
                     .Where(w => w.ManifestId == manifestId)
                     .OrderBy(w => w.Id)
                     .Select(w => w.ExternalId)
-                    .FirstOrDefaultAsync(CancellationToken);
+                    .FirstOrDefaultAsync(CancellationToken)
+                    .ConfigureAwait(false);
                 if (queued is not null)
                     return queued;
             }
@@ -112,7 +118,8 @@ public class ScheduleDemoRun(
                 throw new TimeoutException(
                     $"The scheduler did not queue the run within {FirstRunWait.TotalSeconds} seconds."
                 );
-            await Task.Delay(TimeSpan.FromMilliseconds(100), CancellationToken);
+            await Task.Delay(TimeSpan.FromMilliseconds(100), CancellationToken)
+                .ConfigureAwait(false);
         }
     }
 
@@ -142,7 +149,7 @@ public class ScheduleDemoRun(
     )
     {
         var fields = input.Fields is { Count: > 0 } chosen ? chosen : CorpusFixture.Fields;
-        var unknown = fields.Except(CorpusFixture.Fields).ToList();
+        var unknown = fields.Except(CorpusFixture.Fields, StringComparer.Ordinal).ToList();
         if (unknown.Count > 0)
             throw new ArgumentException(
                 $"The corpus has no field {string.Join(", ", unknown)}.",
@@ -154,7 +161,7 @@ public class ScheduleDemoRun(
             new TopicMapInput
             {
                 RunId = runId,
-                Fields = fields.Distinct().ToList(),
+                Fields = fields.Distinct(StringComparer.Ordinal).ToList(),
                 FromYear = input.FromYear ?? 2016,
                 ToYear = input.ToYear ?? 2025,
             },

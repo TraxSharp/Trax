@@ -10,7 +10,7 @@ public class ChargeCard(DemoPace pace) : EffectJunction<OrderInput, Charged>
 {
     public override async Task<Charged> Run(OrderInput order)
     {
-        await Task.Delay(pace.StepDelay, CancellationToken);
+        await Task.Delay(pace.StepDelay, CancellationToken).ConfigureAwait(false);
         return new Charged(order.OrderId, $"ch_{order.OrderId}", order.Total);
     }
 }

@@ -50,7 +50,7 @@ public class HelloWorldTrainTests
         var run = data
             .Metadatas.Where(m => m.Name == typeof(IHelloWorldTrain).FullName)
             .AsEnumerable()
-            .SingleOrDefault(m => m.Input?.Contains(name) == true);
+            .SingleOrDefault(m => m.Input?.Contains(name, StringComparison.Ordinal) == true);
 
         Assert.That(run, Is.Not.Null, "every run of a train is recorded, with its input");
         Assert.That(run!.TrainState, Is.EqualTo(TrainState.Completed));

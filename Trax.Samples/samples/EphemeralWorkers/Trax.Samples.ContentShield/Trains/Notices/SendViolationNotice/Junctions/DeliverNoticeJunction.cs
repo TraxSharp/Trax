@@ -17,7 +17,7 @@ public class DeliverNoticeJunction(ILogger<DeliverNoticeJunction> logger)
             input.ContentId
         );
 
-        await Task.Delay(150);
+        await Task.Delay(150).ConfigureAwait(false);
 
         var noticeId = $"notice-{Guid.NewGuid():N}";
         logger.LogInformation("Notice {NoticeId} delivered successfully", noticeId);

@@ -13,5 +13,6 @@ public sealed class TraxLendingCaller(TraxCaller caller) : ILendingCaller
 {
     public string? PrincipalId => caller.Principal?.Id;
 
-    public bool IsLibrarian => caller.Principal?.Roles.Contains(BookwormRoles.Librarian) == true;
+    public bool IsLibrarian =>
+        caller.Principal?.Roles.Contains(BookwormRoles.Librarian, StringComparer.Ordinal) == true;
 }

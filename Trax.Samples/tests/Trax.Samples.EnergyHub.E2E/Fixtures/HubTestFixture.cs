@@ -78,11 +78,11 @@ public abstract class HubTestFixture
 
     private async Task CleanExecutionData()
     {
-        await DataContext.BackgroundJobs.ExecuteDeleteAsync();
-        await DataContext.Logs.ExecuteDeleteAsync();
-        await DataContext.WorkQueues.ExecuteDeleteAsync();
-        await DataContext.DeadLetters.ExecuteDeleteAsync();
-        await DataContext.Metadatas.ExecuteDeleteAsync();
+        await DataContext.BackgroundJobs.ExecuteDeleteAsync().ConfigureAwait(false);
+        await DataContext.Logs.ExecuteDeleteAsync().ConfigureAwait(false);
+        await DataContext.WorkQueues.ExecuteDeleteAsync().ConfigureAwait(false);
+        await DataContext.DeadLetters.ExecuteDeleteAsync().ConfigureAwait(false);
+        await DataContext.Metadatas.ExecuteDeleteAsync().ConfigureAwait(false);
         DataContext.Reset();
     }
 }

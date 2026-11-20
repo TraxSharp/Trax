@@ -12,11 +12,11 @@ public class QueueForReview(FaultInjector faults, DemoPace pace)
 {
     public override async Task<RefundOutcome> Run(RefundCase refund)
     {
-        await Task.Delay(pace.StepDelay);
+        await Task.Delay(pace.StepDelay).ConfigureAwait(false);
 
         if (faults.TryFire(refund.RunId, CrashPoint.RefundTrack))
         {
-            await Task.Delay(pace.StepDelay);
+            await Task.Delay(pace.StepDelay).ConfigureAwait(false);
             throw new TimeoutException(
                 "The review queue did not accept the case in time (timeout injected by the demo)."
             );

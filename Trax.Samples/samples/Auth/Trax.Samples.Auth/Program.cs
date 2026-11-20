@@ -173,8 +173,8 @@ var app = builder.Build();
 
 // Create the newsroom schema and seed it. EnsureSchemaCreatedAsync is for demos and tests; use
 // migrations in production.
-await app.Services.EnsureSchemaCreatedAsync<NewsroomDbContext>();
-await SeedAsync(app.Services);
+await app.Services.EnsureSchemaCreatedAsync<NewsroomDbContext>().ConfigureAwait(false);
+await SeedAsync(app.Services).ConfigureAwait(false);
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -201,7 +201,7 @@ static async Task SeedAsync(IServiceProvider services)
     using var scope = services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<INewsroomDbContext>();
 
-    if (await db.Articles.AnyAsync())
+    if (await db.Articles.AnyAsync().ConfigureAwait(false))
         return;
 
     db.Articles.AddRange(
@@ -221,7 +221,7 @@ static async Task SeedAsync(IServiceProvider services)
             PublishedAt = DateTime.UtcNow.AddHours(-1),
         }
     );
-    await db.SaveChangesAsync();
+    await db.SaveChangesAsync().ConfigureAwait(false);
 }
 
 /// <summary>A production API key as configuration holds it: never the key itself.</summary>

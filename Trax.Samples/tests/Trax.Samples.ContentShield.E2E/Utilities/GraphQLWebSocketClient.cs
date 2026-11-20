@@ -36,7 +36,9 @@ public class GraphQLWebSocketClient : IAsyncDisposable
         };
 
         var uri = new Uri($"ws://localhost{path}");
-        client._webSocket = await wsClient.ConnectAsync(uri, CancellationToken.None);
+        client._webSocket = await wsClient
+            .ConnectAsync(uri, CancellationToken.None)
+            .ConfigureAwait(false);
 
         // Send connection_init. Subscription auth travels in the payload because
         // browsers cannot attach custom headers to a WebSocket upgrade. `authToken`
@@ -48,12 +50,12 @@ public class GraphQLWebSocketClient : IAsyncDisposable
             (_, not null) => new { type = "connection_init", payload = new { authToken } },
             _ => new { type = "connection_init" },
         };
-        await client.SendMessageAsync(initMessage);
+        await client.SendMessageAsync(initMessage).ConfigureAwait(false);
 
         // Wait for connection_ack
-        var ack = await client.ReceiveMessageAsync(effectiveTimeout);
+        var ack = await client.ReceiveMessageAsync(effectiveTimeout).ConfigureAwait(false);
         var ackType = ack.GetProperty("type").GetString();
-        if (ackType != "connection_ack")
+        if (!string.Equals(ackType, "connection_ack", StringComparison.Ordinal))
             throw new InvalidOperationException($"Expected connection_ack but got {ackType}");
 
         return client;
@@ -63,13 +65,14 @@ public class GraphQLWebSocketClient : IAsyncDisposable
     {
         _activeSubscriptions.Add(id);
         await SendMessageAsync(
-            new
-            {
-                id,
-                type = "subscribe",
-                payload = new { query },
-            }
-        );
+                new
+                {
+                    id,
+                    type = "subscribe",
+                    payload = new { query },
+                }
+            )
+            .ConfigureAwait(false);
     }
 
     public async Task<JsonElement> ReceiveNextAsync(TimeSpan? timeout = null)
@@ -83,19 +86,19 @@ public class GraphQLWebSocketClient : IAsyncDisposable
             if (remaining <= TimeSpan.Zero)
                 break;
 
-            var message = await ReceiveMessageAsync(remaining);
+            var message = await ReceiveMessageAsync(remaining).ConfigureAwait(false);
             var type = message.GetProperty("type").GetString();
 
-            if (type == "next")
+            if (string.Equals(type, "next", StringComparison.Ordinal))
                 return message.GetProperty("payload");
 
-            if (type == "error")
+            if (string.Equals(type, "error", StringComparison.Ordinal))
             {
                 var errorPayload = message.GetProperty("payload");
                 throw new InvalidOperationException($"Subscription error: {errorPayload}");
             }
 
-            if (type == "complete")
+            if (string.Equals(type, "complete", StringComparison.Ordinal))
                 throw new InvalidOperationException("Subscription completed unexpectedly");
 
             // Ignore other message types (ping, pong, etc.)
@@ -110,7 +113,7 @@ public class GraphQLWebSocketClient : IAsyncDisposable
     {
         try
         {
-            await ReceiveNextAsync(timeout);
+            await ReceiveNextAsync(timeout).ConfigureAwait(false);
             return true;
         }
         catch (TimeoutException)
@@ -123,12 +126,14 @@ public class GraphQLWebSocketClient : IAsyncDisposable
     {
         var json = JsonSerializer.Serialize(message, JsonOptions);
         var bytes = Encoding.UTF8.GetBytes(json);
-        await _webSocket.SendAsync(
-            new ArraySegment<byte>(bytes),
-            WebSocketMessageType.Text,
-            true,
-            CancellationToken.None
-        );
+        await _webSocket
+            .SendAsync(
+                new ArraySegment<byte>(bytes),
+                WebSocketMessageType.Text,
+                true,
+                CancellationToken.None
+            )
+            .ConfigureAwait(false);
     }
 
     private async Task<JsonElement> ReceiveMessageAsync(TimeSpan timeout)
@@ -142,7 +147,9 @@ public class GraphQLWebSocketClient : IAsyncDisposable
             WebSocketReceiveResult result;
             do
             {
-                result = await _webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cts.Token);
+                result = await _webSocket
+                    .ReceiveAsync(new ArraySegment<byte>(buffer), cts.Token)
+                    .ConfigureAwait(false);
                 ms.Write(buffer, 0, result.Count);
             } while (!result.EndOfMessage);
 
@@ -166,11 +173,13 @@ public class GraphQLWebSocketClient : IAsyncDisposable
         {
             try
             {
-                await _webSocket.CloseAsync(
-                    WebSocketCloseStatus.NormalClosure,
-                    "Test complete",
-                    CancellationToken.None
-                );
+                await _webSocket
+                    .CloseAsync(
+                        WebSocketCloseStatus.NormalClosure,
+                        "Test complete",
+                        CancellationToken.None
+                    )
+                    .ConfigureAwait(false);
             }
             catch
             {

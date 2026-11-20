@@ -18,7 +18,7 @@ public class AggregateMetricsJunction(ILogger<AggregateMetricsJunction> logger)
             input.ReportPeriod
         );
 
-        await Task.Delay(250);
+        await Task.Delay(250).ConfigureAwait(false);
 
         logger.LogInformation("Metrics aggregated: 1,247 items reviewed, 83 flagged");
 

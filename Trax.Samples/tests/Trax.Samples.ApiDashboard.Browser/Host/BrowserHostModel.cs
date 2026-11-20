@@ -98,7 +98,7 @@ public class WaitForLedger(Holds holds) : EffectJunction<KeyedInput, Unit>
 {
     public override async Task<Unit> Run(KeyedInput input)
     {
-        await holds.WaitAsync(input.Key, CancellationToken);
+        await holds.WaitAsync(input.Key, CancellationToken).ConfigureAwait(false);
         return Unit.Default;
     }
 }
@@ -201,7 +201,7 @@ public class HandOverParcel(Holds holds) : EffectJunction<RelayInput, Unit>
 {
     public override async Task<Unit> Run(RelayInput input)
     {
-        await holds.WaitAsync(input.Key, CancellationToken);
+        await holds.WaitAsync(input.Key, CancellationToken).ConfigureAwait(false);
         return Unit.Default;
     }
 }

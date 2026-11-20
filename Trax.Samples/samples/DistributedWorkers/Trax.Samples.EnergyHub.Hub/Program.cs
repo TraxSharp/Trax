@@ -174,7 +174,9 @@ builder.Services.AddTrax(trax =>
                         new ProcessChargingSessionInput
                         {
                             StationId = $"EVC-{zone.ToUpperInvariant()}",
-                            SessionType = zone == "parking" ? "Wireless" : "Wired",
+                            SessionType = string.Equals(zone, "parking", StringComparison.Ordinal)
+                                ? "Wireless"
+                                : "Wired",
                         }
                     )),
                     Every.Minutes(2).WithVariance(TimeSpan.FromSeconds(30)),

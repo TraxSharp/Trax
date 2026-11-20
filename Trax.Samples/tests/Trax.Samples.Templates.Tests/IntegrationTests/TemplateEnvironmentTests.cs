@@ -52,20 +52,28 @@ public class TemplateEnvironmentTests
     private static async Task BelievesForwardedHeadersOnlyFromItsProxyNetworks<T>()
         where T : class
     {
-        await using var behindProxy = new WebApplicationFactory<T>().WithWebHostBuilder(b =>
+        var behindProxy = new WebApplicationFactory<T>().WithWebHostBuilder(b =>
             b.UseEnvironment("Development").UseSetting("Trax:Proxy:KnownNetworks", "10.0.0.0/16")
         );
-        await using var noProxy = Start<T>("Development");
-
-        (await ForwardedScheme(behindProxy, "10.0.4.5"))
-            .Should()
-            .Be("https", "a request from the load balancer's network carries the caller's scheme");
-        (await ForwardedScheme(behindProxy, "192.0.2.7"))
-            .Should()
-            .Be("http", "anyone outside the proxy networks could otherwise claim https");
-        (await ForwardedScheme(noProxy, "10.0.4.5"))
-            .Should()
-            .Be("http", "with no proxy networks set the host reads no forwarded header");
+        await using (behindProxy.ConfigureAwait(false))
+        {
+            var noProxy = Start<T>("Development");
+            await using (noProxy.ConfigureAwait(false))
+            {
+                (await ForwardedScheme(behindProxy, "10.0.4.5"))
+                    .Should()
+                    .Be(
+                        "https",
+                        "a request from the load balancer's network carries the caller's scheme"
+                    );
+                (await ForwardedScheme(behindProxy, "192.0.2.7"))
+                    .Should()
+                    .Be("http", "anyone outside the proxy networks could otherwise claim https");
+                (await ForwardedScheme(noProxy, "10.0.4.5"))
+                    .Should()
+                    .Be("http", "with no proxy networks set the host reads no forwarded header");
+            }
+        }
     }
 
     private static async Task<string> ForwardedScheme<T>(
@@ -74,14 +82,16 @@ public class TemplateEnvironmentTests
     )
         where T : class
     {
-        var context = await factory.Server.SendAsync(c =>
-        {
-            c.Connection.RemoteIpAddress = System.Net.IPAddress.Parse(from);
-            c.Request.Method = "GET";
-            c.Request.Path = "/trax/health";
-            c.Request.Headers["X-Forwarded-Proto"] = "https";
-            c.Request.Headers["X-Forwarded-For"] = "203.0.113.9";
-        });
+        var context = await factory
+            .Server.SendAsync(c =>
+            {
+                c.Connection.RemoteIpAddress = IPAddress.Parse(from);
+                c.Request.Method = "GET";
+                c.Request.Path = "/trax/health";
+                c.Request.Headers["X-Forwarded-Proto"] = "https";
+                c.Request.Headers["X-Forwarded-For"] = "203.0.113.9";
+            })
+            .ConfigureAwait(false);
         return context.Request.Scheme;
     }
 
@@ -321,35 +331,44 @@ public class TemplateEnvironmentTests
     )
         where T : class
     {
-        await using var factory = Start<T>(environment);
-        var client = factory.CreateClient();
-        if (key is not null)
-            client.DefaultRequestHeaders.Add("X-Api-Key", key);
+        var factory = Start<T>(environment);
+        await using (factory.ConfigureAwait(false))
+        {
+            var client = factory.CreateClient();
+            if (key is not null)
+                client.DefaultRequestHeaders.Add("X-Api-Key", key);
 
-        var response = await client.PostAsJsonAsync("/trax/graphql", new { query });
-        var body = await response.Content.ReadAsStringAsync();
-        using var json = JsonDocument.Parse(body);
+            var response = await client
+                .PostAsJsonAsync("/trax/graphql", new { query })
+                .ConfigureAwait(false);
+            var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            using var json = JsonDocument.Parse(body);
 
-        if (!json.RootElement.TryGetProperty("errors", out var errors))
-            return [];
-        return errors
-            .EnumerateArray()
-            .Select(e =>
-                e.TryGetProperty("extensions", out var ext)
-                && ext.TryGetProperty("code", out var code)
-                    ? code.GetString() ?? "(null code)"
-                    : $"(no code) {e.GetProperty("message").GetString()}"
-            )
-            .ToList();
+            if (!json.RootElement.TryGetProperty("errors", out var errors))
+                return [];
+            return errors
+                .EnumerateArray()
+                .Select(e =>
+                    e.TryGetProperty("extensions", out var ext)
+                    && ext.TryGetProperty("code", out var code)
+                        ? code.GetString() ?? "(null code)"
+                        : $"(no code) {e.GetProperty("message").GetString()}"
+                )
+                .ToList();
+        }
     }
 
     private static async Task<List<string>> SchemeNames<T>(string environment)
         where T : class
     {
-        await using var factory = Start<T>(environment);
-        var schemes = await factory
-            .Services.GetRequiredService<IAuthenticationSchemeProvider>()
-            .GetAllSchemesAsync();
-        return schemes.Select(s => s.Name).ToList();
+        var factory = Start<T>(environment);
+        await using (factory.ConfigureAwait(false))
+        {
+            var schemes = await factory
+                .Services.GetRequiredService<IAuthenticationSchemeProvider>()
+                .GetAllSchemesAsync()
+                .ConfigureAwait(false);
+            return schemes.Select(s => s.Name).ToList();
+        }
     }
 }

@@ -36,9 +36,9 @@ public class GraphQLClient(HttpClient httpClient)
         if (apiKey != null)
             request.Headers.Add("X-Api-Key", apiKey);
 
-        var response = await httpClient.SendAsync(request);
+        var response = await httpClient.SendAsync(request).ConfigureAwait(false);
 
-        var body = await response.Content.ReadAsStringAsync();
+        var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
 
         if (string.IsNullOrWhiteSpace(body))
         {

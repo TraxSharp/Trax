@@ -23,10 +23,11 @@ public sealed class OrderDraft(GraphQLClient graphQL, string apiKey)
     public async Task<Result> StartAsync()
     {
         var result = await SendAsync(
-            $"mutation($r: String!) {{ machines {{ order {{ start(requestId: $r) {{ {Answer} }} }} }} }}",
-            "start",
-            new { r = $"start-{Guid.NewGuid():N}" }
-        );
+                $"mutation($r: String!) {{ machines {{ order {{ start(requestId: $r) {{ {Answer} }} }} }} }}",
+                "start",
+                new { r = $"start-{Guid.NewGuid():N}" }
+            )
+            .ConfigureAwait(false);
         result.Problem.Should().BeNull("the start should be accepted");
         Id = Guid.Parse(result.Answer.GetProperty("id").GetString()!);
         return result;
@@ -67,22 +68,24 @@ public sealed class OrderDraft(GraphQLClient graphQL, string apiKey)
     public async Task<Result> WaitForStateAsync(string state)
     {
         Result? last = null;
-        var reached = await Polling.WaitUntilAsync(
-            async () =>
-            {
-                last = await LoadAsync();
-                return last.State == state;
-            },
-            Patience,
-            TimeSpan.FromMilliseconds(100)
-        );
+        var reached = await Polling
+            .WaitUntilAsync(
+                async () =>
+                {
+                    last = await LoadAsync().ConfigureAwait(false);
+                    return string.Equals(last.State, state, StringComparison.Ordinal);
+                },
+                Patience,
+                TimeSpan.FromMilliseconds(100)
+            )
+            .ConfigureAwait(false);
         reached.Should().BeTrue($"the order should reach {state}; it is in {last?.State}");
         return last!;
     }
 
     private async Task<Result> SendAsync(string query, string field, object variables)
     {
-        var response = await graphQL.SendAsync(query, apiKey, variables);
+        var response = await graphQL.SendAsync(query, apiKey, variables).ConfigureAwait(false);
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         return new Result(response.GetData("machines", "order", field).Clone());
     }

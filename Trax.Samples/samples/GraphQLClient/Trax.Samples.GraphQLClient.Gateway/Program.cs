@@ -20,16 +20,16 @@ const string billingUrl = "http://localhost:5311";
 
 var inventory = InventoryServerHost.Build([]);
 inventory.Urls.Add(inventoryUrl);
-await inventory.StartAsync();
+await inventory.StartAsync().ConfigureAwait(false);
 
 var billing = BillingServerHost.Build([]);
 billing.Urls.Add(billingUrl);
-await billing.StartAsync();
+await billing.StartAsync().ConfigureAwait(false);
 
 using (var probe = new HttpClient())
 {
-    await WaitForHealthyAsync(probe, $"{inventoryUrl}/trax/health");
-    await WaitForHealthyAsync(probe, $"{billingUrl}/trax/health");
+    await WaitForHealthyAsync(probe, $"{inventoryUrl}/trax/health").ConfigureAwait(false);
+    await WaitForHealthyAsync(probe, $"{billingUrl}/trax/health").ConfigureAwait(false);
 }
 
 // The consumer is a host of its own, as "server A" would be in a real app, and resolves the
@@ -45,14 +45,14 @@ var billingClient = consumerHost.Services.GetRequiredKeyedService<IGraphQLClient
     "serverC"
 );
 
-var product = await inventoryClient.Run(
-    new GetProductRequest { Input = new GetProductInput("SKU-1") }
-);
+var product = await inventoryClient
+    .Run(new GetProductRequest { Input = new GetProductInput("SKU-1") })
+    .ConfigureAwait(false);
 Console.WriteLine($"serverB (inventory) -> {product.Name}, {product.QuantityOnHand} on hand");
 
-var invoice = await billingClient.Run(
-    new GetInvoiceRequest { Input = new GetInvoiceInput("INV-1") }
-);
+var invoice = await billingClient
+    .Run(new GetInvoiceRequest { Input = new GetInvoiceInput("INV-1") })
+    .ConfigureAwait(false);
 Console.WriteLine(
     $"serverC (billing)   -> invoice {invoice.InvoiceId}: {invoice.AmountCents}c ({invoice.Status})"
 );
@@ -61,7 +61,9 @@ Console.WriteLine(
 // billing query is rejected before any HTTP call. That is the isolation keyed clients buy.
 try
 {
-    await inventoryClient.Run(new GetInvoiceRequest { Input = new GetInvoiceInput("INV-1") });
+    await inventoryClient
+        .Run(new GetInvoiceRequest { Input = new GetInvoiceInput("INV-1") })
+        .ConfigureAwait(false);
     Console.WriteLine("UNEXPECTED: the inventory client accepted a billing query");
 }
 catch (GraphQLValidationException)
@@ -69,8 +71,8 @@ catch (GraphQLValidationException)
     Console.WriteLine("serverB rejected a billing query (schema isolation holds)");
 }
 
-await inventory.StopAsync();
-await billing.StopAsync();
+await inventory.StopAsync().ConfigureAwait(false);
+await billing.StopAsync().ConfigureAwait(false);
 return 0;
 
 static async Task WaitForHealthyAsync(HttpClient client, string healthUrl)
@@ -80,7 +82,7 @@ static async Task WaitForHealthyAsync(HttpClient client, string healthUrl)
     {
         try
         {
-            var response = await client.GetAsync(healthUrl);
+            var response = await client.GetAsync(healthUrl).ConfigureAwait(false);
             if (response.IsSuccessStatusCode)
                 return;
         }
@@ -89,7 +91,7 @@ static async Task WaitForHealthyAsync(HttpClient client, string healthUrl)
             // server not up yet
         }
 
-        await Task.Delay(100);
+        await Task.Delay(100).ConfigureAwait(false);
     }
 
     throw new TimeoutException($"Server at {healthUrl} did not become healthy within 30s.");

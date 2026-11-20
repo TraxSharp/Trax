@@ -89,7 +89,8 @@ public class ClientManifestExportTests
             .Be(
                 (await File.ReadAllTextAsync(TopicMapArtifacts.ClientManifest)).Replace(
                     "\r\n",
-                    "\n"
+                    "\n",
+                    StringComparison.Ordinal
                 ),
                 "the page's generated client is written from this manifest; after changing a machine or a page "
                     + "train, export it again and run trax client (the sample's README)"

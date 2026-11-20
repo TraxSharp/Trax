@@ -86,7 +86,10 @@ public class RunActionsBrowserTests : ConsoleTest
         await Assertions
             .Expect(Page)
             .ToHaveURLAsync(new Regex(@"/runs/queued/\d+$"), new() { Timeout = Render });
-        var id = long.Parse(Page.Url[(Page.Url.LastIndexOf('/') + 1)..]);
+        var id = long.Parse(
+            Page.Url[(Page.Url.LastIndexOf('/') + 1)..],
+            System.Globalization.CultureInfo.InvariantCulture
+        );
         var entry = await Host.QueryAsync(dc =>
             dc.WorkQueues.AsNoTracking().SingleAsync(w => w.Id == id)
         );
@@ -97,7 +100,12 @@ public class RunActionsBrowserTests : ConsoleTest
             .Single()
             .Value.GetString();
         entry.Input.Should().Contain(key!, "the run's own input is queued again");
-        Checks.Sent.Count(s => s.OperationName == "RequeueExecution").Should().Be(1);
+        Checks
+            .Sent.Count(s =>
+                string.Equals(s.OperationName, "RequeueExecution", StringComparison.Ordinal)
+            )
+            .Should()
+            .Be(1);
     }
 
     [Test]

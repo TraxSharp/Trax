@@ -34,7 +34,8 @@ public class RetryAndDeadLetterTests : SchedulingTestFixture
         // to a 1 s manager poll, a 1 s dispatcher poll and a 250 ms worker poll, so the window has
         // to outlast that: 12 s.
         var ranAgain = await Polling.WaitUntilAsync(
-            async () => (await Db.Runs(outage.ManifestId, failures[2].Id)).Count > 0,
+            async () =>
+                (await Db.Runs(outage.ManifestId, failures[2].Id).ConfigureAwait(false)).Count > 0,
             TimeSpan.FromSeconds(12),
             TimeSpan.FromMilliseconds(250)
         );

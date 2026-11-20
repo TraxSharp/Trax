@@ -98,7 +98,13 @@ public class ScaffoldedTemplateRestoreTests
         var resolvedTrax = assets
             .RootElement.GetProperty("libraries")
             .EnumerateObject()
-            .Where(l => l.Value.GetProperty("type").GetString() == "package")
+            .Where(l =>
+                string.Equals(
+                    l.Value.GetProperty("type").GetString(),
+                    "package",
+                    StringComparison.Ordinal
+                )
+            )
             .Select(l => l.Name.Split('/'))
             .Where(parts => parts[0].StartsWith("Trax.", StringComparison.OrdinalIgnoreCase))
             .Select(parts => (Id: parts[0], Version: parts[1]))
@@ -107,7 +113,10 @@ public class ScaffoldedTemplateRestoreTests
         resolvedTrax.Should().NotBeEmpty();
 
         var unpinned = resolvedTrax
-            .Where(p => !pins.TryGetValue(p.Id, out var pinned) || pinned != p.Version)
+            .Where(p =>
+                !pins.TryGetValue(p.Id, out var pinned)
+                || !string.Equals(pinned, p.Version, StringComparison.Ordinal)
+            )
             .Select(p =>
                 $"{p.Id} {p.Version} (pinned: {(pins.TryGetValue(p.Id, out var v) ? v : "none")})"
             )
@@ -128,18 +137,19 @@ public class ScaffoldedTemplateRestoreTests
     {
         var output = Path.Combine(_workDir, $"{shortName}-{suffix}");
         await Run(
-            _workDir,
-            "new",
-            shortName,
-            "--name",
-            "Scaffolded",
-            "--output",
-            output,
-            "--debug:custom-hive",
-            _hive
-        );
+                _workDir,
+                "new",
+                shortName,
+                "--name",
+                "Scaffolded",
+                "--output",
+                output,
+                "--debug:custom-hive",
+                _hive
+            )
+            .ConfigureAwait(false);
 
-        var restore = await Run(output, allowFailure: true, "restore");
+        var restore = await Run(output, allowFailure: true, "restore").ConfigureAwait(false);
         return (output, restore);
     }
 }

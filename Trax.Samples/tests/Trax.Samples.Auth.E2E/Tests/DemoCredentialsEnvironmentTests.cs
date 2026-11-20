@@ -146,7 +146,7 @@ public class DemoCredentialsEnvironmentTests
         var hash = SHA256.HashData([.. salt, .. Encoding.UTF8.GetBytes(BotKey)]);
 
         return new ProductionAuthApiFactory(
-            new Dictionary<string, string>
+            new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["Auth:ApiKeys:0:Id"] = "ops-bot",
                 ["Auth:ApiKeys:0:Salt"] = Convert.ToBase64String(salt),
@@ -171,7 +171,8 @@ public class DemoCredentialsEnvironmentTests
     {
         var schemes = await factory
             .Services.GetRequiredService<IAuthenticationSchemeProvider>()
-            .GetAllSchemesAsync();
+            .GetAllSchemesAsync()
+            .ConfigureAwait(false);
         return schemes.Select(s => s.Name).ToList();
     }
 }

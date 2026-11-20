@@ -16,7 +16,7 @@ public class FindHiddenTwins(FaultInjector faults, DemoPace pace)
 
     public override async Task<TopicMap> Run(CombinedSignals combined)
     {
-        await Task.Delay(pace.StepDelay, CancellationToken);
+        await Task.Delay(pace.StepDelay, CancellationToken).ConfigureAwait(false);
         faults.Disarm(combined.RunId);
 
         return new TopicMap(

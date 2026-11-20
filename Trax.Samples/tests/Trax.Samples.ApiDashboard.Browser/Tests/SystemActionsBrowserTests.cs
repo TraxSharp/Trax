@@ -25,7 +25,7 @@ public class SystemActionsBrowserTests : ConsoleTest
     {
         var effect = Effects()
             .Where(e => e.Toggleable && e.Enabled)
-            .OrderBy(e => e.FullName.Contains("Progress") ? 0 : 1)
+            .OrderBy(e => e.FullName.Contains("Progress", StringComparison.Ordinal) ? 0 : 1)
             .First();
         try
         {
@@ -49,7 +49,10 @@ public class SystemActionsBrowserTests : ConsoleTest
                 .Expect(Console.Toast("Effect settings updated."))
                 .ToBeVisibleAsync(new() { Timeout = Render });
             await Assertions.Expect(toggle).Not.ToBeCheckedAsync(new() { Timeout = Render });
-            Effects().Single(e => e.FullName == effect.FullName).Enabled.Should().BeFalse();
+            Effects()
+                .Single(e => string.Equals(e.FullName, effect.FullName, StringComparison.Ordinal))
+                .Enabled.Should()
+                .BeFalse();
         }
         finally
         {
@@ -69,7 +72,7 @@ public class SystemActionsBrowserTests : ConsoleTest
             await OpenConfigureAsync(effect);
             var dialog = Console.Dialog($"Configure {effect.Name}");
             var setting = dialog.GetByRole(AriaRole.Switch, new() { Name = label, Exact = true });
-            if (field.Value == "true")
+            if (string.Equals(field.Value, "true", StringComparison.Ordinal))
                 await Assertions.Expect(setting).ToBeCheckedAsync(new() { Timeout = Render });
             else
                 await Assertions.Expect(setting).Not.ToBeCheckedAsync(new() { Timeout = Render });
@@ -84,14 +87,20 @@ public class SystemActionsBrowserTests : ConsoleTest
             await Assertions.Expect(dialog).ToHaveCountAsync(0, new() { Timeout = Render });
             Field(effect.FullName, field.Name)
                 .Value.Should()
-                .Be(field.Value == "true" ? "false" : "true", "the switch was flipped and saved");
+                .Be(
+                    string.Equals(field.Value, "true", StringComparison.Ordinal) ? "false" : "true",
+                    "the switch was flipped and saved"
+                );
         }
         finally
         {
             Settings(s =>
                 s.ConfigureEffect(
                     effect.FullName,
-                    new Dictionary<string, string?> { [field.Name] = field.Value }
+                    new Dictionary<string, string?>(StringComparer.Ordinal)
+                    {
+                        [field.Name] = field.Value,
+                    }
                 )
             );
         }
@@ -156,7 +165,9 @@ public class SystemActionsBrowserTests : ConsoleTest
                 .ToBeVisibleAsync(new() { Timeout = Render });
             Levels()
                 .GetLogLevels()
-                .Single(l => l.Category == ConsoleHost.LoggedCategory)
+                .Single(l =>
+                    string.Equals(l.Category, ConsoleHost.LoggedCategory, StringComparison.Ordinal)
+                )
                 .Level.Should()
                 .Be(LogLevel.Error);
         }
@@ -169,12 +180,13 @@ public class SystemActionsBrowserTests : ConsoleTest
 
     private async Task OpenConfigureAsync(EffectSettings effect)
     {
-        await Console.OpenAsync("system/effects", Caller.Operator);
+        await Console.OpenAsync("system/effects", Caller.Operator).ConfigureAwait(false);
         await Page.GetByRole(
                 AriaRole.Button,
                 new() { Name = $"Configure {effect.Name}", Exact = true }
             )
-            .ClickAsync(new() { Timeout = Render });
+            .ClickAsync(new() { Timeout = Render })
+            .ConfigureAwait(false);
     }
 
     private static (EffectSettings Effect, EffectSettingField Field) BooleanSetting()
@@ -191,7 +203,9 @@ public class SystemActionsBrowserTests : ConsoleTest
         System.Text.RegularExpressions.Regex.Replace(name, "(?<=[a-z0-9])(?=[A-Z])", " ");
 
     private static EffectSettingField Field(string effect, string name) =>
-        Effects().Single(e => e.FullName == effect).Fields.Single(f => f.Name == name);
+        Effects()
+            .Single(e => string.Equals(e.FullName, effect, StringComparison.Ordinal))
+            .Fields.Single(f => string.Equals(f.Name, name, StringComparison.Ordinal));
 
     private static IReadOnlyList<EffectSettings> Effects() => Settings(s => s.GetEffects());
 

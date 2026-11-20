@@ -28,7 +28,7 @@ public sealed record DemoUser(
             Id,
             DisplayName,
             Roles,
-            Claims: new Dictionary<string, string>
+            Claims: new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 [AuthPolicies.EmailVerifiedClaim] = EmailVerified ? "true" : "false",
             },
@@ -70,7 +70,7 @@ public static class DemoCredentials
         Erin,
         Bob,
         Oscar,
-    }.ToDictionary(u => u.Id);
+    }.ToDictionary(u => u.Id, StringComparer.Ordinal);
 
     public const string AliceKey = "alice-key-do-not-use-in-production";
     public const string ErinKey = "erin-key-do-not-use-in-production";

@@ -33,13 +33,14 @@ public static class TrainStatePoller
 
             var metadata = await query
                 .OrderByDescending(m => m.Id)
-                .FirstOrDefaultAsync(m => m.TrainState == expectedState);
+                .FirstOrDefaultAsync(m => m.TrainState == expectedState)
+                .ConfigureAwait(false);
 
             if (metadata != null)
                 return metadata;
 
             // determinism: polling interval while waiting, bounded by the deadline above.
-            await Task.Delay(PollInterval);
+            await Task.Delay(PollInterval).ConfigureAwait(false);
         }
 
         throw new TimeoutException(
@@ -69,13 +70,14 @@ public static class TrainStatePoller
 
             var metadata = await query
                 .OrderByDescending(m => m.Id)
-                .FirstOrDefaultAsync(m => m.TrainState == expectedState);
+                .FirstOrDefaultAsync(m => m.TrainState == expectedState)
+                .ConfigureAwait(false);
 
             if (metadata != null)
                 return metadata;
 
             // determinism: polling interval while waiting, bounded by the deadline above.
-            await Task.Delay(PollInterval);
+            await Task.Delay(PollInterval).ConfigureAwait(false);
         }
 
         throw new TimeoutException(
