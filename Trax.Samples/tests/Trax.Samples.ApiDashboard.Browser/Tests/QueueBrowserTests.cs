@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
@@ -13,7 +14,7 @@ namespace Trax.Samples.ApiDashboard.Browser.Tests;
 /// page, and Queue train writes a new entry with the input it was given, or says why it did not.
 /// </summary>
 [TestFixture]
-public class QueueBrowserTests : ConsoleTest
+public partial class QueueBrowserTests : ConsoleTest
 {
     private static readonly float Render = BrowserTimeouts.Render.Ms();
 
@@ -30,15 +31,24 @@ public class QueueBrowserTests : ConsoleTest
 
         var sent = Console.SendsAsync("CancelWorkQueueEntry");
         await queue.Button(row, "Cancel").ClickAsync();
-        await Console.ConfirmAsync("Cancel queued entry", $"Cancel queued entry #{blocked.Id}?");
+        await Console.ConfirmAsync(
+            "Cancel queued entry",
+            string.Create(CultureInfo.InvariantCulture, $"Cancel queued entry #{blocked.Id}?")
+        );
         await sent;
 
         await Assertions
-            .Expect(Console.Toast($"Entry #{blocked.Id} cancelled."))
+            .Expect(
+                Console.Toast(
+                    string.Create(CultureInfo.InvariantCulture, $"Entry #{blocked.Id} cancelled.")
+                )
+            )
             .ToBeVisibleAsync(new() { Timeout = Render });
         // A cancelled entry can no longer be selected; its row is found by its id's link.
         await Assertions
-            .Expect(Console.RowLinked($"#{blocked.Id}"))
+            .Expect(
+                Console.RowLinked(string.Create(CultureInfo.InvariantCulture, $"#{blocked.Id}"))
+            )
             .ToContainTextAsync("Cancelled", new() { Timeout = Render });
         (await StatusOf(blocked.Id)).Should().Be(WorkQueueStatus.Cancelled);
     }
@@ -65,7 +75,7 @@ public class QueueBrowserTests : ConsoleTest
             .BeEquivalentTo([first.Id, second.Id]);
 
         await Assertions
-            .Expect(Console.RowLinked($"#{first.Id}"))
+            .Expect(Console.RowLinked(string.Create(CultureInfo.InvariantCulture, $"#{first.Id}")))
             .ToContainTextAsync("Cancelled", new() { Timeout = Render });
         (await StatusOf(first.Id)).Should().Be(WorkQueueStatus.Cancelled);
         (await StatusOf(second.Id)).Should().Be(WorkQueueStatus.Cancelled);
@@ -92,7 +102,10 @@ public class QueueBrowserTests : ConsoleTest
 
         var sent = Console.SendsAsync("CancelWorkQueueEntry");
         await Console.Button("Cancel entry").ClickAsync();
-        await Console.ConfirmAsync("Cancel queued entry", $"Cancel queued entry #{blocked.Id}?");
+        await Console.ConfirmAsync(
+            "Cancel queued entry",
+            string.Create(CultureInfo.InvariantCulture, $"Cancel queued entry #{blocked.Id}?")
+        );
         await sent;
 
         await Assertions
@@ -123,9 +136,7 @@ public class QueueBrowserTests : ConsoleTest
             .ClickAsync();
         await sent;
 
-        await Assertions
-            .Expect(Page)
-            .ToHaveURLAsync(new Regex(@"/runs/queued/\d+$"), new() { Timeout = Render });
+        await Assertions.Expect(Page).ToHaveURLAsync(QueuedRunUrl, new() { Timeout = Render });
         var id = long.Parse(
             Page.Url[(Page.Url.LastIndexOf('/') + 1)..],
             System.Globalization.CultureInfo.InvariantCulture
@@ -164,7 +175,7 @@ public class QueueBrowserTests : ConsoleTest
         await Assertions
             .Expect(dialog.GetByRole(AriaRole.Alert))
             .ToBeVisibleAsync(new() { Timeout = Render });
-        await Assertions.Expect(Page).ToHaveURLAsync(new Regex("/runs/queued$"));
+        await Assertions.Expect(Page).ToHaveURLAsync(QueueUrl);
         (await EntriesOf<IImportFeedTrain>()).Should().Be(before, "nothing was queued");
     }
 
@@ -177,4 +188,10 @@ public class QueueBrowserTests : ConsoleTest
         Host.QueryAsync(dc =>
             dc.WorkQueues.AsNoTracking().CountAsync(w => w.TrainName == typeof(TTrain).FullName)
         );
+
+    [GeneratedRegex("/runs/queued$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex QueueUrl { get; }
+
+    [GeneratedRegex(@"/runs/queued/\d+$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex QueuedRunUrl { get; }
 }

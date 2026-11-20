@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
@@ -14,7 +15,7 @@ namespace Trax.Samples.ApiDashboard.Browser.Tests;
 /// operation's page, which follows it until it finishes (Trax.Api/docs/adr/0045).
 /// </summary>
 [TestFixture]
-public class BulkOperationBrowserTests : ConsoleTest
+public partial class BulkOperationBrowserTests : ConsoleTest
 {
     private static readonly float Render = BrowserTimeouts.Render.Ms();
 
@@ -73,12 +74,7 @@ public class BulkOperationBrowserTests : ConsoleTest
 
         var operation = new BulkOperationPage(Console);
         await Assertions.Expect(operation.Heading).ToBeVisibleAsync(new() { Timeout = Render });
-        await Assertions
-            .Expect(Page)
-            .ToHaveURLAsync(
-                new Regex("/system/operations/[0-9a-f-]{36}$"),
-                new() { Timeout = Render }
-            );
+        await Assertions.Expect(Page).ToHaveURLAsync(OperationUrl, new() { Timeout = Render });
         // The page reads the operation again while it runs; these hold once it has finished.
         await Assertions
             .Expect(Page.GetByText("Finished", new() { Exact = true }))
@@ -93,13 +89,28 @@ public class BulkOperationBrowserTests : ConsoleTest
             }
         )
             await Assertions
-                .Expect(operation.Count(label).GetByText($"{count}", new() { Exact = true }))
+                .Expect(
+                    operation
+                        .Count(label)
+                        .GetByText(
+                            string.Create(CultureInfo.InvariantCulture, $"{count}"),
+                            new() { Exact = true }
+                        )
+                )
                 .ToBeVisibleAsync(new() { Timeout = Render });
         await Assertions.Expect(operation.Filter).ToContainTextAsync(train);
         await Assertions.Expect(operation.Filter).ToContainTextAsync("In progress");
         // The actor is the caller's principal id, {scheme}:{id}.
         await Assertions
-            .Expect(Page.GetByText(new Regex($"^[\\w-]+:{Caller.Operator.Id}$")))
+            .Expect(
+                Page.GetByText(
+                    new Regex(
+                        $"^[\\w-]+:{Caller.Operator.Id}$",
+                        RegexOptions.None,
+                        TimeSpan.FromSeconds(1)
+                    )
+                )
+            )
             .ToBeVisibleAsync();
 
         var ids = held.Select(r => r.Id).ToList();
@@ -141,4 +152,11 @@ public class BulkOperationBrowserTests : ConsoleTest
                     && (m.TrainState == TrainState.InProgress || m.TrainState == TrainState.Pending)
                 )
         );
+
+    [GeneratedRegex(
+        "/system/operations/[0-9a-f-]{36}$",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex OperationUrl { get; }
 }

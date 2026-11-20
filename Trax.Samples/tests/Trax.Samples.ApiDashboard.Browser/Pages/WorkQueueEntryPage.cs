@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Playwright;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 
@@ -10,5 +11,12 @@ namespace Trax.Samples.ApiDashboard.Browser.Pages;
 public sealed class WorkQueueEntryPage(ConsolePage console)
 {
     public ILocator WaitingOn(long entry) =>
-        console.Page.GetByRole(AriaRole.Link, new() { Name = $"Entry {entry}", Exact = true });
+        console.Page.GetByRole(
+            AriaRole.Link,
+            new()
+            {
+                Name = string.Create(CultureInfo.InvariantCulture, $"Entry {entry}"),
+                Exact = true,
+            }
+        );
 }

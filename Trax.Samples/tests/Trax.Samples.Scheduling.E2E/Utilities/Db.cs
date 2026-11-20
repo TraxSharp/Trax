@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Services.DataContext;
@@ -107,9 +108,18 @@ public sealed class Db(IServiceProvider services)
         {
             var all = await Runs(manifestId, afterId).ConfigureAwait(false);
             Assert.Fail(
-                $"Expected {count} {state} run(s) of manifest {manifestId} after metadata {afterId} "
-                    + $"within {timeout.TotalSeconds}s; saw "
-                    + $"[{string.Join(", ", all.Select(r => $"{r.Id}:{r.TrainState}"))}]."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Expected {count} {state} run(s) of manifest {manifestId} after metadata {afterId} "
+                )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"within {timeout.TotalSeconds}s; saw "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"[{string.Join(", ", all.Select(r => $"{r.Id}:{r.TrainState}"))}]."
+                    )
             );
         }
 
@@ -170,7 +180,10 @@ public sealed class Db(IServiceProvider services)
         reached
             .Should()
             .BeTrue(
-                $"manifest {manifestId} should have a {status} dead letter after {afterId} within {timeout.TotalSeconds}s"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"manifest {manifestId} should have a {status} dead letter after {afterId} within {timeout.TotalSeconds}s"
+                )
             );
         return deadLetter!;
     }

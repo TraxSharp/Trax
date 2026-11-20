@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Playwright;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 
@@ -8,7 +9,11 @@ namespace Trax.Samples.ApiDashboard.Browser.Pages;
 
 /// <summary>One dead letter: why it was dead-lettered, its manifest, and Requeue and Acknowledge.</summary>
 public sealed class DeadLetterPage(ConsolePage console, long id, string train = "IImportFeedTrain")
-    : AreaPage(console, $"runs/dead-letters/{id}", train)
+    : AreaPage(
+        console,
+        string.Create(CultureInfo.InvariantCulture, $"runs/dead-letters/{id}"),
+        train
+    )
 {
     public ILocator Details => Main;
 }

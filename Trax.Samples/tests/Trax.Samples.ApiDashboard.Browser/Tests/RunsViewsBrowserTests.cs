@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
@@ -34,10 +35,23 @@ public class RunsViewsBrowserTests : ConsoleTest
         var row = await runs.FindAsync(failed.ExternalId, nameof(ISettleClaimTrain));
         await Assertions.Expect(row).ToContainTextAsync("Failed", new() { Timeout = Render });
         await Assertions
-            .Expect(row.GetByRole(AriaRole.Link, new() { Name = $"#{failed.Id}", Exact = true }))
+            .Expect(
+                row.GetByRole(
+                    AriaRole.Link,
+                    new()
+                    {
+                        Name = string.Create(CultureInfo.InvariantCulture, $"#{failed.Id}"),
+                        Exact = true,
+                    }
+                )
+            )
             .ToHaveAttributeAsync(
                 "href",
-                new System.Text.RegularExpressions.Regex($"/runs/{failed.Id}$")
+                new System.Text.RegularExpressions.Regex(
+                    string.Create(CultureInfo.InvariantCulture, $"/runs/{failed.Id}$"),
+                    System.Text.RegularExpressions.RegexOptions.None,
+                    TimeSpan.FromSeconds(1)
+                )
             );
 
         await RunViews.Tab(Console, "Queued").ClickAsync();
@@ -87,7 +101,11 @@ public class RunsViewsBrowserTests : ConsoleTest
         await Assertions
             .Expect(Page)
             .ToHaveURLAsync(
-                new System.Text.RegularExpressions.Regex($"/runs/queued/{holder}$"),
+                new System.Text.RegularExpressions.Regex(
+                    string.Create(CultureInfo.InvariantCulture, $"/runs/queued/{holder}$"),
+                    System.Text.RegularExpressions.RegexOptions.None,
+                    TimeSpan.FromSeconds(1)
+                ),
                 new() { Timeout = Render }
             );
     }

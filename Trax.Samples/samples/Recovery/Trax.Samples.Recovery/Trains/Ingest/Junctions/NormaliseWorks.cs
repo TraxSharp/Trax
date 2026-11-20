@@ -74,7 +74,7 @@ public partial class NormaliseWorks(DemoPace pace)
             sourceId,
             Doi(item.GetProperty("DOI").GetString()),
             item.GetProperty("title").EnumerateArray().First().GetString() ?? "",
-            JatsTag().Replace(item.GetProperty("abstract").GetString() ?? "", ""),
+            JatsTag.Replace(item.GetProperty("abstract").GetString() ?? "", ""),
             item.GetProperty("issued").GetProperty("date-parts")[0][0].GetInt32(),
             item.GetProperty("author")
                 .EnumerateArray()
@@ -99,9 +99,9 @@ public partial class NormaliseWorks(DemoPace pace)
         List<string> references
     )
     {
-        title = Whitespace().Replace(title, " ").Trim();
-        @abstract = Whitespace().Replace(@abstract, " ").Trim();
-        authors = authors.Select(a => Whitespace().Replace(a, " ").Trim()).ToList();
+        title = Whitespace.Replace(title, " ").Trim();
+        @abstract = Whitespace.Replace(@abstract, " ").Trim();
+        authors = authors.Select(a => Whitespace.Replace(a, " ").Trim()).ToList();
         references = references.Order(StringComparer.Ordinal).ToList();
 
         var content = string.Join(
@@ -124,14 +124,18 @@ public partial class NormaliseWorks(DemoPace pace)
     private static string? Doi(string? raw) =>
         string.IsNullOrWhiteSpace(raw)
             ? null
-            : DoiResolver().Replace(raw.Trim(), "").ToLowerInvariant();
+            : DoiResolver.Replace(raw.Trim(), "").ToLowerInvariant();
 
-    [GeneratedRegex(@"\s+")]
-    private static partial Regex Whitespace();
+    [GeneratedRegex(@"\s+", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Whitespace { get; }
 
-    [GeneratedRegex(@"</?jats:[^>]*>")]
-    private static partial Regex JatsTag();
+    [GeneratedRegex(@"</?jats:[^>]*>", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex JatsTag { get; }
 
-    [GeneratedRegex(@"^https?://(dx\.)?doi\.org/", RegexOptions.IgnoreCase)]
-    private static partial Regex DoiResolver();
+    [GeneratedRegex(
+        @"^https?://(dx\.)?doi\.org/",
+        RegexOptions.IgnoreCase | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex DoiResolver { get; }
 }

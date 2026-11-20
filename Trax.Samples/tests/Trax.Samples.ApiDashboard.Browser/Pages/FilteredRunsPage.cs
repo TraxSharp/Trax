@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Playwright;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 
@@ -14,6 +15,10 @@ public sealed class FilteredRunsPage(ConsolePage console, string query)
     public ILocator CancelAllMatching(int count) =>
         Page.GetByRole(
             AriaRole.Button,
-            new() { Name = $"Cancel all {count} matching", Exact = true }
+            new()
+            {
+                Name = string.Create(CultureInfo.InvariantCulture, $"Cancel all {count} matching"),
+                Exact = true,
+            }
         );
 }

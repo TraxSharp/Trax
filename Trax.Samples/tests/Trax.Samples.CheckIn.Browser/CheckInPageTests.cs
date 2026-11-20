@@ -11,7 +11,7 @@ namespace Trax.Samples.CheckIn.Browser;
 /// feature that says where its booking is. No page carries a credential it was not given at sign-in.
 /// </summary>
 [TestFixture]
-public class CheckInPageTests
+public partial class CheckInPageTests
 {
     private static readonly LocatorAssertionsToContainTextOptions Soon = new() { Timeout = 15_000 };
 
@@ -60,7 +60,7 @@ public class CheckInPageTests
             .ClickAsync();
         await Assertions
             .Expect(ada.GetByRole(AriaRole.Region, new() { Name = "Your bookings" }))
-            .ToContainTextAsync(new Regex("seat 14C.*Checked in"), Soon);
+            .ToContainTextAsync(SeatCheckedIn, Soon);
         await ExpectSourceAsync(ada, "checking-in.feature", "Ada's booking is checked in");
 
         // A passport number ending in 0 has expired: the train turns it down.
@@ -138,4 +138,7 @@ public class CheckInPageTests
         }
         return page;
     }
+
+    [GeneratedRegex("seat 14C.*Checked in", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex SeatCheckedIn { get; }
 }

@@ -13,42 +13,13 @@ namespace Trax.Samples.Tests.Meta.Tests;
 /// alternatives.</para>
 /// </summary>
 [TestFixture]
-public class SamplePortsTests
+public partial class SamplePortsTests
 {
     /// <summary>
     /// Vite's dev server, where the React clients run; the hosts name it as an allowed origin.
     /// It is the browser's port, not a sample host's.
     /// </summary>
     private const int ViteDevServer = 5173;
-
-    private static readonly Regex LocalUrl = new(
-        @"https?://(localhost|127\.0\.0\.1):(?<port>\d+)",
-        RegexOptions.Compiled
-    );
-
-    /// <summary>
-    /// A port held in a variable and spliced into the URL later, as in <c>var port = 5099;</c>.
-    /// Lower case only, so a connection string's <c>Port=5432</c> is not read as one.
-    /// </summary>
-    private static readonly Regex PortVariable = new(
-        @"\bport\s*=\s*(?<port>\d{4,5})\b",
-        RegexOptions.Compiled
-    );
-
-    /// <summary>
-    /// A Kestrel endpoint in <c>appsettings*.json</c>, <c>"Url": "http://localhost:5282"</c>: what the host listens
-    /// on, and not an address it calls (a model's endpoint is a localhost URL too).
-    /// </summary>
-    private static readonly Regex KestrelUrl = new(
-        @"""Url""\s*:\s*""https?://(localhost|127\.0\.0\.1|0\.0\.0\.0|\*|\+):(?<port>\d+)",
-        RegexOptions.Compiled
-    );
-
-    /// <summary>A Vite config's or a script's <c>port: 5281</c>.</summary>
-    private static readonly Regex PortProperty = new(
-        @"\bport:\s*(?<port>\d{4,5})\b",
-        RegexOptions.Compiled
-    );
 
     private static bool InRange(int port) => port is (>= 5200 and <= 5299) or (>= 5310 and <= 5319);
 
@@ -123,4 +94,41 @@ public class SamplePortsTests
                     + string.Join("\n  ", offenders.Distinct(StringComparer.Ordinal))
             );
     }
+
+    /// <summary>A Vite config's or a script's <c>port: 5281</c>.</summary>
+    [GeneratedRegex(
+        @"\bport:\s*(?<port>\d{4,5})\b",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex PortProperty { get; }
+
+    /// <summary>
+    /// A Kestrel endpoint in <c>appsettings*.json</c>, <c>"Url": "http://localhost:5282"</c>: what the host listens
+    /// on, and not an address it calls (a model's endpoint is a localhost URL too).
+    /// </summary>
+    [GeneratedRegex(
+        @"""Url""\s*:\s*""https?://(localhost|127\.0\.0\.1|0\.0\.0\.0|\*|\+):(?<port>\d+)",
+        RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex KestrelUrl { get; }
+
+    /// <summary>
+    /// A port held in a variable and spliced into the URL later, as in <c>var port = 5099;</c>.
+    /// Lower case only, so a connection string's <c>Port=5432</c> is not read as one.
+    /// </summary>
+    [GeneratedRegex(
+        @"\bport\s*=\s*(?<port>\d{4,5})\b",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex PortVariable { get; }
+
+    [GeneratedRegex(
+        @"https?://(localhost|127\.0\.0\.1):(?<port>\d+)",
+        RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex LocalUrl { get; }
 }

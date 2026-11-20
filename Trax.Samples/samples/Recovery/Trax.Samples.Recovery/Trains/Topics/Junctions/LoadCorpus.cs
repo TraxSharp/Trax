@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Samples.Recovery.Corpus;
@@ -12,7 +13,10 @@ public class LoadCorpus(ITopicMapDbContext db, DemoPace pace)
     {
         if (input.FromYear > input.ToYear)
             throw new ArgumentException(
-                $"The year range {input.FromYear} to {input.ToYear} is empty.",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The year range {input.FromYear} to {input.ToYear} is empty."
+                ),
                 nameof(input)
             );
 
@@ -30,8 +34,10 @@ public class LoadCorpus(ITopicMapDbContext db, DemoPace pace)
 
         if (works.Count < 2)
             throw new ArgumentException(
-                $"{string.Join(", ", fields)} from {input.FromYear} to {input.ToYear} holds "
-                    + $"{works.Count} paper(s); a map needs at least two.",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{string.Join(", ", fields)} from {input.FromYear} to {input.ToYear} holds "
+                ) + $"{works.Count} paper(s); a map needs at least two.",
                 nameof(input)
             );
 

@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 using Trax.Samples.ApiDashboard.Browser.Host;
@@ -11,7 +13,7 @@ namespace Trax.Samples.ApiDashboard.Browser.Tests;
 /// state or asking for the stuck ones lists them with what each is waiting for.
 /// </summary>
 [TestFixture]
-public class MachineBrowserTests : ConsoleTest
+public partial class MachineBrowserTests : ConsoleTest
 {
     private static readonly float Render = BrowserTimeouts.Render.Ms();
 
@@ -60,9 +62,7 @@ public class MachineBrowserTests : ConsoleTest
             .ToBeVisibleAsync(new() { Timeout = Render });
 
         await page.State(pending).ClickAsync();
-        await Assertions
-            .Expect(Page)
-            .ToHaveURLAsync(new System.Text.RegularExpressions.Regex("[?&]state=Pending"));
+        await Assertions.Expect(Page).ToHaveURLAsync(PendingFilter);
         var row = page.Instance(overdue.Id);
         await Assertions.Expect(row).ToContainTextAsync("Overdue", new() { Timeout = Render });
         await Assertions.Expect(row).ToContainTextAsync("Stuck", new() { Timeout = Render });
@@ -83,9 +83,7 @@ public class MachineBrowserTests : ConsoleTest
         // The box follows the URL, so it is checked once the filter lands there.
         await page.StuckOnly.ClickAsync();
         await Assertions.Expect(page.StuckOnly).ToBeCheckedAsync(new() { Timeout = Render });
-        await Assertions
-            .Expect(Page)
-            .ToHaveURLAsync(new System.Text.RegularExpressions.Regex("[?&]stuck=true"));
+        await Assertions.Expect(Page).ToHaveURLAsync(StuckFilter);
 
         var row = page.Instance(waiting.Id);
         await Assertions.Expect(row).ToContainTextAsync("Stuck", new() { Timeout = Render });
@@ -94,12 +92,23 @@ public class MachineBrowserTests : ConsoleTest
             .Expect(
                 row.GetByRole(
                     AriaRole.Link,
-                    new() { Name = $"Queue entry {entry.Id}", Exact = true }
+                    new()
+                    {
+                        Name = string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"Queue entry {entry.Id}"
+                        ),
+                        Exact = true,
+                    }
                 )
             )
             .ToHaveAttributeAsync(
                 "href",
-                new System.Text.RegularExpressions.Regex($"/runs/queued/{entry.Id}$")
+                new System.Text.RegularExpressions.Regex(
+                    string.Create(CultureInfo.InvariantCulture, $"/runs/queued/{entry.Id}$"),
+                    System.Text.RegularExpressions.RegexOptions.None,
+                    TimeSpan.FromSeconds(1)
+                )
             );
 
         // Its state is drawn with the train it runs, linked to the train's page.
@@ -118,7 +127,9 @@ public class MachineBrowserTests : ConsoleTest
             .ToHaveAttributeAsync(
                 "href",
                 new System.Text.RegularExpressions.Regex(
-                    $"/trains/{typeof(IRelayParcelTrain).FullName}$"
+                    $"/trains/{typeof(IRelayParcelTrain).FullName}$",
+                    System.Text.RegularExpressions.RegexOptions.None,
+                    TimeSpan.FromSeconds(1)
                 )
             );
     }
@@ -133,10 +144,7 @@ public class MachineBrowserTests : ConsoleTest
         await page.OpenAsync(Caller.Operator);
         await Assertions
             .Expect(page.Lit)
-            .ToHaveTextAsync(
-                new System.Text.RegularExpressions.Regex($"^{nameof(ReminderState.Pending)}"),
-                new() { Timeout = Render }
-            );
+            .ToHaveTextAsync(StartsPending, new() { Timeout = Render });
         await Assertions
             .Expect(page.Commands)
             .ToContainTextAsync(nameof(ReminderTrigger.Dismiss), new() { Timeout = Render });
@@ -164,7 +172,14 @@ public class MachineBrowserTests : ConsoleTest
             .Expect(
                 on.GetByRole(
                     AriaRole.Link,
-                    new() { Name = $"Queue entry {entry.Id}", Exact = true }
+                    new()
+                    {
+                        Name = string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"Queue entry {entry.Id}"
+                        ),
+                        Exact = true,
+                    }
                 )
             )
             .ToBeVisibleAsync(new() { Timeout = Render });
@@ -173,10 +188,7 @@ public class MachineBrowserTests : ConsoleTest
             .ToContainTextAsync("the run it waits on ended", new() { Timeout = Render });
         await Assertions
             .Expect(page.Lit)
-            .ToHaveTextAsync(
-                new System.Text.RegularExpressions.Regex($"^{nameof(RelayState.Relaying)}"),
-                new() { Timeout = Render }
-            );
+            .ToHaveTextAsync(StartsRelaying, new() { Timeout = Render });
     }
 
     [Test]
@@ -203,12 +215,7 @@ public class MachineBrowserTests : ConsoleTest
             };
 
         await Console.OpenAsync(page.Route, Caller.Operator);
-        await Assertions
-            .Expect(page.Lit)
-            .ToHaveTextAsync(
-                new System.Text.RegularExpressions.Regex($"^{nameof(GateState.Closed)}"),
-                new() { Timeout = Render }
-            );
+        await Assertions.Expect(page.Lit).ToHaveTextAsync(StartsClosed, new() { Timeout = Render });
         await subscribed.Task.WaitAsync(BrowserTimeouts.Render);
         await Assertions
             .Expect(page.Commands)
@@ -216,12 +223,7 @@ public class MachineBrowserTests : ConsoleTest
 
         await Seed.OpenGateAsync(key);
 
-        await Assertions
-            .Expect(page.Lit)
-            .ToHaveTextAsync(
-                new System.Text.RegularExpressions.Regex($"^{nameof(GateState.Open)}"),
-                new() { Timeout = Render }
-            );
+        await Assertions.Expect(page.Lit).ToHaveTextAsync(StartsOpen, new() { Timeout = Render });
         await Assertions
             .Expect(page.Commands)
             .ToContainTextAsync(nameof(GateTrigger.Close), new() { Timeout = Render });
@@ -238,10 +240,7 @@ public class MachineBrowserTests : ConsoleTest
         await page.BoardLink.ClickAsync(new() { Timeout = Render });
         await Assertions
             .Expect(Page)
-            .ToHaveURLAsync(
-                new System.Text.RegularExpressions.Regex($"/board/{FeatureShelf.Id}$"),
-                new() { Timeout = Render }
-            );
+            .ToHaveURLAsync(FeatureShelfBoardUrl, new() { Timeout = Render });
         await page.Sticky("Shelve").ClickAsync(new() { Timeout = Render });
 
         var scenarios = Page.GetByLabel("Scenarios behind it");
@@ -260,10 +259,7 @@ public class MachineBrowserTests : ConsoleTest
 
         await Assertions
             .Expect(Page)
-            .ToHaveURLAsync(
-                new System.Text.RegularExpressions.Regex($"/board/{FeatureShelf.Id}$"),
-                new() { Timeout = Render }
-            );
+            .ToHaveURLAsync(FeatureShelfBoardUrl, new() { Timeout = Render });
         await Assertions
             .Expect(new MachinePage(Console, FeatureShelf.Id).Board)
             .ToBeVisibleAsync(new() { Timeout = Render });
@@ -297,4 +293,45 @@ public class MachineBrowserTests : ConsoleTest
         await Assertions.Expect(page.Diagram).ToBeVisibleAsync(new() { Timeout = Render });
         await Assertions.Expect(page.BoardLink).ToHaveCountAsync(0);
     }
+
+    [GeneratedRegex(
+        $"/board/{FeatureShelf.Id}$",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex FeatureShelfBoardUrl { get; }
+
+    [GeneratedRegex(
+        $"^{nameof(GateState.Open)}",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex StartsOpen { get; }
+
+    [GeneratedRegex(
+        $"^{nameof(GateState.Closed)}",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex StartsClosed { get; }
+
+    [GeneratedRegex(
+        $"^{nameof(RelayState.Relaying)}",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex StartsRelaying { get; }
+
+    [GeneratedRegex(
+        $"^{nameof(ReminderState.Pending)}",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex StartsPending { get; }
+
+    [GeneratedRegex("[?&]stuck=true", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex StuckFilter { get; }
+
+    [GeneratedRegex("[?&]state=Pending", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex PendingFilter { get; }
 }

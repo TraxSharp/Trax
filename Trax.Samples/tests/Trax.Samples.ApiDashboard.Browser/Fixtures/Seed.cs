@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
@@ -114,7 +115,10 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
                     () =>
                         host.QueryAsync(dc => dc.Checkpoints.AnyAsync(c => c.MetadataId == run.Id)),
                     BrowserTimeouts.Server,
-                    $"run {run.Id} stores its checkpoint"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"run {run.Id} stores its checkpoint"
+                    )
                 )
                 .ConfigureAwait(false);
             // Steps are stored by a background writer, after the run has ended.
@@ -128,7 +132,10 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
                             )
                         ),
                     BrowserTimeouts.Server,
-                    $"run {run.Id} records its failed step"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"run {run.Id} records its failed step"
+                    )
                 )
                 .ConfigureAwait(false);
             return run;

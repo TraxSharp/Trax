@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
@@ -269,7 +270,16 @@ public static partial class IndexFixture
             ["reference"] = new JsonArray(
                 references
                     .Select(
-                        (r, i) => (JsonNode)new JsonObject { ["key"] = $"ref{i + 1}", ["DOI"] = r }
+                        (r, i) =>
+                            (JsonNode)
+                                new JsonObject
+                                {
+                                    ["key"] = string.Create(
+                                        CultureInfo.InvariantCulture,
+                                        $"ref{i + 1}"
+                                    ),
+                                    ["DOI"] = r,
+                                }
                     )
                     .ToArray()
             ),
@@ -291,7 +301,7 @@ public static partial class IndexFixture
     {
         var index = new JsonObject();
         var position = 0;
-        foreach (var word in Whitespace().Split(text.Trim()))
+        foreach (var word in Whitespace.Split(text.Trim()))
         {
             if (index[word] is not JsonArray positions)
                 index[word] = positions = [];
@@ -300,6 +310,6 @@ public static partial class IndexFixture
         return index;
     }
 
-    [GeneratedRegex(@"\s+")]
-    private static partial Regex Whitespace();
+    [GeneratedRegex(@"\s+", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Whitespace { get; }
 }

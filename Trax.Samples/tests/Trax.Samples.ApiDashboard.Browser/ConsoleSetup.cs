@@ -57,7 +57,7 @@ public partial class ConsoleSetup
     {
         using var http = new HttpClient();
         var html = await http.GetStringAsync(host.Console()).ConfigureAwait(false);
-        var content = ConfigMeta().Match(html).Groups["content"].Value;
+        var content = ConfigMeta.Match(html).Groups["content"].Value;
         using var config = JsonDocument.Parse(WebUtility.HtmlDecode(content));
         return config.RootElement.TryGetProperty("documents", out var documents)
             ? documents
@@ -66,6 +66,10 @@ public partial class ConsoleSetup
             : new Dictionary<string, string>(StringComparer.Ordinal);
     }
 
-    [GeneratedRegex("<meta name=\"trax-dashboard-config\" content=\"(?<content>[^\"]*)\"")]
-    private static partial Regex ConfigMeta();
+    [GeneratedRegex(
+        "<meta name=\"trax-dashboard-config\" content=\"(?<content>[^\"]*)\"",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ConfigMeta { get; }
 }

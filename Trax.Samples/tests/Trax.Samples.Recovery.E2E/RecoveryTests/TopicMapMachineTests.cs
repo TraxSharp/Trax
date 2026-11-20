@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -372,7 +373,10 @@ public class TopicMapMachineTests : RecoveryTestFixture
         var refused = new List<(bool Success, string? Message)>
         {
             await OperationAsync(
-                $"mutation {{ operations {{ workQueue {{ cancelWorkQueueEntry(id: {entry.Id}) {{ success message }} }} }} }}",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"mutation {{ operations {{ workQueue {{ cancelWorkQueueEntry(id: {entry.Id}) {{ success message }} }} }} }}"
+                ),
                 "workQueue",
                 "cancelWorkQueueEntry"
             ),
@@ -393,12 +397,18 @@ public class TopicMapMachineTests : RecoveryTestFixture
             .BeTrue("the build's entry is dispatched");
         refused.Add(
             await OperationAsync(
-                $"mutation {{ operations {{ cancelExecution(id: {run}) {{ success message }} }} }}",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"mutation {{ operations {{ cancelExecution(id: {run}) {{ success message }} }} }}"
+                ),
                 "cancelExecution"
             )
         );
         var bulk = await OperationAsync(
-            $"mutation {{ operations {{ cancelExecutions(ids: [{run}, 999999999]) {{ success count message }} }} }}",
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"mutation {{ operations {{ cancelExecutions(ids: [{run}, 999999999]) {{ success count message }} }} }}"
+            ),
             "cancelExecutions"
         );
 

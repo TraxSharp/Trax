@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 
@@ -7,7 +9,7 @@ using Trax.Samples.ApiDashboard.Browser.Fixtures;
 namespace Trax.Samples.ApiDashboard.Browser.Pages;
 
 /// <summary>One train's page: its chain, its recent runs by step, what starts it, and Run and Queue.</summary>
-public sealed class TrainPage(ConsolePage console, Type train)
+public sealed partial class TrainPage(ConsolePage console, Type train)
     : AreaPage(console, $"trains/{train.FullName}", ShortName(train))
 {
     public ILocator Chain =>
@@ -19,10 +21,7 @@ public sealed class TrainPage(ConsolePage console, Type train)
     public ILocator Step(string name) => Chain.GetByText(name, new() { Exact = true });
 
     /// <summary>The badge on a step that counts the range's failed runs that stopped there.</summary>
-    public ILocator FailureCount =>
-        Chain.GetByLabel(
-            new System.Text.RegularExpressions.Regex(@"^Failed runs in the last 24 hours: \d+$")
-        );
+    public ILocator FailureCount => Chain.GetByLabel(FailedRunsLastDay);
 
     public ILocator Grid =>
         Page.GetByRole(AriaRole.Table, new() { Name = "Recent runs by step", Exact = true });
@@ -31,7 +30,11 @@ public sealed class TrainPage(ConsolePage console, Type train)
     public ILocator Cell(long run, string step, string state) =>
         Grid.GetByRole(
             AriaRole.Link,
-            new() { Name = $"Run #{run}, {step}: {state}", Exact = true }
+            new()
+            {
+                Name = string.Create(CultureInfo.InvariantCulture, $"Run #{run}, {step}: {state}"),
+                Exact = true,
+            }
         );
 
     public ILocator NeverRan => Page.GetByText("This train has not run yet.");
@@ -42,4 +45,11 @@ public sealed class TrainPage(ConsolePage console, Type train)
         Page.GetByRole(AriaRole.Region, new() { Name = "Started by machines" });
 
     private static string ShortName(Type train) => train.Name;
+
+    [GeneratedRegex(
+        @"^Failed runs in the last 24 hours: \d+$",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex FailedRunsLastDay { get; }
 }

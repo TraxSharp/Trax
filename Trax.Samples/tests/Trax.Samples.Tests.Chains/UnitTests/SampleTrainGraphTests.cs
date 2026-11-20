@@ -27,14 +27,9 @@ namespace Trax.Samples.Tests.Chains.UnitTests;
 /// left out: they are scaffolded into a consumer's repository, not run here.</para>
 /// </summary>
 [TestFixture]
-public class SampleTrainGraphTests
+public partial class SampleTrainGraphTests
 {
     private const string Solution = "Trax.Samples.slnx";
-
-    private static readonly Regex DefinesATrain = new(
-        @":\s*(ServiceTrain|Train)<",
-        RegexOptions.Compiled
-    );
 
     private static readonly Lazy<string> SamplesRoot = new(FindSamplesRoot);
 
@@ -255,4 +250,11 @@ public class SampleTrainGraphTests
             $"No {Solution} found walking up from '{AppContext.BaseDirectory}'."
         );
     }
+
+    [GeneratedRegex(
+        @":\s*(ServiceTrain|Train)<",
+        RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex DefinesATrain { get; }
 }

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 
 namespace Trax.Samples.Recovery.Records;
 
@@ -55,7 +56,10 @@ public sealed class CaseFiles
         )
         {
             _orders[runId] = order with { PriorRefunds = order.PriorRefunds + 1 };
-            return $"Order {order.OrderId} now shows {order.PriorRefunds + 1} earlier refund(s).";
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"Order {order.OrderId} now shows {order.PriorRefunds + 1} earlier refund(s)."
+            );
         }
 
         throw new InvalidOperationException($"Run {runId} has no case file.");

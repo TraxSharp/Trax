@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -105,7 +106,10 @@ public class GraphQLWebSocketClient : IAsyncDisposable
         }
 
         throw new TimeoutException(
-            $"No subscription event received within {effectiveTimeout.TotalSeconds}s"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"No subscription event received within {effectiveTimeout.TotalSeconds}s"
+            )
         );
     }
 
@@ -162,7 +166,10 @@ public class GraphQLWebSocketClient : IAsyncDisposable
         catch (OperationCanceledException)
         {
             throw new TimeoutException(
-                $"No WebSocket message received within {timeout.TotalSeconds}s"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"No WebSocket message received within {timeout.TotalSeconds}s"
+                )
             );
         }
     }

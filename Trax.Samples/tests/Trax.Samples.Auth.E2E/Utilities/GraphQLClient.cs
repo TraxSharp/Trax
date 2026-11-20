@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -29,7 +30,10 @@ public class GraphQLClient(HttpClient httpClient)
 
         if (string.IsNullOrWhiteSpace(body))
             throw new InvalidOperationException(
-                $"Empty response body from the GraphQL endpoint (HTTP {(int)response.StatusCode})."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Empty response body from the GraphQL endpoint (HTTP {(int)response.StatusCode})."
+                )
             );
 
         return new GraphQLResponse(

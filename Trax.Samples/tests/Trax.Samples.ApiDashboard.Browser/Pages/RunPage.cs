@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Playwright;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 
@@ -11,7 +12,7 @@ namespace Trax.Samples.ApiDashboard.Browser.Pages;
 /// The heading is the train's short name.
 /// </summary>
 public sealed class RunPage(ConsolePage console, long id, string train)
-    : AreaPage(console, $"runs/{id}", train)
+    : AreaPage(console, string.Create(CultureInfo.InvariantCulture, $"runs/{id}"), train)
 {
     public ILocator Graph => Page.GetByRole(AriaRole.Region, new() { Name = "Run graph" });
 
@@ -24,7 +25,9 @@ public sealed class RunPage(ConsolePage console, long id, string train)
                 new()
                 {
                     NameRegex = new System.Text.RegularExpressions.Regex(
-                        "^" + System.Text.RegularExpressions.Regex.Escape(step) + " "
+                        "^" + System.Text.RegularExpressions.Regex.Escape(step) + " ",
+                        System.Text.RegularExpressions.RegexOptions.None,
+                        TimeSpan.FromSeconds(1)
                     ),
                 }
             );
@@ -43,7 +46,9 @@ public sealed class RunPage(ConsolePage console, long id, string train)
             new()
             {
                 NameRegex = new System.Text.RegularExpressions.Regex(
-                    @"^Step #\d+ " + System.Text.RegularExpressions.Regex.Escape(name) + "$"
+                    @"^Step #\d+ " + System.Text.RegularExpressions.Regex.Escape(name) + "$",
+                    System.Text.RegularExpressions.RegexOptions.None,
+                    TimeSpan.FromSeconds(1)
                 ),
             }
         );

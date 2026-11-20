@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -29,7 +30,7 @@ namespace Trax.Samples.Recovery.Browser.Tests;
     "Trax.Docs/adr/0049-browser-tests-use-playwright-for-dotnet-in-test-projects-only.md"
 )]
 [TestFixture]
-public class TopicMapBrowserTests
+public partial class TopicMapBrowserTests
 {
     private const string Adr = "Trax.Docs/adr/0048";
 
@@ -246,7 +247,10 @@ public class TopicMapBrowserTests
         );
         var instancePage = new Uri(
             BrowserSetup.HostAddress,
-            $"/trax/dashboard/machines/topic-map/user/{draft.Id}?row={draft.RowId}"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"/trax/dashboard/machines/topic-map/user/{draft.Id}?row={draft.RowId}"
+            )
         ).ToString();
         await OpenTheConsoleAsync(console, instancePage);
         var runs = console.GetByRole(AriaRole.Region, new() { Name = "Invoked runs" });
@@ -293,7 +297,7 @@ public class TopicMapBrowserTests
                 "the console lists the same one live run while the map builds, per " + Adr
             )
             .Which.Should()
-            .EndWith($"/runs/{runId}");
+            .EndWith(string.Create(CultureInfo.InvariantCulture, $"/runs/{runId}"));
 
         // Built: the typed get, operations.machineInstance and the console agree on the state, and on there
         // being no live run.
@@ -591,7 +595,11 @@ public class TopicMapBrowserTests
         await answered.ConfigureAwait(false);
         await Expect(page.WizardState)
             .ToHaveTextAsync(
-                new Regex($"^({Regex.Escape(Building)}|{Built})$"),
+                new Regex(
+                    $"^({Regex.Escape(Building)}|{Built})$",
+                    RegexOptions.ExplicitCapture,
+                    TimeSpan.FromSeconds(1)
+                ),
                 new() { Timeout = BrowserTimeouts.Render.Ms() }
             )
             .ConfigureAwait(false);
@@ -764,6 +772,13 @@ public class TopicMapBrowserTests
                 "topic-map.machine.g.ts"
             )
         );
-        return Regex.Match(twin, "irHash = \"(?<hash>[0-9a-f]{64})\"").Groups["hash"].Value;
+        return IrHash.Match(twin).Groups["hash"].Value;
     }
+
+    [GeneratedRegex(
+        "irHash = \"(?<hash>[0-9a-f]{64})\"",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex IrHash { get; }
 }

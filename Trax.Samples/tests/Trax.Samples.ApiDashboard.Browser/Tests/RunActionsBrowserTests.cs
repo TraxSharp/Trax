@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
@@ -12,7 +13,7 @@ namespace Trax.Samples.ApiDashboard.Browser.Tests;
 /// the run a machine instance waits on, and watch a running run's steps arrive on its timeline as they happen.
 /// </summary>
 [TestFixture]
-public class RunActionsBrowserTests : ConsoleTest
+public partial class RunActionsBrowserTests : ConsoleTest
 {
     private static readonly float Render = BrowserTimeouts.Render.Ms();
 
@@ -27,7 +28,10 @@ public class RunActionsBrowserTests : ConsoleTest
 
         var sent = Console.SendsAsync("CancelExecution");
         await page.Action("Cancel").ClickAsync(new() { Timeout = Render });
-        await Console.ConfirmAsync("Cancel run", $"Request cancellation of run #{run.Id}?");
+        await Console.ConfirmAsync(
+            "Cancel run",
+            string.Create(CultureInfo.InvariantCulture, $"Request cancellation of run #{run.Id}?")
+        );
         await sent;
 
         await Assertions
@@ -65,7 +69,7 @@ public class RunActionsBrowserTests : ConsoleTest
             await Wait.UntilAsync(
                 () => CancellationRequested(run.Id),
                 BrowserTimeouts.Server,
-                $"run {run.Id} is asked to cancel"
+                string.Create(CultureInfo.InvariantCulture, $"run {run.Id} is asked to cancel")
             );
     }
 
@@ -80,12 +84,13 @@ public class RunActionsBrowserTests : ConsoleTest
 
         var sent = Console.SendsAsync("RequeueExecution");
         await page.Action("Requeue").ClickAsync(new() { Timeout = Render });
-        await Console.ConfirmAsync("Requeue run", $"Requeue run #{failed.Id}?");
+        await Console.ConfirmAsync(
+            "Requeue run",
+            string.Create(CultureInfo.InvariantCulture, $"Requeue run #{failed.Id}?")
+        );
         await sent;
 
-        await Assertions
-            .Expect(Page)
-            .ToHaveURLAsync(new Regex(@"/runs/queued/\d+$"), new() { Timeout = Render });
+        await Assertions.Expect(Page).ToHaveURLAsync(QueuedRunUrl, new() { Timeout = Render });
         var id = long.Parse(
             Page.Url[(Page.Url.LastIndexOf('/') + 1)..],
             System.Globalization.CultureInfo.InvariantCulture
@@ -116,17 +121,24 @@ public class RunActionsBrowserTests : ConsoleTest
         var (run, release) = await Seed.HeldRunAsync();
         var page = new RunPage(Console, run.Id, nameof(IReconcileAccountTrain));
         await page.OpenAsync(Caller.Operator);
-        await Checks.SubscribedAsync("OnJunctionEvent", $"\"metadataId\":{run.Id}");
+        await Checks.SubscribedAsync(
+            "OnJunctionEvent",
+            string.Create(CultureInfo.InvariantCulture, $"\"metadataId\":{run.Id}")
+        );
         await Checks.ListeningAsync(
             () => Seed.ProbeJunctionEventAsync<IReconcileAccountTrain>(run),
             "onJunctionEvent",
-            $"\"metadataId\":{run.Id}",
+            string.Create(CultureInfo.InvariantCulture, $"\"metadataId\":{run.Id}"),
             $"\"{Fixtures.Seed.ProbeJunction}\""
         );
 
         release();
 
-        await Checks.PushedAsync("onJunctionEvent", $"\"metadataId\":{run.Id}", "\"COMPLETED\"");
+        await Checks.PushedAsync(
+            "onJunctionEvent",
+            string.Create(CultureInfo.InvariantCulture, $"\"metadataId\":{run.Id}"),
+            "\"COMPLETED\""
+        );
         await Assertions
             .Expect(page.TimelineStep(nameof(WaitForLedger)))
             .ToBeVisibleAsync(new() { Timeout = Render });
@@ -145,10 +157,7 @@ public class RunActionsBrowserTests : ConsoleTest
         await page.OpenAsync(Caller.Operator);
         await Assertions
             .Expect(page.Lit)
-            .ToHaveTextAsync(
-                new Regex($"^{nameof(RelayState.Relaying)}"),
-                new() { Timeout = Render }
-            );
+            .ToHaveTextAsync(StartsRelaying, new() { Timeout = Render });
 
         var sent = Console.SendsAsync("CancelMachineInstance");
         await Console.Button("Cancel").ClickAsync(new() { Timeout = Render });
@@ -169,4 +178,14 @@ public class RunActionsBrowserTests : ConsoleTest
                 .Select(m => m.CancellationRequested)
                 .SingleAsync()
         );
+
+    [GeneratedRegex(
+        $"^{nameof(RelayState.Relaying)}",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex StartsRelaying { get; }
+
+    [GeneratedRegex(@"/runs/queued/\d+$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex QueuedRunUrl { get; }
 }

@@ -13,7 +13,7 @@ namespace Trax.Samples.Recovery.E2E.Factories;
 /// <c>Cancelled</c>; a killed process records nothing, and its runs stay <c>InProgress</c> until a host
 /// that starts afterwards reaps them.
 /// </summary>
-public sealed class RecoveryHostProcess : IAsyncDisposable
+public sealed partial class RecoveryHostProcess : IAsyncDisposable
 {
     public const string DefaultConnectionString =
         "Host=localhost;Port=5432;Database=recovery_restart_e2e_tests;Username=trax;Password=trax123;"
@@ -195,11 +195,6 @@ public sealed class RecoveryHostProcess : IAsyncDisposable
     }
 
     // Kestrel's line once it is bound, e.g. "Now listening on: http://127.0.0.1:61234".
-    private static readonly Regex ListeningOn = new(
-        @"Now listening on: (?<address>http://127\.0\.0\.1:\d+)",
-        RegexOptions.Compiled
-    );
-
     // The host project's own build output, which carries its runtime config and dependencies. The test
     /// <summary>
     /// Runs the host's build output with <c>--trax-export-client &lt;path&gt;</c> in the production configuration
@@ -285,4 +280,11 @@ public sealed class RecoveryHostProcess : IAsyncDisposable
             ? assembly
             : throw new InvalidOperationException($"The host is not built at {assembly}.");
     }
+
+    [GeneratedRegex(
+        @"Now listening on: (?<address>http://127\.0\.0\.1:\d+)",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ListeningOn { get; }
 }

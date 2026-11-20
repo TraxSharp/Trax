@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
@@ -12,7 +14,7 @@ namespace Trax.Samples.ApiDashboard.Browser.Tests;
 /// section saves on its own, the Hosts page reads the heartbeat, and Logs keeps its filters in the URL.
 /// </summary>
 [TestFixture]
-public class SystemBrowserTests : ConsoleTest
+public partial class SystemBrowserTests : ConsoleTest
 {
     private static readonly float Render = BrowserTimeouts.Render.Ms();
 
@@ -80,7 +82,10 @@ public class SystemBrowserTests : ConsoleTest
             var retries = retry.GetByLabel("Default max retries", new() { Exact = true });
             await Assertions
                 .Expect(retries)
-                .ToHaveValueAsync($"{before.DefaultMaxRetries}", new() { Timeout = Render });
+                .ToHaveValueAsync(
+                    string.Create(CultureInfo.InvariantCulture, $"{before.DefaultMaxRetries}"),
+                    new() { Timeout = Render }
+                );
 
             var update = Page.WaitForRequestAsync(
                 r =>
@@ -91,7 +96,9 @@ public class SystemBrowserTests : ConsoleTest
                     ) == true,
                 new() { Timeout = Render }
             );
-            await retries.FillAsync($"{before.DefaultMaxRetries + 1}");
+            await retries.FillAsync(
+                string.Create(CultureInfo.InvariantCulture, $"{before.DefaultMaxRetries + 1}")
+            );
             await scheduler.Button(retry, "Save retry").ClickAsync();
 
             var input = (await update)
@@ -159,9 +166,7 @@ public class SystemBrowserTests : ConsoleTest
             .ToHaveValueAsync("WARNING", new() { Timeout = Render });
 
         await logs.MinimumLevel.SelectOptionAsync(new SelectOptionValue { Label = "Error" });
-        await Assertions
-            .Expect(Page)
-            .ToHaveURLAsync(new System.Text.RegularExpressions.Regex("level=ERROR"));
+        await Assertions.Expect(Page).ToHaveURLAsync(ErrorLevelFilter);
     }
 
     [Test]
@@ -195,4 +200,7 @@ public class SystemBrowserTests : ConsoleTest
             result.Success.Should().BeTrue(result.Message);
         }
     }
+
+    [GeneratedRegex("level=ERROR", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex ErrorLevelFilter { get; }
 }

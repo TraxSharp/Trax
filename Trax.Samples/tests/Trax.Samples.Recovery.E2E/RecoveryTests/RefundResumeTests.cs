@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Testing;
@@ -124,9 +125,12 @@ public class RefundResumeTests : RecoveryTestFixture
     {
         var response = await GraphQL
             .SendAsync(
-                $$"""
-                mutation { operations { resumeExecution(id: {{run}}) { success message id } } }
-                """,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $$"""
+                    mutation { operations { resumeExecution(id: {{run}}) { success message id } } }
+                    """
+                ),
                 OperatorKey
             )
             .ConfigureAwait(false);
@@ -183,13 +187,16 @@ public class RefundResumeTests : RecoveryTestFixture
     {
         var response = await GraphQL
             .SendAsync(
-                $$"""
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $$"""
             mutation { operations {
               resumeExecution(id: {{failed}}, from: {{JsonSerializer.Serialize(
                 from
             )}}) { success message id }
             } }
-            """,
+            """
+                ),
                 OperatorKey
             )
             .ConfigureAwait(false);
@@ -223,7 +230,10 @@ public class RefundResumeTests : RecoveryTestFixture
     {
         var detail = await GraphQL
             .SendAsync(
-                $$"""{ operations { executionDetail(id: {{metadataId}}) { output } } }""",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $$"""{ operations { executionDetail(id: {{metadataId}}) { output } } }"""
+                ),
                 OperatorKey
             )
             .ConfigureAwait(false);

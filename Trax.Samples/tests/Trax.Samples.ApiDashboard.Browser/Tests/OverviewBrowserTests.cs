@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
@@ -13,7 +14,7 @@ namespace Trax.Samples.ApiDashboard.Browser.Tests;
 /// list it counts.
 /// </summary>
 [TestFixture]
-public class OverviewBrowserTests : ConsoleTest
+public partial class OverviewBrowserTests : ConsoleTest
 {
     private static readonly float Render = BrowserTimeouts.Render.Ms();
 
@@ -24,7 +25,7 @@ public class OverviewBrowserTests : ConsoleTest
         var overview = new OverviewPage(Console);
 
         await overview.OpenAsync(Caller.Operator);
-        var paused = overview.AttentionLink(new Regex("^Job dispatcher paused"));
+        var paused = overview.AttentionLink(DispatcherPaused);
         await Assertions.Expect(paused).ToBeVisibleAsync(new() { Timeout = Render });
 
         await paused.ClickAsync();
@@ -53,7 +54,14 @@ public class OverviewBrowserTests : ConsoleTest
         var overview = new OverviewPage(Console);
         await overview.OpenAsync(Caller.Operator);
         var group = overview.AttentionLink(
-            new Regex($"^{awaiting} dead letters of {nameof(IImportFeedTrain)}")
+            new Regex(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"^{awaiting} dead letters of {nameof(IImportFeedTrain)}"
+                ),
+                RegexOptions.None,
+                TimeSpan.FromSeconds(1)
+            )
         );
         await Assertions.Expect(group).ToBeVisibleAsync(new() { Timeout = Render });
         await Assertions.Expect(group).ToContainTextAsync(first.Reason);
@@ -87,7 +95,10 @@ public class OverviewBrowserTests : ConsoleTest
         var overview = new OverviewPage(Console);
         await overview.OpenAsync(Caller.Operator);
         var bar = overview.ChartBar(
-            $"{failed} failed {(failed == 1 ? "run" : "runs")} of {nameof(IImportFeedTrain)}"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"{failed} failed {(failed == 1 ? "run" : "runs")} of {nameof(IImportFeedTrain)}"
+            )
         );
         await Assertions.Expect(bar).ToBeVisibleAsync(new() { Timeout = Render });
 
@@ -102,4 +113,7 @@ public class OverviewBrowserTests : ConsoleTest
         query["state"].Should().Be("FAILED");
         query["train"].Should().Be(train);
     }
+
+    [GeneratedRegex("^Job dispatcher paused", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex DispatcherPaused { get; }
 }

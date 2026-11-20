@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -87,7 +88,12 @@ public abstract class AuthTestFixture
 
         arrived
             .Should()
-            .BeTrue($"{expected} audit row(s) for operation '{operationName}' should be written");
+            .BeTrue(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{expected} audit row(s) for operation '{operationName}' should be written"
+                )
+            );
         return rows;
     }
 

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.Client;
@@ -93,10 +94,16 @@ return 1;
 
 static void Print(string label, PlayerProfile p) =>
     Console.WriteLine(
-        $"  {label} -> {p.Name} (level {p.Level}, rank {p.Rank}, {p.Inventory.Count} items)"
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"  {label} -> {p.Name} (level {p.Level}, rank {p.Rank}, {p.Inventory.Count} items)"
+        )
     );
 
 static void PrintTyped(string label, TypedPlayerProfile p) =>
     Console.WriteLine(
-        $"  {label} -> {p.Name} (level {p.Level}, rank {p.Rank}, {p.Inventory.Count} items)"
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"  {label} -> {p.Name} (level {p.Level}, rank {p.Rank}, {p.Inventory.Count} items)"
+        )
     );

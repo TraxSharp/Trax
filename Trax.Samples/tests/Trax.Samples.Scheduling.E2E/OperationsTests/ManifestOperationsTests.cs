@@ -1,3 +1,4 @@
+using System.Globalization;
 using Trax.Effect.Enums;
 using Trax.Samples.Scheduling.E2E.Fixtures;
 
@@ -71,7 +72,10 @@ public class ManifestOperationsTests : SchedulingTestFixture
         var digest = await Db.Manifest(ManifestNames.SendDailyDigest);
 
         var response = await Operator.Send(
-            $$"""{ operations { manifestDetail(id: {{digest.Id}}) { id externalId isEnabled } } }"""
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $$"""{ operations { manifestDetail(id: {{digest.Id}}) { id externalId isEnabled } } }"""
+            )
         );
 
         var manifest = response.Data("operations", "manifestDetail");
@@ -133,15 +137,18 @@ public class ManifestOperationsTests : SchedulingTestFixture
         await Db.WaitForRun(refresh.Id, TrainState.Completed, 0, TimeSpan.FromSeconds(20));
 
         var response = await Operator.Send(
-            $$"""
-            {
-              operations {
-                executions(manifestId: {{refresh.Id}}, trainState: COMPLETED, take: 5) {
-                  items { id manifestId trainState }
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $$"""
+                {
+                  operations {
+                    executions(manifestId: {{refresh.Id}}, trainState: COMPLETED, take: 5) {
+                      items { id manifestId trainState }
+                    }
+                  }
                 }
-              }
-            }
-            """
+                """
+            )
         );
 
         var items = response.Data("operations", "executions", "items").EnumerateArray().ToList();

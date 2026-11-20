@@ -124,7 +124,7 @@ public sealed partial class TopicMapDraft(GraphQLClient graphQL, string apiKey, 
     public async Task<Result> AdvanceAsync(string trigger, object? input = null)
     {
         var field = JsonNamingPolicy.CamelCase.ConvertName(trigger);
-        if (!GraphQLName().IsMatch(field))
+        if (!GraphQLName.IsMatch(field))
             return new Result(null, NotServed, null);
 
         var args = $"id: {Literal(Id.ToString())}";
@@ -187,8 +187,8 @@ public sealed partial class TopicMapDraft(GraphQLClient graphQL, string apiKey, 
 
     private static readonly JsonSerializerOptions Camel = new(JsonSerializerDefaults.Web);
 
-    [GeneratedRegex("^[_A-Za-z][_0-9A-Za-z]*$")]
-    private static partial Regex GraphQLName();
+    [GeneratedRegex("^[_A-Za-z][_0-9A-Za-z]*$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex GraphQLName { get; }
 
     private async Task<Result> MutateAsync(string field, string args)
     {

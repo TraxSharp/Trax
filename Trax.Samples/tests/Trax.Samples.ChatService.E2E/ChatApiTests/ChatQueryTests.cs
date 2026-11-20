@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Trax.Samples.ChatService.E2E.Fixtures;
 
@@ -35,17 +36,20 @@ public class ChatQueryTests : ChatApiTestFixture
         {
             var sendResult = await GraphQL
                 .SendAsync(
-                    $$"""
-                    mutation {
-                        dispatch {
-                            sendMessage(
-                                input: { chatRoomId: "{{chatRoomId}}", content: "Message {{i}}" }
-                            ) {
-                                externalId
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $$"""
+                        mutation {
+                            dispatch {
+                                sendMessage(
+                                    input: { chatRoomId: "{{chatRoomId}}", content: "Message {{i}}" }
+                                ) {
+                                    externalId
+                                }
                             }
                         }
-                    }
-                    """,
+                        """
+                    ),
                     apiKey: AliceKey
                 )
                 .ConfigureAwait(false);

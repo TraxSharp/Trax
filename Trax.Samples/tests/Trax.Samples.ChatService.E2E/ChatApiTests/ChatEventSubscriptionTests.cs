@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Trax.Samples.ChatService.E2E.Fixtures;
 using Trax.Samples.ChatService.E2E.Utilities;
@@ -35,7 +36,11 @@ public class ChatEventSubscriptionTests : ChatApiTestFixture
     {
         for (var attempt = 0; attempt < 10; attempt++)
         {
-            var sent = await SendMessageAsAsync(senderKey, roomId, $"{content} {attempt}")
+            var sent = await SendMessageAsAsync(
+                    senderKey,
+                    roomId,
+                    string.Create(CultureInfo.InvariantCulture, $"{content} {attempt}")
+                )
                 .ConfigureAwait(false);
             sent.HasErrors.Should().BeFalse(sent.FirstErrorMessage);
             try
@@ -63,7 +68,10 @@ public class ChatEventSubscriptionTests : ChatApiTestFixture
         }
         catch (WebSocketClosedException closed)
         {
-            return $"closed {(int?)closed.Status} {closed.Description}";
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"closed {(int?)closed.Status} {closed.Description}"
+            );
         }
     }
 
@@ -185,7 +193,13 @@ public class ChatEventSubscriptionTests : ChatApiTestFixture
             attempt++
         )
         {
-            (await SendMessageAsAsync(BobKey, bobsRoom, $"warm-up {attempt}"))
+            (
+                await SendMessageAsAsync(
+                    BobKey,
+                    bobsRoom,
+                    string.Create(CultureInfo.InvariantCulture, $"warm-up {attempt}")
+                )
+            )
                 .HasErrors.Should()
                 .BeFalse();
             foreach (var message in await DrainAsync(bob, TimeSpan.FromSeconds(1)))

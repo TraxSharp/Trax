@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
@@ -44,7 +45,10 @@ public static class TrainStatePoller
 
         throw new TimeoutException(
             $"No metadata containing '{trainNameContains}' reached state {expectedState} "
-                + $"within {(timeout ?? DefaultTimeout).TotalSeconds}s."
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"within {(timeout ?? DefaultTimeout).TotalSeconds}s."
+                )
         );
     }
 
@@ -79,8 +83,14 @@ public static class TrainStatePoller
         }
 
         throw new TimeoutException(
-            $"No metadata for manifest {manifestId} reached state {expectedState} "
-                + $"within {(timeout ?? DefaultTimeout).TotalSeconds}s."
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"No metadata for manifest {manifestId} reached state {expectedState} "
+            )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"within {(timeout ?? DefaultTimeout).TotalSeconds}s."
+                )
         );
     }
 }

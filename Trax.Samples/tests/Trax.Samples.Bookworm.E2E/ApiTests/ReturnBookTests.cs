@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Trax.Samples.Bookworm.Auth;
 using Trax.Samples.Bookworm.E2E.Fixtures;
@@ -21,8 +22,10 @@ public class ReturnBookTests : ApiTestFixture
             .ConfigureAwait(false);
 
     private static string ReturnMutation(int loanId) =>
-        $"mutation {{ dispatch {{ lending {{ returnBook(input: {{ loanId: {loanId} }}) "
-        + "{ output { loanId returnedAt } } } } }";
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"mutation {{ dispatch {{ lending {{ returnBook(input: {{ loanId: {loanId} }}) "
+        ) + "{ output { loanId returnedAt } } } } }";
 
     [Test]
     public async Task ReturnBook_AuthenticatedMember_StampsReturnedAtAndPersists()

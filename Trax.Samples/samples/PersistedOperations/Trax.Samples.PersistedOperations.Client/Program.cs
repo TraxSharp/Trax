@@ -1,3 +1,4 @@
+using System.Globalization;
 // ─────────────────────────────────────────────────────────────────────────────
 // Trax Persisted Operations sample — Client
 //
@@ -145,7 +146,10 @@ static async Task<string?> TryUploadAsync(HttpClient http, string id, string doc
     }
     catch (JsonException)
     {
-        return $"HTTP {(int)resp.StatusCode} {resp.ReasonPhrase}: {raw}";
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"HTTP {(int)resp.StatusCode} {resp.ReasonPhrase}: {raw}"
+        );
     }
 
     using var _ = doc;
@@ -161,7 +165,10 @@ static async Task<string?> TryUploadAsync(HttpClient http, string id, string doc
     )
         return root.TryGetProperty("errors", out var topLevel) && topLevel.GetArrayLength() > 0
             ? DescribeError(topLevel[0])
-            : $"HTTP {(int)resp.StatusCode} {resp.ReasonPhrase}: {raw}";
+            : string.Create(
+                CultureInfo.InvariantCulture,
+                $"HTTP {(int)resp.StatusCode} {resp.ReasonPhrase}: {raw}"
+            );
 
     var payload = management.GetProperty("uploadPersistedOperation");
     if (payload.GetProperty("success").GetBoolean())

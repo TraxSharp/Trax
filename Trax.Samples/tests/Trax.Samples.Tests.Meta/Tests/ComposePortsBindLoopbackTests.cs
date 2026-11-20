@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Samples.Tests.Meta.Tests;
 
 /// <summary>
@@ -52,7 +54,9 @@ public class ComposePortsBindLoopbackTests
     {
         var offenders = PublishedPorts(File.ReadAllLines(composePath))
             .Where(p => !p.Mapping.StartsWith("127.0.0.1:", StringComparison.Ordinal))
-            .Select(p => $"line {p.Line}: \"{p.Mapping}\"")
+            .Select(p =>
+                string.Create(CultureInfo.InvariantCulture, $"line {p.Line}: \"{p.Mapping}\"")
+            )
             .ToList();
 
         offenders

@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 
@@ -7,7 +8,7 @@ using Trax.Samples.ApiDashboard.Browser.Fixtures;
 namespace Trax.Samples.ApiDashboard.Browser.Pages;
 
 /// <summary>An area of the console at one route, drawn once its heading shows.</summary>
-public abstract class AreaPage(ConsolePage console, string route, string heading)
+public abstract partial class AreaPage(ConsolePage console, string route, string heading)
 {
     public ConsolePage Console { get; } = console;
 
@@ -31,13 +32,7 @@ public abstract class AreaPage(ConsolePage console, string route, string heading
     public ILocator Row(long id) => Console.RowSelectable(id);
 
     /// <summary>What the page says when the operations gate refuses the caller.</summary>
-    public ILocator Refusal =>
-        Page.GetByText(
-            new System.Text.RegularExpressions.Regex(
-                "not authori[sz]ed",
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase
-            )
-        ).First;
+    public ILocator Refusal => Page.GetByText(NotAuthorized).First;
 
     public ILocator Button(ILocator within, string name) =>
         within.GetByRole(AriaRole.Button, new() { Name = name, Exact = true });
@@ -48,4 +43,7 @@ public abstract class AreaPage(ConsolePage console, string route, string heading
     /// <summary>The value a detail page's field list gives for <paramref name="label"/>.</summary>
     public ILocator DetailField(string label) =>
         Main.Locator($"xpath=.//dt[normalize-space()='{label}']/following-sibling::dd").First;
+
+    [GeneratedRegex("not authori[sz]ed", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex NotAuthorized { get; }
 }

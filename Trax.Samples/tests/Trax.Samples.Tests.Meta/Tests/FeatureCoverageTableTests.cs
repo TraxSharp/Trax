@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Samples.Tests.Meta.Tests;
 
 /// <summary>
@@ -21,7 +23,7 @@ namespace Trax.Samples.Tests.Meta.Tests;
 /// </summary>
 [Property("adr", "docs/adr/0006-one-sample-per-major-feature-proven-end-to-end.md")]
 [TestFixture]
-public class FeatureCoverageTableTests
+public partial class FeatureCoverageTableTests
 {
     private const string Adr = "docs/adr/0006-one-sample-per-major-feature-proven-end-to-end.md";
     private const string Heading = "## Feature coverage";
@@ -38,23 +40,6 @@ public class FeatureCoverageTableTests
         "Trax.Api",
         "Trax.Cli",
     };
-
-    private static readonly Regex TestLink = new(
-        @"\[`(?<class>[^`]+)`\]\(https://github\.com/TraxSharp/Trax/blob/main/(?<repo>Trax\.[\w.]+?)/(?<path>[^)\s]+)\)",
-        RegexOptions.Compiled
-    );
-
-    private static readonly Regex FeatureLink = new(
-        @"\[`(?<file>[^`]+\.feature)`\]\(https://github\.com/TraxSharp/Trax/blob/main/Trax\.Samples/(?<path>[^)\s]+)\)",
-        RegexOptions.Compiled
-    );
-
-    private static readonly Regex FeaturePath = new(
-        @"^samples/[^/]+/(?:features|specs)/(?:[^/]+/)*[^/]+\.feature$",
-        RegexOptions.Compiled
-    );
-
-    private static readonly Regex FeatureKeyword = new(@"^\s*Feature:", RegexOptions.Multiline);
 
     private sealed record Row(int Line, string Feature, string ProvedBy);
 
@@ -132,7 +117,10 @@ public class FeatureCoverageTableTests
         var problems = new List<string>();
         foreach (var claim in claims)
         {
-            var at = $"README.md line {claim.Line}: {claim.File} -> {claim.Path}";
+            var at = string.Create(
+                CultureInfo.InvariantCulture,
+                $"README.md line {claim.Line}: {claim.File} -> {claim.Path}"
+            );
             var file = RepoRoot.Combine(claim.Path.Split('/'));
             if (
                 !FeaturePath.IsMatch(claim.Path)
@@ -193,7 +181,9 @@ public class FeatureCoverageTableTests
                 && !FeatureLink.IsMatch(r.ProvedBy)
                 && !r.ProvedBy.Contains(NoE2E, StringComparison.Ordinal)
             )
-            .Select(r => $"README.md line {r.Line}: {r.Feature}")
+            .Select(r =>
+                string.Create(CultureInfo.InvariantCulture, $"README.md line {r.Line}: {r.Feature}")
+            )
             .ToList();
 
         offenders
@@ -222,7 +212,12 @@ public class FeatureCoverageTableTests
                     StringComparison.Ordinal
                 )
             )
-            .Select(c => $"README.md line {c.Line}: {c.Class} -> {c.Repo}/{c.Path}")
+            .Select(c =>
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"README.md line {c.Line}: {c.Class} -> {c.Repo}/{c.Path}"
+                )
+            )
             .ToList();
 
         offenders
@@ -249,14 +244,29 @@ public class FeatureCoverageTableTests
             var file = RepoRoot.Combine(claim.Path.Split('/'));
             if (!File.Exists(file))
             {
-                offenders.Add($"README.md line {claim.Line}: {claim.Path} does not exist");
+                offenders.Add(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"README.md line {claim.Line}: {claim.Path} does not exist"
+                    )
+                );
                 continue;
             }
 
             var code = SourceText.StripCommentsAndStrings(File.ReadAllText(file));
-            if (!Regex.IsMatch(code, $@"\bclass\s+{Regex.Escape(claim.Class)}\b"))
+            if (
+                !Regex.IsMatch(
+                    code,
+                    $@"\bclass\s+{Regex.Escape(claim.Class)}\b",
+                    RegexOptions.None,
+                    TimeSpan.FromSeconds(1)
+                )
+            )
                 offenders.Add(
-                    $"README.md line {claim.Line}: {claim.Path} declares no class {claim.Class}"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"README.md line {claim.Line}: {claim.Path} declares no class {claim.Class}"
+                    )
                 );
         }
 
@@ -350,4 +360,28 @@ public class FeatureCoverageTableTests
                     + string.Join("\n", unlisted)
             );
     }
+
+    [GeneratedRegex(@"^\s*Feature:", RegexOptions.Multiline, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex FeatureKeyword { get; }
+
+    [GeneratedRegex(
+        @"^samples/[^/]+/(?:features|specs)/(?:[^/]+/)*[^/]+\.feature$",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex FeaturePath { get; }
+
+    [GeneratedRegex(
+        @"\[`(?<file>[^`]+\.feature)`\]\(https://github\.com/TraxSharp/Trax/blob/main/Trax\.Samples/(?<path>[^)\s]+)\)",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex FeatureLink { get; }
+
+    [GeneratedRegex(
+        @"\[`(?<class>[^`]+)`\]\(https://github\.com/TraxSharp/Trax/blob/main/(?<repo>Trax\.[\w.]+?)/(?<path>[^)\s]+)\)",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex TestLink { get; }
 }

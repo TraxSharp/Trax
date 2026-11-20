@@ -11,10 +11,8 @@ namespace Trax.Samples.Tests.Meta.Tests;
 /// a property of the scheduler rather than a choice between alternatives.</para>
 /// </summary>
 [TestFixture]
-public class SampleDatabasesAreSeparateTests
+public partial class SampleDatabasesAreSeparateTests
 {
-    private static readonly Regex Database = new(@"Database=(?<db>[^;""]+)", RegexOptions.Compiled);
-
     /// <summary>Every database each sample folder names, keyed by database.</summary>
     private static Dictionary<string, HashSet<string>> FoldersByDatabase()
     {
@@ -72,11 +70,11 @@ public class SampleDatabasesAreSeparateTests
     public void Docker_compose_creates_every_sample_database()
     {
         var compose = File.ReadAllText(Path.Combine(RepoRoot.Path, "docker-compose.yml"));
-        var created = Regex
-            .Match(compose, @"POSTGRES_MULTIPLE_DATABASES:\s*(?<dbs>\S+)")
+        var created = PostgresDatabases
+            .Match(compose)
             .Groups["dbs"]
             .Value.Split(',', StringSplitOptions.RemoveEmptyEntries)
-            .Append(Regex.Match(compose, @"POSTGRES_DB:\s*(?<db>\S+)").Groups["db"].Value)
+            .Append(PostgresDb.Match(compose).Groups["db"].Value)
             .ToHashSet(StringComparer.Ordinal);
 
         var missing = FoldersByDatabase().Keys.Where(db => !created.Contains(db)).ToList();
@@ -89,4 +87,21 @@ public class SampleDatabasesAreSeparateTests
                     + string.Join(", ", missing)
             );
     }
+
+    [GeneratedRegex(
+        @"POSTGRES_DB:\s*(?<db>\S+)",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex PostgresDb { get; }
+
+    [GeneratedRegex(
+        @"POSTGRES_MULTIPLE_DATABASES:\s*(?<dbs>\S+)",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex PostgresDatabases { get; }
+
+    [GeneratedRegex(@"Database=(?<db>[^;""]+)", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Database { get; }
 }

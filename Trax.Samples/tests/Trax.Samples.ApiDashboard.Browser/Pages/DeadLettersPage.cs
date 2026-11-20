@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Playwright;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 
@@ -54,7 +55,10 @@ public sealed class DeadLettersPage(ConsolePage console)
     {
         await Button(Row(id), "Requeue").ClickAsync().ConfigureAwait(false);
         await Console
-            .ConfirmAsync("Requeue dead letter", $"Requeue dead letter #{id}?")
+            .ConfirmAsync(
+                "Requeue dead letter",
+                string.Create(CultureInfo.InvariantCulture, $"Requeue dead letter #{id}?")
+            )
             .ConfigureAwait(false);
     }
 }

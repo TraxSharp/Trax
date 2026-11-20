@@ -10,17 +10,15 @@ namespace Trax.Samples.Tests.Meta.Tests;
 /// choice between alternatives.</para>
 /// </summary>
 [TestFixture]
-public class RabbitMqCredentialsMatchComposeTests
+public partial class RabbitMqCredentialsMatchComposeTests
 {
-    private static readonly Regex AmqpUri = new(
-        @"amqp://(?<user>[^:@/""]+):(?<pass>[^@/""]+)@",
-        RegexOptions.Compiled
-    );
-
     private static (string User, string Pass) FromEnv(string text, string userKey, string passKey)
     {
         string Value(string key) =>
-            Regex.Match(text, key + @"\s*:\s*(?<v>\S+)").Groups["v"].Value.Trim('"', '\'');
+            Regex
+                .Match(text, key + @"\s*:\s*(?<v>\S+)", RegexOptions.None, TimeSpan.FromSeconds(1))
+                .Groups["v"]
+                .Value.Trim('"', '\'');
         return (Value(userKey), Value(passKey));
     }
 
@@ -88,4 +86,11 @@ public class RabbitMqCredentialsMatchComposeTests
                     + string.Join("\n  ", offenders)
             );
     }
+
+    [GeneratedRegex(
+        @"amqp://(?<user>[^:@/""]+):(?<pass>[^@/""]+)@",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex AmqpUri { get; }
 }

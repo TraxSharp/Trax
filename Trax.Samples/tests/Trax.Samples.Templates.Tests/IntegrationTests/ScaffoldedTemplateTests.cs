@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using AwesomeAssertions;
@@ -144,7 +145,7 @@ public class ScaffoldedTemplateTests
     )
     {
         var dir = await Scaffold(shortName);
-        var url = $"http://127.0.0.1:{FreePort()}";
+        var url = string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{FreePort()}");
 
         // The launch profile sets Development; --urls only moves the port off the fixed one.
         await using var app = await Start(
@@ -224,7 +225,7 @@ public class ScaffoldedTemplateTests
     )
     {
         var dir = await Scaffold(shortName);
-        var url = $"http://127.0.0.1:{FreePort()}";
+        var url = string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{FreePort()}");
 
         await using var app = await Start(
             dir,

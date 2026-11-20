@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Playwright;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 
@@ -8,4 +9,4 @@ namespace Trax.Samples.ApiDashboard.Browser.Pages;
 
 /// <summary>One queue entry's page, by its id; the heading is its train's short name.</summary>
 public sealed class QueueEntryPage(ConsolePage console, long id, string train)
-    : AreaPage(console, $"runs/queued/{id}", train);
+    : AreaPage(console, string.Create(CultureInfo.InvariantCulture, $"runs/queued/{id}"), train);

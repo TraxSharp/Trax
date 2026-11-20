@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Playwright;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 
@@ -8,7 +9,7 @@ namespace Trax.Samples.ApiDashboard.Browser.Pages;
 
 /// <summary>One manifest: its schedule, its next runs, its run history and its on/off switch.</summary>
 public sealed class ManifestDetailPage(ConsolePage console, long id, string heading)
-    : AreaPage(console, $"schedules/{id}", heading)
+    : AreaPage(console, string.Create(CultureInfo.InvariantCulture, $"schedules/{id}"), heading)
 {
     public ILocator Schedule => Page.GetByRole(AriaRole.Region, new() { Name = "Schedule" });
 

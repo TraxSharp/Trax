@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Playwright;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 
@@ -36,7 +37,11 @@ public class ConsolePage(IPage page, Uri origin)
                 {
                     Has = Page.GetByRole(
                         AriaRole.Checkbox,
-                        new() { Name = $"Select #{id}", Exact = true }
+                        new()
+                        {
+                            Name = string.Create(CultureInfo.InvariantCulture, $"Select #{id}"),
+                            Exact = true,
+                        }
                     ),
                 }
             );

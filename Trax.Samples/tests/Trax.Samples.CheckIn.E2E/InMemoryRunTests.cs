@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Trax.Samples.CheckIn.Trains;
 using Trax.StateMachine.Gherkin;
@@ -53,7 +54,10 @@ public class InMemoryRunTests
         report
             .Scenarios.Where(s => s.Status != FeatureStatus.Passed)
             .Select(s =>
-                $"{s.File}:{s.Line} {s.Name}: {s.Steps.FirstOrDefault(x => x.Status == FeatureStatus.Failed)?.Message}"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{s.File}:{s.Line} {s.Name}: {s.Steps.FirstOrDefault(x => x.Status == FeatureStatus.Failed)?.Message}"
+                )
             )
             .Should()
             .BeEmpty();

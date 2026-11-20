@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Enums;
 using Trax.Samples.Scheduling.E2E.Fixtures;
@@ -19,15 +20,18 @@ public class DeadLetterOperationsTests : SchedulingTestFixture
         var marker = await Db.LatestMetadataId();
 
         var response = await Operator.Send(
-            $$"""
-            mutation {
-              operations {
-                deadLetters {
-                  requeueDeadLetter(id: {{outage.DeadLetter.Id}}) { success workQueueId message }
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $$"""
+                mutation {
+                  operations {
+                    deadLetters {
+                      requeueDeadLetter(id: {{outage.DeadLetter.Id}}) { success workQueueId message }
+                    }
+                  }
                 }
-              }
-            }
-            """
+                """
+            )
         );
 
         var result = response.Data("operations", "deadLetters", "requeueDeadLetter");
@@ -84,18 +88,21 @@ public class DeadLetterOperationsTests : SchedulingTestFixture
         var outage = await SupplierOutage.RunToDeadLetter(Db, SupplierFeed, Scheduler);
 
         var acknowledge = await Operator.Send(
-            $$"""
-            mutation {
-              operations {
-                deadLetters {
-                  acknowledgeDeadLetter(id: {{outage.DeadLetter.Id}}, note: "Supplier confirmed the outage") {
-                    success
-                    message
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $$"""
+                mutation {
+                  operations {
+                    deadLetters {
+                      acknowledgeDeadLetter(id: {{outage.DeadLetter.Id}}, note: "Supplier confirmed the outage") {
+                        success
+                        message
+                      }
+                    }
                   }
                 }
-              }
-            }
-            """
+                """
+            )
         );
         acknowledge
             .Data("operations", "deadLetters", "acknowledgeDeadLetter")

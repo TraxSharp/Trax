@@ -25,7 +25,9 @@ public sealed class MachinePage : AreaPage
             new()
             {
                 NameRegex = new System.Text.RegularExpressions.Regex(
-                    $"^{System.Text.RegularExpressions.Regex.Escape(state)}\\b"
+                    $"^{System.Text.RegularExpressions.Regex.Escape(state)}\\b",
+                    System.Text.RegularExpressions.RegexOptions.None,
+                    TimeSpan.FromSeconds(1)
                 ),
             }
         );
@@ -35,7 +37,9 @@ public sealed class MachinePage : AreaPage
         State(state)
             .GetByLabel(
                 new System.Text.RegularExpressions.Regex(
-                    $"^{System.Text.RegularExpressions.Regex.Escape(badge)}: \\d+$"
+                    $"^{System.Text.RegularExpressions.Regex.Escape(badge)}: \\d+$",
+                    System.Text.RegularExpressions.RegexOptions.None,
+                    TimeSpan.FromSeconds(1)
                 )
             );
 
@@ -56,7 +60,9 @@ public sealed class MachinePage : AreaPage
             new()
             {
                 NameRegex = new System.Text.RegularExpressions.Regex(
-                    $"^{System.Text.RegularExpressions.Regex.Escape(label)}\\b"
+                    $"^{System.Text.RegularExpressions.Regex.Escape(label)}\\b",
+                    System.Text.RegularExpressions.RegexOptions.None,
+                    TimeSpan.FromSeconds(1)
                 ),
             }
         );

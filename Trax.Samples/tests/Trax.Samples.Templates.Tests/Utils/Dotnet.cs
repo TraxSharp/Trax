@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 
 namespace Trax.Samples.Templates.Tests.Utils;
@@ -69,7 +70,10 @@ internal static class Dotnet
         var output = await stdout.ConfigureAwait(false) + await stderr.ConfigureAwait(false);
         if (!allowFailure && process.ExitCode != 0)
             throw new InvalidOperationException(
-                $"dotnet {string.Join(' ', args)} exited {process.ExitCode}:\n{output}"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"dotnet {string.Join(' ', args)} exited {process.ExitCode}:\n{output}"
+                )
             );
         return (process.ExitCode, output);
     }

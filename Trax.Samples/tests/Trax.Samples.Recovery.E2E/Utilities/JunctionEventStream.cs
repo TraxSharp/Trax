@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -76,7 +77,10 @@ public sealed class JunctionEventStream : IAsyncDisposable
                 type = "subscribe",
                 payload = new
                 {
-                    query = $"subscription {{ onJunctionEvent(metadataId: {metadataId}) {{ {StepFields} }} }}",
+                    query = string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"subscription {{ onJunctionEvent(metadataId: {metadataId}) {{ {StepFields} }} }}"
+                    ),
                 },
             }
         );

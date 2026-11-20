@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Playwright;
@@ -14,7 +15,7 @@ namespace Trax.Samples.ApiDashboard.Browser.Tests;
 /// back from the host's own services and put back afterwards, since every test shares the host.
 /// </summary>
 [TestFixture]
-public class SystemActionsBrowserTests : ConsoleTest
+public partial class SystemActionsBrowserTests : ConsoleTest
 {
     private static readonly float Render = BrowserTimeouts.Render.Ms();
 
@@ -199,8 +200,7 @@ public class SystemActionsBrowserTests : ConsoleTest
         );
     }
 
-    private static string Label(string name) =>
-        System.Text.RegularExpressions.Regex.Replace(name, "(?<=[a-z0-9])(?=[A-Z])", " ");
+    private static string Label(string name) => WordBoundary.Replace(name, " ");
 
     private static EffectSettingField Field(string effect, string name) =>
         Effects()
@@ -218,4 +218,7 @@ public class SystemActionsBrowserTests : ConsoleTest
 
     private static ILogLevelService Levels() =>
         Host.Services.GetRequiredService<ILogLevelService>();
+
+    [GeneratedRegex("(?<=[a-z0-9])(?=[A-Z])", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex WordBoundary { get; }
 }

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -50,7 +51,9 @@ public class BrowserSetup
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
     {
-        Api = new Uri($"http://127.0.0.1:{FreePort()}");
+        Api = new Uri(
+            string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{FreePort()}")
+        );
         s_host = StartHost();
         await WaitForHealth();
         Dist = await Build();
@@ -176,7 +179,10 @@ public class BrowserSetup
         {
             if (s_host!.HasExited)
                 throw new InvalidOperationException(
-                    $"The CheckIn host exited with {s_host.ExitCode}:\n{HostLog}"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"The CheckIn host exited with {s_host.ExitCode}:\n{HostLog}"
+                    )
                 );
             try
             {
@@ -231,7 +237,12 @@ public class BrowserSetup
         await process.WaitForExitAsync().ConfigureAwait(false);
         await reading.ConfigureAwait(false);
         if (process.ExitCode != 0 || !File.Exists(Path.Combine(output, "index.html")))
-            throw new InvalidOperationException($"vite build failed ({process.ExitCode}):\n{log}");
+            throw new InvalidOperationException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"vite build failed ({process.ExitCode}):\n{log}"
+                )
+            );
         return output;
     }
 

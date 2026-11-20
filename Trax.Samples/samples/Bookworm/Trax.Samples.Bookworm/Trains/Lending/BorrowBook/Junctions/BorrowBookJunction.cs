@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Trax.Core.Exceptions;
@@ -30,7 +31,12 @@ public class BorrowBookJunction(
             ?? throw new TrainException("Your credential is not linked to a library member.");
 
         if (!await catalog.Books.AnyAsync(b => b.Id == input.BookId).ConfigureAwait(false))
-            throw new TrainException($"Book {input.BookId} is not in the catalog.");
+            throw new TrainException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Book {input.BookId} is not in the catalog."
+                )
+            );
 
         // Availability depends on every member's loans, not only the caller's, so this one read
         // steps outside the owner filter. It returns a yes or no and no row.
@@ -39,7 +45,12 @@ public class BorrowBookJunction(
             .AnyAsync(l => l.BookId == input.BookId && l.ReturnedAt == null)
             .ConfigureAwait(false);
         if (onLoan)
-            throw new TrainException($"Book {input.BookId} is already on loan.");
+            throw new TrainException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Book {input.BookId} is already on loan."
+                )
+            );
 
         var borrowedAt = DateTime.UtcNow;
         var loan = new Loan
@@ -61,7 +72,12 @@ public class BorrowBookJunction(
         {
             // Another borrow of the same book committed between the check and this insert; the
             // partial unique index on open loans refused the second one.
-            throw new TrainException($"Book {input.BookId} is already on loan.");
+            throw new TrainException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Book {input.BookId} is already on loan."
+                )
+            );
         }
 
         return new BorrowBookOutput

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using Trax.Samples.Recovery.Faults;
 
 namespace Trax.Samples.Recovery.Orders;
@@ -45,7 +46,10 @@ public sealed class Restaurant(FaultInjector faults, DemoPace pace)
             {
                 await Task.Delay(pace.TabletTimeout, cancellationToken).ConfigureAwait(false);
                 throw new TimeoutException(
-                    $"{Name}'s tablet did not answer in {pace.TabletTimeout.TotalSeconds:0.#} s."
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{Name}'s tablet did not answer in {pace.TabletTimeout.TotalSeconds:0.#} s."
+                    )
                 );
             }
 

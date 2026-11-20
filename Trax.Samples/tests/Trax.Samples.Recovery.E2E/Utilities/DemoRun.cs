@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Trax.Samples.Shared.Testing;
 
@@ -71,7 +72,14 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
                 TimeSpan.FromMilliseconds(40)
             )
             .ConfigureAwait(false);
-        found.Should().BeTrue($"attempt {attempt} of manifest {ManifestId} should start");
+        found
+            .Should()
+            .BeTrue(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"attempt {attempt} of manifest {ManifestId} should start"
+                )
+            );
         await stream.SubscribeAsync(id).ConfigureAwait(false);
         Attempts.Add(id);
         return id;
@@ -82,9 +90,12 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
     {
         var response = await graphQL
             .SendAsync(
-                $$"""
-                { operations { executions(manifestId: {{ManifestId}}, order: OLDEST) { items { id } } } }
-                """,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $$"""
+                    { operations { executions(manifestId: {{ManifestId}}, order: OLDEST) { items { id } } } }
+                    """
+                ),
                 apiKey
             )
             .ConfigureAwait(false);
@@ -106,7 +117,10 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
                 {
                     var response = await graphQL
                         .SendAsync(
-                            $$"""{ operations { executionDetail(id: {{metadataId}}) { trainState } } }""",
+                            string.Create(
+                                CultureInfo.InvariantCulture,
+                                $$"""{ operations { executionDetail(id: {{metadataId}}) { trainState } } }"""
+                            ),
                             apiKey
                         )
                         .ConfigureAwait(false);
@@ -119,7 +133,11 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
                 TimeSpan.FromMilliseconds(100)
             )
             .ConfigureAwait(false);
-        ended.Should().BeTrue($"execution {metadataId} should finish");
+        ended
+            .Should()
+            .BeTrue(
+                string.Create(CultureInfo.InvariantCulture, $"execution {metadataId} should finish")
+            );
         return state;
     }
 
@@ -128,12 +146,15 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
     {
         var response = await graphQL
             .SendAsync(
-                $$"""
-                { operations { junctionRuns(metadataId: {{metadataId}}) {
-                    position kind name state questionKey answer replayed nameWithheld trackPosition attempt
-                    nodeId
-                } } }
-                """,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $$"""
+                    { operations { junctionRuns(metadataId: {{metadataId}}) {
+                        position kind name state questionKey answer replayed nameWithheld trackPosition attempt
+                        nodeId
+                    } } }
+                    """
+                ),
                 apiKey
             )
             .ConfigureAwait(false);
@@ -170,7 +191,10 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
         settled
             .Should()
             .BeTrue(
-                $"execution {metadataId}'s stored steps should all have ended within 10 s, but "
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"execution {metadataId}'s stored steps should all have ended within 10 s, but "
+                )
                     + $"{stored.Count} were stored and "
                     + $"{stored.Count(s => string.Equals(s.GetProperty("state").GetString(), "IN_PROGRESS", StringComparison.Ordinal))} "
                     + "still say IN_PROGRESS"
@@ -211,7 +235,10 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
                 {
                     var entry = await graphQL
                         .SendAsync(
-                            $$"""{ operations { workQueue { detail(id: {{entryId}}) { metadataId } } } }""",
+                            string.Create(
+                                CultureInfo.InvariantCulture,
+                                $$"""{ operations { workQueue { detail(id: {{entryId}}) { metadataId } } } }"""
+                            ),
                             apiKey
                         )
                         .ConfigureAwait(false);
@@ -225,7 +252,14 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
                 TimeSpan.FromMilliseconds(100)
             )
             .ConfigureAwait(false);
-        dispatched.Should().BeTrue($"work queue entry {entryId} should be dispatched");
+        dispatched
+            .Should()
+            .BeTrue(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"work queue entry {entryId} should be dispatched"
+                )
+            );
         return runId;
     }
 
@@ -240,12 +274,15 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
         const string node = "id kind junction state canResume checkpointed";
         var response = await graphQL
             .SendAsync(
-                $$"""
-                { operations { runGraph(metadataId: {{metadataId}}) {
-                    canResume
-                    nodes { {{node}} tracks { name nodes { {{node}} tracks { name nodes { {{node}} } } } } }
-                } } }
-                """,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $$"""
+                    { operations { runGraph(metadataId: {{metadataId}}) {
+                        canResume
+                        nodes { {{node}} tracks { name nodes { {{node}} tracks { name nodes { {{node}} } } } } }
+                    } } }
+                    """
+                ),
                 apiKey
             )
             .ConfigureAwait(false);
@@ -274,7 +311,10 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
         // The journal is the run's starter's, by the run's external id.
         var run = await graphQL
             .SendAsync(
-                $$"""{ operations { executionDetail(id: {{metadataId}}) { externalId } } }""",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $$"""{ operations { executionDetail(id: {{metadataId}}) { externalId } } }"""
+                ),
                 apiKey
             )
             .ConfigureAwait(false);

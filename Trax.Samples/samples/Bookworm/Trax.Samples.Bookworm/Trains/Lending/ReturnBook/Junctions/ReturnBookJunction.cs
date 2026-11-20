@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Trax.Core.Exceptions;
 using Trax.Core.Junction;
@@ -16,10 +17,17 @@ public class ReturnBookJunction(ILendingDbContext lending)
     {
         var loan =
             await lending.Loans.FirstOrDefaultAsync(l => l.Id == input.LoanId).ConfigureAwait(false)
-            ?? throw new TrainException($"Loan {input.LoanId} not found.");
+            ?? throw new TrainException(
+                string.Create(CultureInfo.InvariantCulture, $"Loan {input.LoanId} not found.")
+            );
 
         if (loan.ReturnedAt is not null)
-            throw new TrainException($"Loan {input.LoanId} was already returned.");
+            throw new TrainException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Loan {input.LoanId} was already returned."
+                )
+            );
 
         var returnedAt = DateTime.UtcNow;
         loan.ReturnedAt = returnedAt;

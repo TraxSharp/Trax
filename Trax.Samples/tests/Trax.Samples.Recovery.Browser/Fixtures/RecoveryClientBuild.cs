@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 
 namespace Trax.Samples.Recovery.Browser.Fixtures;
@@ -67,7 +68,10 @@ public static class RecoveryClientBuild
 
         if (process.ExitCode != 0 || !File.Exists(Path.Combine(output, "index.html")))
             throw new InvalidOperationException(
-                $"vite build failed with exit code {process.ExitCode}:\n{log}"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"vite build failed with exit code {process.ExitCode}:\n{log}"
+                )
             );
         return output;
     }

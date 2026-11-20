@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
 using Trax.Effect.Models.Manifest;
@@ -34,7 +35,7 @@ public class ManifestActionsBrowserTests : ConsoleTest
         await Wait.UntilAsync(
             () => Queued(manifest.Id),
             BrowserTimeouts.Server,
-            $"manifest {manifest.Id} is queued"
+            string.Create(CultureInfo.InvariantCulture, $"manifest {manifest.Id} is queued")
         );
     }
 
@@ -197,7 +198,7 @@ public class ManifestActionsBrowserTests : ConsoleTest
         await Wait.UntilAsync(
             () => Queued(manifest.Id),
             BrowserTimeouts.Server,
-            $"manifest {manifest.Id} is queued"
+            string.Create(CultureInfo.InvariantCulture, $"manifest {manifest.Id} is queued")
         );
     }
 
@@ -243,7 +244,7 @@ public class ManifestActionsBrowserTests : ConsoleTest
             await Wait.UntilAsync(
                 () => Queued(m.Id),
                 BrowserTimeouts.Server,
-                $"manifest {m.Id} is queued"
+                string.Create(CultureInfo.InvariantCulture, $"manifest {m.Id} is queued")
             );
         Checks
             .Sent.Count(s =>

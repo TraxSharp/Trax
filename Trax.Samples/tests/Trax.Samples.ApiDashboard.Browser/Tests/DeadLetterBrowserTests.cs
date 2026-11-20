@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
@@ -13,7 +14,7 @@ namespace Trax.Samples.ApiDashboard.Browser.Tests;
 /// service does for every surface (central ADR 0022).
 /// </summary>
 [TestFixture]
-public class DeadLetterBrowserTests : ConsoleTest
+public partial class DeadLetterBrowserTests : ConsoleTest
 {
     [Test]
     [Covers("route:/runs/dead-letters")]
@@ -92,7 +93,10 @@ public class DeadLetterBrowserTests : ConsoleTest
         var sent = Console.SendsAsync("AcknowledgeDeadLetter");
         await page.Button(row, "Acknowledge").ClickAsync();
         await Console.NoteAsync(
-            $"Acknowledge dead letter #{deadLetter.Id}",
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"Acknowledge dead letter #{deadLetter.Id}"
+            ),
             "Supplier confirmed the feed was empty.",
             "Acknowledge"
         );
@@ -129,7 +133,11 @@ public class DeadLetterBrowserTests : ConsoleTest
         foreach (var d in new[] { first, second })
         {
             (await DeadLetter(d.Id)).Status.Should().Be(DeadLetterStatus.Retried);
-            (await QueuedFor(d.Id)).Should().BeTrue($"dead letter {d.Id} queued a run");
+            (await QueuedFor(d.Id))
+                .Should()
+                .BeTrue(
+                    string.Create(CultureInfo.InvariantCulture, $"dead letter {d.Id} queued a run")
+                );
         }
         Checks
             .Sent.Count(s =>
@@ -259,15 +267,7 @@ public class DeadLetterBrowserTests : ConsoleTest
         await sent;
 
         await Assertions
-            .Expect(
-                Page.GetByRole(AriaRole.Status)
-                    .Filter(
-                        new()
-                        {
-                            HasTextRegex = new Regex("not authori[sz]ed", RegexOptions.IgnoreCase),
-                        }
-                    )
-            )
+            .Expect(Page.GetByRole(AriaRole.Status).Filter(new() { HasTextRegex = NotAuthorized }))
             .ToBeVisibleAsync(new() { Timeout = Render });
         (await DeadLetter(deadLetter.Id))
             .Status.Should()
@@ -290,19 +290,27 @@ public class DeadLetterBrowserTests : ConsoleTest
 
         var sent = Console.SendsAsync("RequeueDeadLetter");
         await Console.Button("Requeue").ClickAsync();
-        await Console.ConfirmAsync("Requeue dead letter", $"Requeue dead letter #{deadLetter.Id}?");
+        await Console.ConfirmAsync(
+            "Requeue dead letter",
+            string.Create(CultureInfo.InvariantCulture, $"Requeue dead letter #{deadLetter.Id}?")
+        );
         await sent;
 
         // The requeue opens the work queue entry it wrote, which names the dead letter it retries.
         await Assertions
             .Expect(Console.Toast("has been requeued"))
             .ToBeVisibleAsync(new() { Timeout = Render });
-        await Assertions
-            .Expect(Page)
-            .ToHaveURLAsync(new Regex(@"/runs/queued/\d+$"), new() { Timeout = Render });
+        await Assertions.Expect(Page).ToHaveURLAsync(QueuedRunUrl, new() { Timeout = Render });
         await Assertions
             .Expect(
-                Page.GetByRole(AriaRole.Link, new() { Name = $"#{deadLetter.Id}", Exact = true })
+                Page.GetByRole(
+                    AriaRole.Link,
+                    new()
+                    {
+                        Name = string.Create(CultureInfo.InvariantCulture, $"#{deadLetter.Id}"),
+                        Exact = true,
+                    }
+                )
             )
             .ToBeVisibleAsync(new() { Timeout = Render });
         (await DeadLetter(deadLetter.Id)).Status.Should().Be(DeadLetterStatus.Retried);
@@ -321,7 +329,10 @@ public class DeadLetterBrowserTests : ConsoleTest
         var sent = Console.SendsAsync("AcknowledgeDeadLetter");
         await Console.Button("Acknowledge").ClickAsync(new() { Timeout = Render });
         await Console.NoteAsync(
-            $"Acknowledge dead letter #{deadLetter.Id}",
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"Acknowledge dead letter #{deadLetter.Id}"
+            ),
             "Duplicate of an earlier import.",
             "Acknowledge"
         );
@@ -363,4 +374,10 @@ public class DeadLetterBrowserTests : ConsoleTest
         Host.QueryAsync(dc =>
             dc.WorkQueues.AsNoTracking().AnyAsync(w => w.DeadLetterId == deadLetter)
         );
+
+    [GeneratedRegex(@"/runs/queued/\d+$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex QueuedRunUrl { get; }
+
+    [GeneratedRegex("not authori[sz]ed", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex NotAuthorized { get; }
 }

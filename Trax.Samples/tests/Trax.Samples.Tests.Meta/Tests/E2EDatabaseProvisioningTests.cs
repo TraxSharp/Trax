@@ -15,21 +15,16 @@ namespace Trax.Samples.Tests.Meta.Tests;
 /// </summary>
 [Property("adr", "docs/adr/0001-a-sample-e2e-database-must-be-one-ci-provisions.md")]
 [TestFixture]
-public class E2EDatabaseProvisioningTests
+public partial class E2EDatabaseProvisioningTests
 {
-    private static readonly Regex ConnectionString = new(
-        @"Port=(?<port>\d+);Database=(?<db>[^;]+)",
-        RegexOptions.Compiled
-    );
-
     [Test]
     public void EveryE2EFactory_TargetsACiProvisionedDatabase()
     {
         var workflow = File.ReadAllText(MonorepoRoot.Combine(".github", "workflows", "ci.yml"));
 
         // Host ports the workflow maps onto the Postgres service container (e.g. "5432:5432").
-        var hostPorts = Regex
-            .Matches(workflow, @"(?<host>\d+):5432")
+        var hostPorts = PostgresHostPort
+            .Matches(workflow)
             .Select(m => m.Groups["host"].Value)
             .ToHashSet(StringComparer.Ordinal);
 
@@ -116,4 +111,14 @@ public class E2EDatabaseProvisioningTests
                     + string.Join("\n", offenders)
             );
     }
+
+    [GeneratedRegex(@"(?<host>\d+):5432", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex PostgresHostPort { get; }
+
+    [GeneratedRegex(
+        @"Port=(?<port>\d+);Database=(?<db>[^;]+)",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ConnectionString { get; }
 }

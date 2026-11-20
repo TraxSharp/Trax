@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Trax.Core.Exceptions;
 using Trax.Samples.ChatService.Data;
@@ -124,7 +125,7 @@ public class GetChatHistoryTests
                     ChatRoomId = roomId,
                     SenderUserId = ChatUsers.Alice.Id,
                     SenderDisplayName = "Alice",
-                    Content = $"Message {i}",
+                    Content = string.Create(CultureInfo.InvariantCulture, $"Message {i}"),
                     SentAt = BaseTime.AddMinutes(i),
                 }
             );

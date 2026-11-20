@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Services.DataContext;
@@ -197,7 +198,10 @@ public class OperationsGateTests : AuthTestFixture
         listed.Should().BeTrue("the operator sees the run itself");
 
         var detail = await GraphQL.SendAsync(
-            $$"""{ operations { executionDetail(id: {{id}}) { input output } } }""",
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $$"""{ operations { executionDetail(id: {{id}}) { input output } } }"""
+            ),
             OscarKey
         );
 

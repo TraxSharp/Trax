@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 using Trax.Samples.ApiDashboard.Browser.Host;
@@ -11,7 +13,7 @@ namespace Trax.Samples.ApiDashboard.Browser.Tests;
 /// and a run a machine invoked links to the instance that started it.
 /// </summary>
 [TestFixture]
-public class RunPageBrowserTests : ConsoleTest
+public partial class RunPageBrowserTests : ConsoleTest
 {
     private static readonly float Render = BrowserTimeouts.Render.Ms();
 
@@ -87,14 +89,15 @@ public class RunPageBrowserTests : ConsoleTest
         await panel
             .GetByRole(AriaRole.Button, new() { Name = "Resume from here", Exact = true })
             .ClickAsync();
-        await Console.ConfirmAsync("Resume run", $"Resume run #{failed.Id} from NotifyClaimant");
+        await Console.ConfirmAsync(
+            "Resume run",
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"Resume run #{failed.Id} from NotifyClaimant"
+            )
+        );
 
-        await Assertions
-            .Expect(Page)
-            .ToHaveURLAsync(
-                new System.Text.RegularExpressions.Regex(@"/runs/queued/\d+$"),
-                new() { Timeout = Render }
-            );
+        await Assertions.Expect(Page).ToHaveURLAsync(QueuedRunUrl, new() { Timeout = Render });
         var resumes = Checks
             .Sent.Where(s =>
                 string.Equals(s.OperationName, "ResumeExecution", StringComparison.Ordinal)
@@ -122,7 +125,9 @@ public class RunPageBrowserTests : ConsoleTest
             .Expect(Page)
             .ToHaveURLAsync(
                 new System.Text.RegularExpressions.Regex(
-                    $"/machines/{RelayMachine.Id}/system/{instance.Id}$"
+                    $"/machines/{RelayMachine.Id}/system/{instance.Id}$",
+                    System.Text.RegularExpressions.RegexOptions.None,
+                    TimeSpan.FromSeconds(1)
                 ),
                 new() { Timeout = Render }
             );
@@ -130,4 +135,7 @@ public class RunPageBrowserTests : ConsoleTest
             .Expect(Console.Heading(RelayMachine.Id))
             .ToBeVisibleAsync(new() { Timeout = Render });
     }
+
+    [GeneratedRegex(@"/runs/queued/\d+$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex QueuedRunUrl { get; }
 }

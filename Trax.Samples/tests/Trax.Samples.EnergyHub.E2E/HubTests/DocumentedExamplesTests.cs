@@ -58,9 +58,9 @@ public partial class DocumentedExamplesTests : HubTestFixture
         return commands
             .Select(command =>
             {
-                var key = ApiKeyHeader().Match(command);
+                var key = ApiKeyHeader.Match(command);
                 return (
-                    Body: Body().Match(command).Groups["body"].Value,
+                    Body: Body.Match(command).Groups["body"].Value,
                     ApiKey: key.Success ? key.Groups["key"].Value : null
                 );
             })
@@ -83,9 +83,13 @@ public partial class DocumentedExamplesTests : HubTestFixture
         );
     }
 
-    [GeneratedRegex(@"-d '(?<body>[^']+)'")]
-    private static partial Regex Body();
+    [GeneratedRegex(@"-d '(?<body>[^']+)'", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Body { get; }
 
-    [GeneratedRegex(@"-H ""X-Api-Key: (?<key>[^""]+)""")]
-    private static partial Regex ApiKeyHeader();
+    [GeneratedRegex(
+        @"-H ""X-Api-Key: (?<key>[^""]+)""",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ApiKeyHeader { get; }
 }

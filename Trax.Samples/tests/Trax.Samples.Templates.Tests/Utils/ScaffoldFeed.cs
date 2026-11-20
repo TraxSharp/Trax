@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO.Compression;
 using System.Security;
 using System.Xml.Linq;
@@ -104,7 +105,10 @@ internal static class ScaffoldFeed
 
     private static async Task<Packed> Pack()
     {
-        var version = $"0.0.0-scaffold.{DateTime.UtcNow:yyyyMMddHHmmss}";
+        var version = string.Create(
+            CultureInfo.InvariantCulture,
+            $"0.0.0-scaffold.{DateTime.UtcNow:yyyyMMddHHmmss}"
+        );
         var root = Path.Combine(Path.GetTempPath(), "trax-scaffold-feed-" + Guid.NewGuid());
         var feed = Path.Combine(root, "feed");
         Directory.CreateDirectory(feed);

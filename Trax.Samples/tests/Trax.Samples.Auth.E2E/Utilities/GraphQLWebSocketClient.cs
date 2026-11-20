@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -81,7 +82,12 @@ public sealed class GraphQLWebSocketClient : IAsyncDisposable
         {
             var remaining = deadline - DateTime.UtcNow;
             if (remaining <= TimeSpan.Zero)
-                throw new TimeoutException($"No WebSocket message within {timeout.TotalSeconds}s.");
+                throw new TimeoutException(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"No WebSocket message within {timeout.TotalSeconds}s."
+                    )
+                );
 
             var message = await ReceiveRawAsync(remaining).ConfigureAwait(false);
             var type = message.GetProperty("type").GetString();
@@ -120,7 +126,12 @@ public sealed class GraphQLWebSocketClient : IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
-            throw new TimeoutException($"No WebSocket message within {timeout.TotalSeconds}s.");
+            throw new TimeoutException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"No WebSocket message within {timeout.TotalSeconds}s."
+                )
+            );
         }
 
         return JsonSerializer.Deserialize<JsonElement>(ms.ToArray());

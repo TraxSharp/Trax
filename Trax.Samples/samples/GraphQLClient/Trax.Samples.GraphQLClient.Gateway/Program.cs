@@ -1,3 +1,4 @@
+using System.Globalization;
 using Trax.Api.GraphQL.Client;
 using Trax.Samples.GraphQLClient.BillingServer;
 using Trax.Samples.GraphQLClient.BillingServer.Trains;
@@ -48,13 +49,21 @@ var billingClient = consumerHost.Services.GetRequiredKeyedService<IGraphQLClient
 var product = await inventoryClient
     .Run(new GetProductRequest { Input = new GetProductInput("SKU-1") })
     .ConfigureAwait(false);
-Console.WriteLine($"serverB (inventory) -> {product.Name}, {product.QuantityOnHand} on hand");
+Console.WriteLine(
+    string.Create(
+        CultureInfo.InvariantCulture,
+        $"serverB (inventory) -> {product.Name}, {product.QuantityOnHand} on hand"
+    )
+);
 
 var invoice = await billingClient
     .Run(new GetInvoiceRequest { Input = new GetInvoiceInput("INV-1") })
     .ConfigureAwait(false);
 Console.WriteLine(
-    $"serverC (billing)   -> invoice {invoice.InvoiceId}: {invoice.AmountCents}c ({invoice.Status})"
+    string.Create(
+        CultureInfo.InvariantCulture,
+        $"serverC (billing)   -> invoice {invoice.InvoiceId}: {invoice.AmountCents}c ({invoice.Status})"
+    )
 );
 
 // The "serverB" client validates against the inventory schema, which has no getInvoice, so a

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 
 namespace Trax.Samples.Templates.Tests.Utils;
@@ -37,8 +38,10 @@ internal sealed class RunningProcess : IAsyncDisposable
         {
             if (_process.HasExited)
                 throw new InvalidOperationException(
-                    $"dotnet {string.Join(' ', _args)} exited {_process.ExitCode} before printing "
-                        + $"'{text}':\n{Output}"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"dotnet {string.Join(' ', _args)} exited {_process.ExitCode} before printing "
+                    ) + $"'{text}':\n{Output}"
                 );
             if (DateTime.UtcNow > deadline)
                 throw new TimeoutException(

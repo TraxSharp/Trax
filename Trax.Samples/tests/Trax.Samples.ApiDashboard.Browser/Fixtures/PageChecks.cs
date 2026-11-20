@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.Playwright;
 
@@ -149,7 +150,10 @@ public sealed class PageChecks
         catch (TimeoutException)
         {
             throw new TimeoutException(
-                $"Expected {what} within {BrowserTimeouts.Server.TotalSeconds:0} s."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Expected {what} within {BrowserTimeouts.Server.TotalSeconds:0} s."
+                )
             );
         }
     }
@@ -253,7 +257,12 @@ public sealed class PageChecks
         {
             // OnRequest reports a body that is not JSON.
         }
-        Problem($"the host answered HTTP {response.Status} to {name}");
+        Problem(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"the host answered HTTP {response.Status} to {name}"
+            )
+        );
     }
 
     private void OnFrame(string? text)

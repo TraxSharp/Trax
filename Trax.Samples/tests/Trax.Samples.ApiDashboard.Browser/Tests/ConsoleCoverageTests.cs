@@ -91,9 +91,9 @@ public partial class ConsoleCoverageTests
         var clientApp = ClientApp();
         var routes = File.ReadAllText(Path.Combine(clientApp, "src", "AppRoutes.tsx"));
         var surface = new HashSet<string>(StringComparer.Ordinal);
-        foreach (Match m in RoutePath().Matches(routes))
+        foreach (Match m in RoutePath.Matches(routes))
             surface.Add($"route:{m.Groups["path"].Value}");
-        foreach (Match m in MovedPath().Matches(routes))
+        foreach (Match m in MovedPath.Matches(routes))
             surface.Add($"route:{m.Groups["from"].Value}");
 
         foreach (
@@ -104,13 +104,12 @@ public partial class ConsoleCoverageTests
         )
         {
             // A comment may name an operation in prose, so only the document itself is read.
-            var m = Operation()
-                .Match(
-                    string.Join(
-                        '\n',
-                        File.ReadAllLines(file).Where(l => !l.TrimStart().StartsWith('#'))
-                    )
-                );
+            var m = Operation.Match(
+                string.Join(
+                    '\n',
+                    File.ReadAllLines(file).Where(l => !l.TrimStart().StartsWith('#'))
+                )
+            );
             if (
                 m.Success
                 && !string.Equals(m.Groups["kind"].Value, "query", StringComparison.Ordinal)
@@ -170,12 +169,24 @@ public partial class ConsoleCoverageTests
         );
     }
 
-    [GeneratedRegex("<Route\\s+path=\"(?<path>[^\"]+)\"")]
-    private static partial Regex RoutePath();
+    [GeneratedRegex(
+        "<Route\\s+path=\"(?<path>[^\"]+)\"",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex RoutePath { get; }
 
-    [GeneratedRegex("\\[\"(?<from>/[^\"]*)\",\\s*\"/[^\"]*\"\\]")]
-    private static partial Regex MovedPath();
+    [GeneratedRegex(
+        "\\[\"(?<from>/[^\"]*)\",\\s*\"/[^\"]*\"\\]",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex MovedPath { get; }
 
-    [GeneratedRegex(@"\b(?<kind>query|mutation|subscription)\s+(?<name>[A-Z]\w*)")]
-    private static partial Regex Operation();
+    [GeneratedRegex(
+        @"\b(?<kind>query|mutation|subscription)\s+(?<name>[A-Z]\w*)",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Operation { get; }
 }

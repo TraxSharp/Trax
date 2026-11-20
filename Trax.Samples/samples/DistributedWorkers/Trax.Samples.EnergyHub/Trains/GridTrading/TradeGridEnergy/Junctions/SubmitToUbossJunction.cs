@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Junction;
 
@@ -17,7 +18,10 @@ public class SubmitToUbossJunction(ILogger<SubmitToUbossJunction> logger)
 
         var kwhSold = 47.3;
         var revenue = (decimal)kwhSold * input.RatePerKwh;
-        var transactionId = $"UBOSS-{DateTime.UtcNow:yyyyMMddHHmm}-{Guid.NewGuid():N}"[..32];
+        var transactionId = string.Create(
+            CultureInfo.InvariantCulture,
+            $"UBOSS-{DateTime.UtcNow:yyyyMMddHHmm}-{Guid.NewGuid():N}"
+        )[..32];
 
         logger.LogInformation(
             "UBOSS transaction complete — sold {Kwh} kWh for ${Revenue:F2} (tx: {TxId})",

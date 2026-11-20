@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Trax.StateMachine;
 
 namespace Trax.Samples.StateMachine.E2E.Utilities;
@@ -41,7 +42,7 @@ public sealed partial class StateMachineClient(GraphQLClient graphQL)
     /// (<c>web/src/trax/documents/&lt;function&gt;.g.ts</c>) holds it.
     /// </summary>
     public static string DocumentIdOf(string function) =>
-        DocumentId()
+        DocumentId
             .Match(
                 File.ReadAllText(
                     Path.Combine(AppContext.BaseDirectory, "documents", $"{function}.g.ts")
@@ -50,8 +51,12 @@ public sealed partial class StateMachineClient(GraphQLClient graphQL)
             .Groups["id"]
             .Value;
 
-    [System.Text.RegularExpressions.GeneratedRegex("DocumentId = \"(?<id>[^\"]+)\"")]
-    private static partial System.Text.RegularExpressions.Regex DocumentId();
+    [System.Text.RegularExpressions.GeneratedRegex(
+        "DocumentId = \"(?<id>[^\"]+)\"",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial System.Text.RegularExpressions.Regex DocumentId { get; }
 
     /// <summary>
     /// Starts an instance of <paramref name="machine"/> from its declared start, as the page does: the server mints

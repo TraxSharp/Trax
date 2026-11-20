@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Samples.Bookworm.Catalog.Context;
 using Trax.Samples.Bookworm.Catalog.Models.Books;
@@ -34,8 +35,10 @@ public abstract class ApiTestFixture
     }
 
     protected static string Borrow(int bookId) =>
-        $"mutation {{ dispatch {{ lending {{ borrowBook(input: {{ bookId: {bookId} }}) "
-        + "{ output { loanId } } } } }";
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"mutation {{ dispatch {{ lending {{ borrowBook(input: {{ bookId: {bookId} }}) "
+        ) + "{ output { loanId } } } } }";
 
     /// <summary>Borrows <paramref name="bookId"/> as <paramref name="apiKey"/> and returns the loan id.</summary>
     protected async Task<int> BorrowAsync(int bookId, string apiKey)

@@ -12,16 +12,9 @@ namespace Trax.Samples.Tests.Meta.Tests;
 /// is how the broker works rather than a choice between alternatives.</para>
 /// </summary>
 [TestFixture]
-public class RabbitMqExchangePerSampleTests
+public partial class RabbitMqExchangePerSampleTests
 {
     private const string DefaultExchange = "trax.lifecycle";
-
-    private static readonly Regex UseRabbitMqCall = new(@"\bUseRabbitMq\(", RegexOptions.Compiled);
-
-    private static readonly Regex DeclaredName = new(
-        @"ExchangeName\s*=\s*""(?<name>[^""]+)""",
-        RegexOptions.Compiled
-    );
 
     [Test]
     public void Every_rabbitmq_sample_names_an_exchange_no_other_sample_uses()
@@ -107,4 +100,14 @@ public class RabbitMqExchangePerSampleTests
         }
         return source[start..];
     }
+
+    [GeneratedRegex(
+        @"ExchangeName\s*=\s*""(?<name>[^""]+)""",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex DeclaredName { get; }
+
+    [GeneratedRegex(@"\bUseRabbitMq\(", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex UseRabbitMqCall { get; }
 }

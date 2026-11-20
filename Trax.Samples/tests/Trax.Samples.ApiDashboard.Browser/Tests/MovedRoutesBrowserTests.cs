@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
@@ -76,14 +77,22 @@ public class MovedRoutesBrowserTests : ConsoleTest
     private async Task<string> IdAsync(string token) =>
         token switch
         {
-            "run" =>
-                $"{await Host.QueryAsync(dc => dc.Metadatas.MaxAsync(m => m.Id)).ConfigureAwait(false)}",
-            "entry" =>
-                $"{await Host.QueryAsync(dc => dc.WorkQueues.MaxAsync(w => w.Id)).ConfigureAwait(false)}",
-            "deadLetter" => $"{(await Seed.DeadLetterAsync().ConfigureAwait(false)).Id}",
+            "run" => (
+                await Host.QueryAsync(dc => dc.Metadatas.MaxAsync(m => m.Id)).ConfigureAwait(false)
+            ).ToString(CultureInfo.InvariantCulture),
+            "entry" => (
+                await Host.QueryAsync(dc => dc.WorkQueues.MaxAsync(w => w.Id)).ConfigureAwait(false)
+            ).ToString(CultureInfo.InvariantCulture),
+            "deadLetter" => ((await Seed.DeadLetterAsync().ConfigureAwait(false)).Id).ToString(
+                CultureInfo.InvariantCulture
+            ),
             "gate" => $"{(await Seed.ClosedGateAsync().ConfigureAwait(false)).Instance.Id}",
-            "manifest" => $"{(await Seed.OnDemandManifestAsync().ConfigureAwait(false)).Id}",
-            "group" => $"{(await Seed.GroupOfOneAsync().ConfigureAwait(false)).Group.Id}",
+            "manifest" => ((await Seed.OnDemandManifestAsync().ConfigureAwait(false)).Id).ToString(
+                CultureInfo.InvariantCulture
+            ),
+            "group" => ((await Seed.GroupOfOneAsync().ConfigureAwait(false)).Group.Id).ToString(
+                CultureInfo.InvariantCulture
+            ),
             "op" => (await Seed.PersistedOperationAsync().ConfigureAwait(false)).Id,
             _ => throw new ArgumentOutOfRangeException(nameof(token), token, null),
         };

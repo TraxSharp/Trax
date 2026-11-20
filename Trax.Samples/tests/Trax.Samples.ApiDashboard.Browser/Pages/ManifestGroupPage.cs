@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Playwright;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 
@@ -8,7 +9,7 @@ namespace Trax.Samples.ApiDashboard.Browser.Pages;
 
 /// <summary>One manifest group: its stats, its settings, its manifests and runs, and Queue and Cancel.</summary>
 public sealed class ManifestGroupPage(ConsolePage console, long id, string name)
-    : AreaPage(console, $"schedules/groups/{id}", name)
+    : AreaPage(console, string.Create(CultureInfo.InvariantCulture, $"schedules/groups/{id}"), name)
 {
     public ILocator Setting(string label) => Main.GetByLabel(label, new() { Exact = true });
 }

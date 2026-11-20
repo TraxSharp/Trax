@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -150,8 +151,10 @@ public class TopicMapTests : RecoveryTestFixture
             )
                 .Should()
                 .BeTrue(
-                    $"execution {attempt}'s graph should show the gate's Yes step {state}, but "
-                        + $"shows it {GateStepState(graph) ?? "missing"}"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"execution {attempt}'s graph should show the gate's Yes step {state}, but "
+                    ) + $"shows it {GateStepState(graph) ?? "missing"}"
                 );
 
             var parallel = graph
@@ -236,9 +239,12 @@ public class TopicMapTests : RecoveryTestFixture
     {
         var response = await GraphQL
             .SendAsync(
-                $$"""
-                { operations { executionDetail(id: {{metadataId}}) { failureJunction failureException } } }
-                """,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $$"""
+                    { operations { executionDetail(id: {{metadataId}}) { failureJunction failureException } } }
+                    """
+                ),
                 OperatorKey
             )
             .ConfigureAwait(false);
@@ -292,15 +298,18 @@ public class TopicMapTests : RecoveryTestFixture
     {
         var response = await GraphQL
             .SendAsync(
-                $$"""
-                { operations { runGraph(metadataId: {{metadataId}}) { nodes {
-                    id kind state trackTaken tracks { name taken nodes {
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $$"""
+                    { operations { runGraph(metadataId: {{metadataId}}) { nodes {
                         id kind state trackTaken tracks { name taken nodes {
-                            id kind state trackTaken tracks { name taken }
+                            id kind state trackTaken tracks { name taken nodes {
+                                id kind state trackTaken tracks { name taken }
+                            } }
                         } }
-                    } }
-                } } } }
-                """,
+                    } } } }
+                    """
+                ),
                 OperatorKey
             )
             .ConfigureAwait(false);

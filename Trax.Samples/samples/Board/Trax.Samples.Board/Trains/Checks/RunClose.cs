@@ -1,3 +1,4 @@
+using System.Globalization;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.EffectJunction;
@@ -30,13 +31,22 @@ public class RunClose(InvokedRun run, TicketBoard board) : EffectJunction<CloseC
                 new NoteInput
                 {
                     By = TicketBoard.Name(run.UserKey),
-                    Note = $"cannot reproduce: {failed} cases matched the policy",
+                    Note = string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"cannot reproduce: {failed} cases matched the policy"
+                    ),
                 },
                 CancellationToken
             )
             .ConfigureAwait(false);
         return moved is AdvanceOutcome.Advanced
-            ? CheckResult.Accept($"closed: {failed} cases matched the policy", failed)
+            ? CheckResult.Accept(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"closed: {failed} cases matched the policy"
+                ),
+                failed
+            )
             : CheckResult.Refuse(TicketBoard.Why(moved), failed);
     }
 }

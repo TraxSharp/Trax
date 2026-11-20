@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Playwright;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 
@@ -11,5 +12,8 @@ public sealed class WorkQueuePage(ConsolePage console) : AreaPage(console, "runs
 {
     /// <summary>The link a row gives to an entry, a run or a manifest by its id: <c>#id</c>.</summary>
     public ILocator IdLink(ILocator row, long id) =>
-        row.GetByRole(AriaRole.Link, new() { Name = $"#{id}", Exact = true });
+        row.GetByRole(
+            AriaRole.Link,
+            new() { Name = string.Create(CultureInfo.InvariantCulture, $"#{id}"), Exact = true }
+        );
 }

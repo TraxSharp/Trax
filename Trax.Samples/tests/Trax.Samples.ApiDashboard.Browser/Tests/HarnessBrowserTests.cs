@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
 using Trax.Effect.Enums;
@@ -46,7 +47,10 @@ public class HarnessBrowserTests : ConsoleTest
         var group = page.Group(nameof(IImportFeedTrain), first.Reason);
         await Assertions
             .Expect(group)
-            .ToContainTextAsync($"{awaiting} dead letters", new() { Timeout = Render });
+            .ToContainTextAsync(
+                string.Create(CultureInfo.InvariantCulture, $"{awaiting} dead letters"),
+                new() { Timeout = Render }
+            );
         await Assertions.Expect(group).ToContainTextAsync(first.Reason);
         foreach (var manifest in manifests)
             await Assertions

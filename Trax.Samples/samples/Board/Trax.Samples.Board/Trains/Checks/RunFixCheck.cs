@@ -1,3 +1,4 @@
+using System.Globalization;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.EffectJunction;
@@ -69,7 +70,10 @@ public class RunFixCheck(InvokedRun run, TicketBoard board) : EffectJunction<Fix
             .ConfigureAwait(false);
         return moved is AdvanceOutcome.Advanced
             ? CheckResult.Accept(
-                $"{patch}: the repro case and {cases.Count - 1} cases from earlier fixes pass"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{patch}: the repro case and {cases.Count - 1} cases from earlier fixes pass"
+                )
             )
             : CheckResult.Refuse(TicketBoard.Why(moved));
     }

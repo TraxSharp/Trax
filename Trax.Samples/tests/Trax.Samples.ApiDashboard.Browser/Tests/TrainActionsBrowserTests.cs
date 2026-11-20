@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
@@ -11,7 +12,7 @@ namespace Trax.Samples.ApiDashboard.Browser.Tests;
 /// one with the input typed, or say why they did not.
 /// </summary>
 [TestFixture]
-public class TrainActionsBrowserTests : ConsoleTest
+public partial class TrainActionsBrowserTests : ConsoleTest
 {
     private static readonly float Render = BrowserTimeouts.Render.Ms();
 
@@ -66,9 +67,7 @@ public class TrainActionsBrowserTests : ConsoleTest
             .ClickAsync();
         await sent;
 
-        await Assertions
-            .Expect(Page)
-            .ToHaveURLAsync(new Regex(@"/runs/\d+$"), new() { Timeout = Render });
+        await Assertions.Expect(Page).ToHaveURLAsync(RunUrl, new() { Timeout = Render });
         var id = long.Parse(
             Page.Url[(Page.Url.LastIndexOf('/') + 1)..],
             System.Globalization.CultureInfo.InvariantCulture
@@ -81,7 +80,7 @@ public class TrainActionsBrowserTests : ConsoleTest
                         .FirstOrDefaultAsync(m => m.Id == id && m.Input != null)
                 ),
             BrowserTimeouts.Server,
-            $"run {id} stores its input"
+            string.Create(CultureInfo.InvariantCulture, $"run {id} stores its input")
         );
         run.Name.Should().Be(typeof(IImportFeedTrain).FullName);
         run.Input.Should().Contain(key);
@@ -139,9 +138,7 @@ public class TrainActionsBrowserTests : ConsoleTest
             .ClickAsync();
         await sent;
 
-        await Assertions
-            .Expect(Page)
-            .ToHaveURLAsync(new Regex(@"/runs/queued/\d+$"), new() { Timeout = Render });
+        await Assertions.Expect(Page).ToHaveURLAsync(QueuedRunUrl, new() { Timeout = Render });
         var id = long.Parse(
             Page.Url[(Page.Url.LastIndexOf('/') + 1)..],
             System.Globalization.CultureInfo.InvariantCulture
@@ -162,4 +159,10 @@ public class TrainActionsBrowserTests : ConsoleTest
             .ToBeVisibleAsync(new() { Timeout = Render })
             .ConfigureAwait(false);
     }
+
+    [GeneratedRegex(@"/runs/queued/\d+$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex QueuedRunUrl { get; }
+
+    [GeneratedRegex(@"/runs/\d+$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex RunUrl { get; }
 }

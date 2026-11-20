@@ -1,3 +1,4 @@
+using System.Globalization;
 using Trax.Samples.Shared.Testing;
 
 namespace Trax.Samples.ApiDashboard.Browser.Fixtures;
@@ -10,7 +11,14 @@ public static class Wait
     public static async Task UntilAsync(Func<Task<bool>> condition, TimeSpan timeout, string what)
     {
         var reached = await Polling.WaitUntilAsync(condition, timeout, Poll).ConfigureAwait(false);
-        reached.Should().BeTrue($"{what} within {timeout.TotalSeconds:0} s");
+        reached
+            .Should()
+            .BeTrue(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{what} within {timeout.TotalSeconds:0} s"
+                )
+            );
     }
 
     /// <summary>Waits until <paramref name="read"/> returns a value, and returns it.</summary>

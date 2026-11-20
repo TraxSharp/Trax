@@ -1,3 +1,4 @@
+using System.Globalization;
 using Trax.Samples.Recovery.E2E.Fixtures;
 
 namespace Trax.Samples.Recovery.E2E.RecoveryTests;
@@ -130,13 +131,16 @@ public class AskAfreshTests : RecoveryTestFixture
     {
         var response = await GraphQL
             .SendAsync(
-                $$"""
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $$"""
             mutation { operations {
               requeueExecution(id: {{metadataId}}, askAfresh: {{(
                 askAfresh ? "true" : "false"
             )}}) { success message id }
             } }
-            """,
+            """
+                ),
                 OperatorKey
             )
             .ConfigureAwait(false);
@@ -157,7 +161,10 @@ public class AskAfreshTests : RecoveryTestFixture
                 {
                     var entry = await GraphQL
                         .SendAsync(
-                            $$"""{ operations { workQueue { detail(id: {{entryId}}) { metadataId } } } }""",
+                            string.Create(
+                                CultureInfo.InvariantCulture,
+                                $$"""{ operations { workQueue { detail(id: {{entryId}}) { metadataId } } } }"""
+                            ),
                             OperatorKey
                         )
                         .ConfigureAwait(false);

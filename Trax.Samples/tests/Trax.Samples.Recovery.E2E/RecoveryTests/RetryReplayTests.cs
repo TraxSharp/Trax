@@ -1,3 +1,4 @@
+using System.Globalization;
 using Trax.Samples.Recovery.E2E.Fixtures;
 using Trax.Samples.Shared.Testing;
 
@@ -189,7 +190,10 @@ public class RetryReplayTests : RecoveryTestFixture
             );
 
         var detail = await GraphQL.SendAsync(
-            $$"""{ operations { executionDetail(id: {{second}}) { output } } }""",
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $$"""{ operations { executionDetail(id: {{second}}) { output } } }"""
+            ),
             OperatorKey
         );
         detail.HasErrors.Should().BeFalse(detail.FirstErrorMessage);
@@ -214,7 +218,10 @@ public class RetryReplayTests : RecoveryTestFixture
             {
                 var response = await GraphQL
                     .SendAsync(
-                        $$"""{ operations { manifestDetail(id: {{Run.ManifestId}}) { isEnabled } } }""",
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $$"""{ operations { manifestDetail(id: {{Run.ManifestId}}) { isEnabled } } }"""
+                        ),
                         OperatorKey
                     )
                     .ConfigureAwait(false);

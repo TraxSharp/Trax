@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using Microsoft.Extensions.Configuration;
@@ -33,7 +34,7 @@ internal sealed class TestRunner : Function
 
     public static TestRunner Start(string connectionString)
     {
-        var baseUrl = $"http://127.0.0.1:{FreePort()}";
+        var baseUrl = string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{FreePort()}");
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(
                 new Dictionary<string, string?>(StringComparer.Ordinal)

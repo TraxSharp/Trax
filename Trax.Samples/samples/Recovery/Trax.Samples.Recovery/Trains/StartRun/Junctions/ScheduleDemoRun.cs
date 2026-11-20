@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Services.EffectJunction;
@@ -116,7 +117,10 @@ public class ScheduleDemoRun(
             }
             if (DateTime.UtcNow > deadline)
                 throw new TimeoutException(
-                    $"The scheduler did not queue the run within {FirstRunWait.TotalSeconds} seconds."
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"The scheduler did not queue the run within {FirstRunWait.TotalSeconds} seconds."
+                    )
                 );
             await Task.Delay(TimeSpan.FromMilliseconds(100), CancellationToken)
                 .ConfigureAwait(false);
