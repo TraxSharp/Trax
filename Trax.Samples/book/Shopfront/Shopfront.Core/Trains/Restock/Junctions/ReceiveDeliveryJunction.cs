@@ -6,7 +6,7 @@ using Trax.Effect.Services.EffectJunction;
 
 namespace Shopfront.Trains.Restock.Junctions;
 
-internal class ReceiveDeliveryJunction(
+internal sealed class ReceiveDeliveryJunction(
     ISupplier supplier,
     IShopfrontDbContext db,
     ILogger<ReceiveDeliveryJunction> logger
@@ -14,7 +14,9 @@ internal class ReceiveDeliveryJunction(
 {
     public override async Task<RestockOutput> Run(ShortProducts shortProducts)
     {
-        var delivered = await supplier.Deliver(shortProducts.Skus, CancellationToken);
+        var delivered = await supplier
+            .Deliver(shortProducts.Skus, CancellationToken)
+            .ConfigureAwait(false);
 
         foreach (var (sku, units) in delivered)
             await db
@@ -22,7 +24,8 @@ internal class ReceiveDeliveryJunction(
                 .ExecuteUpdateAsync(
                     set => set.SetProperty(p => p.Stock, p => p.Stock + units),
                     CancellationToken
-                );
+                )
+                .ConfigureAwait(false);
 
         logger.LogInformation("Received {Count} deliveries", delivered.Count);
         return new RestockOutput([.. delivered.Select(d => new Delivery(d.Sku, d.Units))]);

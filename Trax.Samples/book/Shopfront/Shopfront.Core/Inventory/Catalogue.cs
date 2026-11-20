@@ -7,12 +7,14 @@ namespace Shopfront.Inventory;
 public class Catalogue(IShopfrontDbContext db)
 {
     // The price of each of these SKUs that the shop sells.
-    public Task<Dictionary<string, decimal>> PricesOf(
+    public async Task<IReadOnlyDictionary<string, decimal>> PricesOf(
         IReadOnlyCollection<string> skus,
         CancellationToken cancellationToken
     ) =>
-        db.Products.Where(p => skus.Contains(p.Sku))
-            .ToDictionaryAsync(p => p.Sku, p => p.Price, cancellationToken);
+        await db
+            .Products.Where(p => skus.Contains(p.Sku))
+            .ToDictionaryAsync(p => p.Sku, p => p.Price, StringComparer.Ordinal, cancellationToken)
+            .ConfigureAwait(false);
 
     // Reserves every line or none of them. Returns the first SKU that is short, or null.
     public async Task<string?> TryReserve(
@@ -23,7 +25,8 @@ public class Catalogue(IShopfrontDbContext db)
         var skus = lines.Select(l => l.Sku).ToList();
         var products = await db
             .Products.Where(p => skus.Contains(p.Sku))
-            .ToDictionaryAsync(p => p.Sku, cancellationToken);
+            .ToDictionaryAsync(p => p.Sku, StringComparer.Ordinal, cancellationToken)
+            .ConfigureAwait(false);
 
         var shortSku = lines
             .Where(l => products[l.Sku].Stock < l.Quantity)
@@ -37,7 +40,7 @@ public class Catalogue(IShopfrontDbContext db)
 
         // One transaction for every line. If another order changed one of these products since
         // it was read, nothing is saved and DbUpdateConcurrencyException says so.
-        await db.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return null;
     }
 
@@ -54,6 +57,7 @@ public class Catalogue(IShopfrontDbContext db)
                 .ExecuteUpdateAsync(
                     set => set.SetProperty(p => p.Stock, p => p.Stock + quantity),
                     cancellationToken
-                );
+                )
+                .ConfigureAwait(false);
     }
 }

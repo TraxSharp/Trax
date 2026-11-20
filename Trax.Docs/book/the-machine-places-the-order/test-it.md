@@ -81,15 +81,23 @@ public class TakePaymentJunctionTests
 
     private static async Task<Payment> Run(IPaymentProvider payments)
     {
-        await using var db = TestDatabase.NewContext();
-        await using var services = new ServiceCollection().BuildServiceProvider();
-        var junction = new TakePaymentJunction(
-            payments,
-            new Catalogue(db),
-            services,
-            NullLogger<TakePaymentJunction>.Instance
-        );
-        return await junction.Run((Ada, Order, Cart, new StockReservation(Guid.NewGuid())));
+        var db = TestDatabase.NewContext();
+        await using (db.ConfigureAwait(false))
+        {
+            var services = new ServiceCollection().BuildServiceProvider();
+            await using (services.ConfigureAwait(false))
+            {
+                var junction = new TakePaymentJunction(
+                    payments,
+                    new Catalogue(db),
+                    services,
+                    NullLogger<TakePaymentJunction>.Instance
+                );
+                return await junction
+                    .Run((Ada, Order, Cart, new StockReservation(Guid.NewGuid())))
+                    .ConfigureAwait(false);
+            }
+        }
     }
 
     [Test]
@@ -100,9 +108,7 @@ public class TakePaymentJunctionTests
         var payment = await Run(payments);
 
         payments.Charges.Should().Equal(("TraxJwt:ada", "tok_visa", 75.00m, (string?)null));
-        payment
-            .Should()
-            .Be(new Payment("tx_test", 75.00m, "https://pay.example/receipts/tx_test"));
+        payment.Should().Be(new Payment("tx_test", 75.00m, "https://pay.example/receipts/tx_test"));
         (await TestDatabase.StockOf("TEE")).Should().Be(0);
     }
 
@@ -157,6 +163,7 @@ public class TakePaymentJunctionTests
 ```csharp compile=tests file=tests/Shopfront.Tests/UnitTests/ConfirmOrderJunctionTests.cs
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Shopfront.Trains.PlaceOrder.Junctions;
 using Shopfront.Trains.PlaceOrder.Models;
 
@@ -178,7 +185,8 @@ public class ConfirmOrderJunctionTests
         {
             var output = await new ConfirmOrderJunction(
                 db,
-                NullLogger<ConfirmOrderJunction>.Instance
+                NullLogger<ConfirmOrderJunction>.Instance,
+                new FakeTimeProvider()
             ).Run((new Customer("TraxJwt:ada"), cart, payment));
 
             output.TransactionId.Should().Be("tx_test");
@@ -209,6 +217,7 @@ using Shopfront.Trains.PlaceOrder.Models;
 using Trax.Api.Auth;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
@@ -225,11 +234,11 @@ public class PlaceOrderTrainTests
 {
     private const string Ada = "TraxJwt:ada";
 
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     private async Task Build(Action<IServiceCollection>? replace = null)
     {
-        await TestDatabase.Reset();
+        await TestDatabase.Reset().ConfigureAwait(false);
 
         var services = new ServiceCollection();
         services.AddLogging();
@@ -246,7 +255,11 @@ public class PlaceOrderTrainTests
     }
 
     [TearDown]
-    public ValueTask DisposeTheContainer() => _provider.DisposeAsync();
+    public async ValueTask DisposeTheContainer()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync().ConfigureAwait(false);
+    }
 
     // A payment token no other test uses, to find this run's record among any others.
     private static string NewToken() => $"tok_{Guid.NewGuid():N}";
@@ -259,11 +272,11 @@ public class PlaceOrderTrainTests
     {
         await Build();
         var token = NewToken();
-        var bus = _provider.GetRequiredService<ITrainBus>();
+        var bus = _provider.NotNull().GetRequiredService<ITrainBus>();
 
         var output = await bus.RunAsync<PlaceOrderOutput>(Order(token, "MUG"));
 
-        var run = RunFor(token);
+        var run = await RunForAsync(token);
         run.TrainState.Should().Be(TrainState.Completed);
         run.Output.Should().Contain(output.TransactionId);
         await using var db = TestDatabase.NewContext();
@@ -276,12 +289,12 @@ public class PlaceOrderTrainTests
     {
         await Build();
         var token = NewToken();
-        var bus = _provider.GetRequiredService<ITrainBus>();
+        var bus = _provider.NotNull().GetRequiredService<ITrainBus>();
 
         var act = () => bus.RunAsync<PlaceOrderOutput>(Order(token, "MUG", 9));
 
         await act.Should().ThrowAsync<TrainException>().WithMessage("*You have not been charged.");
-        RunFor(token).FailureJunction.Should().Be("RefuseOrderJunction");
+        (await RunForAsync(token)).FailureJunction.Should().Be("RefuseOrderJunction");
         (await TestDatabase.StockOf("MUG")).Should().Be(10);
     }
 
@@ -290,9 +303,9 @@ public class PlaceOrderTrainTests
     {
         var decider = new ScriptedDecider().YesNo<LooksFraudulent>(0.9);
         await Build(services => services.AddSingleton<IDecider>(decider));
-        var bus = _provider.GetRequiredService<ITrainBus>();
+        var bus = _provider.NotNull().GetRequiredService<ITrainBus>();
 
-        var act = () => bus.RunAsync<PlaceOrderOutput>(Order(NewToken(), "MUG"));
+        var act = () => bus.RunAsync<PlaceOrderOutput>(Order(NewToken(), "MUG"), decider.LastToken);
 
         await act.Should().ThrowAsync<TrainException>();
         decider
@@ -307,12 +320,12 @@ public class PlaceOrderTrainTests
     {
         await Build();
         var token = NewToken();
-        var bus = _provider.GetRequiredService<ITrainBus>();
+        var bus = _provider.NotNull().GetRequiredService<ITrainBus>();
 
         var act = () => bus.RunAsync<PlaceOrderOutput>(Order(token, "CAP"));
 
         await act.Should().ThrowAsync<TrainException>().WithMessage("CAP is out of stock.");
-        var run = RunFor(token);
+        var run = await RunForAsync(token);
         run.TrainState.Should().Be(TrainState.Failed);
         run.FailureJunction.Should().Be("ReserveStockJunction");
         run.FailureClass.Should().Be(FailureClass.Permanent);
@@ -322,13 +335,13 @@ public class PlaceOrderTrainTests
     public async Task RunAsync_Declined_FailsAtTakePaymentAndStoresNoOrder()
     {
         await Build();
-        var bus = _provider.GetRequiredService<ITrainBus>();
+        var bus = _provider.NotNull().GetRequiredService<ITrainBus>();
 
         var act = () =>
             bus.RunAsync<PlaceOrderOutput>(Order(FakePaymentProvider.DeclinedToken, "MUG"));
 
         await act.Should().ThrowAsync<TrainException>().WithMessage("The card was declined.");
-        var run = RunFor(FakePaymentProvider.DeclinedToken);
+        var run = await RunForAsync(FakePaymentProvider.DeclinedToken);
         run.FailureJunction.Should().Be("TakePaymentJunction");
         run.FailureClass.Should().Be(FailureClass.Permanent);
         await using var db = TestDatabase.NewContext();
@@ -340,7 +353,7 @@ public class PlaceOrderTrainTests
     public async Task RunAsync_FifthCharge_TimesOutAsTransient()
     {
         await Build();
-        var bus = _provider.GetRequiredService<ITrainBus>();
+        var bus = _provider.NotNull().GetRequiredService<ITrainBus>();
         for (var i = 0; i < 4; i++)
             await bus.RunAsync<PlaceOrderOutput>(Order(NewToken(), "MUG"));
         var token = NewToken();
@@ -348,19 +361,25 @@ public class PlaceOrderTrainTests
         var act = () => bus.RunAsync<PlaceOrderOutput>(Order(token, "MUG"));
 
         await act.Should().ThrowExactlyAsync<TimeoutException>();
-        var run = RunFor(token);
+        var run = await RunForAsync(token);
         run.FailureJunction.Should().Be("TakePaymentJunction");
         run.FailureClass.Should().Be(FailureClass.Transient);
     }
 
-    private Metadata RunFor(string paymentToken)
+    private async Task<Metadata> RunForAsync(string paymentToken)
     {
-        using var scope = _provider.CreateScope();
-        var data = scope.ServiceProvider.GetRequiredService<IDataContext>();
-        return data
-            .Metadatas.Where(m => m.Name == typeof(IPlaceOrderTrain).FullName)
-            .AsEnumerable()
-            .Single(m => m.Input?.Contains(paymentToken) == true);
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var data = scope.ServiceProvider.GetRequiredService<IDataContext>();
+            var runs = await data
+                .Metadatas.Where(m => m.Name == typeof(IPlaceOrderTrain).FullName)
+                .ToListAsync()
+                .ConfigureAwait(false);
+            return runs.Single(m =>
+                m.Input?.Contains(paymentToken, StringComparison.Ordinal) == true
+            );
+        }
     }
 }
 ```

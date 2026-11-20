@@ -11,5 +11,5 @@ public class DocumentsAsText
     public void LetTextRun() => Environment.SetEnvironmentVariable(Switch, "false");
 
     [OneTimeTearDown]
-    public void Restore() => Environment.SetEnvironmentVariable(Switch, null);
+    public void Restore() => Environment.SetEnvironmentVariable(Switch, value: null);
 }

@@ -6,7 +6,7 @@ public class FakePaymentProvider : IPaymentProvider
 {
     public const string DeclinedToken = "tok_chargeDeclined";
 
-    private readonly ConcurrentDictionary<string, ChargeResult> byKey = new();
+    private readonly ConcurrentDictionary<string, ChargeResult> byKey = new(StringComparer.Ordinal);
     private int charges;
 
     public Task<ChargeResult> Charge(
@@ -20,7 +20,7 @@ public class FakePaymentProvider : IPaymentProvider
         if (idempotencyKey is not null && byKey.TryGetValue(idempotencyKey, out var earlier))
             return Task.FromResult(earlier);
 
-        if (paymentToken == DeclinedToken)
+        if (string.Equals(paymentToken, DeclinedToken, StringComparison.Ordinal))
             throw new PaymentDeclinedException("The card was declined.");
 
         if (Interlocked.Increment(ref charges) % 5 == 0)

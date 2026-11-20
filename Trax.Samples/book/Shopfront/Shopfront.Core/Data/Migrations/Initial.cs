@@ -26,7 +26,7 @@ namespace Shopfront.Data.Migrations
                     CustomerId = table.Column<string>(type: "text", nullable: false),
                     Total = table.Column<decimal>(type: "numeric(10,2)", precision: 10, scale: 2, nullable: false),
                     TransactionId = table.Column<string>(type: "text", nullable: false),
-                    PlacedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                    PlacedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                 },
                 constraints: table =>
                 {
@@ -42,7 +42,7 @@ namespace Shopfront.Data.Migrations
                     Name = table.Column<string>(type: "text", nullable: false),
                     Price = table.Column<decimal>(type: "numeric(10,2)", precision: 10, scale: 2, nullable: false),
                     Stock = table.Column<int>(type: "integer", nullable: false),
-                    xmin = table.Column<uint>(type: "xid", rowVersion: true, nullable: false)
+                    xmin = table.Column<uint>(type: "xid", rowVersion: true, nullable: false),
                 },
                 constraints: table =>
                 {
@@ -59,7 +59,7 @@ namespace Shopfront.Data.Migrations
                     OrderId = table.Column<Guid>(type: "uuid", nullable: false),
                     Sku = table.Column<string>(type: "text", nullable: false),
                     Quantity = table.Column<int>(type: "integer", nullable: false),
-                    UnitPrice = table.Column<decimal>(type: "numeric(10,2)", precision: 10, scale: 2, nullable: false)
+                    UnitPrice = table.Column<decimal>(type: "numeric(10,2)", precision: 10, scale: 2, nullable: false),
                 },
                 constraints: table =>
                 {
@@ -81,7 +81,7 @@ namespace Shopfront.Data.Migrations
                 {
                     { "CAP", "Cap", 18.50m, 0 },
                     { "MUG", "Mug", 12.00m, 10 },
-                    { "TEE", "T-shirt", 25.00m, 3 }
+                    { "TEE", "T-shirt", 25.00m, 3 },
                 });
 
             migrationBuilder.CreateIndex(

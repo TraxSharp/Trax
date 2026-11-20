@@ -25,7 +25,7 @@ namespace Shopfront.Machines.Checkout;
 
 public sealed record PlacedContext
 {
-    public List<CartLine>? Lines { get; init; }
+    public IReadOnlyList<CartLine>? Lines { get; init; }
     public string? Address { get; init; }
     public string? PaymentToken { get; init; }
     public Guid? OrderId { get; init; }
@@ -41,7 +41,7 @@ namespace Shopfront.Machines.Checkout;
 
 public sealed record ShippingContext
 {
-    public List<CartLine>? Lines { get; init; }
+    public IReadOnlyList<CartLine>? Lines { get; init; }
     public string? Address { get; init; }
     public string? PaymentToken { get; init; }
     public Guid? OrderId { get; init; }
@@ -96,6 +96,7 @@ using Shopfront.Machines.Parcel;
 using Shopfront.Machines.Parcel.Models;
 using Shopfront.Trains.PlaceOrder;
 using Shopfront.Trains.PlaceOrder.Models;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
@@ -108,16 +109,25 @@ public sealed class CheckoutMachine : Machine<CheckoutState, CheckoutTrigger>
 {
     private static readonly Rule HasLines = Field((CheckoutContext c) => c.Lines).CountAtLeast(1);
 
-    private static readonly Lazy<string?> EmbeddedCorpus = new(() =>
-    {
-        using var stream = typeof(CheckoutMachine).Assembly.GetManifestResourceStream(
-            "machines/checkout/differential.json"
-        );
-        return stream is null ? null : new StreamReader(stream).ReadToEnd();
-    });
+    private static readonly Lazy<Task<string?>> EmbeddedCorpus = new(ReadCorpusAsync);
 
     // The committed corpus, embedded in the library, so the machine can replay it and check itself.
-    public override string? Corpus => EmbeddedCorpus.Value;
+    // Corpus is a property, so the first read waits for the resource, which is already in memory.
+    public override string? Corpus => EmbeddedCorpus.Value.GetAwaiter().GetResult();
+
+    private static async Task<string?> ReadCorpusAsync()
+    {
+        var stream = typeof(CheckoutMachine).Assembly.GetManifestResourceStream(
+            "machines/checkout/differential.json"
+        );
+        if (stream is null)
+            return null;
+        await using (stream.ConfigureAwait(false))
+        {
+            using var reader = new StreamReader(stream);
+            return await reader.ReadToEndAsync().ConfigureAwait(false);
+        }
+    }
 
     protected override void Configure(IMachineBuilder<CheckoutState, CheckoutTrigger> m)
     {
@@ -227,7 +237,20 @@ public sealed class CheckoutMachine : Machine<CheckoutState, CheckoutTrigger>
                 .OutcomeSample(
                     CheckoutState.Placing,
                     new PlaceOrderOutput(
-                        Guid.Parse("3179f9c4-07ba-4f64-ac64-e7026995cc89"),
+                        // 3179f9c4-07ba-4f64-ac64-e7026995cc89
+                        new Guid(
+                            0x3179f9c4,
+                            0x07ba,
+                            0x4f64,
+                            0xac,
+                            0x64,
+                            0xe7,
+                            0x02,
+                            0x69,
+                            0x95,
+                            0xcc,
+                            0x89
+                        ),
                         24.00m,
                         "tx_sample"
                     )
@@ -241,14 +264,15 @@ public sealed class CheckoutMachine : Machine<CheckoutState, CheckoutTrigger>
         {
             Lines =
             [
-                .. checkout["lines"]!
+                .. checkout["lines"]
+                    .NotNull()
                     .AsArray()
                     .Select(line => new OrderLine(
-                        line!["sku"]!.GetValue<string>(),
-                        line["quantity"]!.GetValue<int>()
+                        line.NotNull()["sku"].NotNull().GetValue<string>(),
+                        line["quantity"].NotNull().GetValue<int>()
                     )),
             ],
-            PaymentToken = checkout["paymentToken"]!.GetValue<string>(),
+            PaymentToken = checkout["paymentToken"].NotNull().GetValue<string>(),
         };
 }
 ```

@@ -5,6 +5,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Shopfront.Auth;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 
 namespace Shopfront.Tests.IntegrationTests;
@@ -17,10 +18,10 @@ public class PersistedOperationsTests
     );
 
     private static readonly ClientManifestDocument StartCheckout = Manifest
-        .Machines.Single(m => m.Id == "checkout")
-        .Documents.Single(d => d.Operation == "start");
+        .Machines.Single(m => string.Equals(m.Id, "checkout", StringComparison.Ordinal))
+        .Documents.Single(d => string.Equals(d.Operation, "start", StringComparison.Ordinal));
 
-    private WebApplicationFactory<Program> _app = null!;
+    private WebApplicationFactory<Program>? _app;
 
     [SetUp]
     public async Task StartTheApplication()
@@ -35,14 +36,18 @@ public class PersistedOperationsTests
     }
 
     [TearDown]
-    public ValueTask StopTheApplication() => _app.DisposeAsync();
+    public async ValueTask StopTheApplication()
+    {
+        if (_app is not null)
+            await _app.DisposeAsync().ConfigureAwait(false);
+    }
 
     private HttpClient Ada()
     {
-        var client = _app.CreateClient();
+        var client = _app.NotNull().CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer",
-            DevJwt.Mint("ada", Roles.Customer)
+            DevJwt.Mint("ada", Roles.Customer, TimeProvider.System)
         );
         return client;
     }

@@ -61,15 +61,23 @@ public class TakePaymentJunctionTests
 
     private static async Task<Payment> Run(IPaymentProvider payments)
     {
-        await using var db = TestDatabase.NewContext();
-        await using var services = new ServiceCollection().BuildServiceProvider();
-        var junction = new TakePaymentJunction(
-            payments,
-            new Catalogue(db),
-            services,
-            NullLogger<TakePaymentJunction>.Instance
-        );
-        return await junction.Run((Ada, Order, Cart, new StockReservation(Guid.NewGuid())));
+        var db = TestDatabase.NewContext();
+        await using (db.ConfigureAwait(false))
+        {
+            var services = new ServiceCollection().BuildServiceProvider();
+            await using (services.ConfigureAwait(false))
+            {
+                var junction = new TakePaymentJunction(
+                    payments,
+                    new Catalogue(db),
+                    services,
+                    NullLogger<TakePaymentJunction>.Instance
+                );
+                return await junction
+                    .Run((Ada, Order, Cart, new StockReservation(Guid.NewGuid())))
+                    .ConfigureAwait(false);
+            }
+        }
     }
 
     [Test]
@@ -80,9 +88,7 @@ public class TakePaymentJunctionTests
         var payment = await Run(payments);
 
         payments.Charges.Should().Equal(("TraxJwt:ada", "tok_visa", 75.00m, (string?)null));
-        payment
-            .Should()
-            .Be(new Payment("tx_test", 75.00m, "https://pay.example/receipts/tx_test"));
+        payment.Should().Be(new Payment("tx_test", 75.00m, "https://pay.example/receipts/tx_test"));
         (await TestDatabase.StockOf("TEE")).Should().Be(0);
     }
 

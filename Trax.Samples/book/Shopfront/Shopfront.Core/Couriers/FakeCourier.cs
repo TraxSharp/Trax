@@ -11,7 +11,7 @@ public class FakeCourier : ICourier
 
     public async Task<CourierRates> Rates(CancellationToken cancellationToken)
     {
-        await Task.Delay(QuoteTime, cancellationToken);
+        await Task.Delay(QuoteTime, cancellationToken).ConfigureAwait(false);
         return new CourierRates(Base: 4.00m, PerKilogram: 1.50m);
     }
 

@@ -8,7 +8,7 @@ namespace Shopfront.Staff;
 public class StaffFailureHook(IStaffNotifier staff) : ITrainLifecycleHook
 {
     public Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct) =>
-        metadata.Name == typeof(IPlaceOrderTrain).FullName
+        string.Equals(metadata.Name, typeof(IPlaceOrderTrain).FullName, StringComparison.Ordinal)
             ? Task.CompletedTask
             : staff.Notify($"{metadata.Name} failed: {exception.Message}", ct);
 }

@@ -21,7 +21,7 @@ public class CheckTheOrderJunctionTests
                 CustomerId = "TraxJwt:ada",
                 Total = 24.00m,
                 TransactionId = "tx_test",
-                PlacedAt = DateTime.UtcNow,
+                PlacedAt = new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc),
             }
         );
         await db.SaveChangesAsync();
@@ -29,11 +29,14 @@ public class CheckTheOrderJunctionTests
 
     private static async Task<bool> Check(string orderId, string customerId)
     {
-        await using var db = TestDatabase.NewContext();
-        var output = await new CheckTheOrderJunction(db).Run(
-            new ReturnOrderInput { OrderId = orderId, CustomerId = customerId }
-        );
-        return output.Accepted;
+        var db = TestDatabase.NewContext();
+        await using (db.ConfigureAwait(false))
+        {
+            var output = await new CheckTheOrderJunction(db)
+                .Run(new ReturnOrderInput { OrderId = orderId, CustomerId = customerId })
+                .ConfigureAwait(false);
+            return output.Accepted;
+        }
     }
 
     [Test]

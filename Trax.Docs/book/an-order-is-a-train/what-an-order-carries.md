@@ -57,7 +57,7 @@ depend on them, so they are `internal`, as the junctions below are:
 ```csharp compile=app file=Trains/PlaceOrder/Models/PricedCart.cs
 namespace Shopfront.Trains.PlaceOrder.Models;
 
-internal record PricedCart(List<PricedLine> Lines, decimal Total);
+internal sealed record PricedCart(List<PricedLine> Lines, decimal Total);
 ```
 
 `Trains/PlaceOrder/Models/PricedLine.cs`:
@@ -65,7 +65,7 @@ internal record PricedCart(List<PricedLine> Lines, decimal Total);
 ```csharp compile=app file=Trains/PlaceOrder/Models/PricedLine.cs
 namespace Shopfront.Trains.PlaceOrder.Models;
 
-internal record PricedLine(string Sku, int Quantity, decimal UnitPrice);
+internal sealed record PricedLine(string Sku, int Quantity, decimal UnitPrice);
 ```
 
 `Trains/PlaceOrder/Models/StockReservation.cs`:
@@ -73,7 +73,7 @@ internal record PricedLine(string Sku, int Quantity, decimal UnitPrice);
 ```csharp compile=app file=Trains/PlaceOrder/Models/StockReservation.cs
 namespace Shopfront.Trains.PlaceOrder.Models;
 
-internal record StockReservation(Guid Id);
+internal sealed record StockReservation(Guid Id);
 ```
 
 `Trains/PlaceOrder/Models/Payment.cs`:

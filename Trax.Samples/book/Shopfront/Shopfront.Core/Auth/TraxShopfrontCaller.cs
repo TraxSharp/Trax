@@ -9,5 +9,6 @@ public sealed class TraxShopfrontCaller(TraxCaller caller, IServiceProvider serv
     : IShopfrontCaller
 {
     public string? CustomerId => caller.Principal?.Id ?? InvokedRuns.Current(services)?.UserKey;
-    public bool IsStaff => caller.Principal?.Roles.Contains(Roles.Staff) == true;
+    public bool IsStaff =>
+        caller.Principal?.Roles.Contains(Roles.Staff, StringComparer.Ordinal) == true;
 }

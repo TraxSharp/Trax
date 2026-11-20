@@ -5,13 +5,14 @@ using Shopfront.Trains.PlaceOrder;
 using Shopfront.Trains.PlaceOrder.Junctions;
 using Shopfront.Trains.PlaceOrder.Models;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 
 namespace Shopfront.Tests.UnitTests;
 
 [TestFixture]
 public class PriceCartJunctionTests
 {
-    private ShopfrontDbContext _db = null!;
+    private ShopfrontDbContext? _db;
 
     [SetUp]
     public async Task ResetTheDatabase()
@@ -21,10 +22,14 @@ public class PriceCartJunctionTests
     }
 
     [TearDown]
-    public ValueTask DisposeTheContext() => _db.DisposeAsync();
+    public async ValueTask DisposeTheContext()
+    {
+        if (_db is not null)
+            await _db.DisposeAsync().ConfigureAwait(false);
+    }
 
     private PriceCartJunction Junction() =>
-        new(new Catalogue(_db), NullLogger<PriceCartJunction>.Instance);
+        new(new Catalogue(_db.NotNull()), NullLogger<PriceCartJunction>.Instance);
 
     private static PlaceOrderInput Order(params OrderLine[] lines) =>
         new() { Lines = [.. lines], PaymentToken = "tok_visa" };

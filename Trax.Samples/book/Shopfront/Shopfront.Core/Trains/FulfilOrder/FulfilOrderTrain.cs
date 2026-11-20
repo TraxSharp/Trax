@@ -1,5 +1,6 @@
 using Shopfront.Trains.FulfilOrder.Junctions;
 using Shopfront.Trains.FulfilOrder.Models;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.ServiceTrain;
@@ -20,5 +21,6 @@ public class FulfilOrderTrain : ServiceTrain<FulfilOrderInput, FulfilOrderOutput
             .Resolve();
 
     // One order is fulfilled one queued run at a time, however often it is queued.
-    protected override string? QueueSubjectKey(Metadata metadata) => $"order:{TrainInput.OrderId}";
+    protected override string? QueueSubjectKey(Metadata metadata) =>
+        $"order:{TrainInput.NotNull().OrderId}";
 }

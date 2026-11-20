@@ -66,7 +66,7 @@ namespace Shopfront.Trains.PlaceOrder;
 
 public record PlaceOrderInput
 {
-    public required List<OrderLine> Lines { get; init; }
+    public required IReadOnlyList<OrderLine> Lines { get; init; }
     public required string PaymentToken { get; init; }
 }
 ```
@@ -80,7 +80,7 @@ does.
 ```csharp compile=app file=Trains/PlaceOrder/Models/Customer.cs
 namespace Shopfront.Trains.PlaceOrder.Models;
 
-internal record Customer(string Id);
+internal sealed record Customer(string Id);
 ```
 
 `Trains/PlaceOrder/Junctions/IdentifyCustomerJunction.cs`:
@@ -117,15 +117,14 @@ using Trax.Effect.Services.EffectJunction;
 
 namespace Shopfront.Trains.PlaceOrder.Junctions;
 
-internal class AssessRiskJunction(IShopfrontDbContext db)
+internal sealed class AssessRiskJunction(IShopfrontDbContext db)
     : EffectJunction<(Customer Customer, PricedCart Cart), OrderRisk>
 {
     public override async Task<OrderRisk> Run((Customer Customer, PricedCart Cart) input)
     {
-        var ordered = await db.Orders.AnyAsync(
-            o => o.CustomerId == input.Customer.Id,
-            CancellationToken
-        );
+        var ordered = await db
+            .Orders.AnyAsync(o => o.CustomerId == input.Customer.Id, CancellationToken)
+            .ConfigureAwait(false);
         return new OrderRisk(input.Customer.Id, input.Cart.Total, FirstOrder: !ordered);
     }
 }

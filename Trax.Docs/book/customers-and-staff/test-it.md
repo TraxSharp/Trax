@@ -27,7 +27,7 @@ namespace Shopfront.Tests;
 
 internal sealed record TestCaller(string? CustomerId, bool IsStaff) : IShopfrontCaller
 {
-    public static readonly TestCaller Staff = new(null, IsStaff: true);
+    public static readonly TestCaller Staff = new(CustomerId: null, IsStaff: true);
 
     public static TestCaller Customer(string id) => new(id, IsStaff: false);
 }
@@ -82,13 +82,14 @@ using Shopfront.Trains.PlaceOrder;
 using Shopfront.Trains.PlaceOrder.Junctions;
 using Shopfront.Trains.PlaceOrder.Models;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 
 namespace Shopfront.Tests.UnitTests;
 
 [TestFixture]
 public class PriceCartJunctionTests
 {
-    private ShopfrontDbContext _db = null!;
+    private ShopfrontDbContext? _db;
 
     [SetUp]
     public async Task ResetTheDatabase()
@@ -98,10 +99,14 @@ public class PriceCartJunctionTests
     }
 
     [TearDown]
-    public ValueTask DisposeTheContext() => _db.DisposeAsync();
+    public async ValueTask DisposeTheContext()
+    {
+        if (_db is not null)
+            await _db.DisposeAsync().ConfigureAwait(false);
+    }
 
     private PriceCartJunction Junction() =>
-        new(new Catalogue(_db), NullLogger<PriceCartJunction>.Instance);
+        new(new Catalogue(_db.NotNull()), NullLogger<PriceCartJunction>.Instance);
 
     private static PlaceOrderInput Order(params OrderLine[] lines) =>
         new() { Lines = [.. lines], PaymentToken = "tok_visa" };
@@ -381,8 +386,15 @@ public class OrderFilterTests
 
     private static async Task<List<string>> OwnersSeenBy(IShopfrontCaller caller)
     {
-        await using var db = TestDatabase.NewContext(caller);
-        return await db.Orders.Select(o => o.CustomerId).OrderBy(c => c).ToListAsync();
+        var db = TestDatabase.NewContext(caller);
+        await using (db.ConfigureAwait(false))
+        {
+            return await db
+                .Orders.Select(o => o.CustomerId)
+                .OrderBy(c => c)
+                .ToListAsync()
+                .ConfigureAwait(false);
+        }
     }
 
     [Test]
@@ -621,7 +633,7 @@ public class HostTests
         var client = _app.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer",
-            DevJwt.Mint(user, role)
+            DevJwt.Mint(user, role, TimeProvider.System)
         );
         return client;
     }

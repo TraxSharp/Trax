@@ -1,3 +1,3 @@
 namespace Shopfront.Trains.LowStockCheck;
 
-public record LowStockCheckOutput(List<string> LowSkus);
+public record LowStockCheckOutput(IReadOnlyList<string> LowSkus);
