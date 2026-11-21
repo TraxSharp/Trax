@@ -12,7 +12,10 @@ follows: book/scheduled-work/run-it-now
 
 # 9.6 Test it
 
-The junctions are tested against the test database, as the others are.
+The junctions are tested against the test database, as the others are. The stock report reads the
+clock from a `TimeProvider`, so the test hands it a `FakeTimeProvider` from the
+`Microsoft.Extensions.TimeProvider.Testing` package: add a `PackageVersion` for it to
+`Directory.Packages.props` and a `PackageReference` to the test project.
 
 `tests/Shopfront.Tests/UnitTests/StockJunctionTests.cs`:
 

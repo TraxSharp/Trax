@@ -68,6 +68,7 @@ public static partial class SnippetCompiler
         "Microsoft.AspNetCore.Mvc.Testing",
         "Microsoft.AspNetCore.TestHost",
         "Microsoft.CodeAnalysis",
+        "Microsoft.Extensions.TimeProvider.Testing",
         "Microsoft.TestPlatform",
         "Microsoft.VisualStudio.TestPlatform",
         "Microsoft.VisualStudio.CodeCoverage",
@@ -84,6 +85,7 @@ public static partial class SnippetCompiler
         "AwesomeAssertions",
         "Microsoft.AspNetCore.Mvc.Testing",
         "Microsoft.AspNetCore.TestHost",
+        "Microsoft.Extensions.TimeProvider.Testing",
     ];
 
     /// <summary>

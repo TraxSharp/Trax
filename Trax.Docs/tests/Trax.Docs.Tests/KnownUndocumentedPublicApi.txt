@@ -22,8 +22,6 @@ trax M:CodeRenderer.RenderTrainInterfaceAsync
 trax M:CodeRenderer.RenderTrainsCsprojAsync
 trax M:CodeRenderer.RenderTypeRecordAsync
 trax M:CodeRenderer.SetModelsNamespace
-trax M:GraphQLSchemaParser.ParseAsync
-trax M:ISchemaParser.ParseAsync
 trax M:NamingConventions.DeriveGroupName
 trax M:NamingConventions.SanitizeIdentifier
 trax M:NamingConventions.SimplifySchemaName
@@ -31,8 +29,6 @@ trax M:NamingConventions.StripHttpVerbPrefix
 trax M:NamingConventions.ToCamelCase
 trax M:NamingConventions.ToKebabCase
 trax M:NamingConventions.ToPascalCase
-trax M:OpenApiSchemaParser.ParseAsync
-trax M:TraxProjectGenerator.GenerateAsync
 trax M:TraxProjectGenerator.IsDotnetAvailableAsync
 trax T:ApiEnum
 trax T:ApiField

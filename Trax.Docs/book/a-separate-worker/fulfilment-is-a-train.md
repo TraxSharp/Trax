@@ -103,6 +103,7 @@ internal class PackOrderJunction(IWarehouse warehouse, ILogger<PackOrderJunction
 
 ```csharp compile=app file=Shopfront.Core/Trains/FulfilOrder/FulfilOrderTrain.cs
 using Shopfront.Trains.FulfilOrder.Junctions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.ServiceTrain;
@@ -116,7 +117,7 @@ public class FulfilOrderTrain : ServiceTrain<FulfilOrderInput, FulfilOrderOutput
 
     // One order is fulfilled one queued run at a time, however often it is queued.
     protected override string? QueueSubjectKey(Metadata metadata) =>
-        $"order:{TrainInput.OrderId}";
+        $"order:{TrainInput.NotNull().OrderId}";
 }
 ```
 
