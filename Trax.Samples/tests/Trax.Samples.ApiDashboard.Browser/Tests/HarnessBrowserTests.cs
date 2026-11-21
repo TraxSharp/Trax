@@ -36,7 +36,8 @@ public class HarnessBrowserTests : ConsoleTest
                 .CountAsync(d =>
                     d.Status == DeadLetterStatus.AwaitingIntervention
                     && d.Reason == first.Reason
-                    && d.Manifest.NotNull().Name == typeof(IImportFeedTrain).FullName
+                    && d.Manifest != null
+                    && d.Manifest.Name == typeof(IImportFeedTrain).FullName
                 )
         );
         awaiting.Should().BeGreaterThanOrEqualTo(2);

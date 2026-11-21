@@ -47,7 +47,8 @@ public partial class OverviewBrowserTests : ConsoleTest
                 .CountAsync(d =>
                     d.Status == DeadLetterStatus.AwaitingIntervention
                     && d.Reason == first.Reason
-                    && d.Manifest.NotNull().Name == train
+                    && d.Manifest != null
+                    && d.Manifest.Name == train
                 )
         );
         awaiting.Should().BeGreaterThanOrEqualTo(2);
