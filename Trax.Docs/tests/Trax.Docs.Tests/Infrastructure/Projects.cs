@@ -8,7 +8,9 @@ namespace Trax.Docs.Tests.Infrastructure;
 /// </summary>
 internal static partial class Projects
 {
-    private static readonly Lazy<IReadOnlyDictionary<string, Package>> Cached = new(Load);
+    private static readonly Lazy<Task<IReadOnlyDictionary<string, Package>>> Cached = new(
+        LoadAsync
+    );
 
     [GeneratedRegex(
         @"<AssemblyName>(?<name>[^<]+)</AssemblyName>",
@@ -27,20 +29,22 @@ internal static partial class Projects
     /// project files are the only place it is turned off. The sample apps never set it and are
     /// not packages, which is why only <c>src/</c> counts.
     /// </summary>
-    public static IReadOnlyDictionary<string, Package> Packable => Cached.Value;
+    public static Task<IReadOnlyDictionary<string, Package>> PackableAsync() => Cached.Value;
 
     /// <summary>
     /// The npm packages the repository holds, by the <c>name</c> in their <c>package.json</c>:
     /// what a <c>surface: typescript</c> page's <c>package:</c> names.
     /// </summary>
-    public static IReadOnlySet<string> NpmPackages()
+    public static async Task<IReadOnlySet<string>> NpmPackagesAsync()
     {
         var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var folder in Directory.EnumerateDirectories(RepoRoot.Monorepo, "Trax.*"))
         {
             foreach (var file in RepoRoot.FilesUnder(folder, "package.json"))
             {
-                using var json = JsonDocument.Parse(File.ReadAllText(file));
+                using var json = JsonDocument.Parse(
+                    await File.ReadAllTextAsync(file).ConfigureAwait(false)
+                );
                 if (
                     json.RootElement.TryGetProperty("name", out var name)
                     && name.GetString() is { } n
@@ -51,7 +55,7 @@ internal static partial class Projects
         return names;
     }
 
-    private static IReadOnlyDictionary<string, Package> Load()
+    private static async Task<IReadOnlyDictionary<string, Package>> LoadAsync()
     {
         var baselines = Baselines();
         var packages = new Dictionary<string, Package>(StringComparer.Ordinal);
@@ -68,7 +72,7 @@ internal static partial class Projects
 
             foreach (var csproj in RepoRoot.FilesUnder(src, "*.csproj"))
             {
-                var text = File.ReadAllText(csproj);
+                var text = await File.ReadAllTextAsync(csproj).ConfigureAwait(false);
                 if (
                     text.Contains(
                         "<IsPackable>false</IsPackable>",

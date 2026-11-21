@@ -122,8 +122,8 @@ internal sealed partial class FrontMatter
     }
 
     /// <summary>The page's front matter, read from its file.</summary>
-    public static FrontMatter OfPage(string page) =>
-        Of(File.ReadAllText(RepoRoot.Combine(page.Split('/'))));
+    public static async Task<FrontMatter> OfPageAsync(string page) =>
+        Of(await File.ReadAllTextAsync(RepoRoot.Combine(page.Split('/'))).ConfigureAwait(false));
 
     private static string Unquote(string value)
     {

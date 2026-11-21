@@ -62,9 +62,9 @@ public partial class InternalLinksResolveTests
     private static readonly HashSet<string> KnownBrokenLinks = new(StringComparer.Ordinal) { };
 
     [Test]
-    public void Every_InternalLink_ResolvesTo_ExistingPageAndHeading()
+    public async Task Every_InternalLink_ResolvesTo_ExistingPageAndHeading()
     {
-        var site = DocsSite.Load();
+        var site = await DocsSite.LoadAsync().ConfigureAwait(false);
 
         var offenders = new List<string>();
         var allowed = new HashSet<string>(StringComparer.Ordinal);
@@ -74,7 +74,9 @@ public partial class InternalLinksResolveTests
             var rel = RepoRoot.Relative(file).Replace('\\', '/');
             var isPublished = site.Pages.Contains(rel);
 
-            foreach (var (line, target) in Links(File.ReadAllText(file)))
+            foreach (
+                var (line, target) in Links(await File.ReadAllTextAsync(file).ConfigureAwait(false))
+            )
             {
                 var problem = Check(rel, isPublished, target, site);
                 if (problem is null)

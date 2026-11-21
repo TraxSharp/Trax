@@ -35,13 +35,15 @@ public partial class ImagesResolveTests
     private static partial Regex InlineCode { get; }
 
     [Test]
-    public void Every_Image_IsAFigure_ThatExists_WithAltText()
+    public async Task Every_Image_IsAFigure_ThatExists_WithAltText()
     {
         var offenders = new List<string>();
 
         foreach (var page in RepoRoot.PublishedPages())
         {
-            foreach (var (line, alt, target) in Images(ReadPage(page)))
+            foreach (
+                var (line, alt, target) in Images(await ReadPageAsync(page).ConfigureAwait(false))
+            )
             {
                 if (!target.StartsWith(ImagesPath, StringComparison.Ordinal))
                     offenders.Add(
@@ -78,24 +80,27 @@ public partial class ImagesResolveTests
     }
 
     [Test]
-    public void Every_FigureInImages_IsShownOnAPage()
+    public async Task Every_FigureInImages_IsShownOnAPage()
     {
         var dir = RepoRoot.Combine("images");
         if (!Directory.Exists(dir))
             return;
 
-        var shown = RepoRoot
-            .PublishedPages()
-            .SelectMany(page => Images(ReadPage(page)))
-            .Select(image => image.Target)
-            .Where(target => target.StartsWith(ImagesPath, StringComparison.Ordinal))
-            .Select(target => target[ImagesPath.Length..])
-            .ToHashSet(StringComparer.Ordinal);
+        var shown = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var page in RepoRoot.PublishedPages())
+        {
+            shown.UnionWith(
+                Images(await ReadPageAsync(page).ConfigureAwait(false))
+                    .Select(image => image.Target)
+                    .Where(target => target.StartsWith(ImagesPath, StringComparison.Ordinal))
+                    .Select(target => target[ImagesPath.Length..])
+            );
+        }
 
         var unused = Directory
             .EnumerateFiles(dir)
-            .Select(Path.GetFileName)
-            .Where(name => !shown.Contains(name!))
+            .Select(file => Path.GetFileName(file))
+            .Where(name => !shown.Contains(name))
             .Order(StringComparer.Ordinal);
 
         unused
@@ -107,8 +112,8 @@ public partial class ImagesResolveTests
             );
     }
 
-    private static string ReadPage(string page) =>
-        File.ReadAllText(RepoRoot.Combine(page.Split('/')));
+    private static Task<string> ReadPageAsync(string page) =>
+        File.ReadAllTextAsync(RepoRoot.Combine(page.Split('/')));
 
     /// <summary>The images on a page with their line numbers, skipping code.</summary>
     private static IEnumerable<(int Line, string Alt, string Target)> Images(string content)

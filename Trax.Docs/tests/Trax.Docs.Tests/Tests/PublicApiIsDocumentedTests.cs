@@ -80,7 +80,7 @@ public partial class PublicApiIsDocumentedTests
     private static partial Regex Word { get; }
 
     [Test]
-    public void Every_PublicApi_IsNamed_OnAPublishedPage()
+    public async Task Every_PublicApi_IsNamed_OnAPublishedPage()
     {
         var baselines = Baselines().ToList();
         baselines
@@ -89,12 +89,18 @@ public partial class PublicApiIsDocumentedTests
                 "the guard reads the public API baselines; finding none means it checks nothing"
             );
 
-        var words = PublishedWords();
-        var known = KnownUndocumented();
+        var words = await PublishedWordsAsync().ConfigureAwait(false);
+        var known = await KnownUndocumentedAsync().ConfigureAwait(false);
 
-        var undocumented = baselines
-            .SelectMany(b => Undocumented(b.Assembly, File.ReadAllText(b.Path), words))
-            .ToHashSet(StringComparer.Ordinal);
+        var undocumented = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (assembly, path) in baselines)
+            undocumented.UnionWith(
+                Undocumented(
+                    assembly,
+                    await File.ReadAllTextAsync(path).ConfigureAwait(false),
+                    words
+                )
+            );
 
         var offenders = undocumented
             .Where(k => !known.Contains(k))
@@ -457,14 +463,16 @@ public partial class PublicApiIsDocumentedTests
     }
 
     /// <summary>Every word on a page traxsharp.net publishes.</summary>
-    private static HashSet<string> PublishedWords()
+    private static async Task<HashSet<string>> PublishedWordsAsync()
     {
         var words = new HashSet<string>(StringComparer.Ordinal);
         foreach (var file in RepoRoot.MarkdownFiles())
         {
             if (!RepoRoot.IsPublished(RepoRoot.Relative(file).Replace('\\', '/')))
                 continue;
-            foreach (Match word in Word.Matches(File.ReadAllText(file)))
+            foreach (
+                Match word in Word.Matches(await File.ReadAllTextAsync(file).ConfigureAwait(false))
+            )
                 words.Add(word.Value);
         }
 
@@ -474,7 +482,7 @@ public partial class PublicApiIsDocumentedTests
     /// <summary>Each folder's public API baselines, with the assembly each one describes.</summary>
     private static IEnumerable<(string Assembly, string Path)> Baselines()
     {
-        var monorepo = Directory.GetParent(RepoRoot.Path)!.FullName;
+        var monorepo = RepoRoot.Monorepo;
         foreach (
             var folder in Directory
                 .EnumerateDirectories(monorepo, "Trax.*")
@@ -497,8 +505,11 @@ public partial class PublicApiIsDocumentedTests
         }
     }
 
-    private static HashSet<string> KnownUndocumented() =>
-        File.ReadAllLines(RepoRoot.Combine(KnownUndocumentedFile.Split('/')))
+    private static async Task<HashSet<string>> KnownUndocumentedAsync() =>
+        (
+            await File.ReadAllLinesAsync(RepoRoot.Combine(KnownUndocumentedFile.Split('/')))
+                .ConfigureAwait(false)
+        )
             .Select(l => l.Trim())
             .Where(l => l.Length > 0 && !l.StartsWith('#'))
             .ToHashSet(StringComparer.Ordinal);

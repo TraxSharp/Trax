@@ -10,7 +10,9 @@ internal static class RepoRoot
     /// The repository root: the folder holding Trax.Docs and every Trax.* folder. The paths in
     /// <c>source:</c> front matter and <c>from=</c> fences are relative to it.
     /// </summary>
-    public static string Monorepo => Directory.GetParent(Path)!.FullName;
+    public static string Monorepo =>
+        Directory.GetParent(Path)?.FullName
+        ?? throw new InvalidOperationException($"The docs root '{Path}' has no parent folder.");
 
     public static string Combine(params string[] segments) =>
         System.IO.Path.Combine(new[] { Path }.Concat(segments).ToArray());

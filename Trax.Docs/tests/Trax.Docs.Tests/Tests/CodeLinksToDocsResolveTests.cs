@@ -38,10 +38,14 @@ public partial class CodeLinksToDocsResolveTests
     private static partial Regex DocsLink { get; }
 
     [Test]
-    public void Every_DocsLink_InCode_Resolves()
+    public async Task Every_DocsLink_InCode_Resolves()
     {
-        var site = DocsSite.Load();
-        var links = CodeFiles().SelectMany(f => Links(f.Path, File.ReadAllText(f.Full))).ToList();
+        var site = await DocsSite.LoadAsync().ConfigureAwait(false);
+        var links = new List<(string Where, string Url, string Path, string? Anchor)>();
+        foreach (var f in CodeFiles())
+            links.AddRange(
+                Links(f.Path, await File.ReadAllTextAsync(f.Full).ConfigureAwait(false))
+            );
 
         links
             .Should()
@@ -69,15 +73,21 @@ public partial class CodeLinksToDocsResolveTests
     }
 
     [Test]
-    public void The_ConsolesGlossaryLinks_AreAmongThoseChecked()
+    public async Task The_ConsolesGlossaryLinks_AreAmongThoseChecked()
     {
         // The console links each Trax term to its own glossary entry (lib/vocabulary.ts). A move
         // of that file out of the scanned folder would leave those links unchecked.
-        var glossaryLinks = CodeFiles()
-            .Where(f =>
-                f.Path.EndsWith("ClientApp/src/lib/vocabulary.ts", StringComparison.Ordinal)
-            )
-            .SelectMany(f => Links(f.Path, File.ReadAllText(f.Full)))
+        var links = new List<(string Where, string Url, string Path, string? Anchor)>();
+        foreach (
+            var f in CodeFiles()
+                .Where(f =>
+                    f.Path.EndsWith("ClientApp/src/lib/vocabulary.ts", StringComparison.Ordinal)
+                )
+        )
+            links.AddRange(
+                Links(f.Path, await File.ReadAllTextAsync(f.Full).ConfigureAwait(false))
+            );
+        var glossaryLinks = links
             .Where(l =>
                 string.Equals(l.Path, "/docs/reference/glossary", StringComparison.Ordinal)
                 && l.Anchor is not null

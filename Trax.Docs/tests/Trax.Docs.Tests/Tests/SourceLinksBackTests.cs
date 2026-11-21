@@ -27,17 +27,22 @@ public class SourceLinksBackTests
     private const string KnownUnlinkedFile = "tests/Trax.Docs.Tests/KnownUnlinkedSdkPages.txt";
 
     [Test]
-    public void Every_SdkReferencePage_IsLinkedFromItsSource()
+    public async Task Every_SdkReferencePage_IsLinkedFromItsSource()
     {
-        var unlinked = RepoRoot
-            .PublishedPages()
-            .Where(page =>
-                DocsSite.IsSdkReferenceLeaf(page)
-                && IsUnlinked(page, FrontMatter.OfPage(page).List("source"), ReadSource)
-            )
-            .ToHashSet(StringComparer.Ordinal);
+        var unlinked = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var page in RepoRoot.PublishedPages().Where(DocsSite.IsSdkReferenceLeaf))
+        {
+            var sources = (await FrontMatter.OfPageAsync(page).ConfigureAwait(false)).List(
+                "source"
+            );
+            var texts = new Dictionary<string, string?>(StringComparer.Ordinal);
+            foreach (var source in sources)
+                texts[source] = await ReadSourceAsync(source).ConfigureAwait(false);
+            if (IsUnlinked(page, sources, s => texts[s]))
+                unlinked.Add(page);
+        }
 
-        var known = Ratchet.Entries(KnownUnlinkedFile);
+        var known = await Ratchet.EntriesAsync(KnownUnlinkedFile).ConfigureAwait(false);
         var offenders = unlinked
             .Where(p => !known.Contains(p))
             .Order(StringComparer.Ordinal)
@@ -122,9 +127,11 @@ public class SourceLinksBackTests
         return !texts.Exists(link.IsMatch);
     }
 
-    private static string? ReadSource(string relative)
+    private static async Task<string?> ReadSourceAsync(string relative)
     {
+        if (!relative.EndsWith(".cs", StringComparison.Ordinal))
+            return null;
         var full = Path.Combine(new[] { RepoRoot.Monorepo }.Concat(relative.Split('/')).ToArray());
-        return File.Exists(full) ? File.ReadAllText(full) : null;
+        return File.Exists(full) ? await File.ReadAllTextAsync(full).ConfigureAwait(false) : null;
     }
 }

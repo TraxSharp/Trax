@@ -52,11 +52,14 @@ public class BookSampleIsTheBookTests
     ];
 
     [Test]
-    public void EveryFileTheBookPrints_IsInTheSample_AsPrinted()
+    public async Task EveryFileTheBookPrints_IsInTheSample_AsPrinted()
     {
         var offenders = new List<string>();
         foreach (
-            var (file, fence) in BookProject.Files().OrderBy(f => f.Key, StringComparer.Ordinal)
+            var (file, fence) in (await BookProject.FilesAsync().ConfigureAwait(false)).OrderBy(
+                f => f.Key,
+                StringComparer.Ordinal
+            )
         )
         {
             var path = Path.Combine(Sample, file);
@@ -64,7 +67,7 @@ public class BookSampleIsTheBookTests
                 offenders.Add($"{file}  is missing (printed by {fence.Location})");
             else if (
                 !string.Equals(
-                    Normalized(File.ReadAllText(path)),
+                    Normalized(await File.ReadAllTextAsync(path).ConfigureAwait(false)),
                     Normalized(fence.Code),
                     StringComparison.Ordinal
                 )
@@ -85,9 +88,11 @@ public class BookSampleIsTheBookTests
     }
 
     [Test]
-    public void EveryFileInTheSample_IsPrintedByTheBook_OrGeneratedByIt()
+    public async Task EveryFileInTheSample_IsPrintedByTheBook_OrGeneratedByIt()
     {
-        var printed = BookProject.Files().Keys.ToHashSet(StringComparer.Ordinal);
+        var printed = (await BookProject.FilesAsync().ConfigureAwait(false)).Keys.ToHashSet(
+            StringComparer.Ordinal
+        );
         var allowed = NotPrintedByTheBook.Select(p => Glob(p.Pattern)).ToList();
 
         var offenders = SampleFiles()

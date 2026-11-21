@@ -44,16 +44,18 @@ public sealed record SnippetUnit(string Page, string Group, IReadOnlyList<Fence>
     public bool IsTests => string.Equals(Group, TestsGroup, StringComparison.Ordinal);
 
     /// <summary>The compiled fences of every page, one unit per page and group.</summary>
-    public static IEnumerable<SnippetUnit> InDocs() =>
+    public static async Task<IReadOnlyList<SnippetUnit>> InDocsAsync() =>
         WithTheAppInTheTests(
-            Following(
-                    Own(Infrastructure.Fences.InDocs()).ToList(),
-                    SnippetCompiler.FollowedPageOf,
-                    SnippetCompiler.MovesOf
-                )
-                .ToList(),
-            SnippetCompiler.FollowedPageOf
-        );
+                Following(
+                        Own(await Infrastructure.Fences.InDocsAsync().ConfigureAwait(false))
+                            .ToList(),
+                        SnippetCompiler.FollowedPageOf,
+                        SnippetCompiler.MovesOf
+                    )
+                    .ToList(),
+                SnippetCompiler.FollowedPageOf
+            )
+            .ToList();
 
     /// <summary>
     /// Each <see cref="TestsGroup"/> unit with the <see cref="AppGroup"/> fences of its page, or of

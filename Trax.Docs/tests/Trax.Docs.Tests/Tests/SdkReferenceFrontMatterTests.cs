@@ -248,16 +248,20 @@ public partial class SdkReferenceFrontMatterTests
     };
 
     [Test]
-    public void Every_SdkReferencePage_NamesItsPackageNamespaceAndSource()
+    public async Task Every_SdkReferencePage_NamesItsPackageNamespaceAndSource()
     {
-        var npm = Projects.NpmPackages();
+        var npm = await Projects.NpmPackagesAsync().ConfigureAwait(false);
         var errors = new List<string>();
         var incomplete = new HashSet<string>(StringComparer.Ordinal);
         var missingFields = new List<string>();
 
         foreach (var page in LeafPages())
         {
-            var (missing, wrong) = Check(FrontMatter.OfPage(page), npm);
+            var (missing, wrong) = await CheckAsync(
+                    await FrontMatter.OfPageAsync(page).ConfigureAwait(false),
+                    npm
+                )
+                .ConfigureAwait(false);
             errors.AddRange(wrong.Select(w => $"{page}  -> {w}"));
             if (missing.Count > 0)
             {
@@ -266,7 +270,7 @@ public partial class SdkReferenceFrontMatterTests
             }
         }
 
-        var known = Ratchet.Entries(KnownIncompleteFile);
+        var known = await Ratchet.EntriesAsync(KnownIncompleteFile).ConfigureAwait(false);
         var offenders = missingFields.Where(m => !known.Contains(m.Split("  ")[0])).ToList();
         var stale = Ratchet.Stale(known, incomplete);
 
@@ -301,27 +305,35 @@ public partial class SdkReferenceFrontMatterTests
     }
 
     [Test]
-    public void Every_SignatureName_IsInThePackagesBaseline()
+    public async Task Every_SignatureName_IsInThePackagesBaseline()
     {
+        var packable = await Projects.PackableAsync().ConfigureAwait(false);
         var mismatched = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         var checkedPages = 0;
 
         foreach (var page in LeafPages())
         {
-            var package = FrontMatter.OfPage(page).Scalar("package");
+            var package = (await FrontMatter.OfPageAsync(page).ConfigureAwait(false)).Scalar(
+                "package"
+            );
             if (
                 package is null
-                || !Projects.Packable.TryGetValue(package, out var project)
+                || !packable.TryGetValue(package, out var project)
                 || project.Baseline is null
             )
                 continue;
 
             checkedPages++;
-            var words = Word.Matches(File.ReadAllText(project.Baseline))
+            var words = Word.Matches(
+                    await File.ReadAllTextAsync(project.Baseline).ConfigureAwait(false)
+                )
                 .Select(m => m.Value)
                 .ToHashSet(StringComparer.Ordinal);
 
-            var missing = SignatureFences(File.ReadAllText(RepoRoot.Combine(page.Split('/'))))
+            var missing = SignatureFences(
+                    await File.ReadAllTextAsync(RepoRoot.Combine(page.Split('/')))
+                        .ConfigureAwait(false)
+                )
                 .SelectMany(f => DeclaredNames(f.Code).Select(n => (f.Line, Name: n)))
                 .Where(x => !words.Contains(x.Name))
                 .Select(x =>
@@ -333,7 +345,7 @@ public partial class SdkReferenceFrontMatterTests
                 mismatched[page] = missing;
         }
 
-        var known = Ratchet.Entries(KnownMismatchFile);
+        var known = await Ratchet.EntriesAsync(KnownMismatchFile).ConfigureAwait(false);
         var offenders = mismatched
             .Where(m => !known.Contains(m.Key))
             .OrderBy(m => m.Key, StringComparer.Ordinal)
@@ -369,9 +381,9 @@ public partial class SdkReferenceFrontMatterTests
 
     [TestCase(KnownIncompleteFile)]
     [TestCase(KnownMismatchFile)]
-    public void KnownPages_AreSortedAndUnique(string file) =>
+    public async Task KnownPages_AreSortedAndUnique(string file) =>
         Ratchet
-            .IsSortedAndUnique(Ratchet.Entries(file))
+            .IsSortedAndUnique(await Ratchet.EntriesAsync(file).ConfigureAwait(false))
             .Should()
             .BeTrue($"{file} lists each page once, in ordinal order. See {Adr}.");
 
@@ -459,38 +471,41 @@ public partial class SdkReferenceFrontMatterTests
     }
 
     [Test]
-    public void Check_ReportsMissingFieldsApart_FromWrongOnes()
+    public async Task Check_ReportsMissingFieldsApart_FromWrongOnes()
     {
         var npm = new HashSet<string>(StringComparer.Ordinal) { "@traxsharp/state-machine" };
 
-        Check(FrontMatter.Of("---\ntitle: X\n---\n"), npm)
+        (await CheckAsync(FrontMatter.Of("---\ntitle: X\n---\n"), npm).ConfigureAwait(false))
             .Missing.Should()
             .Equal("package", "namespace", "source");
 
-        var graphql = Check(
-            FrontMatter.Of(
-                "---\npackage: Trax.Api.GraphQL\nsurface: graphql\nsource: [Trax.Api]\n---\n"
-            ),
-            npm
-        );
+        var graphql = await CheckAsync(
+                FrontMatter.Of(
+                    "---\npackage: Trax.Api.GraphQL\nsurface: graphql\nsource: [Trax.Api]\n---\n"
+                ),
+                npm
+            )
+            .ConfigureAwait(false);
         graphql.Missing.Should().BeEmpty();
         graphql.Wrong.Should().BeEmpty();
 
-        var typescript = Check(
-            FrontMatter.Of(
-                "---\npackage: \"@traxsharp/state-machine\"\nsurface: typescript\nsource:\n  - Trax.StateMachine/ts\n---\n"
-            ),
-            npm
-        );
+        var typescript = await CheckAsync(
+                FrontMatter.Of(
+                    "---\npackage: \"@traxsharp/state-machine\"\nsurface: typescript\nsource:\n  - Trax.StateMachine/ts\n---\n"
+                ),
+                npm
+            )
+            .ConfigureAwait(false);
         typescript.Missing.Should().BeEmpty();
         typescript.Wrong.Should().BeEmpty();
 
-        var wrong = Check(
-            FrontMatter.Of(
-                "---\npackage: Trax.Nope\nnamespace: Trax.Nope\nsurface: rest\nsource:\n  - Trax.Nope/x.cs\n  - ../etc\n---\n"
-            ),
-            npm
-        );
+        var wrong = await CheckAsync(
+                FrontMatter.Of(
+                    "---\npackage: Trax.Nope\nnamespace: Trax.Nope\nsurface: rest\nsource:\n  - Trax.Nope/x.cs\n  - ../etc\n---\n"
+                ),
+                npm
+            )
+            .ConfigureAwait(false);
         wrong.Missing.Should().BeEmpty();
         wrong
             .Wrong.Should()
@@ -502,24 +517,30 @@ public partial class SdkReferenceFrontMatterTests
     }
 
     [Test]
-    public void Check_ReadsTheNamespaceFromTheBaseline()
+    public async Task Check_ReadsTheNamespaceFromTheBaseline()
     {
         var npm = new HashSet<string>(StringComparer.Ordinal);
         const string source = "source: [Trax.Scheduler/src/Trax.Scheduler]";
 
-        Check(
-            FrontMatter.Of(
-                $"---\npackage: Trax.Scheduler\nnamespace: Trax.Scheduler.Configuration\n{source}\n---\n"
-            ),
-            npm
+        (
+            await CheckAsync(
+                    FrontMatter.Of(
+                        $"---\npackage: Trax.Scheduler\nnamespace: Trax.Scheduler.Configuration\n{source}\n---\n"
+                    ),
+                    npm
+                )
+                .ConfigureAwait(false)
         )
             .Wrong.Should()
             .BeEmpty();
-        Check(
-            FrontMatter.Of(
-                $"---\npackage: Trax.Scheduler\nnamespace: [Trax.Scheduler.Configuration, Trax.Scheduler.Nope]\n{source}\n---\n"
-            ),
-            npm
+        (
+            await CheckAsync(
+                    FrontMatter.Of(
+                        $"---\npackage: Trax.Scheduler\nnamespace: [Trax.Scheduler.Configuration, Trax.Scheduler.Nope]\n{source}\n---\n"
+                    ),
+                    npm
+                )
+                .ConfigureAwait(false)
         )
             .Wrong.Should()
             .ContainSingle()
@@ -528,19 +549,15 @@ public partial class SdkReferenceFrontMatterTests
     }
 
     [Test]
-    public void Packable_IsTheShippedProjects()
+    public async Task Packable_IsTheShippedProjects()
     {
-        Projects
-            .Packable.Should()
+        var packable = await Projects.PackableAsync().ConfigureAwait(false);
+        packable
+            .Should()
             .ContainKeys("Trax.Core", "Trax.Scheduler", "Trax.Cli", "Trax.Runner.Lambda");
-        Projects
-            .Packable.Keys.Should()
-            .NotContain(k => k.EndsWith(".Tests", StringComparison.Ordinal));
-        Projects.Packable["Trax.Cli"].Baseline.Should().EndWith("trax.received.txt");
-        Projects
-            .Packable["Trax.Scheduler"]
-            .Baseline.Should()
-            .EndWith("Trax.Scheduler.received.txt");
+        packable.Keys.Should().NotContain(k => k.EndsWith(".Tests", StringComparison.Ordinal));
+        packable["Trax.Cli"].Baseline.Should().EndWith("trax.received.txt");
+        packable["Trax.Scheduler"].Baseline.Should().EndWith("Trax.Scheduler.received.txt");
     }
 
     /// <summary>The published SDK reference pages below the section and folder indexes.</summary>
@@ -551,7 +568,7 @@ public partial class SdkReferenceFrontMatterTests
     /// The fields the page leaves out (<c>package</c>, <c>namespace</c>, <c>source</c>), and the
     /// ones it states wrongly.
     /// </summary>
-    private static (List<string> Missing, List<string> Wrong) Check(
+    private static async Task<(List<string> Missing, List<string> Wrong)> CheckAsync(
         FrontMatter frontMatter,
         IReadOnlySet<string> npm
     )
@@ -567,7 +584,12 @@ public partial class SdkReferenceFrontMatterTests
         Projects.Package? project = null;
         if (package is null)
             missing.Add("package");
-        else if (Projects.Packable.TryGetValue(package, out var found))
+        else if (
+            (await Projects.PackableAsync().ConfigureAwait(false)).TryGetValue(
+                package,
+                out var found
+            )
+        )
             project = found;
         else if (
             !(
@@ -587,7 +609,7 @@ public partial class SdkReferenceFrontMatterTests
         else if (project?.Baseline is { } baseline && namespaces.Count > 0)
         {
             var declared = Namespace
-                .Matches(File.ReadAllText(baseline))
+                .Matches(await File.ReadAllTextAsync(baseline).ConfigureAwait(false))
                 .Select(m => m.Groups["name"].Value)
                 .ToHashSet(StringComparer.Ordinal);
             wrong.AddRange(

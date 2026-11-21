@@ -22,9 +22,9 @@ public class RedirectsTests
         "Trax.Docs/adr/0050-docs-pages-are-typed-and-their-code-is-checked-against-the-code.md";
 
     [Test]
-    public void Redirects_AreOldDocsPaths_ClaimedOnce()
+    public async Task Redirects_AreOldDocsPaths_ClaimedOnce()
     {
-        var site = DocsSite.Load();
+        var site = await DocsSite.LoadAsync().ConfigureAwait(false);
         var problems = Problems(site);
 
         problems

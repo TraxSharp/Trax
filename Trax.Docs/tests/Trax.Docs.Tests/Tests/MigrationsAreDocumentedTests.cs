@@ -203,7 +203,7 @@ public partial class MigrationsAreDocumentedTests
     /// <summary>Every shipped migration script, by provider, without its extension.</summary>
     private static IEnumerable<(string Provider, string Script)> Scripts()
     {
-        var monorepo = Directory.GetParent(RepoRoot.Path)!.FullName;
+        var monorepo = RepoRoot.Monorepo;
         foreach (var provider in new[] { "Postgres", "Sqlite" })
         {
             var folder = Path.Combine(

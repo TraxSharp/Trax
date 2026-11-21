@@ -101,12 +101,12 @@ public static partial class SnippetCompiler
 
     private static readonly CSharpParseOptions ParseOptions = new(LanguageVersion.Latest);
 
-    private static readonly Lazy<IReadOnlyList<MetadataReference>> References = new(() =>
-        LoadReferences(tests: false)
+    private static readonly Lazy<Task<IReadOnlyList<MetadataReference>>> References = new(() =>
+        LoadReferencesAsync(tests: false)
     );
 
-    private static readonly Lazy<IReadOnlyList<MetadataReference>> TestReferences = new(() =>
-        LoadReferences(tests: true)
+    private static readonly Lazy<Task<IReadOnlyList<MetadataReference>>> TestReferences = new(() =>
+        LoadReferencesAsync(tests: true)
     );
 
     /// <summary>The context file every page's compilations get, unless the page opts out.</summary>
@@ -248,43 +248,48 @@ public static partial class SnippetCompiler
     /// The unit's errors and warnings, each as <c>page.md:line:column: severity id: message</c>.
     /// Empty when it compiles cleanly.
     /// </summary>
-    public static IReadOnlyList<string> Diagnose(SnippetUnit unit)
+    public static async Task<IReadOnlyList<string>> DiagnoseAsync(SnippetUnit unit)
     {
+        var references = await References.Value.ConfigureAwait(false);
+        var ownReferences = unit.IsTests
+            ? await TestReferences.Value.ConfigureAwait(false)
+            : references;
+
         if (unit.App.Count > 0)
         {
             // The project it references: its own diagnostics belong to the app unit, which reports
             // them. It grants the tests its internals, as InternalsVisibleTo does.
-            var app = Compile(
-                AppAssemblyName,
-                unit.Page,
-                unit.App,
-                ImplicitUsings,
-                References.Value,
-                $"[assembly: System.Runtime.CompilerServices.InternalsVisibleTo(\"{TestsAssemblyName}\")]"
-            );
-            return Report(
-                Compile(
-                    unit.IsTests ? TestsAssemblyName : $"{AppAssemblyName}.{unit.Group}",
+            var app = await CompileAsync(
+                    AppAssemblyName,
                     unit.Page,
-                    unit.Fences,
-                    unit.IsTests ? TestImplicitUsings : ImplicitUsings,
-                    [
-                        .. unit.IsTests ? TestReferences.Value : References.Value,
-                        app.ToMetadataReference(),
-                    ],
-                    withContext: false
+                    unit.App,
+                    ImplicitUsings,
+                    references,
+                    $"[assembly: System.Runtime.CompilerServices.InternalsVisibleTo(\"{TestsAssemblyName}\")]"
                 )
+                .ConfigureAwait(false);
+            return Report(
+                await CompileAsync(
+                        unit.IsTests ? TestsAssemblyName : $"{AppAssemblyName}.{unit.Group}",
+                        unit.Page,
+                        unit.Fences,
+                        unit.IsTests ? TestImplicitUsings : ImplicitUsings,
+                        [.. ownReferences, app.ToMetadataReference()],
+                        withContext: false
+                    )
+                    .ConfigureAwait(false)
             );
         }
 
         return Report(
-            Compile(
-                AppAssemblyName,
-                unit.Page,
-                unit.Fences,
-                ImplicitUsings,
-                unit.IsTests ? TestReferences.Value : References.Value
-            )
+            await CompileAsync(
+                    AppAssemblyName,
+                    unit.Page,
+                    unit.Fences,
+                    ImplicitUsings,
+                    ownReferences
+                )
+                .ConfigureAwait(false)
         );
     }
 
@@ -304,7 +309,7 @@ public static partial class SnippetCompiler
         "System.Threading.Tasks",
     ];
 
-    private static CSharpCompilation Compile(
+    private static async Task<CSharpCompilation> CompileAsync(
         string assemblyName,
         string page,
         IEnumerable<Fence> fences,
@@ -340,7 +345,7 @@ public static partial class SnippetCompiler
         foreach (var context in withContext ? ContextFilesFor(page) : [])
             trees.Add(
                 CSharpSyntaxTree.ParseText(
-                    File.ReadAllText(context),
+                    await File.ReadAllTextAsync(context).ConfigureAwait(false),
                     ParseOptions,
                     path: RepoRoot.Relative(context).Replace('\\', '/')
                 )
@@ -390,7 +395,7 @@ public static partial class SnippetCompiler
         return $"{where}: {severity} {diagnostic.Id}: {diagnostic.GetMessage()}";
     }
 
-    private static IReadOnlyList<MetadataReference> LoadReferences(bool tests)
+    private static async Task<IReadOnlyList<MetadataReference>> LoadReferencesAsync(bool tests)
     {
         var list = Path.Combine(AppContext.BaseDirectory, "snippet-references.txt");
         if (!File.Exists(list))
@@ -399,7 +404,7 @@ public static partial class SnippetCompiler
                     + "Trax.Docs.Snippets.Tests.csproj writes it on build; build the project first."
             );
 
-        return File.ReadAllLines(list)
+        return (await File.ReadAllLinesAsync(list).ConfigureAwait(false))
             .Where(line =>
                 line.Length > 0
                 && (

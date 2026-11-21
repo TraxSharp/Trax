@@ -107,8 +107,8 @@ public static partial class Fences
             )
             {
                 IsFragment = markers.Contains(FragmentMarker, StringComparer.Ordinal),
-                From = hash < 0 ? from : from![..hash],
-                FromRegion = hash < 0 ? null : from![(hash + 1)..],
+                From = from is null || hash < 0 ? from : from[..hash],
+                FromRegion = from is null || hash < 0 ? null : from[(hash + 1)..],
                 File = markers
                     .FirstOrDefault(w => w.StartsWith(FileWord, StringComparison.Ordinal))
                     ?[FileWord.Length..],
@@ -119,23 +119,33 @@ public static partial class Fences
     }
 
     /// <summary>Every fence in every markdown file under the docs root, published or not.</summary>
-    public static IEnumerable<Fence> InDocs() =>
-        RepoRoot
-            .MarkdownFiles()
-            .SelectMany(file =>
-                In(RepoRoot.Relative(file).Replace('\\', '/'), File.ReadAllText(file))
+    public static async Task<IReadOnlyList<Fence>> InDocsAsync()
+    {
+        var fences = new List<Fence>();
+        foreach (var file in RepoRoot.MarkdownFiles())
+            fences.AddRange(
+                In(
+                    RepoRoot.Relative(file).Replace('\\', '/'),
+                    await File.ReadAllTextAsync(file).ConfigureAwait(false)
+                )
             );
+        return fences;
+    }
 
     /// <summary>Every fence on a page traxsharp.net publishes.</summary>
-    public static IEnumerable<Fence> OnPublishedPages() =>
-        InDocs().Where(f => RepoRoot.IsPublished(f.Page));
+    public static async Task<IReadOnlyList<Fence>> OnPublishedPagesAsync() =>
+        (await InDocsAsync().ConfigureAwait(false))
+            .Where(f => RepoRoot.IsPublished(f.Page))
+            .ToList();
 
     /// <summary>
     /// Every fence a reader copies from: the published pages and the agent skills, which a release
     /// publishes on their own (Trax.Docs/adr/0056) and which carry the same markers.
     /// </summary>
-    public static IEnumerable<Fence> OnPagesAndSkills() =>
-        InDocs().Where(f => RepoRoot.IsPublished(f.Page) || RepoRoot.IsSkill(f.Page));
+    public static async Task<IReadOnlyList<Fence>> OnPagesAndSkillsAsync() =>
+        (await InDocsAsync().ConfigureAwait(false))
+            .Where(f => RepoRoot.IsPublished(f.Page) || RepoRoot.IsSkill(f.Page))
+            .ToList();
 
     private static List<string> GroupsOf(IEnumerable<string> words, int openLine)
     {

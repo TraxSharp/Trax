@@ -23,10 +23,9 @@ public class SampleExcerptsMatchSourceTests
         "Trax.Docs/adr/0050-docs-pages-are-typed-and-their-code-is-checked-against-the-code.md";
 
     [Test]
-    public void Every_FromFence_IsAnExcerptOfItsFile()
+    public async Task Every_FromFence_IsAnExcerptOfItsFile()
     {
-        var offenders = Fences
-            .OnPagesAndSkills()
+        var offenders = (await Fences.OnPagesAndSkillsAsync().ConfigureAwait(false))
             .Where(f => f.From is not null)
             .Select(Excerpts.Problem)
             .OfType<string>()

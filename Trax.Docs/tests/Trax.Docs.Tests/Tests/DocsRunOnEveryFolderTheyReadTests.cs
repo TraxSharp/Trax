@@ -34,12 +34,13 @@ public partial class DocsRunOnEveryFolderTheyReadTests
     private static partial Regex FromMarker { get; }
 
     [Test]
-    public void Every_FolderTheDocsRead_IsUpstreamOfTraxDocs()
+    public async Task Every_FolderTheDocsRead_IsUpstreamOfTraxDocs()
     {
-        var upstream = UpstreamOf("Trax.Docs");
-        var folders = Folders();
+        var packages = await PackagesAsync().ConfigureAwait(false);
+        var upstream = Closure("Trax.Docs", packages);
+        var folders = packages.Keys.ToHashSet(StringComparer.Ordinal);
 
-        var offenders = FoldersRead(folders)
+        var offenders = (await FoldersReadAsync(folders).ConfigureAwait(false))
             .Where(read =>
                 !string.Equals(read.Folder, "Trax.Docs", StringComparison.Ordinal)
                 && !upstream.Contains(read.Folder)
@@ -87,7 +88,7 @@ public partial class DocsRunOnEveryFolderTheyReadTests
     }
 
     /// <summary>The folders the docs tests read, with the first reason found for each.</summary>
-    private static IEnumerable<(string Folder, string Why)> FoldersRead(
+    private static async Task<IEnumerable<(string Folder, string Why)>> FoldersReadAsync(
         IReadOnlySet<string> folders
     )
     {
@@ -95,7 +96,8 @@ public partial class DocsRunOnEveryFolderTheyReadTests
 
         foreach (var page in RepoRoot.PublishedPages())
         {
-            var markdown = File.ReadAllText(RepoRoot.Combine(page.Split('/')));
+            var markdown = await File.ReadAllTextAsync(RepoRoot.Combine(page.Split('/')))
+                .ConfigureAwait(false);
             foreach (var path in FrontMatter.Of(markdown).List("source"))
                 why.TryAdd(TopFolder(path), $"`source:` of {page}");
             foreach (Match m in FromMarker.Matches(markdown))
@@ -116,11 +118,6 @@ public partial class DocsRunOnEveryFolderTheyReadTests
     private static string TopFolder(string repoRelative) =>
         repoRelative.TrimStart('/').Split('/')[0];
 
-    private static IReadOnlySet<string> Folders() =>
-        Packages().Keys.ToHashSet(StringComparer.Ordinal);
-
-    private static IReadOnlySet<string> UpstreamOf(string folder) => Closure(folder, Packages());
-
     private static IReadOnlySet<string> Closure(
         string folder,
         IReadOnlyDictionary<string, string[]> packages
@@ -138,21 +135,23 @@ public partial class DocsRunOnEveryFolderTheyReadTests
         return seen;
     }
 
-    private static IReadOnlyDictionary<string, string[]> Packages()
+    private static async Task<IReadOnlyDictionary<string, string[]>> PackagesAsync()
     {
         var file = Path.Combine([RepoRoot.Monorepo, .. Config.Split('/')]);
-        using var json = JsonDocument.Parse(File.ReadAllText(file));
+        using var json = JsonDocument.Parse(
+            await File.ReadAllTextAsync(file).ConfigureAwait(false)
+        );
         return json
             .RootElement.GetProperty("packages")
             .EnumerateArray()
             .ToDictionary(
-                p => p.GetProperty("folder").GetString()!,
-                p =>
-                    p.GetProperty("upstream")
-                        .EnumerateArray()
-                        .Select(u => u.GetString()!)
-                        .ToArray(),
+                p => Text(p.GetProperty("folder")),
+                p => p.GetProperty("upstream").EnumerateArray().Select(Text).ToArray(),
                 StringComparer.Ordinal
             );
     }
+
+    private static string Text(JsonElement element) =>
+        element.GetString()
+        ?? throw new InvalidOperationException($"{Config} holds a null where a string belongs.");
 }

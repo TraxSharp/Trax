@@ -27,13 +27,15 @@ namespace Trax.Docs.Snippets.Tests.Tests;
 [TestFixture]
 public partial class CompiledSnippetsTests
 {
-    private static IEnumerable<TestCaseData> Units() =>
-        SnippetUnit.InDocs().Select(unit => new TestCaseData(unit).SetName(unit.ToString()));
+    private static async Task<IEnumerable<TestCaseData>> Units() =>
+        (await SnippetUnit.InDocsAsync().ConfigureAwait(false)).Select(unit =>
+            new TestCaseData(unit).SetName(unit.ToString())
+        );
 
     [TestCaseSource(nameof(Units))]
-    public void Snippet_Compiles(SnippetUnit unit)
+    public async Task Snippet_Compiles(SnippetUnit unit)
     {
-        var diagnostics = SnippetCompiler.Diagnose(unit);
+        var diagnostics = await SnippetCompiler.DiagnoseAsync(unit).ConfigureAwait(false);
 
         diagnostics
             .Should()
@@ -50,18 +52,19 @@ public partial class CompiledSnippetsTests
     }
 
     [Test]
-    public void GettingStarted_IsCompiled()
+    public async Task GettingStarted_IsCompiled()
     {
         // The walkthrough is the page a new reader copies from first. If a refactor of the
         // markers drops it out of the compiled set, this says so rather than going quietly green.
-        SnippetUnit.InDocs().Should().Contain(u => u.Page == "getting-started.md");
+        (await SnippetUnit.InDocsAsync().ConfigureAwait(false))
+            .Should()
+            .Contain(u => u.Page == "getting-started.md");
     }
 
     [Test]
-    public void Marker_IsOnlyOnCSharpFences()
+    public async Task Marker_IsOnlyOnCSharpFences()
     {
-        var offenders = Fences
-            .InDocs()
+        var offenders = (await Fences.InDocsAsync().ConfigureAwait(false))
             .Where(f => f.IsCompiled && !f.IsCSharp)
             .Select(f => $"{f.Location}  (language '{f.Language}')")
             .ToList();
@@ -77,10 +80,12 @@ public partial class CompiledSnippetsTests
     }
 
     [Test]
-    public void ContextFiles_BelongToPagesWithCompiledSnippets()
+    public async Task ContextFiles_BelongToPagesWithCompiledSnippets()
     {
         var root = SnippetCompiler.ContextRoot;
-        var pages = SnippetUnit.InDocs().Select(u => u.Page).ToHashSet(StringComparer.Ordinal);
+        var pages = (await SnippetUnit.InDocsAsync().ConfigureAwait(false))
+            .Select(u => u.Page)
+            .ToHashSet(StringComparer.Ordinal);
 
         var orphans = Directory.Exists(root)
             ? Directory
@@ -104,10 +109,10 @@ public partial class CompiledSnippetsTests
     }
 
     [Test]
-    public void SharedContext_ImpliesNoTraxNamespace()
+    public async Task SharedContext_ImpliesNoTraxNamespace()
     {
         var root = SnippetCompiler.ContextRoot;
-        var offenders = Directory
+        var files = Directory
             .EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)
             .Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))
             .Where(f =>
@@ -120,8 +125,11 @@ public partial class CompiledSnippetsTests
                     ) && !f.StartsWith("sdk-reference/", StringComparison.Ordinal)
                 )
             )
-            .SelectMany(f =>
-                File.ReadAllLines(Path.Combine(root, f))
+            .ToList();
+        var offenders = new List<string>();
+        foreach (var f in files)
+            offenders.AddRange(
+                (await File.ReadAllLinesAsync(Path.Combine(root, f)).ConfigureAwait(false))
                     .Select(
                         (line, i) =>
                             (
@@ -134,8 +142,7 @@ public partial class CompiledSnippetsTests
                     )
                     .Where(x => TraxGlobalUsing.IsMatch(x.Line))
                     .Select(x => $"{x.At}  {x.Line.Trim()}")
-            )
-            .ToList();
+            );
 
         offenders
             .Should()

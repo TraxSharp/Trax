@@ -84,9 +84,12 @@ public partial class PackagesPageTests
     )]
     private static partial Regex NuGetLink { get; }
 
-    private static HashSet<string> LinkedPackages()
+    private static Task<string> PageAsync() =>
+        File.ReadAllTextAsync(RepoRoot.Combine("reference", "packages.md"));
+
+    private static async Task<HashSet<string>> LinkedPackagesAsync()
     {
-        var page = File.ReadAllText(RepoRoot.Combine("reference", "packages.md"));
+        var page = await PageAsync().ConfigureAwait(false);
         return NuGetLink
             .Matches(page)
             .Select(m => m.Groups["id"].Value)
@@ -94,9 +97,9 @@ public partial class PackagesPageTests
     }
 
     [Test]
-    public void PackagesPage_Links_EveryPublishedPackage()
+    public async Task PackagesPage_Links_EveryPublishedPackage()
     {
-        var linked = LinkedPackages();
+        var linked = await LinkedPackagesAsync().ConfigureAwait(false);
 
         PublishedPackages
             .Where(id => !linked.Contains(id))
@@ -117,9 +120,10 @@ public partial class PackagesPageTests
     private static partial Regex StatedCount { get; }
 
     [Test]
-    public void PackagesPage_StatesTheNumberOfPackagesItLists()
+    public async Task PackagesPage_StatesTheNumberOfPackagesItLists()
     {
-        var page = File.ReadAllText(RepoRoot.Combine("reference", "packages.md"));
+        var page = await PageAsync().ConfigureAwait(false);
+        var linked = await LinkedPackagesAsync().ConfigureAwait(false);
         var stated = StatedCount.Match(page);
 
         stated
@@ -128,17 +132,17 @@ public partial class PackagesPageTests
         int.Parse(stated.Groups["count"].Value, System.Globalization.CultureInfo.InvariantCulture)
             .Should()
             .Be(
-                LinkedPackages().Count,
+                linked.Count,
                 "the count in the page's opening must match the packages it lists. See " + Adr + "."
             );
     }
 
     [Test]
-    public void PackagesPage_Links_OnlyKnownPackages()
+    public async Task PackagesPage_Links_OnlyKnownPackages()
     {
         var known = PublishedPackages.ToHashSet(StringComparer.Ordinal);
 
-        LinkedPackages()
+        (await LinkedPackagesAsync().ConfigureAwait(false))
             .Where(id => !known.Contains(id))
             .Should()
             .BeEmpty(
