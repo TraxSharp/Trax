@@ -75,5 +75,6 @@ Pages to look things up in. Per-type and per-method pages are in the
 - [CLI](/docs/reference/cli): the `trax` command, `generate` and `machine`.
 - [Project Templates](/docs/reference/templates): the `dotnet new` templates.
 - [Architecture Guards](/docs/reference/architecture-guards): the guard packages, their fixtures and what they check.
+- [Trax.Analyzers](/docs/reference/analyzers): the opt-in analyzer package, its switches and levels.
 - [Analyzer](/docs/core/analyzer): the deprecated chain analyzer.
 - [IDE Extensions](/docs/core/ide-extensions): inlay hints for VS Code and Rider.

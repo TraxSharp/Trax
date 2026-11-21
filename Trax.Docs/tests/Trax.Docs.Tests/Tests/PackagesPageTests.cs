@@ -22,8 +22,10 @@ public partial class PackagesPageTests
     [
         // Trax.Core
         "Trax.Core",
-        "Trax.Core.Analyzers",
         "Trax.Core.Testing",
+        // Trax.Analyzers
+        "Trax.Analyzers",
+        "Trax.Analyzers.Annotations",
         // Trax.Effect
         "Trax.Effect",
         "Trax.Effect.Broadcaster.RabbitMQ",

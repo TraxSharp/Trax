@@ -117,6 +117,24 @@ host shutdown timeouts all sit behind ordinary awaits with defaults measured in 
 seconds. `Trax.Docs/adr/0014` records why this is a rule, and what it costs: a default a
 test overrides is a default nothing exercises.
 
+## The analyzer profile
+
+Test projects build under the same Trax.Analyzers profile as the code they test, every rule an
+error (`Trax.Docs/adr/0061`, the list in `Trax.Analyzers/rules.txt`). What that means in a test:
+
+- **The clock.** `DateTime.UtcNow`, `Stopwatch` and the tick counts are banned. Pass the code a
+  `FakeTimeProvider` (from `Microsoft.Extensions.TimeProvider.Testing`) or a fixed one, and move it
+  with `Advance`. A test that waits on wall time takes `TimeProvider.System` by name.
+- **Blocking I/O.** `File.ReadAllText`, `.Result`, `.Wait()` and `Cancel()` where an async form
+  exists are errors, even where the test method has to become `async Task` to avoid them. A
+  `TestCaseSource` that reads files can be `async Task<IEnumerable<TestCaseData>>`.
+- **`ConfigureAwait(false)`** on every await, as in library code.
+- **Null on purpose.** The null-forgiving operator is banned, `null!` included. A test that passes
+  null where the signature says it cannot writes `Null.Of<T>()` (each folder's `tests/Null.cs`), so
+  the intent is in the name. Anywhere else, test for null or call `NotNull()`.
+- **No escapes.** `#pragma warning disable`, `[SuppressMessage]` and `NoWarn` are refused by
+  `AnalyzerProfileTests`, in tests as in `src`.
+
 ## Skipping
 
 A test that cannot run in the current environment calls `Assert.Ignore("...")` after an
@@ -187,7 +205,5 @@ is on [IDE extensions](/docs/core/ide-extensions); how they work, for changing t
   `IJunction<TIn, TOut>` through the PSI, so generics and inheritance are resolved semantically.
   `./gradlew buildPlugin` builds it into `build/distributions/`.
 
-The Roslyn analyzer is a separate thing: inside the Trax.Core solution, `Trax.Core/Directory.Build.props`
-adds `Trax.Core.Analyzers` to every other project as an analyzer reference
-(`OutputItemType="Analyzer"`, `ReferenceOutputAssembly="false"`), so Trax.Core's own projects are
-built with it.
+The extensions are not Roslyn analyzers. The analyzers every Trax project builds with are the
+Trax.Analyzers profile, described under [The analyzer profile](#the-analyzer-profile).

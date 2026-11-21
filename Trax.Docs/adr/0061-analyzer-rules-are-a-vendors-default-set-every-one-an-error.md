@@ -1,66 +1,92 @@
 ---
-authors: [mark-keaton]
-repos: [core]
+authors: [mark-keaton, Theauxm]
+repos: [core, effect, statemachine, mediator, scheduler, api, cli, samples, docs]
 areas: [ci]
-status: proposed
+status: accepted
 ---
 
 # Analyzer rules are a vendor's default set, every one an error
 
 A list of analyzer rules picked one at a time is a list somebody has to defend one at a time,
 and it drifts with whoever edited it last. The profile is instead taken whole from
-Meziantou.Analyzer: every rule the package reports in a build is an error, in `src` and tests
-alike, and nothing is chosen. The root `.globalconfig` is generated from the package's own
-default configuration and is never edited by hand, and no project, file or line opts out.
+Meziantou.Analyzer: every rule upstream reports by default is an error, in `src` and tests
+alike, plus a short list of rules Trax adds on purpose. Nothing else is chosen.
+
+Trax does not reference Meziantou.Analyzer. It keeps a copy (MIT) in `Trax.Analyzers/`, renamed
+into Trax's namespace and ids (`MA0004` is `TRX0004`), and ships it as the `Trax.Analyzers`
+package. The copy is refreshed from an upstream tag by `Trax.Analyzers/tools/sync-upstream.sh`.
 
 ## Status
 
-**Proposed.** A prototype over Trax.Core. The other folders join by referencing the package
-from their `Directory.Build.props` and clearing what it reports.
+**Accepted.** Every .NET folder, every sample, the `dotnet new` templates (with `--strict`) and
+the book's Shopfront build under the profile.
+
+## The profile
+
+`Trax.Analyzers/rules.txt` is the profile: one line per rule, with the severity it gets in source
+projects and in test projects. A rule upstream reports by default is `error` in both. A rule
+upstream ships silent or off stays that way unless its line says `added by Trax`, such as TRX0045
+(no blocking call, even where the caller must become async). A rule upstream has deprecated or
+that contradicts another (TRX0032 asks for a token where none exists) is `none`, with the reason
+on its line. `tools/generate-profile.sh` writes the package's configuration from it, per
+`TraxAnalysisLevel`, so a release that adds errors does so under a new level.
+
+On top of the rules come the bans, as files the package ships under `bans/`: reading the clock,
+chance and the console, `Environment.Exit` and `FailFast`, and the null-forgiving operator in
+every form. The clock is read from an injected `TimeProvider`; only a composition root names
+`TimeProvider.System`.
+
+For a consumer the package is opt-in: nothing applies until the project references it, and each
+part can be turned off (an MSBuild switch per ban group, `TraxAnalyzersTests` for test projects,
+a severity in `.editorconfig` for one rule). The repository uses none of those freedoms.
+
+## How a rule is turned off here
+
+In two places, each with its reason beside it:
+
+- **The root `.globalconfig`**, for the whole repository. Each line says `# Exempt:` (keeping the
+  rule would break a published promise: a public signature or a documented exception) or
+  `# Deferred:` (the work is owed), and why.
+- **A folder's `Directory.Build.props`**, for one ban group, with the reason in a comment above.
+  Trax.Cli turns the console ban off: a command-line tool writes to the console.
+
+No `#pragma`, no `[SuppressMessage]`, no `NoWarn` or `WarningsNotAsErrors` naming a rule, no
+`RunAnalyzers=false`, no nearer `.editorconfig`, `.globalconfig` or ban file.
 
 ## Considered options
 
-Every rule the package ships lost because the package ships rules that contradict each other
-(return the task, await the task; one-line summaries, multi-line summaries). The rules it
-leaves off are the ones its author treats as a matter of taste, so the default set is the
-largest one that can be satisfied.
+Referencing Meziantou.Analyzer lost because the profile would then move with someone else's
+release schedule, the ids and messages would point readers at another project, and the bans and
+the rules Trax adds would live in a second package. The copy costs a sync now and then, which
+`upstream.txt` and the sync script make a readable diff.
 
-A curated list lost because it is the thing this replaces. Rules the package ships as silent
-stay silent: it offers them in the editor and does not report them, so promoting them would be
-a choice of ours, not the vendor's.
+Every rule the package ships lost because it ships rules that contradict each other (return the
+task, await the task). The rules it leaves off are the ones its author treats as taste, so the
+default set is the largest one that can be satisfied.
 
-A relaxed tier for tests lost for the same reason. The cost is visible: an example quoted in
-the docs carries `ConfigureAwait(false)` because the build requires it.
+A curated list lost because it is the thing this replaces. A relaxed tier for tests lost for the
+same reason. The cost is visible: an example quoted in the docs carries `ConfigureAwait(false)`
+because the build requires it.
 
 ## Consequences
 
-A rule is exempted only where satisfying it would change what a published package promises:
-a public signature, or a documented exception. Each exemption is a line in
-`.github/scripts/generate-analyzer-profile.sh` with its reason, and is copied into the
-generated file as a comment.
-
-Raising the package version can fail the build, because a new version can enable new rules.
-That pull request regenerates the profile and fixes what it reports.
-
-## The team's layer
-
-What the vendor's set does not say is added in one place and kept short: the rules the
-generator lists as added, and the APIs and syntax named in `BannedSymbols.txt` and
-`BannedSyntaxes.txt` at the repository root. It bans reading the clock, chance and the console
-from library code, and the null-forgiving operator in every form. This is the only part of the
-profile that is a choice of ours, so it is the only part worth arguing about.
+Moving to a newer upstream tag can fail the build, because a new version can enable new rules.
+That pull request gives each new rule a line in `rules.txt` and fixes what it reports. Like any
+dependency bumped by hand, the tag must be at least 7 days old.
 
 ## Exemplars
 
-**Enforced elsewhere:** `AnalyzerProfileTests` in Trax.Core's Tests.Meta project holds the
-generated profile to the package's defaults and fails on a suppression, `BanLayerProbeTests`
-beside it runs the analyzers over code that breaks each ban and requires the diagnostic, and
-the build itself fails on any rule the profile reports.
-
-Not covered: the guard reads the profile and the sources of the folder it runs in. A folder
-that does not reference the package is not held to anything.
+**Enforced elsewhere:** `AnalyzerProfileTests` in Trax.Core's Tests.Meta project requires every
+.NET folder to import the profile, holds each `.globalconfig` line to a reason and a rule
+`rules.txt` lists, and refuses every other way to turn a rule off, across the whole repository.
+`ProfileTests` and `BanTests` in `Trax.Analyzers/tests/Trax.Analyzers.Package.Tests` hold the
+generated configuration to `rules.txt` and require each ban to report. The build itself fails on
+any rule the profile reports.
 
 ## Changelog
 
+- **2026-11-21**: Rewritten as the decision stands: the rules are a Trax-owned copy shipped as
+  Trax.Analyzers, the profile is `rules.txt`, the rules Trax adds are marked there, and every
+  folder, sample, template and the book is under it.
 - **2026-11-17**: Added the team's layer: banned APIs, banned syntax, and no null-forgiving operator.
 - **2026-11-17**: Recorded.

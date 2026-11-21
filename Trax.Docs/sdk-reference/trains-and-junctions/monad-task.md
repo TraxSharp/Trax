@@ -9,6 +9,7 @@ namespace:
   - Trax.Core.Monad
 source:
   - Trax.Core/src/Trax.Core/Extensions/MonadTaskExtensions.cs
+  - Trax.Core/src/Trax.Core/Extensions/MonadTask.cs
   - Trax.Core/src/Trax.Core/Monad/Monad.cs
 parent: Trains and Junctions
 grand_parent: SDK Reference
