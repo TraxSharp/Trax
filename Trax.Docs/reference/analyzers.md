@@ -1,6 +1,6 @@
 ---
 title: Trax.Analyzers
-description: "The opt-in Trax.Analyzers package: about 250 Roslyn rules and bans on the clock, chance and the console, every one an error, how to turn it on, pin it and turn parts of it off."
+description: "The opt-in Trax.Analyzers package: its Roslyn rules and bans, every one an error, and how to turn it on, pin its level and turn parts of it off."
 type: reference
 area: tooling
 nav_order: 4
