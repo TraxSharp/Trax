@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Docs.Tests.Tests;
 
 /// <summary>
@@ -128,7 +130,7 @@ public partial class CodeLinksToDocsResolveTests
         for (var i = 0; i < lines.Length; i++)
             foreach (Match m in DocsLink.Matches(lines[i]))
                 yield return (
-                    $"{file}:{i + 1}",
+                    string.Create(CultureInfo.InvariantCulture, $"{file}:{i + 1}"),
                     m.Value,
                     m.Groups["path"].Value,
                     m.Groups["anchor"].Success ? m.Groups["anchor"].Value : null

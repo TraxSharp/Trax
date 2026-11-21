@@ -151,7 +151,7 @@ public class GuardRunnerTests
             .Single(r => string.Equals(r.Name, "census/classified", StringComparison.Ordinal))
             .Inspected.Should()
             .Be(1);
-        failures.Should().BeEmpty(string.Join("\n", failures.SelectMany(f => f.Offenders)));
+        failures.Should().BeEmpty(string.Join('\n', failures.SelectMany(f => f.Offenders)));
     }
 
     #endregion
@@ -167,7 +167,7 @@ public class GuardRunnerTests
             .Where(r => !r.Passed)
             .ToList();
 
-        failures.Should().BeEmpty(string.Join("\n", failures.SelectMany(f => f.Offenders)));
+        failures.Should().BeEmpty(string.Join('\n', failures.SelectMany(f => f.Offenders)));
     }
 
     [Test]
@@ -180,7 +180,7 @@ public class GuardRunnerTests
             .Where(r => !r.Passed)
             .ToList();
 
-        failures.Should().BeEmpty(string.Join("\n", failures.SelectMany(f => f.Offenders)));
+        failures.Should().BeEmpty(string.Join('\n', failures.SelectMany(f => f.Offenders)));
     }
 
     [Test]

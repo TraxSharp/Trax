@@ -6,7 +6,7 @@ namespace Trax.Docs.Tests.Infrastructure;
 /// <summary>The heading ids traxsharp.net gives a page, computed the way rehype-slug does.</summary>
 internal static partial class Headings
 {
-    [GeneratedRegex(@"^\s*(```|~~~)", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    [GeneratedRegex(@"^\s*(```|~~~)", RegexOptions.ExplicitCapture, matchTimeoutMilliseconds: 1000)]
     private static partial Regex Fence { get; }
 
     [GeneratedRegex(
@@ -55,7 +55,7 @@ internal static partial class Headings
             while (occurrences.ContainsKey(unique))
             {
                 occurrences[slug]++;
-                unique = $"{slug}-{occurrences[slug]}";
+                unique = string.Create(CultureInfo.InvariantCulture, $"{slug}-{occurrences[slug]}");
             }
             occurrences[unique] = 0;
             ids.Add(unique);

@@ -34,7 +34,7 @@ public partial class TypeScriptExportsAreDocumentedTests
     )]
     private static partial Regex Name { get; }
 
-    [GeneratedRegex("`([^`\\n]+)`", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    [GeneratedRegex("`(?<span>[^`\\n]+)`", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     private static partial Regex CodeSpan { get; }
 
     [Test]
@@ -65,7 +65,7 @@ public partial class TypeScriptExportsAreDocumentedTests
 
         var words = CodeSpan
             .Matches(File.ReadAllText(RepoRoot.Combine(Page)))
-            .SelectMany(span => Identifier.Matches(span.Groups[1].Value))
+            .SelectMany(span => Identifier.Matches(span.Groups["span"].Value))
             .Select(word => word.Value)
             .ToHashSet(StringComparer.Ordinal);
         var undocumented = exports

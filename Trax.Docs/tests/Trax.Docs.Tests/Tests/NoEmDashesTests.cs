@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Docs.Tests.Tests;
 
 /// <summary>
@@ -25,7 +27,12 @@ public class NoEmDashesTests
             for (var i = 0; i < lines.Length; i++)
             {
                 if (lines[i].Contains('—', StringComparison.Ordinal))
-                    offenders.Add($"{RepoRoot.Relative(file)}:{i + 1}  -> {lines[i].Trim()}");
+                    offenders.Add(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{RepoRoot.Relative(file)}:{i + 1}  -> {lines[i].Trim()}"
+                        )
+                    );
             }
         }
 

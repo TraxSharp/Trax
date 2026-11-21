@@ -48,6 +48,12 @@ public partial class PublicApiIsDocumentedTests
         "CompareTo",
     };
 
+    [GeneratedRegex(@"^(?:\[[^\]]*\]\s*)+", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex LeadingAttributes { get; }
+
+    [GeneratedRegex("(?<=[a-z0-9])(?=[A-Z])", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex WordBoundary { get; }
+
     [GeneratedRegex(
         @"^(?:\[.*\]\s*)*(?:public|protected) (?:(?:static|sealed|abstract|readonly|partial|ref|unsafe|new)\s+)*"
             + @"(?<kind>record struct|record class|record|class|struct|interface|enum|delegate)\s+(?<decl>.*)$",
@@ -281,7 +287,7 @@ public partial class PublicApiIsDocumentedTests
             if (text.StartsWith('[') && text.EndsWith(']'))
                 continue;
 
-            var owner = string.Join(".", stack.Select(s => s.Name));
+            var owner = string.Join('.', stack.Select(s => s.Name));
 
             var type = TypeDeclaration.Match(text);
             if (type.Success)
@@ -291,7 +297,7 @@ public partial class PublicApiIsDocumentedTests
                 if (string.Equals(kind, "delegate", StringComparison.Ordinal))
                 {
                     if (NameBeforeParameters(decl) is { } delegateName)
-                        yield return new Entry(true, owner, delegateName, "");
+                        yield return new Entry(IsType: true, owner, delegateName, "");
                     continue;
                 }
 
@@ -300,7 +306,7 @@ public partial class PublicApiIsDocumentedTests
                     continue;
 
                 var name = declared.Groups["name"].Value;
-                yield return new Entry(true, owner, name, declared.Groups["rest"].Value);
+                yield return new Entry(IsType: true, owner, name, declared.Groups["rest"].Value);
                 stack.Add((indent, name, kind));
                 continue;
             }
@@ -310,7 +316,7 @@ public partial class PublicApiIsDocumentedTests
 
             var member = MemberName(text, stack[^1].Kind, stack[^1].Name);
             if (member is not null)
-                yield return new Entry(false, owner, member, "");
+                yield return new Entry(IsType: false, owner, member, "");
         }
     }
 
@@ -323,7 +329,7 @@ public partial class PublicApiIsDocumentedTests
                 ? v
                 : null;
 
-        text = Regex.Replace(text, @"^(?:\[[^\]]*\]\s*)+", "");
+        text = LeadingAttributes.Replace(text, "");
 
         var isInterface = string.Equals(ownerKind, "interface", StringComparison.Ordinal);
         if (
@@ -432,7 +438,7 @@ public partial class PublicApiIsDocumentedTests
             [
                 n,
                 char.ToLowerInvariant(n[0]) + n[1..],
-                Regex.Replace(n, "(?<=[a-z0-9])(?=[A-Z])", "_").ToUpperInvariant(),
+                WordBoundary.Replace(n, "_").ToUpperInvariant(),
             ];
 
         var bases = new List<string> { name };

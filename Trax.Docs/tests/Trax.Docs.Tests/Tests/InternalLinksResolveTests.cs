@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Docs.Tests.Tests;
 
 /// <summary>
@@ -44,7 +46,7 @@ public partial class InternalLinksResolveTests
     )]
     private static partial Regex Scheme { get; }
 
-    [GeneratedRegex(@"^\s*(```|~~~)", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    [GeneratedRegex(@"^\s*(```|~~~)", RegexOptions.ExplicitCapture, matchTimeoutMilliseconds: 1000)]
     private static partial Regex Fence { get; }
 
     [GeneratedRegex(@"`[^`]*`", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
@@ -85,7 +87,12 @@ public partial class InternalLinksResolveTests
                     continue;
                 }
 
-                offenders.Add($"{rel}:{line} -> {target} ({problem})");
+                offenders.Add(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{rel}:{line} -> {target} ({problem})"
+                    )
+                );
             }
         }
 

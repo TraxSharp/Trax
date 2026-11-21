@@ -28,7 +28,7 @@ public partial class DocsRunOnEveryFolderTheyReadTests
 
     [GeneratedRegex(
         @"^\s*(```|~~~).*\bfrom=(?<path>[^\s#]+)",
-        RegexOptions.Multiline,
+        RegexOptions.Multiline | RegexOptions.ExplicitCapture,
         matchTimeoutMilliseconds: 1000
     )]
     private static partial Regex FromMarker { get; }

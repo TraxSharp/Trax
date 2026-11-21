@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Docs.Tests.Tests;
 
 /// <summary>
@@ -26,7 +28,7 @@ public partial class ImagesResolveTests
     )]
     private static partial Regex Image { get; }
 
-    [GeneratedRegex(@"^\s*(```|~~~)", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    [GeneratedRegex(@"^\s*(```|~~~)", RegexOptions.ExplicitCapture, matchTimeoutMilliseconds: 1000)]
     private static partial Regex Fence { get; }
 
     [GeneratedRegex(@"`[^`]*`", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
@@ -42,12 +44,27 @@ public partial class ImagesResolveTests
             foreach (var (line, alt, target) in Images(ReadPage(page)))
             {
                 if (!target.StartsWith(ImagesPath, StringComparison.Ordinal))
-                    offenders.Add($"{page}:{line} -> {target} (not under {ImagesPath})");
+                    offenders.Add(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{page}:{line} -> {target} (not under {ImagesPath})"
+                        )
+                    );
                 else if (!File.Exists(RepoRoot.Combine("images", target[ImagesPath.Length..])))
-                    offenders.Add($"{page}:{line} -> {target} (no such file in images/)");
+                    offenders.Add(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{page}:{line} -> {target} (no such file in images/)"
+                        )
+                    );
 
                 if (string.IsNullOrWhiteSpace(alt))
-                    offenders.Add($"{page}:{line} -> {target} (no alt text)");
+                    offenders.Add(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{page}:{line} -> {target} (no alt text)"
+                        )
+                    );
             }
         }
 

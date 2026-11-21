@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Docs.Tests.Tests;
 
 /// <summary>
@@ -322,7 +324,9 @@ public partial class SdkReferenceFrontMatterTests
             var missing = SignatureFences(File.ReadAllText(RepoRoot.Combine(page.Split('/'))))
                 .SelectMany(f => DeclaredNames(f.Code).Select(n => (f.Line, Name: n)))
                 .Where(x => !words.Contains(x.Name))
-                .Select(x => $"{x.Name} (line {x.Line})")
+                .Select(x =>
+                    string.Create(CultureInfo.InvariantCulture, $"{x.Name} (line {x.Line})")
+                )
                 .Distinct(StringComparer.Ordinal)
                 .ToList();
             if (missing.Count > 0)
@@ -345,7 +349,10 @@ public partial class SdkReferenceFrontMatterTests
                     + "record, struct, enum, delegate) and every member (the name before its "
                     + "parameter list or its `{ get`) is a name in that package's public API "
                     + "baseline. Fix the signature to match the code, or the `package:` to the one "
-                    + $"that ships it. Checked {checkedPages} pages. See {Adr}. Do not add the page "
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"that ships it. Checked {checkedPages} pages. See {Adr}. Do not add the page "
+                    )
                     + $"to {KnownMismatchFile}. Not in the baseline:\n  "
                     + string.Join("\n  ", offenders)
             );
@@ -649,7 +656,7 @@ public partial class SdkReferenceFrontMatterTests
                 .FirstOrDefault()
                 ?.ToLowerInvariant();
             if (inSignature && language is "csharp" or "cs" or "c#")
-                fences.Add((i + 1, string.Join("\n", body)));
+                fences.Add((i + 1, string.Join('\n', body)));
             i = j;
         }
 
@@ -674,7 +681,7 @@ public partial class SdkReferenceFrontMatterTests
                     : l
             )
             .Where(l => !l.TrimStart().StartsWith('['));
-        var text = string.Join("\n", lines);
+        var text = string.Join('\n', lines);
 
         var names = new HashSet<string>(StringComparer.Ordinal);
 

@@ -10,7 +10,7 @@ namespace Trax.Docs.Tests.Tests;
 /// <para>Not ADR-enforcing: it pins page content an outside build found missing, not a recorded decision.</para>
 /// </summary>
 [TestFixture]
-public class StateMachinePagesTests
+public partial class StateMachinePagesTests
 {
     private static string Page(string relative) =>
         File.ReadAllText(RepoRoot.Combine(relative.Split('/')))
@@ -115,8 +115,8 @@ public class StateMachinePagesTests
     {
         var page = Page(relative);
         // An excerpt (from=) mirrors a real file, whose using lines are in that file.
-        var blocks = Regex
-            .Matches(page, "```csharp(?<marker>[^\n]*)\n(?<body>.*?)```", RegexOptions.Singleline)
+        var blocks = CSharpBlock
+            .Matches(page)
             .Where(b =>
                 !b.Groups["marker"].Value.TrimStart().StartsWith("from=", StringComparison.Ordinal)
             );
@@ -135,4 +135,11 @@ public class StateMachinePagesTests
                 "a snippet copied on its own must compile"
             );
     }
+
+    [GeneratedRegex(
+        "```csharp(?<marker>[^\n]*)\n(?<body>.*?)```",
+        RegexOptions.Singleline,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex CSharpBlock { get; }
 }

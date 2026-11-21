@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Docs.Tests.Tests;
 
 /// <summary>
@@ -60,7 +62,12 @@ public partial class NoJekyllSyntaxTests
                 foreach (var (desc, pattern) in BannedPatterns)
                 {
                     if (pattern.IsMatch(lines[i]))
-                        offenders.Add($"{rel}:{i + 1}  -> {desc}: {lines[i].Trim()}");
+                        offenders.Add(
+                            string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"{rel}:{i + 1}  -> {desc}: {lines[i].Trim()}"
+                            )
+                        );
                 }
             }
         }
