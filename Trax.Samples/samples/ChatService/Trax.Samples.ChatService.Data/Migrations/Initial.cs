@@ -26,6 +26,32 @@ namespace Trax.Samples.ChatService.Data.Migrations
                 }
             );
 
+            CreateChatMessagesTable(migrationBuilder);
+
+            CreateChatParticipantsTable(migrationBuilder);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ChatMessages_ChatRoomId_SentAt",
+                table: "ChatMessages",
+                columns: new[] { "ChatRoomId", "SentAt" }
+            );
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ChatParticipants_ChatRoomId_UserId",
+                table: "ChatParticipants",
+                columns: new[] { "ChatRoomId", "UserId" },
+                unique: true
+            );
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ChatParticipants_UserId",
+                table: "ChatParticipants",
+                column: "UserId"
+            );
+        }
+
+        private static void CreateChatMessagesTable(MigrationBuilder migrationBuilder)
+        {
             migrationBuilder.CreateTable(
                 name: "ChatMessages",
                 columns: table => new
@@ -49,7 +75,10 @@ namespace Trax.Samples.ChatService.Data.Migrations
                     );
                 }
             );
+        }
 
+        private static void CreateChatParticipantsTable(MigrationBuilder migrationBuilder)
+        {
             migrationBuilder.CreateTable(
                 name: "ChatParticipants",
                 columns: table => new
@@ -71,25 +100,6 @@ namespace Trax.Samples.ChatService.Data.Migrations
                         onDelete: ReferentialAction.Cascade
                     );
                 }
-            );
-
-            migrationBuilder.CreateIndex(
-                name: "IX_ChatMessages_ChatRoomId_SentAt",
-                table: "ChatMessages",
-                columns: new[] { "ChatRoomId", "SentAt" }
-            );
-
-            migrationBuilder.CreateIndex(
-                name: "IX_ChatParticipants_ChatRoomId_UserId",
-                table: "ChatParticipants",
-                columns: new[] { "ChatRoomId", "UserId" },
-                unique: true
-            );
-
-            migrationBuilder.CreateIndex(
-                name: "IX_ChatParticipants_UserId",
-                table: "ChatParticipants",
-                column: "UserId"
             );
         }
 

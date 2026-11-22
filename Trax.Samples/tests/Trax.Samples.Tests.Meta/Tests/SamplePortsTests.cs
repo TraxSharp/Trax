@@ -29,32 +29,7 @@ public partial class SamplePortsTests
     public void Every_sample_port_is_in_range_and_owned_by_one_sample()
     {
         var samples = Path.Combine(RepoRoot.Path, "samples");
-        var files = Directory
-            .EnumerateFiles(samples, "launchSettings.json", SearchOption.AllDirectories)
-            .Concat(
-                Directory.EnumerateFiles(samples, "appsettings*.json", SearchOption.AllDirectories)
-            )
-            .Concat(Directory.EnumerateFiles(samples, "*.ts", SearchOption.AllDirectories))
-            .Concat(Directory.EnumerateFiles(samples, "*.tsx", SearchOption.AllDirectories))
-            .Concat(SourceFiles.CSharp("samples"))
-            .Where(f =>
-                !f.Contains(
-                    $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
-                    StringComparison.Ordinal
-                )
-                && !f.Contains(
-                    $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
-                    StringComparison.Ordinal
-                )
-                && !f.Contains(
-                    $"{Path.DirectorySeparatorChar}node_modules{Path.DirectorySeparatorChar}",
-                    StringComparison.Ordinal
-                )
-                && !f.Contains(
-                    $"{Path.DirectorySeparatorChar}dist{Path.DirectorySeparatorChar}",
-                    StringComparison.Ordinal
-                )
-            );
+        var files = PortFiles(samples);
 
         var offenders = new List<string>();
         var foldersByPort = new Dictionary<int, SortedSet<string>>();
@@ -106,6 +81,35 @@ public partial class SamplePortsTests
                     + string.Join("\n  ", offenders.Distinct(StringComparer.Ordinal))
             );
     }
+
+    // The launch profiles, appsettings, TypeScript and C# a sample's ports are read from.
+    private static IEnumerable<string> PortFiles(string samples) =>
+        Directory
+            .EnumerateFiles(samples, "launchSettings.json", SearchOption.AllDirectories)
+            .Concat(
+                Directory.EnumerateFiles(samples, "appsettings*.json", SearchOption.AllDirectories)
+            )
+            .Concat(Directory.EnumerateFiles(samples, "*.ts", SearchOption.AllDirectories))
+            .Concat(Directory.EnumerateFiles(samples, "*.tsx", SearchOption.AllDirectories))
+            .Concat(SourceFiles.CSharp("samples"))
+            .Where(f =>
+                !f.Contains(
+                    $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
+                && !f.Contains(
+                    $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
+                && !f.Contains(
+                    $"{Path.DirectorySeparatorChar}node_modules{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
+                && !f.Contains(
+                    $"{Path.DirectorySeparatorChar}dist{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
+            );
 
     /// <summary>A Vite config's or a script's <c>port: 5281</c>.</summary>
     [GeneratedRegex(

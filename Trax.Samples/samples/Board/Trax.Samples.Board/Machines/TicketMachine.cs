@@ -68,6 +68,16 @@ public sealed class TicketMachine : Machine<TicketState, TicketTrigger>
             .SystemOwned()
             .StartsAt(TicketState.Triage, () => ContextFor("unknown", "unknown"));
 
+        TriageAndReproduce(m);
+        FixAndReview(m);
+
+        m.In(TicketState.Done).Context<TicketContext>();
+        m.In(TicketState.Closed).Context<TicketContext>();
+    }
+
+    // Triage picks the area; reproducing tries cases until one shows the bug or two do not.
+    private static void TriageAndReproduce(IMachineBuilder<TicketState, TicketTrigger> m)
+    {
         Lane(m, TicketState.Triage)
             .On(TicketTrigger.Triaged)
             .WithInput<TriagedInput>()
@@ -103,7 +113,11 @@ public sealed class TicketMachine : Machine<TicketState, TicketTrigger>
             .Because("A ticket is closed only after at least two cases did not reproduce it.")
             .Reduce(Moved())
             .To(TicketState.Closed);
+    }
 
+    // A fix is written, checked by QA, then reviewed; a failure at either sends it back.
+    private static void FixAndReview(IMachineBuilder<TicketState, TicketTrigger> m)
+    {
         Lane(m, TicketState.ReadyToFix)
             .On(TicketTrigger.FixRejected)
             .WithInput<NoteInput>()
@@ -144,9 +158,6 @@ public sealed class TicketMachine : Machine<TicketState, TicketTrigger>
             .WithInput<NoteInput>()
             .Reduce(Moved())
             .To(TicketState.ReadyToFix);
-
-        m.In(TicketState.Done).Context<TicketContext>();
-        m.In(TicketState.Closed).Context<TicketContext>();
     }
 
     // A lane: a worker claims the ticket once, and the claim is released when its lease runs out.

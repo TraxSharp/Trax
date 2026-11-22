@@ -110,6 +110,12 @@ public sealed class CheckoutMachine : Machine<CheckoutState, CheckoutTrigger>
             .CustomGuard(TotalMatchesItems, (ctx, _) => TotalIsThePriceOfTheItems(ctx))
             .CustomReducer(AddItemToCart, AddToCart);
 
+        CartReviewAndPaid(m);
+    }
+
+    // Cart, Review and Paid, and the events each of them takes.
+    private static void CartReviewAndPaid(IMachineBuilder<CheckoutState, CheckoutTrigger> m)
+    {
         // Any signed-in user may send every event of their own checkout.
         m.In(CheckoutState.Cart)
             .Context<CheckoutContext>()

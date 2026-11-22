@@ -38,22 +38,7 @@ public class ScheduleDemoRun(
         // armed before the manifest is scheduled, since the dispatcher may start the first run
         // before the start below sees it queued, and disarmed if the start fails, so a refused or
         // timed-out start leaves nothing armed.
-        CrashPoint[] crashes = !input.CrashOnce
-            ? []
-            : input.Scenario switch
-            {
-                Scenario.Refund => input.CrashWhile switch
-                {
-                    RefundCrash.Emailing => [CrashPoint.RefundEmail],
-                    RefundCrash.PayingThenEmailing =>
-                    [
-                        CrashPoint.RefundTrack,
-                        CrashPoint.RefundEmail,
-                    ],
-                    _ => [CrashPoint.RefundTrack],
-                },
-                _ => [CrashPoint.CoCitation],
-            };
+        var crashes = CrashesFor(input);
         faults.Arm(runId, crashes);
 
         Trax.Effect.Models.Manifest.Manifest manifest;
@@ -97,6 +82,25 @@ public class ScheduleDemoRun(
             FirstRunId = firstRunId,
         };
     }
+
+    // Where the run crashes: nowhere unless it asks to crash once, else by its scenario.
+    private static CrashPoint[] CrashesFor(StartRunInput input) =>
+        !input.CrashOnce
+            ? []
+            : input.Scenario switch
+            {
+                Scenario.Refund => input.CrashWhile switch
+                {
+                    RefundCrash.Emailing => [CrashPoint.RefundEmail],
+                    RefundCrash.PayingThenEmailing =>
+                    [
+                        CrashPoint.RefundTrack,
+                        CrashPoint.RefundEmail,
+                    ],
+                    _ => [CrashPoint.RefundTrack],
+                },
+                _ => [CrashPoint.CoCitation],
+            };
 
     // The scheduler queues the manifest's first run on its next pass, a second at most in this demo: its id is what
     // the page follows.

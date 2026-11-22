@@ -60,17 +60,7 @@ public class RefundResumeTests : RecoveryTestFixture
 
         faults.Disarm(Run.RunId);
 
-        // What the operator sees on the failed run: a checkpoint after the Gate step, and
-        // NotifyCustomer offered as a point to resume at; nothing before the checkpoint is.
-        var (canResume, nodes) = await Run.RunGraphAsync(failed);
-        canResume.Should().BeTrue($"the failed run has a checkpoint to resume after ({Adr})");
-        nodes[Checkpoint].GetProperty("checkpointed").GetBoolean().Should().BeTrue();
-        nodes[Notify].GetProperty("canResume").GetBoolean().Should().BeTrue();
-        nodes[IssuePayment]
-            .GetProperty("canResume")
-            .GetBoolean()
-            .Should()
-            .BeFalse("no checkpoint before it holds what it needs");
+        await ExpectResumableAtNotifyAsync(failed);
 
         // On GraphQL, at the step the page's button names.
         var overGraphQL = await ResumeOverGraphQLAsync(failed, Notify);
@@ -96,6 +86,32 @@ public class RefundResumeTests : RecoveryTestFixture
         Decider.Asked(Run.RunId, "ApproveRefund").Should().Be(1);
         Stream.Errors.Should().BeEmpty();
 
+        await ExpectNoViolationsLeftAsync(
+            before,
+            [failed, retry, lastRetry, overGraphQL, fromDashboard]
+        );
+    }
+
+    private async Task ExpectResumableAtNotifyAsync(long failed)
+    {
+        // What the operator sees on the failed run: a checkpoint after the Gate step, and
+        // NotifyCustomer offered as a point to resume at; nothing before the checkpoint is.
+        var (canResume, nodes) = await Run.RunGraphAsync(failed).ConfigureAwait(false);
+        canResume.Should().BeTrue($"the failed run has a checkpoint to resume after ({Adr})");
+        nodes[Checkpoint].GetProperty("checkpointed").GetBoolean().Should().BeTrue();
+        nodes[Notify].GetProperty("canResume").GetBoolean().Should().BeTrue();
+        nodes[IssuePayment]
+            .GetProperty("canResume")
+            .GetBoolean()
+            .Should()
+            .BeFalse("no checkpoint before it holds what it needs");
+    }
+
+    private static async Task ExpectNoViolationsLeftAsync(
+        IReadOnlyList<TraxInvariantViolation> before,
+        long[] started
+    )
+    {
         // Every invariant that holds while the host runs; the first three hold once it stops.
         var transient = new[]
         {
@@ -103,14 +119,16 @@ public class RefundResumeTests : RecoveryTestFixture
             TraxInvariants.EffectClaimInFlight,
             TraxInvariants.DispatchedWithoutRun,
         };
-        var added = (await TraxInvariants.FindViolationsAsync(ConnectionString))
+        var added = (
+            await TraxInvariants.FindViolationsAsync(ConnectionString).ConfigureAwait(false)
+        )
             .Except(before)
             .ToList();
         added
             .Where(v => !transient.Contains(v.Invariant))
             .Should()
             .BeEmpty(TraxInvariants.Describe(added));
-        var runs = new[] { failed, retry, lastRetry, overGraphQL, fromDashboard }.Select(id =>
+        var runs = started.Select(id =>
             id.ToString(System.Globalization.CultureInfo.InvariantCulture)
         );
         added

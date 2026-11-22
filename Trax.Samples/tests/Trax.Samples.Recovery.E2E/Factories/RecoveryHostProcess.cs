@@ -76,28 +76,12 @@ public sealed partial class RecoveryHostProcess : IAsyncDisposable
         TimeSpan? machineSweepInterval = null
     )
     {
-        var assembly = HostAssembly();
-
-        var start = new ProcessStartInfo("dotnet")
-        {
-            WorkingDirectory = Path.GetDirectoryName(assembly).NotNull(),
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-        };
-        start.ArgumentList.Add(assembly);
-        start.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
-        start.Environment["ConnectionStrings__TraxDatabase"] = connectionString ?? ConnectionString;
-        start.Environment["Kestrel__Endpoints__Http__Url"] = "http://127.0.0.1:0";
-        start.Environment["Logging__LogLevel__Microsoft.Hosting.Lifetime"] = "Information";
-        start.Environment["Recovery__StepDelay"] = stepDelay.ToString("c");
-        start.Environment["Recovery__ModelLatencyMin"] = "00:00:00";
-        start.Environment["Recovery__ModelLatencyMax"] = "00:00:00";
-        start.Environment["Recovery__RequirePersistedOperations"] = requirePersistedOperations
-            ? "true"
-            : "false";
-        if (machineSweepInterval is { } sweep)
-            start.Environment["Recovery__MachineSweepInterval"] = sweep.ToString("c");
+        var start = StartInfo(
+            stepDelay,
+            connectionString,
+            requirePersistedOperations,
+            machineSweepInterval
+        );
 
         var output = new StringBuilder();
         var listening = new TaskCompletionSource<Uri>(
@@ -141,6 +125,50 @@ public sealed partial class RecoveryHostProcess : IAsyncDisposable
             );
         }
 
+        return await WaitHealthyAsync(process, output, address).ConfigureAwait(false);
+    }
+
+    // The dotnet process that runs the built host, configured through its environment.
+    private static ProcessStartInfo StartInfo(
+        TimeSpan stepDelay,
+        string? connectionString,
+        bool requirePersistedOperations,
+        TimeSpan? machineSweepInterval
+    )
+    {
+        var assembly = HostAssembly();
+
+        var start = new ProcessStartInfo("dotnet")
+        {
+            WorkingDirectory = Path.GetDirectoryName(assembly).NotNull(),
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        start.ArgumentList.Add(assembly);
+        start.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+        start.Environment["ConnectionStrings__TraxDatabase"] = connectionString ?? ConnectionString;
+        start.Environment["Kestrel__Endpoints__Http__Url"] = "http://127.0.0.1:0";
+        start.Environment["Logging__LogLevel__Microsoft.Hosting.Lifetime"] = "Information";
+        start.Environment["Recovery__StepDelay"] = stepDelay.ToString("c");
+        start.Environment["Recovery__ModelLatencyMin"] = "00:00:00";
+        start.Environment["Recovery__ModelLatencyMax"] = "00:00:00";
+        start.Environment["Recovery__RequirePersistedOperations"] = requirePersistedOperations
+            ? "true"
+            : "false";
+        if (machineSweepInterval is { } sweep)
+            start.Environment["Recovery__MachineSweepInterval"] = sweep.ToString("c");
+
+        return start;
+    }
+
+    // Waits for the listening host to answer its health check; a host that never does is disposed.
+    private static async Task<RecoveryHostProcess> WaitHealthyAsync(
+        Process process,
+        StringBuilder output,
+        Uri address
+    )
+    {
         var host = new RecoveryHostProcess(process, output, address);
         var healthy = await Polling
             .WaitUntilAsync(

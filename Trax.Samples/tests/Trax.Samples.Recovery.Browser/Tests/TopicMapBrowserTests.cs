@@ -86,28 +86,7 @@ public partial class TopicMapBrowserTests
             .Should()
             .Be(PersistedOperationRequired, "an ad-hoc generic mutation is refused like any other");
 
-        // And the schema has no generic mutation to persist a document for: the operator's own registered
-        // document naming one fails validation on the field, not on the transport.
-        var upload = await UploadDocumentAsync(
-            $"browser-generic-{Guid.NewGuid():N}",
-            "mutation { dispatch { stateMachine { __typename } } }"
-        );
-        var refused = JsonDocument
-            .Parse(upload)
-            .RootElement.GetProperty("data")
-            .GetProperty("persistedOperations")
-            .GetProperty("uploadPersistedOperation");
-        refused.GetProperty("success").GetBoolean().Should().BeFalse(upload);
-        var error = refused.GetProperty("errors").EnumerateArray().Single();
-        error.GetProperty("code").GetString().Should().Be("SCHEMA_VALIDATION_FAILED", upload);
-        error
-            .GetProperty("message")
-            .GetString()
-            .Should()
-            .Be(
-                "The field `stateMachine` does not exist on the type `DispatchMutations`.",
-                "the generic mutations are off: nothing exposes them"
-            );
+        await ExpectGenericMutationDocumentRefusedAsync();
     }
 
     [Test]
@@ -263,32 +242,7 @@ public partial class TopicMapBrowserTests
 
         await BuildAsync(page);
 
-        // Once the build's run has started, both read it: the console loads the page again (the state does not
-        // move when the queued run starts), and GraphQL's operations.machineInstance is asked. The console holds
-        // its key in memory only, so a fresh load asks for it again.
-        (
-            await Polling.WaitUntilAsync(
-                async () =>
-                    string.Equals(
-                        await DraftRows.RunStateAsync(draft.Id).ConfigureAwait(false),
-                        "in_progress",
-                        StringComparison.Ordinal
-                    ),
-                BrowserTimeouts.Server,
-                TimeSpan.FromMilliseconds(25)
-            )
-        )
-            .Should()
-            .BeTrue("the build's run starts");
-        var reloaded = OpenTheConsoleAsync(console, instancePage);
-        var live = await MachineInstanceAsync(draft);
-        await reloaded;
-        var run = live.GetProperty("invokedRuns").EnumerateArray().Single();
-        run.GetProperty("isLive").GetBoolean().Should().BeTrue("the draft's state waits on it");
-        var runId = run.GetProperty("id").GetInt64();
-        (await DraftRows.LatestRunIdAsync(draft.Id))
-            .Should()
-            .Be(runId, "the run GraphQL lists is the one the build started");
+        var runId = await LiveRunIdAsync(console, instancePage, draft);
 
         await Expect(page.WizardState)
             .ToHaveTextAsync(Built, new() { Timeout = BrowserTimeouts.Server.Ms() });
@@ -300,13 +254,93 @@ public partial class TopicMapBrowserTests
             .Which.Should()
             .EndWith(string.Create(CultureInfo.InvariantCulture, $"/runs/{runId}"));
 
+        await ExpectBuiltWithNoLiveRunAsync(page, draft);
+
+        await Expect(state)
+            .ToHaveTextAsync("Built", new() { Timeout = BrowserTimeouts.Render.Ms() });
+        await Expect(runs)
+            .ToContainTextAsync("No runs to show", new() { Timeout = BrowserTimeouts.Render.Ms() });
+    }
+
+    private static async Task ExpectGenericMutationDocumentRefusedAsync()
+    {
+        // And the schema has no generic mutation to persist a document for: the operator's own registered
+        // document naming one fails validation on the field, not on the transport.
+        var upload = await UploadDocumentAsync(
+                $"browser-generic-{Guid.NewGuid():N}",
+                "mutation { dispatch { stateMachine { __typename } } }"
+            )
+            .ConfigureAwait(false);
+        var refused = JsonDocument
+            .Parse(upload)
+            .RootElement.GetProperty("data")
+            .GetProperty("persistedOperations")
+            .GetProperty("uploadPersistedOperation");
+        refused.GetProperty("success").GetBoolean().Should().BeFalse(upload);
+        var error = refused.GetProperty("errors").EnumerateArray().Single();
+        error.GetProperty("code").GetString().Should().Be("SCHEMA_VALIDATION_FAILED", upload);
+        error
+            .GetProperty("message")
+            .GetString()
+            .Should()
+            .Be(
+                "The field `stateMachine` does not exist on the type `DispatchMutations`.",
+                "the generic mutations are off: nothing exposes them"
+            );
+    }
+
+    // The id of the build's run, once both the console and GraphQL show it live.
+    private static async Task<long> LiveRunIdAsync(
+        IPage console,
+        string instancePage,
+        (Guid Id, long RowId, string State) draft
+    )
+    {
+        // Once the build's run has started, both read it: the console loads the page again (the state does not
+        // move when the queued run starts), and GraphQL's operations.machineInstance is asked. The console holds
+        // its key in memory only, so a fresh load asks for it again.
+        (
+            await Polling
+                .WaitUntilAsync(
+                    async () =>
+                        string.Equals(
+                            await DraftRows.RunStateAsync(draft.Id).ConfigureAwait(false),
+                            "in_progress",
+                            StringComparison.Ordinal
+                        ),
+                    BrowserTimeouts.Server,
+                    TimeSpan.FromMilliseconds(25)
+                )
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .BeTrue("the build's run starts");
+        var reloaded = OpenTheConsoleAsync(console, instancePage);
+        var live = await MachineInstanceAsync(draft).ConfigureAwait(false);
+        await reloaded.ConfigureAwait(false);
+        var run = live.GetProperty("invokedRuns").EnumerateArray().Single();
+        run.GetProperty("isLive").GetBoolean().Should().BeTrue("the draft's state waits on it");
+        var runId = run.GetProperty("id").GetInt64();
+        (await DraftRows.LatestRunIdAsync(draft.Id).ConfigureAwait(false))
+            .Should()
+            .Be(runId, "the run GraphQL lists is the one the build started");
+
+        return runId;
+    }
+
+    private static async Task ExpectBuiltWithNoLiveRunAsync(
+        RecoveryPage page,
+        (Guid Id, long RowId, string State) draft
+    )
+    {
         // Built: the typed get, operations.machineInstance and the console agree on the state, and on there
         // being no live run.
-        var got = await TypedAsync(page, DemoKeysUser, "get", new { id = draft.Id });
-        var revision = await DraftRows.RevisionAsync(draft.Id);
+        var got = await TypedAsync(page, DemoKeysUser, "get", new { id = draft.Id })
+            .ConfigureAwait(false);
+        var revision = await DraftRows.RevisionAsync(draft.Id).ConfigureAwait(false);
         got.GetProperty("state").GetString().Should().Be("Built");
         got.GetProperty("revision").GetInt64().Should().Be(revision);
-        var built = await MachineInstanceAsync(draft);
+        var built = await MachineInstanceAsync(draft).ConfigureAwait(false);
         built.GetProperty("state").GetString().Should().Be("Built");
         built.GetProperty("revision").GetInt64().Should().Be(revision);
         built
@@ -314,11 +348,6 @@ public partial class TopicMapBrowserTests
             .GetArrayLength()
             .Should()
             .Be(0, "the build's run has ended");
-
-        await Expect(state)
-            .ToHaveTextAsync("Built", new() { Timeout = BrowserTimeouts.Render.Ms() });
-        await Expect(runs)
-            .ToContainTextAsync("No runs to show", new() { Timeout = BrowserTimeouts.Render.Ms() });
     }
 
     // Loads the operations console at a route and connects with the operator key, which it asks for on every load.

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
 using Trax.Core.Extensions;
 using Trax.Effect.Enums;
+using Trax.Effect.Models.Metadata;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 using Trax.Samples.ApiDashboard.Browser.Host;
 using Trax.Samples.ApiDashboard.Browser.Pages;
@@ -46,73 +47,9 @@ public partial class BulkOperationBrowserTests : ConsoleTest
             .GetByRole(AriaRole.Checkbox)
             .CheckAsync(new() { Timeout = Render });
 
-        var started = Page.WaitForRequestAsync(
-            r =>
-                r.Url.EndsWith("/trax/graphql", StringComparison.Ordinal)
-                && r.PostData?.Contains(
-                    "\"operationName\":\"StartBulkOperation\"",
-                    StringComparison.Ordinal
-                ) == true,
-            new() { Timeout = Render }
-        );
-        await runs.CancelAllMatching(held.Count).ClickAsync(new() { Timeout = Render });
-        var dialog = Page.GetByRole(
-            AriaRole.Dialog,
-            new() { Name = "Cancel all matching runs", Exact = true }
-        );
-        await dialog.GetByLabel($"Type {held.Count} to confirm").FillAsync($"{held.Count}");
-        await Console.ConfirmAsync(
-            "Cancel all matching runs",
-            $"this filter matches: {held.Count}"
-        );
+        await StartBulkCancelAsync(runs, held, train);
 
-        var variables = (await started).PostDataJSON().NotNull().Value.GetProperty("variables");
-        variables.GetProperty("kind").GetString().Should().Be("CANCEL");
-        variables.GetProperty("expectedCount").GetInt32().Should().Be(held.Count);
-        var filter = variables.GetProperty("filter").GetProperty("executions");
-        filter.GetProperty("trainName").GetString().Should().Be(train);
-        filter.GetProperty("trainState").GetString().Should().Be("IN_PROGRESS");
-
-        var operation = new BulkOperationPage(Console);
-        await Assertions.Expect(operation.Heading).ToBeVisibleAsync(new() { Timeout = Render });
-        await Assertions.Expect(Page).ToHaveURLAsync(OperationUrl, new() { Timeout = Render });
-        // The page reads the operation again while it runs; these hold once it has finished.
-        await Assertions
-            .Expect(Page.GetByText("Finished", new() { Exact = true }))
-            .ToBeVisibleAsync(new() { Timeout = BrowserTimeouts.Server.Ms() });
-        foreach (
-            var (label, count) in new[]
-            {
-                ("Matched", held.Count),
-                ("Done", held.Count),
-                ("Failed", 0),
-                ("Not attempted", 0),
-            }
-        )
-            await Assertions
-                .Expect(
-                    operation
-                        .Count(label)
-                        .GetByText(
-                            string.Create(CultureInfo.InvariantCulture, $"{count}"),
-                            new() { Exact = true }
-                        )
-                )
-                .ToBeVisibleAsync(new() { Timeout = Render });
-        await Assertions.Expect(operation.Filter).ToContainTextAsync(train);
-        await Assertions.Expect(operation.Filter).ToContainTextAsync("In progress");
-        // The actor is the caller's principal id, {scheme}:{id}.
-        await Assertions
-            .Expect(
-                Page.GetByText(
-                    new Regex(
-                        $"^[\\w-]+:{Caller.Operator.Id}$",
-                        RegexOptions.None,
-                        TimeSpan.FromSeconds(1)
-                    )
-                )
-            )
-            .ToBeVisibleAsync();
+        await ExpectFinishedOperationAsync(held, train);
 
         var ids = held.Select(r => r.Id).ToList();
         (
@@ -143,6 +80,106 @@ public partial class BulkOperationBrowserTests : ConsoleTest
             )
             .Should()
             .Be(0, "the selection is not what is cancelled");
+    }
+
+    // Cancels every matching run from the batch bar, confirms by typing the count, and checks the
+    // one operation the console started.
+    private async Task StartBulkCancelAsync(
+        FilteredRunsPage runs,
+        IReadOnlyList<Metadata> held,
+        string train
+    )
+    {
+        var started = Page.WaitForRequestAsync(
+            r =>
+                r.Url.EndsWith("/trax/graphql", StringComparison.Ordinal)
+                && r.PostData?.Contains(
+                    "\"operationName\":\"StartBulkOperation\"",
+                    StringComparison.Ordinal
+                ) == true,
+            new() { Timeout = Render }
+        );
+        await runs.CancelAllMatching(held.Count)
+            .ClickAsync(new() { Timeout = Render })
+            .ConfigureAwait(false);
+        var dialog = Page.GetByRole(
+            AriaRole.Dialog,
+            new() { Name = "Cancel all matching runs", Exact = true }
+        );
+        await dialog
+            .GetByLabel($"Type {held.Count} to confirm")
+            .FillAsync($"{held.Count}")
+            .ConfigureAwait(false);
+        await Console
+            .ConfirmAsync("Cancel all matching runs", $"this filter matches: {held.Count}")
+            .ConfigureAwait(false);
+
+        var variables = (await started.ConfigureAwait(false))
+            .PostDataJSON()
+            .NotNull()
+            .Value.GetProperty("variables");
+        variables.GetProperty("kind").GetString().Should().Be("CANCEL");
+        variables.GetProperty("expectedCount").GetInt32().Should().Be(held.Count);
+        var filter = variables.GetProperty("filter").GetProperty("executions");
+        filter.GetProperty("trainName").GetString().Should().Be(train);
+        filter.GetProperty("trainState").GetString().Should().Be("IN_PROGRESS");
+    }
+
+    // The operation's page, once the operation has finished: its counts, its filter and its actor.
+    private async Task ExpectFinishedOperationAsync(IReadOnlyList<Metadata> held, string train)
+    {
+        var operation = new BulkOperationPage(Console);
+        await Assertions
+            .Expect(operation.Heading)
+            .ToBeVisibleAsync(new() { Timeout = Render })
+            .ConfigureAwait(false);
+        await Assertions
+            .Expect(Page)
+            .ToHaveURLAsync(OperationUrl, new() { Timeout = Render })
+            .ConfigureAwait(false);
+        // The page reads the operation again while it runs; these hold once it has finished.
+        await Assertions
+            .Expect(Page.GetByText("Finished", new() { Exact = true }))
+            .ToBeVisibleAsync(new() { Timeout = BrowserTimeouts.Server.Ms() })
+            .ConfigureAwait(false);
+        foreach (
+            var (label, count) in new[]
+            {
+                ("Matched", held.Count),
+                ("Done", held.Count),
+                ("Failed", 0),
+                ("Not attempted", 0),
+            }
+        )
+            await Assertions
+                .Expect(
+                    operation
+                        .Count(label)
+                        .GetByText(
+                            string.Create(CultureInfo.InvariantCulture, $"{count}"),
+                            new() { Exact = true }
+                        )
+                )
+                .ToBeVisibleAsync(new() { Timeout = Render })
+                .ConfigureAwait(false);
+        await Assertions.Expect(operation.Filter).ToContainTextAsync(train).ConfigureAwait(false);
+        await Assertions
+            .Expect(operation.Filter)
+            .ToContainTextAsync("In progress")
+            .ConfigureAwait(false);
+        // The actor is the caller's principal id, {scheme}:{id}.
+        await Assertions
+            .Expect(
+                Page.GetByText(
+                    new Regex(
+                        $"^[\\w-]+:{Caller.Operator.Id}$",
+                        RegexOptions.None,
+                        TimeSpan.FromSeconds(1)
+                    )
+                )
+            )
+            .ToBeVisibleAsync()
+            .ConfigureAwait(false);
     }
 
     private static Task<int> ActiveRunsOf(string train) =>

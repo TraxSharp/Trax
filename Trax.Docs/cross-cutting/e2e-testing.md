@@ -244,24 +244,24 @@ A test then writes the entry the dispatcher claims. Serialize the input with
 back with; `JsonSerializer`'s defaults write PascalCase, which the dispatcher does not bind:
 
 ```csharp from=Trax.Samples/tests/Trax.Samples.EnergyHub.E2E/HubTests/DependencyChainTests.cs
-            var entry = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
-                new CreateWorkQueue
-                {
-                    TrainName = solarManifest.Name,
-                    Input = JsonSerializer.Serialize(
-                        input,
-                        TraxJsonSerializationOptions.ManifestProperties
-                    ),
-                    InputTypeName = typeof(MonitorSolarProductionInput).FullName,
-                    ManifestId = solarManifest.Id,
-                    Priority = 20,
-                },
-                TimeProvider.System
-            );
+var entry = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
+    new CreateWorkQueue
+    {
+        TrainName = solarManifest.Name,
+        Input = JsonSerializer.Serialize(
+            input,
+            TraxJsonSerializationOptions.ManifestProperties
+        ),
+        InputTypeName = typeof(MonitorSolarProductionInput).FullName,
+        ManifestId = solarManifest.Id,
+        Priority = 20,
+    },
+    TimeProvider.System
+);
 
-            await DataContext.Track(entry);
-            await DataContext.SaveChanges(CancellationToken.None);
-            DataContext.Reset();
+await DataContext.Track(entry).ConfigureAwait(false);
+await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+DataContext.Reset();
 ```
 
 `WorkQueue.Create` is the only way to build an entry; the parameterless constructor is protected.

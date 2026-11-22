@@ -26,41 +26,7 @@ public class RestartTests
     [Test]
     public async Task AHostKilledMidBuild_FailsTheRunOnTheNextStart_AndTheDraftIsRebuiltFromBuildFailed()
     {
-        Guid draftId;
-        await using (
-            var first = await RecoveryHostProcess.StartAsync(
-                TimeSpan.FromSeconds(2),
-                requirePersistedOperations: false
-            )
-        )
-        {
-            await TopicMapDrafts.ClearAsync(RecoveryHostProcess.ConnectionString);
-            var draft = new TopicMapDraft(new GraphQLClient(first.Http), DemoKeys.Operator);
-            await draft.CreateAsync();
-            draftId = draft.Id;
-            (await draft.BuildAsync(CorpusFixture.Fields, 2016, 2025))
-                .State.Should()
-                .Be(nameof(TopicMapState.Building));
-
-            (
-                await Polling.WaitUntilAsync(
-                    async () =>
-                        string.Equals(
-                            await RunStateAsync(draftId).ConfigureAwait(false),
-                            "in_progress",
-                            StringComparison.Ordinal
-                        ),
-                    TopicMapDraft.Patience,
-                    TimeSpan.FromMilliseconds(100)
-                )
-            )
-                .Should()
-                .BeTrue(
-                    $"the build should be running on the first host. It wrote:\n{first.Output}"
-                );
-
-            await first.KillAsync();
-        }
+        var draftId = await KillTheFirstHostMidBuildAsync();
 
         (await RunStateAsync(draftId))
             .Should()
@@ -89,6 +55,50 @@ public class RestartTests
             .Be(nameof(TopicMapState.Building));
         var built = await resumed.WaitForStateAsync(nameof(TopicMapState.Built));
         built.Context["topicPairs"].NotNull().GetValue<int>().Should().Be(32);
+    }
+
+    // Starts a build on a first host and kills the host while the build's run is in progress.
+    private static async Task<Guid> KillTheFirstHostMidBuildAsync()
+    {
+        Guid draftId;
+        var first = await RecoveryHostProcess
+            .StartAsync(TimeSpan.FromSeconds(2), requirePersistedOperations: false)
+            .ConfigureAwait(false);
+        await using (first.ConfigureAwait(false))
+        {
+            await TopicMapDrafts
+                .ClearAsync(RecoveryHostProcess.ConnectionString)
+                .ConfigureAwait(false);
+            var draft = new TopicMapDraft(new GraphQLClient(first.Http), DemoKeys.Operator);
+            await draft.CreateAsync().ConfigureAwait(false);
+            draftId = draft.Id;
+            (await draft.BuildAsync(CorpusFixture.Fields, 2016, 2025).ConfigureAwait(false))
+                .State.Should()
+                .Be(nameof(TopicMapState.Building));
+
+            (
+                await Polling
+                    .WaitUntilAsync(
+                        async () =>
+                            string.Equals(
+                                await RunStateAsync(draftId).ConfigureAwait(false),
+                                "in_progress",
+                                StringComparison.Ordinal
+                            ),
+                        TopicMapDraft.Patience,
+                        TimeSpan.FromMilliseconds(100)
+                    )
+                    .ConfigureAwait(false)
+            )
+                .Should()
+                .BeTrue(
+                    $"the build should be running on the first host. It wrote:\n{first.Output}"
+                );
+
+            await first.KillAsync().ConfigureAwait(false);
+        }
+
+        return draftId;
     }
 
     // The state of the latest run the draft's Building state queued, as Postgres spells it.

@@ -132,29 +132,7 @@ static async Task SeedAsync(IServiceProvider services)
     var lending = scope.ServiceProvider.GetRequiredService<ILendingDbContext>();
     var clock = scope.ServiceProvider.GetRequiredService<TimeProvider>();
 
-    if (!await catalog.Books.AnyAsync().ConfigureAwait(false))
-    {
-        var tolkien = new Author { Name = "J.R.R. Tolkien" };
-        var leguin = new Author { Name = "Ursula K. Le Guin" };
-        catalog.Authors.AddRange(tolkien, leguin);
-        await catalog.SaveChangesAsync().ConfigureAwait(false);
-
-        catalog.Books.AddRange(
-            new Book
-            {
-                Title = "The Hobbit",
-                Isbn = "978-0345339683",
-                AuthorId = tolkien.Id,
-            },
-            new Book
-            {
-                Title = "A Wizard of Earthsea",
-                Isbn = "978-0553383041",
-                AuthorId = leguin.Id,
-            }
-        );
-        await catalog.SaveChangesAsync().ConfigureAwait(false);
-    }
+    await SeedCatalogAsync(catalog).ConfigureAwait(false);
 
     // Startup has no caller, so the owner filter would hide every member: seeding reads past it.
     if (!await lending.Members.IgnoreQueryFilters().AnyAsync().ConfigureAwait(false))
@@ -188,6 +166,33 @@ static async Task SeedAsync(IServiceProvider services)
             }
         );
         await lending.SaveChangesAsync().ConfigureAwait(false);
+    }
+}
+
+static async Task SeedCatalogAsync(ICatalogDbContext catalog)
+{
+    if (!await catalog.Books.AnyAsync().ConfigureAwait(false))
+    {
+        var tolkien = new Author { Name = "J.R.R. Tolkien" };
+        var leguin = new Author { Name = "Ursula K. Le Guin" };
+        catalog.Authors.AddRange(tolkien, leguin);
+        await catalog.SaveChangesAsync().ConfigureAwait(false);
+
+        catalog.Books.AddRange(
+            new Book
+            {
+                Title = "The Hobbit",
+                Isbn = "978-0345339683",
+                AuthorId = tolkien.Id,
+            },
+            new Book
+            {
+                Title = "A Wizard of Earthsea",
+                Isbn = "978-0553383041",
+                AuthorId = leguin.Id,
+            }
+        );
+        await catalog.SaveChangesAsync().ConfigureAwait(false);
     }
 }
 

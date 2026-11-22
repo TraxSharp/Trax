@@ -61,6 +61,12 @@ public class ClaimTicket(TraxPrincipal caller, TicketBoard board, TimeProvider c
                 .Fire(ticket.Id, TicketTrigger.Release, input: null, CancellationToken)
                 .ConfigureAwait(false);
 
+        return await Claim(lane, ticket).ConfigureAwait(false);
+    }
+
+    // Claims the ticket for the caller and hands back its work, or says why it could not.
+    private async Task<WorkPackage> Claim(LaneSpec lane, Ticket ticket)
+    {
         var claimed = await board
             .Fire(
                 ticket.Id,

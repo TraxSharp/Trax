@@ -34,6 +34,30 @@ public class BorrowBookJunction(
                 .ConfigureAwait(false)
             ?? throw new TrainException("Your credential is not linked to a library member.");
 
+        await EnsureBookCanBeLent(input).ConfigureAwait(false);
+
+        var borrowedAt = clock.GetUtcNow().UtcDateTime;
+        var loan = new Loan
+        {
+            MemberId = member.Id,
+            BookId = input.BookId,
+            BorrowedAt = borrowedAt,
+        };
+        lending.Loans.Add(loan);
+
+        await SaveLoan(input).ConfigureAwait(false);
+
+        return new BorrowBookOutput
+        {
+            LoanId = loan.Id,
+            BorrowedAt = borrowedAt,
+            DueAt = loanPolicy.DueDate(borrowedAt),
+        };
+    }
+
+    // The book is in the catalog and nobody has it out.
+    private async Task EnsureBookCanBeLent(BorrowBookInput input)
+    {
         if (
             !await catalog
                 .Books.AnyAsync(b => b.Id == input.BookId, cancellationToken: CancellationToken)
@@ -62,16 +86,10 @@ public class BorrowBookJunction(
                     $"Book {input.BookId} is already on loan."
                 )
             );
+    }
 
-        var borrowedAt = clock.GetUtcNow().UtcDateTime;
-        var loan = new Loan
-        {
-            MemberId = member.Id,
-            BookId = input.BookId,
-            BorrowedAt = borrowedAt,
-        };
-        lending.Loans.Add(loan);
-
+    private async Task SaveLoan(BorrowBookInput input)
+    {
         try
         {
             await lending.SaveChangesAsync(CancellationToken).ConfigureAwait(false);
@@ -90,12 +108,5 @@ public class BorrowBookJunction(
                 )
             );
         }
-
-        return new BorrowBookOutput
-        {
-            LoanId = loan.Id,
-            BorrowedAt = borrowedAt,
-            DueAt = loanPolicy.DueDate(borrowedAt),
-        };
     }
 }

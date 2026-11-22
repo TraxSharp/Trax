@@ -82,6 +82,14 @@ public sealed class TopicMapMachine : Machine<TopicMapState, TopicMapTrigger>
             .Watch(r => r.OwnerOnly())
             .Discard(r => r.OwnerOnly());
 
+        ChoosingStates(m);
+        BuildStates(m);
+        DifferentialSamples(m);
+    }
+
+    // Choosing the fields, then the years.
+    private static void ChoosingStates(IMachineBuilder<TopicMapState, TopicMapTrigger> m)
+    {
         m.In(TopicMapState.ChoosingFields)
             .Context<TopicMapContext>()
             .On(TopicMapTrigger.ChooseFields)
@@ -115,7 +123,11 @@ public sealed class TopicMapMachine : Machine<TopicMapState, TopicMapTrigger>
                 )
             )
             .To(TopicMapState.Building);
+    }
 
+    // Building the map, and every state a build ends in.
+    private static void BuildStates(IMachineBuilder<TopicMapState, TopicMapTrigger> m)
+    {
         m.In(TopicMapState.Building)
             .Context<TopicMapContext>()
             .Requires(HasRange)
@@ -171,7 +183,11 @@ public sealed class TopicMapMachine : Machine<TopicMapState, TopicMapTrigger>
                 .AnyAuthenticated()
                 .Reduce(Reset())
                 .To(TopicMapState.ChoosingFields);
+    }
 
+    // The inputs and outcomes the differential corpus is generated from.
+    private static void DifferentialSamples(IMachineBuilder<TopicMapState, TopicMapTrigger> m)
+    {
         m.Differential(d =>
             d.Sample(TopicMapTrigger.ChooseFields, new FieldsChoice { Fields = ["Hydrology"] })
                 .Sample(TopicMapTrigger.Build, new RangeChoice { FromYear = 2016, ToYear = 2025 })

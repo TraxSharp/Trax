@@ -26,31 +26,7 @@ public class CombineSignals(IDbContextFactory<TopicMapDbContext> contexts, DemoP
         var (slice, embedding, coCitation, authors) = signals;
         await Task.Delay(pace.StepDelay, CancellationToken).ConfigureAwait(false);
 
-        var titles = slice.Papers.ToDictionary(p => p.Id, p => p.Title, StringComparer.Ordinal);
-        var references = coCitation.Pairs.ToDictionary(p => (p.WorkA, p.WorkB), p => (int)p.Value);
-        var coauthors = authors.Pairs.ToDictionary(p => (p.WorkA, p.WorkB), p => (int)p.Value);
-
-        var links = embedding
-            .Pairs.Select(pair =>
-            {
-                var shared = references.GetValueOrDefault((pair.WorkA, pair.WorkB));
-                var sharedAuthors = coauthors.GetValueOrDefault((pair.WorkA, pair.WorkB));
-                var score =
-                    0.5 * pair.Value
-                    + 0.3 * coCitation.Weight * Math.Min(shared / 2.0, 1)
-                    + 0.2 * Math.Min(sharedAuthors, 1);
-                return new TopicLink(
-                    pair.WorkA,
-                    titles[pair.WorkA],
-                    pair.WorkB,
-                    titles[pair.WorkB],
-                    pair.Value,
-                    shared,
-                    sharedAuthors,
-                    Math.Round(score, 3, MidpointRounding.ToEven)
-                );
-            })
-            .ToList();
+        var links = ScoreLinks(slice, embedding, coCitation, authors);
 
         var onTheMap = links.Where(l => l.Score >= Threshold).ToList();
 
@@ -90,5 +66,40 @@ public class CombineSignals(IDbContextFactory<TopicMapDbContext> contexts, DemoP
                 );
             }
         }
+    }
+
+    // Every embedding pair, scored by its similarity, its shared references and its shared authors.
+    private static List<TopicLink> ScoreLinks(
+        CorpusSlice slice,
+        EmbeddingSignal embedding,
+        CoCitationSignal coCitation,
+        AuthorSignal authors
+    )
+    {
+        var titles = slice.Papers.ToDictionary(p => p.Id, p => p.Title, StringComparer.Ordinal);
+        var references = coCitation.Pairs.ToDictionary(p => (p.WorkA, p.WorkB), p => (int)p.Value);
+        var coauthors = authors.Pairs.ToDictionary(p => (p.WorkA, p.WorkB), p => (int)p.Value);
+
+        return embedding
+            .Pairs.Select(pair =>
+            {
+                var shared = references.GetValueOrDefault((pair.WorkA, pair.WorkB));
+                var sharedAuthors = coauthors.GetValueOrDefault((pair.WorkA, pair.WorkB));
+                var score =
+                    0.5 * pair.Value
+                    + 0.3 * coCitation.Weight * Math.Min(shared / 2.0, 1)
+                    + 0.2 * Math.Min(sharedAuthors, 1);
+                return new TopicLink(
+                    pair.WorkA,
+                    titles[pair.WorkA],
+                    pair.WorkB,
+                    titles[pair.WorkB],
+                    pair.Value,
+                    shared,
+                    sharedAuthors,
+                    Math.Round(score, 3, MidpointRounding.ToEven)
+                );
+            })
+            .ToList();
     }
 }

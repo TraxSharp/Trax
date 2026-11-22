@@ -27,40 +27,7 @@ public static class SupplierOutage
     {
         var manifest = await db.Manifest(ManifestNames.ImportSupplierFeed).ConfigureAwait(false);
 
-        // A run still in flight from an earlier test would count toward this outage's retries.
-        await db.WaitUntil(
-                () =>
-                    db.Query(async dc =>
-                        !await dc
-                            .Metadatas.AnyAsync(m =>
-                                m.ManifestId == manifest.Id
-                                && (
-                                    m.TrainState == TrainState.Pending
-                                    || m.TrainState == TrainState.InProgress
-                                )
-                            )
-                            .ConfigureAwait(false)
-                    ),
-                TimeSpan.FromSeconds(30),
-                "no run of import-supplier-feed should still be in flight"
-            )
-            .ConfigureAwait(false);
-
-        // A dead letter still awaiting intervention holds the manifest back. Acknowledging it
-        // also resets the failure count, so only this outage's failures count.
-        var awaiting = await db.Query(dc =>
-                dc.DeadLetters.Where(d =>
-                        d.ManifestId == manifest.Id
-                        && d.Status == DeadLetterStatus.AwaitingIntervention
-                    )
-                    .Select(d => d.Id)
-                    .ToListAsync()
-            )
-            .ConfigureAwait(false);
-        if (awaiting.Count > 0)
-            await scheduler
-                .AcknowledgeDeadLettersAsync([.. awaiting], "Reset by the E2E suite")
-                .ConfigureAwait(false);
+        await SettleEarlierOutagesAsync(db, scheduler, manifest.Id).ConfigureAwait(false);
 
         var lastDeadLetterId =
             await db.Query(dc => dc.DeadLetters.MaxAsync(d => (long?)d.Id)).ConfigureAwait(false)
@@ -93,5 +60,48 @@ public static class SupplierOutage
             .ConfigureAwait(false);
 
         return new Result(manifest.Id, failures, deadLetter);
+    }
+
+    // Waits out an earlier test's runs of the manifest and acknowledges its dead letters.
+    private static async Task SettleEarlierOutagesAsync(
+        Db db,
+        ITraxScheduler scheduler,
+        long manifestId
+    )
+    {
+        // A run still in flight from an earlier test would count toward this outage's retries.
+        await db.WaitUntil(
+                () =>
+                    db.Query(async dc =>
+                        !await dc
+                            .Metadatas.AnyAsync(m =>
+                                m.ManifestId == manifestId
+                                && (
+                                    m.TrainState == TrainState.Pending
+                                    || m.TrainState == TrainState.InProgress
+                                )
+                            )
+                            .ConfigureAwait(false)
+                    ),
+                TimeSpan.FromSeconds(30),
+                "no run of import-supplier-feed should still be in flight"
+            )
+            .ConfigureAwait(false);
+
+        // A dead letter still awaiting intervention holds the manifest back. Acknowledging it
+        // also resets the failure count, so only this outage's failures count.
+        var awaiting = await db.Query(dc =>
+                dc.DeadLetters.Where(d =>
+                        d.ManifestId == manifestId
+                        && d.Status == DeadLetterStatus.AwaitingIntervention
+                    )
+                    .Select(d => d.Id)
+                    .ToListAsync()
+            )
+            .ConfigureAwait(false);
+        if (awaiting.Count > 0)
+            await scheduler
+                .AcknowledgeDeadLettersAsync([.. awaiting], "Reset by the E2E suite")
+                .ConfigureAwait(false);
     }
 }

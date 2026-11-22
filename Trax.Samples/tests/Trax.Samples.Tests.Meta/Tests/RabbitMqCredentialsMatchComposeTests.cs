@@ -32,19 +32,7 @@ public partial class RabbitMqCredentialsMatchComposeTests
 
         var offenders = new List<string>();
         // Every workflow that starts a broker, at the root of the repository Trax.Samples lives in.
-        var workflows = new List<string>();
-        foreach (
-            var w in Directory.EnumerateFiles(MonorepoRoot.Combine(".github", "workflows"), "*.yml")
-        )
-        {
-            if (
-                (await File.ReadAllTextAsync(w).ConfigureAwait(false)).Contains(
-                    "RABBITMQ_DEFAULT_USER",
-                    StringComparison.Ordinal
-                )
-            )
-                workflows.Add(w);
-        }
+        var workflows = await BrokerWorkflowsAsync();
         workflows.Should().NotBeEmpty("CI starts a RabbitMQ broker for the samples' tests");
         foreach (var workflow in workflows)
         {
@@ -59,23 +47,7 @@ public partial class RabbitMqCredentialsMatchComposeTests
                 );
         }
 
-        var files = Directory
-            .EnumerateFiles(
-                Path.Combine(RepoRoot.Path, "samples"),
-                "appsettings*.json",
-                SearchOption.AllDirectories
-            )
-            .Concat(SourceFiles.CSharp("samples", "tests"))
-            .Where(f =>
-                !f.Contains(
-                    $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
-                    StringComparison.Ordinal
-                )
-                && !f.Contains(
-                    $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
-                    StringComparison.Ordinal
-                )
-            );
+        var files = ConfigAndSourceFiles();
 
         foreach (var file in files)
         {
@@ -99,6 +71,45 @@ public partial class RabbitMqCredentialsMatchComposeTests
                     + string.Join("\n  ", offenders)
             );
     }
+
+    private static async Task<List<string>> BrokerWorkflowsAsync()
+    {
+        var workflows = new List<string>();
+        foreach (
+            var w in Directory.EnumerateFiles(MonorepoRoot.Combine(".github", "workflows"), "*.yml")
+        )
+        {
+            if (
+                (await File.ReadAllTextAsync(w).ConfigureAwait(false)).Contains(
+                    "RABBITMQ_DEFAULT_USER",
+                    StringComparison.Ordinal
+                )
+            )
+                workflows.Add(w);
+        }
+
+        return workflows;
+    }
+
+    // The samples' appsettings files and the C# sources of the samples and their tests.
+    private static IEnumerable<string> ConfigAndSourceFiles() =>
+        Directory
+            .EnumerateFiles(
+                Path.Combine(RepoRoot.Path, "samples"),
+                "appsettings*.json",
+                SearchOption.AllDirectories
+            )
+            .Concat(SourceFiles.CSharp("samples", "tests"))
+            .Where(f =>
+                !f.Contains(
+                    $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
+                && !f.Contains(
+                    $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
+            );
 
     [GeneratedRegex(
         @"amqp://(?<user>[^:@/""]+):(?<pass>[^@/""]+)@",

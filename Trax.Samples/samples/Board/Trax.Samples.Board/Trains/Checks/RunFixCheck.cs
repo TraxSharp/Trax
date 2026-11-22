@@ -37,19 +37,7 @@ public class RunFixCheck(InvokedRun run, TicketBoard board) : EffectJunction<Fix
         {
             var why =
                 $"{Money(broken)} pays {Money(patched.Charge(broken))} with this patch; the policy says {Money(report.Policy.Charge(broken))}";
-            await board
-                .Fire(
-                    ticket.Id,
-                    TicketTrigger.FixRejected,
-                    new NoteInput
-                    {
-                        By = TicketBoard.Name(run.UserKey),
-                        Note = $"patch refused: {why}",
-                    },
-                    CancellationToken
-                )
-                .ConfigureAwait(false);
-            return CheckResult.Refuse(why);
+            return await RejectFix(ticket, why).ConfigureAwait(false);
         }
 
         var patch = check.Inclusive
@@ -77,5 +65,23 @@ public class RunFixCheck(InvokedRun run, TicketBoard board) : EffectJunction<Fix
                 )
             )
             : CheckResult.Refuse(TicketBoard.Why(moved));
+    }
+
+    // The patch breaks a case: the ticket goes back to ReadyToFix with the reason.
+    private async Task<CheckResult> RejectFix(Ticket ticket, string why)
+    {
+        await board
+            .Fire(
+                ticket.Id,
+                TicketTrigger.FixRejected,
+                new NoteInput
+                {
+                    By = TicketBoard.Name(run.UserKey),
+                    Note = $"patch refused: {why}",
+                },
+                CancellationToken
+            )
+            .ConfigureAwait(false);
+        return CheckResult.Refuse(why);
     }
 }

@@ -120,24 +120,7 @@ public class TopicMapMachineTests : RecoveryTestFixture
     public async Task StartingANewMap_ResetsTheDraft_FromEveryStateThatOffersIt(TopicMapState from)
     {
         await _draft.NotNull().CreateAsync();
-        switch (from)
-        {
-            case TopicMapState.Building:
-                // Started at once, before the run ends: the draft is in Building, or Built if the run won.
-                (await _draft.NotNull().BuildAsync(CorpusFixture.Fields, 2016, 2025))
-                    .State.Should()
-                    .Be(nameof(TopicMapState.Building));
-                break;
-            case TopicMapState.BuildFailed:
-                // One field over two years holds fewer than two papers, so the build fails.
-                await _draft.NotNull().BuildAsync([CorpusFixture.Hydrology], 1990, 1991);
-                await _draft.NotNull().WaitForStateAsync(nameof(TopicMapState.BuildFailed));
-                break;
-            default:
-                await _draft.NotNull().BuildAsync(CorpusFixture.Fields, 2016, 2025);
-                await _draft.NotNull().WaitForStateAsync(nameof(TopicMapState.Built));
-                break;
-        }
+        await BuildTowardAsync(from);
         await using (var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<IDataContext>();
@@ -404,18 +387,7 @@ public class TopicMapMachineTests : RecoveryTestFixture
         };
 
         // Once dispatched, the run itself: alone, and in a batch with an id that names nothing.
-        long? run = null;
-        (
-            await Shared.Testing.Polling.WaitUntilAsync(
-                async () =>
-                    (run = (await EntryAsync(entry.Id).ConfigureAwait(false)).MetadataId)
-                        is not null,
-                TopicMapDraft.Patience,
-                TimeSpan.FromMilliseconds(100)
-            )
-        )
-            .Should()
-            .BeTrue("the build's entry is dispatched");
+        var run = await DispatchedRunAsync(entry.Id);
         refused.Add(
             await OperationAsync(
                 string.Create(
@@ -433,6 +405,84 @@ public class TopicMapMachineTests : RecoveryTestFixture
             "cancelExecutions"
         );
 
+        ShouldAllBeRefused(refused, bulk);
+
+        // The build goes on, and its outcome moves the draft.
+        (await _draft.NotNull().WaitForStateAsync(nameof(TopicMapState.Built)))
+            .Context["topicPairs"]
+            .NotNull()
+            .GetValue<int>()
+            .Should()
+            .Be(32);
+    }
+
+    // Builds the draft as far as the state the test starts from lets the page take it.
+    private async Task BuildTowardAsync(TopicMapState from)
+    {
+        switch (from)
+        {
+            case TopicMapState.Building:
+                // Started at once, before the run ends: the draft is in Building, or Built if the run won.
+                (
+                    await _draft
+                        .NotNull()
+                        .BuildAsync(CorpusFixture.Fields, 2016, 2025)
+                        .ConfigureAwait(false)
+                )
+                    .State.Should()
+                    .Be(nameof(TopicMapState.Building));
+                break;
+            case TopicMapState.BuildFailed:
+                // One field over two years holds fewer than two papers, so the build fails.
+                await _draft
+                    .NotNull()
+                    .BuildAsync([CorpusFixture.Hydrology], 1990, 1991)
+                    .ConfigureAwait(false);
+                await _draft
+                    .NotNull()
+                    .WaitForStateAsync(nameof(TopicMapState.BuildFailed))
+                    .ConfigureAwait(false);
+                break;
+            default:
+                await _draft
+                    .NotNull()
+                    .BuildAsync(CorpusFixture.Fields, 2016, 2025)
+                    .ConfigureAwait(false);
+                await _draft
+                    .NotNull()
+                    .WaitForStateAsync(nameof(TopicMapState.Built))
+                    .ConfigureAwait(false);
+                break;
+        }
+    }
+
+    // The run the build's entry was dispatched as, once it has been.
+    private static async Task<long?> DispatchedRunAsync(long entryId)
+    {
+        long? run = null;
+        (
+            await Shared
+                .Testing.Polling.WaitUntilAsync(
+                    async () =>
+                        (run = (await EntryAsync(entryId).ConfigureAwait(false)).MetadataId)
+                            is not null,
+                    TopicMapDraft.Patience,
+                    TimeSpan.FromMilliseconds(100)
+                )
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .BeTrue("the build's entry is dispatched");
+
+        return run;
+    }
+
+    // Every cancel is refused, and the bulk cancel skips the run and says why.
+    private static void ShouldAllBeRefused(
+        List<(bool Success, string? Message)> refused,
+        (bool Success, string? Message) bulk
+    )
+    {
         refused
             .Should()
             .AllSatisfy(r =>
@@ -453,14 +503,6 @@ public class TopicMapMachineTests : RecoveryTestFixture
                 "1 skipped: "
                     + Trax.Scheduler.Services.Operations.OperationsService.UserOwnedRunCancelRefusal
             );
-
-        // The build goes on, and its outcome moves the draft.
-        (await _draft.NotNull().WaitForStateAsync(nameof(TopicMapState.Built)))
-            .Context["topicPairs"]
-            .NotNull()
-            .GetValue<int>()
-            .Should()
-            .Be(32);
     }
 
     private async Task<(bool Success, string? Message)> OperationAsync(

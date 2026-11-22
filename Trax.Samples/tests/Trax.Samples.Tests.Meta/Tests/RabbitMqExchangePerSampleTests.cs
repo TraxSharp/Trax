@@ -54,24 +54,7 @@ public partial class RabbitMqExchangePerSampleTests
                             + $"the shared default {DefaultExchange}"
                     );
 
-            var names = files
-                .SelectMany(f => DeclaredName.Matches(f.Text).Select(m => m.Groups["name"].Value))
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
-            if (names.Count != 1)
-                offenders.Add(
-                    $"samples/{sample}: declares {names.Count} exchange names "
-                        + $"({string.Join(", ", names)}); its processes must share exactly one"
-                );
-
-            foreach (var name in names)
-            {
-                if (string.Equals(name, DefaultExchange, StringComparison.Ordinal))
-                    offenders.Add($"samples/{sample}: uses the shared default {DefaultExchange}");
-                if (!foldersByName.TryGetValue(name, out var folders))
-                    foldersByName[name] = folders = [];
-                folders.Add(sample);
-            }
+            AddExchangeNames(sample, files, foldersByName, offenders);
         }
 
         foreach (var (name, folders) in foldersByName.Where(kv => kv.Value.Count > 1))
@@ -85,6 +68,35 @@ public partial class RabbitMqExchangePerSampleTests
                     + "Offenders:\n  "
                     + string.Join("\n  ", offenders)
             );
+    }
+
+    // Records the exchange names one sample folder declares; it must declare exactly one, and not
+    // the shared default.
+    private static void AddExchangeNames(
+        string sample,
+        List<(string File, string Text, string Code)> files,
+        Dictionary<string, List<string>> foldersByName,
+        List<string> offenders
+    )
+    {
+        var names = files
+            .SelectMany(f => DeclaredName.Matches(f.Text).Select(m => m.Groups["name"].Value))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (names.Count != 1)
+            offenders.Add(
+                $"samples/{sample}: declares {names.Count} exchange names "
+                    + $"({string.Join(", ", names)}); its processes must share exactly one"
+            );
+
+        foreach (var name in names)
+        {
+            if (string.Equals(name, DefaultExchange, StringComparison.Ordinal))
+                offenders.Add($"samples/{sample}: uses the shared default {DefaultExchange}");
+            if (!foldersByName.TryGetValue(name, out var folders))
+                foldersByName[name] = folders = [];
+            folders.Add(sample);
+        }
     }
 
     /// <summary>The text of the call starting at <paramref name="start"/>, to its closing parenthesis.</summary>

@@ -32,9 +32,56 @@ public partial class E2EDatabaseProvisioningTests
         // Databases the run can reach: the service's POSTGRES_DB plus every database the
         // workflow creates before the tests, both named by this folder's entry in the CI
         // package table, and by each suite of this folder (a test project with a job of its own).
-        var config = JsonNode
-            .Parse(File.ReadAllText(MonorepoRoot.Combine(".github", "ci", "packages.json")))
-            .NotNull();
+        var provisioned = ProvisionedDatabases(
+            File.ReadAllText(MonorepoRoot.Combine(".github", "ci", "packages.json"))
+        );
+
+        hostPorts.Should().NotBeEmpty("the workflow must map at least one Postgres host port");
+        provisioned.Should().NotBeEmpty("the workflow must provision at least one database");
+
+        var offenders = new List<string>();
+        var inspected = 0;
+
+        // Most suites keep their factory in a Factories/ folder; PersistedOperations keeps its in
+        // Fixtures/. Match on either, because a factory this scan misses is a suite the guard
+        // cannot vouch for while still reporting green.
+        var factories = FactoryFiles();
+
+        foreach (var file in factories)
+        foreach (Match match in ConnectionString.Matches(File.ReadAllText(file)))
+        {
+            inspected++;
+            var port = match.Groups["port"].Value;
+            var db = match.Groups["db"].Value;
+            if (
+                OffenderFor(RepoRoot.Relative(file), port, db, hostPorts, provisioned) is
+                { } offender
+            )
+                offenders.Add(offender);
+        }
+
+        inspected
+            .Should()
+            .BeGreaterThan(
+                4,
+                "the five Postgres factory connection strings in this repo must all be inspected. "
+                    + "Fewer means either a suite was deleted, in which case lower this floor "
+                    + "deliberately, or the connection-string shape changed and this guard is "
+                    + "silently passing"
+            );
+        offenders
+            .Should()
+            .BeEmpty(
+                "every E2E factory must target the CI Postgres port and a provisioned database. A "
+                    + "factory pointing elsewhere skips and reports green while testing nothing. See "
+                    + "docs/adr/0001-a-sample-e2e-database-must-be-one-ci-provisions.md:\n"
+                    + string.Join('\n', offenders)
+            );
+    }
+
+    private static HashSet<string> ProvisionedDatabases(string packagesJson)
+    {
+        var config = JsonNode.Parse(packagesJson).NotNull();
         var rows = config["packages"]
             .NotNull()
             .AsArray()
@@ -64,16 +111,11 @@ public partial class E2EDatabaseProvisioningTests
                 provisioned.Add(db.NotNull().GetValue<string>());
         }
 
-        hostPorts.Should().NotBeEmpty("the workflow must map at least one Postgres host port");
-        provisioned.Should().NotBeEmpty("the workflow must provision at least one database");
+        return provisioned;
+    }
 
-        var offenders = new List<string>();
-        var inspected = 0;
-
-        // Most suites keep their factory in a Factories/ folder; PersistedOperations keeps its in
-        // Fixtures/. Match on either, because a factory this scan misses is a suite the guard
-        // cannot vouch for while still reporting green.
-        var factories = SourceFiles
+    private static IEnumerable<string> FactoryFiles() =>
+        SourceFiles
             .CSharp("tests")
             .Where(f =>
                 f.Contains(
@@ -82,44 +124,23 @@ public partial class E2EDatabaseProvisioningTests
                 ) || Path.GetFileName(f).EndsWith("Factory.cs", StringComparison.Ordinal)
             );
 
-        foreach (var file in factories)
-        foreach (Match match in ConnectionString.Matches(File.ReadAllText(file)))
-        {
-            inspected++;
-            var port = match.Groups["port"].Value;
-            var db = match.Groups["db"].Value;
-            var rel = RepoRoot.Relative(file);
-
-            if (!hostPorts.Contains(port))
-                offenders.Add(
-                    $"{rel}: connection port {port} is not mapped to the CI Postgres service "
-                        + $"(mapped host ports: {string.Join(", ", hostPorts.Order(StringComparer.Ordinal))})."
-                );
-            else if (!provisioned.Contains(db))
-                offenders.Add(
-                    $"{rel}: database '{db}' is not provisioned in CI. Add it to the "
-                        + "Trax.Samples databases, or its suite's, in .github/ci/packages.json (provisioned: "
-                        + $"{string.Join(", ", provisioned.Order(StringComparer.Ordinal))})."
-                );
-        }
-
-        inspected
-            .Should()
-            .BeGreaterThan(
-                4,
-                "the five Postgres factory connection strings in this repo must all be inspected. "
-                    + "Fewer means either a suite was deleted, in which case lower this floor "
-                    + "deliberately, or the connection-string shape changed and this guard is "
-                    + "silently passing"
-            );
-        offenders
-            .Should()
-            .BeEmpty(
-                "every E2E factory must target the CI Postgres port and a provisioned database. A "
-                    + "factory pointing elsewhere skips and reports green while testing nothing. See "
-                    + "docs/adr/0001-a-sample-e2e-database-must-be-one-ci-provisions.md:\n"
-                    + string.Join('\n', offenders)
-            );
+    // Why a factory's connection port or database is not one CI provisions, or null when both are.
+    private static string? OffenderFor(
+        string rel,
+        string port,
+        string db,
+        HashSet<string> hostPorts,
+        HashSet<string> provisioned
+    )
+    {
+        if (!hostPorts.Contains(port))
+            return $"{rel}: connection port {port} is not mapped to the CI Postgres service "
+                + $"(mapped host ports: {string.Join(", ", hostPorts.Order(StringComparer.Ordinal))}).";
+        if (!provisioned.Contains(db))
+            return $"{rel}: database '{db}' is not provisioned in CI. Add it to the "
+                + "Trax.Samples databases, or its suite's, in .github/ci/packages.json (provisioned: "
+                + $"{string.Join(", ", provisioned.Order(StringComparer.Ordinal))}).";
+        return null;
     }
 
     [GeneratedRegex(@"(?<host>\d+):5432", RegexOptions.None, matchTimeoutMilliseconds: 1000)]

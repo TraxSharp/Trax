@@ -198,13 +198,21 @@ public class OperationsGateTests : AuthTestFixture
         );
         listed.Should().BeTrue("the operator sees the run itself");
 
-        var detail = await GraphQL.SendAsync(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $$"""{ operations { executionDetail(id: {{id}}) { input output } } }"""
-            ),
-            OscarKey
-        );
+        await ExpectDetailWithoutNoteAsync(id, note);
+    }
+
+    // The run's detail, read as the operator, does not carry the gated note.
+    private async Task ExpectDetailWithoutNoteAsync(long? id, string note)
+    {
+        var detail = await GraphQL
+            .SendAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $$"""{ operations { executionDetail(id: {{id}}) { input output } } }"""
+                ),
+                OscarKey
+            )
+            .ConfigureAwait(false);
 
         detail.HasErrors.Should().BeFalse(detail.Raw);
         detail

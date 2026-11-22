@@ -49,6 +49,25 @@ namespace Shopfront.Data.Migrations
                     table.PrimaryKey("PK_Products", x => x.Sku);
                 });
 
+            CreateOrderItemTable(migrationBuilder);
+
+            SeedProducts(migrationBuilder);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_OrderItem_OrderId",
+                schema: "shop",
+                table: "OrderItem",
+                column: "OrderId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Orders_CustomerId",
+                schema: "shop",
+                table: "Orders",
+                column: "CustomerId");
+        }
+
+        private static void CreateOrderItemTable(MigrationBuilder migrationBuilder)
+        {
             migrationBuilder.CreateTable(
                 name: "OrderItem",
                 schema: "shop",
@@ -72,7 +91,10 @@ namespace Shopfront.Data.Migrations
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
+        }
 
+        private static void SeedProducts(MigrationBuilder migrationBuilder)
+        {
             migrationBuilder.InsertData(
                 schema: "shop",
                 table: "Products",
@@ -83,18 +105,6 @@ namespace Shopfront.Data.Migrations
                     { "MUG", "Mug", 12.00m, 10 },
                     { "TEE", "T-shirt", 25.00m, 3 },
                 });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_OrderItem_OrderId",
-                schema: "shop",
-                table: "OrderItem",
-                column: "OrderId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Orders_CustomerId",
-                schema: "shop",
-                table: "Orders",
-                column: "CustomerId");
         }
 
         /// <inheritdoc />

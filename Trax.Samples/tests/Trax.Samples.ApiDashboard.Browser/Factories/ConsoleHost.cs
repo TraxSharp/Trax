@@ -160,7 +160,34 @@ public sealed class ConsoleHost : IAsyncDisposable
         builder.Services.AddSingleton<ISnapshotPrincipal, NoSnapshotPrincipal>();
         builder.Services.AddSingleton<Outages>();
         builder.Services.AddSingleton<Holds>();
-        builder.Services.AddTrax(trax =>
+        AddTraxEffectsAndScheduler(builder.Services);
+        builder.Services.AddTraxGraphQL(graphql =>
+            graphql
+                .ExposeOperationQueries()
+                .ExposeOperationMutations()
+                .GateOperations(roles: OperatorRole)
+                .RequireAuthorization()
+                .UsePersistedOperations(po =>
+                    po.SingleNode()
+                        .RequirePersisted(require: true)
+                        .GateManagement(roles: ApiAdminRole)
+                )
+        );
+
+        var app = builder.Build();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.UseTraxGraphQL();
+        // The GraphQL endpoint authorizes everything the app reads; the shell is open here because
+        // a browser cannot present the API key on a page load (Trax.Api/docs/adr/0039).
+        app.UseTraxApiDashboard(dashboard => dashboard.AllowAnonymousShell());
+        return app;
+    }
+
+    // Effects, machines, the mediator, and a scheduler that polls every second or two.
+    private static void AddTraxEffectsAndScheduler(IServiceCollection services)
+    {
+        services.AddTrax(trax =>
             trax.AddEffects(effects =>
                     effects
                         .UsePostgres(ConnectionString)
@@ -198,27 +225,6 @@ public sealed class ConsoleHost : IAsyncDisposable
                         )
                 )
         );
-        builder.Services.AddTraxGraphQL(graphql =>
-            graphql
-                .ExposeOperationQueries()
-                .ExposeOperationMutations()
-                .GateOperations(roles: OperatorRole)
-                .RequireAuthorization()
-                .UsePersistedOperations(po =>
-                    po.SingleNode()
-                        .RequirePersisted(require: true)
-                        .GateManagement(roles: ApiAdminRole)
-                )
-        );
-
-        var app = builder.Build();
-        app.UseAuthentication();
-        app.UseAuthorization();
-        app.UseTraxGraphQL();
-        // The GraphQL endpoint authorizes everything the app reads; the shell is open here because
-        // a browser cannot present the API key on a page load (Trax.Api/docs/adr/0039).
-        app.UseTraxApiDashboard(dashboard => dashboard.AllowAnonymousShell());
-        return app;
     }
 
     private static async Task DropTraxSchemaAsync()

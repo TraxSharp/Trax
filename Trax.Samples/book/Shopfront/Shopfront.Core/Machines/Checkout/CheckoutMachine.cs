@@ -48,6 +48,14 @@ public sealed class CheckoutMachine : Machine<CheckoutState, CheckoutTrigger>
             .Watch(read => read.OwnerOnly())
             .Discard(read => read.OwnerOnly());
 
+        ShoppingStates(m);
+        OrderStates(m);
+        DifferentialSamples(m);
+    }
+
+    // Filling the cart, giving the address and choosing how to pay.
+    private static void ShoppingStates(IMachineBuilder<CheckoutState, CheckoutTrigger> m)
+    {
         m.In(CheckoutState.Cart)
             .Context<CheckoutContext>()
             .After(TimeSpan.FromHours(2))
@@ -89,7 +97,11 @@ public sealed class CheckoutMachine : Machine<CheckoutState, CheckoutTrigger>
             .On(CheckoutTrigger.PlaceOrder)
             .Requires(Roles.Customer)
             .To(CheckoutState.Placing);
+    }
 
+    // Placing the order and what follows it, and the cart left too long.
+    private static void OrderStates(IMachineBuilder<CheckoutState, CheckoutTrigger> m)
+    {
         // Entering Placing runs PlaceOrder with what the checkout gathered, and its end moves the checkout.
         m.In(CheckoutState.Placing)
             .Context<CheckoutContext>()
@@ -130,7 +142,11 @@ public sealed class CheckoutMachine : Machine<CheckoutState, CheckoutTrigger>
             .AnyAuthenticated()
             .Reduce(Reset())
             .To(CheckoutState.Cart);
+    }
 
+    // The inputs and outcomes the differential corpus is generated from.
+    private static void DifferentialSamples(IMachineBuilder<CheckoutState, CheckoutTrigger> m)
+    {
         m.Differential(d =>
             d.Sample(
                     CheckoutTrigger.SetLines,

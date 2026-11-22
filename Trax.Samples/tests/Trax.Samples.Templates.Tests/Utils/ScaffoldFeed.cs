@@ -154,36 +154,7 @@ internal static class ScaffoldFeed
             await Run(root, "restore", project, "--locked-mode").ConfigureAwait(false);
 
         var traversal = Path.Combine(root, "pack-trax.proj");
-        await File.WriteAllTextAsync(
-                traversal,
-                new XDocument(
-                    new XElement(
-                        "Project",
-                        new XElement(
-                            "ItemGroup",
-                            projects.Select(p => new XElement(
-                                "TraxPackage",
-                                new XAttribute("Include", p)
-                            ))
-                        ),
-                        new XElement(
-                            "Target",
-                            new XAttribute("Name", "PackTrax"),
-                            new XElement(
-                                "MSBuild",
-                                new XAttribute("Projects", "@(TraxPackage)"),
-                                new XAttribute("Targets", "Pack"),
-                                new XAttribute("BuildInParallel", "true"),
-                                new XAttribute(
-                                    "Properties",
-                                    $"Configuration=ScaffoldTest;Version={version};"
-                                        + $"PackageOutputPath={feed};EnablePackageValidation=false"
-                                )
-                            )
-                        )
-                    )
-                ).ToString()
-            )
+        await File.WriteAllTextAsync(traversal, PackTraxProject(projects, feed, version))
             .ConfigureAwait(false);
         await Run(
                 root,
@@ -199,6 +170,33 @@ internal static class ScaffoldFeed
 
         return new Packed(root, feed, templatesNupkg, version);
     }
+
+    // A traversal project that packs every Trax project into the feed at the given version.
+    private static string PackTraxProject(List<string> projects, string feed, string version) =>
+        new XDocument(
+            new XElement(
+                "Project",
+                new XElement(
+                    "ItemGroup",
+                    projects.Select(p => new XElement("TraxPackage", new XAttribute("Include", p)))
+                ),
+                new XElement(
+                    "Target",
+                    new XAttribute("Name", "PackTrax"),
+                    new XElement(
+                        "MSBuild",
+                        new XAttribute("Projects", "@(TraxPackage)"),
+                        new XAttribute("Targets", "Pack"),
+                        new XAttribute("BuildInParallel", "true"),
+                        new XAttribute(
+                            "Properties",
+                            $"Configuration=ScaffoldTest;Version={version};"
+                                + $"PackageOutputPath={feed};EnablePackageValidation=false"
+                        )
+                    )
+                )
+            )
+        ).ToString();
 
     /// <summary>
     /// The Trax package ids the packed templates pin, read from each template's

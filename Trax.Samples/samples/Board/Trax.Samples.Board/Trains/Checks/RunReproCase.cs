@@ -37,30 +37,7 @@ public class RunReproCase(InvokedRun run, TicketBoard board)
             );
 
         if (charged == policy)
-        {
-            failed++;
-            var noted = await board
-                .Fire(
-                    ticket.Id,
-                    TicketTrigger.NotReproduced,
-                    new CaseInput
-                    {
-                        By = TicketBoard.Name(run.UserKey),
-                        Note = $"{Money(check.Subtotal)} pays {Money(charged)}, as it should",
-                        Subtotal = check.Subtotal,
-                        Charged = charged,
-                        FailedCases = failed,
-                    },
-                    CancellationToken
-                )
-                .ConfigureAwait(false);
-            if (noted is not AdvanceOutcome.Advanced)
-                return CheckResult.Refuse(TicketBoard.Why(noted));
-            return CheckResult.Refuse(
-                $"{Money(check.Subtotal)} pays {Money(charged)}, which matches the policy: not reproduced",
-                failed
-            );
-        }
+            return await NotReproduced(ticket, check, charged, failed).ConfigureAwait(false);
 
         var moved = await board
             .Fire(
@@ -83,5 +60,37 @@ public class RunReproCase(InvokedRun run, TicketBoard board)
                 failed
             )
             : CheckResult.Refuse(TicketBoard.Why(moved), failed);
+    }
+
+    // The case pays what the policy says: one more failed case, and the claim stays.
+    private async Task<CheckResult> NotReproduced(
+        Ticket ticket,
+        ReproCheck check,
+        decimal charged,
+        int failed
+    )
+    {
+        failed++;
+        var noted = await board
+            .Fire(
+                ticket.Id,
+                TicketTrigger.NotReproduced,
+                new CaseInput
+                {
+                    By = TicketBoard.Name(run.UserKey),
+                    Note = $"{Money(check.Subtotal)} pays {Money(charged)}, as it should",
+                    Subtotal = check.Subtotal,
+                    Charged = charged,
+                    FailedCases = failed,
+                },
+                CancellationToken
+            )
+            .ConfigureAwait(false);
+        if (noted is not AdvanceOutcome.Advanced)
+            return CheckResult.Refuse(TicketBoard.Why(noted));
+        return CheckResult.Refuse(
+            $"{Money(check.Subtotal)} pays {Money(charged)}, which matches the policy: not reproduced",
+            failed
+        );
     }
 }
