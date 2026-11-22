@@ -15,6 +15,11 @@
 # clean one.
 #
 # Run after `dotnet restore --locked-mode`, from the folder whose lockfiles to check.
+#
+# One folder is left out: Trax.Analyzers/tests/Trax.Analyzers.Tests.Pins. Its projects build
+# nothing and run nothing; they pin, through lockfiles, the reference packages the analyzer tests
+# compile sample code against, among them deliberately old ones (.NET 5, xunit v2, MSTest 4.3.3)
+# that some rules are tested on. Nothing from that folder reaches a build or a package.
 set -euo pipefail
 
 registration=https://api.nuget.org/v3/registration5-gz-semver2
@@ -41,7 +46,7 @@ export -f check
 export registration
 
 packages=$(
-  git ls-files -z '*packages.lock.json' |
+  git ls-files -z '*packages.lock.json' ':(top,exclude)Trax.Analyzers/tests/Trax.Analyzers.Tests.Pins/' |
     xargs -0 jq -r '.dependencies[] | to_entries[]
       | select(.value.type != "Project" and .value.resolved != null)
       | "\(.key) \(.value.resolved)"' |
