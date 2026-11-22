@@ -14,9 +14,10 @@ tests in `tests/Trax.Analyzers.Tests` and the rule pages in `docs/rules`. The sc
 - **A fix to a rule goes in the copied file.** The next sync replaces those files, so either send
   the fix upstream too, or note it in `upstream.txt` and reapply it after a sync.
 - **Everything else is Trax's own**: the project files and `src/*.props`, the package
-  (`src/Trax.Analyzers.Package`), `rules.txt`, the ban files, `tests/Trax.Analyzers.Package.Tests`
-  and `tools/`. The polyfills in `src/Trax.Analyzers.Polyfills` are generated once by
-  `tools/generate-polyfills.sh`.
+  (`src/Trax.Analyzers.Package`), `rules.txt`, the ban files, `tests/Trax.Analyzers.Package.Tests`,
+  `tests/Trax.Analyzers.Tests/NuGetPackages.cs` (which replaces upstream's), the pin projects in
+  `tests/Trax.Analyzers.Tests.Pins` and `tools/`. The polyfills in `src/Trax.Analyzers.Polyfills`
+  are generated once by `tools/generate-polyfills.sh`.
 - **Moving to a newer upstream tag**: pick one at least 7 days old, run
   `tools/sync-upstream.sh <tag>`, read the diff, and give every new rule a line in `rules.txt`
   (`ProfileTests` fails until you do).
@@ -34,6 +35,16 @@ readable diff), and `.csharpierignore` keeps the formatter off them.
 ## Building and testing
 
 `trax-test Trax.Analyzers`. The rules are built twice, against Roslyn 5.0 and 5.6
-(`src/Analyzer.props` says why); the tests run the 5.6 build. Some of the copied tests download
-reference packages from api.nuget.org while they run, so they fail where the test step has no
-network.
+(`src/Analyzer.props` says why); the tests run the 5.6 build.
+
+The copied tests compile their snippets against reference packs and packages
+(`ReferenceAssemblies.Net.Net80`, `AddXunitV3()`) and load analyzers from packages
+(`AnalyzerTestExtensions`). In trax-test's runner the test step has no network, so all of them must
+already be in the NuGet cache. The projects under `tests/Trax.Analyzers.Tests.Pins` reference every
+one, one version of a package per project, which puts them in a lockfile, so the locked restore
+fetches them. They are never compiled against, and their versions stay out of
+`Directory.Packages.props` (Dependabot skips the folder) because they are the versions the tests
+name. `NuGetPackages.cs` reads only the cache; Microsoft.CodeAnalysis.Testing still downloads what
+the cache lacks where it has a network, so a missing pin shows up in the runner, not on CI. When a
+sync or a new test asks for another package or version, add it to the pin project for its
+framework and run `dotnet restore Trax.Analyzers.slnx --use-lock-file --force-evaluate`.

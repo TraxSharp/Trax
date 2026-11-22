@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "Microsoft.NETCore.App.Ref": {
+        "type": "Direct",
+        "requested": "[7.0.0, )",
+        "resolved": "7.0.0",
+        "contentHash": "CrX2bAyttzhfwaNRZ/swlW5PBVxW7IK2V6GHPj6LpWiYIhSxR/OoMcFNRIRRT7TefARlb5dciQ4nh28J8LcKmg=="
+      }
+    }
+  }
+}

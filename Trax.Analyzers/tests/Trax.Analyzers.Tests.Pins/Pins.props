@@ -1,0 +1,32 @@
+<Project>
+  <!-- What every pin project shares. A pin project is never compiled against: its references only
+       put each package, and what it depends on, in the NuGet cache and in its packages.lock.json,
+       so a locked restore downloads them before the tests run without a network
+       (AGENTS.md, "Building and testing"). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <TraxAnalyzers>false</TraxAnalyzers>
+    <!-- There is no code to analyze, and the analyzers inside the ASP.NET Core reference packs fail
+         on a project that references them without the shared framework. -->
+    <RunAnalyzers>false</RunAnalyzers>
+    <!-- The versions are the ones the copied tests ask for, not the repository's: they stay out of
+         Directory.Packages.props so that a bump there cannot move them. -->
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+    <!-- A package that net10.0 already provides is still needed when a test compiles for
+         netstandard2.0 or net48, so none is pruned from the graph. -->
+    <RestoreEnablePackagePruning>false</RestoreEnablePackagePruning>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Remove="DotNet.ReproducibleBuilds" />
+  </ItemGroup>
+
+  <ItemDefinitionGroup>
+    <PackageReference>
+      <ExcludeAssets>all</ExcludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemDefinitionGroup>
+</Project>

@@ -6,4 +6,4 @@ src/Trax.Analyzers.Annotations/**/*.cs
 src/Trax.Analyzers.Roslyn/
 src/Trax.Analyzers.Polyfills/
 tests/Trax.Analyzers.Tests/**/*.cs
-!tests/Trax.Analyzers.Tests/SharedHttpClient.cs
+!tests/Trax.Analyzers.Tests/NuGetPackages.cs

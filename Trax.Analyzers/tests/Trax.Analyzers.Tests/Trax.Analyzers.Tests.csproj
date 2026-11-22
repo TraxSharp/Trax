@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- The rules' tests, copied from Meziantou.Analyzer by tools/sync-upstream.sh (everything but
-       this file and SharedHttpClient.cs). They test the Roslyn 5.6 build. -->
+       this file and NuGetPackages.cs). They test the Roslyn 5.6 build. -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>

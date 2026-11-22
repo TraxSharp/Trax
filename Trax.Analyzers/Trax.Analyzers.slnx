@@ -10,5 +10,12 @@
   <Folder Name="/tests/">
     <Project Path="tests/Trax.Analyzers.Tests/Trax.Analyzers.Tests.csproj" />
     <Project Path="tests/Trax.Analyzers.Package.Tests/Trax.Analyzers.Package.Tests.csproj" />
+    <Project Path="tests/Trax.Analyzers.Tests.Pins/Default/Trax.Analyzers.Tests.Pins.Default.csproj" />
+    <Project Path="tests/Trax.Analyzers.Tests.Pins/NetStandard/Trax.Analyzers.Tests.Pins.NetStandard.csproj" />
+    <Project Path="tests/Trax.Analyzers.Tests.Pins/Net50/Trax.Analyzers.Tests.Pins.Net50.csproj" />
+    <Project Path="tests/Trax.Analyzers.Tests.Pins/Net60/Trax.Analyzers.Tests.Pins.Net60.csproj" />
+    <Project Path="tests/Trax.Analyzers.Tests.Pins/Net70/Trax.Analyzers.Tests.Pins.Net70.csproj" />
+    <Project Path="tests/Trax.Analyzers.Tests.Pins/Net80/Trax.Analyzers.Tests.Pins.Net80.csproj" />
+    <Project Path="tests/Trax.Analyzers.Tests.Pins/Net90/Trax.Analyzers.Tests.Pins.Net90.csproj" />
   </Folder>
 </Solution>

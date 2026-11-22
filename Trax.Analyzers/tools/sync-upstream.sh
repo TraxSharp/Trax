@@ -135,14 +135,11 @@ find "${copied[@]}" -type f \( -name '*.cs' -o -name '*.md' -o -name '*.txt' -o 
 perl -0pi -e 's/Name: "Analyzer",(\s*)ContainingSymbol: INamespaceSymbol(\s*)\{(\s*)Name: "Meziantou",/Name: "Analyzers",$1ContainingSymbol: INamespaceSymbol$2\{$3Name: "Trax",/g' \
   "$here/src/Trax.Analyzers/Internals/AnnotationAttributes.cs"
 
-# Upstream's test harness names its cache folder after the project; keep it apart from upstream's.
-# It also downloads from www.nuget.org, which CI's egress policy does not allow; api.nuget.org's flat
-# container serves the same package.
-harness="$here/tests/Trax.Analyzers.Tests/Harness/NuGetPackages.cs"
-perl -pi -e 's/"Meziantou\.AnalyzerTests"/"Trax.Analyzers.Tests"/g' "$harness"
-perl -pi -e 's{https://www\.nuget\.org/api/v2/package/\{packageName\}/\{version\}}{https://api.nuget.org/v3-flatcontainer/{packageName.ToLowerInvariant()}/{version.ToLowerInvariant()}/{packageName.ToLowerInvariant()}.{version.ToLowerInvariant()}.nupkg}g' "$harness"
-grep -q 'api.nuget.org/v3-flatcontainer' "$here/tests/Trax.Analyzers.Tests/Harness/NuGetPackages.cs" ||
-  { echo "The harness download URL moved upstream; update the rewrite in this script" >&2; exit 1; }
+# Upstream's harness downloads from nuget.org any package a test needs that the NuGet cache does not
+# hold. Trax's tests run where the test step has no network, so tests/Trax.Analyzers.Tests/NuGetPackages.cs
+# (Trax's own) replaces it: it only reads the cache, which the pin projects under
+# tests/Trax.Analyzers.Tests.Pins fill through their lockfiles.
+rm "$here/tests/Trax.Analyzers.Tests/Harness/NuGetPackages.cs"
 
 {
   echo "# What tools/sync-upstream.sh copied, and from where. Written by the script."
