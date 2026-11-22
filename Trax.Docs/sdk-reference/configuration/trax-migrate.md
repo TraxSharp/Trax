@@ -45,7 +45,7 @@ public static Task RunTraxAsync(
 | `Requested` | Whether this process's command line contains `--trax-migrate`. |
 | `RequestedIn(args)` | Whether `args` contain `--trax-migrate`. |
 | `MigrateOnDeploy<TContext>()` | Names one of the application's own contexts for a migrate process to bring up to date. |
-| `RunTraxAsync(host, args)` | Runs the host as `host.RunAsync()` does, or, for a migrate process, migrates the named contexts and returns without starting it. |
+| `RunTraxAsync(host, args)` | Runs the host as `host.RunAsync()` does, or, for a migrate process, migrates the named contexts and returns without starting it. A flag counts when it is in `args` or in the process's own command line, which is where registration reads it. |
 
 ## Behavior
 
@@ -71,7 +71,8 @@ A context named without an `IDbContextFactory<TContext>` registered throws, nami
 
 A host started with `--trax-migrate` that calls `app.Run()` rather than `RunTraxAsync` refuses to start, naming
 `RunTraxAsync`, so a migrate process never also starts the host's workers and listeners. On a `WebApplication`,
-`RunTraxAsync` from `Trax.Api.GraphQL.PersistedOperations.Extensions` handles `--trax-migrate` the same way, as
+`RunTraxAsync` from `Trax.Api.GraphQL.PersistedOperations.Extensions` handles `--trax-migrate` and
+`--trax-export-deploy` the same way (see [DeployManifest](/docs/sdk-reference/configuration/deploy-manifest)), as
 well as `--trax-export-client` (see [Client manifest](/docs/sdk-reference/statemachine-api/client-manifest)).
 
 ## Example
@@ -91,7 +92,7 @@ builder.Services.AddTrax(trax => trax
 );
 
 var host = builder.Build();
-await host.RunTraxAsync(args: []);
+await host.RunTraxAsync(args);
 ```
 
 A deployment runs it once with `--trax-migrate`, and every serving process with `TRAX_MIGRATIONS=skip`.

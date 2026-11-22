@@ -7,12 +7,14 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
 using Trax.Core.Extensions;
+using Trax.Effect.Configuration.Deploy;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Extensions;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.CancellationRegistry;
 using Trax.Scheduler.Services.DecisionRecording;
+using Trax.Scheduler.Services.Deploy;
 using Trax.Scheduler.Services.DormantDependentContext;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.RequestHandler;
@@ -126,6 +128,11 @@ public static class JobRunnerExtensions
         // Hosting-agnostic request handler
         services.AddScoped<ITraxRequestHandler, TraxRequestHandler>();
 
+        // A host that maps a runner endpoint reports the job-runner role to a deploy export.
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IDeployManifestSource, JobRunnerDeployManifestSource>()
+        );
+
         return services;
     }
 
@@ -216,7 +223,8 @@ public static class JobRunnerExtensions
                     }
                 }
             )
-            .Accepts<RemoteJobRequest>("application/json");
+            .Accepts<RemoteJobRequest>("application/json")
+            .WithMetadata(JobRunnerEndpointMetadata.Instance);
 
         return ApplyPolicy(builder, runnerOptions);
     }
@@ -290,7 +298,8 @@ public static class JobRunnerExtensions
                     return SignedRunResponse(httpRequest, verifier, response);
                 }
             )
-            .Accepts<RemoteRunRequest>("application/json");
+            .Accepts<RemoteRunRequest>("application/json")
+            .WithMetadata(JobRunnerEndpointMetadata.Instance);
 
         return ApplyPolicy(builder, runnerOptions);
     }

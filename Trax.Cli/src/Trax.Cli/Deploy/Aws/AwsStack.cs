@@ -14,13 +14,16 @@ namespace Trax.Cli.Deploy.Aws;
 /// </summary>
 internal static class AwsStack
 {
-    /// <summary>The parameter that is "1" once the services run, and "0" while a new stack waits for its migration.</summary>
-    public const string ScaleParameter = "Scale";
-
     public const string MigrateImageParameter = "MigrateImage";
 
     /// <summary>Production only: "true" keeps the database from being deleted, until destroy turns it off.</summary>
     public const string ProtectParameter = "Protect";
+
+    /// <summary>
+    /// Production with Cognito only: the id of a user pool an earlier destroy kept, which the stack signs in against
+    /// instead of creating one; empty to create one.
+    /// </summary>
+    public const string UserPoolParameter = "ExistingUserPool";
 
     public const string MigrateContainer = "migrate";
 
@@ -37,6 +40,12 @@ internal static class AwsStack
 
     public const string DatabaseUser = "trax";
 
+    /// <summary>
+    /// Where the image carries the CAs that sign every RDS server certificate. Trax.Effect.Data.Postgres copies the
+    /// bundle to <c>trax/</c> in the app's publish output, which <c>-t:PublishContainer</c> puts in <c>/app</c>.
+    /// </summary>
+    public const string RdsCaBundle = "/app/trax/rds-global-bundle.pem";
+
     // AWS managed policies and CloudFront managed policies, by their fixed ids.
     private const string TaskExecutionPolicy =
         "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy";
@@ -45,6 +54,12 @@ internal static class AwsStack
 
     /// <summary>The template parameter carrying <paramref name="service"/>'s image.</summary>
     public static string ImageParameter(string service) => $"{LogicalId(service)}Image";
+
+    /// <summary>
+    /// The template parameter carrying how many copies of <paramref name="service"/> run: "0" while its image waits
+    /// for a migration.
+    /// </summary>
+    public static string CountParameter(string service) => $"{LogicalId(service)}Count";
 
     /// <summary>The ECS service of <paramref name="service"/>, as the stack's output names it.</summary>
     public static string ServiceOutput(string service) => $"{LogicalId(service)}ServiceName";
@@ -79,14 +94,6 @@ internal static class AwsStack
         var outputs = new JsonObject();
         var parameters = new JsonObject
         {
-            [ScaleParameter] = new JsonObject
-            {
-                ["Type"] = "String",
-                ["AllowedValues"] = new JsonArray("0", "1"),
-                ["Default"] = "1",
-                ["Description"] =
-                    "0 while a new stack waits for its first migration, so no service starts on an empty database.",
-            },
             [MigrateImageParameter] = new JsonObject
             {
                 ["Type"] = "String",
@@ -104,11 +111,22 @@ internal static class AwsStack
                     "Whether the database refuses to be deleted. trax deploy destroy sets it to false first.",
             };
         foreach (var service in file.Services.Keys)
+        {
             parameters[ImageParameter(service)] = new JsonObject
             {
                 ["Type"] = "String",
                 ["Description"] = $"The image the {service} service runs.",
             };
+            parameters[CountParameter(service)] = new JsonObject
+            {
+                ["Type"] = "Number",
+                ["MinValue"] = 0,
+                ["Default"] = file.Count(env, service).ToString(CultureInfo.InvariantCulture),
+                ["Description"] =
+                    $"How many copies of {service} run. 0 while its image waits for the migration, so it never "
+                    + "starts on a schema older than it.",
+            };
+        }
 
         // ---- Network -------------------------------------------------------------------------------------
         JsonNode vpc;
@@ -222,13 +240,14 @@ internal static class AwsStack
             AddDatabase(resources, stack, production, serviceSubnets);
             connection = Sub(
                 $"Host=${{Database.Endpoint.Address}};Port=${{Database.Endpoint.Port}};Database={DatabaseName};"
-                    + $"Username={DatabaseUser};SSL Mode=Require;GSS Encryption Mode=Disable"
+                    + $"Username={DatabaseUser};SSL Mode=VerifyFull;Root Certificate={RdsCaBundle};"
+                    + "GSS Encryption Mode=Disable"
             );
         }
 
         // ---- Sign-in ---------------------------------------------------------------------------------------
         if (env.Auth is { Kind: DeployAuth.Cognito })
-            AddCognito(resources, outputs, stack);
+            AddCognito(resources, outputs, parameters, stack, production);
 
         // ---- ECS -------------------------------------------------------------------------------------------
         resources["Cluster"] = Resource(
@@ -275,7 +294,13 @@ internal static class AwsStack
             environment.Add(
                 (
                     auth.AuthorityKey,
-                    Sub("https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}")
+                    new JsonObject
+                    {
+                        ["Fn::Sub"] = new JsonArray(
+                            "https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}",
+                            new JsonObject { ["UserPool"] = UserPoolId(parameters) }
+                        ),
+                    }
                 )
             );
             environment.Add((auth.AudienceKey, Ref("UserPoolClient")));
@@ -323,7 +348,7 @@ internal static class AwsStack
                 ["Cluster"] = Ref("Cluster"),
                 ["LaunchType"] = "FARGATE",
                 ["TaskDefinition"] = Ref($"{id}TaskDefinition"),
-                ["DesiredCount"] = If("Running", file.Count(env, service), 0),
+                ["DesiredCount"] = Ref(CountParameter(service)),
                 ["DeploymentConfiguration"] = new JsonObject
                 {
                     // The new copy is healthy before the old one stops, and a version that never gets healthy is
@@ -374,17 +399,20 @@ internal static class AwsStack
         outputs["AssignPublicIp"] = Output(assignPublicIp);
         outputs["Migrator"] = Output(migrator);
 
-        return new JsonObject
+        var template = new JsonObject
         {
             ["AWSTemplateFormatVersion"] = "2010-09-09",
             ["Description"] =
                 $"Trax app {file.App}, environment {environmentName} ({env.Profile}). Written by trax deploy; "
                 + "changes made outside it are reverted on the next deploy.",
             ["Parameters"] = parameters,
-            ["Conditions"] = Conditions(parameters),
-            ["Resources"] = resources,
-            ["Outputs"] = outputs,
         };
+        // Without a Protect parameter there is no condition, and so no Conditions section.
+        if (Conditions(parameters) is { Count: > 0 } conditions)
+            template["Conditions"] = conditions;
+        template["Resources"] = resources;
+        template["Outputs"] = outputs;
+        return template;
     }
 
     /// <summary>The template as CloudFormation receives it: compact, so it fits the 51,200-byte inline limit.</summary>
@@ -439,17 +467,16 @@ internal static class AwsStack
 
     private static JsonObject Conditions(JsonObject parameters)
     {
-        var conditions = new JsonObject
-        {
-            ["Running"] = new JsonObject
-            {
-                ["Fn::Equals"] = new JsonArray(Ref(ScaleParameter), "1"),
-            },
-        };
+        var conditions = new JsonObject();
         if (parameters.ContainsKey(ProtectParameter))
             conditions["Protected"] = new JsonObject
             {
                 ["Fn::Equals"] = new JsonArray(Ref(ProtectParameter), "true"),
+            };
+        if (parameters.ContainsKey(UserPoolParameter))
+            conditions[CreateUserPool] = new JsonObject
+            {
+                ["Fn::Equals"] = new JsonArray(Ref(UserPoolParameter), ""),
             };
         return conditions;
     }
@@ -886,9 +913,36 @@ internal static class AwsStack
         resources["Database"] = database;
     }
 
-    private static void AddCognito(JsonObject resources, JsonObject outputs, string stack)
+    private const string CreateUserPool = "CreateUserPool";
+
+    /// <summary>The pool the stack signs in against: the one it creates, or the one a destroy kept.</summary>
+    private static JsonNode UserPoolId(JsonObject parameters) =>
+        parameters.ContainsKey(UserPoolParameter)
+            ? If(CreateUserPool, Ref("UserPool"), Ref(UserPoolParameter))
+            : Ref("UserPool");
+
+    /// <summary>
+    /// The sign-in. Production's pool and its Operator group are protected and kept when the stack is deleted, so a
+    /// destroy without --delete-data keeps every user; the next deploy passes the kept pool's id in
+    /// <see cref="UserPoolParameter"/>, and the stack then creates neither and uses that pool.
+    /// </summary>
+    private static void AddCognito(
+        JsonObject resources,
+        JsonObject outputs,
+        JsonObject parameters,
+        string stack,
+        bool production
+    )
     {
-        resources["UserPool"] = Resource(
+        if (production)
+            parameters[UserPoolParameter] = new JsonObject
+            {
+                ["Type"] = "String",
+                ["Default"] = "",
+                ["Description"] =
+                    "The id of a user pool an earlier destroy kept, to sign in against instead of creating one.",
+            };
+        var pool = Resource(
             "AWS::Cognito::UserPool",
             new JsonObject
             {
@@ -912,11 +966,12 @@ internal static class AwsStack
                 },
             }
         );
+        resources["UserPool"] = pool;
         resources["UserPoolClient"] = Resource(
             "AWS::Cognito::UserPoolClient",
             new JsonObject
             {
-                ["UserPoolId"] = Ref("UserPool"),
+                ["UserPoolId"] = UserPoolId(parameters),
                 ["ClientName"] = $"{stack}-api",
                 ["GenerateSecret"] = false,
                 ["ExplicitAuthFlows"] = new JsonArray(
@@ -927,7 +982,7 @@ internal static class AwsStack
                 ["EnableTokenRevocation"] = true,
             }
         );
-        resources["OperatorGroup"] = Resource(
+        var group = Resource(
             "AWS::Cognito::UserPoolGroup",
             new JsonObject
             {
@@ -936,7 +991,18 @@ internal static class AwsStack
                 ["Description"] = "May use the operations namespace and the console.",
             }
         );
-        outputs["UserPoolId"] = Output(Ref("UserPool"));
+        resources["OperatorGroup"] = group;
+        if (production)
+        {
+            ((JsonObject)pool["Properties"]!)["DeletionProtection"] = "ACTIVE";
+            foreach (var kept in new[] { pool, group })
+            {
+                kept["Condition"] = CreateUserPool;
+                kept["DeletionPolicy"] = "Retain";
+                kept["UpdateReplacePolicy"] = "Retain";
+            }
+        }
+        outputs["UserPoolId"] = Output(UserPoolId(parameters));
         outputs["UserPoolClientId"] = Output(Ref("UserPoolClient"));
     }
 

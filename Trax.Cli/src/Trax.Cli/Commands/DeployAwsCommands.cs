@@ -69,7 +69,7 @@ internal static class DeployAwsCommands
                 PlanAsync(
                     PathOf(r, file),
                     r.GetRequiredValue(env),
-                    new DotnetHostExporter(),
+                    new DotnetHostExporter(ct),
                     r.InvocationConfiguration.Output,
                     r.InvocationConfiguration.Error,
                     ct
@@ -148,7 +148,8 @@ internal static class DeployAwsCommands
         var deleteData = new Option<bool>("--delete-data")
         {
             Description =
-                "Also delete the images and the app's secrets. Production's database still leaves a final snapshot.",
+                "Also delete production's user pool with every user in it, the images and the app's secrets. "
+                + "Production's database still leaves a final snapshot.",
         };
         var yes = new Option<bool>("--yes")
         {
@@ -408,6 +409,26 @@ internal static class DeployAwsCommands
             )
             .ConfigureAwait(false);
 
+    /// <summary>What destroy asks before it deletes anything: what goes, and what happens to the users.</summary>
+    internal static string DestroyPrompt(DeployFile file, string environment, bool deleteData)
+    {
+        var env = file.Environment(environment);
+        var stack = file.StackName(environment);
+        var cognito = env.Auth is { Kind: DeployAuth.Cognito };
+        var production = env.Profile == DeployEnvironment.Production;
+        var gone = new List<string> { stack };
+        if (cognito && (deleteData || !production))
+            gone.Add("its user pool with every user in it");
+        if (deleteData)
+            gone.Add("its images and its secrets");
+        var users =
+            cognito && production && !deleteData
+                ? " Its user pool and every user in it are kept, and the next deploy signs in against them; "
+                    + "--delete-data deletes them."
+                : "";
+        return $"This deletes {string.Join(", ", gone)}.{users} Type {stack} to go on: ";
+    }
+
     internal static async Task<int> DestroyAsync(
         string filePath,
         string environment,
@@ -427,9 +448,7 @@ internal static class DeployAwsCommands
                     if (!yes)
                     {
                         await stdout
-                            .WriteAsync(
-                                $"This deletes {stack}{(deleteData ? ", its images and its secrets" : "")}. Type {stack} to go on: "
-                            )
+                            .WriteAsync(DestroyPrompt(file, environment, deleteData))
                             .ConfigureAwait(false);
                         if (!string.Equals(ReadLine()?.Trim(), stack, StringComparison.Ordinal))
                             throw new InvalidOperationException("Nothing was deleted.");
@@ -527,10 +546,18 @@ internal static class DeployAwsCommands
         if (Console.IsInputRedirected)
             return (await Console.In.ReadToEndAsync().ConfigureAwait(false)).TrimEnd('\r', '\n');
         await stdout.WriteAsync("Value (not shown): ").ConfigureAwait(false);
+        var value = ReadHidden(() => Console.ReadKey(intercept: true));
+        await stdout.WriteLineAsync().ConfigureAwait(false);
+        return value;
+    }
+
+    /// <summary>The characters typed until Enter, with Backspace taking one back and every other key ignored.</summary>
+    internal static string ReadHidden(Func<ConsoleKeyInfo> readKey)
+    {
         var value = new System.Text.StringBuilder();
         while (true)
         {
-            var key = Console.ReadKey(intercept: true);
+            var key = readKey();
             if (key.Key == ConsoleKey.Enter)
                 break;
             if (key.Key == ConsoleKey.Backspace)
@@ -539,9 +566,12 @@ internal static class DeployAwsCommands
                     value.Length--;
                 continue;
             }
+            // Arrows, Home, End, Delete and Tab are control characters ('\0', '\t'), which nobody sees typed with
+            // echo off and which would end up in the stored value.
+            if (char.IsControl(key.KeyChar))
+                continue;
             value.Append(key.KeyChar);
         }
-        await stdout.WriteLineAsync().ConfigureAwait(false);
         return value.ToString();
     }
 
@@ -553,10 +583,9 @@ internal static class DeployAwsCommands
             return 0;
         }
         catch (Exception ex)
-            when (ex
-                    is InvalidOperationException
-                        or IOException
-                        or Amazon.Runtime.AmazonServiceException
+            when (DeployCommand.Reported(ex)
+                || ex
+                    is Amazon.Runtime.AmazonServiceException
                         or Amazon.Runtime.AmazonClientException
             )
         {

@@ -122,10 +122,9 @@ internal sealed class RabbitMqPersistedOperationBroadcaster
 
             if (_connection is not { IsOpen: true })
             {
-                var factory = new ConnectionFactory
-                {
-                    Uri = new Uri(_options.RabbitMqConnectionString.NotNull()),
-                };
+                var factory = _options.RabbitMqInvalidation.CreateConnectionFactory(
+                    _options.RabbitMqConnectionString.NotNull()
+                );
                 _connection = await factory.CreateConnectionAsync(ct).ConfigureAwait(false);
             }
 

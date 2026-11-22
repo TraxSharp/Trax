@@ -2,6 +2,8 @@ using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Effect.Configuration.ClientExport;
+using Trax.Effect.Data.InMemory.Extensions;
+using Trax.Effect.Extensions;
 
 namespace Trax.Effect.Tests.Integration.UnitTests.Configuration;
 
@@ -82,5 +84,24 @@ public class TraxClientExportTests
             .Should()
             .ThrowAsync<InvalidOperationException>()
             .WithMessage("*--trax-export-client*not migrated*RunTraxAsync*");
+    }
+
+    [Test]
+    public void An_exporting_host_on_the_in_memory_provider_refuses_to_serve()
+    {
+        var services = new ServiceCollection();
+        services.AddTrax(
+            trax => trax.AddEffects(effects => effects.UseInMemory()),
+            exportsDeploy: false,
+            migrates: false,
+            exportsClient: true
+        );
+
+        services
+            .Should()
+            .ContainSingle(sd =>
+                sd.ServiceType == typeof(IHostedService)
+                && sd.ImplementationType == typeof(ClientExportServeGate)
+            );
     }
 }

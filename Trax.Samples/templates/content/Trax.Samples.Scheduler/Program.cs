@@ -21,6 +21,7 @@
 using Microsoft.AspNetCore.HttpOverrides;
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.Dashboard.Extensions;
+using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
@@ -111,6 +112,7 @@ builder.Services.AddTraxGraphQL(graphql =>
         .ExposeOperationMutations()
         .GateOperations(roles: DemoKeys.OperatorRole)
 );
+builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
 // -- Behind a load balancer ----------------------------------------------------
 // A load balancer that ends TLS tells the host the caller's address and scheme in
@@ -139,6 +141,7 @@ app.UseForwardedHeaders();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseTraxGraphQL();
+app.MapHealthChecks("/trax/health");
 
 // -- 4. Operations console (Development only) ----------------------------------
 // The console can queue, run and cancel trains and change scheduler settings. Each request it

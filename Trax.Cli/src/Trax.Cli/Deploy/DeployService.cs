@@ -15,8 +15,9 @@ internal sealed class DeployService
     public int Count { get; set; } = 1;
 
     /// <summary>
-    /// The port on 127.0.0.1 a compose stack publishes this service's HTTP on. Default: 8080, then 8081 and on for
-    /// each further service that serves HTTP.
+    /// The port on 127.0.0.1 a compose stack publishes this service's HTTP on. Compose publishes one only for a hub
+    /// (a service that serves HTTP and runs the api or scheduler role); without this it takes 8080, or the next port
+    /// no other service has.
     /// </summary>
     public int? Port { get; set; }
 }

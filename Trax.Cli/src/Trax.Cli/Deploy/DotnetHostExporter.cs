@@ -7,10 +7,15 @@ namespace Trax.Cli.Deploy;
 
 /// <summary>
 /// Runs the project with <c>--trax-export-deploy</c>: <c>dotnet run</c> in Release, without its launch profile, so the
-/// host starts as it would deployed (Production) and refuses what it would refuse there.
+/// host starts as it would deployed (Production) and refuses what it would refuse there. A host that ignores the
+/// argument starts serving instead of exiting, so the run is stopped after <see cref="Timeout"/>, or when the command
+/// is cancelled.
 /// </summary>
-internal sealed class DotnetHostExporter : IHostExporter
+internal sealed class DotnetHostExporter(CancellationToken ct = default) : IHostExporter
 {
+    /// <summary>How long one export may take, its build included.</summary>
+    public static readonly TimeSpan Timeout = TimeSpan.FromMinutes(10);
+
     public async Task<DeployManifest> ExportAsync(
         string projectPath,
         IReadOnlyDictionary<string, string> environment
@@ -21,7 +26,21 @@ internal sealed class DotnetHostExporter : IHostExporter
         try
         {
             var psi = StartInfo(projectPath, path, environment);
-            var (exit, stdout, stderr) = await ChildProcess.RunAsync(psi).ConfigureAwait(false);
+            (int ExitCode, string StdOut, string StdErr) run;
+            try
+            {
+                run = await ChildProcess.RunAsync(psi, Timeout, ct).ConfigureAwait(false);
+            }
+            catch (TimeoutException ex)
+            {
+                throw new InvalidOperationException(
+                    $"{Path.GetFileName(projectPath)} did not report what it needs from its deployment: "
+                        + "it was still running when trax stopped it. A host that calls app.Run() instead of "
+                        + $"'await app.RunTraxAsync(args)' serves instead of reporting. {ex.Message}",
+                    ex
+                );
+            }
+            var (exit, stdout, stderr) = run;
             if (exit != 0 || !File.Exists(path))
                 throw new InvalidOperationException(
                     $"{Path.GetFileName(projectPath)} did not report what it needs from its deployment "

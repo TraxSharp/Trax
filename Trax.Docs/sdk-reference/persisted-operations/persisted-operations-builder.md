@@ -42,6 +42,11 @@ public sealed partial class PersistedOperationsBuilder
         Action<RabbitMqInvalidationOptions> configure
     );
     public PersistedOperationsBuilder UseRabbitMqInvalidation(string connectionString);
+    public PersistedOperationsBuilder UseRabbitMqInvalidation(
+        IConfiguration configuration,
+        Action<RabbitMqInvalidationOptions> configure,
+        string name = "RabbitMq"
+    );
     public PersistedOperationsBuilder SingleNode();
     public PersistedOperationsBuilder GateManagement(string? policy = null, string? roles = null);
     public PersistedOperationsBuilder GateManagementToAuthenticatedUsers();
@@ -62,6 +67,8 @@ public sealed class RabbitMqInvalidationOptions
     public byte[]? SigningKey { get; set; }
     public TimeSpan MaxClockSkew { get; set; }
     public bool AllowInsecureTransport { get; set; }
+    public string? UserName { get; set; }
+    public string? Password { get; set; }
     public bool UnsignedMessagesAllowed { get; }
     public RabbitMqInvalidationOptions AllowUnsignedMessages();
 }
@@ -80,6 +87,7 @@ public sealed class RabbitMqInvalidationOptions
 | `WithCacheMaxAge(TimeSpan maxAge)` | 5 minutes | The longest any cache on a node keeps a persisted operation, counted from when its document was read from the database. The backstop for a change that did not reach the node: it serves what it cached for at most this long, then reads the store again. Must be positive. |
 | `UseRabbitMqInvalidation(string connectionString, Action<RabbitMqInvalidationOptions> configure)` | none | Broadcast every change over a RabbitMQ fanout so every node empties its caches, each message signed with the key `configure` sets. Required when more than one node serves the endpoint. Works with or without `WithInMemoryCache()`. A publish the broker does not confirm is reported as `CHANGE_NOT_BROADCAST`. See [Signing and transport](#signing-and-transport). |
 | `UseRabbitMqInvalidation(string connectionString)` | none | The same broker with no key set, which refuses the start until one is set through the overload above. |
+| `UseRabbitMqInvalidation(IConfiguration configuration, Action<RabbitMqInvalidationOptions> configure, string name = "RabbitMq")` | none | The first overload, with the broker read from configuration: `ConnectionStrings:{name}` when it is set, otherwise `{name}:Host` and `{name}:Port` (default 5672) over plain `amqp://`, with `{name}:UserName` and `{name}:Password` in place of any user and password in the URI. These are the settings [UseRabbitMq](/docs/sdk-reference/configuration/use-rabbit-mq#reading-the-broker-from-configuration) reads, and the ones `trax deploy --target compose` sets. Throws `ArgumentException` when neither the URI nor the host is set. |
 | `SingleNode()` | none | Declare that one process serves the endpoint and writes the store, so no broadcast is needed. |
 | `GateManagement(string? policy = null, string? roles = null)` | not served | Serve the [management fields](/docs/sdk-reference/persisted-operations/management-mutations), `persistedOperations { ... }` at the root, behind `@authorize` with this policy or these roles. A comma-separated `roles` list is any of; repeated calls are all of. A policy or roles is required. Without this call or the next, the fields are not in the schema. |
 | `GateManagementToAuthenticatedUsers()` | not served | Serve the management fields to any authenticated caller. On a host with public sign-up that is anyone, so prefer `GateManagement`. |
@@ -111,6 +119,8 @@ logging a warning at most once a minute.
 | `SigningKey` | `null` | The shared key, at least `MinimumSigningKeyLength` (32) bytes. Required unless `AllowUnsignedMessages()` is called. |
 | `MaxClockSkew` | 5 minutes | How far a message's timestamp may be from the receiving node's clock, either way. Must be positive and at most one hour. |
 | `AllowUnsignedMessages()` | off | Publish unsigned and accept messages without a signature when no key is set. The receiver logs a warning when it starts. Only for a broker no one else can publish to. Read back from `UnsignedMessagesAllowed`. |
+| `UserName` | `null` | The broker user, in place of the one in the connection string. |
+| `Password` | `null` | The broker password, in place of the one in the connection string. Taken as it is: a `/`, `@`, `:` or `;` in it needs no encoding. |
 | `AllowInsecureTransport` | `false` | Accept plain `amqp://` to a broker that is not loopback. Without it such a URI refuses the start, since the broker credentials and every message would cross the network in cleartext. The receiver logs a warning when it is what lets the connection through. |
 
 ```csharp compile

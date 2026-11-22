@@ -42,6 +42,12 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         var env = file.Environment(environment);
         var stack = file.StackName(environment);
         var tags = Tags(file, environment);
+        var existing = await aws.DescribeStackAsync(stack, ct);
+        // A first deploy that stopped before its change set ran left an empty stack in review: create it again.
+        if (existing is { Created: false })
+            existing = null;
+        if (existing is not null)
+            CheckOwner(existing, file, stack);
 
         // Nothing is created until every secret the app needs has a value.
         var stored = (
@@ -58,7 +64,6 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
                     + $"'trax deploy secret set <name> --env {environment}'."
             );
 
-        var existing = await aws.DescribeStackAsync(stack, ct).ConfigureAwait(false);
         if (existing is { Dead: true })
             throw new InvalidOperationException(
                 $"{stack} is {existing.Status}: its creation failed and it can only be deleted. Run "
@@ -93,28 +98,22 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         }
         var migrator = image[AwsStack.Migrator(file, exports)];
 
-        // Pass 1: the infrastructure, and the migrate task on the new image. A new stack starts its services at
-        // zero; an existing one keeps them on the image they run.
-        var waiting =
-            existing is null
-            || string.Equals(
-                existing.Parameters.GetValueOrDefault(AwsStack.ScaleParameter),
-                "0",
-                StringComparison.Ordinal
-            );
+        // Pass 1: the infrastructure, and the migrate task on the new image. A service the stack does not run yet
+        // (every service of a new stack) waits at zero on the new image; one it runs keeps its image and count.
         var first = new Dictionary<string, string?>(StringComparer.Ordinal)
         {
-            [AwsStack.ScaleParameter] = waiting ? "0" : "1",
             [AwsStack.MigrateImageParameter] = migrator,
         };
         foreach (var name in file.Services.Keys)
         {
-            var key = AwsStack.ImageParameter(name);
-            first[key] =
-                waiting || existing?.Parameters.ContainsKey(key) is not true ? image[name] : null;
+            var (count, current) = Holding(existing, file, env, name);
+            first[AwsStack.CountParameter(name)] = count;
+            first[AwsStack.ImageParameter(name)] = current ? null : image[name];
         }
         if (existing?.Parameters.ContainsKey(AwsStack.ProtectParameter) is true)
             first[AwsStack.ProtectParameter] = "true";
+        if (KeepsItsUserPool(env))
+            first[AwsStack.UserPoolParameter] = await UserPoolAsync(stack, existing, ct);
         say(existing is null ? $"Creating {stack}..." : $"Updating {stack}...");
         await aws.DeployAsync(stack, template, first, tags, say, ct).ConfigureAwait(false);
 
@@ -144,16 +143,21 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
                     + $"'trax deploy logs migrate --env {environment}'."
             );
 
-        // Pass 2: every service onto the new image, rolled with the circuit breaker on.
+        // Pass 2: every service onto the new image at its count, rolled with the circuit breaker on.
         var second = new Dictionary<string, string?>(StringComparer.Ordinal)
         {
-            [AwsStack.ScaleParameter] = "1",
             [AwsStack.MigrateImageParameter] = migrator,
         };
         foreach (var name in file.Services.Keys)
+        {
+            second[AwsStack.CountParameter(name)] = file.Count(env, name)
+                .ToString(System.Globalization.CultureInfo.InvariantCulture);
             second[AwsStack.ImageParameter(name)] = image[name];
+        }
         if (first.ContainsKey(AwsStack.ProtectParameter))
             second[AwsStack.ProtectParameter] = "true";
+        if (first.TryGetValue(AwsStack.UserPoolParameter, out var pool))
+            second[AwsStack.UserPoolParameter] = pool;
         say($"Rolling the services onto {tag}...");
         await aws.DeployAsync(stack, template, second, tags, say, ct).ConfigureAwait(false);
 
@@ -162,9 +166,33 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
             .Outputs.GetValueOrDefault("Url");
     }
 
+    /// <summary>Whether the environment's user pool outlives its stack: production's Cognito pool.</summary>
+    private static bool KeepsItsUserPool(DeployEnvironment env) =>
+        env.Profile == DeployEnvironment.Production && env.Auth is { Kind: DeployAuth.Cognito };
+
     /// <summary>
-    /// Deletes the environment's stack. Production's database is unprotected first and keeps a final snapshot;
-    /// with <paramref name="deleteData"/> the images and the app's secrets go too.
+    /// The pool a deploy passes the stack: the one the stack already uses, or on a new stack the one an earlier
+    /// destroy kept, or empty to create one.
+    /// </summary>
+    private async Task<string> UserPoolAsync(
+        string stack,
+        AwsStackState? existing,
+        CancellationToken ct
+    )
+    {
+        if (existing is not null)
+            // A stack keeps the pool it has: switching would take the one it created out of the stack.
+            return existing.Parameters.GetValueOrDefault(AwsStack.UserPoolParameter) ?? "";
+        var kept = await aws.GetParameterAsync(UserPoolRecord(stack), ct);
+        if (kept is not null)
+            say($"Signing in against the user pool {kept}, which the last destroy kept.");
+        return kept ?? "";
+    }
+
+    /// <summary>
+    /// Deletes the environment's stack. Production's database is unprotected first and keeps a final snapshot, and
+    /// production's user pool is kept and recorded for the next deploy; with <paramref name="deleteData"/> the pool,
+    /// the images and the app's secrets go too.
     /// </summary>
     public async Task DestroyAsync(
         DeployFile file,
@@ -173,13 +201,23 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         CancellationToken ct
     )
     {
-        file.Environment(environment);
+        var env = file.Environment(environment);
         var stack = file.StackName(environment);
         var existing = await aws.DescribeStackAsync(stack, ct).ConfigureAwait(false);
+        var record = UserPoolRecord(stack);
+        var pool = KeepsItsUserPool(env)
+            ? existing?.Outputs.GetValueOrDefault("UserPoolId")
+                ?? await aws.GetParameterAsync(record, ct).ConfigureAwait(false)
+            : null;
+        // Recorded before the stack goes, so a destroy that stops partway still leaves the pool findable.
+        if (pool is not null && !deleteData)
+            await aws.PutParameterAsync(record, pool, Tags(file, environment), ct)
+                .ConfigureAwait(false);
         if (existing is null)
             say($"{stack} does not exist.");
         else
         {
+            CheckOwner(existing, file, stack);
             if (existing.Parameters.ContainsKey(AwsStack.ProtectParameter) && !existing.Dead)
             {
                 say("Turning off the database's deletion protection...");
@@ -202,6 +240,28 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
                         + "Snapshots)."
                 );
         }
+        if (pool is not null)
+        {
+            if (deleteData)
+            {
+                await aws.DeleteUserPoolAsync(pool, ct);
+                await aws.DeleteParameterAsync(record, ct);
+                say($"Deleted the user pool {pool} and every user in it.");
+            }
+            else
+            {
+                var users = await aws.UserCountAsync(pool, ct);
+                say(
+                    users is null
+                        ? $"The user pool {pool} recorded in {record} no longer exists; the next deploy creates one."
+                        : $"Kept the user pool {pool} with its {users} users (Cognito's estimate), recorded in "
+                            + $"{record}. The next deploy of {environment} signs in against it; "
+                            + $"'trax deploy destroy --env {environment} --delete-data' deletes it."
+                );
+                if (users is null)
+                    await aws.DeleteParameterAsync(record, ct);
+            }
+        }
         if (!deleteData)
             return;
         foreach (var name in file.Services.Keys)
@@ -209,8 +269,66 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         foreach (var name in file.Secrets)
             await aws.DeleteSecretAsync(AwsStack.AppSecretName(stack, name), ct)
                 .ConfigureAwait(false);
-        say("Deleted the images and the app's secrets (a secret can be restored for seven days).");
+        say(
+            "Deleted the images and the app's secrets. For seven days 'trax deploy secret set' restores a secret "
+                + "with its new value."
+        );
     }
+
+    /// <summary>
+    /// What pass 1 sends for <paramref name="service"/>: its count (null keeps the stack's), and whether it stays on
+    /// the image it runs. A service the stack holds no image for, or runs none of, waits at zero on the new image.
+    /// A stack from before the count parameters says whether its services run in its "Scale" parameter.
+    /// </summary>
+    private static (string? Count, bool Current) Holding(
+        AwsStackState? existing,
+        DeployFile file,
+        DeployEnvironment env,
+        string service
+    )
+    {
+        if (existing?.Parameters.ContainsKey(AwsStack.ImageParameter(service)) is not true)
+            return ("0", false);
+        if (existing.Parameters.TryGetValue(AwsStack.CountParameter(service), out var count))
+            return string.Equals(count, "0", StringComparison.Ordinal)
+                ? ("0", false)
+                : (null, true);
+        return string.Equals(
+            existing.Parameters.GetValueOrDefault("Scale"),
+            "0",
+            StringComparison.Ordinal
+        )
+            ? ("0", false)
+            : (
+                file.Count(env, service)
+                    .ToString(System.Globalization.CultureInfo.InvariantCulture),
+                true
+            );
+    }
+
+    /// <summary>
+    /// Refuses a stack another app deployed. An app and an environment name can join to the same stack name as
+    /// another app's (<c>orders-eu</c> + <c>prod</c>, <c>orders</c> + <c>eu-prod</c>), and changing that stack would
+    /// move the other app's services onto this app's images.
+    /// </summary>
+    private static void CheckOwner(AwsStackState existing, DeployFile file, string stack)
+    {
+        var owner = existing.Tags.GetValueOrDefault("trax:app");
+        if (owner == file.App)
+            return;
+        throw new InvalidOperationException(
+            owner is null
+                ? $"{stack} has no trax:app tag, so trax deploy did not create it. trax changes only the stacks it "
+                    + "created."
+                : $"{stack} belongs to app '{owner}', not '{file.App}'. Rename this app or its environment."
+        );
+    }
+
+    /// <summary>
+    /// The SSM parameter a destroy records a kept user pool's id in, which the next deploy of the environment reads:
+    /// <c>/&lt;stack&gt;/user-pool</c>.
+    /// </summary>
+    public static string UserPoolRecord(string stack) => $"/{stack}/user-pool";
 
     /// <summary>The ECR repository of a service: <c>trax/&lt;stack&gt;/&lt;service&gt;</c>.</summary>
     public static string Repository(string stack, string service) => $"trax/{stack}/{service}";

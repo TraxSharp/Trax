@@ -128,27 +128,15 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
     [Test]
     public async Task RequeueExecution_ByStaffOutsideTheTrainsRole_IsRefused()
     {
-        var run = await CustomerFailedOrderAsync();
+        var (run, sku) = await CustomerFailedOrderAsync();
 
-        using var doc = await PostAsync(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $$"""mutation { operations { requeueExecution(id: {{run}}) { success message } } }"""
-            ),
-            _staff.NotNull()
-        );
+        using var doc = await PostAsync(RequeueExecution(run), _staff.NotNull());
 
         ErrorCodes(doc).Should().Contain("TRAX_AUTHORIZATION", doc.RootElement.GetRawText());
-        (await QueuedEntriesAsync()).Should().Be(0, "a refused requeue queues nothing");
+        (await QueuedWithAsync(sku)).Should().Be(0, "a refused requeue queues nothing");
 
         // A caller in both the gate's role and the train's may.
-        using var allowed = await PostAsync(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $$"""mutation { operations { requeueExecution(id: {{run}}) { success message } } }"""
-            ),
-            _staffCustomer.NotNull()
-        );
+        using var allowed = await PostAsync(RequeueExecution(run), _staffCustomer.NotNull());
         ErrorCodes(allowed).Should().BeEmpty(allowed.RootElement.GetRawText());
         allowed
             .RootElement.GetProperty("data")
@@ -158,58 +146,152 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
             .GetBoolean()
             .Should()
             .BeTrue(allowed.RootElement.GetRawText());
+        (await QueuedWithAsync(sku)).Should().Be(1, "the allowed requeue queues the run's input");
     }
+
+    private static string RequeueExecution(long run) =>
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $$"""mutation { operations { requeueExecution(id: {{run}}) { success message } } }"""
+        );
 
     [Test]
     public async Task QueueTrain_ByStaffOutsideTheTrainsRole_IsRefused()
     {
-        using var doc = await PostAsync(
-            $$"""mutation { operations { workQueue { queueTrain(input: { trainName: "{{TrainName}}", inputJson: "{\"sku\":\"x\"}" }) { success message } } } }""",
-            _staff.NotNull()
-        );
+        var sku = Guid.NewGuid().ToString("N");
+        var before = await LastRunIdAsync();
+
+        using var doc = await PostAsync(QueueTrain(sku), _staff.NotNull());
 
         ErrorCodes(doc).Should().Contain("TRAX_AUTHORIZATION", doc.RootElement.GetRawText());
+        (await QueuedWithAsync(sku)).Should().Be(0, "a refused queueTrain queues nothing");
+        (await DirectRunsAfterAsync(before)).Should().Be(0, "a refused queueTrain starts no run");
+
+        // A caller in both the gate's role and the train's may.
+        using var allowed = await PostAsync(QueueTrain(sku), _staffCustomer.NotNull());
+        Succeeded(allowed, "workQueue", "queueTrain");
+        (await QueuedWithAsync(sku))
+            .Should()
+            .BeGreaterThan(0, "the allowed queueTrain queues the input");
     }
 
     [Test]
     public async Task RunTrain_ByStaffOutsideTheTrainsRole_IsRefused()
     {
-        using var doc = await PostAsync(
-            $$"""mutation { operations { workQueue { runTrain(input: { trainName: "{{TrainName}}", inputJson: "{\"sku\":\"x\"}" }) { success message } } } }""",
-            _staff.NotNull()
-        );
+        var sku = Guid.NewGuid().ToString("N");
+        var before = await LastRunIdAsync();
+
+        using var doc = await PostAsync(RunTrain(sku), _staff.NotNull());
 
         ErrorCodes(doc).Should().Contain("TRAX_AUTHORIZATION", doc.RootElement.GetRawText());
+        (await DirectRunsAfterAsync(before)).Should().Be(0, "a refused runTrain writes no run");
+        (await QueuedWithAsync(sku)).Should().Be(0, "a refused runTrain queues nothing");
+
+        // A caller in both the gate's role and the train's may.
+        using var allowed = await PostAsync(RunTrain(sku), _staffCustomer.NotNull());
+        Succeeded(allowed, "workQueue", "runTrain");
+        (await DirectRunsAfterAsync(before)).Should().Be(1, "the allowed runTrain writes its run");
+    }
+
+    private static string QueueTrain(string sku) =>
+        $$"""mutation { operations { workQueue { queueTrain(input: { trainName: "{{TrainName}}", inputJson: "{\"sku\":\"{{sku}}\"}" }) { success message } } } }""";
+
+    private static string RunTrain(string sku) =>
+        $$"""mutation { operations { workQueue { runTrain(input: { trainName: "{{TrainName}}", inputJson: "{\"sku\":\"{{sku}}\"}" }) { success message } } } }""";
+
+    /// <summary>The mutation at <paramref name="path"/> under <c>operations</c> succeeded.</summary>
+    private static void Succeeded(JsonDocument response, params string[] path)
+    {
+        var raw = response.RootElement.GetRawText();
+        ErrorCodes(response).Should().BeEmpty(raw);
+        var field = response.RootElement.GetProperty("data").GetProperty("operations");
+        foreach (var name in path)
+            field = field.GetProperty(name);
+        field.GetProperty("success").GetBoolean().Should().BeTrue(raw);
     }
 
     [Test]
     public async Task ResumeExecution_ByStaffOutsideTheTrainsRole_IsRefused()
     {
-        var run = await CustomerFailedOrderAsync();
+        // A run that checkpointed before it failed, so the resume gets as far as the enqueue,
+        // where the train's [TraxAuthorize] applies.
+        var run = await CheckpointedFailedOrderAsync();
 
-        using var doc = await PostAsync(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $$"""mutation { operations { resumeExecution(id: {{run}}) { success message } } }"""
-            ),
-            _staff.NotNull()
-        );
+        using var doc = await PostAsync(ResumeExecution(run), _staff.NotNull());
 
-        // A run with no checkpoint is refused for that reason too; what must not happen is a
-        // queued resume.
-        var raw = doc.RootElement.GetRawText();
-        if (!ErrorCodes(doc).Contains("TRAX_AUTHORIZATION"))
-            doc.RootElement.GetProperty("data")
-                .GetProperty("operations")
-                .GetProperty("resumeExecution")
-                .GetProperty("success")
-                .GetBoolean()
-                .Should()
-                .BeFalse(raw);
+        ErrorCodes(doc).Should().Contain("TRAX_AUTHORIZATION", doc.RootElement.GetRawText());
+        (await ResumesOfAsync(run)).Should().Be(0, "a refused resume queues nothing");
+
+        // A caller in both the gate's role and the train's may.
+        using var allowed = await PostAsync(ResumeExecution(run), _staffCustomer.NotNull());
+        Succeeded(allowed, "resumeExecution");
+        (await ResumesOfAsync(run)).Should().Be(1, "the allowed resume queues one entry");
     }
 
-    /// <summary>A customer places an order through the train's own mutation, and it fails.</summary>
-    private async Task<long> CustomerFailedOrderAsync()
+    private static string ResumeExecution(long run) =>
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $$"""mutation { operations { resumeExecution(id: {{run}}) { success message } } }"""
+        );
+
+    /// <summary>
+    /// A run of <see cref="ICheckpointedOrderTrain"/> that wrote its checkpoint and then failed.
+    /// Run in process, as a worker runs it: the resume is what is under test.
+    /// </summary>
+    private async Task<long> CheckpointedFailedOrderAsync()
+    {
+        long run;
+        using (var scope = _host.NotNull().Services.CreateScope())
+        {
+            var train = scope.ServiceProvider.GetRequiredService<ICheckpointedOrderTrain>();
+            var act = async () =>
+                await train
+                    .Run(new PlaceOrderInput { Sku = Guid.NewGuid().ToString("N") })
+                    .ConfigureAwait(false);
+            await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
+            run = ((ServiceTrain<PlaceOrderInput, PlaceOrderOutput>)train).Metadata.NotNull().Id;
+        }
+
+        var db = await _host
+            .NotNull()
+            .Services.GetRequiredService<IDataContextProviderFactory>()
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            (await db.Metadatas.AsNoTracking().SingleAsync(m => m.Id == run).ConfigureAwait(false))
+                .TrainState.Should()
+                .Be(TrainState.Failed);
+            (
+                await db
+                    .Checkpoints.AsNoTracking()
+                    .CountAsync(c => c.MetadataId == run)
+                    .ConfigureAwait(false)
+            )
+                .Should()
+                .Be(1, "the run checkpointed before it failed");
+            return run;
+        }
+    }
+
+    private async Task<int> ResumesOfAsync(long run)
+    {
+        var db = await _host
+            .NotNull()
+            .Services.GetRequiredService<IDataContextProviderFactory>()
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            return await db.WorkQueues.CountAsync(q => q.ResumeFrom == run).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// A customer places an order through the train's own mutation, and it fails. Returns the run
+    /// and the order's sku, which no other run's input carries.
+    /// </summary>
+    private async Task<(long Run, string Sku)> CustomerFailedOrderAsync()
     {
         var sku = Guid.NewGuid().ToString("N");
         using var doc = await PostAsync(
@@ -250,11 +332,15 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
                 .SingleAsync()
                 .ConfigureAwait(false);
             starter.Should().NotBeNull("a GraphQL run records its caller as the starter");
-            return run.Id;
+            return (run.Id, sku);
         }
     }
 
-    private async Task<int> QueuedEntriesAsync()
+    /// <summary>
+    /// The work queue rows whose input carries <paramref name="sku"/>. Counted by the test's own
+    /// sku rather than the train, because the fixture's database outlives a run of the suite.
+    /// </summary>
+    private async Task<int> QueuedWithAsync(string sku)
     {
         var db = await _host
             .NotNull()
@@ -263,8 +349,58 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
             .ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
-            return await db
-                .WorkQueues.CountAsync(q => q.TrainName == TrainName)
+            // The column is jsonb, so it is matched as text.
+            return await ((DbContext)db)
+                .Database.SqlQuery<int>(
+                    $"SELECT count(*)::int AS \"Value\" FROM trax.work_queue WHERE input::text LIKE {"%" + sku + "%"}"
+                )
+                .SingleAsync()
+                .ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>The newest run's id, so a check can look only at runs written after it.</summary>
+    private async Task<long> LastRunIdAsync()
+    {
+        var db = await _host
+            .NotNull()
+            .Services.GetRequiredService<IDataContextProviderFactory>()
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            return await ((DbContext)db)
+                .Database.SqlQuery<long>(
+                    $"SELECT coalesce(max(id), 0) AS \"Value\" FROM trax.metadata"
+                )
+                .SingleAsync()
+                .ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// The runs of the train written after <paramref name="after"/> by a direct run rather than
+    /// the dispatcher: a dispatched run carries its work queue row's external id, and the
+    /// scheduler may dispatch another test's queued row at any time.
+    /// </summary>
+    private async Task<int> DirectRunsAfterAsync(long after)
+    {
+        var db = await _host
+            .NotNull()
+            .Services.GetRequiredService<IDataContextProviderFactory>()
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            return await ((DbContext)db)
+                .Database.SqlQuery<int>(
+                    $"""
+                    SELECT count(*)::int AS "Value" FROM trax.metadata m
+                    WHERE m.name = {TrainName} AND m.id > {after}
+                      AND NOT EXISTS (SELECT 1 FROM trax.work_queue q WHERE q.external_id = m.external_id)
+                    """
+                )
+                .SingleAsync()
                 .ConfigureAwait(false);
         }
     }

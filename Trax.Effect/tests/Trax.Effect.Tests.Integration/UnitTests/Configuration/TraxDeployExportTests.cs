@@ -65,6 +65,44 @@ public class TraxDeployExportTests
     }
 
     [Test]
+    public void An_exporting_host_on_the_in_memory_provider_refuses_to_serve()
+    {
+        var services = new ServiceCollection();
+        services.AddTrax(
+            trax => trax.AddEffects(effects => effects.UseInMemory()),
+            exportsDeploy: true,
+            migrates: false,
+            exportsClient: false
+        );
+
+        services
+            .Should()
+            .ContainSingle(sd =>
+                sd.ServiceType == typeof(IHostedService)
+                && sd.ImplementationType == typeof(DeployExportServeGate)
+            );
+    }
+
+    [Test]
+    public void An_exporting_host_with_no_data_provider_refuses_to_serve()
+    {
+        var services = new ServiceCollection();
+        services.AddTrax(
+            trax => trax.AddEffects(),
+            exportsDeploy: true,
+            migrates: false,
+            exportsClient: false
+        );
+
+        services
+            .Should()
+            .ContainSingle(sd =>
+                sd.ServiceType == typeof(IHostedService)
+                && sd.ImplementationType == typeof(DeployExportServeGate)
+            );
+    }
+
+    [Test]
     public async Task Postgres_is_reported_with_whether_the_host_migrates_on_start()
     {
         var services = new ServiceCollection();

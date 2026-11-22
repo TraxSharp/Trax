@@ -66,7 +66,7 @@ internal static class DeployCommand
                             path,
                             parseResult.GetValue(output)?.FullName,
                             parseResult.GetValue(build),
-                            new DotnetHostExporter(),
+                            new DotnetHostExporter(ct),
                             BuildImageAsync,
                             stdout,
                             stderr
@@ -80,7 +80,7 @@ internal static class DeployCommand
                     return 1;
                 }
                 return await DeployAwsCommands
-                    .DeployAsync(path, environment, new DotnetHostExporter(), stdout, stderr, ct)
+                    .DeployAsync(path, environment, new DotnetHostExporter(ct), stdout, stderr, ct)
                     .ConfigureAwait(false);
             }
         );
@@ -184,7 +184,7 @@ internal static class DeployCommand
                 .ConfigureAwait(false);
             return 0;
         }
-        catch (Exception ex) when (ex is InvalidOperationException or IOException)
+        catch (Exception ex) when (Reported(ex))
         {
             await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
@@ -256,12 +256,24 @@ internal static class DeployCommand
                 .ConfigureAwait(false);
             return 0;
         }
-        catch (Exception ex) when (ex is InvalidOperationException or IOException)
+        catch (Exception ex) when (Reported(ex))
         {
             await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
     }
+
+    /// <summary>
+    /// The failures a deploy command prints as one line and exit 1, rather than a stack trace: what it refuses, and
+    /// what the file system, a host's report or a process it starts can throw.
+    /// </summary>
+    internal static bool Reported(Exception ex) =>
+        ex
+            is InvalidOperationException
+                or IOException
+                or UnauthorizedAccessException
+                or System.Text.Json.JsonException
+                or System.ComponentModel.Win32Exception;
 
     /// <summary>Asks each service's host what it needs, by running it once with --trax-export-deploy.</summary>
     internal static async Task<Dictionary<string, DeployManifest>> ExportAsync(

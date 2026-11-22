@@ -41,7 +41,16 @@ docker compose up -d                      # or: podman compose up -d
 The stack is Postgres, RabbitMQ when a host uses it, one `migrate` run of the new version, then each service. The
 API service answers on port 8080.
 
+Passwords reach the hosts as values of their own, never inside a connection string or a URI: Postgres's as
+`PGPASSWORD`, RabbitMQ's as `RabbitMq__Password` beside `RabbitMq__Host` and `RabbitMq__UserName`. A host that
+broadcasts through RabbitMQ reads them with `UseRabbitMq(builder.Configuration)`.
+
 ## 3. Deploy to AWS
+
+An AWS stack keeps runs in Postgres and does not provide RabbitMQ yet, so a deploy refuses a host that keeps its
+runs anywhere else or broadcasts through RabbitMQ (`UseRabbitMq`). It also refuses more than
+one API service, an API with no health check, and more than one copy of the API or the scheduler. Deploy those with
+`--target compose`.
 
 Sign in to the account the usual way (`aws sso login`, a profile, or a role in CI), then:
 
@@ -73,6 +82,9 @@ runs.
 docker compose down                       # compose; add -v to drop the database too
 trax deploy destroy --env production      # AWS; production's database leaves a final snapshot
 ```
+
+In production, `destroy` keeps the Cognito user pool and its users, and the next deploy of the environment signs in
+against it again. `destroy --delete-data` deletes the pool and every user in it.
 
 ## SDK Reference
 

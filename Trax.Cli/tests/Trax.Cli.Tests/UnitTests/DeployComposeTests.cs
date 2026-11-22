@@ -9,9 +9,9 @@ namespace Trax.Cli.Tests.UnitTests;
 /// <summary>
 /// <c>trax deploy --target compose</c> turns trax.deploy.json and what each host reports into a compose stack:
 /// Postgres, RabbitMQ only when a host connects to it, one migrate run before any service starts, each service with
-/// migrations off, every password, setting and secret required from the environment, and a port only for a service
-/// that serves HTTP. It refuses what compose cannot give the hosts, and never overwrites a compose file it did not
-/// write.
+/// migrations off, every password, setting and secret required from the environment, and a port only for a hub (a
+/// service that serves HTTP and runs the api or scheduler role, so runs as one). It refuses what compose cannot give
+/// the hosts, and never overwrites a compose file it did not write.
 /// </summary>
 public class DeployComposeTests
 {
@@ -92,8 +92,11 @@ public class DeployComposeTests
 
                 # What every Trax service is given.
                 x-trax: &trax
-                  ConnectionStrings__Trax: Host=database;Database=orders;Username=orders;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD};GSS Encryption Mode=Disable
-                  ConnectionStrings__RabbitMq: amqp://orders:${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD}@rabbitmq:5672
+                  ConnectionStrings__Trax: Host=database;Database=orders;Username=orders;GSS Encryption Mode=Disable
+                  PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+                  RabbitMq__Host: rabbitmq
+                  RabbitMq__UserName: orders
+                  RabbitMq__Password: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD}
                   Auth__Authority: ${Auth__Authority:?set Auth__Authority}
                   Stripe__ApiKey: ${Stripe__ApiKey:?set Stripe__ApiKey}
 
@@ -198,6 +201,65 @@ public class DeployComposeTests
     }
 
     [Test]
+    public void A_password_with_url_characters_still_connects()
+    {
+        const string password = "a/b;c";
+        var compose = ComposeTarget.Render(File_(), Exports())[0].Content;
+
+        // What compose hands every Trax service once it has read the .env.
+        var env = Interpolated(
+            compose,
+            new Dictionary<string, string>
+            {
+                ["POSTGRES_PASSWORD"] = password,
+                ["RABBITMQ_PASSWORD"] = password,
+                ["Auth__Authority"] = "https://issuer.example.com",
+                ["Stripe__ApiKey"] = "sk",
+            }
+        );
+
+        env["PGPASSWORD"].Should().Be(password);
+        env["ConnectionStrings__Trax"]
+            .Split(';')
+            .Select(p => p.Split('=')[0])
+            .Should()
+            .Equal("Host", "Database", "Username", "GSS Encryption Mode");
+        env.Should().NotContainKey("ConnectionStrings__RabbitMq");
+        env["RabbitMq__Host"].Should().Be("rabbitmq");
+        env["RabbitMq__UserName"].Should().Be("orders");
+        env["RabbitMq__Password"].Should().Be(password);
+        env.Where(e => e.Value.Contains(password))
+            .Select(e => e.Key)
+            .Should()
+            .BeEquivalentTo(
+                ["PGPASSWORD", "RabbitMq__Password"],
+                "a password reaches a host only as a value of its own"
+            );
+    }
+
+    /// <summary>The <c>x-trax</c> settings with each <c>${NAME:?...}</c> replaced as compose does.</summary>
+    private static Dictionary<string, string> Interpolated(
+        string compose,
+        IReadOnlyDictionary<string, string> values
+    )
+    {
+        var lines = compose.ReplaceLineEndings("\n").Split('\n');
+        var start = Array.IndexOf(lines, "x-trax: &trax") + 1;
+        return lines[start..]
+            .TakeWhile(l => l.StartsWith("  ", StringComparison.Ordinal))
+            .Select(l => l.Trim().Split(": ", 2))
+            .ToDictionary(
+                p => p[0],
+                p =>
+                    System.Text.RegularExpressions.Regex.Replace(
+                        p[1],
+                        @"\$\{([A-Za-z_][A-Za-z0-9_]*):\?[^}]*\}",
+                        m => values[m.Groups[1].Value]
+                    )
+            );
+    }
+
+    [Test]
     public void A_stack_with_no_rabbitmq_host_runs_no_broker()
     {
         var hub = Hub();
@@ -249,6 +311,127 @@ public class DeployComposeTests
         act.Should()
             .Throw<InvalidOperationException>()
             .WithMessage("*'hub'*api and scheduler*count 2*");
+    }
+
+    [Test]
+    public void A_replicated_service_that_reports_health_publishes_no_port()
+    {
+        var worker = Worker();
+        worker.Endpoints = new DeployEndpoints { Health = "/trax/health" };
+
+        var compose = ComposeTarget
+            .Render(
+                File_(),
+                new Dictionary<string, DeployManifest>(StringComparer.Ordinal)
+                {
+                    ["hub"] = Hub(),
+                    ["worker"] = worker,
+                }
+            )[0]
+            .Content;
+
+        compose.Split("127.0.0.1:").Length.Should().Be(2, "only the hub publishes a port");
+        compose.Should().Contain("\"127.0.0.1:8080:8080\"");
+    }
+
+    [Test]
+    public void A_hub_takes_the_next_port_no_other_service_has_asked_for()
+    {
+        var file = File_();
+        file.Services["ops"] = new DeployService { Project = "Orders/Orders.csproj", Port = 8080 };
+        var ops = Hub();
+        ops.Roles = ["scheduler"];
+
+        var compose = ComposeTarget
+            .Render(
+                file,
+                new Dictionary<string, DeployManifest>(StringComparer.Ordinal)
+                {
+                    ["hub"] = Hub(),
+                    ["worker"] = Worker(),
+                    ["ops"] = ops,
+                }
+            )[0]
+            .Content;
+
+        compose.Should().Contain("\"127.0.0.1:8081:8080\"").And.Contain("\"127.0.0.1:8080:8080\"");
+        compose.Split("127.0.0.1:8080:").Length.Should().Be(2);
+    }
+
+    [Test]
+    public void A_port_on_a_service_compose_publishes_no_port_for_is_refused()
+    {
+        var file = File_();
+        file.Services["worker"].Port = 9000;
+
+        var act = () => ComposeTarget.Render(file, Exports());
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*'worker'*port 9000*");
+    }
+
+    [TestCase(typeof(UnauthorizedAccessException))]
+    [TestCase(typeof(System.Text.Json.JsonException))]
+    [TestCase(typeof(System.ComponentModel.Win32Exception))]
+    public async Task Deploy_reports_a_failure_in_a_line(Type failure)
+    {
+        var exit = await DeployCommand
+            .RunAsync(
+                "compose",
+                await WriteAsync(File_()).ConfigureAwait(false),
+                outDir: null,
+                build: false,
+                new AwsDeployerTests.ThrowingExporter(
+                    (Exception)Activator.CreateInstance(failure).NotNull()
+                ),
+                (_, _) => Task.CompletedTask,
+                TextWriter.Null,
+                TextWriter.Null
+            )
+            .ConfigureAwait(false);
+
+        exit.Should().Be(1);
+    }
+
+    [Test]
+    public async Task A_child_that_does_not_exit_in_time_is_stopped_and_its_output_kept()
+    {
+        if (OperatingSystem.IsWindows())
+            Assert.Ignore("Uses sh; the timeout's code path is the same on every OS.");
+        var psi = new System.Diagnostics.ProcessStartInfo("sh");
+        psi.ArgumentList.Add("-c");
+        psi.ArgumentList.Add("echo serving; sleep 20");
+        var clock = TimeProvider.System.GetTimestamp();
+
+        var act = async () =>
+            await ChildProcess
+                .RunAsync(psi, TimeSpan.FromSeconds(1), CancellationToken.None)
+                .ConfigureAwait(false);
+
+        await act.Should()
+            .ThrowAsync<TimeoutException>()
+            .WithMessage("*serving*")
+            .ConfigureAwait(false);
+        TimeProvider.System.GetElapsedTime(clock).Should().BeLessThan(TimeSpan.FromSeconds(15));
+    }
+
+    [Test]
+    public async Task A_child_is_stopped_when_the_command_is_cancelled()
+    {
+        if (OperatingSystem.IsWindows())
+            Assert.Ignore("Uses sh; the cancellation's code path is the same on every OS.");
+        var psi = new System.Diagnostics.ProcessStartInfo("sh");
+        psi.ArgumentList.Add("-c");
+        psi.ArgumentList.Add("sleep 20");
+        using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+        var clock = TimeProvider.System.GetTimestamp();
+
+        var act = async () =>
+            await ChildProcess
+                .RunAsync(psi, TimeSpan.FromMinutes(5), cancel.Token)
+                .ConfigureAwait(false);
+
+        await act.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
+        TimeProvider.System.GetElapsedTime(clock).Should().BeLessThan(TimeSpan.FromSeconds(15));
     }
 
     [Test]
@@ -383,6 +566,10 @@ public class DeployComposeTests
     [TestCase(
         """{ "version": 1, "app": "orders", "services": { "hub": { "project": "Orders/Orders.csproj" } }, "secrets": ["Auth:Authority"] }""",
         "*'Auth:Authority' is not an environment name*"
+    )]
+    [TestCase(
+        """{ "version": 1, "app": "orders", "services": { "hub": { "project": "Orders/Orders.csproj", "port": 8080 }, "worker": { "project": "Orders.Worker/Orders.Worker.csproj", "port": 8080 } } }""",
+        "*'worker'*port 8080*'hub'*"
     )]
     [TestCase("""{ "version": 2, "app": "orders", "services": {} }""", "*version 2*")]
     public async Task A_file_that_cannot_be_deployed_is_refused_naming_the_problem(

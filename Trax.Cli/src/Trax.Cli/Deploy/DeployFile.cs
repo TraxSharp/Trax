@@ -63,10 +63,11 @@ internal sealed partial class DeployFile
                     : $"{FileName} has no environment '{name}'. It has: {string.Join(", ", Environments.Keys)}."
             );
         string Problem(string what) => $"Environment '{name}': {what}";
-        if (!Name.IsMatch(name))
+        if (!EnvironmentName.IsMatch(name))
             throw new InvalidOperationException(
                 Problem(
-                    "its name must be lower case, a letter first, then letters, digits or dashes."
+                    "its name must be lower-case letters and digits only. The stack is <app>-<environment>, and "
+                        + "a dash here would give two apps the same stack."
                 )
             );
         if (env.Profile is not (DeployEnvironment.Production or DeployEnvironment.Try))
@@ -203,6 +204,7 @@ internal sealed partial class DeployFile
                 Problem("services is empty. Name at least one project to deploy.")
             );
         var dir = Path.GetDirectoryName(Path.GetFullPath(path)).NotNull();
+        var ports = new Dictionary<int, string>();
         foreach (var (name, service) in Services)
         {
             if (!Name.IsMatch(name) || name is "database" or "rabbitmq" or "migrate")
@@ -225,6 +227,12 @@ internal sealed partial class DeployFile
                             CultureInfo.InvariantCulture,
                             $"service '{name}' has port {service.Port}, which is not a TCP port."
                         )
+                    )
+                );
+            if (service.Port is { } port && !ports.TryAdd(port, name))
+                throw new InvalidOperationException(
+                    Problem(
+                        $"service '{name}' has port {port}, which service '{ports[port]}' has too."
                     )
                 );
             if (service.Count < 1)
@@ -263,6 +271,9 @@ internal sealed partial class DeployFile
 
     [GeneratedRegex("^[a-z][a-z0-9-]*$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     internal static partial Regex Name { get; }
+
+    [GeneratedRegex("^[a-z0-9]+$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex EnvironmentName { get; }
 
     [GeneratedRegex("^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     private static partial Regex Variable { get; }

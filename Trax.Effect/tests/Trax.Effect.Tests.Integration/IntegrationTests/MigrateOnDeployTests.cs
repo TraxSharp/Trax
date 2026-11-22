@@ -1,10 +1,15 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Npgsql;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Trax.Core.Extensions;
+using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DomainContext;
@@ -69,16 +74,80 @@ public class MigrateOnDeployTests
         (await Count("gadgets")).Should().Be(1);
     }
 
-    private ServiceProvider Services()
+    [Test]
+    public async Task A_migrate_process_applies_a_contexts_ef_migrations()
+    {
+        await using var services = Services(s =>
+        {
+            s.AddDbContextFactory<WidgetContext>(o =>
+                o.UseNpgsql(
+                        _connectionString,
+                        npgsql => npgsql.MigrationsHistoryTable("__EFMigrationsHistory", Schema)
+                    )
+                    .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
+            );
+            return effects => effects.MigrateOnDeploy<WidgetContext>();
+        });
+        var host = new UnstartedHost(services);
+
+        await host.RunTraxAsync(["--trax-migrate"]);
+
+        host.Started.Should().BeFalse();
+        (await TableExists("widgets")).Should().BeTrue();
+        (await AppliedMigrations()).Should().Equal(CreateWidgets.Id);
+    }
+
+    [Test]
+    public async Task A_context_with_no_factory_refuses_the_migration()
+    {
+        await using var services = Services(_ =>
+            effects => effects.MigrateOnDeploy<WidgetContext>()
+        );
+        var host = new UnstartedHost(services);
+
+        var act = async () => await host.RunTraxAsync(["--trax-migrate"]);
+
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*MigrateOnDeploy<WidgetContext>()*no IDbContextFactory<WidgetContext>*");
+        host.Started.Should().BeFalse();
+    }
+
+    private ServiceProvider Services() =>
+        Services(s =>
+        {
+            s.AddDbContextFactory<GadgetContext>(o => o.UseNpgsql(_connectionString.NotNull()));
+            return effects => effects.MigrateOnDeploy<GadgetContext>();
+        });
+
+    private ServiceProvider Services(
+        Func<
+            IServiceCollection,
+            Func<TraxEffectBuilderWithData, TraxEffectBuilderWithData>
+        > register
+    )
     {
         var services = new ServiceCollection();
-        services.AddDbContextFactory<GadgetContext>(o => o.UseNpgsql(_connectionString.NotNull()));
+        var named = register(services);
         services.AddTrax(trax =>
-            trax.AddEffects(effects =>
-                effects.UsePostgres(_connectionString.NotNull()).MigrateOnDeploy<GadgetContext>()
-            )
+            trax.AddEffects(effects => named(effects.UsePostgres(_connectionString.NotNull())))
         );
         return services.BuildServiceProvider();
+    }
+
+    private async Task<List<string>> AppliedMigrations()
+    {
+        await using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            $"SELECT \"MigrationId\" FROM {Schema}.\"__EFMigrationsHistory\" ORDER BY 1",
+            connection
+        );
+        var ids = new List<string>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            ids.Add(reader.GetString(0));
+        return ids;
     }
 
     private async Task Exec(string sql)
@@ -132,6 +201,60 @@ public class MigrateOnDeployTests
         public Task StopAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 
         public void Dispose() { }
+    }
+
+    public sealed class Widget
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = null!;
+    }
+
+    /// <summary>A context that has EF migrations, so a migrate process runs them rather than creating its tables.</summary>
+    public sealed class WidgetContext(DbContextOptions<WidgetContext> options) : DbContext(options)
+    {
+        public DbSet<Widget> Widgets => Set<Widget>();
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.HasDefaultSchema(Schema);
+            modelBuilder.Entity<Widget>(e =>
+            {
+                e.ToTable("widgets");
+                e.Property(r => r.Id).HasColumnName("id");
+                e.Property(r => r.Name).HasColumnName("name");
+            });
+        }
+    }
+
+    /// <summary>WidgetContext's one migration, written by hand.</summary>
+    [DbContext(typeof(WidgetContext))]
+    [Migration(Id)]
+    public sealed class CreateWidgets : Migration
+    {
+        public const string Id = "20261116000000_CreateWidgets";
+
+        protected override void Up(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.EnsureSchema(Schema);
+            migrationBuilder.CreateTable(
+                name: "widgets",
+                schema: Schema,
+                columns: table => new
+                {
+                    id = table
+                        .Column<int>(nullable: false)
+                        .Annotation(
+                            "Npgsql:ValueGenerationStrategy",
+                            NpgsqlValueGenerationStrategy.IdentityByDefaultColumn
+                        ),
+                    name = table.Column<string>(nullable: false),
+                },
+                constraints: table => table.PrimaryKey("pk_widgets", x => x.id)
+            );
+        }
+
+        protected override void Down(MigrationBuilder migrationBuilder) =>
+            migrationBuilder.DropTable(name: "widgets", schema: Schema);
     }
 
     public sealed class Gadget

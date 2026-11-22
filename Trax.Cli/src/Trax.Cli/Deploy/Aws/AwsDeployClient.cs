@@ -6,6 +6,8 @@ using Amazon.CloudFormation;
 using Amazon.CloudFormation.Model;
 using Amazon.CloudWatchLogs;
 using Amazon.CloudWatchLogs.Model;
+using Amazon.CognitoIdentityProvider;
+using Amazon.CognitoIdentityProvider.Model;
 using Amazon.EC2;
 using Amazon.EC2.Model;
 using Amazon.ECR;
@@ -16,8 +18,11 @@ using Amazon.SecretsManager;
 using Amazon.SecretsManager.Model;
 using Amazon.SecurityToken;
 using Amazon.SecurityToken.Model;
+using Amazon.SimpleSystemsManagement;
+using Amazon.SimpleSystemsManagement.Model;
 using Trax.Core.Extensions;
 using InvalidOperationException = System.InvalidOperationException;
+using Parameter = Amazon.CloudFormation.Model.Parameter;
 using Task = System.Threading.Tasks.Task;
 
 namespace Trax.Cli.Deploy.Aws;
@@ -146,7 +151,14 @@ internal sealed class AwsDeployClient(string region, TimeProvider clock) : IAwsD
                     p => p.ParameterValue,
                     StringComparer.Ordinal
                 )
-            );
+            )
+            {
+                Tags = (found.Tags ?? []).ToDictionary(
+                    t => t.Key,
+                    t => t.Value,
+                    StringComparer.Ordinal
+                ),
+            };
         }
         catch (AmazonCloudFormationException ex)
             when (ex.Message.Contains("does not exist", StringComparison.Ordinal))
@@ -175,7 +187,7 @@ internal sealed class AwsDeployClient(string region, TimeProvider clock) : IAwsD
                         CultureInfo.InvariantCulture,
                         $"trax-{started:yyyyMMddHHmmss}"
                     ),
-                    ChangeSetType = existing is null ? ChangeSetType.CREATE : ChangeSetType.UPDATE,
+                    ChangeSetType = ChangeSetTypeFor(existing),
                     TemplateBody = template,
                     UsePreviousTemplate = template is null ? true : null,
                     Parameters =
@@ -200,60 +212,89 @@ internal sealed class AwsDeployClient(string region, TimeProvider clock) : IAwsD
             )
             .ConfigureAwait(false);
 
-        DescribeChangeSetResponse described;
-        while (true)
+        try
         {
-            described = await cfn.DescribeChangeSetAsync(
-                    new DescribeChangeSetRequest { ChangeSetName = changeSet.Id },
-                    ct
-                )
-                .ConfigureAwait(false);
-            if (described.Status == ChangeSetStatus.CREATE_COMPLETE)
-                break;
-            if (described.Status == ChangeSetStatus.FAILED)
+            DescribeChangeSetResponse described;
+            while (true)
             {
-                await cfn.DeleteChangeSetAsync(
-                        new DeleteChangeSetRequest { ChangeSetName = changeSet.Id },
+                described = await cfn.DescribeChangeSetAsync(
+                        new DescribeChangeSetRequest { ChangeSetName = changeSet.Id },
                         ct
                     )
                     .ConfigureAwait(false);
-                if (
-                    described.StatusReason?.Contains(
-                        "didn't contain changes",
-                        StringComparison.Ordinal
+                if (described.Status == ChangeSetStatus.CREATE_COMPLETE)
+                    break;
+                if (described.Status == ChangeSetStatus.FAILED)
+                {
+                    await cfn.DeleteChangeSetAsync(
+                            new DeleteChangeSetRequest { ChangeSetName = changeSet.Id },
+                            ct
+                        )
+                        .ConfigureAwait(false);
+                    if (
+                        described.StatusReason?.Contains(
+                            "didn't contain changes",
+                            StringComparison.Ordinal
+                        )
+                            is true
+                        || described.StatusReason?.Contains("No updates", StringComparison.Ordinal)
+                            is true
                     )
-                        is true
-                    || described.StatusReason?.Contains("No updates", StringComparison.Ordinal)
-                        is true
-                )
-                    return false;
-                throw new InvalidOperationException(
-                    $"CloudFormation refused the change to {stack}: {described.StatusReason}"
+                        return false;
+                    throw new InvalidOperationException(
+                        $"CloudFormation refused the change to {stack}: {described.StatusReason}"
+                    );
+                }
+                await Task.Delay(TimeSpan.FromSeconds(3), clock, ct).ConfigureAwait(false);
+            }
+            foreach (var change in described.Changes ?? [])
+            {
+                var resource = change.ResourceChange;
+                progress(
+                    $"  {resource.Action?.Value, -8}{resource.LogicalResourceId} ({resource.ResourceType})"
+                        + (
+                            string.Equals(
+                                resource.Replacement?.Value,
+                                "True",
+                                StringComparison.Ordinal
+                            )
+                                ? ", replaced"
+                                : ""
+                        )
                 );
             }
-            await Task.Delay(TimeSpan.FromSeconds(3), clock, ct).ConfigureAwait(false);
-        }
-        foreach (var change in described.Changes ?? [])
-        {
-            var resource = change.ResourceChange;
-            progress(
-                $"  {resource.Action?.Value, -8}{resource.LogicalResourceId} ({resource.ResourceType})"
-                    + (
-                        string.Equals(resource.Replacement?.Value, "True", StringComparison.Ordinal)
-                            ? ", replaced"
-                            : ""
-                    )
-            );
-        }
 
-        await cfn.ExecuteChangeSetAsync(
-                new ExecuteChangeSetRequest { ChangeSetName = changeSet.Id },
-                ct
-            )
-            .ConfigureAwait(false);
+            await cfn.ExecuteChangeSetAsync(
+                    new ExecuteChangeSetRequest { ChangeSetName = changeSet.Id },
+                    ct
+                )
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // A change set left behind holds a new stack in REVIEW_IN_PROGRESS. The next deploy creates it again
+            // either way, so a delete that fails (the change set already executing) changes nothing.
+            try
+            {
+                await cfn.DeleteChangeSetAsync(
+                        new DeleteChangeSetRequest { ChangeSetName = changeSet.Id },
+                        CancellationToken.None
+                    )
+                    .ConfigureAwait(false);
+            }
+            catch (AmazonCloudFormationException) { }
+            throw;
+        }
         await WaitAsync(cfn, stack, started, progress, ct).ConfigureAwait(false);
         return true;
     }
+
+    /// <summary>
+    /// CREATE for a stack that does not exist or holds nothing yet (REVIEW_IN_PROGRESS, left by a first deploy's
+    /// change set that failed or was abandoned, which CloudFormation lets a CREATE change set replace), else UPDATE.
+    /// </summary>
+    internal static ChangeSetType ChangeSetTypeFor(AwsStackState? existing) =>
+        existing is null or { Created: false } ? ChangeSetType.CREATE : ChangeSetType.UPDATE;
 
     private async Task WaitAsync(
         AmazonCloudFormationClient cfn,
@@ -426,14 +467,34 @@ internal sealed class AwsDeployClient(string region, TimeProvider clock) : IAwsD
     )
     {
         using var secrets = new AmazonSecretsManagerClient(_region);
+        await PutSecretAsync(secrets, name, value, tags, ct);
+    }
+
+    /// <summary>
+    /// Stores <paramref name="value"/> as the secret's current value, creating the secret when it does not exist and
+    /// restoring it first when it is pending deletion (as <c>destroy --delete-data</c> leaves it for seven days),
+    /// since a secret pending deletion takes no value and holds its name.
+    /// </summary>
+    internal static async Task PutSecretAsync(
+        IAmazonSecretsManager secrets,
+        string name,
+        string value,
+        IReadOnlyDictionary<string, string> tags,
+        CancellationToken ct
+    )
+    {
+        var put = new PutSecretValueRequest { SecretId = name, SecretString = value };
         try
         {
+            await secrets.PutSecretValueAsync(put, ct).ConfigureAwait(false);
+        }
+        catch (InvalidRequestException ex)
+            when (ex.Message.Contains("marked for deletion", StringComparison.Ordinal))
+        {
             await secrets
-                .PutSecretValueAsync(
-                    new PutSecretValueRequest { SecretId = name, SecretString = value },
-                    ct
-                )
+                .RestoreSecretAsync(new RestoreSecretRequest { SecretId = name }, ct)
                 .ConfigureAwait(false);
+            await secrets.PutSecretValueAsync(put, ct).ConfigureAwait(false);
         }
         catch (Amazon.SecretsManager.Model.ResourceNotFoundException)
         {
@@ -508,6 +569,128 @@ internal sealed class AwsDeployClient(string region, TimeProvider clock) : IAwsD
         return found;
     }
 
+    public async Task<string?> GetParameterAsync(string name, CancellationToken ct)
+    {
+        using var ssm = new AmazonSimpleSystemsManagementClient(_region);
+        try
+        {
+            return (await ssm.GetParameterAsync(new GetParameterRequest { Name = name }, ct))
+                .Parameter
+                .Value;
+        }
+        catch (ParameterNotFoundException)
+        {
+            return null;
+        }
+    }
+
+    public async Task PutParameterAsync(
+        string name,
+        string value,
+        IReadOnlyDictionary<string, string> tags,
+        CancellationToken ct
+    )
+    {
+        using var ssm = new AmazonSimpleSystemsManagementClient(_region);
+        try
+        {
+            await ssm.PutParameterAsync(
+                new PutParameterRequest
+                {
+                    Name = name,
+                    Value = value,
+                    Type = ParameterType.String,
+                    Tags =
+                    [
+                        .. tags.Select(t => new Amazon.SimpleSystemsManagement.Model.Tag
+                        {
+                            Key = t.Key,
+                            Value = t.Value,
+                        }),
+                    ],
+                },
+                ct
+            );
+        }
+        catch (ParameterAlreadyExistsException)
+        {
+            // Tags go only with a new parameter; an existing one is overwritten without them.
+            await ssm.PutParameterAsync(
+                new PutParameterRequest
+                {
+                    Name = name,
+                    Value = value,
+                    Type = ParameterType.String,
+                    Overwrite = true,
+                },
+                ct
+            );
+        }
+    }
+
+    public async Task DeleteParameterAsync(string name, CancellationToken ct)
+    {
+        using var ssm = new AmazonSimpleSystemsManagementClient(_region);
+        try
+        {
+            await ssm.DeleteParameterAsync(new DeleteParameterRequest { Name = name }, ct);
+        }
+        catch (ParameterNotFoundException) { }
+    }
+
+    public async Task<long?> UserCountAsync(string userPoolId, CancellationToken ct)
+    {
+        using var cognito = new AmazonCognitoIdentityProviderClient(_region);
+        try
+        {
+            var pool = await cognito.DescribeUserPoolAsync(
+                new DescribeUserPoolRequest { UserPoolId = userPoolId },
+                ct
+            );
+            return pool.UserPool.EstimatedNumberOfUsers ?? 0;
+        }
+        catch (Amazon.CognitoIdentityProvider.Model.ResourceNotFoundException)
+        {
+            return null;
+        }
+    }
+
+    public async Task DeleteUserPoolAsync(string userPoolId, CancellationToken ct)
+    {
+        using var cognito = new AmazonCognitoIdentityProviderClient(_region);
+        try
+        {
+            var pool = (
+                await cognito.DescribeUserPoolAsync(
+                    new DescribeUserPoolRequest { UserPoolId = userPoolId },
+                    ct
+                )
+            ).UserPool;
+            if (pool.DeletionProtection == DeletionProtectionType.ACTIVE)
+                await cognito.UpdateUserPoolAsync(UnprotectedUpdate(pool), ct);
+            await cognito.DeleteUserPoolAsync(
+                new DeleteUserPoolRequest { UserPoolId = userPoolId },
+                ct
+            );
+        }
+        catch (Amazon.CognitoIdentityProvider.Model.ResourceNotFoundException) { }
+    }
+
+    /// <summary>
+    /// The pool's own settings with deletion protection off. UpdateUserPool resets every setting it is not given to
+    /// its default, so the ones the stack set are passed back as they are; the MFA setting, which needs its TOTP
+    /// configuration with it, is left to the delete that follows.
+    /// </summary>
+    private static UpdateUserPoolRequest UnprotectedUpdate(UserPoolType pool) =>
+        new()
+        {
+            UserPoolId = pool.Id,
+            DeletionProtection = DeletionProtectionType.INACTIVE,
+            AutoVerifiedAttributes = pool.AutoVerifiedAttributes,
+            AdminCreateUserConfig = pool.AdminCreateUserConfig,
+            Policies = pool.Policies,
+        };
+
     public async Task<IReadOnlyList<AwsServiceState>> DescribeServicesAsync(
         string cluster,
         IReadOnlyList<string> services,
@@ -542,7 +725,7 @@ internal sealed class AwsDeployClient(string region, TimeProvider clock) : IAwsD
     {
         using var logs = new AmazonCloudWatchLogsClient(_region);
         var start = new DateTimeOffset(since, TimeSpan.Zero).ToUnixTimeMilliseconds();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var seen = new SeenLogEvents();
         while (true)
         {
             string? next = null;
@@ -559,7 +742,7 @@ internal sealed class AwsDeployClient(string region, TimeProvider clock) : IAwsD
                     )
                     .ConfigureAwait(false);
                 foreach (var e in page.Events ?? [])
-                    if (seen.Add(e.EventId))
+                    if (seen.Add(e.EventId, e.Timestamp ?? start))
                     {
                         start = Math.Max(start, e.Timestamp ?? start);
                         yield return e.Message.TrimEnd();

@@ -28,8 +28,8 @@ public sealed class DeployManifest
     public int Version { get; set; } = CurrentVersion;
 
     /// <summary>
-    /// What the host runs, sorted: <c>api</c> (it maps the Trax GraphQL endpoint), <c>scheduler</c>, <c>worker</c>,
-    /// <c>job-runner</c>.
+    /// What the host runs, sorted: <c>api</c> (it maps the Trax GraphQL endpoint), <c>job-runner</c> (it maps a runner
+    /// endpoint), <c>scheduler</c>, <c>worker</c>.
     /// </summary>
     public IList<string> Roles { get; set; } = [];
 

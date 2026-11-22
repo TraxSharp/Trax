@@ -115,6 +115,35 @@ public class ScaffoldedTemplateTests
             .Equal("8080");
     }
 
+    [Test]
+    public async Task Scaffold_Publish_CarriesTheRdsCaBundle()
+    {
+        // trax deploy's AWS stack connects with Root Certificate=/app/trax/rds-global-bundle.pem,
+        // and -t:PublishContainer puts the publish output in /app.
+        var dir = await Scaffold("trax-hub");
+        // Outside the project, whose globs would otherwise pick the output up.
+        var output = Path.Combine(_workDir, "trax-hub-publish");
+
+        var publish = await Run(
+            dir,
+            allowFailure: true,
+            "publish",
+            "App.csproj",
+            "-c",
+            "Release",
+            "--no-restore",
+            "-o",
+            output
+        );
+
+        publish.ExitCode.Should().Be(0, $"the scaffold publishes:\n{publish.Output}");
+        var bundle = Path.Combine(output, "trax", "rds-global-bundle.pem");
+        File.Exists(bundle)
+            .Should()
+            .BeTrue("Trax.Effect.Data.Postgres puts the RDS CA bundle in every app it is part of");
+        (await File.ReadAllTextAsync(bundle)).Should().StartWith("-----BEGIN CERTIFICATE-----");
+    }
+
     [TestCase("trax-hub")]
     [TestCase("trax-scheduler")]
     [TestCase("trax-api")]
@@ -243,12 +272,12 @@ public class ScaffoldedTemplateTests
     }
 
     [TestCase("trax-hub", "api,scheduler", "/trax/health")]
-    [TestCase("trax-scheduler", "api,scheduler", null)]
+    [TestCase("trax-scheduler", "api,scheduler", "/trax/health")]
     [TestCase("trax-api", "api", "/trax/health")]
     public async Task Scaffold_ReportsWhatItNeedsFromItsDeployment(
         string shortName,
         string roles,
-        string? health
+        string health
     )
     {
         var dir = await Scaffold(shortName);
@@ -281,12 +310,19 @@ public class ScaffoldedTemplateTests
         manifest.Database.NotNull().Provider.Should().Be("postgres");
         manifest.Endpoints.GraphQL.Should().Be("/trax/graphql");
         manifest.Endpoints.Health.Should().Be(health);
+        if (manifest.Roles.Contains("api"))
+            manifest
+                .Endpoints.Health.Should()
+                .NotBeNull(
+                    "an api host is deployed behind a load balancer, which probes its health"
+                );
         manifest.Endpoints.Console.Should().BeNull("the console is served only in Development");
     }
 
     [TestCase("trax-hub", "/trax/dashboard/", HttpStatusCode.NotFound)]
     [TestCase("trax-hub", "/trax/health", HttpStatusCode.OK)]
     [TestCase("trax-scheduler", "/trax/dashboard/", HttpStatusCode.NotFound)]
+    [TestCase("trax-scheduler", "/trax/health", HttpStatusCode.OK)]
     [TestCase("trax-api", "/trax/health", HttpStatusCode.OK)]
     public async Task Scaffold_StartsInProduction_WithoutTheDevelopmentOnlyParts(
         string shortName,

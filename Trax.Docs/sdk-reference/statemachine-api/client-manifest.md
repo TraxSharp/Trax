@@ -38,7 +38,7 @@ Three namespaces: `ClientManifest` and its records are in `Trax.StateMachine`; `
 
 | Member | Description |
 | --- | --- |
-| `app.RunTraxAsync(string[]? args = null)` | Runs the host as `app.RunAsync()` does, unless the process was started with `--trax-migrate` (it migrates and exits, see [TraxMigrate](/docs/sdk-reference/configuration/trax-migrate)) or `--trax-export-client <path>`: then it runs the host's startup checks, writes the manifest to the path and returns without serving. `args` defaults to the process's command line. In `Trax.Api.GraphQL.PersistedOperations.Extensions`. |
+| `app.RunTraxAsync(string[]? args = null)` | Runs the host as `app.RunAsync()` does, unless the process was started with `--trax-migrate` (it migrates and exits, see [TraxMigrate](/docs/sdk-reference/configuration/trax-migrate)), `--trax-export-deploy <path>` (it writes the deploy manifest and exits, see [DeployManifest](/docs/sdk-reference/configuration/deploy-manifest)) or `--trax-export-client <path>`: then it runs the host's startup checks, writes the manifest to the path and returns without serving. `args` defaults to the process's command line. In `Trax.Api.GraphQL.PersistedOperations.Extensions`. |
 | `TraxClientExport.Argument` | `--trax-export-client`. It takes the path next (`--trax-export-client out/client.json`) or after `=`. |
 | `TraxClientExport.Requested`, `TraxClientExport.Path` | Whether, and where to, the process was started to export, read from its command line when first used. `UsePostgres` and `UseSqlite` skip their migration when it is set; a host skips its own seeding the same way. The argument without a path throws an `ArgumentException` that says so where it is read. |
 | `TraxClientExport.PathIn(IReadOnlyList<string> args)` | The path `args` name after the argument, or null. The argument without a path throws. |
@@ -57,9 +57,9 @@ Three namespaces: `ClientManifest` and its records are in `Trax.StateMachine`; `
   writes, so a configuration production refuses fails the export too. No other hosted service starts: nothing
   listens, sweeps, registers documents or opens a database. A host that seeds data at startup checks
   `TraxClientExport.Requested` first.
-- **Started to export, never serves.** A host started with `--trax-export-client` whose provider skipped its
-  migration refuses to start if it serves anyway, because it calls `app.Run()` rather than `RunTraxAsync`: its
-  database was not migrated. The refusal names `RunTraxAsync`.
+- **Started to export, never serves.** A host started with `--trax-export-client` refuses to start if it serves
+  anyway, because it calls `app.Run()` rather than `RunTraxAsync`, whatever its data provider, including none: an
+  exporting process skips its migration. The refusal names `RunTraxAsync`.
 - **Only what a client sends.** The manifest lists the documents the host generates (each exposed machine's, and
   `runProgress`'s), never one under `operations`, and each exposed train's and query model's field and arguments.
   `Types` holds the SDL of the types those documents reach, and every type an exposed train's or query model's

@@ -14,13 +14,17 @@ using Microsoft.Extensions.Options;
 using NSubstitute;
 using Trax.Api.Dashboard.Extensions;
 using Trax.Api.Dashboard.Serving;
+using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Api.Services.HealthCheck;
+using Trax.Api.Tests.PersistedOperations.Fixtures;
 using Trax.Core.Extensions;
 using Trax.Effect.Configuration.ClientExport;
 using Trax.Effect.Configuration.Deploy;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Extensions;
+using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
@@ -110,7 +114,62 @@ public class DeployManifestExportTests
         File.Exists(_path.NotNull()).Should().BeFalse();
     }
 
-    private static WebApplication Build(Action<IServiceCollection>? more = null)
+    [Test]
+    public async Task A_host_whose_persisted_operations_invalidate_over_rabbitmq_reports_the_broker()
+    {
+        await using var app = Build(
+            PersistedOperationStorage,
+            g =>
+                g.UsePersistedOperations(po =>
+                    po.UseRabbitMqInvalidation("amqp://localhost", TestInvalidationKey.Sign)
+                )
+        );
+
+        await app.RunTraxAsync(["--trax-export-deploy", _path]);
+
+        var manifest = DeployManifest.Read(await File.ReadAllTextAsync(_path));
+        manifest.Transports.Should().Equal("rabbitmq");
+    }
+
+    [Test]
+    public async Task A_host_whose_persisted_operation_store_invalidates_over_rabbitmq_reports_the_broker()
+    {
+        await using var app = Build(s =>
+        {
+            PersistedOperationStorage(s);
+            s.AddPersistedOperationStore(store =>
+                store.UseRabbitMqInvalidation("amqp://localhost", TestInvalidationKey.Sign)
+            );
+        });
+
+        await app.RunTraxAsync(["--trax-export-deploy", _path]);
+
+        var manifest = DeployManifest.Read(await File.ReadAllTextAsync(_path));
+        manifest.Transports.Should().Equal("rabbitmq");
+    }
+
+    [Test]
+    public async Task A_single_node_persisted_operations_host_reports_no_transport()
+    {
+        await using var app = Build(
+            PersistedOperationStorage,
+            g => g.UsePersistedOperations(po => po.SingleNode())
+        );
+
+        await app.RunTraxAsync(["--trax-export-deploy", _path]);
+
+        var manifest = DeployManifest.Read(await File.ReadAllTextAsync(_path));
+        manifest.Transports.Should().BeEmpty();
+    }
+
+    // The store reads through the Trax data context; the export never opens it.
+    private static void PersistedOperationStorage(IServiceCollection services) =>
+        services.AddSingleton(Substitute.For<IDataContextProviderFactory>());
+
+    private static WebApplication Build(
+        Action<IServiceCollection>? more = null,
+        Func<TraxGraphQLBuilder, TraxGraphQLBuilder>? graphql = null
+    )
     {
         var builder = WebApplication.CreateBuilder(
             new WebApplicationOptions { EnvironmentName = Environments.Production }
@@ -140,8 +199,12 @@ public class DeployManifestExportTests
             o.UseInMemoryDatabase("Deploy_" + Guid.NewGuid())
         );
         services.AddTraxGraphQL(g =>
-            g.AddDbContext<OrderTestDbContext>().ExposeOperationQueries().AllowAnonymousOperations()
-        );
+        {
+            var api = g.AddDbContext<OrderTestDbContext>()
+                .ExposeOperationQueries()
+                .AllowAnonymousOperations();
+            return graphql is null ? api : graphql(api);
+        });
         services
             .AddAuthentication(TestUserHandler.Name)
             .AddScheme<AuthenticationSchemeOptions, TestUserHandler>(

@@ -46,7 +46,11 @@ public static class TraxDeployExtensions
     /// and returns without starting the host, so no hosted service runs and nothing listens.
     /// </summary>
     /// <param name="host">The built host.</param>
-    /// <param name="args">The process's arguments; null reads them from the command line.</param>
+    /// <param name="args">
+    /// The process's arguments. A flag counts when it is in these or in the process's own command line, so a host
+    /// handed fewer arguments than it was started with still exits rather than serving; null reads only the command
+    /// line.
+    /// </param>
     /// <param name="cancellationToken">Stops the host, or the migration.</param>
     public static async Task RunTraxAsync(
         this IHost host,
@@ -55,7 +59,29 @@ public static class TraxDeployExtensions
     )
     {
         ArgumentNullException.ThrowIfNull(host);
-        var exportPath = args is null ? TraxDeployExport.Path : TraxDeployExport.PathIn(args);
+        await host.RunTraxAsync(
+                args,
+                TraxDeployExport.Path,
+                TraxMigrate.Requested,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+    }
+
+    /// <param name="host">The built host.</param>
+    /// <param name="args">The arguments the host was handed; null when it was handed none.</param>
+    /// <param name="processExportPath">The path the process's own <c>--trax-export-deploy</c> names, or null.</param>
+    /// <param name="processMigrates">Whether the process was started with <c>--trax-migrate</c>.</param>
+    /// <param name="cancellationToken">Stops the host, or the migration.</param>
+    internal static async Task RunTraxAsync(
+        this IHost host,
+        string[]? args,
+        string? processExportPath,
+        bool processMigrates,
+        CancellationToken cancellationToken
+    )
+    {
+        var exportPath = (args is null ? null : TraxDeployExport.PathIn(args)) ?? processExportPath;
         if (exportPath is not null)
         {
             await DeployManifestExport
@@ -70,7 +96,7 @@ public static class TraxDeployExtensions
             return;
         }
 
-        var migrate = args is null ? TraxMigrate.Requested : TraxMigrate.RequestedIn(args);
+        var migrate = processMigrates || (args is not null && TraxMigrate.RequestedIn(args));
         if (!migrate)
         {
             await host.RunAsync(cancellationToken).ConfigureAwait(false);

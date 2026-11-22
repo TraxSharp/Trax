@@ -1,6 +1,6 @@
 ---
 title: UseRabbitMq
-description: "Reference for UseRabbitMq, the RabbitMQ broadcaster transport: its options, message signing, TLS, exchanges, delivery and RabbitMqTrainEventReceiver."
+description: "Reference for UseRabbitMq, the RabbitMQ broadcaster transport: its options, broker settings, signing, TLS, exchanges, delivery and RabbitMqTrainEventReceiver."
 type: reference
 area: effects
 parent: Configuration
@@ -29,6 +29,13 @@ public static BroadcasterBuilder UseRabbitMq(
     string connectionString,
     Action<RabbitMqBroadcasterOptions>? configure = null
 )
+
+public static BroadcasterBuilder UseRabbitMq(
+    this BroadcasterBuilder builder,
+    IConfiguration configuration,
+    Action<RabbitMqBroadcasterOptions>? configure = null,
+    string name = "RabbitMq"
+)
 ```
 
 ## Parameters
@@ -36,13 +43,17 @@ public static BroadcasterBuilder UseRabbitMq(
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `connectionString` | `string` | The AMQP connection URI, such as `amqps://trax:secret@rabbitmq.internal:5671` or `amqp://guest:guest@localhost:5672`. Plain `amqp://` is refused for a host that is not loopback unless `AllowInsecureTransport` is set |
+| `configuration` | `IConfiguration` | The host's configuration, read as [Reading the broker from configuration](#reading-the-broker-from-configuration) says |
+| `name` | `string` | The name the broker's settings are under. Default `RabbitMq` |
 | `configure` | `Action<RabbitMqBroadcasterOptions>?` | Changes the options below |
 
 ### RabbitMqBroadcasterOptions
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `ConnectionString` | `string` | N/A | AMQP connection URI |
+| `ConnectionString` | `string` | N/A | AMQP connection URI. It may leave out the user and password when `UserName` and `Password` carry them. |
+| `UserName` | `string?` | `null` | The broker user, in place of the one in the URI |
+| `Password` | `string?` | `null` | The broker password, in place of the one in the URI. Taken as it is: a `/`, `@`, `:` or `;` in it needs no encoding, which it would in a URI. |
 | `ExchangeName` | `string` | `"trax.lifecycle"` | Fanout exchange name |
 | `JunctionExchangeName` | `string?` | `ExchangeName` + `".junctions"` | Fanout exchange [junction events](/docs/effect/junction-events) are published to. Must differ from `ExchangeName`, or `UseRabbitMq` throws `ArgumentException`. |
 | `PrefetchCount` | `ushort` | `64` | How many received events the receiver may hold unacknowledged at once. The broker holds the rest until the handlers acknowledge one, so a slow handler leaves events queued on the broker rather than in the receiving process. `0` (no limit) is refused: `UseRabbitMq` throws `ArgumentException`, and a directly constructed receiver throws `InvalidOperationException` from `StartAsync`. |
@@ -59,6 +70,28 @@ public static BroadcasterBuilder UseRabbitMq(
 `AllowUnsignedMessages()`, when the key is shorter than 32 bytes, or when the URI is plain `amqp://` to a host that is
 not loopback without `AllowInsecureTransport`. The broadcaster checks the same when it is created, and a directly
 constructed receiver throws `InvalidOperationException` from `StartAsync`, before it connects.
+
+### Reading the broker from configuration
+
+`UseRabbitMq(configuration)` reads the broker from the host's configuration, under `name` (`RabbitMq` by default):
+
+| Setting | Environment variable | Meaning |
+|---------|----------------------|---------|
+| `ConnectionStrings:RabbitMq` | `ConnectionStrings__RabbitMq` | An AMQP URI. When it is set, it is the broker. |
+| `RabbitMq:Host` | `RabbitMq__Host` | The broker's host, when there is no URI. Reached over plain `amqp://`, so a host that is not loopback needs `AllowInsecureTransport`; for TLS, give an `amqps://` URI without credentials instead. |
+| `RabbitMq:Port` | `RabbitMq__Port` | The port with `RabbitMq:Host`. Default 5672. |
+| `RabbitMq:UserName` | `RabbitMq__UserName` | The user, in place of any in the URI |
+| `RabbitMq:Password` | `RabbitMq__Password` | The password, in place of any in the URI |
+
+A host that keeps a full URI in `ConnectionStrings:RabbitMq` connects as it did. `trax deploy --target compose` sets
+the host, user and password apart and no URI, so a generated password holding a `/` reaches the broker intact. With
+neither the URI nor the host set, `UseRabbitMq` throws `ArgumentException` naming both. The persisted-operation
+invalidation reads the same settings through `UseRabbitMqInvalidation(configuration, ...)`.
+
+```csharp fragment
+.UseBroadcaster(b => b.UseRabbitMq(builder.Configuration, opts =>
+    opts.SigningKey = Convert.FromBase64String(builder.Configuration["Trax:BroadcastSigningKey"]!)))
+```
 
 ## Returns
 

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Trax.Core.Extensions;
 using Trax.Effect.Configuration.Deploy;
 using Trax.Effect.Configuration.TraxEffectBuilder;
+using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 
@@ -82,6 +83,25 @@ public class TraxMigrateTests
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
             .WithMessage("*--trax-migrate*RunTraxAsync*");
+    }
+
+    [Test]
+    public void A_migrate_process_on_the_in_memory_provider_refuses_to_serve()
+    {
+        var services = new ServiceCollection();
+        services.AddTrax(
+            trax => trax.AddEffects(effects => effects.UseInMemory()),
+            exportsDeploy: false,
+            migrates: true,
+            exportsClient: false
+        );
+
+        services
+            .Should()
+            .ContainSingle(sd =>
+                sd.ServiceType == typeof(IHostedService)
+                && sd.ImplementationType == typeof(MigrateServeGate)
+            );
     }
 
     [TestCase(new[] { "--trax-migrate" }, true)]
