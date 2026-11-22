@@ -117,6 +117,40 @@ public class BulkOperationStressTests : StressTestSetup
     {
         var jobs = Services.GetRequiredService<BulkOperationJobs>();
 
+        var id = await StartBulkOperationAsync(kind, filter, matching).ConfigureAwait(false);
+
+        var finish = TimeProvider.System.GetTimestamp();
+        var reads = new List<TimeSpan>();
+        while (jobs.Get(id)?.Status == BulkOperationStatus.Running)
+        {
+            var read = TimeProvider.System.GetTimestamp();
+            await OperationsFieldAsync(
+                    "{ operations { executions(take: 500) { totalCount items { id } } } }"
+                )
+                .ConfigureAwait(false);
+            var readTook = TimeProvider.System.GetElapsedTime(read);
+            reads.Add(readTook);
+            TimeProvider
+                .System.GetElapsedTime(finish)
+                .Should()
+                .BeLessThan(FinishBudget, $"the operation over every match finishes ({Adr})");
+        }
+        var finishTook = TimeProvider.System.GetElapsedTime(finish);
+
+        await ReportAndAssertFinishedAsync(
+                jobs,
+                id,
+                kind,
+                matching,
+                expectedDone,
+                finishTook,
+                reads
+            )
+            .ConfigureAwait(false);
+    }
+
+    private async Task<Guid> StartBulkOperationAsync(string kind, string filter, int matching)
+    {
         var answer = TimeProvider.System.GetTimestamp();
         var started = await OperationsFieldAsync(
                 $"mutation {{ operations {{ startBulkOperation(kind: {kind}, filter: {filter}, "
@@ -146,28 +180,19 @@ public class BulkOperationStressTests : StressTestSetup
             .Should()
             .BeTrue(started.GetProperty("message").GetString());
         answerTook.Should().BeLessThan(StartBudget, $"the snapshot is read in short pages ({Adr})");
-        var id = Guid.Parse(
-            started.GetProperty("operation").GetProperty("id").GetString().NotNull()
-        );
+        return Guid.Parse(started.GetProperty("operation").GetProperty("id").GetString().NotNull());
+    }
 
-        var finish = TimeProvider.System.GetTimestamp();
-        var reads = new List<TimeSpan>();
-        while (jobs.Get(id)?.Status == BulkOperationStatus.Running)
-        {
-            var read = TimeProvider.System.GetTimestamp();
-            await OperationsFieldAsync(
-                    "{ operations { executions(take: 500) { totalCount items { id } } } }"
-                )
-                .ConfigureAwait(false);
-            var readTook = TimeProvider.System.GetElapsedTime(read);
-            reads.Add(readTook);
-            TimeProvider
-                .System.GetElapsedTime(finish)
-                .Should()
-                .BeLessThan(FinishBudget, $"the operation over every match finishes ({Adr})");
-        }
-        var finishTook = TimeProvider.System.GetElapsedTime(finish);
-
+    private async Task ReportAndAssertFinishedAsync(
+        BulkOperationJobs jobs,
+        Guid id,
+        string kind,
+        int matching,
+        int expectedDone,
+        TimeSpan finishTook,
+        List<TimeSpan> reads
+    )
+    {
         var operation = jobs.Get(id).NotNull();
         var run = jobs.Run(id).NotNull();
         await TestContext

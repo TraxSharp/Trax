@@ -15,75 +15,72 @@ internal static class BulkProgress
     public static TimeSpan Every { get; set; } = TimeSpan.FromSeconds(1);
 
     public static void Follow(ConsoleContext context, Guid operation, Action ended) =>
-        _ = Task.Run(
-            async () =>
-            {
-                var closed = context.Closed;
-                void Say(Action show)
+        _ = Task.Run(() => FollowAsync(context, operation, ended), context.Closed);
+
+    private static async Task FollowAsync(ConsoleContext context, Guid operation, Action ended)
+    {
+        var closed = context.Closed;
+        void Say(Action show)
+        {
+            if (!closed.IsCancellationRequested)
+                context.App.Invoke(() =>
                 {
                     if (!closed.IsCancellationRequested)
-                        context.App.Invoke(() =>
-                        {
-                            if (!closed.IsCancellationRequested)
-                                show();
-                        });
-                }
-                for (; ; )
-                {
-                    TraxAnswer<BulkOperationResult> answer;
-                    try
-                    {
-                        await Task.Delay(Every, context.Clock, closed).ConfigureAwait(false);
-                        answer = await context
-                            .Client.BulkOperationAsync(
-                                new BulkOperationVariables { Id = operation, FailuresTake = 0 },
-                                closed
-                            )
-                            .ConfigureAwait(false);
-                    }
-                    catch (OperationCanceledException) when (closed.IsCancellationRequested)
-                    {
-                        return;
-                    }
-                    catch (Exception ex)
-                    {
-                        Say(() => context.Status($"Bulk operation {operation}: {ex.Message}"));
-                        return;
-                    }
-                    if (answer.Data?.Operations?.BulkOperation is not { } state)
-                    {
-                        Say(() =>
-                            context.Status(
-                                $"Bulk operation {operation}: {answer.Message ?? "no answer"}"
-                            )
-                        );
-                        return;
-                    }
-                    var line =
-                        string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"{Wire.Name(state.Kind).ToLowerInvariant()} all: {state.Done} of {state.Total} done"
-                        )
-                        + (
-                            state.Failed > 0
-                                ? string.Create(
-                                    CultureInfo.InvariantCulture,
-                                    $", {state.Failed} failed"
-                                )
-                                : ""
-                        )
-                        + $"  ({Wire.Name(state.Status).ToLowerInvariant()})";
-                    var running = state.Status == BulkOperationStatus.Running;
-                    Say(() =>
-                    {
-                        context.Status(running ? line : $"{line}  {state.Message}");
-                        if (!running)
-                            ended();
-                    });
-                    if (!running)
-                        return;
-                }
-            },
-            context.Closed
-        );
+                        show();
+                });
+        }
+        for (; ; )
+        {
+            TraxAnswer<BulkOperationResult> answer;
+            try
+            {
+                await Task.Delay(Every, context.Clock, closed).ConfigureAwait(false);
+                answer = await context
+                    .Client.BulkOperationAsync(
+                        new BulkOperationVariables { Id = operation, FailuresTake = 0 },
+                        closed
+                    )
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (closed.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                Say(() => context.Status($"Bulk operation {operation}: {ex.Message}"));
+                return;
+            }
+            if (answer.Data?.Operations?.BulkOperation is not { } state)
+            {
+                Say(() =>
+                    context.Status($"Bulk operation {operation}: {answer.Message ?? "no answer"}")
+                );
+                return;
+            }
+            var line = Line(state);
+            var running = state.Status == BulkOperationStatus.Running;
+            Say(() =>
+            {
+                context.Status(running ? line : $"{line}  {state.Message}");
+                if (!running)
+                    ended();
+            });
+            if (!running)
+                return;
+        }
+    }
+
+    // The status line for the operation as it stands.
+    private static string Line(BulkOperationResultOperationsBulkOperation state) =>
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"{Wire.Name(state.Kind).ToLowerInvariant()} all: {state.Done} of {state.Total} done"
+        )
+        + (
+            state.Failed > 0
+                ? string.Create(CultureInfo.InvariantCulture, $", {state.Failed} failed")
+                : ""
+        )
+        + $"  ({Wire.Name(state.Status).ToLowerInvariant()})";
 }

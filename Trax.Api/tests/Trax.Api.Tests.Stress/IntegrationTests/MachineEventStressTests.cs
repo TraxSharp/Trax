@@ -186,34 +186,12 @@ public class MachineEventStressTests
             .Should()
             .BeTrue("each event's request is audited once");
 
-        var perEvent = clockTook / Events;
-        var runsSince = await AdvanceRunsAsync() - runsBefore;
-        await TestContext
-            .Out.WriteLineAsync(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"{Events} events: {clockTook.TotalMilliseconds:F0} ms, {perEvent.TotalMilliseconds:F2} ms each; "
-                )
-                    + string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"runs {runsSince}, audits {CountingAuditSink.Entries - auditsBefore}, "
-                    )
-                    + string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"notices {Volatile.Read(ref notices)}"
-                    )
-            )
-            .ConfigureAwait(false);
-
-        (await AdvanceRunsAsync().ConfigureAwait(false) - runsBefore)
-            .Should()
-            .Be(Events, "each event records one run of the internal advance train, per " + Adr);
-        (CountingAuditSink.Entries - auditsBefore).Should().Be(Events, "one audit entry per event");
-        Volatile
-            .Read(ref notices)
-            .Should()
-            .Be(Events, "one notice per event, coalesced to none fewer");
-        perEvent.Should().BeLessThan(PerEventBudget, "an event's cost is bounded");
+        await ReportAndAssertPerEventCostAsync(
+            clockTook,
+            runsBefore,
+            auditsBefore,
+            () => Volatile.Read(ref notices)
+        );
     }
 
     private const int ConcurrentInstances = 20;
@@ -251,40 +229,7 @@ public class MachineEventStressTests
         var read = TimeProvider.System.GetTimestamp();
         foreach (var id in ids)
         {
-            var scope = _host.NotNull().Services.CreateAsyncScope();
-            await using var scopeDisposal = scope.ConfigureAwait(false);
-            var page = await scope
-                .ServiceProvider.GetRequiredService<IOperationsService>()
-                .GetMachineInstanceTransitionsAsync(
-                    new MachineInstanceKey(
-                        "stress-toggle",
-                        Trax.Effect.Enums.SnapshotOwnerKind.User,
-                        id,
-                        await RowIdAsync(id)
-                    ),
-                    beforeRevision: null,
-                    100,
-                    CancellationToken.None
-                );
-            var oldestFirst = page.NotNull().Items.Reverse().ToList();
-            oldestFirst
-                .Select(t => t.Revision)
-                .Should()
-                .Equal(
-                    Enumerable.Range(1, EventsPerInstance + 1).Select(r => (long)r),
-                    "every event adds one row at its revision, none lost or doubled under load, per "
-                        + "Trax.StateMachine/docs/adr/0003-a-machine-instance-history-is-written-with-its-snapshot.md"
-                );
-            oldestFirst[0].Kind.Should().Be(Trax.Effect.Enums.SnapshotTransitionKind.Start);
-            oldestFirst
-                .Skip(1)
-                .Select(t => t.Trigger)
-                .Should()
-                .Equal(
-                    Enumerable
-                        .Range(0, EventsPerInstance)
-                        .Select(e => e % 2 == 0 ? "Close" : "Open")
-                );
+            await AssertHistoryInOrderAsync(id);
         }
         var readTook = TimeProvider.System.GetElapsedTime(read);
 
@@ -307,6 +252,75 @@ public class MachineEventStressTests
         perEvent
             .Should()
             .BeLessThan(PerEventBudget, "the history row keeps an event's cost bounded");
+    }
+
+    private static async Task ReportAndAssertPerEventCostAsync(
+        TimeSpan clockTook,
+        long runsBefore,
+        long auditsBefore,
+        Func<int> notices
+    )
+    {
+        var perEvent = clockTook / Events;
+        var runsSince = await AdvanceRunsAsync().ConfigureAwait(false) - runsBefore;
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{Events} events: {clockTook.TotalMilliseconds:F0} ms, {perEvent.TotalMilliseconds:F2} ms each; "
+                )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"runs {runsSince}, audits {CountingAuditSink.Entries - auditsBefore}, "
+                    )
+                    + string.Create(CultureInfo.InvariantCulture, $"notices {notices()}")
+            )
+            .ConfigureAwait(false);
+
+        (await AdvanceRunsAsync().ConfigureAwait(false) - runsBefore)
+            .Should()
+            .Be(Events, "each event records one run of the internal advance train, per " + Adr);
+        (CountingAuditSink.Entries - auditsBefore).Should().Be(Events, "one audit entry per event");
+        notices().Should().Be(Events, "one notice per event, coalesced to none fewer");
+        perEvent.Should().BeLessThan(PerEventBudget, "an event's cost is bounded");
+    }
+
+    /// <summary>Reads one instance's history through the operations service and checks every row is there, in order.</summary>
+    private async Task AssertHistoryInOrderAsync(Guid id)
+    {
+        var scope = _host.NotNull().Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
+        var page = await scope
+            .ServiceProvider.GetRequiredService<IOperationsService>()
+            .GetMachineInstanceTransitionsAsync(
+                new MachineInstanceKey(
+                    "stress-toggle",
+                    Trax.Effect.Enums.SnapshotOwnerKind.User,
+                    id,
+                    await RowIdAsync(id).ConfigureAwait(false)
+                ),
+                beforeRevision: null,
+                100,
+                CancellationToken.None
+            )
+            .ConfigureAwait(false);
+        var oldestFirst = page.NotNull().Items.Reverse().ToList();
+        oldestFirst
+            .Select(t => t.Revision)
+            .Should()
+            .Equal(
+                Enumerable.Range(1, EventsPerInstance + 1).Select(r => (long)r),
+                "every event adds one row at its revision, none lost or doubled under load, per "
+                    + "Trax.StateMachine/docs/adr/0003-a-machine-instance-history-is-written-with-its-snapshot.md"
+            );
+        oldestFirst[0].Kind.Should().Be(Trax.Effect.Enums.SnapshotTransitionKind.Start);
+        oldestFirst
+            .Skip(1)
+            .Select(t => t.Trigger)
+            .Should()
+            .Equal(
+                Enumerable.Range(0, EventsPerInstance).Select(e => e % 2 == 0 ? "Close" : "Open")
+            );
     }
 
     private static async Task<long> RowIdAsync(Guid id)

@@ -49,21 +49,7 @@ internal sealed class MainWindow : Window
         _tabs.Add(_machines);
         _tabs.ValueChanged += (_, _) => ShowHelp();
 
-        var feed = new FrameView
-        {
-            Title = "Live",
-            Y = Pos.Bottom(_tabs),
-            Width = Dim.Fill(),
-            Height = FeedLines + 2,
-        };
-        var feedList = new ListView
-        {
-            Width = Dim.Fill(),
-            Height = Dim.Fill(),
-            Source = new ListWrapper<string>(_feed),
-            CanFocus = false,
-        };
-        feed.Add(feedList);
+        var feed = NewFeed();
 
         _status = new Label
         {
@@ -100,6 +86,27 @@ internal sealed class MainWindow : Window
             // The feed starts once the host has named its own trains, so none of them slips in first.
             ReadAdminTrains(then: Follow);
         };
+    }
+
+    // The live feed under the tabs, as tall as FeedLines.
+    private FrameView NewFeed()
+    {
+        var feed = new FrameView
+        {
+            Title = "Live",
+            Y = Pos.Bottom(_tabs),
+            Width = Dim.Fill(),
+            Height = FeedLines + 2,
+        };
+        var feedList = new ListView
+        {
+            Width = Dim.Fill(),
+            Height = Dim.Fill(),
+            Source = new ListWrapper<string>(_feed),
+            CanFocus = false,
+        };
+        feed.Add(feedList);
+        return feed;
     }
 
     private bool _started;

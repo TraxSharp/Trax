@@ -133,109 +133,119 @@ public static partial class AuthE2EHost
             .ConfigureWebHost(web =>
                 web.UseTestServer()
                     .ConfigureServices(services =>
-                    {
-                        services.AddLogging();
-                        services.AddRouting();
-
-                        // Auth — registered conditionally per test.
-                        if (schemes.HasFlag(Schemes.ApiKey))
-                        {
-                            services.AddTraxApiKeyAuth(keys =>
-                                keys.Add(AdminApiKey, id: "admin", "Admin", "Player")
-                                    .Add(PlayerApiKey, id: "player", "Player")
-                            );
-                        }
-                        if (schemes.HasFlag(Schemes.Jwt))
-                        {
-                            services.AddTraxJwtAuth(jwt =>
-                                jwt.UseSymmetricKey(JwtIssuer, JwtAudience, JwtKey)
-                                    .WithClockSkew(TimeSpan.FromSeconds(5))
-                            );
-                        }
-
-                        // The pipeline below runs UseAuthentication, which needs the
-                        // services even when no scheme is registered.
-                        if (schemes == Schemes.None)
-                            services.AddAuthentication();
-
-                        // [TraxAuthorize(Policy="AdminPolicy")] requires a
-                        // matching ASP.NET Core policy definition.
-                        services.AddAuthorization(opts =>
-                            opts.AddPolicy("AdminPolicy", policy => policy.RequireRole("Admin"))
-                        );
-
-                        // Trax core + mediator. The mediator scans this
-                        // assembly so the test trains are registered.
-                        services.AddTrax(trax =>
-                            trax.AddEffects(effects =>
-                                    effects.UsePostgres(connectionString).AddJson()
-                                )
-                                .AddMediator(typeof(AuthE2EHost).Assembly)
-                        );
-
-                        services.AddTraxApi();
-
-                        services.AddDbContextFactory<TestDbContext>(o =>
-                            o.UseNpgsql(connectionString)
-                        );
-
-                        // Second DbContext for [TraxAuthorize]-on-[TraxQueryModel]
-                        // coverage. Lives in the `test_authz` schema so it does
-                        // not interfere with the unauthorized fixtures. Only the
-                        // QueryModelAuthorize E2E suite seeds it; the other
-                        // suites tolerate its presence because none of their
-                        // queries touch its fields.
-                        services.AddDbContextFactory<AuthzTestDbContext>(o =>
-                            o.UseNpgsql(connectionString)
-                        );
-
-                        services.AddTraxGraphQL(graphql =>
-                            (graphQL ?? (g => g))(graphql)
-                                // Default is generous (15) and covers the
-                                // discover/namespace/entity/nodes/field chain
-                                // without needing an explicit override.
-                                .AddDbContext<TestDbContext>()
-                                .AddDbContext<AuthzTestDbContext>()
-                                // The host runs as Production, where introspection is off by
-                                // default; a few tests here read the schema through it.
-                                .AllowIntrospection(_ => true)
-                                // Registered by name rather than by scanning the test
-                                // assembly. A scan pulls in every [ExtendObjectType] any other
-                                // test file happens to declare, which is how unrelated fixtures
-                                // ended up in this host's schema.
-                                .ConfigureSchema(b =>
-                                    b.AddTypeExtension<TestSubscriptions>()
-                                        .AddTypeExtension<TestMutations>()
-                                        .AddTypeExtension<TraxCallerProbeQueries>()
-                                        .AddTypeExtension<TraxCallerProbeMutations>()
-                                )
-                        );
-                    })
-                    .Configure(app =>
-                    {
-                        app.UseRouting();
-                        app.UseAuthentication();
-                        app.UseAuthorization();
-                        app.UseWebSockets();
-                        // AddTraxGraphQL registers its schema under the name
-                        // "trax"; MapGraphQL with no schema name targets the
-                        // default schema and produces an empty "RootQuery".
-                        app.UseEndpoints(endpoints =>
-                        {
-                            endpoints.MapGraphQL("/trax/graphql", "trax");
-                            // Parallel endpoint that gates every request on
-                            // the combined TraxAuthPolicy, used by tests that
-                            // need 401 on bad credentials.
-                            endpoints
-                                .MapGraphQL("/trax/graphql/protected", "trax")
-                                .RequireAuthorization(TraxAuthClaimTypes.TraxAuthPolicy);
-                        });
-                    })
+                        ConfigureHostServices(services, schemes, connectionString, graphQL)
+                    )
+                    .Configure(app => ConfigureApp(app))
             )
             .Build();
 
         await host.StartAsync().ConfigureAwait(false);
         return host;
+    }
+
+    private static void ConfigureApp(IApplicationBuilder app)
+    {
+        app.UseRouting();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.UseWebSockets();
+        // AddTraxGraphQL registers its schema under the name
+        // "trax"; MapGraphQL with no schema name targets the
+        // default schema and produces an empty "RootQuery".
+        app.UseEndpoints(endpoints =>
+        {
+            endpoints.MapGraphQL("/trax/graphql", "trax");
+            // Parallel endpoint that gates every request on
+            // the combined TraxAuthPolicy, used by tests that
+            // need 401 on bad credentials.
+            endpoints
+                .MapGraphQL("/trax/graphql/protected", "trax")
+                .RequireAuthorization(TraxAuthClaimTypes.TraxAuthPolicy);
+        });
+    }
+
+    private static void ConfigureHostServices(
+        IServiceCollection services,
+        Schemes schemes,
+        string connectionString,
+        Func<TraxGraphQLBuilder, TraxGraphQLBuilder>? graphQL
+    )
+    {
+        services.AddLogging();
+        services.AddRouting();
+
+        AddAuth(services, schemes);
+
+        // Trax core + mediator. The mediator scans this
+        // assembly so the test trains are registered.
+        services.AddTrax(trax =>
+            trax.AddEffects(effects => effects.UsePostgres(connectionString).AddJson())
+                .AddMediator(typeof(AuthE2EHost).Assembly)
+        );
+
+        services.AddTraxApi();
+
+        services.AddDbContextFactory<TestDbContext>(o => o.UseNpgsql(connectionString));
+
+        // Second DbContext for [TraxAuthorize]-on-[TraxQueryModel]
+        // coverage. Lives in the `test_authz` schema so it does
+        // not interfere with the unauthorized fixtures. Only the
+        // QueryModelAuthorize E2E suite seeds it; the other
+        // suites tolerate its presence because none of their
+        // queries touch its fields.
+        services.AddDbContextFactory<AuthzTestDbContext>(o => o.UseNpgsql(connectionString));
+
+        services.AddTraxGraphQL(graphql =>
+            (graphQL ?? (g => g))(graphql)
+                // Default is generous (15) and covers the
+                // discover/namespace/entity/nodes/field chain
+                // without needing an explicit override.
+                .AddDbContext<TestDbContext>()
+                .AddDbContext<AuthzTestDbContext>()
+                // The host runs as Production, where introspection is off by
+                // default; a few tests here read the schema through it.
+                .AllowIntrospection(_ => true)
+                // Registered by name rather than by scanning the test
+                // assembly. A scan pulls in every [ExtendObjectType] any other
+                // test file happens to declare, which is how unrelated fixtures
+                // ended up in this host's schema.
+                .ConfigureSchema(b =>
+                    b.AddTypeExtension<TestSubscriptions>()
+                        .AddTypeExtension<TestMutations>()
+                        .AddTypeExtension<TraxCallerProbeQueries>()
+                        .AddTypeExtension<TraxCallerProbeMutations>()
+                )
+        );
+    }
+
+    private static void AddAuth(IServiceCollection services, Schemes schemes)
+    {
+        // Auth — registered conditionally per test.
+        if (schemes.HasFlag(Schemes.ApiKey))
+        {
+            services.AddTraxApiKeyAuth(keys =>
+                keys.Add(AdminApiKey, id: "admin", "Admin", "Player")
+                    .Add(PlayerApiKey, id: "player", "Player")
+            );
+        }
+        if (schemes.HasFlag(Schemes.Jwt))
+        {
+            services.AddTraxJwtAuth(jwt =>
+                jwt.UseSymmetricKey(JwtIssuer, JwtAudience, JwtKey)
+                    .WithClockSkew(TimeSpan.FromSeconds(5))
+            );
+        }
+
+        // The pipeline below runs UseAuthentication, which needs the
+        // services even when no scheme is registered.
+        if (schemes == Schemes.None)
+            services.AddAuthentication();
+
+        // [TraxAuthorize(Policy="AdminPolicy")] requires a
+        // matching ASP.NET Core policy definition.
+        services.AddAuthorization(opts =>
+            opts.AddPolicy("AdminPolicy", policy => policy.RequireRole("Admin"))
+        );
     }
 
     /// <summary>

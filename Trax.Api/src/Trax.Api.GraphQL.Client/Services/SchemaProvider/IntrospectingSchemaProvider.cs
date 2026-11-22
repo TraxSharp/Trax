@@ -127,29 +127,7 @@ public class IntrospectingSchemaProvider : ISchemaProvider
 
     private async Task<ISchema> LoadSchemaAsync()
     {
-        GraphQLResponse<JsonElement> response;
-        try
-        {
-            var request = new GraphQLHttpRequest(IntrospectionQuery);
-            response = await _configuration
-                .GraphQLHttpClient.SendQueryAsync<JsonElement>(request)
-                .ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is not GraphQLSchemaIntrospectionException)
-        {
-            throw new GraphQLSchemaIntrospectionException(
-                $"Failed to introspect schema at {_configuration.BaseAddress}.",
-                ex
-            );
-        }
-
-        if (response.Errors is { Length: > 0 })
-        {
-            throw new GraphQLSchemaIntrospectionException(
-                $"Introspection at {_configuration.BaseAddress} returned errors: "
-                    + string.Join("; ", response.Errors.Select(e => e.Message))
-            );
-        }
+        var response = await SendIntrospectionAsync().ConfigureAwait(false);
 
         IntrospectionRoot? parsed;
         try
@@ -190,5 +168,34 @@ public class IntrospectingSchemaProvider : ISchemaProvider
                 ex
             );
         }
+    }
+
+    // The introspection response, refused when the request fails or the server answers with errors.
+    private async Task<GraphQLResponse<JsonElement>> SendIntrospectionAsync()
+    {
+        GraphQLResponse<JsonElement> response;
+        try
+        {
+            var request = new GraphQLHttpRequest(IntrospectionQuery);
+            response = await _configuration
+                .GraphQLHttpClient.SendQueryAsync<JsonElement>(request)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not GraphQLSchemaIntrospectionException)
+        {
+            throw new GraphQLSchemaIntrospectionException(
+                $"Failed to introspect schema at {_configuration.BaseAddress}.",
+                ex
+            );
+        }
+
+        if (response.Errors is { Length: > 0 })
+        {
+            throw new GraphQLSchemaIntrospectionException(
+                $"Introspection at {_configuration.BaseAddress} returned errors: "
+                    + string.Join("; ", response.Errors.Select(e => e.Message))
+            );
+        }
+        return response;
     }
 }

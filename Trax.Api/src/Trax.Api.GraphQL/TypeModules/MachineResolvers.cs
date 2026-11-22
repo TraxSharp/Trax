@@ -81,34 +81,7 @@ internal static class MachineResolvers
             return MachineAnswer.Refused(id, invalid);
 
         if (trigger.Kind == TriggerKind.EffectBound)
-        {
-            // The server runs the effect and hands the edge its receipt: the client sends neither.
-            var (sent, failure) = await RunAsync<SendSnapshotOutput>(
-                    ctx,
-                    typeof(ISendSnapshot),
-                    new SendSnapshotInput
-                    {
-                        Machine = machine.Name,
-                        Id = id,
-                        RequestId = requestId,
-                    },
-                    machine.Name,
-                    id
-                )
-                .ConfigureAwait(false);
-            return sent switch
-            {
-                { Problem: { } problem } => MachineAnswer.Refused(id, problem),
-                { Snapshot: { } wire } => MachineAnswer.Of(
-                    id,
-                    wire,
-                    sent.Revision,
-                    sent.DueAt,
-                    sent.DueAtKnown
-                ),
-                _ => Failed(id, failure),
-            };
-        }
+            return await SendEffectBoundAsync(ctx, machine, id, requestId).ConfigureAwait(false);
 
         var (input, sensitive) = InputJson(
             ctx,
@@ -156,6 +129,41 @@ internal static class MachineResolvers
                 advanced.DueAtKnown
             ),
             _ => Failed(id, failed),
+        };
+    }
+
+    private static async Task<MachineAnswer> SendEffectBoundAsync(
+        IResolverContext ctx,
+        IMachine machine,
+        Guid id,
+        string requestId
+    )
+    {
+        // The server runs the effect and hands the edge its receipt: the client sends neither.
+        var (sent, failure) = await RunAsync<SendSnapshotOutput>(
+                ctx,
+                typeof(ISendSnapshot),
+                new SendSnapshotInput
+                {
+                    Machine = machine.Name,
+                    Id = id,
+                    RequestId = requestId,
+                },
+                machine.Name,
+                id
+            )
+            .ConfigureAwait(false);
+        return sent switch
+        {
+            { Problem: { } problem } => MachineAnswer.Refused(id, problem),
+            { Snapshot: { } wire } => MachineAnswer.Of(
+                id,
+                wire,
+                sent.Revision,
+                sent.DueAt,
+                sent.DueAtKnown
+            ),
+            _ => Failed(id, failure),
         };
     }
 

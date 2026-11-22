@@ -50,47 +50,7 @@ public class TraxJwtDispatcherSocketE2ETests
         var host = new HostBuilder()
             .ConfigureWebHost(web =>
                 web.UseTestServer()
-                    .ConfigureServices(s =>
-                    {
-                        s.AddLogging();
-                        s.AddRouting();
-                        s.AddTraxJwtAuth(
-                            "cognito",
-                            jwt =>
-                                jwt.UseAuthority(jwks.Issuer, Audience)
-                                    .AllowHttpMetadata()
-                                    // Generous on purpose. ADR 0014 asks that nothing
-                                    // slower than a deadline sit under it, and warming
-                                    // the configuration below achieves that directly:
-                                    // once it is cached no HTTP happens under the socket
-                                    // receive at all. Pinning this under the receive
-                                    // instead only moved the failure into setup, where a
-                                    // slow first connect to the loopback JWKS server blew
-                                    // a 5s budget on a loaded CI runner.
-                                    .CustomizeBearerOptions(o =>
-                                        o.BackchannelTimeout = WarmupBudget
-                                    )
-                        );
-                        s.AddTraxJwtAuth(
-                            "internal",
-                            jwt => jwt.UseSymmetricKey(InternalIssuer, Audience, InternalKey)
-                        );
-                        s.AddTraxJwtDispatcher(d =>
-                            d.MapIssuer(jwks.Issuer, "cognito")
-                                .MapIssuer(InternalIssuer, "internal")
-                        );
-                        // The scanned trains include one gated by AdminPolicy, which must be registered.
-                        s.AddAuthorization(o =>
-                            o.AddPolicy("AdminPolicy", p => p.RequireRole("Admin"))
-                        );
-                        s.AddTrax(trax =>
-                            trax.AddEffects(effects => effects.UsePostgres(cs).AddJson())
-                                .AddMediator(typeof(AuthE2EHost).Assembly)
-                        );
-                        s.AddTraxApi();
-                        s.AddDbContextFactory<TestDbContext>(o => o.UseNpgsql(cs));
-                        s.AddTraxGraphQL(graphql => graphql.AddDbContext<TestDbContext>());
-                    })
+                    .ConfigureServices(s => ConfigureHostServices(s, jwks, cs))
                     .Configure(app =>
                     {
                         app.UseRouting();
@@ -104,6 +64,43 @@ public class TraxJwtDispatcherSocketE2ETests
         await host.StartAsync().ConfigureAwait(false);
         await WarmJwksMetadataAsync(host, jwks).ConfigureAwait(false);
         return (host, jwks);
+    }
+
+    private static void ConfigureHostServices(IServiceCollection s, TestJwksServer jwks, string cs)
+    {
+        s.AddLogging();
+        s.AddRouting();
+        s.AddTraxJwtAuth(
+            "cognito",
+            jwt =>
+                jwt.UseAuthority(jwks.Issuer, Audience)
+                    .AllowHttpMetadata()
+                    // Generous on purpose. ADR 0014 asks that nothing
+                    // slower than a deadline sit under it, and warming
+                    // the configuration below achieves that directly:
+                    // once it is cached no HTTP happens under the socket
+                    // receive at all. Pinning this under the receive
+                    // instead only moved the failure into setup, where a
+                    // slow first connect to the loopback JWKS server blew
+                    // a 5s budget on a loaded CI runner.
+                    .CustomizeBearerOptions(o => o.BackchannelTimeout = WarmupBudget)
+        );
+        s.AddTraxJwtAuth(
+            "internal",
+            jwt => jwt.UseSymmetricKey(InternalIssuer, Audience, InternalKey)
+        );
+        s.AddTraxJwtDispatcher(d =>
+            d.MapIssuer(jwks.Issuer, "cognito").MapIssuer(InternalIssuer, "internal")
+        );
+        // The scanned trains include one gated by AdminPolicy, which must be registered.
+        s.AddAuthorization(o => o.AddPolicy("AdminPolicy", p => p.RequireRole("Admin")));
+        s.AddTrax(trax =>
+            trax.AddEffects(effects => effects.UsePostgres(cs).AddJson())
+                .AddMediator(typeof(AuthE2EHost).Assembly)
+        );
+        s.AddTraxApi();
+        s.AddDbContextFactory<TestDbContext>(o => o.UseNpgsql(cs));
+        s.AddTraxGraphQL(graphql => graphql.AddDbContext<TestDbContext>());
     }
 
     /// <summary>

@@ -128,6 +128,34 @@ public class ParityOperationsOverHttpTests
     public async Task OneTimeSetUp()
     {
         _operations = Substitute.For<IOperationsService>();
+        StubBatchOperations();
+        StubRecordedDecisions();
+
+        _effects = Substitute.For<IEffectSettingsService>();
+        StubEffects();
+
+        _logLevels = Substitute.For<ILogLevelService>();
+        StubLogLevels();
+
+        _host = new HostBuilder()
+            .ConfigureWebHost(web =>
+                web.UseTestServer()
+                    .ConfigureServices(ConfigureParityServices)
+                    .Configure(app =>
+                    {
+                        app.UseRouting();
+                        app.UseAuthentication();
+                        app.UseAuthorization();
+                        app.UseEndpoints(e => e.MapGraphQL("/trax/graphql", "trax"));
+                    })
+            )
+            .Build();
+
+        await _host.NotNull().StartAsync();
+    }
+
+    private void StubBatchOperations()
+    {
         _operations
             .NotNull()
             .TriggerManifestsAsync(
@@ -161,6 +189,10 @@ public class ParityOperationsOverHttpTests
                 Arg.Any<CancellationToken>()
             )
             .Returns(new OperationResult(Success: true, Count: 5, Message: "5 flagged"));
+    }
+
+    private void StubRecordedDecisions()
+    {
         _operations
             .NotNull()
             .GetRecordedDecisionsAsync(
@@ -198,8 +230,10 @@ public class ParityOperationsOverHttpTests
                     11
                 )
             );
+    }
 
-        _effects = Substitute.For<IEffectSettingsService>();
+    private void StubEffects()
+    {
         _effects
             .NotNull()
             .GetEffects()
@@ -242,8 +276,10 @@ public class ParityOperationsOverHttpTests
                     }
                 )
             );
+    }
 
-        _logLevels = Substitute.For<ILogLevelService>();
+    private void StubLogLevels()
+    {
         _logLevels
             .NotNull()
             .GetLogLevels()
@@ -259,54 +295,39 @@ public class ParityOperationsOverHttpTests
             .NotNull()
             .SetLogLevels(Arg.Any<IReadOnlyList<LogLevelChange>>())
             .Returns(new LogLevelUpdateResult(Success: true, 1, [], "1 set"));
+    }
 
-        _host = new HostBuilder()
-            .ConfigureWebHost(web =>
-                web.UseTestServer()
-                    .ConfigureServices(services =>
-                    {
-                        services.AddLogging();
-                        services.AddRouting();
-                        services.AddTraxApiKeyAuth(keys =>
-                            keys.Add(AdminKey, id: "admin", "Admin")
-                                .Add(ReaderKey, id: "reader", "Reader")
-                        );
-                        services.AddSingleton<TraxMarker>();
-                        var discovery = Substitute.For<ITrainDiscoveryService>();
-                        discovery.DiscoverTrains().Returns([]);
-                        services.AddSingleton(discovery);
-                        services.AddSingleton(Substitute.For<IEffectRegistry>());
-                        services.AddTraxGraphQL(graphql =>
-                            graphql
-                                .ExposeOperationQueries()
-                                .ExposeOperationMutations()
-                                .GateOperations(roles: "Admin")
-                        );
+    private void ConfigureParityServices(IServiceCollection services)
+    {
+        services.AddLogging();
+        services.AddRouting();
+        services.AddTraxApiKeyAuth(keys =>
+            keys.Add(AdminKey, id: "admin", "Admin").Add(ReaderKey, id: "reader", "Reader")
+        );
+        services.AddSingleton<TraxMarker>();
+        var discovery = Substitute.For<ITrainDiscoveryService>();
+        discovery.DiscoverTrains().Returns([]);
+        services.AddSingleton(discovery);
+        services.AddSingleton(Substitute.For<IEffectRegistry>());
+        services.AddTraxGraphQL(graphql =>
+            graphql
+                .ExposeOperationQueries()
+                .ExposeOperationMutations()
+                .GateOperations(roles: "Admin")
+        );
 
-                        var graphs = Substitute.For<ITrainChainGraphs>();
-                        graphs.Find(RoutedTrain).Returns(RoutedGraph);
-                        services.AddSingleton(graphs);
+        var graphs = Substitute.For<ITrainChainGraphs>();
+        graphs.Find(RoutedTrain).Returns(RoutedGraph);
+        services.AddSingleton(graphs);
 
-                        services.AddScoped(_ => _operations.NotNull());
-                        services.AddScoped(_ => _effects.NotNull());
-                        services.AddSingleton(_logLevels.NotNull());
-                        services.AddScoped(_ => Substitute.For<ITraxScheduler>());
-                        services.AddScoped(_ => Substitute.For<ITrainExecutionService>());
-                        services.AddScoped(_ =>
-                            Substitute.For<Trax.Scheduler.Services.JobSubmitter.IJobSubmitter>()
-                        );
-                    })
-                    .Configure(app =>
-                    {
-                        app.UseRouting();
-                        app.UseAuthentication();
-                        app.UseAuthorization();
-                        app.UseEndpoints(e => e.MapGraphQL("/trax/graphql", "trax"));
-                    })
-            )
-            .Build();
-
-        await _host.NotNull().StartAsync();
+        services.AddScoped(_ => _operations.NotNull());
+        services.AddScoped(_ => _effects.NotNull());
+        services.AddSingleton(_logLevels.NotNull());
+        services.AddScoped(_ => Substitute.For<ITraxScheduler>());
+        services.AddScoped(_ => Substitute.For<ITrainExecutionService>());
+        services.AddScoped(_ =>
+            Substitute.For<Trax.Scheduler.Services.JobSubmitter.IJobSubmitter>()
+        );
     }
 
     [OneTimeTearDown]

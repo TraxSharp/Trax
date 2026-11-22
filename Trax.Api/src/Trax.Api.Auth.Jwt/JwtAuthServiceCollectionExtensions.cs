@@ -187,6 +187,33 @@ public static class JwtAuthServiceCollectionExtensions
         var mappings = new Dictionary<string, string>(builder.Mappings, StringComparer.Ordinal);
         var dispatcherSchemeName = builder.SchemeName;
 
+        AddDispatcherScheme(authBuilder, dispatcherSchemeName, mappings, fallback);
+        AddDispatcherPolicy(services, dispatcherSchemeName, mappings, builder);
+
+        IncludeInTraxAuthPolicy(services, dispatcherSchemeName);
+
+        // Expose the routing table to the GraphQL subscription socket path, which
+        // has no authentication middleware and cannot use the policy scheme above.
+        // FallbackSchemeName is null when unmapped issuers should be rejected (the
+        // reject scheme is HTTP-only and has no JWT options to validate against).
+        JwtResolverRegistry.GetOrAdd(services);
+        services.TryAddSingleton(sp => new JwtDispatcherRuntime(
+            mappings,
+            builder.FallbackSchemeName,
+            sp.GetRequiredService<JwtResolverRegistry>()
+        ));
+
+        return authBuilder;
+    }
+
+    // The policy scheme that forwards a request to the scheme its token's issuer maps to, or to the fallback.
+    private static void AddDispatcherScheme(
+        AuthenticationBuilder authBuilder,
+        string dispatcherSchemeName,
+        Dictionary<string, string> mappings,
+        string fallback
+    )
+    {
         authBuilder.AddPolicyScheme(
             dispatcherSchemeName,
             displayName: dispatcherSchemeName,
@@ -205,7 +232,15 @@ public static class JwtAuthServiceCollectionExtensions
                 };
             }
         );
+    }
 
+    private static void AddDispatcherPolicy(
+        IServiceCollection services,
+        string dispatcherSchemeName,
+        Dictionary<string, string> mappings,
+        JwtDispatcherBuilder builder
+    )
+    {
         services
             .AddAuthorizationBuilder()
             .AddPolicy(
@@ -225,21 +260,6 @@ public static class JwtAuthServiceCollectionExtensions
                             ])
                         )
             );
-
-        IncludeInTraxAuthPolicy(services, dispatcherSchemeName);
-
-        // Expose the routing table to the GraphQL subscription socket path, which
-        // has no authentication middleware and cannot use the policy scheme above.
-        // FallbackSchemeName is null when unmapped issuers should be rejected (the
-        // reject scheme is HTTP-only and has no JWT options to validate against).
-        JwtResolverRegistry.GetOrAdd(services);
-        services.TryAddSingleton(sp => new JwtDispatcherRuntime(
-            mappings,
-            builder.FallbackSchemeName,
-            sp.GetRequiredService<JwtResolverRegistry>()
-        ));
-
-        return authBuilder;
     }
 
     private static bool IsSchemeRegistered(IServiceCollection services, string schemeName) =>
@@ -345,63 +365,69 @@ public static class JwtAuthServiceCollectionExtensions
             if (existingValidated is not null)
                 await existingValidated(context).ConfigureAwait(false);
 
-            if (context.Result is not null)
-                return;
-
-            if (context.Principal is null || context.SecurityToken is null)
-            {
-                context.Fail("JWT validation completed without a principal or security token.");
-                return;
-            }
-
-            var sp = context.HttpContext.RequestServices;
-            var schemeName = context.Scheme.Name;
-
-            ITraxPrincipalResolver<JwtTokenInput>? resolver;
-            try
-            {
-                resolver = ResolvePrincipalResolver(sp, schemeName);
-            }
-            catch (Exception ex)
-            {
-                context.Fail(ex);
-                return;
-            }
-            if (resolver is null)
-            {
-                context.Fail(
-                    string.Equals(schemeName, JwtDefaults.SchemeName, StringComparison.Ordinal)
-                        ? "No ITraxPrincipalResolver<JwtTokenInput> registered. "
-                            + "Call AddTraxJwtAuth before UseAuthentication."
-                        : $"No ITraxPrincipalResolver<JwtTokenInput> registered for scheme '{schemeName}'."
-                );
-                return;
-            }
-
-            TraxPrincipal? traxPrincipal;
-            try
-            {
-                var input = new JwtTokenInput(context.Principal, context.SecurityToken);
-                traxPrincipal = await resolver
-                    .ResolveAsync(input, context.HttpContext.RequestAborted)
-                    .ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                context.Fail(ex);
-                return;
-            }
-
-            if (traxPrincipal is null)
-            {
-                context.Fail("JWT did not map to a known Trax principal.");
-                return;
-            }
-
-            context.Principal = traxPrincipal.ToClaimsPrincipal(context.Scheme.Name);
+            await ResolveTraxPrincipalAsync(context).ConfigureAwait(false);
         };
 
         jwtBuilder.BearerOptionsCustomizer?.Invoke(options);
+    }
+
+    // Replaces the validated principal with the Trax principal the scheme's resolver maps it to, or fails the token.
+    private static async Task ResolveTraxPrincipalAsync(TokenValidatedContext context)
+    {
+        if (context.Result is not null)
+            return;
+
+        if (context.Principal is null || context.SecurityToken is null)
+        {
+            context.Fail("JWT validation completed without a principal or security token.");
+            return;
+        }
+
+        var sp = context.HttpContext.RequestServices;
+        var schemeName = context.Scheme.Name;
+
+        ITraxPrincipalResolver<JwtTokenInput>? resolver;
+        try
+        {
+            resolver = ResolvePrincipalResolver(sp, schemeName);
+        }
+        catch (Exception ex)
+        {
+            context.Fail(ex);
+            return;
+        }
+        if (resolver is null)
+        {
+            context.Fail(
+                string.Equals(schemeName, JwtDefaults.SchemeName, StringComparison.Ordinal)
+                    ? "No ITraxPrincipalResolver<JwtTokenInput> registered. "
+                        + "Call AddTraxJwtAuth before UseAuthentication."
+                    : $"No ITraxPrincipalResolver<JwtTokenInput> registered for scheme '{schemeName}'."
+            );
+            return;
+        }
+
+        TraxPrincipal? traxPrincipal;
+        try
+        {
+            var input = new JwtTokenInput(context.Principal, context.SecurityToken);
+            traxPrincipal = await resolver
+                .ResolveAsync(input, context.HttpContext.RequestAborted)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            context.Fail(ex);
+            return;
+        }
+
+        if (traxPrincipal is null)
+        {
+            context.Fail("JWT did not map to a known Trax principal.");
+            return;
+        }
+
+        context.Principal = traxPrincipal.ToClaimsPrincipal(context.Scheme.Name);
     }
 
     private static ITraxPrincipalResolver<JwtTokenInput>? ResolvePrincipalResolver(

@@ -52,30 +52,7 @@ public class ManifestMutationRefusalTests
         }
 
         var discovery = Substitute.For<ITrainDiscoveryService>();
-        discovery
-            .DiscoverTrains()
-            .Returns([
-                new TrainRegistration
-                {
-                    ServiceType = typeof(IRefusalTrain),
-                    ImplementationType = typeof(RefusalTrain),
-                    InputType = typeof(RefusalInput),
-                    OutputType = typeof(Unit),
-                    Lifetime = ServiceLifetime.Scoped,
-                    ServiceTypeName = nameof(IRefusalTrain),
-                    ImplementationTypeName = nameof(RefusalTrain),
-                    HasAllowAnonymousAttribute = true,
-                    InputTypeName = nameof(RefusalInput),
-                    OutputTypeName = nameof(Unit),
-                    RequiredPolicies = [],
-                    RequiredRoles = [],
-                    IsQuery = false,
-                    IsMutation = true,
-                    IsRemote = false,
-                    IsBroadcastEnabled = false,
-                    GraphQLOperations = GraphQLOperation.Run,
-                },
-            ]);
+        discovery.DiscoverTrains().Returns([RefusalTrainRegistration()]);
 
         var services = new ServiceCollection();
         services.AddLogging();
@@ -108,6 +85,28 @@ public class ManifestMutationRefusalTests
             .GetRequiredService<IRequestExecutorProvider>()
             .GetExecutorAsync("trax");
     }
+
+    private static TrainRegistration RefusalTrainRegistration() =>
+        new TrainRegistration
+        {
+            ServiceType = typeof(IRefusalTrain),
+            ImplementationType = typeof(RefusalTrain),
+            InputType = typeof(RefusalInput),
+            OutputType = typeof(Unit),
+            Lifetime = ServiceLifetime.Scoped,
+            ServiceTypeName = nameof(IRefusalTrain),
+            ImplementationTypeName = nameof(RefusalTrain),
+            HasAllowAnonymousAttribute = true,
+            InputTypeName = nameof(RefusalInput),
+            OutputTypeName = nameof(Unit),
+            RequiredPolicies = [],
+            RequiredRoles = [],
+            IsQuery = false,
+            IsMutation = true,
+            IsRemote = false,
+            IsBroadcastEnabled = false,
+            GraphQLOperations = GraphQLOperation.Run,
+        };
 
     [TearDown]
     public async Task TearDown()

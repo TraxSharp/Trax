@@ -17,7 +17,15 @@ public class TypeExtensionExposureRuleTests
     /// All 24 combinations, with the expected answer spelled out rather than computed, so a change
     /// to the rule has to change this table too.
     /// </summary>
-    private static IEnumerable<TestCaseData> Matrix()
+    private static IEnumerable<TestCaseData> Matrix() =>
+        OpenEndpointAnonymousParent()
+            .Concat(OpenEndpointGatedParent())
+            .Concat(OpenEndpointNotExposedParent())
+            .Concat(GatedEndpointAnonymousParent())
+            .Concat(GatedEndpointGatedParent())
+            .Concat(GatedEndpointNotExposedParent());
+
+    private static IEnumerable<TestCaseData> OpenEndpointAnonymousParent()
     {
         // Endpoint open. Only a field whose parent gives it nothing has to declare.
         yield return Case(
@@ -48,7 +56,10 @@ public class TypeExtensionExposureRuleTests
             gated: false,
             ExposureViolation.Conflict
         );
+    }
 
+    private static IEnumerable<TestCaseData> OpenEndpointGatedParent()
+    {
         yield return Case(
             TypeExtensionParentPosture.Gated,
             authorize: false,
@@ -77,7 +88,10 @@ public class TypeExtensionExposureRuleTests
             gated: false,
             ExposureViolation.Conflict
         );
+    }
 
+    private static IEnumerable<TestCaseData> OpenEndpointNotExposedParent()
+    {
         yield return Case(
             TypeExtensionParentPosture.NotExposed,
             authorize: false,
@@ -106,7 +120,10 @@ public class TypeExtensionExposureRuleTests
             gated: false,
             ExposureViolation.Conflict
         );
+    }
 
+    private static IEnumerable<TestCaseData> GatedEndpointAnonymousParent()
+    {
         // Endpoint gated. Nothing has to declare, because the endpoint already rejects the
         // anonymous caller, but declaring two contradictory things is still incoherent.
         yield return Case(
@@ -137,79 +154,85 @@ public class TypeExtensionExposureRuleTests
             gated: true,
             ExposureViolation.Conflict
         );
-
-        yield return Case(
-            TypeExtensionParentPosture.Gated,
-            authorize: false,
-            anonymous: false,
-            gated: true,
-            ExposureViolation.None
-        );
-        yield return Case(
-            TypeExtensionParentPosture.Gated,
-            authorize: true,
-            anonymous: false,
-            gated: true,
-            ExposureViolation.None
-        );
-        yield return Case(
-            TypeExtensionParentPosture.Gated,
-            authorize: false,
-            anonymous: true,
-            gated: true,
-            ExposureViolation.None
-        );
-        yield return Case(
-            TypeExtensionParentPosture.Gated,
-            authorize: true,
-            anonymous: true,
-            gated: true,
-            ExposureViolation.Conflict
-        );
-
-        yield return Case(
-            TypeExtensionParentPosture.NotExposed,
-            authorize: false,
-            anonymous: false,
-            gated: true,
-            ExposureViolation.None
-        );
-        yield return Case(
-            TypeExtensionParentPosture.NotExposed,
-            authorize: true,
-            anonymous: false,
-            gated: true,
-            ExposureViolation.None
-        );
-        yield return Case(
-            TypeExtensionParentPosture.NotExposed,
-            authorize: false,
-            anonymous: true,
-            gated: true,
-            ExposureViolation.None
-        );
-        yield return Case(
-            TypeExtensionParentPosture.NotExposed,
-            authorize: true,
-            anonymous: true,
-            gated: true,
-            ExposureViolation.Conflict
-        );
-
-        static TestCaseData Case(
-            TypeExtensionParentPosture parent,
-            bool authorize,
-            bool anonymous,
-            bool gated,
-            ExposureViolation expected
-        ) =>
-            new TestCaseData(parent, authorize, anonymous, gated, expected).SetName(
-                $"{parent}_"
-                    + $"{(authorize ? "Authorize" : "NoAuthorize")}_"
-                    + $"{(anonymous ? "AllowAnonymous" : "NoAllowAnonymous")}_"
-                    + $"{(gated ? "EndpointGated" : "EndpointOpen")}"
-            );
     }
+
+    private static IEnumerable<TestCaseData> GatedEndpointGatedParent()
+    {
+        yield return Case(
+            TypeExtensionParentPosture.Gated,
+            authorize: false,
+            anonymous: false,
+            gated: true,
+            ExposureViolation.None
+        );
+        yield return Case(
+            TypeExtensionParentPosture.Gated,
+            authorize: true,
+            anonymous: false,
+            gated: true,
+            ExposureViolation.None
+        );
+        yield return Case(
+            TypeExtensionParentPosture.Gated,
+            authorize: false,
+            anonymous: true,
+            gated: true,
+            ExposureViolation.None
+        );
+        yield return Case(
+            TypeExtensionParentPosture.Gated,
+            authorize: true,
+            anonymous: true,
+            gated: true,
+            ExposureViolation.Conflict
+        );
+    }
+
+    private static IEnumerable<TestCaseData> GatedEndpointNotExposedParent()
+    {
+        yield return Case(
+            TypeExtensionParentPosture.NotExposed,
+            authorize: false,
+            anonymous: false,
+            gated: true,
+            ExposureViolation.None
+        );
+        yield return Case(
+            TypeExtensionParentPosture.NotExposed,
+            authorize: true,
+            anonymous: false,
+            gated: true,
+            ExposureViolation.None
+        );
+        yield return Case(
+            TypeExtensionParentPosture.NotExposed,
+            authorize: false,
+            anonymous: true,
+            gated: true,
+            ExposureViolation.None
+        );
+        yield return Case(
+            TypeExtensionParentPosture.NotExposed,
+            authorize: true,
+            anonymous: true,
+            gated: true,
+            ExposureViolation.Conflict
+        );
+    }
+
+    private static TestCaseData Case(
+        TypeExtensionParentPosture parent,
+        bool authorize,
+        bool anonymous,
+        bool gated,
+        ExposureViolation expected
+    ) =>
+        new TestCaseData(parent, authorize, anonymous, gated, expected).SetName(
+            $"{parent}_"
+                + $"{(authorize ? "Authorize" : "NoAuthorize")}_"
+                + $"{(anonymous ? "AllowAnonymous" : "NoAllowAnonymous")}_"
+                + $"{(gated ? "EndpointGated" : "EndpointOpen")}"
+        );
 
     /// <summary>
     /// The enums are internal, and a public test method cannot name them in its signature, so the

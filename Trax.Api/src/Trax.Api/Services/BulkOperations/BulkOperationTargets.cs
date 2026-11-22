@@ -226,28 +226,7 @@ internal static class BulkOperationTargets
             }
             case BulkOperationKind.Requeue:
             {
-                var scheduler = services.GetRequiredService<ITraxScheduler>();
-                // The overload is called only when asked, so a host whose scheduler predates it
-                // keeps the default path.
-                var result = run.AskAfresh
-                    ? await scheduler
-                        .RequeueDeadLettersAsync(batch, askAfresh: true, ct)
-                        .ConfigureAwait(false)
-                    : await scheduler.RequeueDeadLettersAsync(batch, ct).ConfigureAwait(false);
-                if (
-                    result.Count == 0
-                    && string.Equals(
-                        result.Message,
-                        OperationsService.NoDispatcherMessage,
-                        StringComparison.Ordinal
-                    )
-                )
-                    return ([], result.Message);
-                return (
-                    await DeadLetterFailuresAsync(factory, batch, DeadLetterStatus.Retried, ct)
-                        .ConfigureAwait(false),
-                    null
-                );
+                return await RequeueAsync(run, batch, services, factory, ct).ConfigureAwait(false);
             }
             case BulkOperationKind.Acknowledge:
             {
@@ -278,21 +257,71 @@ internal static class BulkOperationTargets
             case BulkOperationKind.Enable:
             case BulkOperationKind.Disable:
             {
-                var enabled = run.Kind == BulkOperationKind.Enable;
-                var result = await services
-                    .GetRequiredService<IOperationsService>()
-                    .SetManifestsEnabledAsync(batch, enabled, ct)
+                return await SetEnabledAsync(run, batch, services, factory, ct)
                     .ConfigureAwait(false);
-                if (!result.Success)
-                    return ([], result.Message ?? "The batch was refused.");
-                return (
-                    await ManifestFailuresAsync(factory, batch, enabled, ct).ConfigureAwait(false),
-                    null
-                );
             }
             default:
                 throw new ArgumentOutOfRangeException(nameof(run), run.Kind, message: null);
         }
+    }
+
+    private static async Task<(
+        IReadOnlyList<BulkOperationFailure> Failures,
+        string? Refusal
+    )> RequeueAsync(
+        BulkOperationRun run,
+        long[] batch,
+        IServiceProvider services,
+        IDataContextProviderFactory factory,
+        CancellationToken ct
+    )
+    {
+        var scheduler = services.GetRequiredService<ITraxScheduler>();
+        // The overload is called only when asked, so a host whose scheduler predates it
+        // keeps the default path.
+        var result = run.AskAfresh
+            ? await scheduler
+                .RequeueDeadLettersAsync(batch, askAfresh: true, ct)
+                .ConfigureAwait(false)
+            : await scheduler.RequeueDeadLettersAsync(batch, ct).ConfigureAwait(false);
+        if (
+            result.Count == 0
+            && string.Equals(
+                result.Message,
+                OperationsService.NoDispatcherMessage,
+                StringComparison.Ordinal
+            )
+        )
+            return ([], result.Message);
+        return (
+            await DeadLetterFailuresAsync(factory, batch, DeadLetterStatus.Retried, ct)
+                .ConfigureAwait(false),
+            null
+        );
+    }
+
+    private static async Task<(
+        IReadOnlyList<BulkOperationFailure> Failures,
+        string? Refusal
+    )> SetEnabledAsync(
+        BulkOperationRun run,
+        long[] batch,
+        IServiceProvider services,
+        IDataContextProviderFactory factory,
+        CancellationToken ct
+    )
+    {
+        var enabled = run.Kind == BulkOperationKind.Enable;
+        var result = await services
+            .GetRequiredService<IOperationsService>()
+            .SetManifestsEnabledAsync(batch, enabled, ct)
+            .ConfigureAwait(false);
+        if (!result.Success)
+            return ([], result.Message ?? "The batch was refused.");
+        return (
+            await ManifestFailuresAsync(factory, batch, enabled, ct).ConfigureAwait(false),
+            null
+        );
     }
 
     private static async Task<IReadOnlyList<BulkOperationFailure>> CancelFailuresAsync(

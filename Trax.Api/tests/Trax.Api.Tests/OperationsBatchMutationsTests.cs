@@ -585,21 +585,7 @@ public class OperationsBatchMutationsTests
         await using var host = BulkHost(out var channel);
         var jobs = host.GetRequiredService<BulkOperationJobs>();
         // The three end between the snapshot and their batch, as a run finishing on its own does.
-        jobs.BeforeFirstBatch = async ct =>
-        {
-            var db = await _factory.NotNull().CreateDbContextAsync(ct).ConfigureAwait(false);
-            await using (db.ConfigureAwait(false))
-            {
-                await ((DbContext)db)
-                    .Set<Metadata>()
-                    .Where(m => finishedFirst.Contains(m.Id))
-                    .ExecuteUpdateAsync(
-                        s => s.SetProperty(m => m.TrainState, TrainState.Completed),
-                        ct
-                    )
-                    .ConfigureAwait(false);
-            }
-        };
+        jobs.BeforeFirstBatch = CompleteRunsBeforeFirstBatch(finishedFirst);
 
         var started = await new OperationsMutations().StartBulkOperation(
             BulkOperationKind.Cancel,
@@ -637,6 +623,28 @@ public class OperationsBatchMutationsTests
         await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
             (await db.Metadatas.CountAsync(m => m.CancellationRequested)).Should().Be(247);
 
+        AssertCancelOutcomeAudited(channel);
+    }
+
+    private Func<CancellationToken, Task> CompleteRunsBeforeFirstBatch(long[] finishedFirst) =>
+        async ct =>
+        {
+            var db = await _factory.NotNull().CreateDbContextAsync(ct).ConfigureAwait(false);
+            await using (db.ConfigureAwait(false))
+            {
+                await ((DbContext)db)
+                    .Set<Metadata>()
+                    .Where(m => finishedFirst.Contains(m.Id))
+                    .ExecuteUpdateAsync(
+                        s => s.SetProperty(m => m.TrainState, TrainState.Completed),
+                        ct
+                    )
+                    .ConfigureAwait(false);
+            }
+        };
+
+    private static void AssertCancelOutcomeAudited(TraxAuditChannel channel)
+    {
         channel
             .Reader.TryRead(out var entry)
             .Should()

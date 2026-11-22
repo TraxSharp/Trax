@@ -217,12 +217,7 @@ public class RabbitMqBroadcasterTests
     [Test]
     public async Task TwoReceivers_BothObserveSameMessage()
     {
-        var options = OnRunExchange(
-            new PersistedOperationsBuilder()
-                .WithInMemoryCache()
-                .UseRabbitMqInvalidation(AmqpUri, TestInvalidationKey.Sign)
-                .Build()
-        );
+        var options = SignedOnRunExchange();
 
         var key = $"twonodes_{Guid.NewGuid():N}";
         var cacheA = new RecordingCache();
@@ -232,18 +227,8 @@ public class RabbitMqBroadcasterTests
             options,
             NullLogger<RabbitMqPersistedOperationBroadcaster>.Instance
         );
-        var receiverA = new PersistedOperationReceiverService(
-            options,
-            cacheA,
-            NoOpInvalidator(),
-            NullLogger<PersistedOperationReceiverService>.Instance
-        );
-        var receiverB = new PersistedOperationReceiverService(
-            options,
-            cacheB,
-            NoOpInvalidator(),
-            NullLogger<PersistedOperationReceiverService>.Instance
-        );
+        var receiverA = NewReceiver(options, cacheA);
+        var receiverB = NewReceiver(options, cacheB);
 
         var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
         await receiverA.StartAsync(cts.Token);
@@ -260,20 +245,8 @@ public class RabbitMqBroadcasterTests
                 cts.Token
             );
 
-            var sawA = await WaitUntilAsync(
-                () =>
-                    cacheA.Invalidations.Exists(p =>
-                        string.Equals(p.Id, key, StringComparison.Ordinal)
-                    ),
-                TimeSpan.FromSeconds(10)
-            );
-            var sawB = await WaitUntilAsync(
-                () =>
-                    cacheB.Invalidations.Exists(p =>
-                        string.Equals(p.Id, key, StringComparison.Ordinal)
-                    ),
-                TimeSpan.FromSeconds(10)
-            );
+            var sawA = await WaitForInvalidationAsync(cacheA, key);
+            var sawB = await WaitForInvalidationAsync(cacheB, key);
 
             sawA.Should().BeTrue("receiver A should see the broadcast");
             sawB.Should().BeTrue("receiver B should see the broadcast");
@@ -288,19 +261,9 @@ public class RabbitMqBroadcasterTests
     [Test]
     public async Task AMessageNotSignedWithTheKey_IsDropped_AndEmptiesNothing()
     {
-        var options = OnRunExchange(
-            new PersistedOperationsBuilder()
-                .WithInMemoryCache()
-                .UseRabbitMqInvalidation(AmqpUri, TestInvalidationKey.Sign)
-                .Build()
-        );
+        var options = SignedOnRunExchange();
         var cache = new RecordingCache();
-        var receiver = new PersistedOperationReceiverService(
-            options,
-            cache,
-            NoOpInvalidator(),
-            NullLogger<PersistedOperationReceiverService>.Instance
-        );
+        var receiver = NewReceiver(options, cache);
         await receiver.StartAsync(CancellationToken.None);
 
         var unsigned = $"unsigned_{Guid.NewGuid():N}";
@@ -308,44 +271,7 @@ public class RabbitMqBroadcasterTests
         var sentinel = $"sentinel_{Guid.NewGuid():N}";
         try
         {
-            var factory = new ConnectionFactory { Uri = new Uri(AmqpUri) };
-            await using (var connection = await factory.CreateConnectionAsync())
-            await using (
-                var channel = await connection.CreateChannelAsync(
-                    cancellationToken: CancellationToken.None
-                )
-            )
-            {
-                await channel.BasicPublishAsync(
-                    options.RabbitMqExchange,
-                    string.Empty,
-                    mandatory: false,
-                    new BasicProperties(),
-                    Body(unsigned),
-                    cancellationToken: CancellationToken.None
-                );
-                var otherKey = "another-key-of-thirty-two-bytes!"u8.ToArray();
-                await channel.BasicPublishAsync(
-                    options.RabbitMqExchange,
-                    string.Empty,
-                    mandatory: false,
-                    new BasicProperties
-                    {
-                        Headers = new Dictionary<string, object?>(StringComparer.Ordinal)
-                        {
-                            [InvalidationMessageSignature.Header] =
-                                InvalidationMessageSignature.Create(
-                                    otherKey,
-                                    options.RabbitMqExchange,
-                                    Body(forged),
-                                    TimeProvider.System.GetUtcNow()
-                                ),
-                        },
-                    },
-                    Body(forged),
-                    cancellationToken: CancellationToken.None
-                );
-            }
+            await PublishUnsignedAndForgedAsync(options.RabbitMqExchange, unsigned, forged, Body);
 
             await using var publisher = new RabbitMqPersistedOperationBroadcaster(
                 options,
@@ -353,15 +279,7 @@ public class RabbitMqBroadcasterTests
             );
             await publisher.PublishAsync(Change(sentinel), CancellationToken.None);
 
-            (
-                await WaitUntilAsync(
-                    () =>
-                        cache.Invalidations.Exists(p =>
-                            string.Equals(p.Id, sentinel, StringComparison.Ordinal)
-                        ),
-                    TimeSpan.FromSeconds(10)
-                )
-            )
+            (await WaitForInvalidationAsync(cache, sentinel))
                 .Should()
                 .BeTrue("a message signed with the key is received");
             cache
@@ -395,29 +313,14 @@ public class RabbitMqBroadcasterTests
         // After Stop, a published message must NOT reach the receiver's cache.
         // This proves StopAsync actually unbinds the consumer rather than
         // leaving it silently running.
-        var options = OnRunExchange(
-            new PersistedOperationsBuilder()
-                .WithInMemoryCache()
-                .UseRabbitMqInvalidation(AmqpUri, TestInvalidationKey.Sign)
-                .Build()
-        );
+        var options = SignedOnRunExchange();
         var cache = new RecordingCache();
-        var svc = new PersistedOperationReceiverService(
-            options,
-            cache,
-            NoOpInvalidator(),
-            NullLogger<PersistedOperationReceiverService>.Instance
-        );
+        var svc = NewReceiver(options, cache);
 
         // A receiver left running on the same exchange: once it has seen a sentinel published after
         // the message, the stopped receiver would have been handed that message too.
         var liveCache = new RecordingCache();
-        var live = new PersistedOperationReceiverService(
-            options,
-            liveCache,
-            NoOpInvalidator(),
-            NullLogger<PersistedOperationReceiverService>.Instance
-        );
+        var live = NewReceiver(options, liveCache);
 
         await svc.StartAsync(CancellationToken.None);
         await live.StartAsync(CancellationToken.None);
@@ -442,15 +345,7 @@ public class RabbitMqBroadcasterTests
                     CancellationToken.None
                 );
 
-            (
-                await WaitUntilAsync(
-                    () =>
-                        liveCache.Invalidations.Exists(p =>
-                            string.Equals(p.Id, sentinel, StringComparison.Ordinal)
-                        ),
-                    TimeSpan.FromSeconds(10)
-                )
-            )
+            (await WaitForInvalidationAsync(liveCache, sentinel))
                 .Should()
                 .BeTrue("the running receiver sees the sentinel");
             liveCache
@@ -473,12 +368,7 @@ public class RabbitMqBroadcasterTests
     [Test]
     public async Task AReceiverWhoseChannelTheBrokerCloses_EmptiesItsCaches_AndKeepsReceiving()
     {
-        var options = OnRunExchange(
-            new PersistedOperationsBuilder()
-                .WithInMemoryCache()
-                .UseRabbitMqInvalidation(AmqpUri, TestInvalidationKey.Sign)
-                .Build()
-        );
+        var options = SignedOnRunExchange();
         var cache = new RecordingCache();
         var generation = new PersistedOperationCacheGeneration();
         var svc = new PersistedOperationReceiverService(
@@ -509,35 +399,7 @@ public class RabbitMqBroadcasterTests
                 .BeTrue("a receiver that lost its channel may have missed a broadcast");
 
             var id = $"after_channel_close_{Guid.NewGuid():N}";
-            var received = await WaitUntilAsync(
-                async () =>
-                {
-                    try
-                    {
-                        await publisher
-                            .PublishAsync(
-                                new PersistedOperationChangedMessage(
-                                    TenantKey: null,
-                                    id,
-                                    PersistedOperationChangeType.Upsert,
-                                    TimeProvider.System.GetUtcNow().UtcDateTime
-                                ),
-                                CancellationToken.None
-                            )
-                            .ConfigureAwait(false);
-                    }
-                    catch (RabbitMQ.Client.Exceptions.PublishException)
-                    {
-                        // The broker nacks a publish routed to the old channel's auto-delete
-                        // queue while it is being deleted. Not yet resubscribed: try again.
-                        return false;
-                    }
-                    return cache.Invalidations.Exists(p =>
-                        string.Equals(p.Id, id, StringComparison.Ordinal)
-                    );
-                },
-                TimeSpan.FromSeconds(15)
-            );
+            var received = await PublishUntilReceivedAsync(publisher, cache, id);
             received.Should().BeTrue("the receiver subscribes again on a new channel");
         }
         finally
@@ -577,19 +439,9 @@ public class RabbitMqBroadcasterTests
         // Publish a non-JSON byte payload directly to the exchange. The
         // receiver's OnMessageAsync should fail to deserialize, log, and
         // nack without crashing the host.
-        var options = OnRunExchange(
-            new PersistedOperationsBuilder()
-                .WithInMemoryCache()
-                .UseRabbitMqInvalidation(AmqpUri, TestInvalidationKey.Sign)
-                .Build()
-        );
+        var options = SignedOnRunExchange();
         var cache = new RecordingCache();
-        var svc = new PersistedOperationReceiverService(
-            options,
-            cache,
-            NoOpInvalidator(),
-            NullLogger<PersistedOperationReceiverService>.Instance
-        );
+        var svc = NewReceiver(options, cache);
         await svc.StartAsync(CancellationToken.None);
 
         var factory = new RabbitMQ.Client.ConnectionFactory { Uri = new Uri(AmqpUri) };
@@ -597,50 +449,9 @@ public class RabbitMqBroadcasterTests
         await using var channel = await conn.CreateChannelAsync(
             cancellationToken: CancellationToken.None
         );
-        await channel.ExchangeDeclareAsync(
-            exchange: _exchange,
-            type: RabbitMQ.Client.ExchangeType.Fanout,
-            durable: true,
-            autoDelete: false,
-            cancellationToken: CancellationToken.None
-        );
-        await channel.BasicPublishAsync(
-            exchange: _exchange,
-            routingKey: string.Empty,
-            mandatory: false,
-            basicProperties: Signed(System.Text.Encoding.UTF8.GetBytes("garbage-not-json")),
-            body: System.Text.Encoding.UTF8.GetBytes("garbage-not-json"),
-            cancellationToken: CancellationToken.None
-        );
-
-        // A valid message published after it on the same channel reaches the queue after it, so once
-        // the receiver has handled it the malformed one was received and rejected.
         var sentinel = $"sentinel_{Guid.NewGuid():N}";
-        var sentinelBody = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(
-            new PersistedOperationChangedMessage(
-                TenantKey: null,
-                sentinel,
-                PersistedOperationChangeType.Upsert,
-                TimeProvider.System.GetUtcNow().UtcDateTime
-            )
-        );
-        await channel.BasicPublishAsync(
-            exchange: _exchange,
-            routingKey: string.Empty,
-            mandatory: false,
-            basicProperties: Signed(sentinelBody),
-            body: sentinelBody,
-            cancellationToken: CancellationToken.None
-        );
-        (
-            await WaitUntilAsync(
-                () =>
-                    cache.Invalidations.Exists(p =>
-                        string.Equals(p.Id, sentinel, StringComparison.Ordinal)
-                    ),
-                TimeSpan.FromSeconds(10)
-            )
-        )
+        await PublishGarbageThenSentinelAsync(channel, sentinel);
+        (await WaitForInvalidationAsync(cache, sentinel))
             .Should()
             .BeTrue("the receiver kept consuming after the malformed message");
         // No invalidations should have been recorded for the malformed payload,
@@ -666,6 +477,169 @@ public class RabbitMqBroadcasterTests
                 NullLogger<RabbitMqPersistedOperationBroadcaster>.Instance
             );
         act.Should().Throw<InvalidOperationException>();
+    }
+
+    private PersistedOperationsOptions SignedOnRunExchange() =>
+        OnRunExchange(
+            new PersistedOperationsBuilder()
+                .WithInMemoryCache()
+                .UseRabbitMqInvalidation(AmqpUri, TestInvalidationKey.Sign)
+                .Build()
+        );
+
+    private static PersistedOperationReceiverService NewReceiver(
+        PersistedOperationsOptions options,
+        RecordingCache cache
+    ) =>
+        new(
+            options,
+            cache,
+            NoOpInvalidator(),
+            NullLogger<PersistedOperationReceiverService>.Instance
+        );
+
+    private static Task<bool> WaitForInvalidationAsync(RecordingCache cache, string id) =>
+        WaitUntilAsync(
+            () =>
+                cache.Invalidations.Exists(p => string.Equals(p.Id, id, StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(10)
+        );
+
+    // One message with no signature and one signed with another key.
+    private static async Task PublishUnsignedAndForgedAsync(
+        string exchange,
+        string unsigned,
+        string forged,
+        Func<string, byte[]> body
+    )
+    {
+        var factory = new ConnectionFactory { Uri = new Uri(AmqpUri) };
+        var connection = await factory.CreateConnectionAsync().ConfigureAwait(false);
+        await using (connection.ConfigureAwait(false))
+        {
+            var channel = await connection
+                .CreateChannelAsync(cancellationToken: CancellationToken.None)
+                .ConfigureAwait(false);
+            await using (channel.ConfigureAwait(false))
+            {
+                await channel
+                    .BasicPublishAsync(
+                        exchange,
+                        string.Empty,
+                        mandatory: false,
+                        new BasicProperties(),
+                        body(unsigned),
+                        cancellationToken: CancellationToken.None
+                    )
+                    .ConfigureAwait(false);
+                var otherKey = "another-key-of-thirty-two-bytes!"u8.ToArray();
+                await channel
+                    .BasicPublishAsync(
+                        exchange,
+                        string.Empty,
+                        mandatory: false,
+                        new BasicProperties
+                        {
+                            Headers = new Dictionary<string, object?>(StringComparer.Ordinal)
+                            {
+                                [InvalidationMessageSignature.Header] =
+                                    InvalidationMessageSignature.Create(
+                                        otherKey,
+                                        exchange,
+                                        body(forged),
+                                        TimeProvider.System.GetUtcNow()
+                                    ),
+                            },
+                        },
+                        body(forged),
+                        cancellationToken: CancellationToken.None
+                    )
+                    .ConfigureAwait(false);
+            }
+        }
+    }
+
+    // Publishes until the receiver has the message, retrying while it is not yet subscribed.
+    private static async Task<bool> PublishUntilReceivedAsync(
+        RabbitMqPersistedOperationBroadcaster publisher,
+        RecordingCache cache,
+        string id
+    )
+    {
+        return await WaitUntilAsync(
+                async () =>
+                {
+                    try
+                    {
+                        await publisher
+                            .PublishAsync(
+                                new PersistedOperationChangedMessage(
+                                    TenantKey: null,
+                                    id,
+                                    PersistedOperationChangeType.Upsert,
+                                    TimeProvider.System.GetUtcNow().UtcDateTime
+                                ),
+                                CancellationToken.None
+                            )
+                            .ConfigureAwait(false);
+                    }
+                    catch (RabbitMQ.Client.Exceptions.PublishException)
+                    {
+                        // The broker nacks a publish routed to the old channel's auto-delete
+                        // queue while it is being deleted. Not yet resubscribed: try again.
+                        return false;
+                    }
+                    return cache.Invalidations.Exists(p =>
+                        string.Equals(p.Id, id, StringComparison.Ordinal)
+                    );
+                },
+                TimeSpan.FromSeconds(15)
+            )
+            .ConfigureAwait(false);
+    }
+
+    private async Task PublishGarbageThenSentinelAsync(IChannel channel, string sentinel)
+    {
+        await channel
+            .ExchangeDeclareAsync(
+                exchange: _exchange,
+                type: RabbitMQ.Client.ExchangeType.Fanout,
+                durable: true,
+                autoDelete: false,
+                cancellationToken: CancellationToken.None
+            )
+            .ConfigureAwait(false);
+        await channel
+            .BasicPublishAsync(
+                exchange: _exchange,
+                routingKey: string.Empty,
+                mandatory: false,
+                basicProperties: Signed(System.Text.Encoding.UTF8.GetBytes("garbage-not-json")),
+                body: System.Text.Encoding.UTF8.GetBytes("garbage-not-json"),
+                cancellationToken: CancellationToken.None
+            )
+            .ConfigureAwait(false);
+
+        // A valid message published after it on the same channel reaches the queue after it, so once
+        // the receiver has handled it the malformed one was received and rejected.
+        var sentinelBody = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(
+            new PersistedOperationChangedMessage(
+                TenantKey: null,
+                sentinel,
+                PersistedOperationChangeType.Upsert,
+                TimeProvider.System.GetUtcNow().UtcDateTime
+            )
+        );
+        await channel
+            .BasicPublishAsync(
+                exchange: _exchange,
+                routingKey: string.Empty,
+                mandatory: false,
+                basicProperties: Signed(sentinelBody),
+                body: sentinelBody,
+                cancellationToken: CancellationToken.None
+            )
+            .ConfigureAwait(false);
     }
 
     /// <summary>

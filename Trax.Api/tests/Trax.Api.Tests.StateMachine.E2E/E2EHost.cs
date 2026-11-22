@@ -133,103 +133,9 @@ public static class E2EHost
             .ConfigureWebHost(web =>
                 web.UseTestServer()
                     .ConfigureServices(services =>
-                    {
-                        services.AddLogging();
-                        services.AddRouting();
-
-                        services.AddTraxApiKeyAuth(keys =>
-                            keys.Add(AdminApiKey, id: "admin", "Admin")
-                                .Add(
-                                    AliceKey,
-                                    id: "alice",
-                                    WizardMachine.PayerRole,
-                                    WizardMachine.ApproverRole
-                                )
-                                .Add(BobKey, id: "bob")
-                                .Add(CarolKey, id: "carol", WizardMachine.PayerRole)
-                                .Add(OperatorKey, id: "operator", OperatorRole, "Admin")
-                        );
-                        options.Authentication?.Invoke(services);
-                        services.AddAuthorization();
-
-                        // Trax core + state machines + mediator in one chain. AddStateMachines wires the store /
-                        // claim ledger / exactly-once runner / registry over the machines registered below, and
-                        // contributes the six generic mutation trains to the mediator scan (they ship in the persistence
-                        // package, not this one) so Trax routes them by input type. The host names neither the
-                        // snapshot tables nor the mutations' assembly. AddStateMachines precedes AddMediator.
-                        // The wizard invokes a train, so the host checks a run's cancel flag between junctions.
-                        services.AddTrax(trax =>
-                            trax.AddEffects(effects =>
-                                {
-                                    var configured = effects
-                                        .UsePostgres(connectionString)
-                                        .AddJson()
-                                        .AddJunctionProgress();
-                                    return options.SaveTrainParameters
-                                        ? configured.SaveTrainParameters()
-                                        : configured;
-                                })
-                                .AddStateMachines(options.Machines)
-                                .AddMediator(typeof(E2EHost).Assembly)
-                        );
-                        // The machines, registered by hand: the ones the test serves as their marked subclasses.
-                        E2EMachines.Register(services, options.Served);
-                        foreach (var machine in options.Instances)
-                            services.AddSingleton(machine);
-                        if (options.Views is { } views)
-                            services.AddSingleton(views);
-
-                        // The two things a machine can't know: map auth to a user key, and the effect impl.
-                        services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
-                        services.AddSingleton(charge);
-
-                        if (options.ExposeOperations)
-                            AddOperationsServices(services);
-
-                        if (options.Trains is { } keep)
-                            services.AddSingleton<ITrainDiscoveryService>(
-                                new KeptTrains(new TrainDiscoveryService(services), keep)
-                            );
-
-                        services.AddTraxApi();
-                        // The six stateMachine trains are all mutations; the Ping query train (this
-                        // assembly) keeps the root Query type non-empty so HotChocolate can build.
-                        services.AddTraxGraphQL(graphql =>
-                        {
-                            if (options.ExposeOperations)
-                                graphql = graphql
-                                    .ExposeOperationQueries()
-                                    .ExposeOperationMutations()
-                                    .GateOperations(roles: OperatorRole);
-                            graphql = options.GraphQL?.Invoke(graphql) ?? graphql;
-                            // A host that exposes machines needs persisted operations; a test that configures them
-                            // itself keeps its own configuration.
-                            return
-                                (
-                                    options.Machines is null
-                                    && options.Served.Count == 0
-                                    && options.Instances.Count == 0
-                                )
-                                || services.Any(d =>
-                                    d.ServiceType == typeof(IPersistedOperationsCapability)
-                                )
-                                ? graphql
-                                : MachineDocumentOps.Persisted()(graphql);
-                        });
-
-                        options.Services?.Invoke(services);
-                    })
-                    .Configure(app =>
-                    {
-                        app.UseRouting();
-                        app.UseAuthentication();
-                        app.UseAuthorization();
-                        app.UseEndpoints(endpoints =>
-                        {
-                            endpoints.MapGraphQL("/trax/graphql", "trax");
-                            options.Endpoints?.Invoke(endpoints);
-                        });
-                    })
+                        ConfigureServices(services, charge, options, connectionString)
+                    )
+                    .Configure(app => ConfigureApp(app, options))
             )
             .Build();
 
@@ -243,6 +149,109 @@ public static class E2EHost
             throw;
         }
         return host;
+    }
+
+    private static void ConfigureServices(
+        IServiceCollection services,
+        IOrderCharge charge,
+        E2EHostOptions options,
+        string connectionString
+    )
+    {
+        services.AddLogging();
+        services.AddRouting();
+
+        AddApiKeys(services);
+        options.Authentication?.Invoke(services);
+        services.AddAuthorization();
+
+        // Trax core + state machines + mediator in one chain. AddStateMachines wires the store /
+        // claim ledger / exactly-once runner / registry over the machines registered below, and
+        // contributes the six generic mutation trains to the mediator scan (they ship in the persistence
+        // package, not this one) so Trax routes them by input type. The host names neither the
+        // snapshot tables nor the mutations' assembly. AddStateMachines precedes AddMediator.
+        // The wizard invokes a train, so the host checks a run's cancel flag between junctions.
+        services.AddTrax(trax =>
+            trax.AddEffects(effects =>
+                {
+                    var configured = effects
+                        .UsePostgres(connectionString)
+                        .AddJson()
+                        .AddJunctionProgress();
+                    return options.SaveTrainParameters
+                        ? configured.SaveTrainParameters()
+                        : configured;
+                })
+                .AddStateMachines(options.Machines)
+                .AddMediator(typeof(E2EHost).Assembly)
+        );
+        // The machines, registered by hand: the ones the test serves as their marked subclasses.
+        E2EMachines.Register(services, options.Served);
+        foreach (var machine in options.Instances)
+            services.AddSingleton(machine);
+        if (options.Views is { } views)
+            services.AddSingleton(views);
+
+        // The two things a machine can't know: map auth to a user key, and the effect impl.
+        services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
+        services.AddSingleton(charge);
+
+        if (options.ExposeOperations)
+            AddOperationsServices(services);
+
+        if (options.Trains is { } keep)
+            services.AddSingleton<ITrainDiscoveryService>(
+                new KeptTrains(new TrainDiscoveryService(services), keep)
+            );
+
+        services.AddTraxApi();
+        AddHostGraphQL(services, options);
+
+        options.Services?.Invoke(services);
+    }
+
+    private static void AddApiKeys(IServiceCollection services) =>
+        services.AddTraxApiKeyAuth(keys =>
+            keys.Add(AdminApiKey, id: "admin", "Admin")
+                .Add(AliceKey, id: "alice", WizardMachine.PayerRole, WizardMachine.ApproverRole)
+                .Add(BobKey, id: "bob")
+                .Add(CarolKey, id: "carol", WizardMachine.PayerRole)
+                .Add(OperatorKey, id: "operator", OperatorRole, "Admin")
+        );
+
+    private static void AddHostGraphQL(IServiceCollection services, E2EHostOptions options) =>
+        // The six stateMachine trains are all mutations; the Ping query train (this
+        // assembly) keeps the root Query type non-empty so HotChocolate can build.
+        services.AddTraxGraphQL(graphql =>
+        {
+            if (options.ExposeOperations)
+                graphql = graphql
+                    .ExposeOperationQueries()
+                    .ExposeOperationMutations()
+                    .GateOperations(roles: OperatorRole);
+            graphql = options.GraphQL?.Invoke(graphql) ?? graphql;
+            // A host that exposes machines needs persisted operations; a test that configures them
+            // itself keeps its own configuration.
+            return
+                (
+                    options.Machines is null
+                    && options.Served.Count == 0
+                    && options.Instances.Count == 0
+                ) || services.Any(d => d.ServiceType == typeof(IPersistedOperationsCapability))
+                ? graphql
+                : MachineDocumentOps.Persisted()(graphql);
+        });
+
+    private static void ConfigureApp(IApplicationBuilder app, E2EHostOptions options)
+    {
+        app.UseRouting();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.UseEndpoints(endpoints =>
+        {
+            endpoints.MapGraphQL("/trax/graphql", "trax");
+            options.Endpoints?.Invoke(endpoints);
+        });
     }
 
     /// <summary>

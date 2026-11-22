@@ -93,28 +93,7 @@ internal sealed class MachineEnumSharingInterceptor(IReadOnlySet<Type> accepted)
             switch (type)
             {
                 case IComplexTypeDefinition complex:
-                    foreach (var field in complex.Fields)
-                    {
-                        if (field.IsIntrospectionField)
-                            continue;
-                        Carry(problems, $"{type.Name}.{field.Name}", field.Type, from, queue);
-                        foreach (var argument in field.Arguments)
-                            Carry(
-                                problems,
-                                $"{type.Name}.{field.Name}({argument.Name}:)",
-                                argument.Type,
-                                from,
-                                queue
-                            );
-                    }
-                    if (type is InterfaceType)
-                        foreach (var implementation in _objects)
-                            if (
-                                implementation.Implements.Any(i =>
-                                    string.Equals(i.Name, type.Name, StringComparison.Ordinal)
-                                )
-                            )
-                                queue.Enqueue((implementation, from));
+                    CarryComplex(problems, type, complex, from, queue);
                     break;
                 case UnionType union:
                     foreach (var member in union.Types)
@@ -128,6 +107,39 @@ internal sealed class MachineEnumSharingInterceptor(IReadOnlySet<Type> accepted)
         }
 
         return problems.Distinct(StringComparer.Ordinal).ToList();
+    }
+
+    // The fields and arguments of an object or interface type, and an interface's implementations.
+    private void CarryComplex(
+        List<string> problems,
+        ITypeDefinition type,
+        IComplexTypeDefinition complex,
+        string from,
+        Queue<(ITypeDefinition Type, string From)> queue
+    )
+    {
+        foreach (var field in complex.Fields)
+        {
+            if (field.IsIntrospectionField)
+                continue;
+            Carry(problems, $"{type.Name}.{field.Name}", field.Type, from, queue);
+            foreach (var argument in field.Arguments)
+                Carry(
+                    problems,
+                    $"{type.Name}.{field.Name}({argument.Name}:)",
+                    argument.Type,
+                    from,
+                    queue
+                );
+        }
+        if (type is InterfaceType)
+            foreach (var implementation in _objects)
+                if (
+                    implementation.Implements.Any(i =>
+                        string.Equals(i.Name, type.Name, StringComparison.Ordinal)
+                    )
+                )
+                    queue.Enqueue((implementation, from));
     }
 
     private bool IsMachines(string root, string field) =>

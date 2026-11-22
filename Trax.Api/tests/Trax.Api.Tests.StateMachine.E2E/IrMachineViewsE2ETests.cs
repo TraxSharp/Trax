@@ -163,6 +163,42 @@ public class IrMachineViewsE2ETests
         HostFile Host
     ) Machines(bool receipts = false)
     {
+        var order = OrderIr();
+        var shop = ShopIr();
+        var receipt = ReceiptIr();
+        var payers = new JsonObject
+        {
+            ["roles"] = new JsonArray(new JsonArray(WizardMachine.PayerRole)),
+        };
+        var file = new JsonObject
+        {
+            ["version"] = 1,
+            ["machines"] = MachinesSection(order, receipt, shop, payers),
+            ["views"] = ViewsSection(payers),
+        };
+        var irs = new Dictionary<string, JsonObject>(StringComparer.Ordinal)
+        {
+            ["v-order"] = order,
+            ["v-receipt"] = receipt,
+            ["v-shop"] = shop,
+        };
+        if (!receipts)
+        {
+            file["machines"].NotNull().AsObject().Remove("v-receipt");
+            file["views"].NotNull().AsObject().Remove("my things");
+            irs.Remove("v-receipt");
+        }
+        var host = HostFile.Read(file.ToJsonString());
+        IrDirectory.Check("test", host, irs);
+        var machines = IrMachines.Create(
+            irs.Select(kv => new IrMachines.Source(kv.Value, host.Machines[kv.Key])).ToList(),
+            []
+        );
+        return (machines, host);
+    }
+
+    private static JsonObject OrderIr()
+    {
         var loaves = new JsonObject
         {
             ["name"] = "loaves",
@@ -170,7 +206,7 @@ public class IrMachineViewsE2ETests
             ["nullable"] = false,
             ["constraints"] = new JsonArray(),
         };
-        var order = new JsonObject
+        return new JsonObject
         {
             ["id"] = "v-order",
             ["version"] = 1,
@@ -194,7 +230,11 @@ public class IrMachineViewsE2ETests
                 }
             ),
         };
-        var shop = new JsonObject
+    }
+
+    private static JsonObject ShopIr()
+    {
+        return new JsonObject
         {
             ["id"] = "v-shop",
             ["version"] = 1,
@@ -218,7 +258,11 @@ public class IrMachineViewsE2ETests
                 }
             ),
         };
-        var receipt = new JsonObject
+    }
+
+    private static JsonObject ReceiptIr()
+    {
+        return new JsonObject
         {
             ["id"] = "v-receipt",
             ["version"] = 1,
@@ -242,122 +286,101 @@ public class IrMachineViewsE2ETests
                 }
             ),
         };
-        var payers = new JsonObject
-        {
-            ["roles"] = new JsonArray(new JsonArray(WizardMachine.PayerRole)),
-        };
-        var file = new JsonObject
-        {
-            ["version"] = 1,
-            ["machines"] = new JsonObject
-            {
-                ["v-order"] = new JsonObject
-                {
-                    ["schemaHash"] = Hash(order),
-                    ["owner"] = "user",
-                    ["start"] = new JsonObject { ["anyAuthenticated"] = true },
-                    ["read"] = new JsonObject { ["anyAuthenticated"] = true },
-                    ["triggers"] = new JsonObject
-                    {
-                        ["Place"] = new JsonObject { ["anyAuthenticated"] = true },
-                    },
-                },
-                ["v-receipt"] = new JsonObject
-                {
-                    ["schemaHash"] = Hash(receipt),
-                    ["owner"] = "user",
-                    ["start"] = new JsonObject { ["anyAuthenticated"] = true },
-                    ["read"] = payers.DeepClone(),
-                    ["triggers"] = new JsonObject
-                    {
-                        ["Cancel"] = new JsonObject { ["anyAuthenticated"] = true },
-                    },
-                },
-                ["v-shop"] = new JsonObject
-                {
-                    ["schemaHash"] = Hash(shop),
-                    ["owner"] = new JsonObject { ["system"] = "v-shop/main" },
-                    ["triggers"] = new JsonObject
-                    {
-                        ["Open"] = new JsonObject { ["server"] = true },
-                    },
-                },
-            },
-            ["views"] = new JsonObject
-            {
-                ["orders"] = new JsonObject
-                {
-                    ["reads"] = new JsonArray(new JsonObject { ["machine"] = "v-order" }),
-                    ["fields"] = new JsonObject
-                    {
-                        ["status"] = new JsonObject
-                        {
-                            ["from"] = "v-order.state",
-                            ["labels"] = new JsonObject
-                            {
-                                ["Draft"] = "Not sent",
-                                ["Placed"] = "Placed!",
-                            },
-                        },
-                        ["loaves"] = new JsonObject { ["from"] = "v-order.loaves" },
-                    },
-                    ["readers"] = payers,
-                },
-                // Read by anyone signed in, over a machine only Payers read.
-                ["my things"] = new JsonObject
-                {
-                    ["reads"] = new JsonArray(
-                        new JsonObject { ["machine"] = "v-receipt" },
-                        new JsonObject { ["machine"] = "v-order" }
-                    ),
-                    ["fields"] = new JsonObject
-                    {
-                        ["receipt"] = new JsonObject { ["from"] = "v-receipt.state" },
-                        ["order"] = new JsonObject { ["from"] = "v-order.state" },
-                    },
-                    ["readers"] = new JsonObject { ["anyAuthenticated"] = true },
-                },
-                ["shop sign"] = new JsonObject
-                {
-                    ["reads"] = new JsonArray(
-                        new JsonObject { ["machine"] = "v-shop", ["key"] = "v-shop/main" }
-                    ),
-                    ["fields"] = new JsonObject
-                    {
-                        ["open"] = new JsonObject
-                        {
-                            ["from"] = "v-shop.state",
-                            ["labels"] = new JsonObject
-                            {
-                                ["Closed"] = "Closed for now",
-                                ["Opened"] = "Open",
-                            },
-                        },
-                    },
-                    ["readers"] = new JsonObject { ["anyAuthenticated"] = true },
-                },
-            },
-        };
-        var irs = new Dictionary<string, JsonObject>(StringComparer.Ordinal)
-        {
-            ["v-order"] = order,
-            ["v-receipt"] = receipt,
-            ["v-shop"] = shop,
-        };
-        if (!receipts)
-        {
-            file["machines"].NotNull().AsObject().Remove("v-receipt");
-            file["views"].NotNull().AsObject().Remove("my things");
-            irs.Remove("v-receipt");
-        }
-        var host = HostFile.Read(file.ToJsonString());
-        IrDirectory.Check("test", host, irs);
-        var machines = IrMachines.Create(
-            irs.Select(kv => new IrMachines.Source(kv.Value, host.Machines[kv.Key])).ToList(),
-            []
-        );
-        return (machines, host);
     }
+
+    private static JsonObject MachinesSection(
+        JsonObject order,
+        JsonObject receipt,
+        JsonObject shop,
+        JsonObject payers
+    ) =>
+        new JsonObject
+        {
+            ["v-order"] = new JsonObject
+            {
+                ["schemaHash"] = Hash(order),
+                ["owner"] = "user",
+                ["start"] = new JsonObject { ["anyAuthenticated"] = true },
+                ["read"] = new JsonObject { ["anyAuthenticated"] = true },
+                ["triggers"] = new JsonObject
+                {
+                    ["Place"] = new JsonObject { ["anyAuthenticated"] = true },
+                },
+            },
+            ["v-receipt"] = new JsonObject
+            {
+                ["schemaHash"] = Hash(receipt),
+                ["owner"] = "user",
+                ["start"] = new JsonObject { ["anyAuthenticated"] = true },
+                ["read"] = payers.DeepClone(),
+                ["triggers"] = new JsonObject
+                {
+                    ["Cancel"] = new JsonObject { ["anyAuthenticated"] = true },
+                },
+            },
+            ["v-shop"] = new JsonObject
+            {
+                ["schemaHash"] = Hash(shop),
+                ["owner"] = new JsonObject { ["system"] = "v-shop/main" },
+                ["triggers"] = new JsonObject { ["Open"] = new JsonObject { ["server"] = true } },
+            },
+        };
+
+    private static JsonObject ViewsSection(JsonObject payers) =>
+        new JsonObject
+        {
+            ["orders"] = new JsonObject
+            {
+                ["reads"] = new JsonArray(new JsonObject { ["machine"] = "v-order" }),
+                ["fields"] = new JsonObject
+                {
+                    ["status"] = new JsonObject
+                    {
+                        ["from"] = "v-order.state",
+                        ["labels"] = new JsonObject
+                        {
+                            ["Draft"] = "Not sent",
+                            ["Placed"] = "Placed!",
+                        },
+                    },
+                    ["loaves"] = new JsonObject { ["from"] = "v-order.loaves" },
+                },
+                ["readers"] = payers,
+            },
+            // Read by anyone signed in, over a machine only Payers read.
+            ["my things"] = new JsonObject
+            {
+                ["reads"] = new JsonArray(
+                    new JsonObject { ["machine"] = "v-receipt" },
+                    new JsonObject { ["machine"] = "v-order" }
+                ),
+                ["fields"] = new JsonObject
+                {
+                    ["receipt"] = new JsonObject { ["from"] = "v-receipt.state" },
+                    ["order"] = new JsonObject { ["from"] = "v-order.state" },
+                },
+                ["readers"] = new JsonObject { ["anyAuthenticated"] = true },
+            },
+            ["shop sign"] = new JsonObject
+            {
+                ["reads"] = new JsonArray(
+                    new JsonObject { ["machine"] = "v-shop", ["key"] = "v-shop/main" }
+                ),
+                ["fields"] = new JsonObject
+                {
+                    ["open"] = new JsonObject
+                    {
+                        ["from"] = "v-shop.state",
+                        ["labels"] = new JsonObject
+                        {
+                            ["Closed"] = "Closed for now",
+                            ["Opened"] = "Open",
+                        },
+                    },
+                },
+                ["readers"] = new JsonObject { ["anyAuthenticated"] = true },
+            },
+        };
 
     private static string Hash(JsonObject ir) =>
         Convert.ToHexStringLower(

@@ -42,6 +42,12 @@ internal sealed class RunGraphNodeType : ObjectType<RunGraphNode>
                 "The name of the track or branch this node sits on, or null at the chain's top "
                     + "level."
             );
+        ConfigureDepthAndRunFields(descriptor);
+    }
+
+    /// <summary>Binds how deep a node sits, whether it can resume, and what it ran.</summary>
+    private static void ConfigureDepthAndRunFields(IObjectTypeDescriptor<RunGraphNode> descriptor)
+    {
         descriptor
             .Field(n => n.Depth)
             .Description("How many tracks deep the node sits: 0 at the chain's top level.");

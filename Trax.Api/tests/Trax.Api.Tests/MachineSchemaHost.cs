@@ -86,23 +86,7 @@ internal static class MachineSchemaHost
                         s.AddSingleton(Substitute.For<ITraxHealthService>());
                         s.AddSingleton(Substitute.For<IJobSubmitter>());
                         services?.Invoke(s);
-                        s.AddTraxGraphQL(g =>
-                        {
-                            var built = (graphql ?? (x => x))(g);
-                            // Served machines require persisted operations; a test that configures them itself
-                            // keeps its own configuration.
-                            return
-                                !persistedOperations
-                                || built.Services.Any(d =>
-                                    d.ServiceType == typeof(IPersistedOperationsCapability)
-                                )
-                                ? built
-                                : built.UsePersistedOperations(po =>
-                                    po.SingleNode()
-                                        .RequirePersisted(require: false)
-                                        .LogNonPersistedRequests(log: true)
-                                );
-                        });
+                        s.AddTraxGraphQL(g => ConfigureGraphQL(g, graphql, persistedOperations));
                     })
                     .Configure(app =>
                     {
@@ -124,6 +108,24 @@ internal static class MachineSchemaHost
             throw;
         }
         return host;
+    }
+
+    private static TraxGraphQLBuilder ConfigureGraphQL(
+        TraxGraphQLBuilder g,
+        Func<TraxGraphQLBuilder, TraxGraphQLBuilder>? graphql,
+        bool persistedOperations
+    )
+    {
+        var built = (graphql ?? (x => x))(g);
+        // Served machines require persisted operations; a test that configures them itself
+        // keeps its own configuration.
+        return
+            !persistedOperations
+            || built.Services.Any(d => d.ServiceType == typeof(IPersistedOperationsCapability))
+            ? built
+            : built.UsePersistedOperations(po =>
+                po.SingleNode().RequirePersisted(require: false).LogNonPersistedRequests(log: true)
+            );
     }
 
     /// <summary>Starts the host and builds its schema; for the tests that read the schema.</summary>

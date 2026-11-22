@@ -95,6 +95,17 @@ internal sealed partial class DashboardEndpoint(
             return;
         }
 
+        await ServeAssetOrIndexAsync(context, relative, basePath).ConfigureAwait(false);
+    }
+
+    // A file of the app when it has one by that path, a 404 for any other file, and the index for a route.
+    private async Task ServeAssetOrIndexAsync(
+        HttpContext context,
+        string relative,
+        PathString basePath
+    )
+    {
+        var response = context.Response;
         if (assets.TryGet(relative, out var asset))
         {
             await WriteAsync(

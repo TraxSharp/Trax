@@ -47,38 +47,7 @@ internal sealed class SchemaNameCensus
     {
         var census = new SchemaNameCensus();
 
-        // The views root, when the host serves views of machines derived from features.
-        if (viewsExposed)
-            census.Field(
-                "RootQuery",
-                MachineViewTypeModule.RootField,
-                Trax(MachineViewTypeModule.RootField)
-            );
-
-        // The machines root, on both roots, when the host exposes a machine.
-        if (machinesExposed)
-        {
-            census.Field("RootQuery", MachineSurface.RootField, Trax(MachineSurface.RootField));
-            census.Field("RootMutation", MachineSurface.RootField, Trax(MachineSurface.RootField));
-        }
-
-        // The entry fields Trax hangs off the roots.
-        if (configuration.ModelRegistrations.Count > 0 || trains.Any(t => t.IsQuery))
-            census.Field("RootQuery", "discover", Trax("discover"));
-        if (trains.Any(t => t.IsMutation))
-            census.Field("RootMutation", "dispatch", Trax("dispatch"));
-        if (configuration.OperationQueriesExposed)
-            census.Field("RootQuery", "operations", Trax("operations"));
-        if (configuration.OperationMutationsExposed)
-            census.Field("RootMutation", "operations", Trax("operations"));
-
-        // A feature package's own root fields, such as persistedOperations once its management
-        // gate is declared, on both roots.
-        foreach (var field in configuration.FeatureRootFields)
-        {
-            census.Field("RootQuery", field, Trax(field));
-            census.Field("RootMutation", field, Trax(field));
-        }
+        CountRootFields(census, configuration, trains, machinesExposed, viewsExposed);
 
         foreach (var reg in configuration.ModelRegistrations)
         {
@@ -124,6 +93,49 @@ internal sealed class SchemaNameCensus
             .ToHashSet(StringComparer.Ordinal);
         census.ThrowOnClashes();
         return census;
+    }
+
+    // The fields Trax places on the roots themselves.
+    private static void CountRootFields(
+        SchemaNameCensus census,
+        GraphQLConfiguration configuration,
+        IReadOnlyList<TrainRegistration> trains,
+        bool machinesExposed,
+        bool viewsExposed
+    )
+    {
+        // The views root, when the host serves views of machines derived from features.
+        if (viewsExposed)
+            census.Field(
+                "RootQuery",
+                MachineViewTypeModule.RootField,
+                Trax(MachineViewTypeModule.RootField)
+            );
+
+        // The machines root, on both roots, when the host exposes a machine.
+        if (machinesExposed)
+        {
+            census.Field("RootQuery", MachineSurface.RootField, Trax(MachineSurface.RootField));
+            census.Field("RootMutation", MachineSurface.RootField, Trax(MachineSurface.RootField));
+        }
+
+        // The entry fields Trax hangs off the roots.
+        if (configuration.ModelRegistrations.Count > 0 || trains.Any(t => t.IsQuery))
+            census.Field("RootQuery", "discover", Trax("discover"));
+        if (trains.Any(t => t.IsMutation))
+            census.Field("RootMutation", "dispatch", Trax("dispatch"));
+        if (configuration.OperationQueriesExposed)
+            census.Field("RootQuery", "operations", Trax("operations"));
+        if (configuration.OperationMutationsExposed)
+            census.Field("RootMutation", "operations", Trax("operations"));
+
+        // A feature package's own root fields, such as persistedOperations once its management
+        // gate is declared, on both roots.
+        foreach (var field in configuration.FeatureRootFields)
+        {
+            census.Field("RootQuery", field, Trax(field));
+            census.Field("RootMutation", field, Trax(field));
+        }
     }
 
     /// <summary>

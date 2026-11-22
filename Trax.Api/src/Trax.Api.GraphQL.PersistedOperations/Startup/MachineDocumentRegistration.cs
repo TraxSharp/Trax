@@ -71,26 +71,7 @@ internal sealed class MachineDocumentRegistration(
             && console.Count == 0
         )
         {
-            // No document of this node's, but the registration still runs: it marks the documents of every machine no
-            // node serves, and collects them after the grace period, so an earlier deploy's clients reload.
-            registry.Publish(
-                [],
-                new Dictionary<string, int>(StringComparer.Ordinal),
-                new Dictionary<string, StoredMachineDocument>(StringComparer.Ordinal)
-            );
-            try
-            {
-                await RegisterAsync(cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
-            {
-                _logger.LogWarning(
-                    ex,
-                    "Could not register this node's empty set of machine documents; the documents of machines no node "
-                        + "serves are collected at the next attempt, in {Interval}.",
-                    Interval
-                );
-            }
+            await RegisterEmptyAsync(cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -121,6 +102,30 @@ internal sealed class MachineDocumentRegistration(
         IncludeConsoleDocuments(executor.Schema, console);
         await RegisterAsync(cancellationToken).ConfigureAwait(false);
         PublishConsoleDocumentIds();
+    }
+
+    // No document of this node's, but the registration still runs: it marks the documents of every machine no
+    // node serves, and collects them after the grace period, so an earlier deploy's clients reload.
+    private async Task RegisterEmptyAsync(CancellationToken cancellationToken)
+    {
+        registry.Publish(
+            [],
+            new Dictionary<string, int>(StringComparer.Ordinal),
+            new Dictionary<string, StoredMachineDocument>(StringComparer.Ordinal)
+        );
+        try
+        {
+            await RegisterAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(
+                ex,
+                "Could not register this node's empty set of machine documents; the documents of machines no node "
+                    + "serves are collected at the next attempt, in {Interval}.",
+                Interval
+            );
+        }
     }
 
     // The operations console's documents, when the host serves it. The console reaches optional parts of the schema

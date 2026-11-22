@@ -64,6 +64,22 @@ internal static class TypedQueryGenerator
         var keyword = opAttr.OperationType == OperationType.Query ? "query" : "mutation";
         sb.Append(keyword).Append(' ').Append(operationName);
 
+        AppendVariables(sb, args);
+
+        AppendOperationBody(sb, pathSegments, rootField, args, elementResultType);
+
+        return new GeneratedQuery(
+            sb.ToString(),
+            operationName,
+            opAttr.OperationType,
+            args,
+            pathSegments,
+            rootField
+        );
+    }
+
+    private static void AppendVariables(StringBuilder sb, IReadOnlyList<ArgumentBinding> args)
+    {
         if (args.Count > 0)
         {
             sb.Append('(');
@@ -78,7 +94,16 @@ internal static class TypedQueryGenerator
             }
             sb.Append(')');
         }
+    }
 
+    private static void AppendOperationBody(
+        StringBuilder sb,
+        IReadOnlyList<string> pathSegments,
+        string rootField,
+        IReadOnlyList<ArgumentBinding> args,
+        Type elementResultType
+    )
+    {
         // Wrapper fields (e.g. `discover { netsuite { ... } }`) sit between the operation body
         // and the root field. Their indent grows with depth so the formatted output stays
         // readable. The root field's own indent is 2 spaces per nesting level above its baseline.
@@ -93,6 +118,23 @@ internal static class TypedQueryGenerator
 
         sb.Append(new string(' ', rootIndent)).Append(rootField);
 
+        AppendRootArguments(sb, args);
+
+        sb.Append(" {\n");
+        WriteSelectionSet(sb, elementResultType, indent: rootIndent + 2);
+        sb.Append(new string(' ', rootIndent)).Append("}\n");
+
+        for (var i = pathSegments.Count - 1; i >= 0; i--)
+        {
+            rootIndent -= 2;
+            sb.Append(new string(' ', rootIndent)).Append("}\n");
+        }
+
+        sb.Append("}\n");
+    }
+
+    private static void AppendRootArguments(StringBuilder sb, IReadOnlyList<ArgumentBinding> args)
+    {
         if (args.Count > 0)
         {
             sb.Append('(');
@@ -107,27 +149,6 @@ internal static class TypedQueryGenerator
             }
             sb.Append(')');
         }
-
-        sb.Append(" {\n");
-        WriteSelectionSet(sb, elementResultType, indent: rootIndent + 2);
-        sb.Append(new string(' ', rootIndent)).Append("}\n");
-
-        for (var i = pathSegments.Count - 1; i >= 0; i--)
-        {
-            rootIndent -= 2;
-            sb.Append(new string(' ', rootIndent)).Append("}\n");
-        }
-
-        sb.Append("}\n");
-
-        return new GeneratedQuery(
-            sb.ToString(),
-            operationName,
-            opAttr.OperationType,
-            args,
-            pathSegments,
-            rootField
-        );
     }
 
     private static IReadOnlyList<string> ParsePath(string? path, Type requestType)

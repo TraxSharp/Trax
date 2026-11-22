@@ -8,6 +8,7 @@ using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Queries;
 using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.DeadLetter;
@@ -95,108 +96,116 @@ public class OperationsPageBoundsTests
 
     private async Task Seed()
     {
+        var manifest = await SeedManifests().ConfigureAwait(false);
+        await SeedRunsAndLogs(manifest).ConfigureAwait(false);
+    }
+
+    private async Task<Manifest> SeedManifests()
+    {
         Manifest manifest;
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
-            var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
-            await using (db.ConfigureAwait(false))
+            var groups = new List<ManifestGroup>();
+            for (var i = 0; i < Rows; i++)
             {
-                var groups = new List<ManifestGroup>();
-                for (var i = 0; i < Rows; i++)
+                var grp = new ManifestGroup
                 {
-                    var grp = new ManifestGroup
-                    {
-                        Name = string.Create(CultureInfo.InvariantCulture, $"group-{i}"),
-                        CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
-                        UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
-                    };
-                    groups.Add(grp);
-                    await db.Track(grp).ConfigureAwait(false);
-                }
-                await db.SaveChanges(default).ConfigureAwait(false);
-
-                manifest = Manifest.Create(new CreateManifest { Name = typeof(PagedFakeTrain) });
-                manifest.ManifestGroupId = groups[0].Id;
-                await db.Track(manifest).ConfigureAwait(false);
-                for (var i = 1; i < Rows; i++)
-                {
-                    var m = Manifest.Create(new CreateManifest { Name = typeof(PagedFakeTrain) });
-                    m.ManifestGroupId = groups[0].Id;
-                    await db.Track(m).ConfigureAwait(false);
-                }
-                await db.SaveChanges(default).ConfigureAwait(false);
+                    Name = string.Create(CultureInfo.InvariantCulture, $"group-{i}"),
+                    CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+                    UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+                };
+                groups.Add(grp);
+                await db.Track(grp).ConfigureAwait(false);
             }
-        }
+            await db.SaveChanges(default).ConfigureAwait(false);
 
-        {
-            var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
-            await using (db.ConfigureAwait(false))
+            manifest = Manifest.Create(new CreateManifest { Name = typeof(PagedFakeTrain) });
+            manifest.ManifestGroupId = groups[0].Id;
+            await db.Track(manifest).ConfigureAwait(false);
+            for (var i = 1; i < Rows; i++)
             {
-                var parent = Metadata.Create(
-                    new CreateMetadata
+                var m = Manifest.Create(new CreateManifest { Name = typeof(PagedFakeTrain) });
+                m.ManifestGroupId = groups[0].Id;
+                await db.Track(m).ConfigureAwait(false);
+            }
+            await db.SaveChanges(default).ConfigureAwait(false);
+        }
+        return manifest;
+    }
+
+    private async Task SeedRunsAndLogs(Manifest manifest)
+    {
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var parent = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = "Trax.X.Parent",
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                },
+                TimeProvider.System
+            );
+            await db.Track(parent).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            _parentId = parent.Id;
+
+            for (var i = 0; i < Rows; i++)
+            {
+                await TrackChildRow(db, manifest, i).ConfigureAwait(false);
+            }
+            await db.SaveChanges(default).ConfigureAwait(false);
+
+            await ((DbContext)db)
+                .Database.ExecuteSqlInterpolatedAsync(
+                    $"INSERT INTO trax.log (metadata_id, event_id, level, message, category) SELECT {_parentId}, g, 'information'::trax.log_level, 'msg', 'Test' FROM generate_series(1, {Rows}) g"
+                )
+                .ConfigureAwait(false);
+        }
+    }
+
+    private async Task TrackChildRow(IDataContext db, Manifest manifest, int i)
+    {
+        var child = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = "Trax.X.Child",
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = null,
+            },
+            TimeProvider.System
+        );
+        child.ParentId = _parentId;
+        await db.Track(child).ConfigureAwait(false);
+
+        await db.Track(
+                DeadLetter.Create(
+                    new CreateDeadLetter
                     {
-                        Name = "Trax.X.Parent",
-                        ExternalId = Guid.NewGuid().ToString("N"),
-                        Input = null,
+                        Manifest = manifest,
+                        Reason = string.Create(CultureInfo.InvariantCulture, $"failure-{i}"),
+                        RetryCount = 3,
                     },
                     TimeProvider.System
-                );
-                await db.Track(parent).ConfigureAwait(false);
-                await db.SaveChanges(default).ConfigureAwait(false);
-                _parentId = parent.Id;
+                )
+            )
+            .ConfigureAwait(false);
 
-                for (var i = 0; i < Rows; i++)
-                {
-                    var child = Metadata.Create(
-                        new CreateMetadata
-                        {
-                            Name = "Trax.X.Child",
-                            ExternalId = Guid.NewGuid().ToString("N"),
-                            Input = null,
-                        },
-                        TimeProvider.System
-                    );
-                    child.ParentId = _parentId;
-                    await db.Track(child).ConfigureAwait(false);
-
-                    await db.Track(
-                            DeadLetter.Create(
-                                new CreateDeadLetter
-                                {
-                                    Manifest = manifest,
-                                    Reason = string.Create(
-                                        CultureInfo.InvariantCulture,
-                                        $"failure-{i}"
-                                    ),
-                                    RetryCount = 3,
-                                },
-                                TimeProvider.System
-                            )
-                        )
-                        .ConfigureAwait(false);
-
-                    await db.Track(
-                            WorkQueue.Create(
-                                new CreateWorkQueue
-                                {
-                                    TrainName = string.Create(
-                                        CultureInfo.InvariantCulture,
-                                        $"Trax.Tests.IFake{i}"
-                                    ),
-                                },
-                                TimeProvider.System
-                            )
-                        )
-                        .ConfigureAwait(false);
-                }
-                await db.SaveChanges(default).ConfigureAwait(false);
-
-                await ((DbContext)db)
-                    .Database.ExecuteSqlInterpolatedAsync(
-                        $"INSERT INTO trax.log (metadata_id, event_id, level, message, category) SELECT {_parentId}, g, 'information'::trax.log_level, 'msg', 'Test' FROM generate_series(1, {Rows}) g"
-                    )
-                    .ConfigureAwait(false);
-            }
-        }
+        await db.Track(
+                WorkQueue.Create(
+                    new CreateWorkQueue
+                    {
+                        TrainName = string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"Trax.Tests.IFake{i}"
+                        ),
+                    },
+                    TimeProvider.System
+                )
+            )
+            .ConfigureAwait(false);
     }
 
     private static IEnumerable<TestCaseData> Queries()

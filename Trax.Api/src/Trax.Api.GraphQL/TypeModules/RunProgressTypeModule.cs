@@ -244,6 +244,22 @@ internal sealed class RunProgressTypeModule(ITrainDiscoveryService discovery) : 
                 )
             );
 
+        return await OpenStreamAsync(ctx, access, starters, user, runId, run, lease)
+            .ConfigureAwait(false);
+    }
+
+    // Subscribes to the run's state changes and steps, and opens its stream; a failure releases what was taken.
+    private static async ValueTask<ISourceStream> OpenStreamAsync(
+        IResolverContext ctx,
+        RunProgressAccess access,
+        IReadOnlyCollection<string> starters,
+        ClaimsPrincipal? user,
+        string runId,
+        RunProgressRun run,
+        IDisposable lease
+    )
+    {
+        var services = ctx.Services;
         var receiver = services.GetRequiredService<ITopicEventReceiver>();
         var sender = services.GetRequiredService<ITopicEventSender>();
         ISourceStream<TrainLifecycleEvent>? states = null;
@@ -265,16 +281,8 @@ internal sealed class RunProgressTypeModule(ITrainDiscoveryService discovery) : 
                     ctx.RequestAborted
                 )
                 .ConfigureAwait(false);
-            var publisher = LifecycleEventPublisher.For(sender);
-            var statesBaseline = await publisher
-                .LastPublishedAsync(
-                    nameof(LifecycleSubscriptions.OnTrainStateChanged),
-                    ctx.RequestAborted
-                )
-                .ConfigureAwait(false);
-            var stepsBaseline = await publisher
-                .LastPublishedAsync(
-                    nameof(LifecycleSubscriptions.OnJunctionEvent),
+            var (publisher, statesBaseline, stepsBaseline) = await ReadBaselinesAsync(
+                    sender,
                     ctx.RequestAborted
                 )
                 .ConfigureAwait(false);
@@ -297,26 +305,60 @@ internal sealed class RunProgressTypeModule(ITrainDiscoveryService discovery) : 
                 // The endpoint policy and the run being the caller's are asked again at every
                 // connection re-check; a stream they no longer admit ends with the answer a
                 // refused subscribe gets.
-                Recheck = SubscriptionRecheck.For(
-                    services,
-                    user,
-                    async ct =>
-                        await access.FindAsync(runId, starters, ct).ConfigureAwait(false)
-                            is not null
-                ),
+                Recheck = RecheckRun(services, user, access, runId, starters),
                 Logger = services.GetService<ILoggerFactory>()?.CreateLogger<RunProgressStream>(),
                 Clock = services.GetService<TimeProvider>() ?? TimeProvider.System,
             };
         }
         catch
         {
-            if (states is not null)
-                await states.DisposeAsync().ConfigureAwait(false);
-            if (steps is not null)
-                await steps.DisposeAsync().ConfigureAwait(false);
-            lease.Dispose();
+            await ReleaseAsync(states, steps, lease).ConfigureAwait(false);
             throw;
         }
+    }
+
+    // What each topic last published, so the stream reads only what comes after.
+    private static async Task<(
+        LifecycleEventPublisher Publisher,
+        long StatesBaseline,
+        long StepsBaseline
+    )> ReadBaselinesAsync(ITopicEventSender sender, CancellationToken ct)
+    {
+        var publisher = LifecycleEventPublisher.For(sender);
+        var statesBaseline = await publisher
+            .LastPublishedAsync(nameof(LifecycleSubscriptions.OnTrainStateChanged), ct)
+            .ConfigureAwait(false);
+        var stepsBaseline = await publisher
+            .LastPublishedAsync(nameof(LifecycleSubscriptions.OnJunctionEvent), ct)
+            .ConfigureAwait(false);
+        return (publisher, statesBaseline, stepsBaseline);
+    }
+
+    private static SubscriptionRecheck RecheckRun(
+        IServiceProvider services,
+        ClaimsPrincipal? user,
+        RunProgressAccess access,
+        string runId,
+        IReadOnlyCollection<string> starters
+    ) =>
+        SubscriptionRecheck.For(
+            services,
+            user,
+            async ct =>
+                await access.FindAsync(runId, starters, ct).ConfigureAwait(false) is not null
+        );
+
+    private static async Task ReleaseAsync(
+        ISourceStream<TrainLifecycleEvent>? states,
+        ISourceStream<JunctionEvent>? steps,
+        IDisposable lease
+    )
+    {
+        if (states is not null)
+            await states.DisposeAsync().ConfigureAwait(false);
+        if (steps is not null)
+            await steps.DisposeAsync().ConfigureAwait(false);
+        lease.Dispose();
     }
 
     internal static JunctionEvent Wrap(RunProgressRun run, JunctionStep step, TimeProvider clock) =>

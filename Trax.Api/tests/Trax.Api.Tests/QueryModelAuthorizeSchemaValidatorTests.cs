@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
+using HotChocolate.Execution.Configuration;
 using HotChocolate.Types;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -443,6 +444,21 @@ public class QueryModelAuthorizeSchemaValidatorTests
             d.Field("discover").Type<DiscoverObjectType>().Resolve(_ => new object());
         });
 
+        AddDiscoverExtensions(gql, includeAuthorizeOnField, includeNamespaceField);
+
+        var sp = services.BuildServiceProvider();
+        var resolver = sp.GetRequiredService<IRequestExecutorProvider>();
+        _ = await resolver.GetExecutorAsync("trax").ConfigureAwait(false);
+
+        return (config, sp);
+    }
+
+    private static void AddDiscoverExtensions(
+        IRequestExecutorBuilder gql,
+        bool includeAuthorizeOnField,
+        bool includeNamespaceField
+    )
+    {
         if (includeNamespaceField)
         {
             gql.AddType(new ObjectType(d => d.Name("DiscoverQueries_testns")));
@@ -477,12 +493,6 @@ public class QueryModelAuthorizeSchemaValidatorTests
                 })
             );
         }
-
-        var sp = services.BuildServiceProvider();
-        var resolver = sp.GetRequiredService<IRequestExecutorProvider>();
-        _ = await resolver.GetExecutorAsync("trax").ConfigureAwait(false);
-
-        return (config, sp);
     }
 
     /// <summary>

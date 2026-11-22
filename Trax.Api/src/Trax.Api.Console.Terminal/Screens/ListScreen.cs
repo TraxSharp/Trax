@@ -445,6 +445,14 @@ internal sealed class ListScreen : View
         if (chosen is not { } index || index >= actions.Count)
             return;
         var bulk = actions[index];
+        if (BulkOptions(bulk) is not { } options)
+            return;
+        StartBulk(bulk, filterSnapshot, page, options);
+    }
+
+    // What the operator chooses for the bulk action, or null when they back out.
+    private ActionOptions? BulkOptions(BulkAction bulk)
+    {
         var options = new ActionOptions();
         if (bulk.AsksAfresh)
         {
@@ -455,7 +463,7 @@ internal sealed class ListScreen : View
                 "Ask afresh"
             );
             if (afresh is not (0 or 1))
-                return;
+                return null;
             options = options with { AskAfresh = afresh == 1 };
         }
         if (bulk.NeedsNote)
@@ -466,9 +474,19 @@ internal sealed class ListScreen : View
                 accept: Capital(bulk.Name)
             );
             if (note is not [var text] || text.Trim().Length == 0)
-                return;
+                return null;
             options = options with { Note = text.Trim() };
         }
+        return options;
+    }
+
+    private void StartBulk(
+        BulkAction bulk,
+        Dictionary<string, string> filterSnapshot,
+        ListPage<ConsoleRow> page,
+        ActionOptions options
+    )
+    {
         _context.Status(
             string.Create(
                 CultureInfo.InvariantCulture,

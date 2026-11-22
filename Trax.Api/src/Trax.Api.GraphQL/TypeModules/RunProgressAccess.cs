@@ -128,6 +128,18 @@ internal sealed class RunProgressAccess(
                 : found;
         }
 
+        return await FindQueuedAsync(db, runId, starters, names, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>The run <paramref name="runId"/> while it is still queued for one of <paramref name="starters"/>.</summary>
+    private async Task<RunProgressRun?> FindQueuedAsync(
+        Trax.Effect.Data.Services.DataContext.IDataContext db,
+        string runId,
+        IReadOnlyCollection<string> starters,
+        List<string> names,
+        CancellationToken ct
+    )
+    {
         var queued = await db
             .WorkQueues.AsNoTracking()
             .Where(w =>

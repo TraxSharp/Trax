@@ -433,38 +433,34 @@ public class JwtMultiSchemeTests
                             );
                         }
                     })
-                    .Configure(app =>
-                    {
-                        app.UseRouting();
-                        app.UseAuthentication();
-                        app.UseAuthorization();
-                        app.UseEndpoints(endpoints =>
-                        {
-                            endpoints
-                                .MapGet(
-                                    "/protected-alpha",
-                                    (ClaimsPrincipal user) => Results.Ok(MakeResponse(user))
-                                )
-                                .RequireAuthorization("alpha-JwtPolicy");
-                            endpoints
-                                .MapGet(
-                                    "/protected-beta",
-                                    (ClaimsPrincipal user) => Results.Ok(MakeResponse(user))
-                                )
-                                .RequireAuthorization("beta-JwtPolicy");
-                            endpoints
-                                .MapGet(
-                                    "/trax-policy",
-                                    (ClaimsPrincipal user) => Results.Ok(MakeResponse(user))
-                                )
-                                .RequireAuthorization(TraxAuthClaimTypes.TraxAuthPolicy);
-                        });
-                    })
+                    .Configure(app => ConfigureApp(app))
             )
             .Build();
 
         await host.StartAsync().ConfigureAwait(false);
         return host;
+    }
+
+    private static void ConfigureApp(IApplicationBuilder app)
+    {
+        app.UseRouting();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.UseEndpoints(endpoints =>
+        {
+            endpoints
+                .MapGet(
+                    "/protected-alpha",
+                    (ClaimsPrincipal user) => Results.Ok(MakeResponse(user))
+                )
+                .RequireAuthorization("alpha-JwtPolicy");
+            endpoints
+                .MapGet("/protected-beta", (ClaimsPrincipal user) => Results.Ok(MakeResponse(user)))
+                .RequireAuthorization("beta-JwtPolicy");
+            endpoints
+                .MapGet("/trax-policy", (ClaimsPrincipal user) => Results.Ok(MakeResponse(user)))
+                .RequireAuthorization(TraxAuthClaimTypes.TraxAuthPolicy);
+        });
     }
 
     private static EndpointResponse MakeResponse(ClaimsPrincipal user) =>

@@ -210,19 +210,7 @@ public class OperatorMachineFeedE2ETests
             .BeTrue("the dashboard's feed heard the write too");
 
         // The listener's session names itself, whatever the host's own sessions are called.
-        var listeners = await E2ESql.ScalarAsync<long>(
-            Database,
-            "SELECT count(*) FROM pg_stat_activity WHERE application_name = @name "
-                + "AND datname = current_database()",
-            ("name", ListenerApplicationName)
-        );
-        listeners
-            .Should()
-            .Be(
-                1,
-                "one listening session serves every subscriber on a host, the dashboard's and GraphQL's, per "
-                    + Adr
-            );
+        await AssertOneListenerSessionAsync();
 
         await stop.CancelAsync();
         try
@@ -295,49 +283,8 @@ public class OperatorMachineFeedE2ETests
                 .BeFalse(doc.RootElement.GetRawText());
             var operations = doc.RootElement.GetProperty("data").GetProperty("operations");
 
-            var item = operations
-                .GetProperty("machineInstances")
-                .GetProperty("items")
-                .EnumerateArray()
-                .Single(i =>
-                    string.Equals(
-                        i.GetProperty("id").GetString(),
-                        approving.Id.ToString(),
-                        StringComparison.Ordinal
-                    )
-                );
-            item.GetProperty("state").GetString().Should().Be(nameof(WizardState.Approving));
-            item.GetProperty("dueAt").ValueKind.Should().Be(JsonValueKind.String);
-            item.GetProperty("overdue")
-                .GetBoolean()
-                .Should()
-                .BeTrue("its timer is an hour past due and nothing fired it");
-            item.GetProperty("stuck").GetBoolean().Should().BeTrue();
-            item.GetProperty("waitingOn").ValueKind.Should().Be(JsonValueKind.Null);
-            item.GetProperty("inStateSince")
-                .GetString()
-                .Should()
-                .Be(item.GetProperty("updatedAt").GetString(), "no transition log is kept yet");
-
-            operations
-                .GetProperty("machineInstanceCounts")
-                .EnumerateArray()
-                .Single(c =>
-                    string.Equals(
-                        c.GetProperty("state").GetString(),
-                        nameof(WizardState.Approving),
-                        StringComparison.Ordinal
-                    )
-                    && string.Equals(
-                        c.GetProperty("ownerKind").GetString(),
-                        "USER",
-                        StringComparison.Ordinal
-                    )
-                )
-                .GetProperty("stuck")
-                .GetInt64()
-                .Should()
-                .BeGreaterThanOrEqualTo(1, "the overdue instance is counted stuck in its state");
+            AssertOverdueItem(operations, approving.Id);
+            AssertCountedStuck(operations);
         }
         finally
         {
@@ -349,6 +296,75 @@ public class OperatorMachineFeedE2ETests
             );
             await poller.StartAsync(CancellationToken.None);
         }
+    }
+
+    private static async Task AssertOneListenerSessionAsync()
+    {
+        var listeners = await E2ESql
+            .ScalarAsync<long>(
+                Database,
+                "SELECT count(*) FROM pg_stat_activity WHERE application_name = @name "
+                    + "AND datname = current_database()",
+                ("name", ListenerApplicationName)
+            )
+            .ConfigureAwait(false);
+        listeners
+            .Should()
+            .Be(
+                1,
+                "one listening session serves every subscriber on a host, the dashboard's and GraphQL's, per "
+                    + Adr
+            );
+    }
+
+    private static void AssertOverdueItem(JsonElement operations, Guid id)
+    {
+        var item = operations
+            .GetProperty("machineInstances")
+            .GetProperty("items")
+            .EnumerateArray()
+            .Single(i =>
+                string.Equals(
+                    i.GetProperty("id").GetString(),
+                    id.ToString(),
+                    StringComparison.Ordinal
+                )
+            );
+        item.GetProperty("state").GetString().Should().Be(nameof(WizardState.Approving));
+        item.GetProperty("dueAt").ValueKind.Should().Be(JsonValueKind.String);
+        item.GetProperty("overdue")
+            .GetBoolean()
+            .Should()
+            .BeTrue("its timer is an hour past due and nothing fired it");
+        item.GetProperty("stuck").GetBoolean().Should().BeTrue();
+        item.GetProperty("waitingOn").ValueKind.Should().Be(JsonValueKind.Null);
+        item.GetProperty("inStateSince")
+            .GetString()
+            .Should()
+            .Be(item.GetProperty("updatedAt").GetString(), "no transition log is kept yet");
+    }
+
+    private static void AssertCountedStuck(JsonElement operations)
+    {
+        operations
+            .GetProperty("machineInstanceCounts")
+            .EnumerateArray()
+            .Single(c =>
+                string.Equals(
+                    c.GetProperty("state").GetString(),
+                    nameof(WizardState.Approving),
+                    StringComparison.Ordinal
+                )
+                && string.Equals(
+                    c.GetProperty("ownerKind").GetString(),
+                    "USER",
+                    StringComparison.Ordinal
+                )
+            )
+            .GetProperty("stuck")
+            .GetInt64()
+            .Should()
+            .BeGreaterThanOrEqualTo(1, "the overdue instance is counted stuck in its state");
     }
 
     // graphql-transport-ws sends no ack for subscribe, so the feed is live only once a write reaches it, and a write

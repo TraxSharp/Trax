@@ -81,8 +81,6 @@ public sealed class TraxJwtSocketInterceptor : DefaultSocketSessionInterceptor
         if (string.IsNullOrWhiteSpace(token))
             return ConnectionStatus.Reject("Missing auth token in connection_init payload.");
 
-        const string scheme = JwtDefaults.SchemeName;
-
         // The resolver is scoped: it is the host's code and typically hits a database. A socket
         // interceptor is a singleton, so it cannot hold one, and the connection gets its own
         // scope instead. The handler and the host's events resolve from the same scope.
@@ -93,72 +91,122 @@ public sealed class TraxJwtSocketInterceptor : DefaultSocketSessionInterceptor
         // scope instead. The handler and the host's events resolve from the same scope.
         await using (scope.ConfigureAwait(false))
         {
-            AuthenticateResult result;
-            try
-            {
-                result = await JwtSocketAuthentication
-                    .AuthenticateAsync(
-                        scope.ServiceProvider,
-                        session.Connection.HttpContext,
-                        scheme,
-                        token,
-                        cancellationToken
-                    )
-                    .ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Trax subscription JWT authentication threw an exception.");
-                return ConnectionStatus.Reject("JWT validation failed.");
-            }
-
-            if (!result.Succeeded || result.Principal is not { } principal)
-                return ConnectionStatus.Reject(JwtSocketAuthentication.RejectedMessage);
-
-            // AddTraxJwtAuth's OnTokenValidated resolved the Trax principal inside the handler. A
-            // scheme the host registered itself did not, so the resolver runs here.
-            var resolvedByHandler =
-                _applicationServices.Services.GetService<JwtResolverRegistry>() is { } registry
-                && registry.SchemeNames.Contains(scheme, StringComparer.Ordinal);
-
-            if (!resolvedByHandler)
-            {
-                TraxPrincipal? traxPrincipal;
-                try
-                {
-                    var resolver = scope.ServiceProvider.GetRequiredService<
-                        ITraxPrincipalResolver<JwtTokenInput>
-                    >();
-                    traxPrincipal = await resolver
-                        .ResolveAsync(
-                            new JwtTokenInput(principal, new JsonWebToken(token)),
-                            cancellationToken
-                        )
-                        .ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Trax subscription JWT resolver threw an exception.");
-                    return ConnectionStatus.Reject("JWT resolver failed.");
-                }
-
-                if (traxPrincipal is null)
-                    return ConnectionStatus.Reject("JWT did not map to a known Trax principal.");
-
-                principal = traxPrincipal.ToClaimsPrincipal(scheme);
-            }
-
-            JwtSocketAuthentication.AttachPrincipal(session, principal);
-            JwtSocketAuthentication.CloseAtExpiry(
-                session,
-                JwtSocketAuthentication.ExpiresAt(result, token),
-                _applicationServices.Services,
-                _logger
-            );
-
-            return await base.OnConnectAsync(session, connectionInitMessage, cancellationToken)
+            return await ConnectInScopeAsync(
+                    scope.ServiceProvider,
+                    session,
+                    connectionInitMessage,
+                    token,
+                    cancellationToken
+                )
                 .ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Authenticates the token with the connection's scope, resolves the Trax principal when the
+    /// scheme's handler did not, and accepts the connection or rejects it.
+    /// </summary>
+    private async ValueTask<ConnectionStatus> ConnectInScopeAsync(
+        IServiceProvider scopeServices,
+        ISocketSession session,
+        IOperationMessagePayload connectionInitMessage,
+        string token,
+        CancellationToken cancellationToken
+    )
+    {
+        const string scheme = JwtDefaults.SchemeName;
+
+        AuthenticateResult result;
+        try
+        {
+            result = await JwtSocketAuthentication
+                .AuthenticateAsync(
+                    scopeServices,
+                    session.Connection.HttpContext,
+                    scheme,
+                    token,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Trax subscription JWT authentication threw an exception.");
+            return ConnectionStatus.Reject("JWT validation failed.");
+        }
+
+        if (!result.Succeeded || result.Principal is not { } principal)
+            return ConnectionStatus.Reject(JwtSocketAuthentication.RejectedMessage);
+
+        // AddTraxJwtAuth's OnTokenValidated resolved the Trax principal inside the handler. A
+        // scheme the host registered itself did not, so the resolver runs here.
+        var resolvedByHandler =
+            _applicationServices.Services.GetService<JwtResolverRegistry>() is { } registry
+            && registry.SchemeNames.Contains(scheme, StringComparer.Ordinal);
+
+        if (!resolvedByHandler)
+        {
+            var (traxPrincipal, resolverRejection) = await ResolveTraxPrincipalAsync(
+                    scopeServices,
+                    principal,
+                    token,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            if (resolverRejection is not null)
+                return resolverRejection;
+
+            if (traxPrincipal is null)
+                return ConnectionStatus.Reject("JWT did not map to a known Trax principal.");
+
+            principal = traxPrincipal.ToClaimsPrincipal(scheme);
+        }
+
+        JwtSocketAuthentication.AttachPrincipal(session, principal);
+        JwtSocketAuthentication.CloseAtExpiry(
+            session,
+            JwtSocketAuthentication.ExpiresAt(result, token),
+            _applicationServices.Services,
+            _logger
+        );
+
+        return await base.OnConnectAsync(session, connectionInitMessage, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Runs the host's principal resolver on the validated token, or the rejection when it threw.
+    /// </summary>
+    private async Task<(
+        TraxPrincipal? Principal,
+        ConnectionStatus? Rejection
+    )> ResolveTraxPrincipalAsync(
+        IServiceProvider scopeServices,
+        System.Security.Claims.ClaimsPrincipal principal,
+        string token,
+        CancellationToken cancellationToken
+    )
+    {
+        TraxPrincipal? traxPrincipal;
+        try
+        {
+            var resolver = scopeServices.GetRequiredService<
+                ITraxPrincipalResolver<JwtTokenInput>
+            >();
+            traxPrincipal = await resolver
+                .ResolveAsync(
+                    new JwtTokenInput(principal, new JsonWebToken(token)),
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Trax subscription JWT resolver threw an exception.");
+            return (null, ConnectionStatus.Reject("JWT resolver failed."));
+        }
+
+        return (traxPrincipal, null);
     }
 
     private static ConnectionInitPayload? TryReadPayload(IOperationMessagePayload payload) =>

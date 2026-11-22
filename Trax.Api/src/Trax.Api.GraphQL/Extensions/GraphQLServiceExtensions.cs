@@ -121,23 +121,64 @@ public static class GraphQLServiceExtensions
         var config = builder.Build();
         services.AddSingleton(config);
 
-        // Ensure the WebSocket upgrade middleware sits at the front of the
-        // pipeline so subscriptions can always upgrade, no matter where the host
-        // places UseTraxGraphQL() relative to other endpoint middleware (the
-        // dashboard's Blazor endpoints, an explicit UseEndpoints, etc.). See
-        // WebSocketsStartupFilter for the failure mode this prevents.
-        services.TryAddEnumerable(
-            ServiceDescriptor.Transient<IStartupFilter, WebSocketsStartupFilter>()
+        AddHostingServices(services);
+
+        var surfaces = DiscoverSurfaces(services, config);
+
+        AddRegistrationOrderValidators(
+            services,
+            surfaces.TrainRegistrations,
+            surfaces.StateMachineOptions,
+            surfaces.MachinesExposed,
+            surfaces.ViewsExposed
         );
 
-        // What the host serves, for a process started with --trax-export-deploy (TraxDeployExport).
-        services.TryAddEnumerable(
-            ServiceDescriptor.Singleton<
-                Trax.Effect.Configuration.Deploy.IDeployManifestSource,
-                Deploy.ApiDeployManifestSource
-            >()
-        );
+        AddApiServices(services);
+        AddOperationsServices(services, config);
 
+        var hasMutationRoot = RequireRootTypes(config, surfaces);
+
+        var graphqlBuilder = AddSchemaTypes(services, hasMutationRoot);
+        AddViewsAndMachinesRoots(
+            services,
+            graphqlBuilder,
+            config,
+            surfaces.TrainRegistrations,
+            surfaces.MachinesExposed,
+            surfaces.ViewsExposed
+        );
+        AddOperationsRoots(services, graphqlBuilder, config);
+        AddAuthorizationWiring(services, graphqlBuilder, config);
+        AddQueryModels(services, graphqlBuilder, config);
+        AddConsumerSchemaExtensions(services, graphqlBuilder, config);
+        AddSchemaCensusAndEventHandlers(services, graphqlBuilder, config, surfaces.NameCensus);
+
+        return services;
+    }
+
+    /// <summary>
+    /// What <c>AddTraxGraphQL</c> found registered before it: the trains, the machines and the
+    /// views it serves, and the census of the names they claim.
+    /// </summary>
+    private sealed record DiscoveredSurfaces(
+        IReadOnlyList<TrainRegistration> TrainRegistrations,
+        bool HasTrainQueries,
+        bool HasTrainMutations,
+        StateMachineOptions? StateMachineOptions,
+        bool MachinesExposed,
+        bool ViewsExposed,
+        SchemaNameCensus NameCensus
+    );
+
+    /// <summary>
+    /// Reads the trains, machines and views registered so far, checks the trains' authorization
+    /// posture, and takes the census of the names they claim.
+    /// </summary>
+    private static DiscoveredSurfaces DiscoverSurfaces(
+        IServiceCollection services,
+        GraphQLConfiguration config
+    )
+    {
         // Detect train queries/mutations registered before us so we can decide whether
         // RootQuery / RootMutation will have any fields by the time HotChocolate builds
         // the schema. A train registered AFTER AddTraxGraphQL is not seen here, and
@@ -181,6 +222,87 @@ public static class GraphQLServiceExtensions
             viewsExposed
         );
 
+        return new DiscoveredSurfaces(
+            trainRegistrations,
+            hasTrainQueries,
+            hasTrainMutations,
+            stateMachineOptions,
+            machinesExposed,
+            viewsExposed,
+            nameCensus
+        );
+    }
+
+    /// <summary>
+    /// Refuses a schema whose root Query type would be empty, and answers whether it has a root
+    /// Mutation type.
+    /// </summary>
+    private static bool RequireRootTypes(GraphQLConfiguration config, DiscoveredSurfaces surfaces)
+    {
+        var hasTrainQueries = surfaces.HasTrainQueries;
+        var hasTrainMutations = surfaces.HasTrainMutations;
+        var machinesExposed = surfaces.MachinesExposed;
+        var hasQueryRoot =
+            config.OperationQueriesExposed
+            || hasTrainQueries
+            || config.ModelRegistrations.Count > 0
+            || machinesExposed
+            || config.FeatureRootFieldsAdded;
+        var hasMutationRoot =
+            config.OperationMutationsExposed
+            || hasTrainMutations
+            || machinesExposed
+            || config.FeatureRootFieldsAdded;
+
+        if (!hasQueryRoot)
+            throw new InvalidOperationException(
+                "AddTraxGraphQL() found no GraphQL queries to expose. The root Query type "
+                    + "would be empty and HotChocolate would fail to build the schema. "
+                    + "Either register at least one [TraxQuery] train, register a "
+                    + "DbContext via AddDbContext<T>() with [TraxQueryModel] entities, or "
+                    + "call ExposeOperationQueries() on the builder to expose the "
+                    + "predefined operations namespace."
+            );
+
+        return hasMutationRoot;
+    }
+
+    /// <summary>
+    /// Registers the startup filter that puts the WebSocket middleware first, and what the host
+    /// serves for a deploy export.
+    /// </summary>
+    private static void AddHostingServices(IServiceCollection services)
+    {
+        // Ensure the WebSocket upgrade middleware sits at the front of the
+        // pipeline so subscriptions can always upgrade, no matter where the host
+        // places UseTraxGraphQL() relative to other endpoint middleware (the
+        // dashboard's Blazor endpoints, an explicit UseEndpoints, etc.). See
+        // WebSocketsStartupFilter for the failure mode this prevents.
+        services.TryAddEnumerable(
+            ServiceDescriptor.Transient<IStartupFilter, WebSocketsStartupFilter>()
+        );
+
+        // What the host serves, for a process started with --trax-export-deploy (TraxDeployExport).
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<
+                Trax.Effect.Configuration.Deploy.IDeployManifestSource,
+                Deploy.ApiDeployManifestSource
+            >()
+        );
+    }
+
+    /// <summary>
+    /// Refuses the host, naming it, when a train, machine or view is registered after
+    /// <c>AddTraxGraphQL</c> could see it, and reports queue-capable mutations once at startup.
+    /// </summary>
+    private static void AddRegistrationOrderValidators(
+        IServiceCollection services,
+        IReadOnlyList<TrainRegistration> trainRegistrations,
+        StateMachineOptions? stateMachineOptions,
+        bool machinesExposed,
+        bool viewsExposed
+    )
+    {
         // A train registered after this call skipped the checks above. Refuse the host, naming it,
         // rather than leave its field silently missing.
         var seenTrains = trainRegistrations.Select(r => r.ServiceType).ToHashSet();
@@ -214,7 +336,14 @@ public static class GraphQLServiceExtensions
             sp,
             sp.GetRequiredService<ILogger<QueueDispatchReporter>>()
         ));
+    }
 
+    /// <summary>
+    /// Registers the API services, the type modules, the background job lists and the lifecycle
+    /// hooks the GraphQL surface needs.
+    /// </summary>
+    private static void AddApiServices(IServiceCollection services)
+    {
         services.AddTraxApi();
         services.AddSingleton<TrainTypeModule>();
         services.AddSingleton<RunProgressTypeModule>();
@@ -247,7 +376,17 @@ public static class GraphQLServiceExtensions
         // Deliver coalesced change signals to the local onDataChanged subscription. The change-
         // signal pipeline itself is registered by AddTrax(); this is the in-process delivery sink.
         services.AddSingleton<IChangeSignalSink, TopicEventSenderChangeSink>();
+    }
 
+    /// <summary>
+    /// Registers the lifecycle stream options, and the startup check that the operations surface
+    /// has its backing services when it is exposed.
+    /// </summary>
+    private static void AddOperationsServices(
+        IServiceCollection services,
+        GraphQLConfiguration config
+    )
+    {
         // Exposing the operations (admin) surface means this host is an admin dashboard, which
         // should observe every train's lifecycle — not the per-train [TraxBroadcast] opt-in that
         // curates user-facing subscriptions. So the lifecycle hooks stream all trains here.
@@ -278,29 +417,17 @@ public static class GraphQLServiceExtensions
                 mutationsExposed
             ));
         }
+    }
 
-        var hasQueryRoot =
-            config.OperationQueriesExposed
-            || hasTrainQueries
-            || config.ModelRegistrations.Count > 0
-            || machinesExposed
-            || config.FeatureRootFieldsAdded;
-        var hasMutationRoot =
-            config.OperationMutationsExposed
-            || hasTrainMutations
-            || machinesExposed
-            || config.FeatureRootFieldsAdded;
-
-        if (!hasQueryRoot)
-            throw new InvalidOperationException(
-                "AddTraxGraphQL() found no GraphQL queries to expose. The root Query type "
-                    + "would be empty and HotChocolate would fail to build the schema. "
-                    + "Either register at least one [TraxQuery] train, register a "
-                    + "DbContext via AddDbContext<T>() with [TraxQueryModel] entities, or "
-                    + "call ExposeOperationQueries() on the builder to expose the "
-                    + "predefined operations namespace."
-            );
-
+    /// <summary>
+    /// Adds the named schema with its root, subscription and lifecycle types, its error filter and
+    /// its in-memory subscriptions.
+    /// </summary>
+    private static IRequestExecutorBuilder AddSchemaTypes(
+        IServiceCollection services,
+        bool hasMutationRoot
+    )
+    {
         var graphqlBuilder = services.AddGraphQLServer(SchemaName);
 
         graphqlBuilder.AddQueryType<RootQuery>();
@@ -322,7 +449,19 @@ public static class GraphQLServiceExtensions
                 sp.GetRootServiceProvider().GetService<ILogger<TraxErrorFilter>>()
             ))
             .AddInMemorySubscriptions();
+        return graphqlBuilder;
+    }
 
+    /// <summary>Adds the views root and the machines root, each when the host serves it.</summary>
+    private static void AddViewsAndMachinesRoots(
+        IServiceCollection services,
+        IRequestExecutorBuilder graphqlBuilder,
+        GraphQLConfiguration config,
+        IReadOnlyList<TrainRegistration> trainRegistrations,
+        bool machinesExposed,
+        bool viewsExposed
+    )
+    {
         // The views root: one query field per view, each read only by its readers.
         if (viewsExposed)
         {
@@ -380,7 +519,15 @@ public static class GraphQLServiceExtensions
                 }
             );
         }
+    }
 
+    /// <summary>Adds the operations query and mutation namespaces, each when exposed.</summary>
+    private static void AddOperationsRoots(
+        IServiceCollection services,
+        IRequestExecutorBuilder graphqlBuilder,
+        GraphQLConfiguration config
+    )
+    {
         if (config.OperationQueriesExposed)
         {
             graphqlBuilder.AddType(new ObjectType<OperationsQueries>());
@@ -432,7 +579,18 @@ public static class GraphQLServiceExtensions
                 })
             );
         }
+    }
 
+    /// <summary>
+    /// Wires the @authorize handler, the hardening defaults and the HTTP interceptor that
+    /// establishes the caller.
+    /// </summary>
+    private static void AddAuthorizationWiring(
+        IServiceCollection services,
+        IRequestExecutorBuilder graphqlBuilder,
+        GraphQLConfiguration config
+    )
+    {
         // Wire HotChocolate's @authorize directive handler on every host. The directive runs
         // against ASP.NET Core's IAuthorizationService, so RequireRole and policy definitions
         // registered via services.AddAuthorization(...) apply. A host that never called
@@ -458,7 +616,18 @@ public static class GraphQLServiceExtensions
         // configuration from the schema container.
         graphqlBuilder.BridgeApplicationService<GraphQLConfiguration>();
         graphqlBuilder.AddHttpRequestInterceptor<TraxHttpAuthenticationInterceptor>();
+    }
 
+    /// <summary>
+    /// Adds the query models, their authorization validators, the discover namespace and their
+    /// filtering, sorting and projection, when the host registered any.
+    /// </summary>
+    private static void AddQueryModels(
+        IServiceCollection services,
+        IRequestExecutorBuilder graphqlBuilder,
+        GraphQLConfiguration config
+    )
+    {
         if (config.ModelRegistrations.Count > 0)
         {
             services.AddSingleton<QueryModelTypeModule>();
@@ -502,58 +671,78 @@ public static class GraphQLServiceExtensions
                 })
             );
 
-            if (config.ModelRegistrations.Any(r => r.Attribute.Filtering))
+            AddQueryModelDataConventions(services, graphqlBuilder, config);
+        }
+    }
+
+    /// <summary>The filtering, sorting and projection conventions the query models opted into.</summary>
+    private static void AddQueryModelDataConventions(
+        IServiceCollection services,
+        IRequestExecutorBuilder graphqlBuilder,
+        GraphQLConfiguration config
+    )
+    {
+        if (config.ModelRegistrations.Any(r => r.Attribute.Filtering))
+        {
+            // Scalar collection properties need their element filter input restricted:
+            // `some/all/none: { neq: ... }` lowers to Any(x => x != value) over a
+            // primitive collection, which no EF Core provider can translate, so it
+            // passes validation and throws at execution. See ListElementFilterBinding.
+            var listElementBindings = ListElementFilterBinding.Discover(
+                config
+                    .ModelRegistrations.Where(r => r.Attribute.Filtering)
+                    .Select(r => r.EntityType)
+            );
+
+            if (listElementBindings.Count > 0)
             {
-                // Scalar collection properties need their element filter input restricted:
-                // `some/all/none: { neq: ... }` lowers to Any(x => x != value) over a
-                // primitive collection, which no EF Core provider can translate, so it
-                // passes validation and throws at execution. See ListElementFilterBinding.
-                var listElementBindings = ListElementFilterBinding.Discover(
-                    config
-                        .ModelRegistrations.Where(r => r.Attribute.Filtering)
-                        .Select(r => r.EntityType)
-                );
-
-                if (listElementBindings.Count > 0)
-                {
-                    // Whether a scalar collection is GIN-indexed decides which operator
-                    // Npgsql emits for a membership filter, and nothing in the schema or
-                    // the response reveals the answer. Say so at startup.
-                    services.AddHostedService<QueryModelScalarCollectionIndexValidator>();
-                }
-
-                // Supplying a configure action replaces HotChocolate's default convention
-                // wiring, so re-establish the stock operations and queryable provider before
-                // layering Trax's bindings and the opt-in modules on top.
-                graphqlBuilder.AddFiltering(convention =>
-                {
-                    convention.AddDefaults();
-                    BindQueryModelFilterTypes(convention, config);
-                    ListElementFilterBinding.Apply(convention, listElementBindings);
-                    foreach (var module in config.FilterModules)
-                        module.Apply(convention);
-                });
+                // Whether a scalar collection is GIN-indexed decides which operator
+                // Npgsql emits for a membership filter, and nothing in the schema or
+                // the response reveals the answer. Say so at startup.
+                services.AddHostedService<QueryModelScalarCollectionIndexValidator>();
             }
 
-            if (config.ModelRegistrations.Any(r => r.Attribute.Sorting))
-                graphqlBuilder.AddSorting(convention =>
-                {
-                    convention.AddDefaults();
-                    BindQueryModelSortTypes(convention, config);
-                });
-
-            if (config.ModelRegistrations.Any(r => r.Attribute.Projection))
+            // Supplying a configure action replaces HotChocolate's default convention
+            // wiring, so re-establish the stock operations and queryable provider before
+            // layering Trax's bindings and the opt-in modules on top.
+            graphqlBuilder.AddFiltering(convention =>
             {
-                graphqlBuilder.AddProjections();
-                // Declares the entity key as a projection requirement on hand-written
-                // [ExtendObjectType] resolvers, which would otherwise receive a parent
-                // whose key was never selected. See QueryModelProjection.
-                graphqlBuilder.TryAddTypeInterceptor(
-                    new QueryModelProjectionRequirementInterceptor(config)
-                );
-            }
+                convention.AddDefaults();
+                BindQueryModelFilterTypes(convention, config);
+                ListElementFilterBinding.Apply(convention, listElementBindings);
+                foreach (var module in config.FilterModules)
+                    module.Apply(convention);
+            });
         }
 
+        if (config.ModelRegistrations.Any(r => r.Attribute.Sorting))
+            graphqlBuilder.AddSorting(convention =>
+            {
+                convention.AddDefaults();
+                BindQueryModelSortTypes(convention, config);
+            });
+
+        if (config.ModelRegistrations.Any(r => r.Attribute.Projection))
+        {
+            graphqlBuilder.AddProjections();
+            // Declares the entity key as a projection requirement on hand-written
+            // [ExtendObjectType] resolvers, which would otherwise receive a parent
+            // whose key was never selected. See QueryModelProjection.
+            graphqlBuilder.TryAddTypeInterceptor(
+                new QueryModelProjectionRequirementInterceptor(config)
+            );
+        }
+    }
+
+    /// <summary>
+    /// Registers the consumer's type modules, type extensions and schema callbacks, the callbacks last.
+    /// </summary>
+    private static void AddConsumerSchemaExtensions(
+        IServiceCollection services,
+        IRequestExecutorBuilder graphqlBuilder,
+        GraphQLConfiguration config
+    )
+    {
         // Register additional TypeModules provided by consumers via AddTypeModule<T>().
         foreach (var typeModuleType in config.AdditionalTypeModules)
         {
@@ -576,7 +765,19 @@ public static class GraphQLServiceExtensions
         {
             schemaConfiguration(graphqlBuilder);
         }
+    }
 
+    /// <summary>
+    /// Registers the exposure and collision interceptors, the policy validators and the event
+    /// handlers that feed the subscriptions.
+    /// </summary>
+    private static void AddSchemaCensusAndEventHandlers(
+        IServiceCollection services,
+        IRequestExecutorBuilder graphqlBuilder,
+        GraphQLConfiguration config,
+        SchemaNameCensus nameCensus
+    )
+    {
         // Turns [TraxAuthorize] on any resolver into @authorize, and censuses the fields type
         // extensions add. Registered on every host: a query model's or an output type's own member
         // can carry [TraxAuthorize] on a host with no type extension at all, and its gate must not
@@ -624,8 +825,6 @@ public static class GraphQLServiceExtensions
         // host called AddJunctionEvents(), so without it this is never resolved. A singleton,
         // because the run's path resolves it once per step and it holds no per-request state.
         services.AddSingleton<IJunctionEventHandler, GraphQLJunctionEventHandler>();
-
-        return services;
     }
 
     /// <summary>
@@ -804,6 +1003,48 @@ public static class GraphQLServiceExtensions
             config.CostOverride?.Invoke(opts);
         });
 
+        ApplyIntrospectionGate(services, graphqlBuilder, config);
+        ApplyTransportDefaults(services, graphqlBuilder, config);
+
+        // G7 — endpoint authorization. Wired when the builder opted in via
+        // RequireAuthorization(). The HTTP interceptor authenticates with the policy's schemes;
+        // the request middleware below is the only place the policy refuses an operation, so a refused request
+        // runs inside execution and the diagnostic listeners (the audit trail) see it.
+        if (config.AuthorizationRequired)
+        {
+            services.AddAuthorization();
+            services.AddHostedService<TraxGraphQLAuthPolicyValidator>();
+
+            // The same policy for every operation on every transport. HotChocolate's request
+            // pipeline is the one place an HTTP request and each operation a socket carries both
+            // pass through. See docs/adr/0009-the-endpoint-policy-applies-to-every-transport.md.
+            graphqlBuilder.UseRequest(
+                EndpointPolicyRequestMiddleware.Create,
+                key: EndpointPolicyRequestMiddleware.Key,
+                before: "DocumentCacheMiddleware"
+            );
+        }
+
+        // G6 — Per-request operation cap. Registered through HotChocolate's validation
+        // builder so the rejection happens during validation, before any resolver runs. (A rule
+        // added to the schema services is never picked up by the document validator.)
+        var maxOperations = config.MaxOperationsPerRequest;
+        graphqlBuilder.AddValidationRule((_, _) => new OperationCountValidatorRule(maxOperations));
+
+        // At most one machine write per operation: the fields under a namespace resolve in
+        // parallel, so two events in one operation would race on the instance.
+        graphqlBuilder.AddValidationRule((_, _) => new MachineEventCountValidatorRule());
+    }
+
+    /// <summary>
+    /// G3: introspection, the schema download and the IDE, decided per request.
+    /// </summary>
+    private static void ApplyIntrospectionGate(
+        IServiceCollection services,
+        IRequestExecutorBuilder graphqlBuilder,
+        GraphQLConfiguration config
+    )
+    {
         // G3 — Introspection, decided per request. HotChocolate reads the DisableIntrospection
         // option once, when the executor is built and no request exists, so the schema-level
         // switch is always on and a request is let through only by the allowance middleware,
@@ -843,7 +1084,18 @@ public static class GraphQLServiceExtensions
             key: IntrospectionAllowanceMiddleware.Key,
             before: WellKnownRequestMiddleware.DocumentValidationMiddleware
         );
+    }
 
+    /// <summary>
+    /// G8 and G4 to G5: HTTP GET, socket origins, subscription auth and the per-connection
+    /// operation limit.
+    /// </summary>
+    private static void ApplyTransportDefaults(
+        IServiceCollection services,
+        IRequestExecutorBuilder graphqlBuilder,
+        GraphQLConfiguration config
+    )
+    {
         // G8 — HTTP GET. Off unless the host opts in: a cross-site top-level navigation carries a
         // SameSite=Lax cookie, so a GET-executable query could be run as the signed-in user from
         // another site. An opted-in GET still needs the GraphQL-preflight header (a navigation
@@ -900,35 +1152,6 @@ public static class GraphQLServiceExtensions
             sp.GetRequiredService<IRequestExecutorProvider>(),
             SchemaName
         ));
-
-        // G7 — endpoint authorization. Wired when the builder opted in via
-        // RequireAuthorization(). The HTTP interceptor authenticates with the policy's schemes;
-        // the request middleware below is the only place the policy refuses an operation, so a refused request
-        // runs inside execution and the diagnostic listeners (the audit trail) see it.
-        if (config.AuthorizationRequired)
-        {
-            services.AddAuthorization();
-            services.AddHostedService<TraxGraphQLAuthPolicyValidator>();
-
-            // The same policy for every operation on every transport. HotChocolate's request
-            // pipeline is the one place an HTTP request and each operation a socket carries both
-            // pass through. See docs/adr/0009-the-endpoint-policy-applies-to-every-transport.md.
-            graphqlBuilder.UseRequest(
-                EndpointPolicyRequestMiddleware.Create,
-                key: EndpointPolicyRequestMiddleware.Key,
-                before: "DocumentCacheMiddleware"
-            );
-        }
-
-        // G6 — Per-request operation cap. Registered through HotChocolate's validation
-        // builder so the rejection happens during validation, before any resolver runs. (A rule
-        // added to the schema services is never picked up by the document validator.)
-        var maxOperations = config.MaxOperationsPerRequest;
-        graphqlBuilder.AddValidationRule((_, _) => new OperationCountValidatorRule(maxOperations));
-
-        // At most one machine write per operation: the fields under a namespace resolve in
-        // parallel, so two events in one operation would race on the instance.
-        graphqlBuilder.AddValidationRule((_, _) => new MachineEventCountValidatorRule());
     }
 
     /// <summary>

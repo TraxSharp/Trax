@@ -26,28 +26,7 @@ public sealed partial class PersistedOperationsBuilder
                     + "Pass non-empty operation names only."
             );
 
-        if (_rabbitMqConnectionString is null && !_singleNode)
-            throw new InvalidOperationException(
-                "Persisted operations need to know how a change reaches every node. "
-                    + "Each node caches the documents it serves for up to the cache's maximum age, so an "
-                    + "upload, deactivation or restore made on one node is seen by another at once only "
-                    + "if it is broadcast. Call UseRabbitMqInvalidation(connectionString) when more than "
-                    + "one node serves this endpoint, or SingleNode() when exactly one process serves it "
-                    + "and writes the store."
-            );
-
-        if (_rabbitMqConnectionString is not null && _singleNode)
-            throw new InvalidOperationException(
-                "SingleNode() and UseRabbitMqInvalidation(...) contradict each other. "
-                    + "Keep UseRabbitMqInvalidation when more than one node serves this endpoint, "
-                    + "or SingleNode() when exactly one does."
-            );
-
-        if (
-            _rabbitMqConnectionString is not null
-            && _rabbitMqInvalidation.Problem(_rabbitMqConnectionString) is { } problem
-        )
-            throw new InvalidOperationException(problem);
+        ValidateInvalidation();
 
         if (_cacheTtl is { } ttl && ttl > _cacheMaxAge)
             throw new InvalidOperationException(
@@ -73,5 +52,32 @@ public sealed partial class PersistedOperationsBuilder
             MachineDocumentGracePeriod = _machineDocumentGracePeriod,
             ClientDocumentFiles = _clientDocumentFiles.ToList(),
         };
+    }
+
+    // A change must reach every node: refuses a builder that says neither how, or says both.
+    private void ValidateInvalidation()
+    {
+        if (_rabbitMqConnectionString is null && !_singleNode)
+            throw new InvalidOperationException(
+                "Persisted operations need to know how a change reaches every node. "
+                    + "Each node caches the documents it serves for up to the cache's maximum age, so an "
+                    + "upload, deactivation or restore made on one node is seen by another at once only "
+                    + "if it is broadcast. Call UseRabbitMqInvalidation(connectionString) when more than "
+                    + "one node serves this endpoint, or SingleNode() when exactly one process serves it "
+                    + "and writes the store."
+            );
+
+        if (_rabbitMqConnectionString is not null && _singleNode)
+            throw new InvalidOperationException(
+                "SingleNode() and UseRabbitMqInvalidation(...) contradict each other. "
+                    + "Keep UseRabbitMqInvalidation when more than one node serves this endpoint, "
+                    + "or SingleNode() when exactly one does."
+            );
+
+        if (
+            _rabbitMqConnectionString is not null
+            && _rabbitMqInvalidation.Problem(_rabbitMqConnectionString) is { } problem
+        )
+            throw new InvalidOperationException(problem);
     }
 }

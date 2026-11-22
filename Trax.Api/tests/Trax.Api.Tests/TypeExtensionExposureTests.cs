@@ -45,55 +45,8 @@ public class TypeExtensionExposureTests
     {
         var host = new HostBuilder()
             .ConfigureServices(services =>
-            {
-                services.AddLogging();
-
-                // RequireAuthorization() gates on the combined Trax policy, which only exists once
-                // a scheme has contributed to it.
-                if (gateEndpoint)
-                    services.AddTraxApiKeyAuth(keys =>
-                        keys.Add("census-key-0123456789abcdefghijklmnopqrs", id: "census")
-                    );
-
-                services.AddSingleton<TraxMarker>();
-                var discovery = Substitute.For<ITrainDiscoveryService>();
-                discovery.DiscoverTrains().Returns([]);
-                services.AddSingleton(discovery);
-                services.AddSingleton(Substitute.For<IEffectRegistry>());
-
-                services.AddDbContextFactory<CensusDbContext>(o =>
-                    o.UseInMemoryDatabase("census-" + Guid.NewGuid())
-                );
-                services.AddDbContextFactory<GatedOnlyDbContext>(o =>
-                    o.UseInMemoryDatabase("census-gated-" + Guid.NewGuid())
-                );
-
-                services.AddTraxGraphQL(graphql =>
-                {
-                    // A gated endpoint cannot carry a [TraxAllowAnonymous] entity: that pairing is
-                    // itself a violation of the entity rule, so those hosts get a context holding
-                    // only the gated entity.
-                    if (gateEndpoint)
-                        graphql.AddDbContext<GatedOnlyDbContext>().RequireAuthorization();
-                    else
-                        graphql.AddDbContext<CensusDbContext>();
-
-                    if (exposeOperations)
-                        graphql.ExposeOperationMutations().AllowAnonymousOperations();
-                    configure(graphql);
-                    return graphql;
-                });
-
-                // Backing services for the operations resolvers, so exposing the namespace does
-                // not fail for an unrelated reason.
-                services.AddScoped(_ => Substitute.For<ITraxHealthService>());
-                services.AddScoped(_ => Substitute.For<IOperationsService>());
-                services.AddScoped(_ =>
-                    Substitute.For<Trax.Mediator.Services.TrainExecution.ITrainExecutionService>()
-                );
-                services.AddScoped(_ => Substitute.For<ITraxScheduler>());
-                services.AddScoped(_ => Substitute.For<IJobSubmitter>());
-            })
+                AddCensusServices(services, configure, exposeOperations, gateEndpoint)
+            )
             .Build();
 
         try
@@ -110,6 +63,62 @@ public class TypeExtensionExposureTests
         {
             host.Dispose();
         }
+    }
+
+    private static void AddCensusServices(
+        IServiceCollection services,
+        Action<TraxGraphQLBuilder> configure,
+        bool exposeOperations,
+        bool gateEndpoint
+    )
+    {
+        services.AddLogging();
+
+        // RequireAuthorization() gates on the combined Trax policy, which only exists once
+        // a scheme has contributed to it.
+        if (gateEndpoint)
+            services.AddTraxApiKeyAuth(keys =>
+                keys.Add("census-key-0123456789abcdefghijklmnopqrs", id: "census")
+            );
+
+        services.AddSingleton<TraxMarker>();
+        var discovery = Substitute.For<ITrainDiscoveryService>();
+        discovery.DiscoverTrains().Returns([]);
+        services.AddSingleton(discovery);
+        services.AddSingleton(Substitute.For<IEffectRegistry>());
+
+        services.AddDbContextFactory<CensusDbContext>(o =>
+            o.UseInMemoryDatabase("census-" + Guid.NewGuid())
+        );
+        services.AddDbContextFactory<GatedOnlyDbContext>(o =>
+            o.UseInMemoryDatabase("census-gated-" + Guid.NewGuid())
+        );
+
+        services.AddTraxGraphQL(graphql =>
+        {
+            // A gated endpoint cannot carry a [TraxAllowAnonymous] entity: that pairing is
+            // itself a violation of the entity rule, so those hosts get a context holding
+            // only the gated entity.
+            if (gateEndpoint)
+                graphql.AddDbContext<GatedOnlyDbContext>().RequireAuthorization();
+            else
+                graphql.AddDbContext<CensusDbContext>();
+
+            if (exposeOperations)
+                graphql.ExposeOperationMutations().AllowAnonymousOperations();
+            configure(graphql);
+            return graphql;
+        });
+
+        // Backing services for the operations resolvers, so exposing the namespace does
+        // not fail for an unrelated reason.
+        services.AddScoped(_ => Substitute.For<ITraxHealthService>());
+        services.AddScoped(_ => Substitute.For<IOperationsService>());
+        services.AddScoped(_ =>
+            Substitute.For<Trax.Mediator.Services.TrainExecution.ITrainExecutionService>()
+        );
+        services.AddScoped(_ => Substitute.For<ITraxScheduler>());
+        services.AddScoped(_ => Substitute.For<IJobSubmitter>());
     }
 
     // ── A field on a [TraxAllowAnonymous] parent inherits nothing ────────

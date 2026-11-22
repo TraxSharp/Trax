@@ -182,6 +182,26 @@ public class JunctionEventsE2ETests
                 ("JUNCTION_FAILED", Withheld)
             );
 
+        AssertDecidedFieldsAndFailure(steps);
+
+        admin
+            .Received.Should()
+            .NotContain(Marker, "a step carries no input, output or message, per " + Adr);
+        admin.Received.Should().NotContain("\"Red\"", "the withheld answer appears nowhere");
+        admin
+            .Received.Should()
+            .NotContain(nameof(RevealSecret), "a junction on a sensitive track is named to nobody")
+            .And.NotContain(nameof(FinishOrExplode));
+        steps
+            .Should()
+            .Contain(
+                s => s.Name == nameof(PassLane),
+                "the operations view sees the names on a track whose answer it may see"
+            );
+    }
+
+    private static void AssertDecidedFieldsAndFailure(List<Step> steps)
+    {
         var lane = steps.First(s =>
             string.Equals(s.EventType, "DECIDED", StringComparison.Ordinal)
             && string.Equals(s.Name, "MarkerLane", StringComparison.Ordinal)
@@ -213,21 +233,6 @@ public class JunctionEventsE2ETests
             .Should()
             .Be("InvalidOperationException");
         failed.Fields.GetProperty("failureClass").ValueKind.Should().NotBe(JsonValueKind.Null);
-
-        admin
-            .Received.Should()
-            .NotContain(Marker, "a step carries no input, output or message, per " + Adr);
-        admin.Received.Should().NotContain("\"Red\"", "the withheld answer appears nowhere");
-        admin
-            .Received.Should()
-            .NotContain(nameof(RevealSecret), "a junction on a sensitive track is named to nobody")
-            .And.NotContain(nameof(FinishOrExplode));
-        steps
-            .Should()
-            .Contain(
-                s => s.Name == nameof(PassLane),
-                "the operations view sees the names on a track whose answer it may see"
-            );
     }
 
     [Test]
@@ -513,6 +518,33 @@ public class JunctionEventsE2ETests
             .GetProperty("operations")
             .GetProperty("runGraph");
 
+        var nodes = AssertGraphNodeIds(graph);
+        AssertNodeStates(nodes);
+
+        // None is lost: every recorded step is on a node or listed unmatched.
+        var unmatched = graph.GetProperty("unmatchedSteps").EnumerateArray().ToList();
+        Positions(nodes)
+            .Concat(unmatched.Select(s => s.GetProperty("position").GetInt32()))
+            .Should()
+            .BeEquivalentTo(timeline.Select(s => s.GetProperty("position").GetInt32()));
+
+        // The steps after the sensitive route carry no node id, which would name its track.
+        unmatched
+            .Should()
+            .OnlyContain(s => s.GetProperty("nodeId").ValueKind == JsonValueKind.Null);
+
+        foreach (var key in new[] { PlayerKey, GuestKey, null })
+        {
+            using var refused = await PostAsync(RunGraphQuery(run.MetadataId), key);
+            Denied(refused)
+                .Should()
+                .BeTrue($"the graph names the train's types (caller {key ?? "anonymous"})");
+            refused.RootElement.GetRawText().Should().NotContain(nameof(HoldForRelease));
+        }
+    }
+
+    private static JsonElement AssertGraphNodeIds(JsonElement graph)
+    {
         graph.GetProperty("hasGraph").GetBoolean().Should().BeTrue();
         graph.GetProperty("train").GetString().Should().Be(typeof(IHiddenMarkerTrain).FullName);
         graph.GetProperty("hash").GetString().Should().HaveLength(64);
@@ -537,6 +569,11 @@ public class JunctionEventsE2ETests
             .Select(t => t.GetProperty("name").GetString())
             .Should()
             .Equal("Fast", "Slow");
+        return nodes;
+    }
+
+    private static void AssertNodeStates(JsonElement nodes)
+    {
         var byId = nodes
             .EnumerateArray()
             .ToDictionary(n => n.GetProperty("id").GetString().NotNull(), StringComparer.Ordinal);
@@ -579,27 +616,6 @@ public class JunctionEventsE2ETests
             .GetString()
             .Should()
             .Be("WITHHELD");
-
-        // None is lost: every recorded step is on a node or listed unmatched.
-        var unmatched = graph.GetProperty("unmatchedSteps").EnumerateArray().ToList();
-        Positions(nodes)
-            .Concat(unmatched.Select(s => s.GetProperty("position").GetInt32()))
-            .Should()
-            .BeEquivalentTo(timeline.Select(s => s.GetProperty("position").GetInt32()));
-
-        // The steps after the sensitive route carry no node id, which would name its track.
-        unmatched
-            .Should()
-            .OnlyContain(s => s.GetProperty("nodeId").ValueKind == JsonValueKind.Null);
-
-        foreach (var key in new[] { PlayerKey, GuestKey, null })
-        {
-            using var refused = await PostAsync(RunGraphQuery(run.MetadataId), key);
-            Denied(refused)
-                .Should()
-                .BeTrue($"the graph names the train's types (caller {key ?? "anonymous"})");
-            refused.RootElement.GetRawText().Should().NotContain(nameof(HoldForRelease));
-        }
     }
 
     private static IEnumerable<int> Positions(JsonElement nodes) =>
@@ -697,6 +713,25 @@ public class JunctionEventsE2ETests
             .Equal(DashboardStates(dashboard.Nodes), "the API and the dashboard share one read");
         graph.GetProperty("unmatchedSteps").GetArrayLength().Should().Be(0);
 
+        AssertForkAndBranchStates(graph, fail, forkState);
+
+        // Each recorded step says which branch it ran in, from the column Effect writes.
+        rows.Single(r =>
+                string.Equals(
+                    r.NodeId,
+                    $"{Fork}/left/{nameof(ScoreLeft)}#0",
+                    StringComparison.Ordinal
+                )
+            )
+            .BranchPath.Should()
+            .Be($"{Fork}/left");
+        rows.Where(r => r.NodeId?.StartsWith(Fork + "/", StringComparison.Ordinal) != true)
+            .Should()
+            .OnlyContain(r => r.BranchPath == null, "a step outside the Parallel is in no branch");
+    }
+
+    private static void AssertForkAndBranchStates(JsonElement graph, bool fail, string forkState)
+    {
         var fork = graph
             .GetProperty("nodes")
             .EnumerateArray()
@@ -716,20 +751,6 @@ public class JunctionEventsE2ETests
         states[$"{nameof(JoinScores)}#0"].Should().Be(fail ? "NOT_REACHED" : "COMPLETED");
         if (!fail)
             states[NestedFork].Should().Be("COMPLETED");
-
-        // Each recorded step says which branch it ran in, from the column Effect writes.
-        rows.Single(r =>
-                string.Equals(
-                    r.NodeId,
-                    $"{Fork}/left/{nameof(ScoreLeft)}#0",
-                    StringComparison.Ordinal
-                )
-            )
-            .BranchPath.Should()
-            .Be($"{Fork}/left");
-        rows.Where(r => r.NodeId?.StartsWith(Fork + "/", StringComparison.Ordinal) != true)
-            .Should()
-            .OnlyContain(r => r.BranchPath == null, "a step outside the Parallel is in no branch");
     }
 
     /// <summary>

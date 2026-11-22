@@ -63,6 +63,12 @@ public class WizardMachine : Machine<WizardState, WizardTrigger>
         m.Watch(r => r.OwnerOnly());
         m.Discard(r => r.OwnerOnly());
 
+        ConfigureUpToApproval(m);
+        ConfigureBuildAndAfter(m);
+    }
+
+    private static void ConfigureUpToApproval(IMachineBuilder<WizardState, WizardTrigger> m)
+    {
         m.In(WizardState.Naming)
             .Context<WizardContext>()
             .On(WizardTrigger.Describe)
@@ -98,7 +104,10 @@ public class WizardMachine : Machine<WizardState, WizardTrigger>
             .To(WizardState.Building)
             .After(ApprovalWindow)
             .GoTo(WizardState.Expired);
+    }
 
+    private static void ConfigureBuildAndAfter(IMachineBuilder<WizardState, WizardTrigger> m)
+    {
         m.In(WizardState.Building)
             .Context<WizardContext>()
             .Invokes<IBuildWizardTrain, BuildWizardInput, WizardArtifact>(BuildInput)

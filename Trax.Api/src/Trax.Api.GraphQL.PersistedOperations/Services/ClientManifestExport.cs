@@ -82,52 +82,14 @@ internal static class ClientManifestExport
     {
         var documents = exposed.Count == 0 ? [] : MachineDocuments.Generate(schema, exposed);
         var exposedTrains = ExposedTrains.Resolve(schema, trains);
-        var models = (queryModels ?? [])
-            .Select(r =>
-            {
-                var ns = r.Attribute.Namespace is { } n ? TrainTypeModule.CamelCase(n) : null;
-                var field = QueryModelTypeModule.FieldName(r);
-                return
-                    ExposedTrains.FieldOf(schema, mutation: false, ns, field)
-                        is var (holder, definition)
-                    ? (
-                        Registration: r,
-                        Namespace: ns,
-                        Field: field,
-                        Holder: holder,
-                        Definition: definition
-                    )
-                    : default;
-            })
-            .Where(m => m.Definition is not null)
-            .OrderBy(m => m.Namespace ?? "", StringComparer.Ordinal)
-            .ThenBy(m => m.Field, StringComparer.Ordinal)
-            .ToList();
+        var models = ServedQueryModels(schema, queryModels);
         var progressDocuments = ProgressDocuments.Generate(schema);
         var viewDocuments = ViewDocuments.Generate(schema);
         GeneratedDocumentValidation.Validate(
             schema,
             [.. documents, .. progressDocuments, .. viewDocuments]
         );
-        var machines = exposed
-            .OrderBy(m => m.Name, StringComparer.Ordinal)
-            .Select(machine => new ClientManifestMachine
-            {
-                Id = machine.Name,
-                IrHash = machine.SchemaHash.NotNull(),
-                Ir = (JsonObject)JsonNode.Parse(machine.ExportIr()).NotNull(),
-                Documents = documents
-                    .Where(d => string.Equals(d.Machine, machine.Name, StringComparison.Ordinal))
-                    .OrderBy(d => d.Operation, StringComparer.Ordinal)
-                    .Select(d => new ClientManifestDocument
-                    {
-                        Id = d.Id,
-                        Operation = d.Operation,
-                        Document = d.Text,
-                    })
-                    .ToList(),
-            })
-            .ToList();
+        var machines = ClientMachines(exposed, documents);
 
         var types = DocumentTypes.Sdl(
             schema,
@@ -142,18 +104,7 @@ internal static class ClientManifestExport
         return new ClientManifest
         {
             Machines = machines,
-            Trains = exposedTrains
-                .Select(t => new ClientManifestTrain
-                {
-                    Field = t.Field,
-                    Root = t.Root,
-                    Namespace = t.Namespace,
-                    Answer = Print(t.Definition.Type),
-                    Arguments = t.Definition.Arguments.Select(Argument).ToList(),
-                    Requires = RequirementOf(t.Registration),
-                    Progress = progressDocuments.Count > 0 && t.Registration.IsRunProgressEnabled,
-                })
-                .ToList(),
+            Trains = ClientTrains(exposedTrains, progressDocuments),
             QueryModels = models
                 .Select(m => new ClientManifestQueryModel
                 {
@@ -186,6 +137,81 @@ internal static class ClientManifestExport
             Types = types,
         };
     }
+
+    // The query models the schema serves, by namespace and field.
+    private static List<(
+        QueryModelRegistration Registration,
+        string? Namespace,
+        string Field,
+        string Holder,
+        IOutputFieldDefinition Definition
+    )> ServedQueryModels(
+        ISchemaDefinition schema,
+        IReadOnlyList<QueryModelRegistration>? queryModels
+    ) =>
+        (queryModels ?? [])
+            .Select(r =>
+            {
+                var ns = r.Attribute.Namespace is { } n ? TrainTypeModule.CamelCase(n) : null;
+                var field = QueryModelTypeModule.FieldName(r);
+                return
+                    ExposedTrains.FieldOf(schema, mutation: false, ns, field)
+                        is var (holder, definition)
+                    ? (
+                        Registration: r,
+                        Namespace: ns,
+                        Field: field,
+                        Holder: holder,
+                        Definition: definition
+                    )
+                    : default;
+            })
+            .Where(m => m.Definition is not null)
+            .OrderBy(m => m.Namespace ?? "", StringComparer.Ordinal)
+            .ThenBy(m => m.Field, StringComparer.Ordinal)
+            .ToList();
+
+    // Each exposed machine with its IR and its generated documents, by name.
+    private static List<ClientManifestMachine> ClientMachines(
+        IReadOnlyList<IMachine> exposed,
+        IReadOnlyList<MachineDocument> documents
+    ) =>
+        exposed
+            .OrderBy(m => m.Name, StringComparer.Ordinal)
+            .Select(machine => new ClientManifestMachine
+            {
+                Id = machine.Name,
+                IrHash = machine.SchemaHash.NotNull(),
+                Ir = (JsonObject)JsonNode.Parse(machine.ExportIr()).NotNull(),
+                Documents = documents
+                    .Where(d => string.Equals(d.Machine, machine.Name, StringComparison.Ordinal))
+                    .OrderBy(d => d.Operation, StringComparer.Ordinal)
+                    .Select(d => new ClientManifestDocument
+                    {
+                        Id = d.Id,
+                        Operation = d.Operation,
+                        Document = d.Text,
+                    })
+                    .ToList(),
+            })
+            .ToList();
+
+    private static List<ClientManifestTrain> ClientTrains(
+        IReadOnlyList<ExposedTrain> exposedTrains,
+        IReadOnlyList<ProgressDocument> progressDocuments
+    ) =>
+        exposedTrains
+            .Select(t => new ClientManifestTrain
+            {
+                Field = t.Field,
+                Root = t.Root,
+                Namespace = t.Namespace,
+                Answer = Print(t.Definition.Type),
+                Arguments = t.Definition.Arguments.Select(Argument).ToList(),
+                Requires = RequirementOf(t.Registration),
+                Progress = progressDocuments.Count > 0 && t.Registration.IsRunProgressEnabled,
+            })
+            .ToList();
 
     private static ClientManifestArgument Argument(IInputValueDefinition argument) =>
         new()

@@ -120,6 +120,12 @@ internal sealed class TraxErrorFilter(ILogger<TraxErrorFilter>? logger = null) :
         if (error.Exception is null)
             return error;
 
+        return MapException(error);
+    }
+
+    /// <summary>Maps an error that carries an exception to the public shape its type earns.</summary>
+    private IError MapException(IError error)
+    {
         // Every mapped case detaches the exception: HotChocolate writes an attached exception's
         // message and stack trace into the response when the host switches exception details on,
         // after the filters have run, so a mapped error would otherwise carry everything its

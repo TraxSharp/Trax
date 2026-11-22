@@ -408,21 +408,7 @@ internal static class RunGraphs
             ? matched
             : [];
 
-        // A checkpoint records no step of its own: the row it stored says the run reached it,
-        // unless a withheld route came before it, which the walk keeps withholding.
-        var state =
-            steps.Count > 0 ? StateOf(steps, walk.Ended)
-            : skipped ? RunNodeState.Skipped
-            : walk.Resume.Restored(node.Id) ? RunNodeState.Restored
-            : walk.Withheld ? RunNodeState.Withheld
-            : walk.Resume.Wrote(node.Id) ? RunNodeState.Completed
-            : node.Kind
-                is ChainStepKind.Extract
-                    or ChainStepKind.Seed
-                    or ChainStepKind.Resolve
-                    or ChainStepKind.Checkpoint
-                ? RunNodeState.NotRecorded
-            : RunNodeState.NotReached;
+        var state = NodeState(node, steps, walk, skipped);
 
         // A resumed run recorded no step for a routing step before its point; the checkpoint it
         // restored says which track that step took.
@@ -437,23 +423,7 @@ internal static class RunGraphs
         if (node.Tracks.Count > 0 && steps.Any(s => s.AnswerWithheld || s.NameWithheld))
             walk.Withheld = true;
 
-        var tracks = node
-            .Tracks.Select(track =>
-            {
-                var isTaken =
-                    taken is not null && string.Equals(track.Name, taken, StringComparison.Ordinal);
-                // Once the track taken is known, every other track was passed over. Until then a
-                // track's nodes stand as recorded, which is not reached for a track nothing ran on.
-                var passedOver = skipped || (taken is not null && !isTaken);
-                return new RunGraphTrack(
-                    track.Name,
-                    track.Description,
-                    track.IsFallback,
-                    isTaken,
-                    Overlay(track.Nodes, byNode, walk, passedOver)
-                );
-            })
-            .ToList();
+        var tracks = OverlayTracks(node, byNode, walk, skipped, taken);
 
         return new RunGraphNode(
             node.Id,
@@ -473,6 +443,53 @@ internal static class RunGraphs
             Checkpointed = walk.Resume.Holds(node.Id),
         };
     }
+
+    // A checkpoint records no step of its own: the row it stored says the run reached it,
+    // unless a withheld route came before it, which the walk keeps withholding.
+    private static RunNodeState NodeState(
+        ChainGraphNode node,
+        IReadOnlyList<JunctionStep> steps,
+        Walk walk,
+        bool skipped
+    ) =>
+        steps.Count > 0 ? StateOf(steps, walk.Ended)
+        : skipped ? RunNodeState.Skipped
+        : walk.Resume.Restored(node.Id) ? RunNodeState.Restored
+        : walk.Withheld ? RunNodeState.Withheld
+        : walk.Resume.Wrote(node.Id) ? RunNodeState.Completed
+        : node.Kind
+            is ChainStepKind.Extract
+                or ChainStepKind.Seed
+                or ChainStepKind.Resolve
+                or ChainStepKind.Checkpoint
+            ? RunNodeState.NotRecorded
+        : RunNodeState.NotReached;
+
+    // Each track of a routing step: the one taken, and the others, passed over once the taken one is known.
+    private static List<RunGraphTrack> OverlayTracks(
+        ChainGraphNode node,
+        Dictionary<string, List<JunctionStep>> byNode,
+        Walk walk,
+        bool skipped,
+        string? taken
+    ) =>
+        node
+            .Tracks.Select(track =>
+            {
+                var isTaken =
+                    taken is not null && string.Equals(track.Name, taken, StringComparison.Ordinal);
+                // Once the track taken is known, every other track was passed over. Until then a
+                // track's nodes stand as recorded, which is not reached for a track nothing ran on.
+                var passedOver = skipped || (taken is not null && !isTaken);
+                return new RunGraphTrack(
+                    track.Name,
+                    track.Description,
+                    track.IsFallback,
+                    isTaken,
+                    Overlay(track.Nodes, byNode, walk, passedOver)
+                );
+            })
+            .ToList();
 
     /// <summary>
     /// A <c>Parallel</c> step: unlike a routing step's tracks, every branch runs, so none is passed
@@ -538,21 +555,27 @@ internal static class RunGraphs
             steps.Any(s => s.Replayed),
             TrackTaken: null,
             steps,
-            branches
-                .Select(b => new RunGraphTrack(
-                    b.Branch.Name,
-                    b.Branch.Description,
-                    b.Branch.IsFallback,
-                    started,
-                    b.Nodes
-                ))
-                .ToList()
+            ParallelTracks(branches, started)
         )
         {
             CanResume = walk.Resume.CanResumeAt(node.Id),
             Checkpointed = walk.Resume.Holds(node.Id),
         };
     }
+
+    private static List<RunGraphTrack> ParallelTracks(
+        List<(ChainGraphTrack Branch, List<RunGraphNode> Nodes)> branches,
+        bool started
+    ) =>
+        branches
+            .Select(b => new RunGraphTrack(
+                b.Branch.Name,
+                b.Branch.Description,
+                b.Branch.IsFallback,
+                started,
+                b.Nodes
+            ))
+            .ToList();
 
     // Where a Parallel step stands, from its branches: failed when any branch failed, cancelled
     // when one was (a sibling's failure or the run's cancel stopped it), running while any node is

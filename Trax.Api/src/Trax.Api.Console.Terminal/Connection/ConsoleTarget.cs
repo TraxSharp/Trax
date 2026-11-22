@@ -77,13 +77,45 @@ internal sealed record ConsoleTarget(
                     + $"{DefaultGraphQLPath}."
             );
 
-        var socket = new UriBuilder(endpoint)
+        var socket = SocketOf(endpoint);
+
+        var credential = await ReadCredentialAsync(
+                apiKeyFile,
+                tokenFile,
+                environment,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        if (
+            credential is not null
+            && string.Equals(endpoint.Scheme, "http", StringComparison.Ordinal)
+            && !IsThisMachine(endpoint)
+        )
+            throw new InvalidOperationException(
+                $"{endpoint} is plain HTTP to another machine, and the credential would cross the network in "
+                    + "the clear. Use https."
+            );
+        return new ConsoleTarget(endpoint, socket, credential, sendText);
+    }
+
+    // The endpoint's WebSocket address: wss for https, ws for http.
+    private static Uri SocketOf(Uri endpoint) =>
+        new UriBuilder(endpoint)
         {
             Scheme = string.Equals(endpoint.Scheme, "https", StringComparison.Ordinal)
                 ? "wss"
                 : "ws",
         }.Uri;
 
+    // The one credential given, from the files named or else the environment, or null when none is.
+    private static async Task<Credential?> ReadCredentialAsync(
+        FileInfo? apiKeyFile,
+        FileInfo? tokenFile,
+        Func<string, string?> environment,
+        CancellationToken cancellationToken
+    )
+    {
         var credentials = new List<Credential>();
         if (apiKeyFile is not null)
             credentials.Add(
@@ -112,18 +144,7 @@ internal sealed record ConsoleTarget(
                 $"Give one credential: an API key ({ApiKeyVariable} or --api-key-file) or a bearer token "
                     + $"({TokenVariable} or --token-file), not both."
             );
-        var credential = credentials.SingleOrDefault();
-
-        if (
-            credential is not null
-            && string.Equals(endpoint.Scheme, "http", StringComparison.Ordinal)
-            && !IsThisMachine(endpoint)
-        )
-            throw new InvalidOperationException(
-                $"{endpoint} is plain HTTP to another machine, and the credential would cross the network in "
-                    + "the clear. Use https."
-            );
-        return new ConsoleTarget(endpoint, socket, credential, sendText);
+        return credentials.SingleOrDefault();
     }
 
     /// <summary>The largest credential file read; a key or a token is far smaller.</summary>
@@ -177,28 +198,7 @@ internal sealed record ConsoleTarget(
             // A regular file holds as much as its length says; a device such as /dev/zero says 0 and holds more.
             if (read > length)
                 throw new InvalidOperationException($"{option}: {path} is not a regular file.");
-            if (OperatingSystem.IsWindows())
-            {
-                if (CredentialFile.SharedWith(CredentialFile.AllowRules(stream)) is { } others)
-                    throw new InvalidOperationException(
-                        $"{option}: {others} can read or change {path}. Remove them from its "
-                            + "permissions (Properties, Security) so only you have access."
-                    );
-            }
-            else
-            {
-                var mode = File.GetUnixFileMode(stream.SafeFileHandle);
-                const UnixFileMode others =
-                    UnixFileMode.GroupRead
-                    | UnixFileMode.GroupWrite
-                    | UnixFileMode.OtherRead
-                    | UnixFileMode.OtherWrite;
-                if ((mode & others) != UnixFileMode.None)
-                    throw new InvalidOperationException(
-                        $"{option}: other users can read or change {path}. Make it yours alone with "
-                            + $"chmod 600 {path}."
-                    );
-            }
+            RefuseSharedFile(stream, option, path);
             text = System.Text.Encoding.UTF8.GetString(buffer, 0, read);
         }
         catch (Exception ex)
@@ -210,6 +210,34 @@ internal sealed record ConsoleTarget(
             );
         }
         return Value(text) ?? throw new InvalidOperationException($"{option}: {path} is empty.");
+    }
+
+    // Other users' access to the file is as good as the credential itself, so a file they can read or write is
+    // refused.
+    private static void RefuseSharedFile(FileStream stream, string option, string path)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            if (CredentialFile.SharedWith(CredentialFile.AllowRules(stream)) is { } others)
+                throw new InvalidOperationException(
+                    $"{option}: {others} can read or change {path}. Remove them from its "
+                        + "permissions (Properties, Security) so only you have access."
+                );
+        }
+        else
+        {
+            var mode = File.GetUnixFileMode(stream.SafeFileHandle);
+            const UnixFileMode others =
+                UnixFileMode.GroupRead
+                | UnixFileMode.GroupWrite
+                | UnixFileMode.OtherRead
+                | UnixFileMode.OtherWrite;
+            if ((mode & others) != UnixFileMode.None)
+                throw new InvalidOperationException(
+                    $"{option}: other users can read or change {path}. Make it yours alone with "
+                        + $"chmod 600 {path}."
+                );
+        }
     }
 
     // On Unix the file is opened with O_NONBLOCK, so a pipe with no writer answers at once instead of blocking the

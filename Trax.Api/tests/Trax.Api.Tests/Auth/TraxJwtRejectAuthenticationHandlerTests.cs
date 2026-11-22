@@ -65,51 +65,45 @@ public class TraxJwtRejectAuthenticationHandlerTests
                             >(JwtDefaults.RejectSchemeName, _ => { });
                         services.AddAuthorization();
                     })
-                    .Configure(app =>
-                    {
-                        app.UseRouting();
-                        app.UseAuthentication();
-                        app.UseAuthorization();
-                        app.UseEndpoints(endpoints =>
-                        {
-                            endpoints.MapGet(
-                                "/auth-result",
-                                async (HttpContext http) =>
-                                {
-                                    var result = await http.AuthenticateAsync(
-                                            JwtDefaults.RejectSchemeName
-                                        )
-                                        .ConfigureAwait(false);
-                                    return Results.Ok(
-                                        new
-                                        {
-                                            result.Succeeded,
-                                            FailureMessage = result.Failure?.Message,
-                                        }
-                                    );
-                                }
-                            );
-                            endpoints.MapGet(
-                                "/challenge",
-                                async (HttpContext http) =>
-                                {
-                                    await http.ChallengeAsync(JwtDefaults.RejectSchemeName)
-                                        .ConfigureAwait(false);
-                                }
-                            );
-                            endpoints.MapGet(
-                                "/forbid",
-                                async (HttpContext http) =>
-                                {
-                                    await http.ForbidAsync(JwtDefaults.RejectSchemeName)
-                                        .ConfigureAwait(false);
-                                }
-                            );
-                        });
-                    })
+                    .Configure(app => ConfigureApp(app))
             )
             .Build();
         await host.StartAsync().ConfigureAwait(false);
         return host;
+    }
+
+    private static void ConfigureApp(IApplicationBuilder app)
+    {
+        app.UseRouting();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.UseEndpoints(endpoints =>
+        {
+            endpoints.MapGet(
+                "/auth-result",
+                async (HttpContext http) =>
+                {
+                    var result = await http.AuthenticateAsync(JwtDefaults.RejectSchemeName)
+                        .ConfigureAwait(false);
+                    return Results.Ok(
+                        new { result.Succeeded, FailureMessage = result.Failure?.Message }
+                    );
+                }
+            );
+            endpoints.MapGet(
+                "/challenge",
+                async (HttpContext http) =>
+                {
+                    await http.ChallengeAsync(JwtDefaults.RejectSchemeName).ConfigureAwait(false);
+                }
+            );
+            endpoints.MapGet(
+                "/forbid",
+                async (HttpContext http) =>
+                {
+                    await http.ForbidAsync(JwtDefaults.RejectSchemeName).ConfigureAwait(false);
+                }
+            );
+        });
     }
 }

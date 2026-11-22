@@ -395,58 +395,7 @@ public class QueryModelProjectionTests
         await using (scope.ConfigureAwait(false))
         {
             var db = scope.ServiceProvider.GetRequiredService<ProjectionDbContext>();
-            db.Gadgets.AddRange(
-                new Gadget { Id = 101, Title = "G-Alpha" },
-                new Gadget { Id = 202, Title = "G-Beta" }
-            );
-            db.Widgets.AddRange(
-                new Widget
-                {
-                    Id = 1,
-                    Slug = "a",
-                    Name = "Alpha",
-                    GadgetId = 101,
-                },
-                new Widget
-                {
-                    Id = 2,
-                    Slug = "b",
-                    Name = "Beta",
-                    GadgetId = 202,
-                }
-            );
-            db.Cogs.AddRange(
-                new Cog
-                {
-                    Id = 1,
-                    Slug = "a",
-                    Name = "Alpha",
-                },
-                new Cog
-                {
-                    Id = 2,
-                    Slug = "b",
-                    Name = "Beta",
-                }
-            );
-            db.Sprockets.AddRange(
-                new Sprocket { Code = "SP-1", Label = "one" },
-                new Sprocket { Code = "SP-2", Label = "two" }
-            );
-            db.Pairs.AddRange(
-                new Pair
-                {
-                    Left = 1,
-                    Right = 10,
-                    Note = "first",
-                },
-                new Pair
-                {
-                    Left = 2,
-                    Right = 20,
-                    Note = "second",
-                }
-            );
+            AddSeedRows(db);
             await db.SaveChangesAsync().ConfigureAwait(false);
         }
 
@@ -454,6 +403,62 @@ public class QueryModelProjectionTests
             .GetRequiredService<IRequestExecutorProvider>()
             .GetExecutorAsync("trax")
             .ConfigureAwait(false);
+    }
+
+    private static void AddSeedRows(ProjectionDbContext db)
+    {
+        db.Gadgets.AddRange(
+            new Gadget { Id = 101, Title = "G-Alpha" },
+            new Gadget { Id = 202, Title = "G-Beta" }
+        );
+        db.Widgets.AddRange(
+            new Widget
+            {
+                Id = 1,
+                Slug = "a",
+                Name = "Alpha",
+                GadgetId = 101,
+            },
+            new Widget
+            {
+                Id = 2,
+                Slug = "b",
+                Name = "Beta",
+                GadgetId = 202,
+            }
+        );
+        db.Cogs.AddRange(
+            new Cog
+            {
+                Id = 1,
+                Slug = "a",
+                Name = "Alpha",
+            },
+            new Cog
+            {
+                Id = 2,
+                Slug = "b",
+                Name = "Beta",
+            }
+        );
+        db.Sprockets.AddRange(
+            new Sprocket { Code = "SP-1", Label = "one" },
+            new Sprocket { Code = "SP-2", Label = "two" }
+        );
+        db.Pairs.AddRange(
+            new Pair
+            {
+                Left = 1,
+                Right = 10,
+                Note = "first",
+            },
+            new Pair
+            {
+                Left = 2,
+                Right = 20,
+                Note = "second",
+            }
+        );
     }
 
     #endregion

@@ -381,6 +381,27 @@ public partial class OperationsQueries
         if (!afterId.HasValue && skip > 0)
             query = query.Skip(skip);
 
+        var items = await ReadManifestSummariesAsync(query, take, ct).ConfigureAwait(false);
+
+        var nextCursor = items.Count > 0 ? items[^1].Id : (long?)null;
+
+        return new PagedResult<ManifestSummary>(
+            items,
+            totalCount,
+            afterId.HasValue ? 0 : skip,
+            take,
+            isEstimate,
+            nextCursor
+        );
+    }
+
+    /// <summary>One page of manifest summaries, read from an ordered and filtered query.</summary>
+    private static async Task<List<ManifestSummary>> ReadManifestSummariesAsync(
+        IQueryable<Effect.Models.Manifest.Manifest> query,
+        int take,
+        CancellationToken ct
+    )
+    {
         var items = await query
             .Take(take)
             .Select(m => new ManifestSummary(
@@ -404,17 +425,7 @@ public partial class OperationsQueries
             })
             .ToListAsync(ct)
             .ConfigureAwait(false);
-
-        var nextCursor = items.Count > 0 ? items[^1].Id : (long?)null;
-
-        return new PagedResult<ManifestSummary>(
-            items,
-            totalCount,
-            afterId.HasValue ? 0 : skip,
-            take,
-            isEstimate,
-            nextCursor
-        );
+        return items;
     }
 
     /// <summary>
@@ -706,6 +717,55 @@ public partial class OperationsQueries
         var textFilter = ListFilters.HasFailureText(filter);
         var hasFilter = ListFilters.Narrows(filter);
 
+        var (totalCount, isEstimate, isCapped) = await CountExecutionsAsync(
+                db,
+                filtered,
+                sqlDialect,
+                textFilter,
+                hasFilter,
+                ct
+            )
+            .ConfigureAwait(false);
+
+        var oldest = order == SortOrder.Oldest;
+        var items =
+            textFilter && (afterId.HasValue || skip == 0)
+                ? await ReadTextFilteredExecutionsAsync(db, filtered, afterId, oldest, take, ct)
+                    .ConfigureAwait(false)
+                : await ReadExecutionsInOrderAsync(filtered, afterId, oldest, skip, take, ct)
+                    .ConfigureAwait(false);
+
+        var nextCursor = items.Count > 0 ? items[^1].Id : (long?)null;
+
+        return new PagedResult<ExecutionSummary>(
+            items,
+            totalCount,
+            afterId.HasValue ? 0 : skip,
+            take,
+            isEstimate,
+            nextCursor
+        )
+        {
+            IsCountCapped = isCapped,
+        };
+    }
+
+    /// <summary>
+    /// The total a page of executions reports, with whether it is an estimate or capped.
+    /// </summary>
+    private static async Task<(
+        int TotalCount,
+        bool IsEstimate,
+        bool IsCapped
+    )> CountExecutionsAsync(
+        Trax.Effect.Data.Services.DataContext.IDataContext db,
+        IQueryable<Effect.Models.Metadata.Metadata> filtered,
+        ISqlDialect? sqlDialect,
+        bool textFilter,
+        bool hasFilter,
+        CancellationToken ct
+    )
+    {
         // A text filter counts up to FailureTextCountCap matches and no further, so a common term
         // never counts every failed run; every other filtered total is exact, and an unfiltered
         // one may be estimated. The cursor never changes it: totalCount is the size of the whole
@@ -730,28 +790,7 @@ public partial class OperationsQueries
             (totalCount, isEstimate) = await CountEstimator
                 .EstimateOrCountAsync(db, sqlDialect, "metadata", () => filtered.CountAsync(ct), ct)
                 .ConfigureAwait(false);
-
-        var oldest = order == SortOrder.Oldest;
-        var items =
-            textFilter && (afterId.HasValue || skip == 0)
-                ? await ReadTextFilteredExecutionsAsync(db, filtered, afterId, oldest, take, ct)
-                    .ConfigureAwait(false)
-                : await ReadExecutionsInOrderAsync(filtered, afterId, oldest, skip, take, ct)
-                    .ConfigureAwait(false);
-
-        var nextCursor = items.Count > 0 ? items[^1].Id : (long?)null;
-
-        return new PagedResult<ExecutionSummary>(
-            items,
-            totalCount,
-            afterId.HasValue ? 0 : skip,
-            take,
-            isEstimate,
-            nextCursor
-        )
-        {
-            IsCountCapped = isCapped,
-        };
+        return (totalCount, isEstimate, isCapped);
     }
 
     /// <summary>
@@ -894,6 +933,72 @@ public partial class OperationsQueries
         var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
         await using var dbDisposal = db.ConfigureAwait(false);
 
+        var row = await ReadExecutionDetailRowAsync(db, id, ct).ConfigureAwait(false);
+
+        if (row is null)
+            return null;
+
+        var (detail, invokingMachine, invokingInstanceId, invokingOwnerKind) = row.Value;
+
+        // parent_id is covered by the partial index ix_metadata_parent_id, so counting
+        // children stays cheap even on the huge metadata table.
+        var childCount = await db
+            .Metadatas.AsNoTracking()
+            .CountAsync(c => c.ParentId == id, ct)
+            .ConfigureAwait(false);
+
+        var entry = await db
+            .WorkQueues.AsNoTracking()
+            .Where(w => w.MetadataId == id)
+            .OrderBy(w => w.Id)
+            .Select(w => new { w.Id, w.DeadLetterId })
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+
+        var deadLetterId =
+            entry?.DeadLetterId
+            ?? await db
+                .DeadLetters.AsNoTracking()
+                .Where(d => d.RetryMetadataId == id)
+                .OrderBy(d => d.Id)
+                .Select(d => (long?)d.Id)
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
+
+        var invokedBy = await ReadInvokerAsync(
+                db,
+                detail.ExternalId,
+                invokingMachine,
+                invokingInstanceId,
+                invokingOwnerKind,
+                ct
+            )
+            .ConfigureAwait(false);
+
+        return detail with
+        {
+            ChildCount = childCount,
+            InvokedBy = invokedBy,
+            WorkQueueEntryId = entry?.Id,
+            DeadLetterId = deadLetterId,
+        };
+    }
+
+    /// <summary>
+    /// The execution's detail with what names the instance that invoked it, or
+    /// <see langword="null"/> when none has that id.
+    /// </summary>
+    private static async Task<(
+        ExecutionDetail Detail,
+        string? InvokingMachine,
+        Guid? InvokingInstanceId,
+        SnapshotOwnerKind? InvokingOwnerKind
+    )?> ReadExecutionDetailRowAsync(
+        Trax.Effect.Data.Services.DataContext.IDataContext db,
+        long id,
+        CancellationToken ct
+    )
+    {
         var row = await db
             .Metadatas.AsNoTracking()
             .Where(m => m.Id == id)
@@ -940,45 +1045,34 @@ public partial class OperationsQueries
             })
             .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false);
+        return row is null
+            ? null
+            : (row.Detail, row.InvokingMachine, row.InvokingInstanceId, row.InvokingOwnerKind);
+    }
 
-        if (row is null)
-            return null;
-
-        // parent_id is covered by the partial index ix_metadata_parent_id, so counting
-        // children stays cheap even on the huge metadata table.
-        var childCount = await db
-            .Metadatas.AsNoTracking()
-            .CountAsync(c => c.ParentId == id, ct)
-            .ConfigureAwait(false);
-
-        var entry = await db
-            .WorkQueues.AsNoTracking()
-            .Where(w => w.MetadataId == id)
-            .OrderBy(w => w.Id)
-            .Select(w => new { w.Id, w.DeadLetterId })
-            .FirstOrDefaultAsync(ct)
-            .ConfigureAwait(false);
-
-        var deadLetterId =
-            entry?.DeadLetterId
-            ?? await db
-                .DeadLetters.AsNoTracking()
-                .Where(d => d.RetryMetadataId == id)
-                .OrderBy(d => d.Id)
-                .Select(d => (long?)d.Id)
-                .FirstOrDefaultAsync(ct)
-                .ConfigureAwait(false);
-
+    /// <summary>
+    /// The state-machine instance that invoked an execution, or <see langword="null"/> when no
+    /// instance did.
+    /// </summary>
+    private static async Task<RunInvoker?> ReadInvokerAsync(
+        Trax.Effect.Data.Services.DataContext.IDataContext db,
+        string externalId,
+        string? invokingMachine,
+        Guid? invokingInstanceId,
+        SnapshotOwnerKind? invokingOwnerKind,
+        CancellationToken ct
+    )
+    {
         RunInvoker? invokedBy = null;
         if (
-            row.InvokingMachine is { } machine
-            && row.InvokingInstanceId is { } instanceId
-            && row.InvokingOwnerKind is { } ownerKind
+            invokingMachine is { } machine
+            && invokingInstanceId is { } instanceId
+            && invokingOwnerKind is { } ownerKind
         )
         {
             // The row still waiting on this run holds its external id as its invoke token. A
             // user's draft is found through that alone, never through who owns it.
-            var token = row.Detail.ExternalId.TrimEnd();
+            var token = externalId.TrimEnd();
             var rowId = await db
                 .SnapshotDrafts.AsNoTracking()
                 .Where(x =>
@@ -992,14 +1086,7 @@ public partial class OperationsQueries
                 .ConfigureAwait(false);
             invokedBy = new RunInvoker(machine, instanceId, ownerKind, rowId);
         }
-
-        return row.Detail with
-        {
-            ChildCount = childCount,
-            InvokedBy = invokedBy,
-            WorkQueueEntryId = entry?.Id,
-            DeadLetterId = deadLetterId,
-        };
+        return invokedBy;
     }
 
     /// <summary>

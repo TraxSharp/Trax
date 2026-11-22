@@ -164,47 +164,11 @@ public class GraphQLOperationsTests
     public async Task ManifestNextRunsAndScheduleText_ReadEveryManifestOfTheRequestInOneCall()
     {
         var executor = await BuildExecutor();
-        var factory = _serviceProvider
-            .NotNull()
-            .GetRequiredService<Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory>();
-        long groupId;
-        long manifestId;
-        await using (var db = await factory.CreateDbContextAsync(default))
-        {
-            var group = new Trax.Effect.Models.ManifestGroup.ManifestGroup { Name = "nightly" };
-            await db.Track(group);
-            await db.SaveChanges(default);
-            var manifest = Trax.Effect.Models.Manifest.Manifest.Create(
-                new Trax.Effect.Models.Manifest.DTOs.CreateManifest { Name = typeof(object) }
-            );
-            manifest.ExternalId = "nightly-report";
-            manifest.ManifestGroupId = group.Id;
-            await db.Track(manifest);
-            await db.SaveChanges(default);
-            groupId = group.Id;
-            manifestId = manifest.Id;
-        }
+        var (groupId, manifestId) = await SeedNightlyManifestAsync();
 
         var t0 = new DateTime(2026, 10, 19, 2, 0, 0, DateTimeKind.Utc);
         var times = Enumerable.Range(0, 10).Select(d => t0.AddDays(d)).ToList();
-        _operations
-            .NotNull()
-            .GetUpcomingRunsAsync(
-                Arg.Any<IReadOnlyCollection<long>>(),
-                Arg.Any<int>(),
-                Arg.Any<CancellationToken>()
-            )
-            .Returns(ci =>
-                ci.Arg<IReadOnlyCollection<long>>()
-                    .Select(id => new Trax.Scheduler.Services.Operations.ManifestUpcomingRuns(
-                        id,
-                        "Daily at 02:00 UTC",
-                        times,
-                        RunsAfterManifestId: null,
-                        RunsAfterManifestExternalId: null
-                    ))
-                    .ToList()
-            );
+        StubUpcomingRuns(times);
 
         var result = await executor.ExecuteAsync(
             string.Create(
@@ -249,6 +213,54 @@ public class GraphQLOperationsTests
                 Arg.Is<IReadOnlyCollection<long>>(ids => ids.SequenceEqual(new[] { manifestId })),
                 Trax.Scheduler.Services.Operations.OperationsService.MaxUpcomingRuns,
                 Arg.Any<CancellationToken>()
+            );
+    }
+
+    private async Task<(long GroupId, long ManifestId)> SeedNightlyManifestAsync()
+    {
+        var factory = _serviceProvider
+            .NotNull()
+            .GetRequiredService<Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory>();
+        long groupId;
+        long manifestId;
+        var db = await factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var group = new Trax.Effect.Models.ManifestGroup.ManifestGroup { Name = "nightly" };
+            await db.Track(group).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            var manifest = Trax.Effect.Models.Manifest.Manifest.Create(
+                new Trax.Effect.Models.Manifest.DTOs.CreateManifest { Name = typeof(object) }
+            );
+            manifest.ExternalId = "nightly-report";
+            manifest.ManifestGroupId = group.Id;
+            await db.Track(manifest).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            groupId = group.Id;
+            manifestId = manifest.Id;
+        }
+        return (groupId, manifestId);
+    }
+
+    private void StubUpcomingRuns(List<DateTime> times)
+    {
+        _operations
+            .NotNull()
+            .GetUpcomingRunsAsync(
+                Arg.Any<IReadOnlyCollection<long>>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(ci =>
+                ci.Arg<IReadOnlyCollection<long>>()
+                    .Select(id => new Trax.Scheduler.Services.Operations.ManifestUpcomingRuns(
+                        id,
+                        "Daily at 02:00 UTC",
+                        times,
+                        RunsAfterManifestId: null,
+                        RunsAfterManifestExternalId: null
+                    ))
+                    .ToList()
             );
     }
 

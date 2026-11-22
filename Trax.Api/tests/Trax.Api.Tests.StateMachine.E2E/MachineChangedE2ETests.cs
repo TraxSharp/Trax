@@ -644,32 +644,38 @@ public class MachineChangedE2ETests
                 .NotContain(SocketLimitCode)
                 .And.NotBeEmpty("the refusal carries its own code");
 
-            var (freed, op) = accepted[0];
-            await freed.CompleteAsync(op);
-            // The server frees the place once it has handled the complete, after this returns, so a
-            // subscription sent straight away can still be refused. A refused one takes no place, so
-            // try again until one is accepted.
-            var tries = 0;
-            (
-                await E2EWait.UntilAsync(async () =>
-                {
-                    var retry = string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"after-free-{tries++}"
-                    );
-                    await freed
-                        .SubscribeAsync(retry, MachineChangedOps.Subscribe(started.Id))
-                        .ConfigureAwait(false);
-                    var (refused, _, _) = await freed.RefusalAsync(retry).ConfigureAwait(false);
-                    return !refused;
-                })
-            ).Should().BeTrue("a completed stream frees its place");
+            await AssertCompletingFreesAPlaceAsync(accepted[0], started.Id);
         }
         finally
         {
             foreach (var socket in sockets)
                 await socket.DisposeAsync();
         }
+    }
+
+    private static async Task AssertCompletingFreesAPlaceAsync(
+        (GraphQLWs Socket, string Operation) first,
+        Guid instanceId
+    )
+    {
+        var (freed, op) = first;
+        await freed.CompleteAsync(op).ConfigureAwait(false);
+        // The server frees the place once it has handled the complete, after this returns, so a
+        // subscription sent straight away can still be refused. A refused one takes no place, so
+        // try again until one is accepted.
+        var tries = 0;
+        var accepted = await E2EWait
+            .UntilAsync(async () =>
+            {
+                var retry = string.Create(CultureInfo.InvariantCulture, $"after-free-{tries++}");
+                await freed
+                    .SubscribeAsync(retry, MachineChangedOps.Subscribe(instanceId))
+                    .ConfigureAwait(false);
+                var (refused, _, _) = await freed.RefusalAsync(retry).ConfigureAwait(false);
+                return !refused;
+            })
+            .ConfigureAwait(false);
+        accepted.Should().BeTrue("a completed stream frees its place");
     }
 
     [Test]

@@ -10,6 +10,7 @@ using Microsoft.Extensions.Hosting;
 using NSubstitute;
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.DTOs;
+using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Services.HealthCheck;
 using Trax.Effect.Attributes;
@@ -77,60 +78,7 @@ public class AdminOperationsAuthorizationTests
         var host = new HostBuilder()
             .ConfigureWebHost(web =>
                 web.UseTestServer()
-                    .ConfigureServices(services =>
-                    {
-                        services.AddLogging();
-                        services.AddRouting();
-
-                        // API-key scheme registers the combined TraxAuthPolicy that
-                        // the builder's RequireAuthorization() gates on by default.
-                        services.AddTraxApiKeyAuth(keys =>
-                            keys.Add(AdminApiKey, id: "admin", "Admin")
-                                .Add(ReaderApiKey, id: "reader", "Reader")
-                        );
-
-                        // Minimal graph the GraphQL builder needs, plus the backing
-                        // services the exposed operations resolvers require.
-                        services.AddSingleton<TraxMarker>();
-                        var discovery = Substitute.For<ITrainDiscoveryService>();
-                        discovery.DiscoverTrains().Returns([]);
-                        services.AddSingleton(discovery);
-                        services.AddSingleton(Substitute.For<IEffectRegistry>());
-
-                        services.AddTraxGraphQL(graphql =>
-                        {
-                            graphql.ExposeOperationQueries();
-                            graphql.AddTypeExtension<PublicRootQueryExtension>();
-
-                            switch (posture)
-                            {
-                                case Posture.EndpointGated:
-                                    graphql.RequireAuthorization().GateOperations(roles: "Admin");
-                                    break;
-                                case Posture.AnonymousAcknowledged:
-                                    graphql.AllowAnonymousOperations();
-                                    break;
-                                case Posture.NamespaceGated:
-                                    graphql.GateOperationsToAuthenticatedUsers();
-                                    break;
-                                case Posture.NamespaceGatedByRole:
-                                    graphql.GateOperations(roles: "Admin");
-                                    break;
-                            }
-
-                            return graphql;
-                        });
-
-                        // Registered AFTER AddTraxGraphQL so these stubs win over the real
-                        // backing services the stack registers (which would need a database).
-                        // Last registration wins for resolution.
-                        services.AddScoped(_ => health);
-                        services.AddScoped(_ => Substitute.For<IOperationsService>());
-                        services.AddScoped(_ =>
-                            Substitute.For<Trax.Mediator.Services.TrainExecution.ITrainExecutionService>()
-                        );
-                        services.AddScoped(_ => Substitute.For<ITraxScheduler>());
-                    })
+                    .ConfigureServices(services => ConfigureHostServices(services, posture, health))
                     .Configure(app =>
                     {
                         app.UseRouting();
@@ -143,6 +91,69 @@ public class AdminOperationsAuthorizationTests
 
         await host.StartAsync().ConfigureAwait(false);
         return host;
+    }
+
+    private static void ConfigureHostServices(
+        IServiceCollection services,
+        Posture posture,
+        ITraxHealthService health
+    )
+    {
+        services.AddLogging();
+        services.AddRouting();
+
+        // API-key scheme registers the combined TraxAuthPolicy that
+        // the builder's RequireAuthorization() gates on by default.
+        services.AddTraxApiKeyAuth(keys =>
+            keys.Add(AdminApiKey, id: "admin", "Admin").Add(ReaderApiKey, id: "reader", "Reader")
+        );
+
+        // Minimal graph the GraphQL builder needs, plus the backing
+        // services the exposed operations resolvers require.
+        services.AddSingleton<TraxMarker>();
+        var discovery = Substitute.For<ITrainDiscoveryService>();
+        discovery.DiscoverTrains().Returns([]);
+        services.AddSingleton(discovery);
+        services.AddSingleton(Substitute.For<IEffectRegistry>());
+
+        services.AddTraxGraphQL(graphql =>
+        {
+            graphql.ExposeOperationQueries();
+            graphql.AddTypeExtension<PublicRootQueryExtension>();
+
+            ApplyPosture(graphql, posture);
+
+            return graphql;
+        });
+
+        // Registered AFTER AddTraxGraphQL so these stubs win over the real
+        // backing services the stack registers (which would need a database).
+        // Last registration wins for resolution.
+        services.AddScoped(_ => health);
+        services.AddScoped(_ => Substitute.For<IOperationsService>());
+        services.AddScoped(_ =>
+            Substitute.For<Trax.Mediator.Services.TrainExecution.ITrainExecutionService>()
+        );
+        services.AddScoped(_ => Substitute.For<ITraxScheduler>());
+    }
+
+    private static void ApplyPosture(TraxGraphQLBuilder graphql, Posture posture)
+    {
+        switch (posture)
+        {
+            case Posture.EndpointGated:
+                graphql.RequireAuthorization().GateOperations(roles: "Admin");
+                break;
+            case Posture.AnonymousAcknowledged:
+                graphql.AllowAnonymousOperations();
+                break;
+            case Posture.NamespaceGated:
+                graphql.GateOperationsToAuthenticatedUsers();
+                break;
+            case Posture.NamespaceGatedByRole:
+                graphql.GateOperations(roles: "Admin");
+                break;
+        }
     }
 
     internal static async Task<JsonDocument> PostAsync(

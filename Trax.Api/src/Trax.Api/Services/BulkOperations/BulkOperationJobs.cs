@@ -124,37 +124,12 @@ internal sealed class BulkOperationJobs
             if (BeforeSnapshot is { } seam)
                 await seam(ct).ConfigureAwait(false);
 
-            BulkOperationSnapshot snapshot;
-            var scope = _scopes.CreateAsyncScope();
-            await using (scope.ConfigureAwait(false))
-                snapshot = await BulkOperationTargets
-                    .SnapshotAsync(
-                        scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>(),
-                        request.Kind,
-                        request.Filter,
-                        ct
-                    )
-                    .ConfigureAwait(false);
+            var snapshot = await TakeSnapshotAsync(request, ct).ConfigureAwait(false);
 
             var ids = snapshot.Ids;
             var noun = BulkOperationRun.Noun(request.Kind);
-            if (ids.Length != request.ExpectedCount)
-                return new StartBulkOperationResponse(
-                    Success: false,
-                    string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"The filter matches {ids.Length} {noun} now, not the {request.ExpectedCount} "
-                    ) + "confirmed, so nothing was started. Confirm the new count and start again.",
-                    ids.Length,
-                    Operation: null
-                );
-            if (ids.Length == 0)
-                return new StartBulkOperationResponse(
-                    Success: false,
-                    $"The filter matches no {noun}, so nothing was started.",
-                    0,
-                    Operation: null
-                );
+            if (SnapshotRefusal(request, ids, noun) is { } stale)
+                return stale;
 
             lock (_gate)
             {
@@ -187,6 +162,53 @@ internal sealed class BulkOperationJobs
                 lock (_gate)
                     _starting = false;
         }
+    }
+
+    // The ids the request's filter matches now, read in a scope of its own.
+    private async Task<BulkOperationSnapshot> TakeSnapshotAsync(
+        BulkOperationRequest request,
+        CancellationToken ct
+    )
+    {
+        BulkOperationSnapshot snapshot;
+        var scope = _scopes.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+            snapshot = await BulkOperationTargets
+                .SnapshotAsync(
+                    scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>(),
+                    request.Kind,
+                    request.Filter,
+                    ct
+                )
+                .ConfigureAwait(false);
+        return snapshot;
+    }
+
+    // Refuses a start whose snapshot no longer matches the count the caller confirmed, or matches nothing.
+    private static StartBulkOperationResponse? SnapshotRefusal(
+        BulkOperationRequest request,
+        long[] ids,
+        string noun
+    )
+    {
+        if (ids.Length != request.ExpectedCount)
+            return new StartBulkOperationResponse(
+                Success: false,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The filter matches {ids.Length} {noun} now, not the {request.ExpectedCount} "
+                ) + "confirmed, so nothing was started. Confirm the new count and start again.",
+                ids.Length,
+                Operation: null
+            );
+        if (ids.Length == 0)
+            return new StartBulkOperationResponse(
+                Success: false,
+                $"The filter matches no {noun}, so nothing was started.",
+                0,
+                Operation: null
+            );
+        return null;
     }
 
     /// <summary>The operation with this id, or <see langword="null"/> when this node does not know it.</summary>
@@ -322,6 +344,11 @@ internal sealed class BulkOperationJobs
             _running = null;
         }
 
+        NotifyObservers(outcome, run);
+    }
+
+    private void NotifyObservers(BulkOperationOutcome outcome, BulkOperationRun run)
+    {
         foreach (var observer in _observers)
         {
             try

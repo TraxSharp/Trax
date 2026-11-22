@@ -242,24 +242,7 @@ internal sealed class MachinesScreen : View
                 _instances = page.Items;
                 _instanceLines.Clear();
                 foreach (var i in page.Items)
-                    _instanceLines.Add(
-                        TerminalText.Line(
-                            $"{i.State, -20} {Wire.Name(i.OwnerKind).ToLowerInvariant(), -6} {i.Id}  since {Wire.Time(i.InStateSince)}"
-                                + (
-                                    i.Stuck ? "  STUCK"
-                                    : i.Overdue ? "  overdue"
-                                    : ""
-                                )
-                                + (
-                                    i.WaitingOn?.ExecutionId is { } run
-                                        ? string.Create(
-                                            CultureInfo.InvariantCulture,
-                                            $"  waits on run {run}"
-                                        )
-                                        : ""
-                                )
-                        )
-                    );
+                    _instanceLines.Add(TerminalText.Line(InstanceLine(i)));
                 _instancesHeader.Text =
                     string.Create(
                         CultureInfo.InvariantCulture,
@@ -274,6 +257,21 @@ internal sealed class MachinesScreen : View
             _context.Closed
         );
     }
+
+    private static string InstanceLine(
+        MachineInstancesAttentionResultOperationsMachineInstancesItems i
+    ) =>
+        $"{i.State, -20} {Wire.Name(i.OwnerKind).ToLowerInvariant(), -6} {i.Id}  since {Wire.Time(i.InStateSince)}"
+        + (
+            i.Stuck ? "  STUCK"
+            : i.Overdue ? "  overdue"
+            : ""
+        )
+        + (
+            i.WaitingOn?.ExecutionId is { } run
+                ? string.Create(CultureInfo.InvariantCulture, $"  waits on run {run}")
+                : ""
+        );
 
     private void Soon()
     {

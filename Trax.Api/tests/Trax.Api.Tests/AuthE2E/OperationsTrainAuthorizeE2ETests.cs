@@ -60,47 +60,8 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
             .ConfigureWebHost(web =>
                 web.UseTestServer()
                     .ConfigureServices(services =>
-                    {
-                        services.AddLogging();
-                        services.AddRouting();
-                        // A second scheme, so there is no default one and each request's
-                        // user comes from the scheme that authenticated it.
-                        if (withApiKeys)
-                            services.AddTraxApiKeyAuth(keys =>
-                                keys.Add(
-                                    "ops-train-authorize-key-at-least-32-characters",
-                                    id: "ops",
-                                    "Staff"
-                                )
-                            );
-                        services.AddTraxJwtAuth(jwt =>
-                            jwt.UseSymmetricKey(
-                                AuthE2EHost.JwtIssuer,
-                                AuthE2EHost.JwtAudience,
-                                AuthE2EHost.JwtKey
-                            )
-                        );
-                        services.AddAuthorization(o =>
-                            o.AddPolicy("AdminPolicy", p => p.RequireRole("Admin"))
-                        );
-                        services.AddTrax(trax =>
-                            trax.AddEffects(effects =>
-                                    effects
-                                        .UsePostgres(connectionString)
-                                        .SaveTrainParameters()
-                                        .AddDecisionRecording()
-                                )
-                                .AddMediator(typeof(AuthE2EHost).Assembly)
-                                .AddScheduler(scheduler => scheduler)
-                        );
-                        services.AddTraxApi();
-                        services.AddTraxGraphQL(graphql =>
-                            graphql
-                                .ExposeOperationQueries()
-                                .ExposeOperationMutations()
-                                .GateOperations(roles: "Staff")
-                        );
-                    })
+                        ConfigureHostServices(services, connectionString)
+                    )
                     .Configure(app =>
                     {
                         app.UseRouting();
@@ -115,6 +76,39 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
         _customer = AuthE2EHost.SignJwt("customer-1", "Customer One", "Customer");
         _staff = AuthE2EHost.SignJwt("staff-1", "Staff One", "Staff");
         _staffCustomer = AuthE2EHost.SignJwt("staff-2", "Staff Two", "Staff", "Customer");
+    }
+
+    private void ConfigureHostServices(IServiceCollection services, string connectionString)
+    {
+        services.AddLogging();
+        services.AddRouting();
+        // A second scheme, so there is no default one and each request's
+        // user comes from the scheme that authenticated it.
+        if (withApiKeys)
+            services.AddTraxApiKeyAuth(keys =>
+                keys.Add("ops-train-authorize-key-at-least-32-characters", id: "ops", "Staff")
+            );
+        services.AddTraxJwtAuth(jwt =>
+            jwt.UseSymmetricKey(AuthE2EHost.JwtIssuer, AuthE2EHost.JwtAudience, AuthE2EHost.JwtKey)
+        );
+        services.AddAuthorization(o => o.AddPolicy("AdminPolicy", p => p.RequireRole("Admin")));
+        services.AddTrax(trax =>
+            trax.AddEffects(effects =>
+                    effects
+                        .UsePostgres(connectionString)
+                        .SaveTrainParameters()
+                        .AddDecisionRecording()
+                )
+                .AddMediator(typeof(AuthE2EHost).Assembly)
+                .AddScheduler(scheduler => scheduler)
+        );
+        services.AddTraxApi();
+        services.AddTraxGraphQL(graphql =>
+            graphql
+                .ExposeOperationQueries()
+                .ExposeOperationMutations()
+                .GateOperations(roles: "Staff")
+        );
     }
 
     [OneTimeTearDown]

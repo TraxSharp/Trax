@@ -203,6 +203,33 @@ public class StateMachineGraphQLE2ETests
     {
         var id = Guid.NewGuid().ToString();
 
+        await SeedReviewDraftAsync(id);
+        using (
+            var load = await _host
+                .NotNull()
+                .PostAsync(
+                    LoadMutation,
+                    new { input = new { machine = "order", id } },
+                    E2EHost.AdminApiKey
+                )
+        )
+            Snapshot(Output(load, "loadSnapshot")).Should().Contain("\"state\":\"Review\"");
+
+        var before = _charge.NotNull().Calls;
+
+        using var send = await PostSendAsync(id, "r1");
+        NoErrors(send);
+        Snapshot(Output(send, "sendSnapshot")).Should().Contain("\"state\":\"Placed\"");
+        (_charge.NotNull().Calls - before).Should().Be(1, "the charge fires exactly once");
+
+        // A retry (already Placed) must not deliver again.
+        using var retry = await PostSendAsync(id, "r2");
+        Snapshot(Output(retry, "sendSnapshot")).Should().Contain("\"state\":\"Placed\"");
+        (_charge.NotNull().Calls - before).Should().Be(1, "a resend does not re-charge");
+    }
+
+    private async Task SeedReviewDraftAsync(string id)
+    {
         // The generic save serves only machines with no server-side behaviour, and the order has an effect, so its
         // draft is written by the host. The API key scheme qualifies the principal id with its name.
         var scope = _host.NotNull().Services.CreateAsyncScope();
@@ -225,59 +252,27 @@ public class StateMachineGraphQLE2ETests
                             Context = review["context"].NotNull().AsObject().DeepClone().AsObject(),
                         }
                     )
+                    .ConfigureAwait(false)
             ).Should().BeTrue();
         }
-        using (
-            var load = await _host
-                .NotNull()
-                .PostAsync(
-                    LoadMutation,
-                    new { input = new { machine = "order", id } },
-                    E2EHost.AdminApiKey
-                )
-        )
-            Snapshot(Output(load, "loadSnapshot")).Should().Contain("\"state\":\"Review\"");
-
-        var before = _charge.NotNull().Calls;
-
-        using var send = await _host
-            .NotNull()
-            .PostAsync(
-                SendMutation,
-                new
-                {
-                    input = new
-                    {
-                        machine = "order",
-                        id,
-                        requestId = "r1",
-                    },
-                },
-                E2EHost.AdminApiKey
-            );
-        NoErrors(send);
-        Snapshot(Output(send, "sendSnapshot")).Should().Contain("\"state\":\"Placed\"");
-        (_charge.NotNull().Calls - before).Should().Be(1, "the charge fires exactly once");
-
-        // A retry (already Placed) must not deliver again.
-        using var retry = await _host
-            .NotNull()
-            .PostAsync(
-                SendMutation,
-                new
-                {
-                    input = new
-                    {
-                        machine = "order",
-                        id,
-                        requestId = "r2",
-                    },
-                },
-                E2EHost.AdminApiKey
-            );
-        Snapshot(Output(retry, "sendSnapshot")).Should().Contain("\"state\":\"Placed\"");
-        (_charge.NotNull().Calls - before).Should().Be(1, "a resend does not re-charge");
     }
+
+    private Task<JsonDocument> PostSendAsync(string id, string requestId) =>
+        _host
+            .NotNull()
+            .PostAsync(
+                SendMutation,
+                new
+                {
+                    input = new
+                    {
+                        machine = "order",
+                        id,
+                        requestId,
+                    },
+                },
+                E2EHost.AdminApiKey
+            );
 
     [Test]
     public async Task A_save_of_a_machine_with_a_guard_is_a_typed_SAVE_NOT_ALLOWED_and_stores_nothing()

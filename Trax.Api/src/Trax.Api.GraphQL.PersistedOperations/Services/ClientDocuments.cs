@@ -232,6 +232,20 @@ internal static class ClientDocuments
         )
             return $"selects something other than '{rootName}' at its root.";
 
+        return SelectionRefusal(reach, top, holder, rootName, rootKind, mutation);
+    }
+
+    // Why the selection under the root field may not be a client document, or null when it may: each field a
+    // train or query model the host registered, at most in a namespace, and one train in a mutation.
+    private static string? SelectionRefusal(
+        ClientDocumentReach reach,
+        FieldNode top,
+        IObjectTypeDefinition holder,
+        string rootName,
+        string rootKind,
+        bool mutation
+    )
+    {
         var trains = 0;
         var reached = 0;
         foreach (var selection in top.SelectionSet?.Selections ?? [])

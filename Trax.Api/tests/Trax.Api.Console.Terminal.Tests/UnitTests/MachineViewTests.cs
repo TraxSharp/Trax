@@ -151,22 +151,7 @@ public class MachineViewTests
     {
         var state = "Paying";
         var host = new FakeHost()
-            .Answer(
-                "MachineInstance",
-                _ =>
-                    (System.Text.Json.Nodes.JsonObject)
-                        System
-                            .Text.Json.Nodes.JsonNode.Parse(
-                                """
-                                {"operations":{"machineInstance":{"machine":"checkout","ownerKind":"USER","id":"3f2a1c4e-0000-4000-8000-000000000001",
-                                 "rowId":5,"state":"STATE","version":2,"updatedAt":"2026-10-22T10:01:00Z","hasLiveInvokedRun":true,
-                                 "isInvokedRunsCapped":false,"inStateSince":"2026-10-22T10:01:00Z","overdue":false,"stuck":false,
-                                 "waitingOn":{"executionId":4900,"trainState":"IN_PROGRESS","workQueueEntryId":null},
-                                 "invokedRuns":[{"id":4900,"externalId":"run-4900","name":"Shop.IChargeTrain","trainState":"IN_PROGRESS","startTime":"2026-10-22T10:01:00Z","failureClass":"UNCLASSIFIED","cancellationRequested":false,"isLive":true}]}}}
-                                """.Replace("STATE", state, StringComparison.Ordinal)
-                            )
-                            .NotNull()
-            )
+            .Answer("MachineInstance", _ => DetailWaitingOnRun(state))
             .Answer(
                 "MachineInstanceTransitions",
                 """
@@ -180,15 +165,7 @@ public class MachineViewTests
                 TraxJson.Options
             )
             .NotNull();
-        var (terminal, window) = await TerminalHarness.StartAsync(app => new MachineInstanceWindow(
-            new ConsoleContext(
-                app,
-                new TraxClient(host),
-                new Uri("https://ops.example.com/trax/graphql")
-            ),
-            Machine(),
-            instance
-        ));
+        var (terminal, window) = await OpenInstanceWindow(host, instance);
         await using var _ = terminal;
 
         await terminal.Until(
@@ -236,15 +213,7 @@ public class MachineViewTests
                     }
             )
             .Answer("MachineInstanceTransitions", Transitions);
-        var (terminal, window) = await TerminalHarness.StartAsync(app => new MachineInstanceWindow(
-            new ConsoleContext(
-                app,
-                new TraxClient(host),
-                new Uri("https://ops.example.com/trax/graphql")
-            ),
-            Machine(),
-            Instance()
-        ));
+        var (terminal, window) = await OpenInstanceWindow(host, Instance());
         await using var _ = terminal;
         await terminal.Until(
             () =>
@@ -334,6 +303,34 @@ public class MachineViewTests
     private const string Transitions = """
         {"operations":{"machineInstance":{"rowId":5,"transitions":{"items":[]}}}}
         """;
+
+    private static Task<(TerminalHarness Harness, MachineInstanceWindow Window)> OpenInstanceWindow(
+        FakeHost host,
+        MachineInstancesAttentionResultOperationsMachineInstancesItems instance
+    ) =>
+        TerminalHarness.StartAsync(app => new MachineInstanceWindow(
+            new ConsoleContext(
+                app,
+                new TraxClient(host),
+                new Uri("https://ops.example.com/trax/graphql")
+            ),
+            Machine(),
+            instance
+        ));
+
+    private static System.Text.Json.Nodes.JsonObject DetailWaitingOnRun(string state) =>
+        (System.Text.Json.Nodes.JsonObject)
+            System
+                .Text.Json.Nodes.JsonNode.Parse(
+                    """
+                    {"operations":{"machineInstance":{"machine":"checkout","ownerKind":"USER","id":"3f2a1c4e-0000-4000-8000-000000000001",
+                     "rowId":5,"state":"STATE","version":2,"updatedAt":"2026-10-22T10:01:00Z","hasLiveInvokedRun":true,
+                     "isInvokedRunsCapped":false,"inStateSince":"2026-10-22T10:01:00Z","overdue":false,"stuck":false,
+                     "waitingOn":{"executionId":4900,"trainState":"IN_PROGRESS","workQueueEntryId":null},
+                     "invokedRuns":[{"id":4900,"externalId":"run-4900","name":"Shop.IChargeTrain","trainState":"IN_PROGRESS","startTime":"2026-10-22T10:01:00Z","failureClass":"UNCLASSIFIED","cancellationRequested":false,"isLive":true}]}}}
+                    """.Replace("STATE", state, StringComparison.Ordinal)
+                )
+                .NotNull();
 
     private static System.Text.Json.Nodes.JsonObject Detail(string state) =>
         (System.Text.Json.Nodes.JsonObject)

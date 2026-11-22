@@ -176,6 +176,27 @@ internal static class MachineChangedSubscription
         )
             return Once(MachineChange.Refused(rowId: null, RefusalCode.NotFound, NotFoundMessage));
 
+        var recheck = RecheckWatch(
+            services,
+            ctx.GetGlobalStateOrDefault<ClaimsPrincipal>("ClaimsPrincipal"),
+            machine,
+            userKey,
+            id,
+            row
+        );
+
+        return OpenStream(services, machine, internals, userKey, row, recheck);
+    }
+
+    private static SubscriptionRecheck RecheckWatch(
+        IServiceProvider services,
+        ClaimsPrincipal? principal,
+        IMachine machine,
+        string userKey,
+        Guid id,
+        long row
+    )
+    {
         // The endpoint policy and the watch rule are asked again at every connection re-check, for
         // the same caller and the same row, each in a scope of its own so it shares no data context
         // with the socket's other operations. A stream they no longer admit ends with the answer a
@@ -183,7 +204,7 @@ internal static class MachineChangedSubscription
         var scopes = services.GetRequiredService<IServiceScopeFactory>();
         var recheck = SubscriptionRecheck.For(
             services,
-            ctx.GetGlobalStateOrDefault<ClaimsPrincipal>("ClaimsPrincipal"),
+            principal,
             async ct =>
             {
                 var scope = scopes.CreateAsyncScope();
@@ -198,7 +219,20 @@ internal static class MachineChangedSubscription
                 }
             }
         );
+        return recheck;
+    }
 
+    // Takes a watch lease for the caller and opens the stream of the row's changes, or refuses
+    // the subscribe when the caller holds too many.
+    private static ISourceStream OpenStream(
+        IServiceProvider services,
+        IMachine machine,
+        IMachineInternals internals,
+        string userKey,
+        long row,
+        SubscriptionRecheck recheck
+    )
+    {
         var lease = services.GetRequiredService<MachineWatchLimits>().TryAcquire(userKey, row);
         if (lease is null)
             return Once(
@@ -282,6 +316,15 @@ internal static class MachineChangedSubscription
         if (Newer(change, machine, internals, order))
             return (Outdated(change), true);
 
+        return Rehydrated(change, internals);
+    }
+
+    // A changed row read as a load reads it, and whether it ends the stream.
+    private static (MachineChange Event, bool Ends) Rehydrated(
+        SnapshotRowChange change,
+        IMachineInternals internals
+    )
+    {
         // Read as a load reads it: migrated from an older version and validated, so the subscriber is sent what the
         // typed get would answer.
         var stored = new JsonObject

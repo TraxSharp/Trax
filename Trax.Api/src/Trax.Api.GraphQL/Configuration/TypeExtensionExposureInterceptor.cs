@@ -313,74 +313,97 @@ internal sealed class TypeExtensionExposureInterceptor : TypeInterceptor
                 continue;
             }
 
-            var fieldPath = $"{objectType.Name}.{field.Name}";
-            var resolver = $"{member.DeclaringType?.FullName}.{member.Name}";
-            var declaration = Declaration(objectType.RuntimeType, member);
+            CensusExtensionField(objectType, field, member, parent);
+        }
+    }
 
-            // Another framework's attribute is refused wherever it appears, gated parent or not:
-            // it is a posture Trax cannot enforce, standing where a Trax one belongs.
-            if (declaration.HasForeign)
-            {
-                _report.Add(
-                    new TypeExtensionExposureViolation(
-                        fieldPath,
-                        TraxAuthorization.ForeignAttributeMessage(
-                            $"GraphQL field '{fieldPath}' ({resolver})",
-                            declaration.ForeignAttributes
-                        )
-                    )
-                );
-                continue;
-            }
+    /// <summary>
+    /// Reports what is wrong with the posture of one field a type extension contributed, if anything.
+    /// </summary>
+    private void CensusExtensionField(
+        ObjectTypeConfiguration objectType,
+        ObjectFieldConfiguration field,
+        MemberInfo member,
+        TypeExtensionParentPosture parent
+    )
+    {
+        var fieldPath = $"{objectType.Name}.{field.Name}";
+        var resolver = $"{member.DeclaringType?.FullName}.{member.Name}";
+        var declaration = Declaration(objectType.RuntimeType, member);
 
-            // Phase 1 refused to build this field's gate; say why rather than that it is missing.
-            if (MalformedAttribute(declaration.Authorize) is { } malformed)
-            {
-                _report.Add(MalformedViolation(fieldPath, resolver, malformed));
-                continue;
-            }
-
-            var violation = TypeExtensionExposureRule.Evaluate(
-                parent,
-                declaration.HasAuthorize,
-                declaration.AllowAnonymous,
-                _configuration.AuthorizationRequired
-            );
-
-            if (violation is ExposureViolation.None)
-            {
-                // The census accepted a [TraxAuthorize] field on the strength of the gate Phase 1
-                // emits, so the gate has to be there. Asserting it keeps the two phases from
-                // reading different members again.
-                if (
-                    declaration.HasAuthorize
-                    && !declaration.AllowAnonymous
-                    && !field.Directives.Any(d => d.Value is AuthorizeDirective)
-                )
-                    _report.Add(
-                        new TypeExtensionExposureViolation(
-                            fieldPath,
-                            $"GraphQL field '{fieldPath}' ({resolver}) declares [TraxAuthorize], "
-                                + "but no @authorize directive was emitted for it, so the field "
-                                + "would be served ungated. This is a defect in Trax, not in the "
-                                + "host: report it."
-                        )
-                    );
-                continue;
-            }
-
+        // Another framework's attribute is refused wherever it appears, gated parent or not:
+        // it is a posture Trax cannot enforce, standing where a Trax one belongs.
+        if (declaration.HasForeign)
+        {
             _report.Add(
                 new TypeExtensionExposureViolation(
                     fieldPath,
-                    TypeExtensionExposureRule.BuildMessage(
-                        fieldPath,
-                        resolver,
-                        DescribeParent(objectType, parent),
-                        violation
+                    TraxAuthorization.ForeignAttributeMessage(
+                        $"GraphQL field '{fieldPath}' ({resolver})",
+                        declaration.ForeignAttributes
                     )
                 )
             );
+            return;
         }
+
+        // Phase 1 refused to build this field's gate; say why rather than that it is missing.
+        if (MalformedAttribute(declaration.Authorize) is { } malformed)
+        {
+            _report.Add(MalformedViolation(fieldPath, resolver, malformed));
+            return;
+        }
+
+        var violation = TypeExtensionExposureRule.Evaluate(
+            parent,
+            declaration.HasAuthorize,
+            declaration.AllowAnonymous,
+            _configuration.AuthorizationRequired
+        );
+
+        if (violation is ExposureViolation.None)
+        {
+            ReportMissingGate(field, fieldPath, resolver, declaration);
+            return;
+        }
+
+        _report.Add(
+            new TypeExtensionExposureViolation(
+                fieldPath,
+                TypeExtensionExposureRule.BuildMessage(
+                    fieldPath,
+                    resolver,
+                    DescribeParent(objectType, parent),
+                    violation
+                )
+            )
+        );
+    }
+
+    // The census accepted a [TraxAuthorize] field on the strength of the gate Phase 1
+    // emits, so the gate has to be there. Asserting it keeps the two phases from
+    // reading different members again.
+    private void ReportMissingGate(
+        ObjectFieldConfiguration field,
+        string fieldPath,
+        string resolver,
+        TraxAuthorizationDeclaration declaration
+    )
+    {
+        if (
+            declaration.HasAuthorize
+            && !declaration.AllowAnonymous
+            && !field.Directives.Any(d => d.Value is AuthorizeDirective)
+        )
+            _report.Add(
+                new TypeExtensionExposureViolation(
+                    fieldPath,
+                    $"GraphQL field '{fieldPath}' ({resolver}) declares [TraxAuthorize], "
+                        + "but no @authorize directive was emitted for it, so the field "
+                        + "would be served ungated. This is a defect in Trax, not in the "
+                        + "host: report it."
+                )
+            );
     }
 
     /// <summary>

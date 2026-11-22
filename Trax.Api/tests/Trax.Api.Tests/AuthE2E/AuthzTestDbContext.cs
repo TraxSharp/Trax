@@ -115,6 +115,13 @@ public class AuthzTestDbContext(DbContextOptions<AuthzTestDbContext> options) : 
 
         db.SaveChanges();
 
+        AddPublicBooks(db, alice, bob);
+
+        db.SaveChanges();
+    }
+
+    private static void AddPublicBooks(AuthzTestDbContext db, Owner alice, Owner bob)
+    {
         // PublicBook seed runs after the Owner/OwnedBook seed so the FKs
         // resolve. Alice's first PublicBook intentionally links to one of her
         // OwnedBooks to exercise the cascade-from-anonymous-to-gated path.
@@ -139,7 +146,5 @@ public class AuthzTestDbContext(DbContextOptions<AuthzTestDbContext> options) : 
                 LinkedOwnedBookId = null,
             }
         );
-
-        db.SaveChanges();
     }
 }

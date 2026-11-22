@@ -176,20 +176,7 @@ public static class ApiDashboardEndpointExtensions
         var assets =
             services.GetService<DashboardAssets>()
             ?? DashboardAssets.EmbeddedAsync().GetAwaiter().GetResult();
-        if (assets.IndexTemplate is null)
-            throw new InvalidOperationException(
-                "This build of Trax.Api.Dashboard carries no app. The package from nuget.org always "
-                    + "does; a build from the Trax repository embeds it only when "
-                    + "Trax.Api/src/Trax.Api.Dashboard/ClientApp has its npm packages. Run "
-                    + "`npm ci --ignore-scripts` there and build again."
-            );
-        // Fails here, at startup, rather than on the first request.
-        DashboardEndpoint.RenderIndex(
-            assets.IndexTemplate,
-            routePrefix,
-            DefaultGraphQLPath,
-            new Dictionary<string, string>(StringComparer.Ordinal)
-        );
+        RequireRenderableApp(assets, routePrefix);
 
         // The documents the app sends, for a host that runs persisted operations to register when it starts; it hands
         // back the id of each, which the app is told in its runtime config.
@@ -209,15 +196,7 @@ public static class ApiDashboardEndpointExtensions
             options.HostAuthenticated
         );
         var marker = new DashboardEndpointMetadata(options.AnonymousShellAllowed);
-        DashboardResponseHeaders.Subscribe(
-            services.GetService<DiagnosticListener>()
-                ?? throw new InvalidOperationException(
-                    "UseTraxApiDashboard() needs the host's DiagnosticListener, which ASP.NET Core "
-                        + "registers, to put its security headers on the refusals the "
-                        + "authorization middleware answers. Map it on an ASP.NET Core host."
-                ),
-            marker
-        );
+        SubscribeResponseHeaders(services, marker);
 
         // Every method, so a method the app does not serve is answered by the endpoint (405, with
         // the security headers) rather than by routing.
@@ -230,20 +209,65 @@ public static class ApiDashboardEndpointExtensions
 
         if (options.AnonymousShellAllowed)
         {
-            services
-                .GetRequiredService<ILoggerFactory>()
-                .CreateLogger("Trax.Api.Dashboard")
-                .LogWarning(
-                    "AllowAnonymousShell() is set: the Trax API dashboard at {Path} applies no "
-                        + "authorization of its own, so anyone who can reach it can load the app. "
-                        + "What the app shows and changes is still authorized by the Trax GraphQL "
-                        + "endpoint. Use RequirePolicy() or RequireRoles() unless something in "
-                        + "front of it is the gate.",
-                    routePrefix
-                );
+            WarnAnonymousShell(services, routePrefix);
             return builder;
         }
 
+        RequirePosture(builder, options);
+        return builder;
+    }
+
+    // Refuses a build that carries no app, and renders the index once so a template that cannot be filled fails at
+    // startup.
+    private static void RequireRenderableApp(DashboardAssets assets, string routePrefix)
+    {
+        if (assets.IndexTemplate is null)
+            throw new InvalidOperationException(
+                "This build of Trax.Api.Dashboard carries no app. The package from nuget.org always "
+                    + "does; a build from the Trax repository embeds it only when "
+                    + "Trax.Api/src/Trax.Api.Dashboard/ClientApp has its npm packages. Run "
+                    + "`npm ci --ignore-scripts` there and build again."
+            );
+        // Fails here, at startup, rather than on the first request.
+        DashboardEndpoint.RenderIndex(
+            assets.IndexTemplate,
+            routePrefix,
+            DefaultGraphQLPath,
+            new Dictionary<string, string>(StringComparer.Ordinal)
+        );
+    }
+
+    private static void SubscribeResponseHeaders(
+        IServiceProvider services,
+        DashboardEndpointMetadata marker
+    ) =>
+        DashboardResponseHeaders.Subscribe(
+            services.GetService<DiagnosticListener>()
+                ?? throw new InvalidOperationException(
+                    "UseTraxApiDashboard() needs the host's DiagnosticListener, which ASP.NET Core "
+                        + "registers, to put its security headers on the refusals the "
+                        + "authorization middleware answers. Map it on an ASP.NET Core host."
+                ),
+            marker
+        );
+
+    private static void WarnAnonymousShell(IServiceProvider services, string routePrefix) =>
+        services
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger("Trax.Api.Dashboard")
+            .LogWarning(
+                "AllowAnonymousShell() is set: the Trax API dashboard at {Path} applies no "
+                    + "authorization of its own, so anyone who can reach it can load the app. "
+                    + "What the app shows and changes is still authorized by the Trax GraphQL "
+                    + "endpoint. Use RequirePolicy() or RequireRoles() unless something in "
+                    + "front of it is the gate.",
+                routePrefix
+            );
+
+    private static void RequirePosture(
+        IEndpointConventionBuilder builder,
+        TraxApiDashboardOptions options
+    ) =>
         builder.RequireAuthorization(
             new AuthorizeAttribute
             {
@@ -251,8 +275,6 @@ public static class ApiDashboardEndpointExtensions
                 Roles = options.Roles is null ? null : string.Join(',', options.Roles),
             }
         );
-        return builder;
-    }
 
     // [AllowAnonymous] on the endpoint makes the authorization middleware skip every policy on it,
     // so a host chaining AllowAnonymous() on the returned builder would remove the posture without

@@ -112,28 +112,7 @@ public class MachineChangedStressTests
     {
         // One instance started through the API, the rest written beside it for the same user: the test is about
         // the push, not about starting.
-        var first = await StartAsync();
-        var instances = new List<Guid> { first };
-        var seed = new NpgsqlConnection(ConnectionString);
-        await using (seed.ConfigureAwait(false))
-        {
-            await seed.OpenAsync();
-            var copy = new NpgsqlCommand(
-                "INSERT INTO trax.snapshot_draft (id, user_key, machine, version, state, context, "
-                    + "concurrency_token, updated_at, created_at, owner_kind) "
-                    + "SELECT gen_random_uuid(), user_key, machine, version, state, context, gen_random_uuid(), "
-                    + "now(), now(), owner_kind FROM trax.snapshot_draft, generate_series(1, @n) "
-                    + "WHERE machine = 'stress-toggle' AND id = @id RETURNING id",
-                seed
-            );
-            await using var copyDisposal = copy.ConfigureAwait(false);
-            copy.Parameters.AddWithValue("n", Subscribers - 1);
-            copy.Parameters.AddWithValue("id", first);
-            var read = await copy.ExecuteReaderAsync();
-            await using var readDisposal = read.ConfigureAwait(false);
-            while (await read.ReadAsync())
-                instances.Add(read.GetGuid(0));
-        }
+        var instances = await SeedInstancesAsync();
 
         var listener = new NpgsqlConnection(ConnectionString);
         await using var listenerDisposal = listener.ConfigureAwait(false);
@@ -154,9 +133,84 @@ public class MachineChangedStressTests
         var streams = new List<IResponseStream>();
         using var stop = new CancellationTokenSource();
         var readers = new List<Task>();
+        await SubscribeAllAsync(instances, latest, arrived, streams, readers, stop)
+            .ConfigureAwait(false);
+
+        await TestContext
+            .Progress.WriteLineAsync($"{streams.Count} subscriptions open")
+            .ConfigureAwait(false);
+        GC.Collect();
+        var memoryBefore = GC.GetTotalMemory(forceFullCollection: true);
+        var readsBefore = _reads.NotNull().Count;
+        var (written, finalRevision) = await WriteAllAsync(instances).ConfigureAwait(false);
+
+        await AssertEverySubscriberCaughtUpAsync(instances, latest, finalRevision)
+            .ConfigureAwait(false);
+
+        // Notices arrive on the listening connection only while it waits on the server, one per wait: drain them
+        // all on every poll.
+        var expectedNotices = Subscribers * WritesPerInstance;
+        await AssertEveryNoticeArrivesAsync(
+                listener,
+                () => Volatile.Read(ref notices),
+                expectedNotices
+            )
+            .ConfigureAwait(false);
+
+        await ReportAndAssertBoundsAsync(
+                written,
+                arrived,
+                () => Volatile.Read(ref notices),
+                expectedNotices,
+                readsBefore,
+                memoryBefore
+            )
+            .ConfigureAwait(false);
+
+        await EndStreamsAsync(stop, streams, readers).ConfigureAwait(false);
+    }
+
+    /// <summary>One instance started through the API and the rest copied beside it for the same user.</summary>
+    private async Task<List<Guid>> SeedInstancesAsync()
+    {
+        var first = await StartAsync().ConfigureAwait(false);
+        var instances = new List<Guid> { first };
+        var seed = new NpgsqlConnection(ConnectionString);
+        await using (seed.ConfigureAwait(false))
+        {
+            await seed.OpenAsync().ConfigureAwait(false);
+            var copy = new NpgsqlCommand(
+                "INSERT INTO trax.snapshot_draft (id, user_key, machine, version, state, context, "
+                    + "concurrency_token, updated_at, created_at, owner_kind) "
+                    + "SELECT gen_random_uuid(), user_key, machine, version, state, context, gen_random_uuid(), "
+                    + "now(), now(), owner_kind FROM trax.snapshot_draft, generate_series(1, @n) "
+                    + "WHERE machine = 'stress-toggle' AND id = @id RETURNING id",
+                seed
+            );
+            await using var copyDisposal = copy.ConfigureAwait(false);
+            copy.Parameters.AddWithValue("n", Subscribers - 1);
+            copy.Parameters.AddWithValue("id", first);
+            var read = await copy.ExecuteReaderAsync().ConfigureAwait(false);
+            await using var readDisposal = read.ConfigureAwait(false);
+            while (await read.ReadAsync().ConfigureAwait(false))
+                instances.Add(read.GetGuid(0));
+        }
+        return instances;
+    }
+
+    /// <summary>Opens one subscription per instance, each with a reader recording what arrives.</summary>
+    private async Task SubscribeAllAsync(
+        List<Guid> instances,
+        ConcurrentDictionary<Guid, long> latest,
+        ConcurrentDictionary<(Guid, long), long> arrived,
+        List<IResponseStream> streams,
+        List<Task> readers,
+        CancellationTokenSource stop
+    )
+    {
         foreach (var id in instances)
         {
-            var stream = await SubscribeAsync(id);
+            var stream = await SubscribeAsync(id).ConfigureAwait(false);
             streams.Add(stream);
             readers.Add(
                 Task.Run(
@@ -183,13 +237,14 @@ public class MachineChangedStressTests
                 )
             );
         }
+    }
 
-        await TestContext
-            .Progress.WriteLineAsync($"{streams.Count} subscriptions open")
-            .ConfigureAwait(false);
-        GC.Collect();
-        var memoryBefore = GC.GetTotalMemory(forceFullCollection: true);
-        var readsBefore = _reads.NotNull().Count;
+    /// <summary>Makes every write, failing with the writes still in flight if they overrun the budget.</summary>
+    private async Task<(
+        ConcurrentDictionary<(Guid, long), long> Written,
+        ConcurrentDictionary<Guid, long> FinalRevision
+    )> WriteAllAsync(List<Guid> instances)
+    {
         var written = new ConcurrentDictionary<(Guid, long), long>();
         var finalRevision = new ConcurrentDictionary<Guid, long>();
         // Every write in flight, with when it was sent, so a write that never answers is named rather than waited
@@ -241,7 +296,16 @@ public class MachineChangedStressTests
         }
         await writes.ConfigureAwait(false);
         await TestContext.Progress.WriteLineAsync("every write answered").ConfigureAwait(false);
+        return (written, finalRevision);
+    }
 
+    /// <summary>Waits for every subscriber to reach its instance's last revision, naming the ones that do not.</summary>
+    private static async Task AssertEverySubscriberCaughtUpAsync(
+        List<Guid> instances,
+        ConcurrentDictionary<Guid, long> latest,
+        ConcurrentDictionary<Guid, long> finalRevision
+    )
+    {
         if (
             !await UntilAsync(() =>
                     Task.FromResult(
@@ -281,10 +345,14 @@ public class MachineChangedStressTests
         await TestContext
             .Progress.WriteLineAsync("every subscriber is on its last revision")
             .ConfigureAwait(false);
+    }
 
-        // Notices arrive on the listening connection only while it waits on the server, one per wait: drain them
-        // all on every poll.
-        var expectedNotices = Subscribers * WritesPerInstance;
+    private static async Task AssertEveryNoticeArrivesAsync(
+        NpgsqlConnection listener,
+        Func<int> notices,
+        int expectedNotices
+    )
+    {
         (
             await UntilAsync(async () =>
                 {
@@ -296,11 +364,21 @@ public class MachineChangedStressTests
                             )
                             .ConfigureAwait(false)
                     ) { }
-                    return Volatile.Read(ref notices) >= expectedNotices;
+                    return notices() >= expectedNotices;
                 })
                 .ConfigureAwait(false)
-        ).Should().BeTrue(string.Create(CultureInfo.InvariantCulture, $"each write sends a notice on {Channel}; {Volatile.Read(ref notices)} arrived"));
+        ).Should().BeTrue(string.Create(CultureInfo.InvariantCulture, $"each write sends a notice on {Channel}; {notices()} arrived"));
+    }
 
+    private async Task ReportAndAssertBoundsAsync(
+        ConcurrentDictionary<(Guid, long), long> written,
+        ConcurrentDictionary<(Guid, long), long> arrived,
+        Func<int> notices,
+        int expectedNotices,
+        int readsBefore,
+        long memoryBefore
+    )
+    {
         var reads = _reads.NotNull().Count - readsBefore;
         var latencies = written
             .Where(w => arrived.ContainsKey(w.Key))
@@ -314,7 +392,7 @@ public class MachineChangedStressTests
             .Out.WriteLineAsync(
                 string.Create(
                     CultureInfo.InvariantCulture,
-                    $"{Subscribers} subscribers, {expectedNotices} writes: notices {Volatile.Read(ref notices)}, "
+                    $"{Subscribers} subscribers, {expectedNotices} writes: notices {notices()}, "
                 )
                     + string.Create(
                         CultureInfo.InvariantCulture,
@@ -330,14 +408,21 @@ public class MachineChangedStressTests
         reads
             .Should()
             .BeLessThanOrEqualTo(
-                Volatile.Read(ref notices),
+                notices(),
                 "the subscribing host reads a row at most once per notice, whatever its subscribers"
             );
         p99.Should().BeLessThan(LatencyBudget, "a write reaches its subscriber promptly");
         memoryGrowth
             .Should()
             .BeLessThan(MemoryBudgetBytes, "the host keeps no history of what it sent");
+    }
 
+    private static async Task EndStreamsAsync(
+        CancellationTokenSource stop,
+        List<IResponseStream> streams,
+        List<Task> readers
+    )
+    {
         await TestContext.Progress.WriteLineAsync("ending the streams").ConfigureAwait(false);
         await stop.CancelAsync().ConfigureAwait(false);
         foreach (var stream in streams)

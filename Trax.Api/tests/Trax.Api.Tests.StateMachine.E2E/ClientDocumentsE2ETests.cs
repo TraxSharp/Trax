@@ -183,25 +183,7 @@ public class ClientDocumentsE2ETests
         try
         {
             b = await E2EHost.StartAsync(database, new CountingCharge(), Options(v2, "b"));
-            using (
-                var old = await b.PostPersistedAsync(
-                    ClientDocuments.IdOf("OrderCard", OrderCard),
-                    new { input = new { id = 1 } }
-                )
-            )
-                old.RootElement.GetProperty("data")
-                    .GetProperty("discover")
-                    .GetProperty("findOrder")
-                    .GetProperty("customer")
-                    .GetProperty("name")
-                    .GetString()
-                    .Should()
-                    .Be(
-                        "Ada",
-                        "a page built before the frontend's deploy keeps working on a node with the new "
-                            + "documents, per "
-                            + Adr
-                    );
+            await AssertOldVersionRunsAsync(b);
 
             // Node A started before B registered v2: it answers SERVER_OUTDATED until its next read of the store,
             // then runs it.
@@ -255,6 +237,30 @@ public class ClientDocumentsE2ETests
             return codes.SequenceEqual([RefusalCode.ClientOutdated.ToWire()]);
         });
         codes.Should().Equal([RefusalCode.ClientOutdated.ToWire()]);
+    }
+
+    private static async Task AssertOldVersionRunsAsync(IHost b)
+    {
+        using (
+            var old = await b.PostPersistedAsync(
+                    ClientDocuments.IdOf("OrderCard", OrderCard),
+                    new { input = new { id = 1 } }
+                )
+                .ConfigureAwait(false)
+        )
+            old.RootElement.GetProperty("data")
+                .GetProperty("discover")
+                .GetProperty("findOrder")
+                .GetProperty("customer")
+                .GetProperty("name")
+                .GetString()
+                .Should()
+                .Be(
+                    "Ada",
+                    "a page built before the frontend's deploy keeps working on a node with the new "
+                        + "documents, per "
+                        + Adr
+                );
     }
 
     private async Task<string> DocumentsFileAsync(params (string Name, string Text)[] documents)

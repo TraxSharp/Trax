@@ -186,27 +186,9 @@ internal sealed class MachineInstanceWindow : Window
                 : $"Refused: {TerminalText.Line(detail.Message)}";
             return;
         }
-        _header.Text = TerminalText.Line(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"{now.State}  ·  version {now.Version}  ·  since {Wire.Time(now.InStateSince)}"
-            )
-                + (now.DueAt is { } due ? $"  ·  timer due {Wire.Time(due)}" : "")
-                + (
-                    now.Stuck ? "  ·  STUCK"
-                    : now.Overdue ? "  ·  overdue"
-                    : ""
-                )
-                + "  ·  j/k move  H/L sideways  r across/down  v trace a run  q close"
-        );
+        _header.Text = TerminalText.Line(Header(now));
         _lines.Clear();
         _runs.Clear();
-        // Every line carries the host's names; none of them reaches the terminal as anything but text.
-        void Line(string text, long? run = null)
-        {
-            _lines.Add(TerminalText.Line(text));
-            _runs.Add(run);
-        }
         foreach (var line in MachineGraph.Lines(_machine, now.State, _context.VerticalGraphs))
             Line(line);
         if (now.WaitingOn is { } waiting)
@@ -235,6 +217,32 @@ internal sealed class MachineInstanceWindow : Window
                 ) + (run.IsLive ? "  live" : ""),
                 run.Id
             );
+        ShowHistory(history);
+        SetNeedsDraw();
+    }
+
+    // Every line carries the host's names; none of them reaches the terminal as anything but text.
+    private void Line(string text, long? run = null)
+    {
+        _lines.Add(TerminalText.Line(text));
+        _runs.Add(run);
+    }
+
+    private static string Header(MachineInstanceResultOperationsMachineInstance now) =>
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"{now.State}  ·  version {now.Version}  ·  since {Wire.Time(now.InStateSince)}"
+        )
+        + (now.DueAt is { } due ? $"  ·  timer due {Wire.Time(due)}" : "")
+        + (
+            now.Stuck ? "  ·  STUCK"
+            : now.Overdue ? "  ·  overdue"
+            : ""
+        )
+        + "  ·  j/k move  H/L sideways  r across/down  v trace a run  q close";
+
+    private void ShowHistory(TraxAnswer<MachineInstanceTransitionsResult> history)
+    {
         Line("");
         Line("History:");
         var transitions = history.Data?.Operations?.MachineInstance?.Transitions.Items;
@@ -260,7 +268,6 @@ internal sealed class MachineInstanceWindow : Window
                         ),
                     t.StartedRun?.ExecutionId
                 );
-        SetNeedsDraw();
     }
 
     private bool OnKey(Key key)

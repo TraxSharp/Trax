@@ -150,15 +150,7 @@ public class MachineDocumentStorageTests
                 + new string('c', 64)
                 + new string('d', 16),
         ];
-        foreach (var (id, version) in uploaded.Zip(new[] { 1, 1, int.MaxValue }))
-            await E2ESql.ExecuteAsync(
-                Database,
-                "INSERT INTO trax.persisted_operation (tenant_key, id, operation_name, version, document, "
-                    + "shape_fingerprint, is_active, created_at, updated_at) VALUES ('', @id, 'Legacy', @version, "
-                    + "'query Legacy { __typename }', 'x', true, now() - interval '30 days', now() - interval '30 days')",
-                ("id", id),
-                ("version", version)
-            );
+        await InsertUploadedRowsAsync(uploaded);
 
         Track(await ShelfHosts.StartAsync(Database, ShelfShape.V2, "pre_v2", Collecting(clock)));
         var v2 = (await ShelfIdsAsync())
@@ -205,26 +197,7 @@ public class MachineDocumentStorageTests
         var v2 = (await ShelfIdsAsync()).Except(v1, StringComparer.Ordinal).ToList();
         v2.Should().NotBeEmpty("the newer deploy registered its documents");
 
-        // Long ago the newer shape was deployed and rolled back, and its documents were collected. The older shape
-        // still runs on nodes built before a registration wrote updated_at again, so its rows carry their first one.
-        await E2ESql.ExecuteAsync(
-            Database,
-            "UPDATE trax.persisted_operation SET created_at = now() - interval '400 days', "
-                + "updated_at = now() - interval '400 days' WHERE starts_with(id, @prefix)",
-            ("prefix", MachineDocuments.ReservedIdPrefix)
-        );
-        await E2ESql.ExecuteAsync(
-            Database,
-            "UPDATE trax.persisted_operation_history SET changed_at = now() - interval '400 days' "
-                + "WHERE starts_with(id, @prefix)",
-            ("prefix", MachineDocuments.ReservedIdPrefix)
-        );
-        await E2ESql.ExecuteAsync(
-            Database,
-            "UPDATE trax.persisted_operation SET is_active = false, deprecation_reason = 'collected', "
-                + "updated_at = now() - interval '300 days' WHERE id = ANY(@ids)",
-            ("ids", v2.ToArray())
-        );
+        await BackdateAndCollectAsync(v2);
 
         // The newer shape is deployed again, on two nodes one after the other.
         Track(await ShelfHosts.StartAsync(Database, ShelfShape.V2, "re_v2_a", Collecting(clock)));
@@ -259,6 +232,51 @@ public class MachineDocumentStorageTests
             .BeTrue(
                 "once the grace period has passed, the older shape nobody re-stamps is collected"
             );
+    }
+
+    private static async Task InsertUploadedRowsAsync(string[] uploaded)
+    {
+        foreach (var (id, version) in uploaded.Zip(new[] { 1, 1, int.MaxValue }))
+            await E2ESql
+                .ExecuteAsync(
+                    Database,
+                    "INSERT INTO trax.persisted_operation (tenant_key, id, operation_name, version, document, "
+                        + "shape_fingerprint, is_active, created_at, updated_at) VALUES ('', @id, 'Legacy', @version, "
+                        + "'query Legacy { __typename }', 'x', true, now() - interval '30 days', now() - interval '30 days')",
+                    ("id", id),
+                    ("version", version)
+                )
+                .ConfigureAwait(false);
+    }
+
+    private static async Task BackdateAndCollectAsync(List<string> v2)
+    {
+        // Long ago the newer shape was deployed and rolled back, and its documents were collected. The older shape
+        // still runs on nodes built before a registration wrote updated_at again, so its rows carry their first one.
+        await E2ESql
+            .ExecuteAsync(
+                Database,
+                "UPDATE trax.persisted_operation SET created_at = now() - interval '400 days', "
+                    + "updated_at = now() - interval '400 days' WHERE starts_with(id, @prefix)",
+                ("prefix", MachineDocuments.ReservedIdPrefix)
+            )
+            .ConfigureAwait(false);
+        await E2ESql
+            .ExecuteAsync(
+                Database,
+                "UPDATE trax.persisted_operation_history SET changed_at = now() - interval '400 days' "
+                    + "WHERE starts_with(id, @prefix)",
+                ("prefix", MachineDocuments.ReservedIdPrefix)
+            )
+            .ConfigureAwait(false);
+        await E2ESql
+            .ExecuteAsync(
+                Database,
+                "UPDATE trax.persisted_operation SET is_active = false, deprecation_reason = 'collected', "
+                    + "updated_at = now() - interval '300 days' WHERE id = ANY(@ids)",
+                ("ids", v2.ToArray())
+            )
+            .ConfigureAwait(false);
     }
 
     // A host on the shared clock that registers its documents again every 200 ms.

@@ -180,12 +180,33 @@ public class SubscriptionStressTests
         );
         var swTook = TimeProvider.System.GetElapsedTime(sw);
 
+        await ReportAndAssertDataChangedAsync(
+            subscribers,
+            domains,
+            Writers,
+            SignalsPerWriter,
+            notified,
+            swTook,
+            delivered
+        );
+    }
+
+    private async Task ReportAndAssertDataChangedAsync(
+        Subscribers<ChangeDomain> subscribers,
+        ChangeDomain[] domains,
+        int writers,
+        int signalsPerWriter,
+        TimeSpan notified,
+        TimeSpan swTook,
+        bool delivered
+    )
+    {
         var events = subscribers.EventCounts();
         await TestContext
             .Out.WriteLineAsync(
                 string.Create(
                     CultureInfo.InvariantCulture,
-                    $"onDataChanged: {Writers * SignalsPerWriter:N0} signals notified in "
+                    $"onDataChanged: {writers * signalsPerWriter:N0} signals notified in "
                 )
                     + string.Create(
                         CultureInfo.InvariantCulture,
@@ -222,7 +243,7 @@ public class SubscriptionStressTests
                 domains.Length * 8,
                 string.Create(
                     CultureInfo.InvariantCulture,
-                    $"{Writers * SignalsPerWriter:N0} signals coalesce into a few events per domain, "
+                    $"{writers * signalsPerWriter:N0} signals coalesce into a few events per domain, "
                 ) + "not one per write"
             );
     }
@@ -260,22 +281,41 @@ public class SubscriptionStressTests
         );
         var drained = TimeProvider.System.GetElapsedTime(sw) - published;
 
+        await ReportAndAssertSustainedAsync(
+            subscribers,
+            Events,
+            TargetPerSecond,
+            published,
+            drained,
+            delivered
+        );
+    }
+
+    private static async Task ReportAndAssertSustainedAsync(
+        Subscribers<Lifecycle> subscribers,
+        int events,
+        int targetPerSecond,
+        TimeSpan published,
+        TimeSpan drained,
+        bool delivered
+    )
+    {
         var outcomes = subscribers.Streams().Select(Outcome).ToArray();
-        var complete = outcomes.Count(o => o.Received == Events);
+        var complete = outcomes.Count(o => o.Received == events);
         var gapped = outcomes.Count(o => o.Gap);
         await TestContext
             .Out.WriteLineAsync(
                 string.Create(
                     CultureInfo.InvariantCulture,
-                    $"onTrainStateChanged (sustained): {Events:N0} events over "
+                    $"onTrainStateChanged (sustained): {events:N0} events over "
                 )
                     + string.Create(
                         CultureInfo.InvariantCulture,
-                        $"{published.TotalMilliseconds:F0}ms ({Events / published.TotalSeconds:F0}/s "
+                        $"{published.TotalMilliseconds:F0}ms ({events / published.TotalSeconds:F0}/s "
                     )
                     + string.Create(
                         CultureInfo.InvariantCulture,
-                        $"against a ceiling of {TargetPerSecond}/s) reached all {SubscriberCount:N0} subscribers "
+                        $"against a ceiling of {targetPerSecond}/s) reached all {SubscriberCount:N0} subscribers "
                     )
                     + string.Create(
                         CultureInfo.InvariantCulture,
@@ -297,14 +337,14 @@ public class SubscriptionStressTests
         outcomes
             .Should()
             .OnlyContain(
-                o => o.Received == Events || o.Gap,
+                o => o.Received == events || o.Gap,
                 "a subscriber that lost state changes must see a skip in sequence, so it knows to "
                     + "refetch, per docs/adr/0032-the-lifecycle-feed-is-lossy-and-numbers-its-events.md"
             );
         outcomes
             .Should()
             .OnlyContain(
-                o => !o.Gap || o.Received < Events,
+                o => !o.Gap || o.Received < events,
                 "a subscriber that received every event saw no loss, so it must see no skip"
             );
     }
@@ -325,38 +365,7 @@ public class SubscriptionStressTests
         var subscribers = new List<Subscribers<RunChange>>();
         try
         {
-            for (var run = 1; run <= Runs; run++)
-            {
-                var metadataId = run;
-                subscribers.Add(
-                    await Subscribers<RunChange>.AttachAsync(
-                        _executor.NotNull(),
-                        "subscription { onTrainStateChanged(externalId: \""
-                            + metadataId.ToString(
-                                "D32",
-                                System.Globalization.CultureInfo.InvariantCulture
-                            )
-                            + "\") { sequence metadataId trainState } }",
-                        Math.Max(1, SubscriberCount / Runs),
-                        json => new RunChange(
-                            long.Parse(
-                                NumberField(json, "metadataId"),
-                                System.Globalization.CultureInfo.InvariantCulture
-                            ),
-                            long.Parse(
-                                NumberField(json, "sequence"),
-                                System.Globalization.CultureInfo.InvariantCulture
-                            ),
-                            string.Equals(
-                                StringField(json, "trainState"),
-                                "COMPLETED",
-                                StringComparison.Ordinal
-                            )
-                        ),
-                        prime: () => Publish(metadataId, TrainState.InProgress)
-                    )
-                );
-            }
+            await AttachRunFollowersAsync(subscribers, Runs);
 
             var sw = TimeProvider.System.GetTimestamp();
             var sent = 0;
@@ -380,72 +389,138 @@ public class SubscriptionStressTests
                 );
             var drained = TimeProvider.System.GetElapsedTime(sw) - published;
 
-            var outcomes = subscribers
-                .SelectMany((g, index) => g.Streams().Select(s => (Run: index + 1L, s)))
-                .Select(x =>
-                {
-                    var numbers = x
-                        .s.BeforeReset.Concat(x.s.Received)
-                        .Select(e => e.Sequence)
-                        .ToList();
-                    return (
-                        Received: x.s.Received.Count,
-                        Foreign: x.s.Received.Count(e => e.MetadataId != x.Run),
-                        Gap: numbers.Zip(numbers.Skip(1), (a, b) => b != a + 1).Any(g => g)
-                    );
-                })
-                .ToArray();
-            await TestContext
-                .Out.WriteLineAsync(
-                    string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"onTrainStateChanged(externalId): {Runs * ChangesPerRun:N0} changes of {Runs} runs "
-                    )
-                        + string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"over {published.TotalMilliseconds:F0}ms "
-                        )
-                        + string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"({Runs * ChangesPerRun / published.TotalSeconds:F0}/s against a ceiling of "
-                        )
-                        + string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"{TargetPerSecond}/s) to {outcomes.Length:N0} subscribers "
-                        )
-                        + string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"({outcomes.Length / Runs} per run); drained {drained.TotalMilliseconds:F0}ms "
-                        )
-                        + string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"after the last publish; {outcomes.Count(o => o.Received == ChangesPerRun):N0} "
-                        )
-                        + string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"received their run in full, {outcomes.Count(o => o.Gap):N0} saw a gap"
-                        )
-                )
-                .ConfigureAwait(false);
-
-            delivered.Should().BeTrue("each run's last state change should reach its followers");
-            drained.Should().BeLessThan(TimeSpan.FromSeconds(1));
-            outcomes
-                .Should()
-                .OnlyContain(o => o.Foreign == 0, "a subscriber following one run sees only it");
-            outcomes
-                .Should()
-                .OnlyContain(
-                    o => o.Received == ChangesPerRun || o.Gap,
-                    "a subscriber that lost changes of its run must see a skip in sequence, per "
-                        + "docs/adr/0032-the-lifecycle-feed-is-lossy-and-numbers-its-events.md"
-                );
+            var outcomes = RunFollowerOutcomes(subscribers);
+            await ReportAndAssertRunFollowersAsync(
+                Runs,
+                ChangesPerRun,
+                TargetPerSecond,
+                outcomes,
+                published,
+                drained,
+                delivered
+            );
         }
         finally
         {
             foreach (var group in subscribers)
                 await group.DisposeAsync().ConfigureAwait(false);
         }
+    }
+
+    /// <summary>Attaches each run's share of the subscribers, following it by <c>externalId</c>.</summary>
+    private async Task AttachRunFollowersAsync(List<Subscribers<RunChange>> subscribers, int runs)
+    {
+        for (var run = 1; run <= runs; run++)
+        {
+            var metadataId = run;
+            subscribers.Add(
+                await Subscribers<RunChange>
+                    .AttachAsync(
+                        _executor.NotNull(),
+                        "subscription { onTrainStateChanged(externalId: \""
+                            + metadataId.ToString(
+                                "D32",
+                                System.Globalization.CultureInfo.InvariantCulture
+                            )
+                            + "\") { sequence metadataId trainState } }",
+                        Math.Max(1, SubscriberCount / runs),
+                        json => new RunChange(
+                            long.Parse(
+                                NumberField(json, "metadataId"),
+                                System.Globalization.CultureInfo.InvariantCulture
+                            ),
+                            long.Parse(
+                                NumberField(json, "sequence"),
+                                System.Globalization.CultureInfo.InvariantCulture
+                            ),
+                            string.Equals(
+                                StringField(json, "trainState"),
+                                "COMPLETED",
+                                StringComparison.Ordinal
+                            )
+                        ),
+                        prime: () => Publish(metadataId, TrainState.InProgress)
+                    )
+                    .ConfigureAwait(false)
+            );
+        }
+    }
+
+    /// <summary>
+    /// How many changes each subscriber received, how many of them belong to another run, and
+    /// whether its sequence skipped.
+    /// </summary>
+    private static (int Received, int Foreign, bool Gap)[] RunFollowerOutcomes(
+        List<Subscribers<RunChange>> subscribers
+    ) =>
+        subscribers
+            .SelectMany((g, index) => g.Streams().Select(s => (Run: index + 1L, s)))
+            .Select(x =>
+            {
+                var numbers = x.s.BeforeReset.Concat(x.s.Received).Select(e => e.Sequence).ToList();
+                return (
+                    Received: x.s.Received.Count,
+                    Foreign: x.s.Received.Count(e => e.MetadataId != x.Run),
+                    Gap: numbers.Zip(numbers.Skip(1), (a, b) => b != a + 1).Any(g => g)
+                );
+            })
+            .ToArray();
+
+    private static async Task ReportAndAssertRunFollowersAsync(
+        int runs,
+        int changesPerRun,
+        int targetPerSecond,
+        (int Received, int Foreign, bool Gap)[] outcomes,
+        TimeSpan published,
+        TimeSpan drained,
+        bool delivered
+    )
+    {
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"onTrainStateChanged(externalId): {runs * changesPerRun:N0} changes of {runs} runs "
+                )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"over {published.TotalMilliseconds:F0}ms "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"({runs * changesPerRun / published.TotalSeconds:F0}/s against a ceiling of "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{targetPerSecond}/s) to {outcomes.Length:N0} subscribers "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"({outcomes.Length / runs} per run); drained {drained.TotalMilliseconds:F0}ms "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"after the last publish; {outcomes.Count(o => o.Received == changesPerRun):N0} "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"received their run in full, {outcomes.Count(o => o.Gap):N0} saw a gap"
+                    )
+            )
+            .ConfigureAwait(false);
+
+        delivered.Should().BeTrue("each run's last state change should reach its followers");
+        drained.Should().BeLessThan(TimeSpan.FromSeconds(1));
+        outcomes
+            .Should()
+            .OnlyContain(o => o.Foreign == 0, "a subscriber following one run sees only it");
+        outcomes
+            .Should()
+            .OnlyContain(
+                o => o.Received == changesPerRun || o.Gap,
+                "a subscriber that lost changes of its run must see a skip in sequence, per "
+                    + "docs/adr/0032-the-lifecycle-feed-is-lossy-and-numbers-its-events.md"
+            );
     }
 
     /// <summary>One state change of a followed run as its subscriber received it.</summary>
@@ -546,31 +621,7 @@ public class SubscriptionStressTests
         var subscribers = new List<Subscribers<Step>>();
         try
         {
-            for (var run = 1; run <= Runs; run++)
-            {
-                var metadataId = run;
-                subscribers.Add(
-                    await Subscribers<Step>.AttachAsync(
-                        _executor.NotNull(),
-                        string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"subscription {{ onJunctionEvent(metadataId: {metadataId}) "
-                        ) + "{ sequence metadataId junction { position } } }",
-                        Math.Max(1, SubscriberCount / Runs),
-                        json => new Step(
-                            long.Parse(
-                                NumberField(json, "position"),
-                                System.Globalization.CultureInfo.InvariantCulture
-                            ),
-                            long.Parse(
-                                NumberField(json, "sequence"),
-                                System.Globalization.CultureInfo.InvariantCulture
-                            )
-                        ),
-                        prime: () => HandleStep(handler, metadataId, position: 0)
-                    )
-                );
-            }
+            await AttachStepFollowersAsync(subscribers, handler, Runs);
 
             var slowest = TimeSpan.Zero;
             var sw = TimeProvider.System.GetTimestamp();
@@ -595,75 +646,140 @@ public class SubscriptionStressTests
                 );
             var drained = TimeProvider.System.GetElapsedTime(sw) - published;
 
-            var outcomes = subscribers
-                .SelectMany(g => g.Streams())
-                .Select(s =>
-                {
-                    var numbers = s.BeforeReset.Concat(s.Received).Select(e => e.Sequence).ToList();
-                    return (
-                        Received: s.Received.Count,
-                        Gap: numbers.Zip(numbers.Skip(1), (a, b) => b != a + 1).Any(x => x)
-                    );
-                })
-                .ToArray();
-            await TestContext
-                .Out.WriteLineAsync(
-                    string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"onJunctionEvent: {Runs * StepsPerRun:N0} steps of {Runs} runs over "
-                    )
-                        + string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"{published.TotalMilliseconds:F0}ms "
-                        )
-                        + string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"({Runs * StepsPerRun / published.TotalSeconds:F0}/s against a ceiling of "
-                        )
-                        + string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"{TargetPerSecond}/s) to {outcomes.Length:N0} subscribers "
-                        )
-                        + string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"({outcomes.Length / Runs} per run); slowest publish on the run's path "
-                        )
-                        + string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"{slowest.TotalMilliseconds:F0}ms; drained {drained.TotalMilliseconds:F0}ms "
-                        )
-                        + string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"after the last publish; {outcomes.Count(o => o.Received == StepsPerRun):N0} "
-                        )
-                        + string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"received their run in full, {outcomes.Count(o => o.Gap):N0} saw a gap"
-                        )
-                )
-                .ConfigureAwait(false);
-
-            delivered.Should().BeTrue("each run's last step should reach its subscribers");
-            drained.Should().BeLessThan(TimeSpan.FromSeconds(1));
-            slowest
-                .Should()
-                .BeLessThan(
-                    TimeSpan.FromSeconds(1),
-                    "a step's publish is bounded, so fan-out never holds a run up, per "
-                        + "docs/adr/0037-a-runs-step-feed-follows-one-run-with-its-trains-visibility.md"
-                );
-            outcomes
-                .Should()
-                .OnlyContain(
-                    o => o.Received == StepsPerRun || o.Gap,
-                    "a subscriber that lost steps of its run must see a skip in sequence"
-                );
+            var outcomes = StepFollowerOutcomes(subscribers);
+            await ReportAndAssertStepFollowersAsync(
+                Runs,
+                StepsPerRun,
+                TargetPerSecond,
+                outcomes,
+                published,
+                slowest,
+                drained,
+                delivered
+            );
         }
         finally
         {
             foreach (var group in subscribers)
                 await group.DisposeAsync().ConfigureAwait(false);
         }
+    }
+
+    /// <summary>Attaches each run's share of the subscribers to its steps on the junction topic.</summary>
+    private async Task AttachStepFollowersAsync(
+        List<Subscribers<Step>> subscribers,
+        IJunctionEventHandler handler,
+        int runs
+    )
+    {
+        for (var run = 1; run <= runs; run++)
+        {
+            var metadataId = run;
+            subscribers.Add(
+                await Subscribers<Step>
+                    .AttachAsync(
+                        _executor.NotNull(),
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"subscription {{ onJunctionEvent(metadataId: {metadataId}) "
+                        ) + "{ sequence metadataId junction { position } } }",
+                        Math.Max(1, SubscriberCount / runs),
+                        json => new Step(
+                            long.Parse(
+                                NumberField(json, "position"),
+                                System.Globalization.CultureInfo.InvariantCulture
+                            ),
+                            long.Parse(
+                                NumberField(json, "sequence"),
+                                System.Globalization.CultureInfo.InvariantCulture
+                            )
+                        ),
+                        prime: () => HandleStep(handler, metadataId, position: 0)
+                    )
+                    .ConfigureAwait(false)
+            );
+        }
+    }
+
+    /// <summary>How many steps each subscriber received, and whether its sequence skipped.</summary>
+    private static (int Received, bool Gap)[] StepFollowerOutcomes(
+        List<Subscribers<Step>> subscribers
+    ) =>
+        subscribers
+            .SelectMany(g => g.Streams())
+            .Select(s =>
+            {
+                var numbers = s.BeforeReset.Concat(s.Received).Select(e => e.Sequence).ToList();
+                return (
+                    Received: s.Received.Count,
+                    Gap: numbers.Zip(numbers.Skip(1), (a, b) => b != a + 1).Any(x => x)
+                );
+            })
+            .ToArray();
+
+    private static async Task ReportAndAssertStepFollowersAsync(
+        int runs,
+        int stepsPerRun,
+        int targetPerSecond,
+        (int Received, bool Gap)[] outcomes,
+        TimeSpan published,
+        TimeSpan slowest,
+        TimeSpan drained,
+        bool delivered
+    )
+    {
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"onJunctionEvent: {runs * stepsPerRun:N0} steps of {runs} runs over "
+                )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{published.TotalMilliseconds:F0}ms "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"({runs * stepsPerRun / published.TotalSeconds:F0}/s against a ceiling of "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{targetPerSecond}/s) to {outcomes.Length:N0} subscribers "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"({outcomes.Length / runs} per run); slowest publish on the run's path "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{slowest.TotalMilliseconds:F0}ms; drained {drained.TotalMilliseconds:F0}ms "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"after the last publish; {outcomes.Count(o => o.Received == stepsPerRun):N0} "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"received their run in full, {outcomes.Count(o => o.Gap):N0} saw a gap"
+                    )
+            )
+            .ConfigureAwait(false);
+
+        delivered.Should().BeTrue("each run's last step should reach its subscribers");
+        drained.Should().BeLessThan(TimeSpan.FromSeconds(1));
+        slowest
+            .Should()
+            .BeLessThan(
+                TimeSpan.FromSeconds(1),
+                "a step's publish is bounded, so fan-out never holds a run up, per "
+                    + "docs/adr/0037-a-runs-step-feed-follows-one-run-with-its-trains-visibility.md"
+            );
+        outcomes
+            .Should()
+            .OnlyContain(
+                o => o.Received == stepsPerRun || o.Gap,
+                "a subscriber that lost steps of its run must see a skip in sequence"
+            );
     }
 
     /// <summary>One junction event as a subscriber received it.</summary>

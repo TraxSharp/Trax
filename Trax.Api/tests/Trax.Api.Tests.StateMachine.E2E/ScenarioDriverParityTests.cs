@@ -424,20 +424,7 @@ public class ScenarioDriverParityTests
     {
         const string database = Database + "_persisted";
         await E2EHost.RecreateDatabaseAsync(database);
-        var host = await E2EHost.StartAsync(
-            database,
-            new CountingCharge(),
-            new E2EHostOptions
-            {
-                Machines = o =>
-                {
-                    o.ServeFeatures(_directory.NotNull());
-                    o.InvokeOutcomeSweepInterval = TimeSpan.FromMilliseconds(500);
-                    o.InvokeOutcomeSweepIntervalWhileListening = TimeSpan.FromMilliseconds(500);
-                },
-                GraphQL = MachineDocumentOps.Persisted(requirePersisted: true),
-            }
-        );
+        var host = await StartRequiringPersistedAsync(database);
         var path = Path.Combine(Path.GetTempPath(), $"trax-parity-{Guid.NewGuid():N}.json");
         try
         {
@@ -483,6 +470,22 @@ public class ScenarioDriverParityTests
             await E2EHost.DropDatabaseAsync(database);
         }
     }
+
+    private Task<IHost> StartRequiringPersistedAsync(string database) =>
+        E2EHost.StartAsync(
+            database,
+            new CountingCharge(),
+            new E2EHostOptions
+            {
+                Machines = o =>
+                {
+                    o.ServeFeatures(_directory.NotNull());
+                    o.InvokeOutcomeSweepInterval = TimeSpan.FromMilliseconds(500);
+                    o.InvokeOutcomeSweepIntervalWhileListening = TimeSpan.FromMilliseconds(500);
+                },
+                GraphQL = MachineDocumentOps.Persisted(requirePersisted: true),
+            }
+        );
 
     [Test]
     public async Task A_guard_refuses_with_the_same_code_and_message_on_both()

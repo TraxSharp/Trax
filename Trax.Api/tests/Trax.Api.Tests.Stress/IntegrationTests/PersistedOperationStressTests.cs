@@ -137,7 +137,21 @@ public class PersistedOperationStressTests : StressTestSetup
         Func<CancellationToken, Task<IReadOnlyDictionary<string, StoredMachineDocument>>> read =
             storage.ReadMachineDocumentVersionsAsync;
 
-        var kinds = new (string Label, Func<int, Task> Run)[]
+        var kinds = MachineDocumentIdKinds(hot, registry, own, irHash, Text, read);
+
+        await MeasurePerIdCostAsync(kinds, Rounds);
+    }
+
+    /// <summary>The id kinds measured, each a request of that kind against the same catalog.</summary>
+    private static (string Label, Func<int, Task> Run)[] MachineDocumentIdKinds(
+        IOperationDocumentStorage hot,
+        MachineDocumentRegistry registry,
+        MachineDocument own,
+        string irHash,
+        string text,
+        Func<CancellationToken, Task<IReadOnlyDictionary<string, StoredMachineDocument>>> read
+    ) =>
+        new (string Label, Func<int, Task> Run)[]
         {
             (
                 "ordinary id (stored)",
@@ -166,23 +180,7 @@ public class PersistedOperationStressTests : StressTestSetup
             ),
             (
                 "machine this node does not serve",
-                async i =>
-                    (
-                        await registry
-                            .ClassifyAsync(
-                                MachineDocuments.IdOf(
-                                    "unserved",
-                                    "get",
-                                    irHash,
-                                    i.ToString(System.Globalization.CultureInfo.InvariantCulture)
-                                ),
-                                read,
-                                default
-                            )
-                            .ConfigureAwait(false)
-                    )
-                        .Should()
-                        .NotBe(MachineDocumentVerdict.Own)
+                i => AssertUnservedMachineIsNotOwnAsync(registry, irHash, read, i)
             ),
             (
                 "unseen id of a served machine",
@@ -193,7 +191,7 @@ public class PersistedOperationStressTests : StressTestSetup
                                 "stress-machine",
                                 "get",
                                 $"{i:x8}".PadLeft(MachineDocuments.IrHashLength, 'b'),
-                                Text
+                                text
                             ),
                             read,
                             default
@@ -202,14 +200,43 @@ public class PersistedOperationStressTests : StressTestSetup
             ),
         };
 
+    private static async Task AssertUnservedMachineIsNotOwnAsync(
+        MachineDocumentRegistry registry,
+        string irHash,
+        Func<CancellationToken, Task<IReadOnlyDictionary<string, StoredMachineDocument>>> read,
+        int i
+    ) =>
+        (
+            await registry
+                .ClassifyAsync(
+                    MachineDocuments.IdOf(
+                        "unserved",
+                        "get",
+                        irHash,
+                        i.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    ),
+                    read,
+                    default
+                )
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .NotBe(MachineDocumentVerdict.Own);
+
+    /// <summary>Times <paramref name="rounds"/> requests of each kind and prints and bounds the spread.</summary>
+    private async Task MeasurePerIdCostAsync(
+        (string Label, Func<int, Task> Run)[] kinds,
+        int rounds
+    )
+    {
         foreach (var (label, run) in kinds)
         {
-            await run(-1);
-            var samples = new double[Rounds];
-            for (var i = 0; i < Rounds; i++)
+            await run(-1).ConfigureAwait(false);
+            var samples = new double[rounds];
+            for (var i = 0; i < rounds; i++)
             {
                 var sw = TimeProvider.System.GetTimestamp();
-                await run(i);
+                await run(i).ConfigureAwait(false);
                 samples[i] = TimeProvider.System.GetElapsedTime(sw).TotalMilliseconds;
             }
             Array.Sort(samples);
@@ -217,11 +244,11 @@ public class PersistedOperationStressTests : StressTestSetup
                 .Out.WriteLineAsync(
                     string.Create(
                         CultureInfo.InvariantCulture,
-                        $"{label}: mean {samples.Average():F3}ms, p50 {samples[Rounds / 2]:F3}ms, "
+                        $"{label}: mean {samples.Average():F3}ms, p50 {samples[rounds / 2]:F3}ms, "
                     )
                         + string.Create(
                             CultureInfo.InvariantCulture,
-                            $"p99 {samples[(int)(Rounds * 0.99)]:F3}ms over {Rounds:N0} requests "
+                            $"p99 {samples[(int)(rounds * 0.99)]:F3}ms over {rounds:N0} requests "
                         )
                         + string.Create(
                             CultureInfo.InvariantCulture,
@@ -229,7 +256,7 @@ public class PersistedOperationStressTests : StressTestSetup
                         )
                 )
                 .ConfigureAwait(false);
-            samples[(int)(Rounds * 0.99)]
+            samples[(int)(rounds * 0.99)]
                 .Should()
                 .BeLessThan(
                     HotPathBudget.TotalMilliseconds,

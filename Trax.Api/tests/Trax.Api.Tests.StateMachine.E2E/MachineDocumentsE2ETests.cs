@@ -356,20 +356,7 @@ public class MachineDocumentsE2ETests
     [Test]
     public async Task Unknown_reserved_prefix_ids_read_the_store_at_most_once_per_refresh_interval()
     {
-        // A background read that another test's made-up ids asked for may still be due: count from once the reads
-        // have stayed put for longer than a refresh interval.
-        var settle = TimeProvider.System.GetTimestamp();
-        int settled;
-        do
-        {
-            TimeProvider
-                .System.GetElapsedTime(settle)
-                .Should()
-                .BeLessThan(E2EWait.DefaultTimeout, "the background reads settle");
-            settled = _reads.NotNull().Count;
-            // measuring-interval: a read still due runs within one refresh interval of the miss that asked for it.
-            await Task.Delay(MachineDocumentRegistry.MinRefreshInterval * 1.5, TimeProvider.System);
-        } while (_reads.NotNull().Count != settled);
+        await WaitForBackgroundReadsToSettleAsync();
 
         // An ordinary unknown id, remembered as a miss: it must still be remembered afterwards.
         const string Plain = "plain_unknown_v1";
@@ -378,14 +365,7 @@ public class MachineDocumentsE2ETests
         using (await _host.NotNull().PostPersistedAsync(Plain)) { }
         (_reads.NotNull().Count - before).Should().Be(0, "a remembered miss is not read again");
 
-        for (var i = 0; i < 1_000; i++)
-        {
-            using var answer = await _host
-                .NotNull()
-                .PostPersistedAsync(
-                    $"{MachineDocuments.ReservedIdPrefix}wizard_submit_{Guid.NewGuid():N}"
-                );
-        }
+        await PostReservedIdsNotShapedLikeGeneratedOnesAsync();
 
         (_reads.NotNull().Count - before)
             .Should()
@@ -422,6 +402,38 @@ public class MachineDocumentsE2ETests
         (_reads.NotNull().Count - reads)
             .Should()
             .Be(0, "the reserved ids do not fill the miss cache and evict what it remembered");
+    }
+
+    private async Task WaitForBackgroundReadsToSettleAsync()
+    {
+        // A background read that another test's made-up ids asked for may still be due: count from once the reads
+        // have stayed put for longer than a refresh interval.
+        var settle = TimeProvider.System.GetTimestamp();
+        int settled;
+        do
+        {
+            TimeProvider
+                .System.GetElapsedTime(settle)
+                .Should()
+                .BeLessThan(E2EWait.DefaultTimeout, "the background reads settle");
+            settled = _reads.NotNull().Count;
+            // measuring-interval: a read still due runs within one refresh interval of the miss that asked for it.
+            await Task.Delay(MachineDocumentRegistry.MinRefreshInterval * 1.5, TimeProvider.System)
+                .ConfigureAwait(false);
+        } while (_reads.NotNull().Count != settled);
+    }
+
+    private async Task PostReservedIdsNotShapedLikeGeneratedOnesAsync()
+    {
+        for (var i = 0; i < 1_000; i++)
+        {
+            using var answer = await _host
+                .NotNull()
+                .PostPersistedAsync(
+                    $"{MachineDocuments.ReservedIdPrefix}wizard_submit_{Guid.NewGuid():N}"
+                )
+                .ConfigureAwait(false);
+        }
     }
 
     [Test]

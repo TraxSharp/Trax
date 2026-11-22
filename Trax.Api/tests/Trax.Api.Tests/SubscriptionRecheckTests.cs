@@ -398,28 +398,7 @@ public class SubscriptionRecheckTests
 
         _membersOpen = false;
 
-        // Events published before the first frame arrived may still be on their way, and the
-        // server may send a keep-alive. The re-check's error is the stream's last result, a
-        // `next` frame carrying only errors, and the operation then completes.
-        var frames = new List<JsonElement>();
-        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(15);
-        while (
-            frames.Count == 0
-            || !string.Equals(
-                frames[^1].GetProperty("type").GetString(),
-                "complete",
-                StringComparison.Ordinal
-            )
-        )
-        {
-            TimeProvider
-                .System.GetUtcNow()
-                .UtcDateTime.Should()
-                .BeBefore(deadline, "the re-check ends the subscription within a few intervals");
-            var frame = await ReceiveAsync(socket);
-            if (frame.GetProperty("type").GetString() is not ("ping" or "pong"))
-                frames.Add(frame);
-        }
+        var frames = await ReceiveUntilCompleteAsync(socket);
         var raw = string.Join('\n', frames.Select(f => f.GetRawText()));
         frames.Should().HaveCountGreaterThanOrEqualTo(2, raw);
         var last = frames[^2];
@@ -444,6 +423,33 @@ public class SubscriptionRecheckTests
             .GetString()
             .Should()
             .Be("pong", "the socket stays open");
+    }
+
+    private static async Task<List<JsonElement>> ReceiveUntilCompleteAsync(WebSocket socket)
+    {
+        // Events published before the first frame arrived may still be on their way, and the
+        // server may send a keep-alive. The re-check's error is the stream's last result, a
+        // `next` frame carrying only errors, and the operation then completes.
+        var frames = new List<JsonElement>();
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(15);
+        while (
+            frames.Count == 0
+            || !string.Equals(
+                frames[^1].GetProperty("type").GetString(),
+                "complete",
+                StringComparison.Ordinal
+            )
+        )
+        {
+            TimeProvider
+                .System.GetUtcNow()
+                .UtcDateTime.Should()
+                .BeBefore(deadline, "the re-check ends the subscription within a few intervals");
+            var frame = await ReceiveAsync(socket).ConfigureAwait(false);
+            if (frame.GetProperty("type").GetString() is not ("ping" or "pong"))
+                frames.Add(frame);
+        }
+        return frames;
     }
 
     private const string SocketKey = "recheck-socket-key-0123456789abcdefghijk";

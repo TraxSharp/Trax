@@ -103,6 +103,52 @@ public class MachineInstanceQueriesOverHttpTests
     public async Task OneTimeSetUp()
     {
         _operations = Substitute.For<IOperationsService>();
+        StubOperations();
+
+        _host = new HostBuilder()
+            .ConfigureWebHost(web =>
+                web.UseTestServer()
+                    .ConfigureServices(services =>
+                    {
+                        services.AddLogging();
+                        services.AddRouting();
+                        services.AddTraxApiKeyAuth(keys =>
+                            keys.Add(OperatorKey, id: "operator", "Operator")
+                                .Add(UserKey, id: "shopper", "Shopper")
+                        );
+                        services.AddSingleton<TraxMarker>();
+                        var discovery = Substitute.For<ITrainDiscoveryService>();
+                        discovery.DiscoverTrains().Returns([]);
+                        services.AddSingleton(discovery);
+                        services.AddSingleton(Substitute.For<IEffectRegistry>());
+                        services.AddTraxGraphQL(graphql =>
+                            graphql
+                                .ExposeOperationQueries()
+                                .ExposeOperationMutations()
+                                .GateOperations(roles: "Operator")
+                        );
+                        services.AddScoped(_ => _operations.NotNull());
+                        services.AddScoped(_ => Substitute.For<ITraxScheduler>());
+                        services.AddScoped(_ => Substitute.For<ITrainExecutionService>());
+                        services.AddScoped(_ =>
+                            Substitute.For<Trax.Scheduler.Services.JobSubmitter.IJobSubmitter>()
+                        );
+                    })
+                    .Configure(app =>
+                    {
+                        app.UseRouting();
+                        app.UseAuthentication();
+                        app.UseAuthorization();
+                        app.UseEndpoints(e => e.MapGraphQL("/trax/graphql", "trax"));
+                    })
+            )
+            .Build();
+
+        await _host.NotNull().StartAsync();
+    }
+
+    private void StubOperations()
+    {
         _operations
             .NotNull()
             .GetMachineInstancesAsync(Arg.Any<MachineInstanceQuery>(), Arg.Any<CancellationToken>())
@@ -147,47 +193,6 @@ public class MachineInstanceQueriesOverHttpTests
                 ),
                 new MachineInstanceStateCount(Machine, "Shipped", SnapshotOwnerKind.System, 3),
             ]);
-
-        _host = new HostBuilder()
-            .ConfigureWebHost(web =>
-                web.UseTestServer()
-                    .ConfigureServices(services =>
-                    {
-                        services.AddLogging();
-                        services.AddRouting();
-                        services.AddTraxApiKeyAuth(keys =>
-                            keys.Add(OperatorKey, id: "operator", "Operator")
-                                .Add(UserKey, id: "shopper", "Shopper")
-                        );
-                        services.AddSingleton<TraxMarker>();
-                        var discovery = Substitute.For<ITrainDiscoveryService>();
-                        discovery.DiscoverTrains().Returns([]);
-                        services.AddSingleton(discovery);
-                        services.AddSingleton(Substitute.For<IEffectRegistry>());
-                        services.AddTraxGraphQL(graphql =>
-                            graphql
-                                .ExposeOperationQueries()
-                                .ExposeOperationMutations()
-                                .GateOperations(roles: "Operator")
-                        );
-                        services.AddScoped(_ => _operations.NotNull());
-                        services.AddScoped(_ => Substitute.For<ITraxScheduler>());
-                        services.AddScoped(_ => Substitute.For<ITrainExecutionService>());
-                        services.AddScoped(_ =>
-                            Substitute.For<Trax.Scheduler.Services.JobSubmitter.IJobSubmitter>()
-                        );
-                    })
-                    .Configure(app =>
-                    {
-                        app.UseRouting();
-                        app.UseAuthentication();
-                        app.UseAuthorization();
-                        app.UseEndpoints(e => e.MapGraphQL("/trax/graphql", "trax"));
-                    })
-            )
-            .Build();
-
-        await _host.NotNull().StartAsync();
     }
 
     [OneTimeTearDown]

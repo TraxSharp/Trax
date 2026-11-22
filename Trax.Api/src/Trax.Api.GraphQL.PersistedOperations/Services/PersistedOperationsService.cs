@@ -166,20 +166,7 @@ internal sealed class PersistedOperationsService : IPersistedOperationsService
 
         try
         {
-            var row = await Store
-                .UpsertAsync(
-                    input.Id,
-                    input.Document,
-                    new UpsertOptions
-                    {
-                        TenantKey = input.TenantKey,
-                        Description = input.Description,
-                        BypassShapeDiff = input.BypassShapeDiff,
-                        Version = input.Version,
-                    },
-                    ct
-                )
-                .ConfigureAwait(false);
+            var row = await UpsertRowAsync(input, ct).ConfigureAwait(false);
             return UploadPersistedOperationPayload.Ok(PersistedOperationDto.From(row));
         }
         catch (PersistedOperationNotBroadcastException ex) when (ex.Operation is not null)
@@ -221,6 +208,24 @@ internal sealed class PersistedOperationsService : IPersistedOperationsService
             );
         }
     }
+
+    // Stores the uploaded document under its id, as the input asks.
+    private Task<Trax.Effect.Models.PersistedOperation.PersistedOperation> UpsertRowAsync(
+        UploadPersistedOperationInput input,
+        CancellationToken ct
+    ) =>
+        Store.UpsertAsync(
+            input.Id,
+            input.Document,
+            new UpsertOptions
+            {
+                TenantKey = input.TenantKey,
+                Description = input.Description,
+                BypassShapeDiff = input.BypassShapeDiff,
+                Version = input.Version,
+            },
+            ct
+        );
 
     public async Task<DeactivatePersistedOperationPayload> DeactivateAsync(
         DeactivatePersistedOperationInput input,

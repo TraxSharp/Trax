@@ -88,6 +88,27 @@ public class WorkQueueQueries
         if (!afterId.HasValue && skip > 0)
             query = query.Skip(skip);
 
+        var items = await ReadWorkQueueSummariesAsync(query, take, ct).ConfigureAwait(false);
+
+        var nextCursor = items.Count > 0 ? items[^1].Id : (long?)null;
+
+        return new PagedResult<WorkQueueSummary>(
+            items,
+            totalCount,
+            afterId.HasValue ? 0 : skip,
+            take,
+            isEstimate,
+            nextCursor
+        );
+    }
+
+    /// <summary>One page of work queue summaries, read from an ordered and filtered query.</summary>
+    private static async Task<List<WorkQueueSummary>> ReadWorkQueueSummariesAsync(
+        IQueryable<Effect.Models.WorkQueue.WorkQueue> query,
+        int take,
+        CancellationToken ct
+    )
+    {
         var items = await query
             .Take(take)
             .Select(q => new WorkQueueSummary(
@@ -112,17 +133,7 @@ public class WorkQueueQueries
             })
             .ToListAsync(ct)
             .ConfigureAwait(false);
-
-        var nextCursor = items.Count > 0 ? items[^1].Id : (long?)null;
-
-        return new PagedResult<WorkQueueSummary>(
-            items,
-            totalCount,
-            afterId.HasValue ? 0 : skip,
-            take,
-            isEstimate,
-            nextCursor
-        );
+        return items;
     }
 
     /// <summary>

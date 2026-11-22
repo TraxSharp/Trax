@@ -145,7 +145,18 @@ internal static class HeadlessCommands
         if (!outcome.Succeeded || operation is not { } id)
             return outcome.Succeeded ? 0 : 1;
 
-        // Its progress until it ends: the host runs it whether this process stays or not.
+        return await FollowAsync(session, id, output, clock, ct).ConfigureAwait(false);
+    }
+
+    // Its progress until it ends: the host runs it whether this process stays or not.
+    private static async Task<int> FollowAsync(
+        ConsoleSession session,
+        Guid id,
+        TextWriter output,
+        TimeProvider clock,
+        CancellationToken ct
+    )
+    {
         for (; ; )
         {
             await Task.Delay(BulkPollInterval, clock, ct).ConfigureAwait(false);
@@ -192,16 +203,58 @@ internal static class HeadlessCommands
         var ended = new TaskCompletionSource<int>(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
-        Lock gate = new();
-        void Write(TextWriter to, string line)
+        var lines = new WatchLines(output, error, ended);
+
+        var client = session.Client;
+        using var subscription = stream switch
         {
-            lock (gate)
+            "runs" => client.OnTrainStateChanged(e =>
+                lines.On(e, d => Wire.Json(d.OnTrainStateChanged))
+            ),
+            "changes" => client.OnDataChanged(e => lines.On(e, d => Wire.Json(d.OnDataChanged))),
+            "run" => client.OnJunctionEvent(
+                new OnJunctionEventVariables
+                {
+                    MetadataId = Wire.Long(
+                        "run",
+                        id ?? throw new InvalidOperationException("watch run needs the run's id.")
+                    ),
+                },
+                e => lines.On(e, d => Wire.Json(d.OnJunctionEvent))
+            ),
+            "machines" => client.OnMachineInstanceChanged(
+                new OnMachineInstanceChangedVariables { Machine = id },
+                e => lines.On(e, d => Wire.Json(d.OnMachineInstanceChanged))
+            ),
+            _ => throw new InvalidOperationException(
+                $"'{stream}' is not a stream. Use runs, changes, run <id> or machines [name]."
+            ),
+        };
+        var stop = ct.Register(() => ended.TrySetResult(0));
+        await using var stopDisposal = stop.ConfigureAwait(false);
+        return await ended.Task.ConfigureAwait(false);
+    }
+
+    // What a stream sends, one JSON line at a time to output or error, never two at once; the end of the stream
+    // sets the exit code.
+    private sealed class WatchLines(
+        TextWriter output,
+        TextWriter error,
+        TaskCompletionSource<int> ended
+    )
+    {
+        private readonly Lock _gate = new();
+
+        private void Write(TextWriter to, string line)
+        {
+            lock (_gate)
             {
                 to.WriteLine(line);
                 to.Flush();
             }
         }
-        void On<T>(TraxStreamEvent<T> e, Func<T, JsonNode?> data)
+
+        public void On<T>(TraxStreamEvent<T> e, Func<T, JsonNode?> data)
         {
             switch (e)
             {
@@ -233,33 +286,6 @@ internal static class HeadlessCommands
                     break;
             }
         }
-
-        var client = session.Client;
-        using var subscription = stream switch
-        {
-            "runs" => client.OnTrainStateChanged(e => On(e, d => Wire.Json(d.OnTrainStateChanged))),
-            "changes" => client.OnDataChanged(e => On(e, d => Wire.Json(d.OnDataChanged))),
-            "run" => client.OnJunctionEvent(
-                new OnJunctionEventVariables
-                {
-                    MetadataId = Wire.Long(
-                        "run",
-                        id ?? throw new InvalidOperationException("watch run needs the run's id.")
-                    ),
-                },
-                e => On(e, d => Wire.Json(d.OnJunctionEvent))
-            ),
-            "machines" => client.OnMachineInstanceChanged(
-                new OnMachineInstanceChangedVariables { Machine = id },
-                e => On(e, d => Wire.Json(d.OnMachineInstanceChanged))
-            ),
-            _ => throw new InvalidOperationException(
-                $"'{stream}' is not a stream. Use runs, changes, run <id> or machines [name]."
-            ),
-        };
-        var stop = ct.Register(() => ended.TrySetResult(0));
-        await using var stopDisposal = stop.ConfigureAwait(false);
-        return await ended.Task.ConfigureAwait(false);
     }
 
     public static async Task<int> TraceAsync(

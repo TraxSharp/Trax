@@ -236,31 +236,7 @@ public class TypeExtensionRegistrationTests
     {
         // Arrange — build a real HotChocolate executor with a type extension
         // that adds a "ping" field to the operations query type.
-        var discoveryService = Substitute.For<ITrainDiscoveryService>();
-        discoveryService
-            .DiscoverTrains()
-            .Returns([
-                new TrainRegistration
-                {
-                    ServiceType = typeof(IFakeTrainForExtTest),
-                    ImplementationType = typeof(FakeTrainForExtTest),
-                    InputType = typeof(FakeExtTestInput),
-                    OutputType = typeof(Unit),
-                    Lifetime = ServiceLifetime.Scoped,
-                    ServiceTypeName = nameof(IFakeTrainForExtTest),
-                    ImplementationTypeName = nameof(FakeTrainForExtTest),
-                    HasAllowAnonymousAttribute = true,
-                    InputTypeName = nameof(FakeExtTestInput),
-                    OutputTypeName = nameof(Unit),
-                    RequiredPolicies = [],
-                    RequiredRoles = [],
-                    IsQuery = true,
-                    IsMutation = false,
-                    IsRemote = false,
-                    IsBroadcastEnabled = false,
-                    GraphQLOperations = GraphQLOperation.Run,
-                },
-            ]);
+        var discoveryService = DiscoveryOfOneFakeQueryTrain();
 
         var services = new ServiceCollection();
         services.AddSingleton<Trax.Effect.Configuration.TraxBuilder.TraxMarker>();
@@ -294,6 +270,36 @@ public class TypeExtensionRegistrationTests
 
         var data = operationResult.Data;
         data.Should().NotBeNull();
+    }
+
+    private static ITrainDiscoveryService DiscoveryOfOneFakeQueryTrain()
+    {
+        var discoveryService = Substitute.For<ITrainDiscoveryService>();
+        discoveryService
+            .DiscoverTrains()
+            .Returns([
+                new TrainRegistration
+                {
+                    ServiceType = typeof(IFakeTrainForExtTest),
+                    ImplementationType = typeof(FakeTrainForExtTest),
+                    InputType = typeof(FakeExtTestInput),
+                    OutputType = typeof(Unit),
+                    Lifetime = ServiceLifetime.Scoped,
+                    ServiceTypeName = nameof(IFakeTrainForExtTest),
+                    ImplementationTypeName = nameof(FakeTrainForExtTest),
+                    HasAllowAnonymousAttribute = true,
+                    InputTypeName = nameof(FakeExtTestInput),
+                    OutputTypeName = nameof(Unit),
+                    RequiredPolicies = [],
+                    RequiredRoles = [],
+                    IsQuery = true,
+                    IsMutation = false,
+                    IsRemote = false,
+                    IsBroadcastEnabled = false,
+                    GraphQLOperations = GraphQLOperation.Run,
+                },
+            ]);
+        return discoveryService;
     }
 
     [Test]

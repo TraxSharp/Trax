@@ -66,6 +66,30 @@ internal sealed class QueryModelReachValidator(
         WalkObjectTypes(schema, models, entities, Reach);
         WalkInputTypes(schema, models, entities, Reach);
 
+        var messages = PostureMessages(schema, reached);
+
+        if (messages.Count == 0)
+            return;
+
+        throw new InvalidOperationException(
+            $"{messages.Count} entit{(messages.Count == 1 ? "y" : "ies")} reached from a "
+                + "[TraxQueryModel] declare no usable authorization posture (see "
+                + "docs/adr/0025-every-entity-a-query-model-reaches-declares-its-posture.md):"
+                + Environment.NewLine
+                + Environment.NewLine
+                + string.Join(Environment.NewLine + Environment.NewLine, messages)
+        );
+    }
+
+    /// <summary>
+    /// What is wrong with the posture of each entity a query model reaches, in the order of the
+    /// entities' names.
+    /// </summary>
+    private List<string> PostureMessages(
+        ISchemaDefinition schema,
+        Dictionary<Type, SortedSet<string>> reached
+    )
+    {
         var messages = new List<string>();
         foreach (
             var (entity, coordinates) in reached.OrderBy(
@@ -90,18 +114,7 @@ internal sealed class QueryModelReachValidator(
             if (posture.IsGated)
                 VerifyGateEmitted(schema, entity, messages);
         }
-
-        if (messages.Count == 0)
-            return;
-
-        throw new InvalidOperationException(
-            $"{messages.Count} entit{(messages.Count == 1 ? "y" : "ies")} reached from a "
-                + "[TraxQueryModel] declare no usable authorization posture (see "
-                + "docs/adr/0025-every-entity-a-query-model-reaches-declares-its-posture.md):"
-                + Environment.NewLine
-                + Environment.NewLine
-                + string.Join(Environment.NewLine + Environment.NewLine, messages)
-        );
+        return messages;
     }
 
     /// <summary>

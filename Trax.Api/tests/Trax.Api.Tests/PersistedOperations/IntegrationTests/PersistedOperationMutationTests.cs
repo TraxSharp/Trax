@@ -564,23 +564,7 @@ public class PersistedOperationMutationTests
             stored
         );
 
-        var deactivate = (
-            await Execute(
-                """
-                mutation Deactivate($input: DeactivatePersistedOperationInput!) {
-                  persistedOperations { deactivatePersistedOperation(input: $input) { success } }
-                }
-                """,
-                new Dictionary<string, object?>(StringComparer.Ordinal)
-                {
-                    ["input"] = new Dictionary<string, object?>(StringComparer.Ordinal)
-                    {
-                        ["id"] = stored,
-                        ["reason"] = "rotating",
-                    },
-                }
-            )
-        ).RootElement.GetProperty("data").GetProperty("persistedOperations").GetProperty("deactivatePersistedOperation");
+        var deactivate = await DeactivateAsync(stored);
         deactivate.GetProperty("success").GetBoolean().Should().BeFalse(Because);
         (await _store.NotNull().GetAsync(stored, tenantKey: null, CancellationToken.None))
             .Should()
@@ -590,26 +574,54 @@ public class PersistedOperationMutationTests
             "UPDATE trax.persisted_operation SET is_active = false WHERE id = @id",
             stored
         );
-        var restore = (
-            await Execute(
-                """
-                mutation Restore($input: RestorePersistedOperationInput!) {
-                  persistedOperations { restorePersistedOperation(input: $input) { success } }
-                }
-                """,
-                new Dictionary<string, object?>(StringComparer.Ordinal)
-                {
-                    ["input"] = new Dictionary<string, object?>(StringComparer.Ordinal)
-                    {
-                        ["id"] = stored,
-                    },
-                }
-            )
-        ).RootElement.GetProperty("data").GetProperty("persistedOperations").GetProperty("restorePersistedOperation");
+        var restore = await RestoreAsync(stored);
         restore.GetProperty("success").GetBoolean().Should().BeFalse(Because);
         (await _store.NotNull().GetAsync(stored, tenantKey: null, CancellationToken.None))
             .Should()
             .BeNull("a deactivated generated document is the host's to bring back");
+    }
+
+    private async Task<JsonElement> DeactivateAsync(string stored)
+    {
+        return (
+            await Execute(
+                    """
+                    mutation Deactivate($input: DeactivatePersistedOperationInput!) {
+                      persistedOperations { deactivatePersistedOperation(input: $input) { success } }
+                    }
+                    """,
+                    new Dictionary<string, object?>(StringComparer.Ordinal)
+                    {
+                        ["input"] = new Dictionary<string, object?>(StringComparer.Ordinal)
+                        {
+                            ["id"] = stored,
+                            ["reason"] = "rotating",
+                        },
+                    }
+                )
+                .ConfigureAwait(false)
+        ).RootElement.GetProperty("data").GetProperty("persistedOperations").GetProperty("deactivatePersistedOperation");
+    }
+
+    private async Task<JsonElement> RestoreAsync(string stored)
+    {
+        return (
+            await Execute(
+                    """
+                    mutation Restore($input: RestorePersistedOperationInput!) {
+                      persistedOperations { restorePersistedOperation(input: $input) { success } }
+                    }
+                    """,
+                    new Dictionary<string, object?>(StringComparer.Ordinal)
+                    {
+                        ["input"] = new Dictionary<string, object?>(StringComparer.Ordinal)
+                        {
+                            ["id"] = stored,
+                        },
+                    }
+                )
+                .ConfigureAwait(false)
+        ).RootElement.GetProperty("data").GetProperty("persistedOperations").GetProperty("restorePersistedOperation");
     }
 
     private static async Task SqlAsync(string sql, string id)

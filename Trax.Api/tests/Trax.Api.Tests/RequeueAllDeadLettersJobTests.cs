@@ -55,72 +55,15 @@ public class RequeueAllDeadLettersJobTests
             TaskCreationOptions.RunContinuationsAsynchronously
         );
         _foldStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        _scheduler = Substitute.For<ITraxScheduler>();
-        _scheduler
-            .NotNull()
-            .RequeueAllDeadLettersAsync(
-                Arg.Any<bool>(),
-                Arg.Any<IProgress<int>?>(),
-                Arg.Any<CancellationToken>()
-            )
-            .Returns(call =>
-            {
-                _foldToken = call.Arg<CancellationToken>();
-                _foldStarted.NotNull().TrySetResult();
-                return _fold.NotNull().Task.WaitAsync(_foldToken);
-            });
+        StubSchedulerFold();
 
         _stopping = new CancellationTokenSource();
         _time = new ManualTime(new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero));
 
         var factory = new InMemoryContextProviderFactory(new InMemoryDatabaseRoot());
-        await using (var db = await factory.CreateDbContextAsync(default))
-        {
-            var manifest = Manifest.Create(new CreateManifest { Name = typeof(IJobTrain) });
-            await db.Track(manifest);
-            for (var i = 0; i < Awaiting + 2; i++)
-            {
-                var dl = DeadLetter.Create(
-                    new CreateDeadLetter
-                    {
-                        Manifest = manifest,
-                        Reason = string.Create(CultureInfo.InvariantCulture, $"failure-{i}"),
-                        RetryCount = 3,
-                    },
-                    _time.NotNull()
-                );
-                if (i >= Awaiting)
-                    dl.Acknowledge("handled", _time.NotNull());
-                await db.Track(dl);
-            }
-            await db.SaveChanges(default);
-        }
+        await SeedDeadLetters(factory);
 
-        var discovery = Substitute.For<ITrainDiscoveryService>();
-        discovery
-            .DiscoverTrains()
-            .Returns([
-                new TrainRegistration
-                {
-                    ServiceType = typeof(IJobTrain),
-                    ImplementationType = typeof(JobTrain),
-                    InputType = typeof(JobInput),
-                    OutputType = typeof(Unit),
-                    Lifetime = ServiceLifetime.Scoped,
-                    ServiceTypeName = nameof(IJobTrain),
-                    ImplementationTypeName = nameof(JobTrain),
-                    HasAllowAnonymousAttribute = true,
-                    InputTypeName = nameof(JobInput),
-                    OutputTypeName = nameof(Unit),
-                    RequiredPolicies = [],
-                    RequiredRoles = [],
-                    IsQuery = false,
-                    IsMutation = true,
-                    IsRemote = false,
-                    IsBroadcastEnabled = false,
-                    GraphQLOperations = GraphQLOperation.Run,
-                },
-            ]);
+        var discovery = JobTrainDiscovery();
 
         var lifetime = Substitute.For<IHostApplicationLifetime>();
         lifetime.ApplicationStopping.Returns(_stopping.NotNull().Token);
@@ -149,6 +92,80 @@ public class RequeueAllDeadLettersJobTests
             .NotNull()
             .GetRequiredService<IRequestExecutorProvider>()
             .GetExecutorAsync("trax", cancellationToken: CancellationToken.None);
+    }
+
+    private void StubSchedulerFold()
+    {
+        _scheduler = Substitute.For<ITraxScheduler>();
+        _scheduler
+            .NotNull()
+            .RequeueAllDeadLettersAsync(
+                Arg.Any<bool>(),
+                Arg.Any<IProgress<int>?>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(call =>
+            {
+                _foldToken = call.Arg<CancellationToken>();
+                _foldStarted.NotNull().TrySetResult();
+                return _fold.NotNull().Task.WaitAsync(_foldToken);
+            });
+    }
+
+    private async Task SeedDeadLetters(InMemoryContextProviderFactory factory)
+    {
+        var db = await factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var manifest = Manifest.Create(new CreateManifest { Name = typeof(IJobTrain) });
+            await db.Track(manifest).ConfigureAwait(false);
+            for (var i = 0; i < Awaiting + 2; i++)
+            {
+                var dl = DeadLetter.Create(
+                    new CreateDeadLetter
+                    {
+                        Manifest = manifest,
+                        Reason = string.Create(CultureInfo.InvariantCulture, $"failure-{i}"),
+                        RetryCount = 3,
+                    },
+                    _time.NotNull()
+                );
+                if (i >= Awaiting)
+                    dl.Acknowledge("handled", _time.NotNull());
+                await db.Track(dl).ConfigureAwait(false);
+            }
+            await db.SaveChanges(default).ConfigureAwait(false);
+        }
+    }
+
+    private static ITrainDiscoveryService JobTrainDiscovery()
+    {
+        var discovery = Substitute.For<ITrainDiscoveryService>();
+        discovery
+            .DiscoverTrains()
+            .Returns([
+                new TrainRegistration
+                {
+                    ServiceType = typeof(IJobTrain),
+                    ImplementationType = typeof(JobTrain),
+                    InputType = typeof(JobInput),
+                    OutputType = typeof(Unit),
+                    Lifetime = ServiceLifetime.Scoped,
+                    ServiceTypeName = nameof(IJobTrain),
+                    ImplementationTypeName = nameof(JobTrain),
+                    HasAllowAnonymousAttribute = true,
+                    InputTypeName = nameof(JobInput),
+                    OutputTypeName = nameof(Unit),
+                    RequiredPolicies = [],
+                    RequiredRoles = [],
+                    IsQuery = false,
+                    IsMutation = true,
+                    IsRemote = false,
+                    IsBroadcastEnabled = false,
+                    GraphQLOperations = GraphQLOperation.Run,
+                },
+            ]);
+        return discovery;
     }
 
     [TearDown]

@@ -48,60 +48,58 @@ public class ApiKeyAuthHandlerTests
                             });
                         }
                     })
-                    .Configure(app =>
-                    {
-                        app.UseRouting();
-                        app.UseAuthentication();
-                        app.UseAuthorization();
-                        app.UseEndpoints(endpoints =>
-                        {
-                            endpoints
-                                .MapGet(
-                                    "/protected",
-                                    (ClaimsPrincipal user) =>
-                                        Results.Ok(
-                                            new ProtectedResponse
-                                            {
-                                                Name = user.Identity?.Name,
-                                                PrincipalId = user.FindFirst(
-                                                    TraxAuthClaimTypes.PrincipalId
-                                                )?.Value,
-                                                Roles = user.FindAll(ClaimTypes.Role)
-                                                    .Select(c => c.Value)
-                                                    .ToArray(),
-                                                TenantClaim = user.FindFirst("tenant")?.Value,
-                                            }
-                                        )
-                                )
-                                .RequireAuthorization(ApiKeyDefaults.PolicyName);
-
-                            endpoints.MapGet("/anonymous", () => Results.Ok("ok")).AllowAnonymous();
-
-                            endpoints.MapGet(
-                                "/authresult",
-                                async (HttpContext ctx) =>
-                                {
-                                    var result = await ctx.AuthenticateAsync(
-                                            ApiKeyDefaults.SchemeName
-                                        )
-                                        .ConfigureAwait(false);
-                                    return Results.Ok(
-                                        new AuthResultResponse
-                                        {
-                                            Succeeded = result.Succeeded,
-                                            None = result.None,
-                                            FailureMessage = result.Failure?.Message,
-                                        }
-                                    );
-                                }
-                            );
-                        });
-                    })
+                    .Configure(app => ConfigureApp(app))
             )
             .Build();
 
         await host.StartAsync().ConfigureAwait(false);
         return host;
+    }
+
+    private static void ConfigureApp(IApplicationBuilder app)
+    {
+        app.UseRouting();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.UseEndpoints(endpoints =>
+        {
+            endpoints
+                .MapGet(
+                    "/protected",
+                    (ClaimsPrincipal user) =>
+                        Results.Ok(
+                            new ProtectedResponse
+                            {
+                                Name = user.Identity?.Name,
+                                PrincipalId = user.FindFirst(TraxAuthClaimTypes.PrincipalId)?.Value,
+                                Roles = user.FindAll(ClaimTypes.Role)
+                                    .Select(c => c.Value)
+                                    .ToArray(),
+                                TenantClaim = user.FindFirst("tenant")?.Value,
+                            }
+                        )
+                )
+                .RequireAuthorization(ApiKeyDefaults.PolicyName);
+
+            endpoints.MapGet("/anonymous", () => Results.Ok("ok")).AllowAnonymous();
+
+            endpoints.MapGet(
+                "/authresult",
+                async (HttpContext ctx) =>
+                {
+                    var result = await ctx.AuthenticateAsync(ApiKeyDefaults.SchemeName)
+                        .ConfigureAwait(false);
+                    return Results.Ok(
+                        new AuthResultResponse
+                        {
+                            Succeeded = result.Succeeded,
+                            None = result.None,
+                            FailureMessage = result.Failure?.Message,
+                        }
+                    );
+                }
+            );
+        });
     }
 
     #region Header handling

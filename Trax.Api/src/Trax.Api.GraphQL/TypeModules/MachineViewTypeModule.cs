@@ -59,72 +59,11 @@ internal sealed partial class MachineViewTypeModule(
         foreach (var view in catalog.Views.Values.OrderBy(v => v.Name, StringComparer.Ordinal))
         {
             var pascal = Views.Pascal(view.Name);
-            if (!Views.IsGraphQLStem(pascal))
-                throw new InvalidOperationException(
-                    $"The view '{view.Name}' has no GraphQL name: a view's name is words of ASCII letters and digits, "
-                        + "the first starting with a letter."
-                );
-            if (!stems.TryAdd(pascal, view.Name))
-                throw new InvalidOperationException(
-                    $"The views '{stems[pascal]}' and '{view.Name}' are both {pascal} in GraphQL: name them apart by "
-                        + "more than case, spaces, hyphens and underscores."
-                );
-            foreach (var row in view.Reads.Select(r => RowTypeName(pascal, r.Machine)))
-                if (!rows.TryAdd(row, view.Name))
-                    throw new InvalidOperationException(
-                        $"The views '{rows[row]}' and '{view.Name}' both name the type {row}."
-                    );
-            // A field is a field of the row type beside the instance's id: it cannot be the id, and GraphQL has to name it.
-            foreach (var field in view.Fields)
-                if (
-                    string.Equals(field.Name, "id", StringComparison.Ordinal)
-                    || field.Name.StartsWith("__", StringComparison.Ordinal)
-                    || !GraphQLFieldName.IsMatch(field.Name)
-                )
-                    throw new InvalidOperationException(
-                        $"The view '{view.Name}' has a field '{field.Name}' it cannot serve: a view's field is a GraphQL "
-                            + "name (letters, digits and _, not starting with a digit or __), and not 'id', which is the "
-                            + "instance's."
-                    );
+            CheckViewNames(view, pascal, stems, rows);
             var viewType = $"{pascal}View";
             foreach (var read in view.Reads)
                 types.Add(RowType(view, read, pascal, byName[read.Machine]));
-            types.Add(
-                new ObjectType(d =>
-                {
-                    d.Name(viewType);
-                    d.Description($"The view '{view.Name}': what it reads, for the caller.");
-                    foreach (var read in view.Reads)
-                    {
-                        var row = RowTypeName(pascal, read.Machine);
-                        var field = d.Field(MachineSurface.FieldName(read.Machine));
-                        if (read.Key is null)
-                            field
-                                .Description($"The caller's own instances of '{read.Machine}'.")
-                                .Type(
-                                    new NonNullTypeNode(
-                                        new ListTypeNode(
-                                            new NonNullTypeNode(new NamedTypeNode(row))
-                                        )
-                                    )
-                                )
-                                .Resolve(ctx =>
-                                    ((JsonArray)ctx.Parent<JsonObject>()[read.Machine].NotNull())
-                                        .Select(n => n.NotNull().AsObject())
-                                        .ToList()
-                                );
-                        else
-                            field
-                                .Description(
-                                    $"The instance of '{read.Machine}' at {read.Key}, or null before it is started."
-                                )
-                                .Type(new NamedTypeNode(row))
-                                .Resolve(ctx =>
-                                    ctx.Parent<JsonObject>()[read.Machine] as JsonObject
-                                );
-                    }
-                })
-            );
+            types.Add(ViewType(view, pascal, viewType));
             fields.Add((Camel(pascal), viewType, view));
         }
 
@@ -144,6 +83,76 @@ internal sealed partial class MachineViewTypeModule(
         );
         return new ValueTask<IReadOnlyCollection<ITypeSystemMember>>(types);
     }
+
+    // Refuses a view whose name, row type names or field names GraphQL cannot serve apart.
+    private static void CheckViewNames(
+        HostView view,
+        string pascal,
+        Dictionary<string, string> stems,
+        Dictionary<string, string> rows
+    )
+    {
+        if (!Views.IsGraphQLStem(pascal))
+            throw new InvalidOperationException(
+                $"The view '{view.Name}' has no GraphQL name: a view's name is words of ASCII letters and digits, "
+                    + "the first starting with a letter."
+            );
+        if (!stems.TryAdd(pascal, view.Name))
+            throw new InvalidOperationException(
+                $"The views '{stems[pascal]}' and '{view.Name}' are both {pascal} in GraphQL: name them apart by "
+                    + "more than case, spaces, hyphens and underscores."
+            );
+        foreach (var row in view.Reads.Select(r => RowTypeName(pascal, r.Machine)))
+            if (!rows.TryAdd(row, view.Name))
+                throw new InvalidOperationException(
+                    $"The views '{rows[row]}' and '{view.Name}' both name the type {row}."
+                );
+        // A field is a field of the row type beside the instance's id: it cannot be the id, and GraphQL has to name it.
+        foreach (var field in view.Fields)
+            if (
+                string.Equals(field.Name, "id", StringComparison.Ordinal)
+                || field.Name.StartsWith("__", StringComparison.Ordinal)
+                || !GraphQLFieldName.IsMatch(field.Name)
+            )
+                throw new InvalidOperationException(
+                    $"The view '{view.Name}' has a field '{field.Name}' it cannot serve: a view's field is a GraphQL "
+                        + "name (letters, digits and _, not starting with a digit or __), and not 'id', which is the "
+                        + "instance's."
+                );
+    }
+
+    // The view's own type: one field per machine it reads, the caller's instances or one keyed instance.
+    private static ObjectType ViewType(HostView view, string pascal, string viewType) =>
+        new ObjectType(d =>
+        {
+            d.Name(viewType);
+            d.Description($"The view '{view.Name}': what it reads, for the caller.");
+            foreach (var read in view.Reads)
+            {
+                var row = RowTypeName(pascal, read.Machine);
+                var field = d.Field(MachineSurface.FieldName(read.Machine));
+                if (read.Key is null)
+                    field
+                        .Description($"The caller's own instances of '{read.Machine}'.")
+                        .Type(
+                            new NonNullTypeNode(
+                                new ListTypeNode(new NonNullTypeNode(new NamedTypeNode(row)))
+                            )
+                        )
+                        .Resolve(ctx =>
+                            ((JsonArray)ctx.Parent<JsonObject>()[read.Machine].NotNull())
+                                .Select(n => n.NotNull().AsObject())
+                                .ToList()
+                        );
+                else
+                    field
+                        .Description(
+                            $"The instance of '{read.Machine}' at {read.Key}, or null before it is started."
+                        )
+                        .Type(new NamedTypeNode(row))
+                        .Resolve(ctx => ctx.Parent<JsonObject>()[read.Machine] as JsonObject);
+            }
+        });
 
     // One instance's row: its id, and the view's fields of its machine, each typed as the machine's record types it.
     private static ObjectType RowType(HostView view, ViewRead read, string pascal, IMachine machine)

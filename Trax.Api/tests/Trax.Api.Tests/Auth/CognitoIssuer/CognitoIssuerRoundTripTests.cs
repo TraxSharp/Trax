@@ -407,56 +407,50 @@ public class CognitoIssuerRoundTripTests
                             });
                         });
                     })
-                    .Configure(app =>
-                    {
-                        app.UseRouting();
-                        app.UseAuthentication();
-                        app.UseAuthorization();
-                        app.UseEndpoints(endpoints =>
-                        {
-                            endpoints
-                                .MapGet(
-                                    "/protected",
-                                    (ClaimsPrincipal user) =>
-                                    {
-                                        var id =
-                                            user.FindFirst(TraxAuthClaimTypes.PrincipalId)?.Value
-                                            ?? "";
-                                        var name = user.FindFirst(ClaimTypes.Name)?.Value ?? "";
-                                        var type =
-                                            user.FindFirst(TraxAuthClaimTypes.PrincipalType)?.Value
-                                            ?? "";
-                                        var email =
-                                            user.FindFirst("email")?.Value
-                                            ?? user.FindFirst(ClaimTypes.Email)?.Value;
-                                        var emailVerified = user.FindFirst("email_verified")?.Value;
-                                        var idp = user.FindFirst(
-                                            CognitoDefaults.IdentityProvider
-                                        )?.Value;
-                                        var roles = user.FindAll(ClaimTypes.Role)
-                                            .Select(c => c.Value)
-                                            .ToArray();
-                                        return Results.Json(
-                                            new
-                                            {
-                                                id,
-                                                displayName = name,
-                                                principalType = type,
-                                                email,
-                                                emailVerified,
-                                                identityProvider = idp,
-                                                roles,
-                                            }
-                                        );
-                                    }
-                                )
-                                .RequireAuthorization(JwtDefaults.PolicyName);
-                        });
-                    })
+                    .Configure(app => ConfigureApp(app))
             )
             .Build();
         await host.StartAsync().ConfigureAwait(false);
         return host;
+    }
+
+    private static void ConfigureApp(IApplicationBuilder app)
+    {
+        app.UseRouting();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.UseEndpoints(endpoints =>
+        {
+            endpoints
+                .MapGet(
+                    "/protected",
+                    (ClaimsPrincipal user) =>
+                    {
+                        var id = user.FindFirst(TraxAuthClaimTypes.PrincipalId)?.Value ?? "";
+                        var name = user.FindFirst(ClaimTypes.Name)?.Value ?? "";
+                        var type = user.FindFirst(TraxAuthClaimTypes.PrincipalType)?.Value ?? "";
+                        var email =
+                            user.FindFirst("email")?.Value
+                            ?? user.FindFirst(ClaimTypes.Email)?.Value;
+                        var emailVerified = user.FindFirst("email_verified")?.Value;
+                        var idp = user.FindFirst(CognitoDefaults.IdentityProvider)?.Value;
+                        var roles = user.FindAll(ClaimTypes.Role).Select(c => c.Value).ToArray();
+                        return Results.Json(
+                            new
+                            {
+                                id,
+                                displayName = name,
+                                principalType = type,
+                                email,
+                                emailVerified,
+                                identityProvider = idp,
+                                roles,
+                            }
+                        );
+                    }
+                )
+                .RequireAuthorization(JwtDefaults.PolicyName);
+        });
     }
 
     private sealed class PrincipalSnapshot

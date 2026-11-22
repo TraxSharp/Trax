@@ -210,102 +210,14 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
                 ? WatchQueued(run, merged.Writer, stop.Token)
                 : null;
 
-        var sequence = 0L;
         try
         {
-            // The state the run was in when it was found comes first, so a stream opened after the run ended still
-            // says how it ended, and then the stream ends.
-            sequence++;
-            yield return new RunProgressEvent(
-                run.RunId,
-                sequence,
-                run.State,
-                Step: null,
-                run.Failure,
-                Problem: null
-            );
-            if (IsEnd(run.State))
-            {
-                if (run.RetriedAs is { } known)
-                    yield return new RunProgressEvent(
-                        run.RunId,
-                        ++sequence,
-                        State: null,
-                        Step: null,
-                        Failure: null,
-                        Problem: null,
-                        known
-                    );
-                else
-                    await foreach (var retry in RetryOf(run, stop.Token).ConfigureAwait(false))
-                        yield return new RunProgressEvent(
-                            run.RunId,
-                            ++sequence,
-                            State: null,
-                            Step: null,
-                            Failure: null,
-                            Problem: null,
-                            retry
-                        );
-                yield break;
-            }
-
-            RunProgressEvent? end = null;
-            await foreach (var item in merged.Reader.ReadAllAsync(stop.Token).ConfigureAwait(false))
-            {
-                if (closed is not null && item is { State: null, Step: null, Lost: false })
-                {
-                    if (await closed.ConfigureAwait(false) is { } last)
-                        yield return (last with { Sequence = ++sequence });
-                    yield break;
-                }
-                if (Next(run, item, ref sequence, out end) is { } next)
-                    yield return next;
-                if (end is not null)
-                    break;
-            }
-            if (end is null)
-                yield break;
-
-            // The run published its steps before its end, but on another topic, which may be read later. The steps
-            // published until the end was read are waited for, briefly: a step dropped on the way never arrives, and
-            // counts as a loss instead.
-            var target = await _stepsLastPublished.NotNull()(stop.Token).ConfigureAwait(false);
-            using (var settle = CancellationTokenSource.CreateLinkedTokenSource(stop.Token))
-            {
-                settle.CancelAfter(SettleBound);
-                while (Volatile.Read(ref stepsSeen.Value) < target)
-                {
-                    try
-                    {
-                        await Task.Delay(SettlePoll, Clock, settle.Token).ConfigureAwait(false);
-                    }
-                    catch (OperationCanceledException) when (!stop.IsCancellationRequested)
-                    {
-                        sequence++;
-                        break;
-                    }
-                }
-            }
-            while (merged.Reader.TryRead(out var item))
-                if (item.Step is not null && Next(run, item, ref sequence, out _) is { } step)
-                    yield return step;
-
-            yield return (end with { Sequence = ++sequence });
-
             await foreach (
-                var retry in RetryOf(run with { State = end.State.NotNull().Value }, stop.Token)
+                var next in Sequenced(run, merged.Reader, stepsSeen, closed, stop, stop.Token)
+                    .WithCancellation(stop.Token)
                     .ConfigureAwait(false)
             )
-                yield return new RunProgressEvent(
-                    run.RunId,
-                    ++sequence,
-                    State: null,
-                    Step: null,
-                    Failure: null,
-                    Problem: null,
-                    retry
-                );
+                yield return next;
         }
         finally
         {
@@ -321,6 +233,110 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
                 }
             await DisposeAsync().ConfigureAwait(false);
         }
+    }
+
+    // The events of the run in order: the state it was found in, then what it published, then its end and its retry.
+    private async IAsyncEnumerable<RunProgressEvent> Sequenced(
+        RunProgressRun run,
+        ChannelReader<(TrainLifecycleEvent? State, JunctionEvent? Step, bool Lost)> reader,
+        StrongBox<long> stepsSeen,
+        Task<RunProgressEvent?>? closed,
+        CancellationTokenSource stop,
+        [EnumeratorCancellation] CancellationToken ct = default
+    )
+    {
+        var sequence = 0L;
+        // The state the run was in when it was found comes first, so a stream opened after the run ended still
+        // says how it ended, and then the stream ends.
+        sequence++;
+        yield return new RunProgressEvent(
+            run.RunId,
+            sequence,
+            run.State,
+            Step: null,
+            run.Failure,
+            Problem: null
+        );
+        if (IsEnd(run.State))
+        {
+            if (run.RetriedAs is { } known)
+                yield return RetryEvent(run.RunId, ++sequence, known);
+            else
+                await foreach (var retry in RetryOf(run, ct).ConfigureAwait(false))
+                    yield return RetryEvent(run.RunId, ++sequence, retry);
+            yield break;
+        }
+
+        RunProgressEvent? end = null;
+        await foreach (var item in reader.ReadAllAsync(ct).ConfigureAwait(false))
+        {
+            if (closed is not null && item is { State: null, Step: null, Lost: false })
+            {
+                if (await closed.ConfigureAwait(false) is { } last)
+                    yield return (last with { Sequence = ++sequence });
+                yield break;
+            }
+            if (Next(run, item, ref sequence, out end) is { } next)
+                yield return next;
+            if (end is not null)
+                break;
+        }
+        if (end is null)
+            yield break;
+
+        // The run published its steps before its end, but on another topic, which may be read later. The steps
+        // published until the end was read are waited for, briefly: a step dropped on the way never arrives, and
+        // counts as a loss instead.
+        if (await SettleStepsAsync(stepsSeen, stop).ConfigureAwait(false))
+            sequence++;
+        while (reader.TryRead(out var item))
+            if (item.Step is not null && Next(run, item, ref sequence, out _) is { } step)
+                yield return step;
+
+        yield return (end with { Sequence = ++sequence });
+
+        await foreach (
+            var retry in RetryOf(run with { State = end.State.NotNull().Value }, ct)
+                .ConfigureAwait(false)
+        )
+            yield return RetryEvent(run.RunId, ++sequence, retry);
+    }
+
+    private static RunProgressEvent RetryEvent(string runId, long sequence, string retriedAs) =>
+        new RunProgressEvent(
+            runId,
+            sequence,
+            State: null,
+            Step: null,
+            Failure: null,
+            Problem: null,
+            retriedAs
+        );
+
+    // Waits, at most SettleBound, until the steps published until the end was read have been seen; true when the
+    // wait ran out first, which counts as a loss.
+    private async Task<bool> SettleStepsAsync(
+        StrongBox<long> stepsSeen,
+        CancellationTokenSource stop
+    )
+    {
+        var target = await _stepsLastPublished.NotNull()(stop.Token).ConfigureAwait(false);
+        using (var settle = CancellationTokenSource.CreateLinkedTokenSource(stop.Token))
+        {
+            settle.CancelAfter(SettleBound);
+            while (Volatile.Read(ref stepsSeen.Value) < target)
+            {
+                try
+                {
+                    await Task.Delay(SettlePoll, Clock, settle.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (!stop.IsCancellationRequested)
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     // A failed run of a manifest is retried by the scheduler after its delay: the id of the retry once it is queued,
@@ -403,14 +419,7 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
                             failures
                         );
                         await writer.WriteAsync((null, null, false), ct).ConfigureAwait(false);
-                        return new RunProgressEvent(
-                            run.RunId,
-                            0,
-                            State: null,
-                            Step: null,
-                            Failure: null,
-                            Unreadable()
-                        );
+                        return UnreadableEvent(run);
                     }
                     Logger?.LogWarning(
                         e,
@@ -426,24 +435,7 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
                     return null;
                 if (fate == QueuedFate.Waiting)
                     continue;
-                var last =
-                    fate == QueuedFate.Cancelled
-                        ? new RunProgressEvent(
-                            run.RunId,
-                            0,
-                            RunProgressState.Cancelled,
-                            Step: null,
-                            Failure: null,
-                            Problem: null
-                        )
-                        : new RunProgressEvent(
-                            run.RunId,
-                            0,
-                            State: null,
-                            Step: null,
-                            Failure: null,
-                            RunProgressTypeModule.NotFound()
-                        );
+                var last = QueuedEnd(run, fate);
                 await writer.WriteAsync((null, null, false), ct).ConfigureAwait(false);
                 return last;
             }
@@ -453,6 +445,30 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
             return null;
         }
     }
+
+    // The event a queued run ends its stream on when it cannot be read.
+    private static RunProgressEvent UnreadableEvent(RunProgressRun run) =>
+        new RunProgressEvent(run.RunId, 0, State: null, Step: null, Failure: null, Unreadable());
+
+    // The event a queued run ends its stream on: cancelled, or gone.
+    private static RunProgressEvent QueuedEnd(RunProgressRun run, QueuedFate fate) =>
+        fate == QueuedFate.Cancelled
+            ? new RunProgressEvent(
+                run.RunId,
+                0,
+                RunProgressState.Cancelled,
+                Step: null,
+                Failure: null,
+                Problem: null
+            )
+            : new RunProgressEvent(
+                run.RunId,
+                0,
+                State: null,
+                Step: null,
+                Failure: null,
+                RunProgressTypeModule.NotFound()
+            );
 
     /// <summary>How many reads of a queued run may fail in a row before its stream ends with a problem.</summary>
     internal const int QueuedFailureBound = 10;

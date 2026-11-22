@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using NSubstitute;
 using NUnit.Framework;
 using Trax.Api.GraphQL.Queries;
+using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Api.Tests;
@@ -109,34 +110,7 @@ public class MetricsQueriesTests
         var now = TimeProvider.System.GetUtcNow().UtcDateTime;
         var quarter = TimeSpan.FromMinutes(15).Ticks;
         var t0 = new DateTime(now.Ticks - now.Ticks % quarter, DateTimeKind.Utc).AddHours(-2);
-        var durations = new List<(DateTime Start, double Ms)>();
-        await using (var db = await factory.CreateDbContextAsync(default))
-        {
-            // Ten runs, one every 12 minutes; the fourth failed, the rest completed in (i + 1) seconds.
-            for (var i = 0; i < 10; i++)
-            {
-                var start = t0.AddMinutes(12 * i);
-                var run = Trax.Effect.Models.Metadata.Metadata.Create(
-                    new Trax.Effect.Models.Metadata.DTOs.CreateMetadata
-                    {
-                        Name = train,
-                        ExternalId = Guid.NewGuid().ToString("N"),
-                        Input = null,
-                    },
-                    TimeProvider.System
-                );
-                run.TrainState =
-                    i == 3
-                        ? Trax.Effect.Enums.TrainState.Failed
-                        : Trax.Effect.Enums.TrainState.Completed;
-                run.StartTime = start;
-                run.EndTime = start.AddSeconds(i + 1);
-                await db.Track(run);
-                if (i != 3)
-                    durations.Add((start, (i + 1) * 1000));
-            }
-            await db.SaveChanges(default);
-        }
+        var durations = await SeedTenRunsAsync(factory, train, t0);
         var ops = new OperationsService(
             Substitute.For<Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService>(),
             factory,
@@ -175,6 +149,44 @@ public class MetricsQueriesTests
                 bucket.P95DurationMs.Should().BeInRange(recorded.Min(), recorded.Max());
         }
         series.Buckets.Sum(x => x.Completed + x.Failed).Should().Be(10);
+    }
+
+    private static async Task<List<(DateTime Start, double Ms)>> SeedTenRunsAsync(
+        IDataContextProviderFactory factory,
+        string train,
+        DateTime t0
+    )
+    {
+        var durations = new List<(DateTime Start, double Ms)>();
+        var db = await factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            // Ten runs, one every 12 minutes; the fourth failed, the rest completed in (i + 1) seconds.
+            for (var i = 0; i < 10; i++)
+            {
+                var start = t0.AddMinutes(12 * i);
+                var run = Trax.Effect.Models.Metadata.Metadata.Create(
+                    new Trax.Effect.Models.Metadata.DTOs.CreateMetadata
+                    {
+                        Name = train,
+                        ExternalId = Guid.NewGuid().ToString("N"),
+                        Input = null,
+                    },
+                    TimeProvider.System
+                );
+                run.TrainState =
+                    i == 3
+                        ? Trax.Effect.Enums.TrainState.Failed
+                        : Trax.Effect.Enums.TrainState.Completed;
+                run.StartTime = start;
+                run.EndTime = start.AddSeconds(i + 1);
+                await db.Track(run).ConfigureAwait(false);
+                if (i != 3)
+                    durations.Add((start, (i + 1) * 1000));
+            }
+            await db.SaveChanges(default).ConfigureAwait(false);
+        }
+        return durations;
     }
 
     [TestCase(MetricSeriesScope.Train, 7L, null)]

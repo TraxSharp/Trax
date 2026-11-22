@@ -445,29 +445,8 @@ public class ClientDocumentsTests
             )
             .AddFiltering()
             .AddSorting()
-            .AddTypeExtension(
-                new ObjectTypeExtension(d =>
-                {
-                    d.Name("DiscoverQueries");
-                    d.Field("orders")
-                        .Type<ListType<NonNullType<ObjectType<Order>>>>()
-                        .UsePaging<ObjectType<Order>>(options: new() { IncludeTotalCount = true })
-                        .UseFiltering()
-                        .UseSorting()
-                        .Resolve(Array.Empty<Order>());
-                    d.Field("notes").Type<StringType>().Resolve("hand-written");
-                })
-            )
-            .AddTypeExtension(
-                new ObjectTypeExtension(d =>
-                {
-                    d.Name("RunsDiscoverQueries");
-                    d.Field("ledger")
-                        .Type<ListType<NonNullType<ObjectType<Order>>>>()
-                        .Resolve(Array.Empty<Order>());
-                    d.Field("memo").Type<StringType>().Resolve("hand-written");
-                })
-            );
+            .AddTypeExtension(DiscoverQueriesExtension())
+            .AddTypeExtension(RunsDiscoverQueriesExtension());
         var executor = await services
             .BuildServiceProvider()
             .GetRequiredService<IRequestExecutorProvider>()
@@ -484,6 +463,29 @@ public class ClientDocumentsTests
         );
         return (executor.Schema, reach);
     }
+
+    private static ObjectTypeExtension DiscoverQueriesExtension() =>
+        new(d =>
+        {
+            d.Name("DiscoverQueries");
+            d.Field("orders")
+                .Type<ListType<NonNullType<ObjectType<Order>>>>()
+                .UsePaging<ObjectType<Order>>(options: new() { IncludeTotalCount = true })
+                .UseFiltering()
+                .UseSorting()
+                .Resolve(Array.Empty<Order>());
+            d.Field("notes").Type<StringType>().Resolve("hand-written");
+        });
+
+    private static ObjectTypeExtension RunsDiscoverQueriesExtension() =>
+        new(d =>
+        {
+            d.Name("RunsDiscoverQueries");
+            d.Field("ledger")
+                .Type<ListType<NonNullType<ObjectType<Order>>>>()
+                .Resolve(Array.Empty<Order>());
+            d.Field("memo").Type<StringType>().Resolve("hand-written");
+        });
 
     private static TrainRegistration Registration(
         string name,

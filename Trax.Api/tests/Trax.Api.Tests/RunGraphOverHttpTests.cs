@@ -267,33 +267,7 @@ public class RunGraphOverHttpTests
         for (var i = Levels - 1; i >= 0; i--)
         {
             var id = parallels[i];
-            node = new ChainGraphNode(
-                id,
-                ChainStepKind.Parallel,
-                Junction: null,
-                "Paper",
-                "Paper",
-                Opaque: false,
-                [
-                    new ChainGraphTrack("deep", Description: null, IsFallback: false, [node]),
-                    new ChainGraphTrack(
-                        "side",
-                        Description: null,
-                        IsFallback: false,
-                        [
-                            new ChainGraphNode(
-                                $"{id}/side/Side#0",
-                                ChainStepKind.Chain,
-                                "Side",
-                                "Paper",
-                                "Paper",
-                                Opaque: false,
-                                []
-                            ),
-                        ]
-                    ),
-                ]
-            );
+            node = ParallelOverDeepAndSide(id, node);
         }
 
         var graph = new ChainGraph(
@@ -316,6 +290,35 @@ public class RunGraphOverHttpTests
         );
         return (graph, parallels, leaf);
     }
+
+    private static ChainGraphNode ParallelOverDeepAndSide(string id, ChainGraphNode deep) =>
+        new(
+            id,
+            ChainStepKind.Parallel,
+            Junction: null,
+            "Paper",
+            "Paper",
+            Opaque: false,
+            [
+                new ChainGraphTrack("deep", Description: null, IsFallback: false, [deep]),
+                new ChainGraphTrack(
+                    "side",
+                    Description: null,
+                    IsFallback: false,
+                    [
+                        new ChainGraphNode(
+                            $"{id}/side/Side#0",
+                            ChainStepKind.Chain,
+                            "Side",
+                            "Paper",
+                            "Paper",
+                            Opaque: false,
+                            []
+                        ),
+                    ]
+                ),
+            ]
+        );
 
     private static List<string> DeclaredOrder(IReadOnlyList<ChainGraphNode> nodes) =>
         nodes

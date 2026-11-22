@@ -262,31 +262,36 @@ public class MachineInstanceStressTests : StressTestSetup
                     )
                     .ConfigureAwait(false);
             },
-            action: async (sp, ct) =>
-            {
-                var response = await ExecuteGraphQLAsync(
-                        "mutation { operations { cancelMachineInstance(machine: \""
-                            + first.Machine
-                            + "\", ownerKind: SYSTEM, id: \""
-                            + first.Id
-                            + "\") { success outcome message } } }",
-                        ct
-                    )
-                    .ConfigureAwait(false);
-                response.TryGetProperty("errors", out _).Should().BeFalse(response.GetRawText());
-                var result = response
-                    .GetProperty("data")
-                    .GetProperty("operations")
-                    .GetProperty("cancelMachineInstance");
-                result.GetProperty("success").GetBoolean().Should().BeTrue();
-                result
-                    .GetProperty("outcome")
-                    .GetString()
-                    .Should()
-                    .Be("RUN_CANCELLED", "this host registers no machines to apply the outcome");
-            },
+            action: (sp, ct) => AssertCancelledThroughSchemaAsync(first, ct),
             restore: Restore
         );
+    }
+
+    private async Task AssertCancelledThroughSchemaAsync(
+        MachineInstanceRecord first,
+        CancellationToken ct
+    )
+    {
+        var response = await ExecuteGraphQLAsync(
+                "mutation { operations { cancelMachineInstance(machine: \""
+                    + first.Machine
+                    + "\", ownerKind: SYSTEM, id: \""
+                    + first.Id
+                    + "\") { success outcome message } } }",
+                ct
+            )
+            .ConfigureAwait(false);
+        response.TryGetProperty("errors", out _).Should().BeFalse(response.GetRawText());
+        var result = response
+            .GetProperty("data")
+            .GetProperty("operations")
+            .GetProperty("cancelMachineInstance");
+        result.GetProperty("success").GetBoolean().Should().BeTrue();
+        result
+            .GetProperty("outcome")
+            .GetString()
+            .Should()
+            .Be("RUN_CANCELLED", "this host registers no machines to apply the outcome");
     }
 
     private async Task<MachineInstanceRecord> FirstSystemInstanceAsync() =>
@@ -388,30 +393,6 @@ public class MachineInstanceStressTests : StressTestSetup
     {
         var instance = await SystemInstanceAsync(withHistory: false);
 
-        Task Clear() =>
-            ExecSqlAsync(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"DELETE FROM trax.snapshot_transition WHERE draft_row_id = {instance.RowId}"
-                )
-            );
-        async Task Prepare()
-        {
-            await Clear().ConfigureAwait(false);
-            await ExecSqlAsync(
-                    "INSERT INTO trax.snapshot_transition (draft_row_id, revision, kind, trigger, actor, from_state, "
-                        + "to_state, occurred_at) "
-                        + string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"SELECT {instance.RowId}, r, 'command', 'Tick', 'host', 'State' || (r % 8), "
-                        )
-                        + $"'State' || ((r + 1) % 8), now() - (({DeepHistory} - r) * interval '1 second') "
-                        + $"FROM generate_series(1, {DeepHistory}) r"
-                )
-                .ConfigureAwait(false);
-            await ExecSqlAsync("ANALYZE trax.snapshot_transition").ConfigureAwait(false);
-        }
-
         try
         {
             foreach (
@@ -426,47 +407,80 @@ public class MachineInstanceStressTests : StressTestSetup
                     ("oldest page", "first: 100, after: 101", 100L),
                 }
             )
-                await MeasureWriteAsync(
-                    string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"operations.machineInstance {{ transitions }} over {DeepHistory:N0} rows ({label})"
-                    ),
-                    ListBudget,
-                    prepare: async () =>
-                    {
-                        if (
-                            await ScalarAsync<long>(
-                                    string.Create(
-                                        CultureInfo.InvariantCulture,
-                                        $"SELECT count(*) FROM trax.snapshot_transition WHERE draft_row_id = {instance.RowId}"
-                                    )
-                                )
-                                .ConfigureAwait(false) != DeepHistory
-                        )
-                            await Prepare().ConfigureAwait(false);
-                    },
-                    action: async (_, ct) =>
-                    {
-                        var page = (
-                            await OperationsFieldAsync(HistoryDocument(instance, arguments), ct)
-                                .ConfigureAwait(false)
-                        ).GetProperty("transitions");
-                        var items = page.GetProperty("items").EnumerateArray().ToList();
-                        items[0].GetProperty("revision").GetInt64().Should().Be(newest);
-                        items.Should().HaveCount(100);
-                        items[^1]
-                            .GetProperty("previousAt")
-                            .ValueKind.Should()
-                            .Be(newest == 100 ? JsonValueKind.Null : JsonValueKind.String);
-                    },
-                    restore: () => Task.CompletedTask
-                );
+                await MeasureHistoryPageAsync(instance, label, arguments, newest);
         }
         finally
         {
-            await Clear();
+            await ClearDeepHistoryAsync(instance);
         }
     }
+
+    private static Task ClearDeepHistoryAsync(MachineInstanceRecord instance) =>
+        ExecSqlAsync(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"DELETE FROM trax.snapshot_transition WHERE draft_row_id = {instance.RowId}"
+            )
+        );
+
+    private static async Task PrepareDeepHistoryAsync(MachineInstanceRecord instance)
+    {
+        await ClearDeepHistoryAsync(instance).ConfigureAwait(false);
+        await ExecSqlAsync(
+                "INSERT INTO trax.snapshot_transition (draft_row_id, revision, kind, trigger, actor, from_state, "
+                    + "to_state, occurred_at) "
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"SELECT {instance.RowId}, r, 'command', 'Tick', 'host', 'State' || (r % 8), "
+                    )
+                    + $"'State' || ((r + 1) % 8), now() - (({DeepHistory} - r) * interval '1 second') "
+                    + $"FROM generate_series(1, {DeepHistory}) r"
+            )
+            .ConfigureAwait(false);
+        await ExecSqlAsync("ANALYZE trax.snapshot_transition").ConfigureAwait(false);
+    }
+
+    private Task MeasureHistoryPageAsync(
+        MachineInstanceRecord instance,
+        string label,
+        string arguments,
+        long newest
+    ) =>
+        MeasureWriteAsync(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"operations.machineInstance {{ transitions }} over {DeepHistory:N0} rows ({label})"
+            ),
+            ListBudget,
+            prepare: async () =>
+            {
+                if (
+                    await ScalarAsync<long>(
+                            string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"SELECT count(*) FROM trax.snapshot_transition WHERE draft_row_id = {instance.RowId}"
+                            )
+                        )
+                        .ConfigureAwait(false) != DeepHistory
+                )
+                    await PrepareDeepHistoryAsync(instance).ConfigureAwait(false);
+            },
+            action: async (_, ct) =>
+            {
+                var page = (
+                    await OperationsFieldAsync(HistoryDocument(instance, arguments), ct)
+                        .ConfigureAwait(false)
+                ).GetProperty("transitions");
+                var items = page.GetProperty("items").EnumerateArray().ToList();
+                items[0].GetProperty("revision").GetInt64().Should().Be(newest);
+                items.Should().HaveCount(100);
+                items[^1]
+                    .GetProperty("previousAt")
+                    .ValueKind.Should()
+                    .Be(newest == 100 ? JsonValueKind.Null : JsonValueKind.String);
+            },
+            restore: () => Task.CompletedTask
+        );
 
     // How many instances the stuck tests make overdue: a handful among millions, as a real host
     // has when one machine's timers stop being fired.

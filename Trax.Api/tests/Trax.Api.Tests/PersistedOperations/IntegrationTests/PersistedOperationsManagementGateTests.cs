@@ -315,41 +315,7 @@ public class PersistedOperationsManagementGateTests
     public async Task The_gate_and_the_persistedOperations_fields_admit_the_same_principals()
     {
         // Gate, then for each principal whether both surfaces admit it.
-        var table = new (
-            string Gate,
-            Action<PersistedOperationsBuilder> Declare,
-            string[] Admitted
-        )[]
-        {
-            (
-                "roles Deployer",
-                po => po.GateManagement(roles: "Deployer"),
-                ["deployer", "anonymous-first-deployer"]
-            ),
-            (
-                "roles Deployer or Releaser, and Auditor",
-                po =>
-                    po.GateManagement(roles: "Deployer,Releaser").GateManagement(roles: "Auditor"),
-                ["releaser-auditor"]
-            ),
-            (
-                "policy alone",
-                po => po.GateManagement(policy: ClaimPolicy),
-                ["can-manage", "anonymous-first-deployer"]
-            ),
-            (
-                "authenticated only",
-                po => po.GateManagementToAuthenticatedUsers(),
-                [
-                    "deployer",
-                    "reader",
-                    "releaser-auditor",
-                    "can-manage",
-                    "authenticated",
-                    "anonymous-first-deployer",
-                ]
-            ),
-        };
+        var table = GateTable();
 
         var mismatches = new List<string>();
         foreach (var (gateName, declare, admitted) in table)
@@ -393,6 +359,45 @@ public class PersistedOperationsManagementGateTests
                 "the dashboard's gate, the GraphQL persistedOperations fields and "
                     + "operations.config.canManagePersistedOperations refuse the same people"
             );
+    }
+
+    private static (
+        string Gate,
+        Action<PersistedOperationsBuilder> Declare,
+        string[] Admitted
+    )[] GateTable()
+    {
+        return new (string Gate, Action<PersistedOperationsBuilder> Declare, string[] Admitted)[]
+        {
+            (
+                "roles Deployer",
+                po => po.GateManagement(roles: "Deployer"),
+                ["deployer", "anonymous-first-deployer"]
+            ),
+            (
+                "roles Deployer or Releaser, and Auditor",
+                po =>
+                    po.GateManagement(roles: "Deployer,Releaser").GateManagement(roles: "Auditor"),
+                ["releaser-auditor"]
+            ),
+            (
+                "policy alone",
+                po => po.GateManagement(policy: ClaimPolicy),
+                ["can-manage", "anonymous-first-deployer"]
+            ),
+            (
+                "authenticated only",
+                po => po.GateManagementToAuthenticatedUsers(),
+                [
+                    "deployer",
+                    "reader",
+                    "releaser-auditor",
+                    "can-manage",
+                    "authenticated",
+                    "anonymous-first-deployer",
+                ]
+            ),
+        };
     }
 
     [Test]
@@ -560,7 +565,46 @@ public class PersistedOperationsManagementGateTests
         );
         builder.WebHost.UseTestServer();
         builder.Host.UseDefaultServiceProvider(o => o.ValidateOnBuild = false);
-        var services = builder.Services;
+        RegisterServices(builder.Services, graphql, persisted, configure, configureAfter);
+
+        var app = builder.Build();
+        app.UseRouting();
+        app.UseAuthentication();
+        if (withTestPrincipals)
+            // The principal a request names, as an authentication handler would have set it.
+            app.Use(
+                (context, next) =>
+                {
+                    if (
+                        context.Request.Headers.TryGetValue(PrincipalHeader, out var name)
+                        && Principals.TryGetValue(name.ToString(), out var principal)
+                    )
+                        context.User = principal;
+                    return next(context);
+                }
+            );
+        app.UseAuthorization();
+        app.UseTraxGraphQL();
+        try
+        {
+            await app.StartAsync(cancellationToken: CancellationToken.None).ConfigureAwait(false);
+        }
+        catch
+        {
+            await app.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+        return app;
+    }
+
+    private static void RegisterServices(
+        IServiceCollection services,
+        Func<TraxGraphQLBuilder, TraxGraphQLBuilder> graphql,
+        Action<PersistedOperationsBuilder> persisted,
+        Action<IServiceCollection>? configure,
+        Action<IServiceCollection>? configureAfter
+    )
+    {
         services.AddLogging();
         services.AddRouting();
         services.AddTraxApiKeyAuth(keys =>
@@ -600,35 +644,6 @@ public class PersistedOperationsManagementGateTests
                 })
         );
         configureAfter?.Invoke(services);
-
-        var app = builder.Build();
-        app.UseRouting();
-        app.UseAuthentication();
-        if (withTestPrincipals)
-            // The principal a request names, as an authentication handler would have set it.
-            app.Use(
-                (context, next) =>
-                {
-                    if (
-                        context.Request.Headers.TryGetValue(PrincipalHeader, out var name)
-                        && Principals.TryGetValue(name.ToString(), out var principal)
-                    )
-                        context.User = principal;
-                    return next(context);
-                }
-            );
-        app.UseAuthorization();
-        app.UseTraxGraphQL();
-        try
-        {
-            await app.StartAsync(cancellationToken: CancellationToken.None).ConfigureAwait(false);
-        }
-        catch
-        {
-            await app.DisposeAsync().ConfigureAwait(false);
-            throw;
-        }
-        return app;
     }
 
     private static Task<IRequestExecutor> ExecutorAsync(WebApplication app) =>

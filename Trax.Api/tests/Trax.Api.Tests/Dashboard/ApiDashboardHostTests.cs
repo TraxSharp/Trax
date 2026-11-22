@@ -890,44 +890,9 @@ public partial class ApiDashboardHostTests
         var services = builder.Services;
         services.AddSingleton(assets ?? StandInBuild());
         if (addGraphQL)
-        {
-            services.AddSingleton<TraxMarker>();
-            services.AddSingleton(Substitute.For<ITrainDiscoveryService>());
-            services.AddSingleton(Substitute.For<IEffectRegistry>());
-            services.AddSingleton(Substitute.For<ITraxScheduler>());
-            services.AddSingleton(Substitute.For<IOperationsService>());
-            services.AddSingleton(Substitute.For<ITrainExecutionService>());
-            services.AddSingleton(Substitute.For<ITraxHealthService>());
-            services.AddDbContext<OrderTestDbContext>(o =>
-                o.UseInMemoryDatabase("Dashboard_" + Guid.NewGuid())
-            );
-            services.AddTraxGraphQL(g =>
-                exposeOperations
-                    ? g.AddDbContext<OrderTestDbContext>()
-                        .ExposeOperationQueries()
-                        .AllowAnonymousOperations()
-                    : g.AddDbContext<OrderTestDbContext>()
-            );
-        }
+            AddGraphQLServices(services, exposeOperations);
 
-        if (auth != AuthSetup.None)
-            services.AddAuthorization(o =>
-            {
-                if (auth == AuthSetup.SchemeAndPolicy)
-                    o.AddPolicy("TraxAdmin", p => p.RequireRole("Admin"));
-                if (auth == AuthSetup.FallbackPolicy)
-                    o.FallbackPolicy =
-                        new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
-                            .RequireAuthenticatedUser()
-                            .Build();
-            });
-        if (auth is AuthSetup.SchemeOnly or AuthSetup.SchemeAndPolicy or AuthSetup.FallbackPolicy)
-            services
-                .AddAuthentication(TestUserHandler.Name)
-                .AddScheme<AuthenticationSchemeOptions, TestUserHandler>(
-                    TestUserHandler.Name,
-                    configureOptions: null
-                );
+        AddAuthServices(services, auth);
 
         var app = builder.Build();
         try
@@ -956,6 +921,49 @@ public partial class ApiDashboardHostTests
             await app.DisposeAsync().ConfigureAwait(false);
             throw;
         }
+    }
+
+    private static void AddGraphQLServices(IServiceCollection services, bool exposeOperations)
+    {
+        services.AddSingleton<TraxMarker>();
+        services.AddSingleton(Substitute.For<ITrainDiscoveryService>());
+        services.AddSingleton(Substitute.For<IEffectRegistry>());
+        services.AddSingleton(Substitute.For<ITraxScheduler>());
+        services.AddSingleton(Substitute.For<IOperationsService>());
+        services.AddSingleton(Substitute.For<ITrainExecutionService>());
+        services.AddSingleton(Substitute.For<ITraxHealthService>());
+        services.AddDbContext<OrderTestDbContext>(o =>
+            o.UseInMemoryDatabase("Dashboard_" + Guid.NewGuid())
+        );
+        services.AddTraxGraphQL(g =>
+            exposeOperations
+                ? g.AddDbContext<OrderTestDbContext>()
+                    .ExposeOperationQueries()
+                    .AllowAnonymousOperations()
+                : g.AddDbContext<OrderTestDbContext>()
+        );
+    }
+
+    private static void AddAuthServices(IServiceCollection services, AuthSetup auth)
+    {
+        if (auth != AuthSetup.None)
+            services.AddAuthorization(o =>
+            {
+                if (auth == AuthSetup.SchemeAndPolicy)
+                    o.AddPolicy("TraxAdmin", p => p.RequireRole("Admin"));
+                if (auth == AuthSetup.FallbackPolicy)
+                    o.FallbackPolicy =
+                        new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+                            .RequireAuthenticatedUser()
+                            .Build();
+            });
+        if (auth is AuthSetup.SchemeOnly or AuthSetup.SchemeAndPolicy or AuthSetup.FallbackPolicy)
+            services
+                .AddAuthentication(TestUserHandler.Name)
+                .AddScheme<AuthenticationSchemeOptions, TestUserHandler>(
+                    TestUserHandler.Name,
+                    configureOptions: null
+                );
     }
 
     private static Task<HttpResponseMessage> GetAsync(

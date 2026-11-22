@@ -103,7 +103,12 @@ public class RunProgressCrossNodeE2ETests
         await _api.NotNull().StartAsync();
 
         // Node B: built now, started by the test once Alice has seen her run queued.
-        _worker = new HostBuilder()
+        _worker = BuildWorkerNode(connectionString);
+    }
+
+    private IHost BuildWorkerNode(string connectionString)
+    {
+        return new HostBuilder()
             .ConfigureServices(services =>
             {
                 services.AddLogging();
@@ -167,17 +172,7 @@ public class RunProgressCrossNodeE2ETests
         await _worker.NotNull().StartAsync();
 
         // The run waits at the gate on node B, so all of this arrived over the transport.
-        var live = new List<JsonElement>();
-        while (
-            !live.Exists(e =>
-                string.Equals(
-                    e.GetProperty("state").GetString(),
-                    "IN_PROGRESS",
-                    StringComparison.Ordinal
-                )
-            ) || !live.Exists(e => e.GetProperty("step").ValueKind == JsonValueKind.Object)
-        )
-            live.Add(await alice.NextAsync());
+        var live = await ReadUntilInProgressWithStepAsync(alice);
         await ProgressMarkerTrain.Waiting.Task.WaitAsync(
             TimeSpan.FromSeconds(30),
             TimeProvider.System
@@ -207,6 +202,24 @@ public class RunProgressCrossNodeE2ETests
                 "node A runs nothing, so none of the run's events can have come from it"
             );
         _workerEndpoint.NotNull().Published.Should().Contain(m => m.ExternalId == runId);
+    }
+
+    private static async Task<List<JsonElement>> ReadUntilInProgressWithStepAsync(
+        RunProgressE2ETests.Socket alice
+    )
+    {
+        var live = new List<JsonElement>();
+        while (
+            !live.Exists(e =>
+                string.Equals(
+                    e.GetProperty("state").GetString(),
+                    "IN_PROGRESS",
+                    StringComparison.Ordinal
+                )
+            ) || !live.Exists(e => e.GetProperty("step").ValueKind == JsonValueKind.Object)
+        )
+            live.Add(await alice.NextAsync().ConfigureAwait(false));
+        return live;
     }
 
     #region Helpers

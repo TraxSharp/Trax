@@ -192,18 +192,7 @@ public class OperatorMachineInstancesE2ETests
             .GetProperty("items")[0]
             .GetProperty("rowId")
             .GetInt64();
-        var history = string.Create(
-            CultureInfo.InvariantCulture,
-            $$"""
-            { operations { machineInstance(machine: "turnstile", ownerKind: USER, id: "{{_draftId}}", rowId: {{rowId}}) {
-                transitions(first: 10) {
-                  nextCursor
-                  items { revision kind trigger actor fromState toState at previousAt
-                    startedRun { executionId } startedChild { id } }
-                }
-            } } }
-            """
-        );
+        var history = HistoryQuery(rowId);
 
         using var asOperator = await _host.NotNull().PostAsync(history, apiKey: OperatorKey);
         asOperator
@@ -228,33 +217,7 @@ public class OperatorMachineInstancesE2ETests
             );
         page.GetProperty("nextCursor").ValueKind.Should().Be(JsonValueKind.Null);
 
-        // The console reads the field; the field reads the service. Both list the same rows.
-        var scope = _host.NotNull().Services.CreateAsyncScope();
-        await using (scope.ConfigureAwait(false))
-        {
-            var served = await scope
-                .ServiceProvider.GetRequiredService<IOperationsService>()
-                .GetMachineInstanceTransitionsAsync(
-                    new MachineInstanceKey(
-                        "turnstile",
-                        Trax.Effect.Enums.SnapshotOwnerKind.User,
-                        _draftId,
-                        rowId
-                    ),
-                    beforeRevision: null,
-                    10,
-                    CancellationToken.None
-                );
-            served
-                .NotNull()
-                .Items.Select(t => t.Revision)
-                .Should()
-                .Equal(items.Select(i => i.GetProperty("revision").GetInt64()));
-            served
-                .Items.Select(t => t.At)
-                .Should()
-                .Equal(items.Select(i => i.GetProperty("at").GetDateTimeOffset()));
-        }
+        await AssertTheServiceListsTheSameRowsAsync(rowId, items);
 
         asOperator
             .RootElement.GetRawText()
@@ -331,75 +294,122 @@ public class OperatorMachineInstancesE2ETests
         var host = new HostBuilder()
             .ConfigureWebHost(web =>
                 web.UseTestServer()
-                    .ConfigureServices(services =>
-                    {
-                        services.AddLogging();
-                        services.AddRouting();
-                        services.AddTraxApiKeyAuth(keys =>
-                            keys.Add(OperatorKey, id: "operator", "Operator")
-                                .Add(ShopperKey, id: "shopper", "Shopper")
-                        );
-                        E2EHostOptions.AddGenericPolicy(services);
-                        services.AddTrax(trax =>
-                            // The wizard machine in this assembly invokes a train, so the host checks a
-                            // run's cancel flag between junctions.
-                            trax.AddEffects(effects =>
-                                    effects
-                                        .UsePostgres(connectionString)
-                                        .AddJson()
-                                        .AddJunctionProgress()
-                                )
-                                .AddStateMachines(E2EHostOptions.OptInToGeneric)
-                                .AddMediator(typeof(E2EHost).Assembly)
-                        );
-                        E2EMachines.Register(services, []);
-                        services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
-                        services.AddSingleton<IOrderCharge>(new CountingCharge());
-
-                        // The operations service the dashboard and the API share, without the
-                        // scheduler's workers: this host only reads.
-                        services.AddScoped<IOperationsService>(sp => new OperationsService(
-                            sp.GetRequiredService<ITrainDiscoveryService>(),
-                            sp.GetRequiredService<IDataContextProviderFactory>(),
-                            new SchedulerConfiguration(),
-                            sp.GetRequiredService<ITrainExecutionService>()
-                        ));
-
-                        // The operations mutations need a job submitter and the scheduler's
-                        // facade; this host runs neither, and no test here calls them.
-                        services.AddScoped<
-                            Trax.Scheduler.Services.JobSubmitter.IJobSubmitter,
-                            NoJobSubmitter
-                        >();
-                        services.AddScoped(_ =>
-                            System.Reflection.DispatchProxy.Create<
-                                Trax.Scheduler.Services.TraxScheduler.ITraxScheduler,
-                                NoScheduler
-                            >()
-                        );
-
-                        services.AddTraxApi();
-                        services.AddTraxGraphQL(graphql =>
-                            graphql
-                                .ExposeOperationQueries()
-                                .ExposeOperationMutations()
-                                .GateOperations(roles: "Operator")
-                        );
-                    })
-                    .Configure(app =>
-                    {
-                        app.UseRouting();
-                        app.UseAuthentication();
-                        app.UseAuthorization();
-                        app.UseEndpoints(endpoints =>
-                            endpoints.MapGraphQL("/trax/graphql", "trax")
-                        );
-                    })
+                    .ConfigureServices(services => ConfigureServices(services, connectionString))
+                    .Configure(ConfigureApp)
             )
             .Build();
 
         await host.StartAsync().ConfigureAwait(false);
         return host;
+    }
+
+    private string HistoryQuery(long rowId) =>
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $$"""
+            { operations { machineInstance(machine: "turnstile", ownerKind: USER, id: "{{_draftId}}", rowId: {{rowId}}) {
+                transitions(first: 10) {
+                  nextCursor
+                  items { revision kind trigger actor fromState toState at previousAt
+                    startedRun { executionId } startedChild { id } }
+                }
+            } } }
+            """
+        );
+
+    private async Task AssertTheServiceListsTheSameRowsAsync(long rowId, List<JsonElement> items)
+    {
+        // The console reads the field; the field reads the service. Both list the same rows.
+        var scope = _host.NotNull().Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var served = await scope
+                .ServiceProvider.GetRequiredService<IOperationsService>()
+                .GetMachineInstanceTransitionsAsync(
+                    new MachineInstanceKey(
+                        "turnstile",
+                        Trax.Effect.Enums.SnapshotOwnerKind.User,
+                        _draftId,
+                        rowId
+                    ),
+                    beforeRevision: null,
+                    10,
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
+            served
+                .NotNull()
+                .Items.Select(t => t.Revision)
+                .Should()
+                .Equal(items.Select(i => i.GetProperty("revision").GetInt64()));
+            served
+                .Items.Select(t => t.At)
+                .Should()
+                .Equal(items.Select(i => i.GetProperty("at").GetDateTimeOffset()));
+        }
+    }
+
+    private static void ConfigureServices(IServiceCollection services, string connectionString)
+    {
+        services.AddLogging();
+        services.AddRouting();
+        services.AddTraxApiKeyAuth(keys =>
+            keys.Add(OperatorKey, id: "operator", "Operator")
+                .Add(ShopperKey, id: "shopper", "Shopper")
+        );
+        E2EHostOptions.AddGenericPolicy(services);
+        services.AddTrax(trax =>
+            // The wizard machine in this assembly invokes a train, so the host checks a
+            // run's cancel flag between junctions.
+            trax.AddEffects(effects =>
+                    effects.UsePostgres(connectionString).AddJson().AddJunctionProgress()
+                )
+                .AddStateMachines(E2EHostOptions.OptInToGeneric)
+                .AddMediator(typeof(E2EHost).Assembly)
+        );
+        E2EMachines.Register(services, []);
+        services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
+        services.AddSingleton<IOrderCharge>(new CountingCharge());
+
+        AddReadOnlyOperations(services);
+
+        services.AddTraxApi();
+        services.AddTraxGraphQL(graphql =>
+            graphql
+                .ExposeOperationQueries()
+                .ExposeOperationMutations()
+                .GateOperations(roles: "Operator")
+        );
+    }
+
+    private static void AddReadOnlyOperations(IServiceCollection services)
+    {
+        // The operations service the dashboard and the API share, without the
+        // scheduler's workers: this host only reads.
+        services.AddScoped<IOperationsService>(sp => new OperationsService(
+            sp.GetRequiredService<ITrainDiscoveryService>(),
+            sp.GetRequiredService<IDataContextProviderFactory>(),
+            new SchedulerConfiguration(),
+            sp.GetRequiredService<ITrainExecutionService>()
+        ));
+
+        // The operations mutations need a job submitter and the scheduler's
+        // facade; this host runs neither, and no test here calls them.
+        services.AddScoped<Trax.Scheduler.Services.JobSubmitter.IJobSubmitter, NoJobSubmitter>();
+        services.AddScoped(_ =>
+            System.Reflection.DispatchProxy.Create<
+                Trax.Scheduler.Services.TraxScheduler.ITraxScheduler,
+                NoScheduler
+            >()
+        );
+    }
+
+    private static void ConfigureApp(IApplicationBuilder app)
+    {
+        app.UseRouting();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.UseEndpoints(endpoints => endpoints.MapGraphQL("/trax/graphql", "trax"));
     }
 
     private static bool NoOperationsData(JsonDocument doc) =>

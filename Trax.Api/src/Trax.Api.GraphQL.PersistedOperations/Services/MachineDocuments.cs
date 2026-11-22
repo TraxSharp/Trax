@@ -195,7 +195,19 @@ internal static class MachineDocuments
         if (documents.Count == 0)
             throw NotServed(machine);
 
-        // The instance's push: the machine's own field, so a client sends only the id.
+        AddPushDocument(schema, machine, documents, irHash, pascal);
+        return documents;
+    }
+
+    // The instance's push: the machine's own field, so a client sends only the id.
+    private static void AddPushDocument(
+        ISchemaDefinition schema,
+        IMachine machine,
+        List<MachineDocument> documents,
+        string irHash,
+        string pascal
+    )
+    {
         var pushField = MachineChangedSubscription.FieldOf(machine.Name);
         if (
             schema.SubscriptionType is { } subscriptions
@@ -220,7 +232,6 @@ internal static class MachineDocuments
                 )
             );
         }
-        return documents;
     }
 
     private static InvalidOperationException NotServed(IMachine machine) =>

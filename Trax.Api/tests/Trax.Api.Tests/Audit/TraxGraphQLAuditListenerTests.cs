@@ -1247,6 +1247,24 @@ public class TraxGraphQLAuditListenerTests
 
             configureServices?.Invoke(services);
 
+            AddTestGraphQLServer(services);
+
+            var provider = services.BuildServiceProvider();
+            var executor = await provider
+                .GetRequiredService<IRequestExecutorProvider>()
+                .GetExecutorAsync()
+                .ConfigureAwait(false);
+
+            return new TestHost
+            {
+                Executor = executor,
+                Channel = provider.GetRequiredService<TraxAuditChannel>(),
+                Provider = provider,
+            };
+        }
+
+        private static void AddTestGraphQLServer(IServiceCollection services)
+        {
             services
                 .AddGraphQLServer()
                 .AddQueryType<TestQuery>()
@@ -1294,19 +1312,6 @@ public class TraxGraphQLAuditListenerTests
                 .AddApplicationService<TimeProvider>()
                 .AddApplicationService<ILogger<TraxGraphQLAuditListener>>()
                 .AddDiagnosticEventListener<TraxGraphQLAuditListener>();
-
-            var provider = services.BuildServiceProvider();
-            var executor = await provider
-                .GetRequiredService<IRequestExecutorProvider>()
-                .GetExecutorAsync()
-                .ConfigureAwait(false);
-
-            return new TestHost
-            {
-                Executor = executor,
-                Channel = provider.GetRequiredService<TraxAuditChannel>(),
-                Provider = provider,
-            };
         }
     }
 

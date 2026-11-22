@@ -234,27 +234,7 @@ public class OperationsParityReadsTests
         SortOrder order
     )
     {
-        // More runs than the window, with matches near each end and in the middle, so a page
-        // starts in the window and finishes past it, whichever end it reads from.
-        var rows = OperationsQueries.FailureTextWindow + 20_000;
-        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
-            await ((DbContext)db).Database.ExecuteSqlInterpolatedAsync(
-                $"""
-                INSERT INTO trax.metadata (external_id, name, train_state, start_time, failure_reason)
-                SELECT lpad(g::text, 32, '0'), 'Trax.X.Parity', 'failed'::trax.train_state, now(),
-                       'attempt ' || g || CASE WHEN g % 1000 = 7 OR g IN (3, {rows
-                    - 2}) THEN ' Needle' ELSE '' END
-                FROM generate_series(1, {rows}) g
-                """
-            );
-        List<long> matching;
-        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
-            matching = await db
-                .Metadatas.Where(m =>
-                    m.FailureReason != null && m.FailureReason.EndsWith(" Needle")
-                )
-                .Select(m => m.Id)
-                .ToListAsync();
+        var matching = await SeedNeedleRunsAcrossTheWindow();
         var expected =
             order == SortOrder.Oldest
                 ? matching.Order().ToList()
@@ -271,22 +251,7 @@ public class OperationsParityReadsTests
         whole.Items.Select(e => e.Id).Should().Equal(expected);
         whole.TotalCount.Should().Be(expected.Count);
 
-        var paged = new List<long>();
-        long? cursor = null;
-        do
-        {
-            var page = await queries.GetExecutions(
-                _factory.NotNull(),
-                default,
-                take: 7,
-                order: order,
-                afterId: cursor,
-                failureReasonContains: "needle"
-            );
-            paged.AddRange(page.Items.Select(e => e.Id));
-            page.TotalCount.Should().Be(expected.Count, "the cursor never changes the total");
-            cursor = page.Items.Count == 7 ? page.NextCursor : null;
-        } while (cursor is not null);
+        var paged = await ReadNeedlePagesByCursor(queries, order, expected.Count);
 
         paged.Should().Equal(expected, "paging by cursor reads the same rows in the same order");
 
@@ -302,6 +267,68 @@ public class OperationsParityReadsTests
             .Items.Select(e => e.Id)
             .Should()
             .Equal(expected.Skip(7).Take(7), "an offset page reads the same order");
+    }
+
+    private async Task<List<long>> SeedNeedleRunsAcrossTheWindow()
+    {
+        // More runs than the window, with matches near each end and in the middle, so a page
+        // starts in the window and finishes past it, whichever end it reads from.
+        var rows = OperationsQueries.FailureTextWindow + 20_000;
+        {
+            var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+            await using (db.ConfigureAwait(false))
+                await ((DbContext)db)
+                    .Database.ExecuteSqlInterpolatedAsync(
+                        $"""
+                INSERT INTO trax.metadata (external_id, name, train_state, start_time, failure_reason)
+                SELECT lpad(g::text, 32, '0'), 'Trax.X.Parity', 'failed'::trax.train_state, now(),
+                       'attempt ' || g || CASE WHEN g % 1000 = 7 OR g IN (3, {rows
+                    - 2}) THEN ' Needle' ELSE '' END
+                FROM generate_series(1, {rows}) g
+                """
+                    )
+                    .ConfigureAwait(false);
+        }
+        List<long> matching;
+        {
+            var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+            await using (db.ConfigureAwait(false))
+                matching = await db
+                    .Metadatas.Where(m =>
+                        m.FailureReason != null && m.FailureReason.EndsWith(" Needle")
+                    )
+                    .Select(m => m.Id)
+                    .ToListAsync()
+                    .ConfigureAwait(false);
+        }
+        return matching;
+    }
+
+    private async Task<List<long>> ReadNeedlePagesByCursor(
+        OperationsQueries queries,
+        SortOrder order,
+        int expectedCount
+    )
+    {
+        var paged = new List<long>();
+        long? cursor = null;
+        do
+        {
+            var page = await queries
+                .GetExecutions(
+                    _factory.NotNull(),
+                    default,
+                    take: 7,
+                    order: order,
+                    afterId: cursor,
+                    failureReasonContains: "needle"
+                )
+                .ConfigureAwait(false);
+            paged.AddRange(page.Items.Select(e => e.Id));
+            page.TotalCount.Should().Be(expectedCount, "the cursor never changes the total");
+            cursor = page.Items.Count == 7 ? page.NextCursor : null;
+        } while (cursor is not null);
+        return paged;
     }
 
     [Test]

@@ -312,52 +312,10 @@ public partial class ResumeExecutionOperationsTests
     {
         var run = await FailedRunAsync();
 
-        // The row holds the state, so a surface that showed it would show the secret.
-        var rows = await _host
-            .NotNull()
-            .With(d => d.Checkpoints.AsNoTracking().Where(c => c.MetadataId == run).ToListAsync());
-        rows.Should().ContainSingle().Which.State.Should().Contain(ResumeProbe.StateSecret);
-        rows[0]
-            .Tracks.Should()
-            .NotContain(nameof(ResumeVault), "a sensitive route's track is never stored");
+        await AssertTheCheckpointRowHoldsTheSecret(run);
 
-        var graphQlGraph = await _host
-            .NotNull()
-            .GraphQLAsync(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $$"""
-                    {
-                      operations {
-                        runGraph(metadataId: {{run}}) {
-                          metadataId train hasGraph hash moreSteps canResume
-                          nodes { ...node tracks { name taken nodes { ...node tracks { name taken nodes { ...node } } } } }
-                          unmatchedSteps { position name nameWithheld answer answerWithheld }
-                        }
-                      }
-                    }
-                    fragment node on RunGraphNode {
-                      id kind junction in out opaque state replayed trackTaken canResume checkpointed
-                      steps { position kind name state answer answerWithheld nameWithheld failureException }
-                    }
-                    """
-                )
-            );
-        var graphQlRun = await _host
-            .NotNull()
-            .GraphQLAsync(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $$"""
-                    {
-                      operations {
-                        executionDetail(id: {{run}}) { id name input output failureJunction failureException failureReason stackTrace }
-                        junctionRuns(metadataId: {{run}}) { position name answer answerWithheld nameWithheld }
-                      }
-                    }
-                    """
-                )
-            );
+        var graphQlGraph = await RunGraphOverGraphQLAsync(run);
+        var graphQlRun = await ExecutionAndJunctionRunsOverGraphQLAsync(run);
         graphQlGraph
             .RootElement.TryGetProperty("errors", out _)
             .Should()
@@ -366,23 +324,7 @@ public partial class ResumeExecutionOperationsTests
 
         // The dashboard's reads: the run graph's, and the resume check behind it.
         var dashboardGraph = await DashboardGraphAsync(run);
-        var declared = _host
-            .NotNull()
-            .Services.GetRequiredService<ITrainChainGraphs>()
-            .FindDeclared(typeof(IResumableTrain).FullName.NotNull())
-            .NotNull();
-        var checks = await _host
-            .NotNull()
-            .Services.GetRequiredService<IRunResumes>()
-            .CheckMany(
-                declared.Train,
-                declared.Chain,
-                declared.Input,
-                declared.Output,
-                run,
-                [Summarize, Fetch],
-                CancellationToken.None
-            );
+        var checks = await CheckResumesAsync(run);
 
         // And a resume's answer on each surface.
         var resumedOverGraphQl = await _host.NotNull().ResumeOverGraphQLAsync(run, Summarize);
@@ -404,6 +346,111 @@ public partial class ResumeExecutionOperationsTests
                     $"{surface} says a checkpoint exists, never what it holds ({Adr})"
                 );
 
+        AssertNoRunGraphTellsTheVaultsTrack(graphQlGraph, dashboardGraph);
+
+        // What each surface does say: that the checkpoint exists, and at which node.
+        dashboardGraph
+            .Nodes.Where(n => n.Checkpointed)
+            .Select(n => n.Id)
+            .Should()
+            .Equal("Checkpoint<FetchedSources>#0");
+        resumedOverGraphQl
+            .RootElement.GetProperty("data")
+            .GetProperty("operations")
+            .GetProperty("resumeExecution")
+            .GetProperty("success")
+            .GetBoolean()
+            .Should()
+            .BeTrue(Raw(resumedOverGraphQl));
+    }
+
+    private async Task AssertTheCheckpointRowHoldsTheSecret(long run)
+    {
+        // The row holds the state, so a surface that showed it would show the secret.
+        var rows = await _host
+            .NotNull()
+            .With(d => d.Checkpoints.AsNoTracking().Where(c => c.MetadataId == run).ToListAsync())
+            .ConfigureAwait(false);
+        rows.Should().ContainSingle().Which.State.Should().Contain(ResumeProbe.StateSecret);
+        rows[0]
+            .Tracks.Should()
+            .NotContain(nameof(ResumeVault), "a sensitive route's track is never stored");
+    }
+
+    private async Task<JsonDocument> RunGraphOverGraphQLAsync(long run)
+    {
+        return await _host
+            .NotNull()
+            .GraphQLAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $$"""
+                    {
+                      operations {
+                        runGraph(metadataId: {{run}}) {
+                          metadataId train hasGraph hash moreSteps canResume
+                          nodes { ...node tracks { name taken nodes { ...node tracks { name taken nodes { ...node } } } } }
+                          unmatchedSteps { position name nameWithheld answer answerWithheld }
+                        }
+                      }
+                    }
+                    fragment node on RunGraphNode {
+                      id kind junction in out opaque state replayed trackTaken canResume checkpointed
+                      steps { position kind name state answer answerWithheld nameWithheld failureException }
+                    }
+                    """
+                )
+            )
+            .ConfigureAwait(false);
+    }
+
+    private async Task<JsonDocument> ExecutionAndJunctionRunsOverGraphQLAsync(long run)
+    {
+        return await _host
+            .NotNull()
+            .GraphQLAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $$"""
+                    {
+                      operations {
+                        executionDetail(id: {{run}}) { id name input output failureJunction failureException failureReason stackTrace }
+                        junctionRuns(metadataId: {{run}}) { position name answer answerWithheld nameWithheld }
+                      }
+                    }
+                    """
+                )
+            )
+            .ConfigureAwait(false);
+    }
+
+    private async Task<ResumeChecks> CheckResumesAsync(long run)
+    {
+        var declared = _host
+            .NotNull()
+            .Services.GetRequiredService<ITrainChainGraphs>()
+            .FindDeclared(typeof(IResumableTrain).FullName.NotNull())
+            .NotNull();
+        return await _host
+            .NotNull()
+            .Services.GetRequiredService<IRunResumes>()
+            .CheckMany(
+                declared.Train,
+                declared.Chain,
+                declared.Input,
+                declared.Output,
+                run,
+                [Summarize, Fetch],
+                CancellationToken.None
+            )
+            .ConfigureAwait(false);
+    }
+
+    private static void AssertNoRunGraphTellsTheVaultsTrack(
+        JsonDocument graphQlGraph,
+        Api.DTOs.RunGraph dashboardGraph
+    )
+    {
         // The vault's route: which track was taken is told by neither run graph.
         var vault = Flatten(
                 graphQlGraph
@@ -431,21 +478,6 @@ public partial class ResumeExecutionOperationsTests
             .Distinct()
             .Should()
             .ContainSingle("both tracks stand alike, so neither gives the answer away");
-
-        // What each surface does say: that the checkpoint exists, and at which node.
-        dashboardGraph
-            .Nodes.Where(n => n.Checkpointed)
-            .Select(n => n.Id)
-            .Should()
-            .Equal("Checkpoint<FetchedSources>#0");
-        resumedOverGraphQl
-            .RootElement.GetProperty("data")
-            .GetProperty("operations")
-            .GetProperty("resumeExecution")
-            .GetProperty("success")
-            .GetBoolean()
-            .Should()
-            .BeTrue(Raw(resumedOverGraphQl));
     }
 
     /// <summary>

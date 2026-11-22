@@ -78,6 +78,49 @@ public class LogQueries
             || !string.IsNullOrEmpty(messageContains)
             || !string.IsNullOrEmpty(categoryContains);
 
+        var (totalCount, isEstimate, isCapped) = await CountLogsAsync(
+                operationsService,
+                dataContextFactory,
+                sqlDialect,
+                query,
+                hasFilter,
+                ct
+            )
+            .ConfigureAwait(false);
+
+        return new PagedResult<LogEntry>(
+            page.Items.Select(l => new LogEntry(
+                    l.Id,
+                    l.MetadataId,
+                    l.EventId,
+                    l.Level,
+                    l.Category,
+                    l.Message,
+                    l.Exception,
+                    l.StackTrace
+                ))
+                .ToList(),
+            totalCount,
+            page.Skip,
+            page.Take,
+            isEstimate,
+            page.NextCursor
+        )
+        {
+            IsCountCapped = isCapped,
+        };
+    }
+
+    /// <summary>The total a page of logs reports, with whether it is an estimate or capped.</summary>
+    private static async Task<(int TotalCount, bool IsEstimate, bool IsCapped)> CountLogsAsync(
+        IOperationsService operationsService,
+        IDataContextProviderFactory dataContextFactory,
+        ISqlDialect? sqlDialect,
+        LogQuery query,
+        bool hasFilter,
+        CancellationToken ct
+    )
+    {
         // A text filter counts up to OperationsService.LogCountCap matches and no further, so a
         // common term never counts the whole table; the service counts every other filter
         // exactly. An unfiltered count of the log table is a full scan, so that one total is the
@@ -106,27 +149,6 @@ public class LogQueries
                 )
                 .ConfigureAwait(false);
         }
-
-        return new PagedResult<LogEntry>(
-            page.Items.Select(l => new LogEntry(
-                    l.Id,
-                    l.MetadataId,
-                    l.EventId,
-                    l.Level,
-                    l.Category,
-                    l.Message,
-                    l.Exception,
-                    l.StackTrace
-                ))
-                .ToList(),
-            totalCount,
-            page.Skip,
-            page.Take,
-            isEstimate,
-            page.NextCursor
-        )
-        {
-            IsCountCapped = isCapped,
-        };
+        return (totalCount, isEstimate, isCapped);
     }
 }

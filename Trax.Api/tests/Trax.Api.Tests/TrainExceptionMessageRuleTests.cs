@@ -179,25 +179,7 @@ public class TrainExceptionMessageRuleTests
         Exception refusal
     )
     {
-        var execution = Substitute.For<ITrainExecutionService>();
-        execution
-            .QueueAsync(
-                Arg.Any<string>(),
-                Arg.Any<string?>(),
-                Arg.Is<QueueTrainOptions>(o => o.RecordCaller),
-                Arg.Any<CancellationToken>()
-            )
-            .ThrowsAsync(refusal);
-        // The operations namespace queues through the positional overload and records no caller.
-        execution
-            .QueueAsync(
-                Arg.Any<string>(),
-                Arg.Any<string?>(),
-                Arg.Any<int>(),
-                Arg.Any<DateTime?>(),
-                Arg.Any<CancellationToken>()
-            )
-            .ThrowsAsync(refusal);
+        var execution = RefusingExecution(refusal);
 
         // A store that is not the in-memory one, so both surfaces attempt the enqueue rather than
         // refuse it as having nothing to dispatch it.
@@ -248,6 +230,30 @@ public class TrainExceptionMessageRuleTests
             .GetProperty("queueTrain");
         payload.GetProperty("success").GetBoolean().Should().BeFalse();
         return (typedMessage, payload.GetProperty("message").GetString());
+    }
+
+    private static ITrainExecutionService RefusingExecution(Exception refusal)
+    {
+        var execution = Substitute.For<ITrainExecutionService>();
+        execution
+            .QueueAsync(
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Is<QueueTrainOptions>(o => o.RecordCaller),
+                Arg.Any<CancellationToken>()
+            )
+            .ThrowsAsync(refusal);
+        // The operations namespace queues through the positional overload and records no caller.
+        execution
+            .QueueAsync(
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<int>(),
+                Arg.Any<DateTime?>(),
+                Arg.Any<CancellationToken>()
+            )
+            .ThrowsAsync(refusal);
+        return execution;
     }
 
     private static TrainRegistration QueueRegistration() => Typed(GraphQLOperation.Queue);

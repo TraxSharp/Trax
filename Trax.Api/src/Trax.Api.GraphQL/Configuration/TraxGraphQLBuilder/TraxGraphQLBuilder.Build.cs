@@ -9,6 +9,61 @@ public partial class TraxGraphQLBuilder
 {
     internal GraphQLConfiguration Build()
     {
+        var modelRegistrations = DiscoverModelRegistrations();
+
+        // ConfigureFiltering(...) modules attach to HotChocolate's filtering convention,
+        // which Trax only adds when at least one entity has filtering enabled. Without
+        // that, the modules would be silently dropped, so fail loud at build time.
+        if (FilterModules.Count > 0 && !modelRegistrations.Exists(r => r.Attribute.Filtering))
+            throw new InvalidOperationException(
+                "ConfigureFiltering(...) registered custom filter operations, but no "
+                    + "[TraxQueryModel] entity has filtering enabled. The filtering "
+                    + "convention is never added, so the operations would be dropped. "
+                    + "Enable filtering on at least one entity (it is on by default) or "
+                    + "remove the ConfigureFiltering(...) call."
+            );
+
+        ValidateOperationsAuthorization();
+
+        return new GraphQLConfiguration(
+            modelRegistrations,
+            AdditionalTypeModules,
+            SchemaConfigurations,
+            AdditionalTypeExtensions,
+            MaxExecutionDepthValue,
+            CostOverride,
+            IntrospectionPredicate,
+            MaxOperationsPerRequestValue,
+            AuthorizationRequired,
+            AuthorizationPolicy,
+            OperationQueriesExposed,
+            OperationMutationsExposed,
+            FilterModules,
+            OperationsAuthorizeAttributes
+        )
+        {
+            AnonymousOperationsAllowed = AnonymousOperationsAllowed,
+            GetRequestsAllowed = GetRequestsAllowed,
+            FeatureRootFields = FeatureRootFields.ToHashSet(StringComparer.Ordinal),
+            JunctionAnswersForBroadcastAllowed = JunctionAnswersForBroadcastAllowed,
+            BroadcastOutputTrainTypes = BroadcastOutputTrains.ToArray(),
+            SocketAllowedOrigins = SocketAllowedOrigins,
+            MachineSpelledEnums = MachineSpelledEnums,
+            MaxOperationsPerConnection = MaxOperationsPerConnectionValue,
+            MaxConnectionLifetime = MaxConnectionLifetimeValue,
+            ConnectionCredentialRecheckInterval = ConnectionCredentialRecheckIntervalValue,
+            NavigationTargets = NavigationTargetPosture.Discover(
+                modelRegistrations.Select(r => r.EntityType)
+            ),
+        };
+    }
+
+    /// <summary>
+    /// Registers every <c>[TraxQueryModel]</c> entity the registered DbContexts expose, each
+    /// validated as it is found.
+    /// </summary>
+    private List<QueryModelRegistration> DiscoverModelRegistrations()
+    {
         var modelRegistrations = new List<QueryModelRegistration>();
 
         foreach (var dbContextType in DbContextTypes)
@@ -56,52 +111,7 @@ public partial class TraxGraphQLBuilder
                 );
             }
         }
-
-        // ConfigureFiltering(...) modules attach to HotChocolate's filtering convention,
-        // which Trax only adds when at least one entity has filtering enabled. Without
-        // that, the modules would be silently dropped, so fail loud at build time.
-        if (FilterModules.Count > 0 && !modelRegistrations.Exists(r => r.Attribute.Filtering))
-            throw new InvalidOperationException(
-                "ConfigureFiltering(...) registered custom filter operations, but no "
-                    + "[TraxQueryModel] entity has filtering enabled. The filtering "
-                    + "convention is never added, so the operations would be dropped. "
-                    + "Enable filtering on at least one entity (it is on by default) or "
-                    + "remove the ConfigureFiltering(...) call."
-            );
-
-        ValidateOperationsAuthorization();
-
-        return new GraphQLConfiguration(
-            modelRegistrations,
-            AdditionalTypeModules,
-            SchemaConfigurations,
-            AdditionalTypeExtensions,
-            MaxExecutionDepthValue,
-            CostOverride,
-            IntrospectionPredicate,
-            MaxOperationsPerRequestValue,
-            AuthorizationRequired,
-            AuthorizationPolicy,
-            OperationQueriesExposed,
-            OperationMutationsExposed,
-            FilterModules,
-            OperationsAuthorizeAttributes
-        )
-        {
-            AnonymousOperationsAllowed = AnonymousOperationsAllowed,
-            GetRequestsAllowed = GetRequestsAllowed,
-            FeatureRootFields = FeatureRootFields.ToHashSet(StringComparer.Ordinal),
-            JunctionAnswersForBroadcastAllowed = JunctionAnswersForBroadcastAllowed,
-            BroadcastOutputTrainTypes = BroadcastOutputTrains.ToArray(),
-            SocketAllowedOrigins = SocketAllowedOrigins,
-            MachineSpelledEnums = MachineSpelledEnums,
-            MaxOperationsPerConnection = MaxOperationsPerConnectionValue,
-            MaxConnectionLifetime = MaxConnectionLifetimeValue,
-            ConnectionCredentialRecheckInterval = ConnectionCredentialRecheckIntervalValue,
-            NavigationTargets = NavigationTargetPosture.Discover(
-                modelRegistrations.Select(r => r.EntityType)
-            ),
-        };
+        return modelRegistrations;
     }
 
     /// <summary>
@@ -347,7 +357,15 @@ public partial class TraxGraphQLBuilder
                     + "to the interface or remove ExposeAs."
             );
         }
+        ValidateExposedPropertiesAreImplicit(entityType, exposeAs, exposedNames);
+    }
 
+    private static void ValidateExposedPropertiesAreImplicit(
+        Type entityType,
+        Type exposeAs,
+        IReadOnlyCollection<string> exposedNames
+    )
+    {
         // Catch the explicit-interface-implementation footgun: if the interface
         // has a property that the entity implements explicitly (or hides via
         // `new`), reflection's name match won't find a matching public

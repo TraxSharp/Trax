@@ -283,38 +283,7 @@ public class InvokedRunOperationsTests
         var user = await SeedDraftAsync(machine, SnapshotOwnerKind.User, "{}", invokeToken: null);
         var idle = await SeedDraftAsync(machine, SnapshotOwnerKind.System, "{}", invokeToken: null);
 
-        // Each refusal, through the mutation and through the service the dashboard calls.
-        foreach (
-            var (ownerKind, id, outcome) in new[]
-            {
-                (SnapshotOwnerKind.User, user.Id, MachineInstanceCancelOutcome.UserOwned),
-                (SnapshotOwnerKind.System, Guid.NewGuid(), MachineInstanceCancelOutcome.NotFound),
-                (SnapshotOwnerKind.System, idle.Id, MachineInstanceCancelOutcome.NoLiveRun),
-            }
-        )
-        {
-            var graphQl = await new OperationsMutations().CancelMachineInstance(
-                machine,
-                ownerKind,
-                id,
-                operations,
-                default
-            );
-            var dashboard = await operations.CancelMachineInstanceAsync(
-                new MachineInstanceKey(
-                    machine,
-                    ownerKind,
-                    id,
-                    ownerKind == SnapshotOwnerKind.User ? user.RowId : null
-                ),
-                default
-            );
-
-            graphQl.Success.Should().BeFalse();
-            graphQl.Outcome.Should().Be(outcome);
-            dashboard.Outcome.Should().Be(outcome);
-            graphQl.Message.Should().Be(dashboard.Message, "one reason on both surfaces");
-        }
+        await AssertEachRefusalAgreesOnBothSurfacesAsync(machine, operations, user, idle);
 
         // A queued run, cancelled on each surface: one instance each, the same outcome and words.
         var viaGraphQl = await SeedQueuedInstanceAsync(machine);
@@ -360,6 +329,45 @@ public class InvokedRunOperationsTests
         )
             .Should()
             .AllBeEquivalentTo(WorkQueueStatus.Cancelled);
+    }
+
+    private static async Task AssertEachRefusalAgreesOnBothSurfacesAsync(
+        string machine,
+        IOperationsService operations,
+        SnapshotDraft user,
+        SnapshotDraft idle
+    )
+    {
+        // Each refusal, through the mutation and through the service the dashboard calls.
+        foreach (
+            var (ownerKind, id, outcome) in new[]
+            {
+                (SnapshotOwnerKind.User, user.Id, MachineInstanceCancelOutcome.UserOwned),
+                (SnapshotOwnerKind.System, Guid.NewGuid(), MachineInstanceCancelOutcome.NotFound),
+                (SnapshotOwnerKind.System, idle.Id, MachineInstanceCancelOutcome.NoLiveRun),
+            }
+        )
+        {
+            var graphQl = await new OperationsMutations()
+                .CancelMachineInstance(machine, ownerKind, id, operations, default)
+                .ConfigureAwait(false);
+            var dashboard = await operations
+                .CancelMachineInstanceAsync(
+                    new MachineInstanceKey(
+                        machine,
+                        ownerKind,
+                        id,
+                        ownerKind == SnapshotOwnerKind.User ? user.RowId : null
+                    ),
+                    default
+                )
+                .ConfigureAwait(false);
+
+            graphQl.Success.Should().BeFalse();
+            graphQl.Outcome.Should().Be(outcome);
+            dashboard.Outcome.Should().Be(outcome);
+            graphQl.Message.Should().Be(dashboard.Message, "one reason on both surfaces");
+        }
     }
 
     [Test]

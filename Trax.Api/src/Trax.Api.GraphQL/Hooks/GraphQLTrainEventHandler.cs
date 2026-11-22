@@ -88,7 +88,21 @@ public class GraphQLTrainEventHandler : ITrainEventHandler
             return;
         }
 
-        var lifecycleEvent = new TrainLifecycleEvent(
+        var lifecycleEvent = ToLifecycleEvent(message);
+
+        await _publisher.PublishAsync(topicName, lifecycleEvent, ct).ConfigureAwait(false);
+
+        _logger?.LogDebug(
+            "Forwarded remote {EventType} event for train {TrainName} ({ExternalId}) to GraphQL subscriptions.",
+            message.EventType,
+            message.TrainName,
+            message.ExternalId
+        );
+    }
+
+    /// <summary>The lifecycle event a remote message describes, as this node would raise it.</summary>
+    private static TrainLifecycleEvent ToLifecycleEvent(TrainLifecycleEventMessage message) =>
+        new TrainLifecycleEvent(
             MetadataId: message.MetadataId,
             ExternalId: message.ExternalId,
             TrainName: message.TrainName,
@@ -107,14 +121,4 @@ public class GraphQLTrainEventHandler : ITrainEventHandler
             // remote failure is presented exactly as the same failure on this node would be.
             FailureException = message.FailureException,
         };
-
-        await _publisher.PublishAsync(topicName, lifecycleEvent, ct).ConfigureAwait(false);
-
-        _logger?.LogDebug(
-            "Forwarded remote {EventType} event for train {TrainName} ({ExternalId}) to GraphQL subscriptions.",
-            message.EventType,
-            message.TrainName,
-            message.ExternalId
-        );
-    }
 }

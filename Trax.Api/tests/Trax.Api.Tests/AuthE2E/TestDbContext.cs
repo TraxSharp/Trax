@@ -49,7 +49,12 @@ public class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(
         // Clear and reseed every time so assertions are stable regardless of
         // how many previous test runs touched the table.
         db.Database.ExecuteSqlRaw("TRUNCATE TABLE test_auth.book_records RESTART IDENTITY");
-        db.Books.AddRange(
+        db.Books.AddRange(FixtureBooks());
+        db.SaveChanges();
+    }
+
+    private static BookRecord[] FixtureBooks() =>
+        [
             new BookRecord
             {
                 Title = "The Mythical Man-Month",
@@ -97,8 +102,6 @@ public class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(
                 Title = "Domain-Driven Design",
                 Author = "Evans",
                 Rating = 4,
-            }
-        );
-        db.SaveChanges();
-    }
+            },
+        ];
 }

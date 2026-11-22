@@ -17,6 +17,7 @@ using Trax.Api.Tests.AuthE2E;
 using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
@@ -535,6 +536,17 @@ public class AskAfreshMutationsTests
         // The triggers refuse an unknown manifest, so the one the documents name exists.
         await SeedManifestAsync("m").ConfigureAwait(false);
 
+        var scheduler = CreateScheduler();
+        var operations = CreateOperations();
+
+        var host = BuildHost(scheduler, operations);
+
+        await host.StartAsync().ConfigureAwait(false);
+        return (host, scheduler, operations);
+    }
+
+    private static ITraxScheduler CreateScheduler()
+    {
         var scheduler = Substitute.For<ITraxScheduler>();
         scheduler
             .RequeueDeadLetterAsync(Arg.Any<long>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
@@ -580,6 +592,11 @@ public class AskAfreshMutationsTests
                     ReplayDecisionsOf: null
                 )
             );
+        return scheduler;
+    }
+
+    private static IOperationsService CreateOperations()
+    {
         var operations = Substitute.For<IOperationsService>();
         operations
             .RequeueExecutionAsync(Arg.Any<long>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
@@ -611,8 +628,12 @@ public class AskAfreshMutationsTests
                 Arg.Any<CancellationToken>()
             )
             .Returns(new OperationResult(Success: true, Count: 1));
+        return operations;
+    }
 
-        var host = new HostBuilder()
+    private IHost BuildHost(ITraxScheduler scheduler, IOperationsService operations)
+    {
+        return new HostBuilder()
             .ConfigureWebHost(web =>
                 web.UseTestServer()
                     .ConfigureServices(services =>
@@ -652,9 +673,6 @@ public class AskAfreshMutationsTests
                     })
             )
             .Build();
-
-        await host.StartAsync().ConfigureAwait(false);
-        return (host, scheduler, operations);
     }
 
     private static async Task<JsonDocument> PostAsync(IHost host, string query, string? apiKey)
@@ -785,52 +803,61 @@ public class AskAfreshMutationsTests
             await db.Track(manifest).ConfigureAwait(false);
             await db.SaveChanges(default).ConfigureAwait(false);
 
-            var run = Metadata.Create(
-                new CreateMetadata
-                {
-                    Name = manifest.Name,
-                    ExternalId = Guid.NewGuid().ToString("N"),
-                    Input = null,
-                },
-                TimeProvider.System
-            );
-            run.ManifestId = manifest.Id;
-            run.TrainState = TrainState.Failed;
-            run.DecisionsRecorded = true;
-            run.StartTime = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5);
-            await db.Track(run).ConfigureAwait(false);
-            await db.SaveChanges(default).ConfigureAwait(false);
-
-            var ranFrom = WorkQueue.Create(
-                new CreateWorkQueue
-                {
-                    TrainName = manifest.Name,
-                    Input = manifest.Properties,
-                    InputTypeName = manifest.PropertyTypeName,
-                    ManifestId = manifest.Id,
-                },
-                TimeProvider.System
-            );
-            ranFrom.Status = WorkQueueStatus.Dispatched;
-            ranFrom.MetadataId = run.Id;
-            await db.Track(ranFrom).ConfigureAwait(false);
-
-            db.RecordedDecisions.Add(
-                new RecordedDecision
-                {
-                    MetadataId = run.Id,
-                    QuestionKey = "AskAfreshLane",
-                    Occurrence = 0,
-                    Kind = "choice",
-                    Question = """{"text":"Which lane?"}""",
-                    Answer = """{"choice":"Fast"}""",
-                    Fingerprint = "fingerprint",
-                    DecidedAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5),
-                }
-            );
-            await db.SaveChanges(default).ConfigureAwait(false);
-            return (manifest, run.Id);
+            var runId = await SeedFailedRunWithDecisionAsync(db, manifest).ConfigureAwait(false);
+            return (manifest, runId);
         }
+    }
+
+    private static async Task<long> SeedFailedRunWithDecisionAsync(
+        IDataContext db,
+        Manifest manifest
+    )
+    {
+        var run = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = manifest.Name,
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = null,
+            },
+            TimeProvider.System
+        );
+        run.ManifestId = manifest.Id;
+        run.TrainState = TrainState.Failed;
+        run.DecisionsRecorded = true;
+        run.StartTime = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5);
+        await db.Track(run).ConfigureAwait(false);
+        await db.SaveChanges(default).ConfigureAwait(false);
+
+        var ranFrom = WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = manifest.Name,
+                Input = manifest.Properties,
+                InputTypeName = manifest.PropertyTypeName,
+                ManifestId = manifest.Id,
+            },
+            TimeProvider.System
+        );
+        ranFrom.Status = WorkQueueStatus.Dispatched;
+        ranFrom.MetadataId = run.Id;
+        await db.Track(ranFrom).ConfigureAwait(false);
+
+        db.RecordedDecisions.Add(
+            new RecordedDecision
+            {
+                MetadataId = run.Id,
+                QuestionKey = "AskAfreshLane",
+                Occurrence = 0,
+                Kind = "choice",
+                Question = """{"text":"Which lane?"}""",
+                Answer = """{"choice":"Fast"}""",
+                Fingerprint = "fingerprint",
+                DecidedAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5),
+            }
+        );
+        await db.SaveChanges(default).ConfigureAwait(false);
+        return run.Id;
     }
 
     private async Task<long> SeedDeadLetterAsync(Manifest manifest)
