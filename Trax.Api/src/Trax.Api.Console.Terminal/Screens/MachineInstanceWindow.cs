@@ -59,9 +59,10 @@ internal sealed class MachineInstanceWindow : Window
         {
             if (!e.Value)
             {
-                // The token reads as cancelled once CancelAsync returns; its callbacks run on the thread pool.
+                // Cancelled inline, before Run returns and the window is disposed: disposing the source drops
+                // callbacks CancelAsync has not run yet, and the read still out would never hear of it.
                 if (!_open.IsCancellationRequested)
-                    _ = _open.CancelAsync();
+                    _open.Cancel(throwOnFirstException: false);
             }
             else if (_stream is null)
                 Start();

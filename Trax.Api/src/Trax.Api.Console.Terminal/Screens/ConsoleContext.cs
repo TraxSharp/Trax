@@ -54,7 +54,8 @@ internal sealed class ConsoleContext(
 
     /// <summary>Stops the work that follows <see cref="Closed"/>.</summary>
     /// <remarks>
-    /// <see cref="Closed"/> reads as cancelled once this returns; what was registered on it runs on the thread pool.
+    /// What was registered on <see cref="Closed"/> has run by the time this returns, so a window linked to it is
+    /// cancelled before anything disposes it.
     /// </remarks>
-    public void Close() => _ = _closed.CancelAsync();
+    public void Close() => _closed.Cancel(throwOnFirstException: false);
 }
