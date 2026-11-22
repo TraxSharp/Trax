@@ -107,7 +107,12 @@ public partial class ApiDashboardPackageTests
             .ToList();
     }
 
-    // Packs the project as this test run built it, the way CI packs after its build.
+    // Packs the project as this test run built it, the way CI packs after its build. Package
+    // validation is off: it reads the reference assemblies of the projects this one references,
+    // and a build of Trax.Api.slnx builds the ones outside the solution (Trax.Effect and the other
+    // upstream folders) in their default configuration, not this one, so a pack of the project on
+    // its own looks for files that were never built. CI's pack of the solution validates the
+    // package; this test checks what it carries.
     private async Task<string> PackAndUnpackAsync()
     {
         var project = Path.Combine(
@@ -127,7 +132,8 @@ public partial class ApiDashboardPackageTests
                 BuildConfiguration(),
                 "--output",
                 packages,
-                "-p:Version=0.0.0-packtest"
+                "-p:Version=0.0.0-packtest",
+                "-p:EnablePackageValidation=false"
             )
             .ConfigureAwait(false);
         exitCode.Should().Be(0, output);
