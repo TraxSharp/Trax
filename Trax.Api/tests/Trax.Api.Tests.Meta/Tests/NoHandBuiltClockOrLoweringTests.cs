@@ -16,7 +16,10 @@ namespace Trax.Api.Tests.Meta.Tests;
 ///
 /// <para>Enforces <c>Trax.Docs/adr/0061-analyzer-rules-are-a-vendors-default-set-every-one-an-error.md</c>.</para>
 /// </remarks>
-[Property("adr", "Trax.Docs/adr/0061-analyzer-rules-are-a-vendors-default-set-every-one-an-error.md")]
+[Property(
+    "adr",
+    "Trax.Docs/adr/0061-analyzer-rules-are-a-vendors-default-set-every-one-an-error.md"
+)]
 [TestFixture]
 public partial class NoHandBuiltClockOrLoweringTests
 {
