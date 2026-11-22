@@ -83,22 +83,7 @@ public static class SignalRHubEndpointExtensions
     {
         ArgumentNullException.ThrowIfNull(configure);
 
-        if (
-            endpoints.ServiceProvider.GetService<
-                IHubContext<TraxTrainEventHub, ITraxTrainEventClient>
-            >()
-            is null
-        )
-        {
-            throw new InvalidOperationException(
-                "MapTraxTrainEventHub() requires SignalR services. "
-                    + "Call services.AddSignalR() on the host before building the application, e.g.:\n"
-                    + "    builder.Services.AddSignalR();\n"
-                    + "    builder.Services.AddTrax(t => t.AddEffects(e => e.UseBroadcaster(b => b.UseSignalRHub())));\n"
-                    + "    var app = builder.Build();\n"
-                    + "    app.MapTraxTrainEventHub(hub => hub.RequireAuthorization());"
-            );
-        }
+        RequireSignalR(endpoints);
 
         var options = new TraxTrainEventHubOptions();
         configure(options);
@@ -127,6 +112,54 @@ public static class SignalRHubEndpointExtensions
             }
         );
 
+        RefuseForeignOrigins(hub, posture);
+
+        if (posture.AllowAnonymous)
+        {
+            hub.AllowAnonymous();
+            endpoints
+                .ServiceProvider.GetService<ILoggerFactory>()
+                ?.CreateLogger(typeof(SignalRHubEndpointExtensions).FullName.NotNull())
+                .LogWarning(
+                    "The Trax train-event hub at {Path} is mapped with AllowAnonymous(): any client that "
+                        + "can reach it receives every train's lifecycle events.",
+                    path
+                );
+            return hub;
+        }
+
+        ApplyAuthorization(hub, posture, fallback);
+
+        return hub;
+    }
+
+    // Refuses to map the hub on a host without SignalR services.
+    private static void RequireSignalR(IEndpointRouteBuilder endpoints)
+    {
+        if (
+            endpoints.ServiceProvider.GetService<
+                IHubContext<TraxTrainEventHub, ITraxTrainEventClient>
+            >()
+            is null
+        )
+        {
+            throw new InvalidOperationException(
+                "MapTraxTrainEventHub() requires SignalR services. "
+                    + "Call services.AddSignalR() on the host before building the application, e.g.:\n"
+                    + "    builder.Services.AddSignalR();\n"
+                    + "    builder.Services.AddTrax(t => t.AddEffects(e => e.UseBroadcaster(b => b.UseSignalRHub())));\n"
+                    + "    var app = builder.Build();\n"
+                    + "    app.MapTraxTrainEventHub(hub => hub.RequireAuthorization());"
+            );
+        }
+    }
+
+    // Refuses a browser request from an origin the posture does not allow.
+    private static void RefuseForeignOrigins(
+        HubEndpointConventionBuilder hub,
+        TrainEventHubPosture posture
+    )
+    {
         // A browser request from an origin the host does not serve or allow is refused before it
         // reaches the hub, on negotiate and on every transport, whatever its credentials.
         var allowedOrigins = posture.AllowedOrigins;
@@ -145,21 +178,15 @@ public static class SignalRHubEndpointExtensions
                 return Task.CompletedTask;
             };
         });
+    }
 
-        if (posture.AllowAnonymous)
-        {
-            hub.AllowAnonymous();
-            endpoints
-                .ServiceProvider.GetService<ILoggerFactory>()
-                ?.CreateLogger(typeof(SignalRHubEndpointExtensions).FullName.NotNull())
-                .LogWarning(
-                    "The Trax train-event hub at {Path} is mapped with AllowAnonymous(): any client that "
-                        + "can reach it receives every train's lifecycle events.",
-                    path
-                );
-            return hub;
-        }
-
+    // Applies the posture's policies and roles to the hub's endpoints.
+    private static void ApplyAuthorization(
+        HubEndpointConventionBuilder hub,
+        TrainEventHubPosture posture,
+        AuthorizationPolicy? fallback
+    )
+    {
         if (posture.RequireAuthorization)
         {
             if (posture.Policies.Count == 0)
@@ -179,8 +206,6 @@ public static class SignalRHubEndpointExtensions
             hub.RequireAuthorization(
                 new AuthorizeAttribute { Roles = string.Join(',', posture.Roles) }
             );
-
-        return hub;
     }
 
     /// <summary>

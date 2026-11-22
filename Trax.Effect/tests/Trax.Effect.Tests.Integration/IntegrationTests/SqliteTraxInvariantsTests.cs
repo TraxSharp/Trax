@@ -127,6 +127,16 @@ public class SqliteTraxInvariantsTests
                     forged.ToString(System.Globalization.CultureInfo.InvariantCulture)
                 )
             );
+        AssertRunAndCheckpointDetails(violations, stuck, kept, completed);
+    }
+
+    private static void AssertRunAndCheckpointDetails(
+        IReadOnlyList<TraxInvariantViolation> violations,
+        long stuck,
+        long kept,
+        long completed
+    )
+    {
         violations[0]
             .Detail.Should()
             .Be(

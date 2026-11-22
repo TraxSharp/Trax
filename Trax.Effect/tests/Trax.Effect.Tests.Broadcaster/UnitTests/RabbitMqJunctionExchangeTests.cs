@@ -59,27 +59,10 @@ public class RabbitMqJunctionExchangeTests
     [Test]
     public async Task A_receiver_bound_only_to_the_train_exchange_never_receives_a_junction_event()
     {
-        var options = new RabbitMqBroadcasterOptions
-        {
-            ConnectionString = AmqpUri,
-            SigningKey = TestBroadcastKey.Value,
-            ExchangeName = $"trax.test.junctions.{Guid.NewGuid():N}",
-        };
+        var options = NewOptions();
 
         // What a receiver from before junction events does: one queue, bound to the train exchange.
-        IConnection connection;
-        try
-        {
-            connection = await new ConnectionFactory
-            {
-                Uri = new Uri(AmqpUri),
-            }.CreateConnectionAsync(CancellationToken.None);
-        }
-        catch (Exception ex)
-        {
-            Assert.Ignore($"RabbitMQ not reachable at {AmqpUri}: {ex.Message}");
-            return;
-        }
+        var connection = await ConnectOrIgnoreAsync();
 
         var _ = connection;
         await using var _Disposal = _.ConfigureAwait(false);
@@ -87,48 +70,12 @@ public class RabbitMqJunctionExchangeTests
             cancellationToken: CancellationToken.None
         );
         await using var channelDisposal = channel.ConfigureAwait(false);
-        await channel.ExchangeDeclareAsync(
-            options.ExchangeName,
-            ExchangeType.Fanout,
-            durable: true,
-            cancellationToken: CancellationToken.None
-        );
-        var queue = (
-            await channel.QueueDeclareAsync(
-                string.Empty,
-                durable: false,
-                exclusive: true,
-                autoDelete: true,
-                cancellationToken: CancellationToken.None
-            )
-        ).QueueName;
-        await channel.QueueBindAsync(
-            queue,
-            options.ExchangeName,
-            string.Empty,
-            cancellationToken: CancellationToken.None
-        );
+        var queue = await BindLegacyQueueAsync(channel, options.ExchangeName);
         var legacy = new ConcurrentQueue<TrainLifecycleEventMessage>();
         var legacyGotTrainEvent = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
-        var consumer = new AsyncEventingBasicConsumer(channel);
-        consumer.ReceivedAsync += (_, ea) =>
-        {
-            var message = JsonSerializer
-                .Deserialize<TrainLifecycleEventMessage>(ea.Body.Span)
-                .NotNull();
-            legacy.Enqueue(message);
-            if (string.Equals(message.EventType, "Completed", StringComparison.Ordinal))
-                legacyGotTrainEvent.TrySetResult();
-            return Task.CompletedTask;
-        };
-        await channel.BasicConsumeAsync(
-            queue,
-            autoAck: true,
-            consumer,
-            cancellationToken: CancellationToken.None
-        );
+        await ConsumeLegacyAsync(channel, queue, legacy, legacyGotTrainEvent);
 
         var receiver = new RabbitMqTrainEventReceiver(
             options,
@@ -139,16 +86,7 @@ public class RabbitMqJunctionExchangeTests
         var currentGotBoth = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
-        await receiver.StartAsync(
-            (message, _) =>
-            {
-                current.Enqueue(message.EventType);
-                if (current.Count == 2)
-                    currentGotBoth.TrySetResult();
-                return Task.CompletedTask;
-            },
-            CancellationToken.None
-        );
+        await StartCurrentAsync(receiver, current, currentGotBoth);
 
         var broadcaster = new RabbitMqTrainEventBroadcaster(
             options,
@@ -156,25 +94,7 @@ public class RabbitMqJunctionExchangeTests
         );
         await using (broadcaster.ConfigureAwait(false))
         {
-            // In order, each confirmed by the broker before the next is sent.
-            await broadcaster.PublishAsync(
-                Message("JunctionStarted", junction: true),
-                CancellationToken.None
-            );
-            await broadcaster.PublishAsync(
-                Message("Completed", junction: false),
-                CancellationToken.None
-            );
-            await currentGotBoth.Task.WaitAsync(
-                Timeout,
-                TimeProvider.System,
-                CancellationToken.None
-            );
-            await legacyGotTrainEvent.Task.WaitAsync(
-                Timeout,
-                TimeProvider.System,
-                CancellationToken.None
-            );
+            await PublishBothAndWaitAsync(broadcaster, currentGotBoth, legacyGotTrainEvent);
         }
 
         current.Should().BeEquivalentTo(["JunctionStarted", "Completed"]);
@@ -187,6 +107,119 @@ public class RabbitMqJunctionExchangeTests
             );
 
         await receiver.StopAsync(CancellationToken.None);
+    }
+
+    private static async Task<IConnection> ConnectOrIgnoreAsync()
+    {
+        try
+        {
+            return await new ConnectionFactory { Uri = new Uri(AmqpUri) }
+                .CreateConnectionAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Assert.Ignore($"RabbitMQ not reachable at {AmqpUri}: {ex.Message}");
+            throw;
+        }
+    }
+
+    // What a receiver from before junction events binds: one queue, on the train exchange.
+    private static async Task<string> BindLegacyQueueAsync(IChannel channel, string exchangeName)
+    {
+        await channel
+            .ExchangeDeclareAsync(
+                exchangeName,
+                ExchangeType.Fanout,
+                durable: true,
+                cancellationToken: CancellationToken.None
+            )
+            .ConfigureAwait(false);
+        var queue = (
+            await channel
+                .QueueDeclareAsync(
+                    string.Empty,
+                    durable: false,
+                    exclusive: true,
+                    autoDelete: true,
+                    cancellationToken: CancellationToken.None
+                )
+                .ConfigureAwait(false)
+        ).QueueName;
+        await channel
+            .QueueBindAsync(
+                queue,
+                exchangeName,
+                string.Empty,
+                cancellationToken: CancellationToken.None
+            )
+            .ConfigureAwait(false);
+        return queue;
+    }
+
+    private static async Task ConsumeLegacyAsync(
+        IChannel channel,
+        string queue,
+        ConcurrentQueue<TrainLifecycleEventMessage> legacy,
+        TaskCompletionSource legacyGotTrainEvent
+    )
+    {
+        var consumer = new AsyncEventingBasicConsumer(channel);
+        consumer.ReceivedAsync += (_, ea) =>
+        {
+            var message = JsonSerializer
+                .Deserialize<TrainLifecycleEventMessage>(ea.Body.Span)
+                .NotNull();
+            legacy.Enqueue(message);
+            if (string.Equals(message.EventType, "Completed", StringComparison.Ordinal))
+                legacyGotTrainEvent.TrySetResult();
+            return Task.CompletedTask;
+        };
+        await channel
+            .BasicConsumeAsync(
+                queue,
+                autoAck: true,
+                consumer,
+                cancellationToken: CancellationToken.None
+            )
+            .ConfigureAwait(false);
+    }
+
+    private static Task StartCurrentAsync(
+        RabbitMqTrainEventReceiver receiver,
+        ConcurrentQueue<string> current,
+        TaskCompletionSource currentGotBoth
+    ) =>
+        receiver.StartAsync(
+            (message, _) =>
+            {
+                current.Enqueue(message.EventType);
+                if (current.Count == 2)
+                    currentGotBoth.TrySetResult();
+                return Task.CompletedTask;
+            },
+            CancellationToken.None
+        );
+
+    private static async Task PublishBothAndWaitAsync(
+        RabbitMqTrainEventBroadcaster broadcaster,
+        TaskCompletionSource currentGotBoth,
+        TaskCompletionSource legacyGotTrainEvent
+    )
+    {
+        // In order, each confirmed by the broker before the next is sent.
+        await broadcaster
+            .PublishAsync(Message("JunctionStarted", junction: true), CancellationToken.None)
+            .ConfigureAwait(false);
+        await broadcaster
+            .PublishAsync(Message("Completed", junction: false), CancellationToken.None)
+            .ConfigureAwait(false);
+        await currentGotBoth
+            .Task.WaitAsync(Timeout, TimeProvider.System, CancellationToken.None)
+            .ConfigureAwait(false);
+        await legacyGotTrainEvent
+            .Task.WaitAsync(Timeout, TimeProvider.System, CancellationToken.None)
+            .ConfigureAwait(false);
     }
 
     private static RabbitMqBroadcasterOptions NewOptions() =>
@@ -279,39 +312,7 @@ public class RabbitMqJunctionExchangeTests
             cancellationToken: CancellationToken.None
         );
         await using var channelDisposal = channel.ConfigureAwait(false);
-        // Each published where it does not belong, then each where it does, in that order.
-        await Publish(
-            channel,
-            options.ExchangeName,
-            Message("JunctionStarted", junction: true) with
-            {
-                ExternalId = "misplaced-step",
-            }
-        );
-        await Publish(
-            channel,
-            options.EffectiveJunctionExchangeName,
-            Message("Completed", junction: false) with
-            {
-                ExternalId = "misplaced-train",
-            }
-        );
-        await Publish(
-            channel,
-            options.ExchangeName,
-            Message("Completed", junction: false) with
-            {
-                ExternalId = "train",
-            }
-        );
-        await Publish(
-            channel,
-            options.EffectiveJunctionExchangeName,
-            Message("JunctionStarted", junction: true) with
-            {
-                ExternalId = "step",
-            }
-        );
+        await PublishMisplacedThenPlacedAsync(channel, options);
         await gotBoth.Task.WaitAsync(Timeout, TimeProvider.System, CancellationToken.None);
 
         received
@@ -321,6 +322,50 @@ public class RabbitMqJunctionExchangeTests
                 $"an event from an exchange that is not its own is dropped. See {Adr}."
             );
         await receiver.StopAsync(CancellationToken.None);
+    }
+
+    private static async Task PublishMisplacedThenPlacedAsync(
+        IChannel channel,
+        RabbitMqBroadcasterOptions options
+    )
+    {
+        // Each published where it does not belong, then each where it does, in that order.
+        await Publish(
+                channel,
+                options.ExchangeName,
+                Message("JunctionStarted", junction: true) with
+                {
+                    ExternalId = "misplaced-step",
+                }
+            )
+            .ConfigureAwait(false);
+        await Publish(
+                channel,
+                options.EffectiveJunctionExchangeName,
+                Message("Completed", junction: false) with
+                {
+                    ExternalId = "misplaced-train",
+                }
+            )
+            .ConfigureAwait(false);
+        await Publish(
+                channel,
+                options.ExchangeName,
+                Message("Completed", junction: false) with
+                {
+                    ExternalId = "train",
+                }
+            )
+            .ConfigureAwait(false);
+        await Publish(
+                channel,
+                options.EffectiveJunctionExchangeName,
+                Message("JunctionStarted", junction: true) with
+                {
+                    ExternalId = "step",
+                }
+            )
+            .ConfigureAwait(false);
     }
 
     [Test]

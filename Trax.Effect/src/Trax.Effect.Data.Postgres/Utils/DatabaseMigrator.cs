@@ -134,15 +134,7 @@ public static partial class DatabaseMigrator
         };
         var migrationConnectionString = migrationConnection.ConnectionString;
 
-        // Only the script session carries the lock timeout. The advisory-lock session polls and
-        // never waits on a table lock.
-        var lockTimeoutMs = (long)policy.LockTimeout.TotalMilliseconds;
-        migrationConnection.Options = string.IsNullOrWhiteSpace(migrationConnection.Options)
-            ? string.Create(CultureInfo.InvariantCulture, $"-c lock_timeout={lockTimeoutMs}")
-            : string.Create(
-                CultureInfo.InvariantCulture,
-                $"{migrationConnection.Options} -c lock_timeout={lockTimeoutMs}"
-            );
+        AddLockTimeout(migrationConnection, policy);
         var scriptConnectionString = migrationConnection.ConnectionString;
 
         try
@@ -168,32 +160,8 @@ public static partial class DatabaseMigrator
                     scriptConnectionString = migrationConnection.ConnectionString;
                 }
 
-                for (var attempt = 1; ; attempt++)
-                {
-                    // Again before every attempt: a concurrent index build that gave up on its
-                    // lock leaves its index invalid.
-                    await DropInvalidIndexes(lockConnection).ConfigureAwait(false);
-
-                    var result = CreateEngineWithEmbeddedScripts(scriptConnectionString)
-                        .PerformUpgrade();
-
-                    if (result.Successful)
-                        break;
-
-                    if (
-                        !await IsRetryableAsync(result.Error).ConfigureAwait(false)
-                        || attempt >= policy.Attempts
-                    )
-                        ExceptionDispatchInfo.Capture(result.Error).Throw();
-
-                    logger?.LogWarning(
-                        "A Trax migration script gave up waiting for a table lock, or met a duplicate while building a unique index (attempt {Attempt} of {Attempts}); running the pending scripts again.",
-                        attempt,
-                        policy.Attempts
-                    );
-                    if (policy.Backoff > TimeSpan.Zero)
-                        await Task.Delay(policy.Backoff * attempt, clock).ConfigureAwait(false);
-                }
+                await RunScripts(lockConnection, scriptConnectionString, policy, logger, clock)
+                    .ConfigureAwait(false);
             }
             finally
             {
@@ -205,6 +173,59 @@ public static partial class DatabaseMigrator
         {
             logger?.LogError(e, "Migrating the Trax database failed.");
             throw;
+        }
+    }
+
+    // Only the script session carries the lock timeout. The advisory-lock session polls and
+    // never waits on a table lock.
+    private static void AddLockTimeout(
+        NpgsqlConnectionStringBuilder migrationConnection,
+        MigrationLockPolicy policy
+    )
+    {
+        var lockTimeoutMs = (long)policy.LockTimeout.TotalMilliseconds;
+        migrationConnection.Options = string.IsNullOrWhiteSpace(migrationConnection.Options)
+            ? string.Create(CultureInfo.InvariantCulture, $"-c lock_timeout={lockTimeoutMs}")
+            : string.Create(
+                CultureInfo.InvariantCulture,
+                $"{migrationConnection.Options} -c lock_timeout={lockTimeoutMs}"
+            );
+    }
+
+    // Runs the pending scripts, again after a retryable failure, until they succeed or the
+    // policy's attempts are spent.
+    private static async Task RunScripts(
+        NpgsqlConnection lockConnection,
+        string scriptConnectionString,
+        MigrationLockPolicy policy,
+        ILogger? logger,
+        TimeProvider clock
+    )
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            // Again before every attempt: a concurrent index build that gave up on its
+            // lock leaves its index invalid.
+            await DropInvalidIndexes(lockConnection).ConfigureAwait(false);
+
+            var result = CreateEngineWithEmbeddedScripts(scriptConnectionString).PerformUpgrade();
+
+            if (result.Successful)
+                return;
+
+            if (
+                !await IsRetryableAsync(result.Error).ConfigureAwait(false)
+                || attempt >= policy.Attempts
+            )
+                ExceptionDispatchInfo.Capture(result.Error).Throw();
+
+            logger?.LogWarning(
+                "A Trax migration script gave up waiting for a table lock, or met a duplicate while building a unique index (attempt {Attempt} of {Attempts}); running the pending scripts again.",
+                attempt,
+                policy.Attempts
+            );
+            if (policy.Backoff > TimeSpan.Zero)
+                await Task.Delay(policy.Backoff * attempt, clock).ConfigureAwait(false);
         }
     }
 

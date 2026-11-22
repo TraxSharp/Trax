@@ -151,19 +151,7 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        if (TooManyQuestions(request.Questions.Count) is { } tooMany)
-            throw Refused(request, tooMany, FailureClass.Permanent);
-
-        string body;
-
-        try
-        {
-            body = Request(request).ToJsonString();
-        }
-        catch (UnsendableException unsendable)
-        {
-            throw Refused(request, unsendable.Message, FailureClass.Permanent);
-        }
+        var body = RequestBody(request);
 
         for (var attempt = 1; ; attempt++)
         {
@@ -180,44 +168,12 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
 
             try
             {
-                using var message = new HttpRequestMessage(HttpMethod.Post, _options.Endpoint)
-                {
-                    Content = new StringContent(body, Encoding.UTF8, "application/json"),
-                };
+                var sent = await SendOnce(request, body, timeout.Token).ConfigureAwait(false);
+                if (sent.Result is { } result)
+                    return result;
 
-                if (_options.Bearer is { } key)
-                    message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
-
-                using var response = await _http
-                    .SendAsync(message, timeout.Token)
-                    .ConfigureAwait(false);
-
-                if (response.IsSuccessStatusCode)
-                    return Read(await Body(response, timeout.Token).ConfigureAwait(false), request);
-
-                var status = (int)response.StatusCode;
-
-                // Not followed, even by a client that would: the endpoint is the one configured.
-                if (status is >= 300 and < 400)
-                    throw Refused(
-                        request,
-                        string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"the model answered {status} {response.ReasonPhrase}, a redirect, and "
-                        ) + "redirects are not followed: the endpoint is the one configured",
-                        FailureClass.Permanent
-                    );
-
-                failure =
-                    string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"the model answered {status} {response.ReasonPhrase} ({Classify(status)})"
-                    ) + RequestId(response);
-
-                if (!IsRetryable(response.StatusCode))
-                    throw Refused(request, failure, FailureClass.Permanent);
-
-                retryAfter = RetryAfter(response.Headers.RetryAfter);
+                failure = sent.Failure;
+                retryAfter = sent.RetryAfter;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -225,20 +181,11 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
             }
             catch (OperationCanceledException)
             {
-                failure = string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"the model did not answer within {_options.AttemptTimeout.TotalSeconds:0.#}s"
-                );
+                failure = TimedOut();
             }
             catch (HttpRequestException e) when (CannotReach(e.HttpRequestError))
             {
-                // A name that does not resolve or a certificate that is not trusted is a
-                // configuration to fix, not a blip to wait out.
-                throw Refused(
-                    request,
-                    $"the model's endpoint cannot be reached as configured: {e.Message}",
-                    FailureClass.Permanent
-                );
+                throw Unreachable(request, e);
             }
             catch (HttpRequestException e)
             {
@@ -254,26 +201,118 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
                 _slots?.Release();
             }
 
-            if (attempt >= _options.MaxAttempts)
-                throw Refused(
-                    request,
-                    string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"{failure}, after {attempt} attempt{(attempt == 1 ? "" : "s")}"
-                    ),
-                    FailureClass.Transient
-                );
-
-            if (retryAfter > _options.MaxRetryDelay)
-                throw Refused(
-                    request,
-                    $"{failure}, and it asked to be retried in {Seconds(retryAfter.Value)}, "
-                        + $"longer than MaxRetryDelay ({Seconds(_options.MaxRetryDelay)})",
-                    FailureClass.Transient
-                );
+            ThrowIfNoRetry(request, failure, attempt, retryAfter);
 
             await Wait(Delay(attempt, retryAfter), cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private string TimedOut() =>
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"the model did not answer within {_options.AttemptTimeout.TotalSeconds:0.#}s"
+        );
+
+    // A name that does not resolve or a certificate that is not trusted is a
+    // configuration to fix, not a blip to wait out.
+    private static DecisionServiceException Unreachable(
+        DecisionRequest request,
+        HttpRequestException e
+    ) =>
+        Refused(
+            request,
+            $"the model's endpoint cannot be reached as configured: {e.Message}",
+            FailureClass.Permanent
+        );
+
+    // The request body, or a refusal when the model would refuse the request whatever the state.
+    private string RequestBody(DecisionRequest request)
+    {
+        if (TooManyQuestions(request.Questions.Count) is { } tooMany)
+            throw Refused(request, tooMany, FailureClass.Permanent);
+
+        try
+        {
+            return Request(request).ToJsonString();
+        }
+        catch (UnsendableException unsendable)
+        {
+            throw Refused(request, unsendable.Message, FailureClass.Permanent);
+        }
+    }
+
+    // One attempt: the model's answer, or why the attempt failed and when the model asked to be
+    // retried. A failure no retry can fix is thrown as a refusal.
+    private async Task<(DecisionResult? Result, string Failure, TimeSpan? RetryAfter)> SendOnce(
+        DecisionRequest request,
+        string body,
+        CancellationToken timeout
+    )
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Post, _options.Endpoint)
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json"),
+        };
+
+        if (_options.Bearer is { } key)
+            message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
+
+        using var response = await _http.SendAsync(message, timeout).ConfigureAwait(false);
+
+        if (response.IsSuccessStatusCode)
+            return (Read(await Body(response, timeout).ConfigureAwait(false), request), "", null);
+
+        var status = (int)response.StatusCode;
+
+        // Not followed, even by a client that would: the endpoint is the one configured.
+        if (status is >= 300 and < 400)
+            throw Refused(
+                request,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"the model answered {status} {response.ReasonPhrase}, a redirect, and "
+                ) + "redirects are not followed: the endpoint is the one configured",
+                FailureClass.Permanent
+            );
+
+        var failure =
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"the model answered {status} {response.ReasonPhrase} ({Classify(status)})"
+            ) + RequestId(response);
+
+        if (!IsRetryable(response.StatusCode))
+            throw Refused(request, failure, FailureClass.Permanent);
+
+        return (null, failure, RetryAfter(response.Headers.RetryAfter));
+    }
+
+    // Refuses the request once its attempts are spent, or when the model asked to be retried later
+    // than MaxRetryDelay allows.
+    private void ThrowIfNoRetry(
+        DecisionRequest request,
+        string failure,
+        int attempt,
+        TimeSpan? retryAfter
+    )
+    {
+        if (attempt >= _options.MaxAttempts)
+            throw Refused(
+                request,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{failure}, after {attempt} attempt{(attempt == 1 ? "" : "s")}"
+                ),
+                FailureClass.Transient
+            );
+
+        if (retryAfter > _options.MaxRetryDelay)
+            throw Refused(
+                request,
+                $"{failure}, and it asked to be retried in {Seconds(retryAfter.Value)}, "
+                    + $"longer than MaxRetryDelay ({Seconds(_options.MaxRetryDelay)})",
+                FailureClass.Transient
+            );
     }
 
     /// <inheritdoc />

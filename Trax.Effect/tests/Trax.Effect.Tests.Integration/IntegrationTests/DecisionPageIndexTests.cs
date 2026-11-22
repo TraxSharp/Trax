@@ -23,6 +23,26 @@ namespace Trax.Effect.Tests.Integration.IntegrationTests;
 [NonParallelizable]
 public class DecisionPageIndexTests : TestSetup
 {
+    // 20,000 runs of four decisions each, then one run of 200, analyzed.
+    private static readonly string SeedSql = """
+        INSERT INTO trax.metadata (external_id, name, train_state, start_time)
+        SELECT md5(g::text), 'Decision.Page', 'completed', now()
+        FROM generate_series(1, 20001) AS g;
+
+        INSERT INTO trax.decision (metadata_id, question_key, occurrence, fingerprint, kind, question, answer)
+        SELECT m.id, 'q' || o, 1, 'f', 'model', '{}', '{}'
+        FROM trax.metadata AS m CROSS JOIN generate_series(1, 4) AS o
+        WHERE m.name = 'Decision.Page' AND m.external_id <> md5('20001');
+
+        INSERT INTO trax.decision (metadata_id, question_key, occurrence, fingerprint, kind, question, answer)
+        SELECT m.id, 'q', o, 'f', 'model', '{}', '{}'
+        FROM trax.metadata AS m CROSS JOIN generate_series(1, 200) AS o
+        WHERE m.external_id = md5('20001');
+
+        ANALYZE trax.metadata;
+        ANALYZE trax.decision;
+        """;
+
     [Test]
     public async Task A_runs_first_page_of_decisions_reads_the_run_and_id_index()
     {
@@ -39,28 +59,7 @@ public class DecisionPageIndexTests : TestSetup
         // primary key as if the run's rows were spread evenly through it, so the walk's estimate
         // falls as the run grows; at 2,000 rows it tied with the index on a freshly loaded table
         // and the choice turned on ANALYZE's sample. At 200 the index wins by several times.
-        await Execute(
-            connection,
-            npgsqlTransaction,
-            """
-            INSERT INTO trax.metadata (external_id, name, train_state, start_time)
-            SELECT md5(g::text), 'Decision.Page', 'completed', now()
-            FROM generate_series(1, 20001) AS g;
-
-            INSERT INTO trax.decision (metadata_id, question_key, occurrence, fingerprint, kind, question, answer)
-            SELECT m.id, 'q' || o, 1, 'f', 'model', '{}', '{}'
-            FROM trax.metadata AS m CROSS JOIN generate_series(1, 4) AS o
-            WHERE m.name = 'Decision.Page' AND m.external_id <> md5('20001');
-
-            INSERT INTO trax.decision (metadata_id, question_key, occurrence, fingerprint, kind, question, answer)
-            SELECT m.id, 'q', o, 'f', 'model', '{}', '{}'
-            FROM trax.metadata AS m CROSS JOIN generate_series(1, 200) AS o
-            WHERE m.external_id = md5('20001');
-
-            ANALYZE trax.metadata;
-            ANALYZE trax.decision;
-            """
-        );
+        await Execute(connection, npgsqlTransaction, SeedSql);
         var runId = await Scalar(
             connection,
             npgsqlTransaction,

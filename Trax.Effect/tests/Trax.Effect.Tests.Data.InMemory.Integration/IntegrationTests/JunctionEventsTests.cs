@@ -112,6 +112,18 @@ public class JunctionEventsTests
                 && e.FailureReason == null
             );
 
+        AssertDecisionAndLoadSteps(events);
+
+        Broadcaster
+            .For(metadataId)
+            .Select(e => e.EventType)
+            .Should()
+            .Equal(events.Select(e => e.EventType), "the same steps go over the transport");
+    }
+
+    // The decision, the route it took, and the Load junction's start and end.
+    private static void AssertDecisionAndLoadSteps(List<TrainLifecycleEventMessage> events)
+    {
         var decided = events
             .Single(e => string.Equals(e.EventType, "Decided", StringComparison.Ordinal))
             .Junction.NotNull();
@@ -140,12 +152,6 @@ public class JunctionEventsTests
         load[1].Junction.NotNull().EndedAt.Should().NotBeNull();
         load[1].Junction.NotNull().DurationMs.Should().BeGreaterThanOrEqualTo(0);
         load[1].Junction.NotNull().StartedAt.Should().Be(load[0].Junction.NotNull().StartedAt);
-
-        Broadcaster
-            .For(metadataId)
-            .Select(e => e.EventType)
-            .Should()
-            .Equal(events.Select(e => e.EventType), "the same steps go over the transport");
     }
 
     [Test]

@@ -45,35 +45,7 @@ public partial class NoFixedTaskDelayTests
             if (file.EndsWith("NoFixedTaskDelayTests.cs", StringComparison.Ordinal))
                 continue;
 
-            var raw = File.ReadAllText(file);
-            var lines = raw.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
-            var stripped = SourceText.StripCommentsAndStrings(raw);
-            var strippedLines = stripped
-                .Replace("\r\n", "\n", StringComparison.Ordinal)
-                .Split('\n');
-
-            var rel = RepoRoot.Relative(file).Replace('\\', '/');
-            var count = 0;
-
-            for (var i = 0; i < strippedLines.Length; i++)
-            {
-                if (!DelayCall.IsMatch(strippedLines[i]))
-                    continue;
-                if (HasJustification(lines, i))
-                    continue;
-
-                count++;
-                if (!BaselineOffenders.ContainsKey(rel))
-                    newOffenders.Add(
-                        string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"{rel}:{i + 1}  -> {lines[i].Trim()}"
-                        )
-                    );
-            }
-
-            if (count > 0)
-                fileOffenderCounts[rel] = count;
+            ScanFile(file, File.ReadAllText(file), newOffenders, fileOffenderCounts);
         }
 
         // 1. No new fixed delays in files not on the baseline.
@@ -111,6 +83,43 @@ public partial class NoFixedTaskDelayTests
                     + "entry at zero, so the cleanup cannot be undone quietly. Differences:\n  "
                     + string.Join("\n  ", regressions)
             );
+    }
+
+    // Records each unjustified fixed delay in the file: a new offender when the file is not on the
+    // baseline, and the file's count either way.
+    private static void ScanFile(
+        string file,
+        string raw,
+        List<string> newOffenders,
+        Dictionary<string, int> fileOffenderCounts
+    )
+    {
+        var lines = raw.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        var stripped = SourceText.StripCommentsAndStrings(raw);
+        var strippedLines = stripped.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+
+        var rel = RepoRoot.Relative(file).Replace('\\', '/');
+        var count = 0;
+
+        for (var i = 0; i < strippedLines.Length; i++)
+        {
+            if (!DelayCall.IsMatch(strippedLines[i]))
+                continue;
+            if (HasJustification(lines, i))
+                continue;
+
+            count++;
+            if (!BaselineOffenders.ContainsKey(rel))
+                newOffenders.Add(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{rel}:{i + 1}  -> {lines[i].Trim()}"
+                    )
+                );
+        }
+
+        if (count > 0)
+            fileOffenderCounts[rel] = count;
     }
 
     private static bool HasJustification(string[] lines, int delayLineIndex)

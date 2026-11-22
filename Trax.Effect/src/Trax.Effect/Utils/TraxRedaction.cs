@@ -286,28 +286,7 @@ public static class TraxRedaction
             .Where(a => !a.IsDynamic && !IsFramework(a))
             .ToList();
 
-        var references = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-        foreach (var assembly in assemblies)
-        {
-            try
-            {
-                var name = assembly.GetName().Name;
-                if (name is null)
-                    continue;
-                if (!references.TryGetValue(name, out var list))
-                    references[name] = list = [];
-                list.AddRange(
-                    assembly.GetReferencedAssemblies().Select(r => r.Name).OfType<string>()
-                );
-            }
-            catch
-            {
-                // An assembly whose references cannot be read cannot be told apart; it is
-                // looked into below as if it referenced Trax.Effect.
-                if (assembly.GetName().Name is { } name)
-                    references[name] = [EffectAssembly];
-            }
-        }
+        var references = ReferencesOf(assemblies);
 
         var reaching = new Dictionary<string, bool>(StringComparer.Ordinal);
 
@@ -392,6 +371,41 @@ public static class TraxRedaction
         if (IsFramework(type.Assembly))
             return HeldByCollection(type, seen, loaded);
 
+        return DeclaresSensitiveMember(type, seen, loaded);
+    }
+
+    // The names of the assemblies each of the given assemblies references.
+    private static Dictionary<string, List<string>> ReferencesOf(List<Assembly> assemblies)
+    {
+        var references = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var assembly in assemblies)
+        {
+            try
+            {
+                var name = assembly.GetName().Name;
+                if (name is null)
+                    continue;
+                if (!references.TryGetValue(name, out var list))
+                    references[name] = list = [];
+                list.AddRange(
+                    assembly.GetReferencedAssemblies().Select(r => r.Name).OfType<string>()
+                );
+            }
+            catch
+            {
+                // An assembly whose references cannot be read cannot be told apart; it is
+                // looked into below as if it referenced Trax.Effect.
+                if (assembly.GetName().Name is { } name)
+                    references[name] = [EffectAssembly];
+            }
+        }
+        return references;
+    }
+
+    // Whether the type or a base type declares a member marked [TraxSensitive], a property whose
+    // constructor parameter or interface property is marked, or a field whose type reaches a mark.
+    private static bool DeclaresSensitiveMember(Type type, HashSet<Type> seen, Type[] loaded)
+    {
         for (
             var current = type;
             current is not null && current != typeof(object);

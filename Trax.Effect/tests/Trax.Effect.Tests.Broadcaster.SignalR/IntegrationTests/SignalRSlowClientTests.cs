@@ -46,27 +46,12 @@ public class SignalRSlowClientTests
     [Test]
     public async Task A_client_that_stops_reading_must_not_stall_the_lifecycle_hook()
     {
-        var builder = WebApplication.CreateBuilder();
-        builder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0");
-        builder.Services.AddSignalR();
-        var registry = new EffectRegistry();
-        builder.Services.AddSingleton<IEffectRegistry>(registry);
-        new TraxBuilder(builder.Services, registry).AddEffects(effects =>
-            effects.UseBroadcaster(b => b.UseSignalRHub())
-        );
-        var app = builder.Build();
+        var app = BuildApp();
         await using var appDisposal = app.ConfigureAwait(false);
         app.MapTraxTrainEventHub(hub => hub.AllowAnonymous());
         await app.StartAsync(CancellationToken.None);
 
-        var address = app
-            .Services.GetRequiredService<IServer>()
-            .Features.Get<IServerAddressesFeature>()
-            .NotNull()
-            .Addresses.First();
-        var hubUri = new Uri(
-            address.Replace("http://", "ws://", StringComparison.Ordinal) + "/hubs/trax-events"
-        );
+        var hubUri = HubUri(app);
 
         // Connect and complete the SignalR handshake, then stop reading from the socket.
         using var socket = new ClientWebSocket();
@@ -110,5 +95,30 @@ public class SignalRSlowClientTests
 
         socket.Abort();
         await app.StopAsync(CancellationToken.None);
+    }
+
+    private static WebApplication BuildApp()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0");
+        builder.Services.AddSignalR();
+        var registry = new EffectRegistry();
+        builder.Services.AddSingleton<IEffectRegistry>(registry);
+        new TraxBuilder(builder.Services, registry).AddEffects(effects =>
+            effects.UseBroadcaster(b => b.UseSignalRHub())
+        );
+        return builder.Build();
+    }
+
+    private static Uri HubUri(WebApplication app)
+    {
+        var address = app
+            .Services.GetRequiredService<IServer>()
+            .Features.Get<IServerAddressesFeature>()
+            .NotNull()
+            .Addresses.First();
+        return new Uri(
+            address.Replace("http://", "ws://", StringComparison.Ordinal) + "/hubs/trax-events"
+        );
     }
 }

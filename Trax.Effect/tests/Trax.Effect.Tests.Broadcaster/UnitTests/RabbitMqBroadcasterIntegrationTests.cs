@@ -146,19 +146,7 @@ public class RabbitMqBroadcasterIntegrationTests
             return;
         }
 
-        var message = new TrainLifecycleEventMessage(
-            MetadataId: 0,
-            ExternalId: string.Empty,
-            TrainName: string.Empty,
-            TrainState: string.Empty,
-            Timestamp: TestTime.UtcDateTime,
-            FailureJunction: null,
-            FailureReason: null,
-            EventType: TrainLifecycleEventMessage.DataChangedEventType,
-            Executor: "SchedulerProc",
-            Output: null,
-            ChangeDomain: "WorkQueue"
-        );
+        var message = DataChangedMessage();
         await broadcaster.PublishAsync(message, CancellationToken.None);
 
         // determinism: the wait is on the TaskCompletionSource; the delay is only the
@@ -311,50 +299,13 @@ public class RabbitMqBroadcasterIntegrationTests
         // A failed assertion must still release the handler, or disposing the receiver waits on it.
         try
         {
-            for (var i = 0; i < 10; i++)
-                await broadcaster.PublishAsync(
-                    SampleMessage(string.Create(CultureInfo.InvariantCulture, $"m{i}")),
-                    CancellationToken.None
-                );
-
-            // determinism: the wait is on the TaskCompletionSource; the delay is only the ceiling.
-            (
-                await Task.WhenAny(
-                    entered.Task,
-                    // determinism: the fail-safe ceiling named above, not a wait.
-                    Task.Delay(TimeSpan.FromSeconds(10), TimeProvider.System)
-                )
-            )
-                .Should()
-                .Be(entered.Task);
+            await PublishTenAndAwaitTheFirstAsync(broadcaster, entered);
 
             // The queue is exclusive to the receiver's connection, so its depth is read on the
             // receiver's own channel. With the handler held, the broker may hand out only the
             // prefetch (2); the other 8 stay ready on the broker. Without a prefetch limit it would
             // push all 10 into the process and report 0.
-            var channel = (IChannel)
-                typeof(RabbitMqTrainEventReceiver)
-                    .GetField("_channel", BindingFlags.NonPublic | BindingFlags.Instance)
-                    .NotNull()
-                    .GetValue(receiver)
-                    .NotNull();
-            var queue = (string)
-                typeof(RabbitMqTrainEventReceiver)
-                    .GetField("_queueName", BindingFlags.NonPublic | BindingFlags.Instance)
-                    .NotNull()
-                    .GetValue(receiver)
-                    .NotNull();
-
-            var deadline = TimeProvider.System.GetUtcNow() + TimeSpan.FromSeconds(10);
-            uint ready;
-            do
-            {
-                ready = await channel.MessageCountAsync(queue, CancellationToken.None);
-                if (ready == 8)
-                    break;
-                // determinism: polls the broker's counter until it reaches the expected depth.
-                await Task.Delay(50, CancellationToken.None);
-            } while (TimeProvider.System.GetUtcNow() < deadline);
+            var ready = await ReadyCountAsync(receiver);
 
             ready.Should().Be(8u, "only PrefetchCount deliveries may be unacknowledged at once");
         }
@@ -375,5 +326,80 @@ public class RabbitMqBroadcasterIntegrationTests
             .Be(allHandled.Task, "releasing the handler lets the rest of the queue through");
 
         await receiver.StopAsync(CancellationToken.None);
+    }
+
+    private static TrainLifecycleEventMessage DataChangedMessage() =>
+        new(
+            MetadataId: 0,
+            ExternalId: string.Empty,
+            TrainName: string.Empty,
+            TrainState: string.Empty,
+            Timestamp: TestTime.UtcDateTime,
+            FailureJunction: null,
+            FailureReason: null,
+            EventType: TrainLifecycleEventMessage.DataChangedEventType,
+            Executor: "SchedulerProc",
+            Output: null,
+            ChangeDomain: "WorkQueue"
+        );
+
+    // Publishes ten messages, then waits for the handler to take the first.
+    private static async Task PublishTenAndAwaitTheFirstAsync(
+        RabbitMqTrainEventBroadcaster broadcaster,
+        TaskCompletionSource entered
+    )
+    {
+        for (var i = 0; i < 10; i++)
+            await broadcaster
+                .PublishAsync(
+                    SampleMessage(string.Create(CultureInfo.InvariantCulture, $"m{i}")),
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
+
+        // determinism: the wait is on the TaskCompletionSource; the delay is only the ceiling.
+        (
+            await Task.WhenAny(
+                    entered.Task,
+                    // determinism: the fail-safe ceiling named above, not a wait.
+                    Task.Delay(TimeSpan.FromSeconds(10), TimeProvider.System)
+                )
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .Be(entered.Task);
+    }
+
+    // How many messages are ready on the receiver's queue, polled until it reaches 8 or
+    // ten seconds pass.
+    private static async Task<uint> ReadyCountAsync(RabbitMqTrainEventReceiver receiver)
+    {
+        var channel = (IChannel)
+            typeof(RabbitMqTrainEventReceiver)
+                .GetField("_channel", BindingFlags.NonPublic | BindingFlags.Instance)
+                .NotNull()
+                .GetValue(receiver)
+                .NotNull();
+        var queue = (string)
+            typeof(RabbitMqTrainEventReceiver)
+                .GetField("_queueName", BindingFlags.NonPublic | BindingFlags.Instance)
+                .NotNull()
+                .GetValue(receiver)
+                .NotNull();
+
+        var deadline = TimeProvider.System.GetUtcNow() + TimeSpan.FromSeconds(10);
+        uint ready;
+        do
+        {
+            ready = await channel
+                .MessageCountAsync(queue, CancellationToken.None)
+                .ConfigureAwait(false);
+            if (ready == 8)
+                break;
+            // determinism: polls the broker's counter until it reaches the expected depth.
+            await Task.Delay(50, CancellationToken.None).ConfigureAwait(false);
+        } while (TimeProvider.System.GetUtcNow() < deadline);
+
+        return ready;
     }
 }

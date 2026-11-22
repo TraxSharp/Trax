@@ -66,32 +66,7 @@ public static class ServiceExtensions
         if (!export)
             EnableWalMode(connectionString);
 
-        // The in-process notice a dispatcher in this host wakes on when a save commits queued
-        // work. It watches every context the factory below builds.
-        configurationBuilder.ServiceCollection.AddSingleton<SqliteQueuedWorkSignal>();
-        configurationBuilder.ServiceCollection.AddSingleton<IQueuedWorkListener>(sp =>
-            sp.GetRequiredService<SqliteQueuedWorkSignal>()
-        );
-
-        // Register the DbContextFactory
-        configurationBuilder.ServiceCollection.AddDbContextFactory<Services.SqliteContext.SqliteContext>(
-            (sp, options) =>
-            {
-                options
-                    .UseSqlite(connectionString)
-                    .UseLoggerFactory(new NullLoggerFactory())
-                    .AddInterceptors(sp.GetRequiredService<SqliteQueuedWorkSignal>());
-            }
-        );
-
-        // Register SqliteContext as scoped IDataContext (created from factory)
-        configurationBuilder.ServiceCollection.AddScoped<
-            IDataContext,
-            Services.SqliteContext.SqliteContext
-        >(sp =>
-            sp.GetRequiredService<IDbContextFactory<Services.SqliteContext.SqliteContext>>()
-                .CreateDbContext()
-        );
+        AddSqliteContext(configurationBuilder.ServiceCollection, connectionString);
 
         // Register the context provider factory
         configurationBuilder.AddEffect<IDataContextProviderFactory, SqliteContextProviderFactory>(
@@ -125,6 +100,33 @@ public static class ServiceExtensions
             configurationBuilder as TraxEffectBuilderWithData
             ?? new TraxEffectBuilderWithData(configurationBuilder);
         return promoted;
+    }
+
+    private static void AddSqliteContext(IServiceCollection services, string connectionString)
+    {
+        // The in-process notice a dispatcher in this host wakes on when a save commits queued
+        // work. It watches every context the factory below builds.
+        services.AddSingleton<SqliteQueuedWorkSignal>();
+        services.AddSingleton<IQueuedWorkListener>(sp =>
+            sp.GetRequiredService<SqliteQueuedWorkSignal>()
+        );
+
+        // Register the DbContextFactory
+        services.AddDbContextFactory<Services.SqliteContext.SqliteContext>(
+            (sp, options) =>
+            {
+                options
+                    .UseSqlite(connectionString)
+                    .UseLoggerFactory(new NullLoggerFactory())
+                    .AddInterceptors(sp.GetRequiredService<SqliteQueuedWorkSignal>());
+            }
+        );
+
+        // Register SqliteContext as scoped IDataContext (created from factory)
+        services.AddScoped<IDataContext, Services.SqliteContext.SqliteContext>(sp =>
+            sp.GetRequiredService<IDbContextFactory<Services.SqliteContext.SqliteContext>>()
+                .CreateDbContext()
+        );
     }
 
     private static void EnableWalMode(string connectionString)

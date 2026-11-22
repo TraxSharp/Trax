@@ -146,22 +146,7 @@ public class PostgresMigrationTests
             await using var connectionDisposal = connection.ConfigureAwait(false);
             await connection.OpenAsync().ConfigureAwait(false);
 
-            async Task Seed(string externalId, string status, string age) =>
-                await Exec(
-                        connection,
-                        "INSERT INTO trax.work_queue "
-                            + "(external_id, train_name, input, input_type_name, status, created_at) "
-                            + $"VALUES ('{externalId}', 'Some.Train', NULL, NULL, '{status}', "
-                            + $"(now() AT TIME ZONE 'utc') - interval '{age}');"
-                    )
-                    .ConfigureAwait(false);
-
-            await Seed("queued-old", "queued", "10 days").ConfigureAwait(false);
-            await Seed("cancelled-old", "cancelled", "10 days").ConfigureAwait(false);
-            // A dispatch that fails is put back to queued without touching confirmed_at, so one
-            // in flight across the migration has to come out of it confirmed.
-            await Seed("dispatched-recent", "dispatched", "1 hour").ConfigureAwait(false);
-            await Seed("dispatched-old", "dispatched", "10 days").ConfigureAwait(false);
+            await SeedWorkQueueAges(connection).ConfigureAwait(false);
 
             var assembly = typeof(Trax.Effect.Data.Postgres.Utils.DatabaseMigrator).Assembly;
             var to041 = DeployChanges
@@ -200,21 +185,7 @@ public class PostgresMigrationTests
                         + "and nothing reads confirmed_at on one"
                 );
 
-            var unconfirmedIndex = await ExternalIds(
-                    connection,
-                    "SELECT indexdef FROM pg_indexes WHERE schemaname = 'trax' "
-                        + "AND indexname = 'ix_work_queue_unconfirmed';"
-                )
-                .ConfigureAwait(false);
-            unconfirmedIndex
-                .Should()
-                .ContainSingle()
-                .Which.Should()
-                .Contain(
-                    "'queued'",
-                    "the sweep only looks for queued rows, and the dispatched history left null "
-                        + "must not sit in the index"
-                );
+            await AssertUnconfirmedIndexHoldsOnlyQueued(connection).ConfigureAwait(false);
         });
     }
 
@@ -363,26 +334,7 @@ public class PostgresMigrationTests
             64,
             async connectionString =>
             {
-                var before = new NpgsqlConnection(connectionString);
-                await using (before.ConfigureAwait(false))
-                {
-                    await before.OpenAsync().ConfigureAwait(false);
-                    await Exec(
-                            before,
-                            "INSERT INTO trax.log (event_id, level, message, category) "
-                                + "VALUES (0, 'information', 'written before 065', 'Migration')"
-                        )
-                        .ConfigureAwait(false);
-                    // Rows the writer already stored, outside a run and inside one, keep their
-                    // value: the upgrade only fills the NULLs.
-                    await Exec(
-                            before,
-                            "INSERT INTO trax.log (metadata_id, event_id, level, message, category) "
-                                + "VALUES (0, 0, 'information', 'no run before 065', 'Migration'), "
-                                + "(42, 0, 'information', 'a run before 065', 'Migration')"
-                        )
-                        .ConfigureAwait(false);
-                }
+                await SeedLogsBefore065(connectionString).ConfigureAwait(false);
 
                 await DatabaseMigrator.Migrate(connectionString).ConfigureAwait(false);
 
@@ -676,21 +628,7 @@ public class PostgresMigrationTests
             async connectionString =>
             {
                 const int drafts = 25_000;
-                string storage;
-                var before = new NpgsqlConnection(connectionString);
-                await using (before.ConfigureAwait(false))
-                {
-                    await before.OpenAsync().ConfigureAwait(false);
-                    await Exec(
-                            before,
-                            "INSERT INTO trax.snapshot_draft "
-                                + "(id, user_key, machine, version, state, context, concurrency_token, updated_at) "
-                                + "SELECT gen_random_uuid(), 'user-' || (n % 7), 'machine-' || (n % 3), 1, 'Draft', "
-                                + $"'{{}}'::jsonb, gen_random_uuid(), now() FROM generate_series(1, {drafts}) AS n"
-                        )
-                        .ConfigureAwait(false);
-                    storage = await Filenode(before, "snapshot_draft").ConfigureAwait(false);
-                }
+                var storage = await SeedDrafts(connectionString, drafts).ConfigureAwait(false);
 
                 await DatabaseMigrator.Migrate(connectionString).ConfigureAwait(false);
 
@@ -711,72 +649,9 @@ public class PostgresMigrationTests
                 )
                     .Should()
                     .Equal([$"{drafts} {drafts} {drafts}"], "every draft has a key of its own");
-                (
-                    await ExternalIds(
-                            connection,
-                            "SELECT c.conname || ' ' || a.attname FROM pg_constraint c "
-                                + "JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey) "
-                                + "WHERE c.conrelid = 'trax.snapshot_draft'::regclass AND c.contype = 'p'"
-                        )
-                        .ConfigureAwait(false)
-                )
-                    .Should()
-                    .Equal("pk_snapshot_draft row_id");
-                (
-                    await ExternalIds(
-                            connection,
-                            "SELECT is_nullable FROM information_schema.columns WHERE table_schema = 'trax' "
-                                + "AND table_name = 'snapshot_draft' AND column_name = 'row_id'"
-                        )
-                        .ConfigureAwait(false)
-                )
-                    .Should()
-                    .Equal("NO");
-                (
-                    await ExternalIds(
-                            connection,
-                            "SELECT conname || ' ' || convalidated FROM pg_constraint "
-                                + "WHERE conrelid = 'trax.snapshot_draft'::regclass AND contype = 'c'"
-                        )
-                        .ConfigureAwait(false)
-                )
-                    .Should()
-                    .Equal(
-                        ["ck_snapshot_draft_owner true"],
-                        "the owner check is proved, and the check that stood in for NOT NULL's scan is gone"
-                    );
-                foreach (
-                    var index in new[]
-                    {
-                        "ux_snapshot_draft_user_machine_id",
-                        "ux_snapshot_draft_system_machine_id",
-                        "ux_snapshot_draft_invoke_token",
-                    }
-                )
-                    (await IndexState(connection, index).ConfigureAwait(false))
-                        .Should()
-                        .Be("valid, unique", index);
+                await AssertDraftKeyChecksAndIndexes(connection).ConfigureAwait(false);
 
-                // A host still on the previous version inserts naming neither column, and the row is
-                // keyed after every existing one.
-                await Exec(
-                        connection,
-                        "INSERT INTO trax.snapshot_draft "
-                            + "(id, user_key, machine, version, state, context, concurrency_token, updated_at) "
-                            + "VALUES (gen_random_uuid(), 'late', 'machine-0', 1, 'Draft', '{}'::jsonb, "
-                            + "gen_random_uuid(), now())"
-                    )
-                    .ConfigureAwait(false);
-                (
-                    await ExternalIds(
-                            connection,
-                            "SELECT (row_id > (SELECT max(row_id) FROM trax.snapshot_draft WHERE user_key <> 'late'))::text "
-                                + "|| ' ' || owner_kind FROM trax.snapshot_draft WHERE user_key = 'late'"
-                        )
-                        .ConfigureAwait(false)
-                )
-                    .Should()
-                    .Equal("true user");
+                await AssertLateInsertIsKeyedLast(connection).ConfigureAwait(false);
             }
         );
 
@@ -965,34 +840,8 @@ public class PostgresMigrationTests
                     TimeProvider.System
                 );
 
-                // Two distinct waits by the script session prove the first one timed out and the
-                // script was run again. Only then is the lock released.
-                var observer = new NpgsqlConnection(connectionString);
-                await using (observer.ConfigureAwait(false))
-                {
-                    await observer.OpenAsync().ConfigureAwait(false);
-                    var waits = new HashSet<string>(StringComparer.Ordinal);
-                    var deadline = TimeProvider.System.GetUtcNow() + Bounded;
-                    while (waits.Count < 2)
-                    {
-                        TimeProvider
-                            .System.GetUtcNow()
-                            .Should()
-                            .BeBefore(deadline, "the script should have waited on the lock twice");
-                        migration.IsCompleted.Should().BeFalse("the lock is still held");
-                        foreach (
-                            var start in await ExternalIds(
-                                    observer,
-                                    "SELECT query_start::text FROM pg_stat_activity "
-                                        + $"WHERE application_name = '{application}' "
-                                        + "AND wait_event_type = 'Lock';"
-                                )
-                                .ConfigureAwait(false)
-                        )
-                            waits.Add(start);
-                        await Task.Yield();
-                    }
-                }
+                await WaitForTwoLockWaits(connectionString, application, migration)
+                    .ConfigureAwait(false);
 
                 await held.RollbackAsync().ConfigureAwait(false);
                 await held.DisposeAsync().ConfigureAwait(false);
@@ -1067,19 +916,13 @@ public class PostgresMigrationTests
     [Test]
     public async Task A_duplicate_met_while_building_a_scripts_unique_index_runs_the_scripts_again()
     {
-        static PostgresException Error(string sqlState, string? constraint) =>
-            new(
-                "could not create unique index",
-                "ERROR",
-                "ERROR",
-                sqlState,
-                constraintName: constraint
-            );
-
         (
             await DatabaseMigrator
                 .IsRetryableAsync(
-                    Error(PostgresErrorCodes.UniqueViolation, "ix_work_queue_unique_queued_replay")
+                    IndexBuildError(
+                        PostgresErrorCodes.UniqueViolation,
+                        "ix_work_queue_unique_queued_replay"
+                    )
                 )
                 .ConfigureAwait(false)
         )
@@ -1090,7 +933,7 @@ public class PostgresMigrationTests
                 .IsRetryableAsync(
                     new InvalidOperationException(
                         "wrapped",
-                        Error(
+                        IndexBuildError(
                             PostgresErrorCodes.UniqueViolation,
                             "ix_work_queue_unique_queued_replay"
                         )
@@ -1102,33 +945,247 @@ public class PostgresMigrationTests
             .BeTrue();
         (
             await DatabaseMigrator
-                .IsRetryableAsync(Error(PostgresErrorCodes.LockNotAvailable, constraint: null))
+                .IsRetryableAsync(
+                    IndexBuildError(PostgresErrorCodes.LockNotAvailable, constraint: null)
+                )
                 .ConfigureAwait(false)
         )
             .Should()
             .BeTrue();
+        await AssertOtherIndexBuildErrorsAreNotRetriedAsync().ConfigureAwait(false);
+    }
+
+    private static async Task AssertOtherIndexBuildErrorsAreNotRetriedAsync()
+    {
         (
             await DatabaseMigrator
-                .IsRetryableAsync(Error(PostgresErrorCodes.UniqueViolation, "some_consumer_index"))
+                .IsRetryableAsync(
+                    IndexBuildError(PostgresErrorCodes.UniqueViolation, "some_consumer_index")
+                )
                 .ConfigureAwait(false)
         )
             .Should()
             .BeFalse("only an index a script builds again is retried");
         (
             await DatabaseMigrator
-                .IsRetryableAsync(Error(PostgresErrorCodes.UniqueViolation, constraint: null))
+                .IsRetryableAsync(
+                    IndexBuildError(PostgresErrorCodes.UniqueViolation, constraint: null)
+                )
                 .ConfigureAwait(false)
         )
             .Should()
             .BeFalse();
         (
             await DatabaseMigrator
-                .IsRetryableAsync(Error(PostgresErrorCodes.SyntaxError, constraint: null))
+                .IsRetryableAsync(IndexBuildError(PostgresErrorCodes.SyntaxError, constraint: null))
                 .ConfigureAwait(false)
         )
             .Should()
             .BeFalse();
     }
+
+    private static async Task SeedWorkQueueAges(NpgsqlConnection connection)
+    {
+        async Task Seed(string externalId, string status, string age) =>
+            await Exec(
+                    connection,
+                    "INSERT INTO trax.work_queue "
+                        + "(external_id, train_name, input, input_type_name, status, created_at) "
+                        + $"VALUES ('{externalId}', 'Some.Train', NULL, NULL, '{status}', "
+                        + $"(now() AT TIME ZONE 'utc') - interval '{age}');"
+                )
+                .ConfigureAwait(false);
+
+        await Seed("queued-old", "queued", "10 days").ConfigureAwait(false);
+        await Seed("cancelled-old", "cancelled", "10 days").ConfigureAwait(false);
+        // A dispatch that fails is put back to queued without touching confirmed_at, so one
+        // in flight across the migration has to come out of it confirmed.
+        await Seed("dispatched-recent", "dispatched", "1 hour").ConfigureAwait(false);
+        await Seed("dispatched-old", "dispatched", "10 days").ConfigureAwait(false);
+    }
+
+    private static async Task AssertUnconfirmedIndexHoldsOnlyQueued(NpgsqlConnection connection)
+    {
+        var unconfirmedIndex = await ExternalIds(
+                connection,
+                "SELECT indexdef FROM pg_indexes WHERE schemaname = 'trax' "
+                    + "AND indexname = 'ix_work_queue_unconfirmed';"
+            )
+            .ConfigureAwait(false);
+        unconfirmedIndex
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain(
+                "'queued'",
+                "the sweep only looks for queued rows, and the dispatched history left null "
+                    + "must not sit in the index"
+            );
+    }
+
+    private static async Task SeedLogsBefore065(string connectionString)
+    {
+        var before = new NpgsqlConnection(connectionString);
+        await using (before.ConfigureAwait(false))
+        {
+            await before.OpenAsync().ConfigureAwait(false);
+            await Exec(
+                    before,
+                    "INSERT INTO trax.log (event_id, level, message, category) "
+                        + "VALUES (0, 'information', 'written before 065', 'Migration')"
+                )
+                .ConfigureAwait(false);
+            // Rows the writer already stored, outside a run and inside one, keep their
+            // value: the upgrade only fills the NULLs.
+            await Exec(
+                    before,
+                    "INSERT INTO trax.log (metadata_id, event_id, level, message, category) "
+                        + "VALUES (0, 0, 'information', 'no run before 065', 'Migration'), "
+                        + "(42, 0, 'information', 'a run before 065', 'Migration')"
+                )
+                .ConfigureAwait(false);
+        }
+    }
+
+    // Inserts the drafts and returns the table's storage file before the upgrade.
+    private static async Task<string> SeedDrafts(string connectionString, int drafts)
+    {
+        string storage;
+        var before = new NpgsqlConnection(connectionString);
+        await using (before.ConfigureAwait(false))
+        {
+            await before.OpenAsync().ConfigureAwait(false);
+            await Exec(
+                    before,
+                    "INSERT INTO trax.snapshot_draft "
+                        + "(id, user_key, machine, version, state, context, concurrency_token, updated_at) "
+                        + "SELECT gen_random_uuid(), 'user-' || (n % 7), 'machine-' || (n % 3), 1, 'Draft', "
+                        + $"'{{}}'::jsonb, gen_random_uuid(), now() FROM generate_series(1, {drafts.ToString(CultureInfo.InvariantCulture)}) AS n"
+                )
+                .ConfigureAwait(false);
+            storage = await Filenode(before, "snapshot_draft").ConfigureAwait(false);
+        }
+
+        return storage;
+    }
+
+    private static async Task AssertDraftKeyChecksAndIndexes(NpgsqlConnection connection)
+    {
+        (
+            await ExternalIds(
+                    connection,
+                    "SELECT c.conname || ' ' || a.attname FROM pg_constraint c "
+                        + "JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey) "
+                        + "WHERE c.conrelid = 'trax.snapshot_draft'::regclass AND c.contype = 'p'"
+                )
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .Equal("pk_snapshot_draft row_id");
+        (
+            await ExternalIds(
+                    connection,
+                    "SELECT is_nullable FROM information_schema.columns WHERE table_schema = 'trax' "
+                        + "AND table_name = 'snapshot_draft' AND column_name = 'row_id'"
+                )
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .Equal("NO");
+        (
+            await ExternalIds(
+                    connection,
+                    "SELECT conname || ' ' || convalidated FROM pg_constraint "
+                        + "WHERE conrelid = 'trax.snapshot_draft'::regclass AND contype = 'c'"
+                )
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .Equal(
+                ["ck_snapshot_draft_owner true"],
+                "the owner check is proved, and the check that stood in for NOT NULL's scan is gone"
+            );
+        foreach (
+            var index in new[]
+            {
+                "ux_snapshot_draft_user_machine_id",
+                "ux_snapshot_draft_system_machine_id",
+                "ux_snapshot_draft_invoke_token",
+            }
+        )
+            (await IndexState(connection, index).ConfigureAwait(false))
+                .Should()
+                .Be("valid, unique", index);
+    }
+
+    private static async Task AssertLateInsertIsKeyedLast(NpgsqlConnection connection)
+    {
+        // A host still on the previous version inserts naming neither column, and the row is
+        // keyed after every existing one.
+        await Exec(
+                connection,
+                "INSERT INTO trax.snapshot_draft "
+                    + "(id, user_key, machine, version, state, context, concurrency_token, updated_at) "
+                    + "VALUES (gen_random_uuid(), 'late', 'machine-0', 1, 'Draft', '{}'::jsonb, "
+                    + "gen_random_uuid(), now())"
+            )
+            .ConfigureAwait(false);
+        (
+            await ExternalIds(
+                    connection,
+                    "SELECT (row_id > (SELECT max(row_id) FROM trax.snapshot_draft WHERE user_key <> 'late'))::text "
+                        + "|| ' ' || owner_kind FROM trax.snapshot_draft WHERE user_key = 'late'"
+                )
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .Equal("true user");
+    }
+
+    private static async Task WaitForTwoLockWaits(
+        string connectionString,
+        string application,
+        Task migration
+    )
+    {
+        // Two distinct waits by the script session prove the first one timed out and the
+        // script was run again. Only then is the lock released.
+        var observer = new NpgsqlConnection(connectionString);
+        await using (observer.ConfigureAwait(false))
+        {
+            await observer.OpenAsync().ConfigureAwait(false);
+            var waits = new HashSet<string>(StringComparer.Ordinal);
+            var deadline = TimeProvider.System.GetUtcNow() + Bounded;
+            while (waits.Count < 2)
+            {
+                TimeProvider
+                    .System.GetUtcNow()
+                    .Should()
+                    .BeBefore(deadline, "the script should have waited on the lock twice");
+                migration.IsCompleted.Should().BeFalse("the lock is still held");
+                foreach (
+                    var start in await ExternalIds(
+                            observer,
+                            "SELECT query_start::text FROM pg_stat_activity "
+                                + $"WHERE application_name = '{application}' "
+                                + "AND wait_event_type = 'Lock';"
+                        )
+                        .ConfigureAwait(false)
+                )
+                    waits.Add(start);
+                await Task.Yield();
+            }
+        }
+    }
+
+    private static PostgresException IndexBuildError(string sqlState, string? constraint) =>
+        new(
+            "could not create unique index",
+            "ERROR",
+            "ERROR",
+            sqlState,
+            constraintName: constraint
+        );
 
     private static readonly TimeSpan Bounded = TimeSpan.FromSeconds(60);
 

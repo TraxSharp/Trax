@@ -79,17 +79,7 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
                 "ServiceTrain Metadata cannot be null. Something has gone horribly wrong."
             );
 
-        Metadata = JunctionMetadata.Create(
-            new CreateJunctionMetadata
-            {
-                Name = GetType().Name,
-                ExternalId = Guid.NewGuid().ToString("N"),
-                InputType = typeof(TIn),
-                OutputType = typeof(TOut),
-                State = previousOutput.State,
-            },
-            serviceTrain.Metadata
-        );
+        Metadata = NewMetadata(previousOutput, serviceTrain.Metadata);
 
         if (serviceTrain.JunctionEffectRunner is not null)
             await BeforeJunction(serviceTrain.JunctionEffectRunner, serviceTrain, previousOutput)
@@ -138,6 +128,23 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
 
         return result;
     }
+
+    // A fresh row for this junction's run, under the train's.
+    private JunctionMetadata NewMetadata(
+        Either<Exception, TIn> previousOutput,
+        Trax.Effect.Models.Metadata.Metadata trainMetadata
+    ) =>
+        JunctionMetadata.Create(
+            new CreateJunctionMetadata
+            {
+                Name = GetType().Name,
+                ExternalId = Guid.NewGuid().ToString("N"),
+                InputType = typeof(TIn),
+                OutputType = typeof(TOut),
+                State = previousOutput.State,
+            },
+            trainMetadata
+        );
 
     /// <summary>
     /// Runs the junction effects' <c>BeforeJunctionExecution</c>. When the railway already carries a

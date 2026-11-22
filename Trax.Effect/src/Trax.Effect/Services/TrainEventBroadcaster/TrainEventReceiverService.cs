@@ -61,95 +61,7 @@ public class TrainEventReceiverService : BackgroundService
         {
             try
             {
-                await _receiver
-                    .StartAsync(
-                        async (message, ct) =>
-                        {
-                            if (IsLocalEvent(message))
-                            {
-                                _logger?.LogDebug(
-                                    "Skipping local event {EventType} for train {TrainName} ({ExternalId}).",
-                                    message.EventType,
-                                    message.TrainName,
-                                    message.ExternalId
-                                );
-                                return;
-                            }
-
-                            _logger?.LogDebug(
-                                "Received remote event {EventType} for train {TrainName} ({ExternalId}) from {Executor}.",
-                                message.EventType,
-                                message.TrainName,
-                                message.ExternalId,
-                                message.Executor
-                            );
-
-                            var scope = _serviceProvider.CreateAsyncScope();
-                            await using var scopeDisposal = scope.ConfigureAwait(false);
-
-                            // A junction event goes only to the handlers written for one, so a train
-                            // event handler is never handed an event type it does not know. One that
-                            // claims to be a junction event but carries no step is dropped.
-                            if (IsJunctionMessage(message))
-                            {
-                                if (message.Junction is null)
-                                {
-                                    _logger?.LogWarning(
-                                        "Dropping {EventType} for train {TrainName}: a junction event with no junction payload.",
-                                        message.EventType,
-                                        message.TrainName
-                                    );
-                                    return;
-                                }
-
-                                foreach (
-                                    var handler in scope.ServiceProvider.GetServices<IJunctionEventHandler>()
-                                )
-                                {
-                                    try
-                                    {
-                                        await handler
-                                            .HandleAsync(message, ct)
-                                            .ConfigureAwait(false);
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        _logger?.LogError(
-                                            ex,
-                                            "JunctionEventHandler ({HandlerType}) threw while handling {EventType} for train {TrainName}.",
-                                            handler.GetType().Name,
-                                            message.EventType,
-                                            message.TrainName
-                                        );
-                                    }
-                                }
-
-                                return;
-                            }
-
-                            var handlers = scope.ServiceProvider.GetServices<ITrainEventHandler>();
-
-                            foreach (var handler in handlers)
-                            {
-                                try
-                                {
-                                    await handler.HandleAsync(message, ct).ConfigureAwait(false);
-                                }
-                                catch (Exception ex)
-                                {
-                                    _logger?.LogError(
-                                        ex,
-                                        "TrainEventHandler ({HandlerType}) threw while handling {EventType} for train {TrainName}.",
-                                        handler.GetType().Name,
-                                        message.EventType,
-                                        message.TrainName
-                                    );
-                                }
-                            }
-                        },
-                        stoppingToken
-                    )
-                    .ConfigureAwait(false);
+                await _receiver.StartAsync(HandleMessage, stoppingToken).ConfigureAwait(false);
 
                 // StartAsync returned normally — reset delay and wait for cancellation
                 delay = TimeSpan.FromSeconds(5);
@@ -179,6 +91,104 @@ public class TrainEventReceiverService : BackgroundService
                 await Task.Delay(delay, stoppingToken).ConfigureAwait(false);
                 delay = TimeSpan.FromMilliseconds(
                     Math.Min(delay.TotalMilliseconds * 2, maxDelay.TotalMilliseconds)
+                );
+            }
+        }
+    }
+
+    private async Task HandleMessage(TrainLifecycleEventMessage message, CancellationToken ct)
+    {
+        if (IsLocalEvent(message))
+        {
+            _logger?.LogDebug(
+                "Skipping local event {EventType} for train {TrainName} ({ExternalId}).",
+                message.EventType,
+                message.TrainName,
+                message.ExternalId
+            );
+            return;
+        }
+
+        _logger?.LogDebug(
+            "Received remote event {EventType} for train {TrainName} ({ExternalId}) from {Executor}.",
+            message.EventType,
+            message.TrainName,
+            message.ExternalId,
+            message.Executor
+        );
+
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
+
+        // A junction event goes only to the handlers written for one, so a train
+        // event handler is never handed an event type it does not know. One that
+        // claims to be a junction event but carries no step is dropped.
+        if (IsJunctionMessage(message))
+        {
+            await HandleJunctionEvent(scope.ServiceProvider, message, ct).ConfigureAwait(false);
+            return;
+        }
+
+        await HandleTrainEvent(scope.ServiceProvider, message, ct).ConfigureAwait(false);
+    }
+
+    private async Task HandleJunctionEvent(
+        IServiceProvider services,
+        TrainLifecycleEventMessage message,
+        CancellationToken ct
+    )
+    {
+        if (message.Junction is null)
+        {
+            _logger?.LogWarning(
+                "Dropping {EventType} for train {TrainName}: a junction event with no junction payload.",
+                message.EventType,
+                message.TrainName
+            );
+            return;
+        }
+
+        foreach (var handler in services.GetServices<IJunctionEventHandler>())
+        {
+            try
+            {
+                await handler.HandleAsync(message, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(
+                    ex,
+                    "JunctionEventHandler ({HandlerType}) threw while handling {EventType} for train {TrainName}.",
+                    handler.GetType().Name,
+                    message.EventType,
+                    message.TrainName
+                );
+            }
+        }
+    }
+
+    private async Task HandleTrainEvent(
+        IServiceProvider services,
+        TrainLifecycleEventMessage message,
+        CancellationToken ct
+    )
+    {
+        var handlers = services.GetServices<ITrainEventHandler>();
+
+        foreach (var handler in handlers)
+        {
+            try
+            {
+                await handler.HandleAsync(message, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(
+                    ex,
+                    "TrainEventHandler ({HandlerType}) threw while handling {EventType} for train {TrainName}.",
+                    handler.GetType().Name,
+                    message.EventType,
+                    message.TrainName
                 );
             }
         }

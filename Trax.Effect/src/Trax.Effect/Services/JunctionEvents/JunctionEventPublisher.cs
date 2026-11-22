@@ -117,20 +117,7 @@ internal sealed class JunctionEventPublisher
         step = step with { Attempt = run.Attempt };
         var metadata = run.Metadata;
 
-        try
-        {
-            _sink.Value?.Write(metadata.Id, step);
-        }
-        catch (Exception e)
-        {
-            _logger?.LogWarning(
-                e,
-                "Could not store step {Position} ({Name}) of run {ExternalId}; the run carries on.",
-                step.Position,
-                step.Name,
-                run.ExternalId
-            );
-        }
+        Store(run, step);
 
         var message = new TrainLifecycleEventMessage(
             MetadataId: metadata.Id,
@@ -151,6 +138,35 @@ internal sealed class JunctionEventPublisher
             Junction = step,
         };
 
+        await Broadcast(run, eventType, step, message).ConfigureAwait(false);
+        await NotifyHandlers(run, eventType, message).ConfigureAwait(false);
+    }
+
+    private void Store(JunctionEventRun run, JunctionEventPayload step)
+    {
+        try
+        {
+            _sink.Value?.Write(run.Metadata.Id, step);
+        }
+        catch (Exception e)
+        {
+            _logger?.LogWarning(
+                e,
+                "Could not store step {Position} ({Name}) of run {ExternalId}; the run carries on.",
+                step.Position,
+                step.Name,
+                run.ExternalId
+            );
+        }
+    }
+
+    private async Task Broadcast(
+        JunctionEventRun run,
+        string eventType,
+        JunctionEventPayload step,
+        TrainLifecycleEventMessage message
+    )
+    {
         try
         {
             if (_broadcaster.Value is { } broadcaster)
@@ -169,7 +185,14 @@ internal sealed class JunctionEventPublisher
                 run.ExternalId
             );
         }
+    }
 
+    private async Task NotifyHandlers(
+        JunctionEventRun run,
+        string eventType,
+        TrainLifecycleEventMessage message
+    )
+    {
         IEnumerable<IJunctionEventHandler> handlers;
         try
         {

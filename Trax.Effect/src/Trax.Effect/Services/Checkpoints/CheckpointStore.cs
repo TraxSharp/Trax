@@ -36,68 +36,11 @@ internal sealed partial class CheckpointStore(
 
         var step = $"checkpoint '{checkpoint.NodeId}'";
 
-        // Checked again at write time, not only at startup: the startup answer covers only the
-        // assemblies loaded then.
-        if (TraxRedaction.ReachesSensitiveMember(checkpoint.StateType))
-            throw Refused(
-                checkpoint,
-                $"The {step} holds '{checkpoint.StateType.FullName}', which reaches a member "
-                    + "marked [TraxSensitive]. A checkpoint is stored in plain JSON, so a state "
-                    + "holding a sensitive value is never stored."
-            );
-
-        // Refused at startup too; checked here because a row's node id names every track it is
-        // inside, and the track of a sensitive routing step is withheld from every record.
-        // The refusal names the routing step and the checkpoint, never the node id: that holds the
-        // track's name.
-        if (SensitiveTrack(checkpoint.NodeId) is { } routing)
-            throw Refused(
-                checkpoint with
-                {
-                    NodeId = checkpoint.NodeId[(checkpoint.NodeId.LastIndexOf('/') + 1)..],
-                },
-                $"The checkpoint '{checkpoint.NodeId[(checkpoint.NodeId.LastIndexOf('/') + 1)..]}' "
-                    + $"is inside a track of '{routing}', whose answer is marked "
-                    + "[TraxSensitive] and withheld from every record. A resume could not find its "
-                    + "way back into the track, so the checkpoint is never stored. Move it after "
-                    + "the routing step."
-            );
-
-        if (checkpoint.Services is { } scope && _rows.HasUncommittedWork(scope))
-            throw Refused(
-                checkpoint,
-                $"The {step} was reached while the step's data context still held uncommitted "
-                    + "changes or an open transaction. A run resumed after it would skip work that "
-                    + "never committed. Commit before the checkpoint, or move it after the commit."
-            );
+        RefuseUnstorable(checkpoint, step, _rows);
 
         var state = JsonSerializer.Serialize(checkpoint.State, checkpoint.StateType);
 
-        // Postgres cannot store a NUL, and its provider replaces one rather than fail the write, so
-        // the state would read back as a different value. Refused on every provider alike.
-        if (HoldsNul(state))
-            throw Refused(
-                checkpoint,
-                $"The {step} holds '{checkpoint.StateType.FullName}' with a NUL character (\\u0000) "
-                    + "in a string, which the store cannot keep as it is, so a resume would read "
-                    + "back a different value. Remove it, or store the data encoded (Base64, say)."
-            );
-
-        var size = Encoding.UTF8.GetByteCount(state);
-
-        if (size > options.MaxStateBytes)
-            throw Refused(
-                checkpoint,
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"The {step} holds '{checkpoint.StateType.FullName}' as {size} bytes of JSON; the "
-                )
-                    + string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"cap is {options.MaxStateBytes}. Store pointers to the data rather than the "
-                    )
-                    + "data itself."
-            );
+        RefuseUnstorableState(checkpoint, step, state);
 
         if (run.ChainHash is not { } chainHash)
             throw Refused(
@@ -125,6 +68,76 @@ internal sealed partial class CheckpointStore(
             .ConfigureAwait(false);
 
         run.Wrote = true;
+    }
+
+    // Refuses a checkpoint whose state type, track or step's data context means it must not
+    // be stored.
+    private void RefuseUnstorable(CheckpointTaken checkpoint, string step, ICheckpointRows rows)
+    {
+        // Checked again at write time, not only at startup: the startup answer covers only the
+        // assemblies loaded then.
+        if (TraxRedaction.ReachesSensitiveMember(checkpoint.StateType))
+            throw Refused(
+                checkpoint,
+                $"The {step} holds '{checkpoint.StateType.FullName}', which reaches a member "
+                    + "marked [TraxSensitive]. A checkpoint is stored in plain JSON, so a state "
+                    + "holding a sensitive value is never stored."
+            );
+
+        // Refused at startup too; checked here because a row's node id names every track it is
+        // inside, and the track of a sensitive routing step is withheld from every record.
+        // The refusal names the routing step and the checkpoint, never the node id: that holds the
+        // track's name.
+        if (SensitiveTrack(checkpoint.NodeId) is { } routing)
+            throw Refused(
+                checkpoint with
+                {
+                    NodeId = checkpoint.NodeId[(checkpoint.NodeId.LastIndexOf('/') + 1)..],
+                },
+                $"The checkpoint '{checkpoint.NodeId[(checkpoint.NodeId.LastIndexOf('/') + 1)..]}' "
+                    + $"is inside a track of '{routing}', whose answer is marked "
+                    + "[TraxSensitive] and withheld from every record. A resume could not find its "
+                    + "way back into the track, so the checkpoint is never stored. Move it after "
+                    + "the routing step."
+            );
+
+        if (checkpoint.Services is { } scope && rows.HasUncommittedWork(scope))
+            throw Refused(
+                checkpoint,
+                $"The {step} was reached while the step's data context still held uncommitted "
+                    + "changes or an open transaction. A run resumed after it would skip work that "
+                    + "never committed. Commit before the checkpoint, or move it after the commit."
+            );
+    }
+
+    // Refuses a serialized state the store cannot keep as it is, or that is over the size cap.
+    private void RefuseUnstorableState(CheckpointTaken checkpoint, string step, string state)
+    {
+        // Postgres cannot store a NUL, and its provider replaces one rather than fail the write, so
+        // the state would read back as a different value. Refused on every provider alike.
+        if (HoldsNul(state))
+            throw Refused(
+                checkpoint,
+                $"The {step} holds '{checkpoint.StateType.FullName}' with a NUL character (\\u0000) "
+                    + "in a string, which the store cannot keep as it is, so a resume would read "
+                    + "back a different value. Remove it, or store the data encoded (Base64, say)."
+            );
+
+        var size = Encoding.UTF8.GetByteCount(state);
+
+        if (size > options.MaxStateBytes)
+            throw Refused(
+                checkpoint,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The {step} holds '{checkpoint.StateType.FullName}' as {size} bytes of JSON; the "
+                )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"cap is {options.MaxStateBytes}. Store pointers to the data rather than the "
+                    )
+                    + "data itself."
+            );
     }
 
     /// <summary>Whether a string or property name in the JSON text <paramref name="json"/> holds a NUL.</summary>

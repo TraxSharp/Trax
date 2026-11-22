@@ -72,6 +72,11 @@ public partial class MigrationsIntegrityTests
                     + string.Join("\n  ", malformed)
             );
 
+        AssertSequentialFromOne(seenNumbers, provider);
+    }
+
+    private static void AssertSequentialFromOne(List<int> seenNumbers, string provider)
+    {
         // sequential from 1 with no gaps and no duplicates
         seenNumbers.Should().OnlyHaveUniqueItems($"{provider} migration numbers must be unique.");
         var ordered = seenNumbers.Order().ToList();

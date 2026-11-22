@@ -149,15 +149,7 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
             )
             .ConfigureAwait(false);
 
-        await _channel
-            .ExchangeDeclareAsync(
-                exchange: _options.ExchangeName,
-                type: ExchangeType.Fanout,
-                durable: true,
-                autoDelete: false,
-                cancellationToken: ct
-            )
-            .ConfigureAwait(false);
+        await DeclareExchangeAsync(_channel, ct).ConfigureAwait(false);
 
         var queueDeclareResult = await _channel
             .QueueDeclareAsync(
@@ -183,48 +175,7 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
             await BindJunctionsAsync(_connection, _queueName, ct).ConfigureAwait(false);
 
         var consumer = new AsyncEventingBasicConsumer(channel);
-        consumer.ReceivedAsync += async (_, ea) =>
-        {
-            try
-            {
-                var signature = BroadcastMessageSignature.Read(ea.BasicProperties.Headers);
-                if (!_verifier.Accept(ea.Exchange, ea.Body.Span, signature))
-                {
-                    await channel
-                        .BasicNackAsync(
-                            ea.DeliveryTag,
-                            multiple: false,
-                            requeue: false,
-                            cancellationToken: ct
-                        )
-                        .ConfigureAwait(false);
-                    return;
-                }
-
-                var message = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(ea.Body.Span);
-
-                if (message is not null && FromItsExchange(message, ea.Exchange))
-                {
-                    await handler(message, ct).ConfigureAwait(false);
-                }
-
-                await channel
-                    .BasicAckAsync(ea.DeliveryTag, multiple: false, ct)
-                    .ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "Error processing lifecycle event from RabbitMQ.");
-                await channel
-                    .BasicNackAsync(
-                        ea.DeliveryTag,
-                        multiple: false,
-                        requeue: false,
-                        cancellationToken: ct
-                    )
-                    .ConfigureAwait(false);
-            }
-        };
+        consumer.ReceivedAsync += (_, ea) => ReceiveAsync(channel, ea, handler, ct);
 
         await _channel
             .BasicConsumeAsync(
@@ -234,6 +185,63 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
                 cancellationToken: ct
             )
             .ConfigureAwait(false);
+    }
+
+    private Task DeclareExchangeAsync(IChannel channel, CancellationToken ct) =>
+        channel.ExchangeDeclareAsync(
+            exchange: _options.ExchangeName,
+            type: ExchangeType.Fanout,
+            durable: true,
+            autoDelete: false,
+            cancellationToken: ct
+        );
+
+    // Verifies, reads and hands on one delivery, then acknowledges it; a delivery that fails
+    // verification or handling is nacked without requeue.
+    private async Task ReceiveAsync(
+        IChannel channel,
+        BasicDeliverEventArgs ea,
+        Func<TrainLifecycleEventMessage, CancellationToken, Task> handler,
+        CancellationToken ct
+    )
+    {
+        try
+        {
+            var signature = BroadcastMessageSignature.Read(ea.BasicProperties.Headers);
+            if (!_verifier.Accept(ea.Exchange, ea.Body.Span, signature))
+            {
+                await channel
+                    .BasicNackAsync(
+                        ea.DeliveryTag,
+                        multiple: false,
+                        requeue: false,
+                        cancellationToken: ct
+                    )
+                    .ConfigureAwait(false);
+                return;
+            }
+
+            var message = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(ea.Body.Span);
+
+            if (message is not null && FromItsExchange(message, ea.Exchange))
+            {
+                await handler(message, ct).ConfigureAwait(false);
+            }
+
+            await channel.BasicAckAsync(ea.DeliveryTag, multiple: false, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Error processing lifecycle event from RabbitMQ.");
+            await channel
+                .BasicNackAsync(
+                    ea.DeliveryTag,
+                    multiple: false,
+                    requeue: false,
+                    cancellationToken: ct
+                )
+                .ConfigureAwait(false);
+        }
     }
 
     /// <summary>

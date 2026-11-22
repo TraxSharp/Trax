@@ -266,17 +266,7 @@ internal sealed class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IA
 
                 if (refused && ++refusals >= MaxRefusedAttempts)
                 {
-                    Interlocked.Increment(ref _refused);
-                    _logger?.LogError(
-                        ex,
-                        "RabbitMQ broker refused {EventType} for train {TrainName} ({ExternalId}) "
-                            + "{Attempts} times on exchange {Exchange}; dropping it and sending the events behind it.",
-                        message.EventType,
-                        message.TrainName,
-                        message.ExternalId,
-                        refusals,
-                        _options.ExchangeName
-                    );
+                    DropRefused(ex, message, refusals);
                     return;
                 }
 
@@ -304,6 +294,22 @@ internal sealed class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IA
                 delay = TimeSpan.FromTicks(Math.Min(delay.Ticks * 2, MaxRetryDelay.Ticks));
             }
         }
+    }
+
+    // Counts and logs an event the broker refused too many times; the caller drops it.
+    private void DropRefused(Exception ex, TrainLifecycleEventMessage message, int refusals)
+    {
+        Interlocked.Increment(ref _refused);
+        _logger?.LogError(
+            ex,
+            "RabbitMQ broker refused {EventType} for train {TrainName} ({ExternalId}) "
+                + "{Attempts} times on exchange {Exchange}; dropping it and sending the events behind it.",
+            message.EventType,
+            message.TrainName,
+            message.ExternalId,
+            refusals,
+            _options.ExchangeName
+        );
     }
 
     private static bool IsJunctionEvent(TrainLifecycleEventMessage message) =>

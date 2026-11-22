@@ -95,23 +95,7 @@ public static class ServiceExtensions
 
         configure(builder);
 
-        // Build and set the process-wide host identity
-        var hostInfo = Models.Host.TraxHostInfo.AutoDetect();
-        if (builder.HostEnvironmentOverride != null)
-            hostInfo = hostInfo with { HostEnvironment = builder.HostEnvironmentOverride };
-        if (builder.HostInstanceIdOverride != null)
-            hostInfo = hostInfo with { HostInstanceId = builder.HostInstanceIdOverride };
-        if (builder.HostLabels.Count > 0)
-        {
-            var mergedLabels = new Dictionary<string, string>(
-                hostInfo.Labels,
-                StringComparer.Ordinal
-            );
-            foreach (var (key, value) in builder.HostLabels)
-                mergedLabels[key] = value;
-            hostInfo = hostInfo with { Labels = mergedLabels };
-        }
-        Models.Host.TraxHostInfo.Current = hostInfo;
+        SetHostIdentity(builder);
 
         // Use effect configuration from AddEffects(), or defaults if not called
         var effectConfig =
@@ -161,6 +145,27 @@ public static class ServiceExtensions
             .AddTransient<IEffectRunner, EffectRunner>()
             .AddTransient<IJunctionEffectRunner, JunctionEffectRunner>()
             .AddTransient<ILifecycleHookRunner, LifecycleHookRunner>();
+    }
+
+    // Build and set the process-wide host identity
+    private static void SetHostIdentity(TraxBuilder builder)
+    {
+        var hostInfo = Models.Host.TraxHostInfo.AutoDetect();
+        if (builder.HostEnvironmentOverride != null)
+            hostInfo = hostInfo with { HostEnvironment = builder.HostEnvironmentOverride };
+        if (builder.HostInstanceIdOverride != null)
+            hostInfo = hostInfo with { HostInstanceId = builder.HostInstanceIdOverride };
+        if (builder.HostLabels.Count > 0)
+        {
+            var mergedLabels = new Dictionary<string, string>(
+                hostInfo.Labels,
+                StringComparer.Ordinal
+            );
+            foreach (var (key, value) in builder.HostLabels)
+                mergedLabels[key] = value;
+            hostInfo = hostInfo with { Labels = mergedLabels };
+        }
+        Models.Host.TraxHostInfo.Current = hostInfo;
     }
 
     /// <summary>

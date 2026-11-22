@@ -73,35 +73,11 @@ public class SqliteDispatchSqlTests : TestSetup
         await context.Track(metadata);
         await context.SaveChanges(CancellationToken.None);
 
-        var running = WorkQueue.Create(
-            new CreateWorkQueue
-            {
-                TrainName = "Sqlite.Subject",
-                InputTypeName = "Sqlite.Input",
-                SubjectKey = "customer-1",
-            },
-            TestTime.Clock
-        );
+        var running = SubjectEntry("customer-1");
         running.Status = Trax.Effect.Enums.WorkQueueStatus.Dispatched;
         running.MetadataId = metadata.Id;
-        var sibling = WorkQueue.Create(
-            new CreateWorkQueue
-            {
-                TrainName = "Sqlite.Subject",
-                InputTypeName = "Sqlite.Input",
-                SubjectKey = "customer-1",
-            },
-            TestTime.Clock
-        );
-        var other = WorkQueue.Create(
-            new CreateWorkQueue
-            {
-                TrainName = "Sqlite.Subject",
-                InputTypeName = "Sqlite.Input",
-                SubjectKey = "customer-2",
-            },
-            TestTime.Clock
-        );
+        var sibling = SubjectEntry("customer-1");
+        var other = SubjectEntry("customer-2");
         await context.Track(running);
         await context.Track(sibling);
         await context.Track(other);
@@ -124,6 +100,17 @@ public class SqliteDispatchSqlTests : TestSetup
 
         candidates.Should().Contain(other.Id).And.NotContain(sibling.Id);
     }
+
+    private static WorkQueue SubjectEntry(string subjectKey) =>
+        WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = "Sqlite.Subject",
+                InputTypeName = "Sqlite.Input",
+                SubjectKey = subjectKey,
+            },
+            TestTime.Clock
+        );
 
     /// <summary>
     /// A dispatched run carrying no subject must not block subjects it has nothing to do with.

@@ -383,19 +383,7 @@ public class RabbitMqBroadcasterSenderTests
     {
         var connection = OpenConnection();
         var opened = 0;
-        var refusing = OpenChannel();
-        refusing
-            .ExchangeDeclareAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<bool>(),
-                Arg.Any<bool>(),
-                Arg.Any<IDictionary<string, object?>?>(),
-                Arg.Any<bool>(),
-                Arg.Any<bool>(),
-                Arg.Any<CancellationToken>()
-            )
-            .ThrowsAsync(ClosedByPeer());
+        var refusing = RefusingChannel();
         var trains = OpenChannel();
         var published = Records(trains);
         connection
@@ -445,6 +433,25 @@ public class RabbitMqBroadcasterSenderTests
             .ExternalIds.Should()
             .Equal(new[] { "train", "train-2" }, $"train events keep flowing. See {Adr}.");
         await broadcaster.DisposeAsync();
+    }
+
+    // A channel whose exchange declaration the broker refuses.
+    private static IChannel RefusingChannel()
+    {
+        var refusing = OpenChannel();
+        refusing
+            .ExchangeDeclareAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<bool>(),
+                Arg.Any<bool>(),
+                Arg.Any<IDictionary<string, object?>?>(),
+                Arg.Any<bool>(),
+                Arg.Any<bool>(),
+                Arg.Any<CancellationToken>()
+            )
+            .ThrowsAsync(ClosedByPeer());
+        return refusing;
     }
 
     private static TrainLifecycleEventMessage Junction(string externalId) =>

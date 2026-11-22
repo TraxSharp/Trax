@@ -174,25 +174,7 @@ public class ModelToStringTests
         // in Trax.Scheduler) reflects what's actually shipped.
         var cfg = new SchedulerConfig();
 
-        cfg.Id.Should().Be(SchedulerConfig.SingletonId);
-        cfg.ManifestManagerEnabled.Should().BeTrue();
-        cfg.JobDispatcherEnabled.Should().BeTrue();
-        cfg.ManifestManagerPollingInterval.Should().Be(TimeSpan.FromSeconds(5));
-        cfg.JobDispatcherPollingInterval.Should().Be(TimeSpan.FromSeconds(2));
-        cfg.MaxActiveJobs.Should().Be(10);
-        cfg.DefaultMaxRetries.Should().Be(3);
-        cfg.DefaultRetryDelay.Should().Be(TimeSpan.FromMinutes(5));
-        cfg.RetryBackoffMultiplier.Should().Be(2.0);
-        cfg.MaxRetryDelay.Should().Be(TimeSpan.FromHours(1));
-        cfg.DefaultJobTimeout.Should().Be(TimeSpan.FromMinutes(20));
-        cfg.StalePendingTimeout.Should().Be(TimeSpan.FromMinutes(20));
-        cfg.RecoverStuckJobsOnStartup.Should().BeTrue();
-        cfg.DeadLetterRetentionPeriod.Should().Be(TimeSpan.FromDays(30));
-        cfg.AutoPurgeDeadLetters.Should().BeTrue();
-        cfg.LocalWorkerCount.Should().BeNull();
-        cfg.MetadataCleanupInterval.Should().BeNull();
-        cfg.MetadataCleanupRetention.Should().BeNull();
-        cfg.UpdatedAt.Should().Be(default);
+        AssertSchedulerConfigDefaults(cfg);
 
         var when = TestTime.UtcDateTime;
         cfg.Id = 1;
@@ -220,6 +202,29 @@ public class ModelToStringTests
         cfg.UpdatedAt.Should().Be(when);
 
         cfg.ToString().Should().NotBeNullOrEmpty().And.Contain("50");
+    }
+
+    private static void AssertSchedulerConfigDefaults(SchedulerConfig cfg)
+    {
+        cfg.Id.Should().Be(SchedulerConfig.SingletonId);
+        cfg.ManifestManagerEnabled.Should().BeTrue();
+        cfg.JobDispatcherEnabled.Should().BeTrue();
+        cfg.ManifestManagerPollingInterval.Should().Be(TimeSpan.FromSeconds(5));
+        cfg.JobDispatcherPollingInterval.Should().Be(TimeSpan.FromSeconds(2));
+        cfg.MaxActiveJobs.Should().Be(10);
+        cfg.DefaultMaxRetries.Should().Be(3);
+        cfg.DefaultRetryDelay.Should().Be(TimeSpan.FromMinutes(5));
+        cfg.RetryBackoffMultiplier.Should().Be(2.0);
+        cfg.MaxRetryDelay.Should().Be(TimeSpan.FromHours(1));
+        cfg.DefaultJobTimeout.Should().Be(TimeSpan.FromMinutes(20));
+        cfg.StalePendingTimeout.Should().Be(TimeSpan.FromMinutes(20));
+        cfg.RecoverStuckJobsOnStartup.Should().BeTrue();
+        cfg.DeadLetterRetentionPeriod.Should().Be(TimeSpan.FromDays(30));
+        cfg.AutoPurgeDeadLetters.Should().BeTrue();
+        cfg.LocalWorkerCount.Should().BeNull();
+        cfg.MetadataCleanupInterval.Should().BeNull();
+        cfg.MetadataCleanupRetention.Should().BeNull();
+        cfg.UpdatedAt.Should().Be(default);
     }
 
     private sealed record Sample : IManifestProperties

@@ -284,25 +284,7 @@ public class ChangeSignalCoalescerTests
             const int total = threads * perThread;
             var domains = Enum.GetValues<ChangeDomain>();
 
-            Exception? writerFailure = null;
-            await Task.WhenAll(
-                Enumerable
-                    .Range(0, threads)
-                    .Select(t =>
-                        Task.Run(() =>
-                        {
-                            try
-                            {
-                                for (var i = 0; i < perThread; i++)
-                                    signal.Notify(domains[(t + i) % domains.Length]);
-                            }
-                            catch (Exception ex)
-                            {
-                                writerFailure = ex;
-                            }
-                        })
-                    )
-            );
+            var writerFailure = await NotifyFromThreadsAsync(signal, domains, threads, perThread);
 
             writerFailure.Should().BeNull("Notify must never throw, even under concurrent load");
 
@@ -324,6 +306,37 @@ public class ChangeSignalCoalescerTests
         {
             await coalescer.StopAsync(CancellationToken.None);
         }
+    }
+
+    // Notifies perThread signals from each of several threads at once; returns the last failure.
+    private static async Task<Exception?> NotifyFromThreadsAsync(
+        TraxChangeSignal signal,
+        ChangeDomain[] domains,
+        int threads,
+        int perThread
+    )
+    {
+        Exception? writerFailure = null;
+        await Task.WhenAll(
+                Enumerable
+                    .Range(0, threads)
+                    .Select(t =>
+                        Task.Run(() =>
+                        {
+                            try
+                            {
+                                for (var i = 0; i < perThread; i++)
+                                    signal.Notify(domains[(t + i) % domains.Length]);
+                            }
+                            catch (Exception ex)
+                            {
+                                writerFailure = ex;
+                            }
+                        })
+                    )
+            )
+            .ConfigureAwait(false);
+        return writerFailure;
     }
 
     // Waits until the flush count stops growing (two consecutive stable reads), i.e. the coalescer

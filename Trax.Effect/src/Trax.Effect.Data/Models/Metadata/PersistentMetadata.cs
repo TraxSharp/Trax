@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Trax.Effect.Data.Models.Metadata;
 
@@ -18,66 +19,77 @@ internal sealed class PersistentMetadata : Effect.Models.Metadata.Metadata
     {
         modelBuilder.Entity<Effect.Models.Metadata.Metadata>(entity =>
         {
-            entity.ToTable("metadata", "trax");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).ValueGeneratedOnAdd();
-
-            entity.HasIndex(e => e.ManifestId);
-            entity.HasIndex(e => new { e.Name, e.TrainState });
-            // Built by Postgres migration 050; declared here so a schema created from the model has it.
-            entity.HasIndex(e => e.ExternalId).HasDatabaseName("ix_metadata_external_id");
-            // Postgres migration 001 made the column char(32). Mapped as text, a lookup sends a
-            // text parameter, Postgres casts the column to compare it, and the index above no
-            // longer applies, so every lookup by external id reads the whole table.
-            entity.Property(e => e.ExternalId).HasColumnType("character(32)");
-
-            entity
-                .HasOne(x => x.Parent)
-                .WithMany(x => x.Children)
-                .HasForeignKey(e => e.ParentId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity
-                .HasOne(x => x.Manifest)
-                .WithMany(x => x.Metadatas)
-                .HasForeignKey(e => e.ManifestId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            // Configure the conversion from string to jsonb for PostgreSQL
-            // This handles the conversion between C# string properties and PostgreSQL jsonb columns
-            entity
-                .Property(e => e.Input)
-                .HasConversion(
-                    // Convert string to jsonb format for database storage
-                    v => v,
-                    // Convert jsonb back to string when reading from database
-                    v => v
-                )
-                .HasColumnType("jsonb");
-
-            entity
-                .Property(e => e.Output)
-                .HasConversion(
-                    // Convert string to jsonb format for database storage
-                    v => v,
-                    // Convert jsonb back to string when reading from database
-                    v => v
-                )
-                .HasColumnType("jsonb");
-
-            entity.Property(e => e.HostLabels).HasConversion(v => v, v => v).HasColumnType("jsonb");
-
-            // An invoked run's output as its machine reads it (Postgres 073, SQLite 035). Internal members,
-            // mapped by name here because convention maps only public ones; text rather than jsonb, so the
-            // bytes stored are the bytes the size cap counted.
-            entity.Property(e => e.InvokeOutput).HasColumnName("invoke_output");
-            entity.Property(e => e.InvokeOutputOversize).HasColumnName("invoke_output_oversize");
-
-            // Who started the run (Postgres 082, SQLite 042), internal like the invoked run's output.
-            entity.Property(e => e.StarterHash).HasColumnName("starter_hash");
-
-            // The chain the run started under (Postgres 087, SQLite 046), internal like the starter.
-            entity.Property(e => e.ChainHash).HasColumnName("chain_hash");
+            MapKeysAndRelations(entity);
+            MapColumns(entity);
         });
+    }
+
+    private static void MapKeysAndRelations(
+        EntityTypeBuilder<Effect.Models.Metadata.Metadata> entity
+    )
+    {
+        entity.ToTable("metadata", "trax");
+        entity.HasKey(e => e.Id);
+        entity.Property(e => e.Id).ValueGeneratedOnAdd();
+
+        entity.HasIndex(e => e.ManifestId);
+        entity.HasIndex(e => new { e.Name, e.TrainState });
+        // Built by Postgres migration 050; declared here so a schema created from the model has it.
+        entity.HasIndex(e => e.ExternalId).HasDatabaseName("ix_metadata_external_id");
+        // Postgres migration 001 made the column char(32). Mapped as text, a lookup sends a
+        // text parameter, Postgres casts the column to compare it, and the index above no
+        // longer applies, so every lookup by external id reads the whole table.
+        entity.Property(e => e.ExternalId).HasColumnType("character(32)");
+
+        entity
+            .HasOne(x => x.Parent)
+            .WithMany(x => x.Children)
+            .HasForeignKey(e => e.ParentId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        entity
+            .HasOne(x => x.Manifest)
+            .WithMany(x => x.Metadatas)
+            .HasForeignKey(e => e.ManifestId)
+            .OnDelete(DeleteBehavior.Restrict);
+    }
+
+    private static void MapColumns(EntityTypeBuilder<Effect.Models.Metadata.Metadata> entity)
+    {
+        // Configure the conversion from string to jsonb for PostgreSQL
+        // This handles the conversion between C# string properties and PostgreSQL jsonb columns
+        entity
+            .Property(e => e.Input)
+            .HasConversion(
+                // Convert string to jsonb format for database storage
+                v => v,
+                // Convert jsonb back to string when reading from database
+                v => v
+            )
+            .HasColumnType("jsonb");
+
+        entity
+            .Property(e => e.Output)
+            .HasConversion(
+                // Convert string to jsonb format for database storage
+                v => v,
+                // Convert jsonb back to string when reading from database
+                v => v
+            )
+            .HasColumnType("jsonb");
+
+        entity.Property(e => e.HostLabels).HasConversion(v => v, v => v).HasColumnType("jsonb");
+
+        // An invoked run's output as its machine reads it (Postgres 073, SQLite 035). Internal members,
+        // mapped by name here because convention maps only public ones; text rather than jsonb, so the
+        // bytes stored are the bytes the size cap counted.
+        entity.Property(e => e.InvokeOutput).HasColumnName("invoke_output");
+        entity.Property(e => e.InvokeOutputOversize).HasColumnName("invoke_output_oversize");
+
+        // Who started the run (Postgres 082, SQLite 042), internal like the invoked run's output.
+        entity.Property(e => e.StarterHash).HasColumnName("starter_hash");
+
+        // The chain the run started under (Postgres 087, SQLite 046), internal like the starter.
+        entity.Property(e => e.ChainHash).HasColumnName("chain_hash");
     }
 }
