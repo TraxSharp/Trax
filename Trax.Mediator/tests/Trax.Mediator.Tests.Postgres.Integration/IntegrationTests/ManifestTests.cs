@@ -263,14 +263,7 @@ public class ManifestTests : TestSetup
         var context = (IDataContext)postgresContextFactory.Create();
         await using var contextDisposal = context.ConfigureAwait(false);
 
-        var group = new MG.ManifestGroup
-        {
-            Name = $"group-{Guid.NewGuid():N}",
-            Priority = 0,
-            IsEnabled = true,
-            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
-            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
-        };
+        var group = NewTestGroup();
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
 
@@ -293,15 +286,10 @@ public class ManifestTests : TestSetup
         await context.SaveChanges(CancellationToken.None);
 
         // Create metadata (train execution) linked to the manifest
-        var metadata = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = nameof(TestMetadataCanLinkToManifest),
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = new { TestInput = "value" },
-                ManifestId = manifest.Id,
-            },
-            TimeProvider.System
+        var metadata = NewManifestMetadata(
+            nameof(TestMetadataCanLinkToManifest),
+            new { TestInput = "value" },
+            manifest
         );
 
         await context.Track(metadata);
@@ -330,14 +318,7 @@ public class ManifestTests : TestSetup
         var context = (IDataContext)postgresContextFactory.Create();
         await using var contextDisposal = context.ConfigureAwait(false);
 
-        var group = new MG.ManifestGroup
-        {
-            Name = $"group-{Guid.NewGuid():N}",
-            Priority = 0,
-            IsEnabled = true,
-            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
-            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
-        };
+        var group = NewTestGroup();
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
 
@@ -360,26 +341,16 @@ public class ManifestTests : TestSetup
         await context.SaveChanges(CancellationToken.None);
 
         // Create multiple metadata records (train executions) linked to the same manifest
-        var metadata1 = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = nameof(TestManifestCanHaveMultipleMetadataRecords) + "_Run1",
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = new { Run = 1 },
-                ManifestId = manifest.Id,
-            },
-            TimeProvider.System
+        var metadata1 = NewManifestMetadata(
+            nameof(TestManifestCanHaveMultipleMetadataRecords) + "_Run1",
+            new { Run = 1 },
+            manifest
         );
 
-        var metadata2 = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = nameof(TestManifestCanHaveMultipleMetadataRecords) + "_Run2",
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = new { Run = 2 },
-                ManifestId = manifest.Id,
-            },
-            TimeProvider.System
+        var metadata2 = NewManifestMetadata(
+            nameof(TestManifestCanHaveMultipleMetadataRecords) + "_Run2",
+            new { Run = 2 },
+            manifest
         );
 
         await context.Track(metadata1);
@@ -1005,4 +976,26 @@ public class ManifestTests : TestSetup
         public TestCategory Category { get; set; }
         public IList<int> Values { get; set; } = [];
     }
+
+    private static MG.ManifestGroup NewTestGroup() =>
+        new()
+        {
+            Name = $"group-{Guid.NewGuid():N}",
+            Priority = 0,
+            IsEnabled = true,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+        };
+
+    private static Metadata NewManifestMetadata(string name, object input, Manifest manifest) =>
+        Metadata.Create(
+            new CreateMetadata
+            {
+                Name = name,
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = input,
+                ManifestId = manifest.Id,
+            },
+            TimeProvider.System
+        );
 }

@@ -310,60 +310,9 @@ public static class TrainInputReader
         bool missing
     )
     {
-        object? input;
-
-        if (missing)
-        {
-            // A missing input stands in for an input with no values, which is only honest for a
-            // type that needs none. System.Text.Json builds a positional record from {} with every
-            // constructor parameter at its default, so without this a train taking
-            // record RenamePlayer(string Id, string NewName) would be queued with a null Id.
-            // Respecting required constructor parameters refuses exactly that, and leaves Unit,
-            // an input with only settable properties, and parameters with defaults unaffected.
-            try
-            {
-                input = JsonSerializer.Deserialize(
-                    inputJson,
-                    registration.InputType,
-                    InputOptions().Missing
-                );
-            }
-            catch (JsonException refused)
-            {
-                throw new JsonException(
-                    $"No input was given, and {registration.InputTypeName} cannot be built "
-                        + $"without one: {refused.Message}",
-                    refused
-                );
-            }
-        }
-        else
-        {
-            try
-            {
-                input = JsonSerializer.Deserialize(
-                    inputJson,
-                    registration.InputType,
-                    InputOptions().Given
-                );
-            }
-            catch (JsonException refused) when (SavedInputReferences.Present(inputJson))
-            {
-                // A list written with reference metadata fails as "could not be converted",
-                // which names neither the metadata nor the way out. Checked only once the
-                // input has been refused, so an input that reads costs nothing extra.
-                throw new JsonException(
-                    $"{refused.Message} The input carries JSON reference metadata ($id, "
-                        + "$values, $ref), which a train input does not accept. Write it "
-                        + "without, as TrainInputReader.Write does; a run's saved input is "
-                        + "turned into a plain one by TrainInputReader.ResolveSavedInput.",
-                    refused.Path,
-                    refused.LineNumber,
-                    refused.BytePositionInLine,
-                    refused
-                );
-            }
-        }
+        var input = missing
+            ? DeserializeMissing(inputJson, registration)
+            : DeserializeGiven(inputJson, registration);
 
         // A JSON null is well-formed but is not an input, so it is reported the way any other
         // input the train cannot use is: as a JSON problem the caller can fix.
@@ -373,6 +322,60 @@ public static class TrainInputReader
             );
 
         return input;
+    }
+
+    private static object? DeserializeMissing(string inputJson, TrainRegistration registration)
+    {
+        // A missing input stands in for an input with no values, which is only honest for a
+        // type that needs none. System.Text.Json builds a positional record from {} with every
+        // constructor parameter at its default, so without this a train taking
+        // record RenamePlayer(string Id, string NewName) would be queued with a null Id.
+        // Respecting required constructor parameters refuses exactly that, and leaves Unit,
+        // an input with only settable properties, and parameters with defaults unaffected.
+        try
+        {
+            return JsonSerializer.Deserialize(
+                inputJson,
+                registration.InputType,
+                InputOptions().Missing
+            );
+        }
+        catch (JsonException refused)
+        {
+            throw new JsonException(
+                $"No input was given, and {registration.InputTypeName} cannot be built "
+                    + $"without one: {refused.Message}",
+                refused
+            );
+        }
+    }
+
+    private static object? DeserializeGiven(string inputJson, TrainRegistration registration)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize(
+                inputJson,
+                registration.InputType,
+                InputOptions().Given
+            );
+        }
+        catch (JsonException refused) when (SavedInputReferences.Present(inputJson))
+        {
+            // A list written with reference metadata fails as "could not be converted",
+            // which names neither the metadata nor the way out. Checked only once the
+            // input has been refused, so an input that reads costs nothing extra.
+            throw new JsonException(
+                $"{refused.Message} The input carries JSON reference metadata ($id, "
+                    + "$values, $ref), which a train input does not accept. Write it "
+                    + "without, as TrainInputReader.Write does; a run's saved input is "
+                    + "turned into a plain one by TrainInputReader.ResolveSavedInput.",
+                refused.Path,
+                refused.LineNumber,
+                refused.BytePositionInLine,
+                refused
+            );
+        }
     }
 
     /// <summary>

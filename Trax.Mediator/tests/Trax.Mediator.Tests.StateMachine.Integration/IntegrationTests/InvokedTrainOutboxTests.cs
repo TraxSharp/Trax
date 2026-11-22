@@ -150,54 +150,71 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
                     .ConfigureAwait(false);
             };
 
-            using (var scope = _host.NotNull().Scope())
-            {
-                var bus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
-                var advance = () =>
-                    bus.RunAsync<AdvanceSnapshotOutput>(
-                        new AdvanceSnapshotInput
-                        {
-                            Machine = GoodMachine.MachineId,
-                            Id = id,
-                            Trigger = "Go",
-                        }
-                    );
-                if (fault == LaunchFault.None)
-                    (await advance()).Problem.Should().BeNull();
-                else
-                    await advance.Should().ThrowAsync<Exception>();
-            }
+            await AdvanceObservedAsync(id, fault);
 
             trainRun.Should().NotBeNull("the observation ran inside the outbox's transaction");
             trainRun.NotNull().TrainState.Should().Be(TrainState.InProgress);
             stateSeen.Should().Be("Idle", $"the snapshot is not committed part-way. See {Adr}");
             runsSeen.Should().Be(0, "the run is not committed part-way");
 
-            using var check = _host.NotNull().Scope();
-            var finished = await check
-                .ServiceProvider.GetRequiredService<IDataContext>()
-                .Metadatas.AsNoTracking()
-                .SingleAsync(m => m.Id == trainRun.Id);
-            var row = await _host.NotNull().Row(id, GoodMachine.MachineId);
+            await AssertProgressOutcomeAsync(id, fault, trainRun);
+        }
+    }
+
+    /// <summary>
+    /// Sends <c>Go</c> to the instance through the train bus and checks the advance succeeded, or
+    /// threw when <paramref name="fault"/> makes the launch fail.
+    /// </summary>
+    private async Task AdvanceObservedAsync(Guid id, LaunchFault fault)
+    {
+        using (var scope = _host.NotNull().Scope())
+        {
+            var bus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
+            var advance = () =>
+                bus.RunAsync<AdvanceSnapshotOutput>(
+                    new AdvanceSnapshotInput
+                    {
+                        Machine = GoodMachine.MachineId,
+                        Id = id,
+                        Trigger = "Go",
+                    }
+                );
             if (fault == LaunchFault.None)
-            {
-                finished.TrainState.Should().Be(TrainState.Completed);
-                row.NotNull().State.Should().Be("Running");
-                (await _host.NotNull().Runs(id)).Should().ContainSingle();
-            }
+                (await advance().ConfigureAwait(false)).Problem.Should().BeNull();
             else
-            {
-                finished
-                    .TrainState.Should()
-                    .Be(
-                        TrainState.Failed,
-                        "the train's own failure is recorded through its own context"
-                    );
-                row.NotNull()
-                    .State.Should()
-                    .Be("Idle", "and it does not commit the outbox's writes");
-                (await _host.NotNull().Runs(id)).Should().BeEmpty();
-            }
+                await advance.Should().ThrowAsync<Exception>().ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// After the advance: the advance train's own run finished, and the outbox committed or not as
+    /// <paramref name="fault"/> says.
+    /// </summary>
+    private async Task AssertProgressOutcomeAsync(Guid id, LaunchFault fault, Metadata trainRun)
+    {
+        using var check = _host.NotNull().Scope();
+        var finished = await check
+            .ServiceProvider.GetRequiredService<IDataContext>()
+            .Metadatas.AsNoTracking()
+            .SingleAsync(m => m.Id == trainRun.Id)
+            .ConfigureAwait(false);
+        var row = await _host.NotNull().Row(id, GoodMachine.MachineId).ConfigureAwait(false);
+        if (fault == LaunchFault.None)
+        {
+            finished.TrainState.Should().Be(TrainState.Completed);
+            row.NotNull().State.Should().Be("Running");
+            (await _host.NotNull().Runs(id).ConfigureAwait(false)).Should().ContainSingle();
+        }
+        else
+        {
+            finished
+                .TrainState.Should()
+                .Be(
+                    TrainState.Failed,
+                    "the train's own failure is recorded through its own context"
+                );
+            row.NotNull().State.Should().Be("Idle", "and it does not commit the outbox's writes");
+            (await _host.NotNull().Runs(id).ConfigureAwait(false)).Should().BeEmpty();
         }
     }
 

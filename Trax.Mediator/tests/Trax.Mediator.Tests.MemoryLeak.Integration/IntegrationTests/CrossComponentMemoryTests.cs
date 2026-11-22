@@ -71,60 +71,16 @@ public class CrossComponentMemoryTests
                         _jsonOptions.NotNull(),
                         new ParameterEffectConfiguration()
                     );
-                    using var jsonEffect = new JsonEffectProvider(
-                        _serviceProvider
-                            .NotNull()
-                            .GetService<ILogger<JsonEffectProvider>>()
-                            .NotNull(),
-                        _configuration.NotNull()
-                    );
+                    using var jsonEffect = NewLoggingJsonEffect();
 
                     // Create multiple metadata objects to test both providers
                     for (int metadataIndex = 0; metadataIndex < 6; metadataIndex++)
                     {
-                        var input = MemoryTestModelFactory.CreateInput(
-                            id: string.Create(
-                                CultureInfo.InvariantCulture,
-                                $"CrossComponent_{iteration}_{metadataIndex}"
-                            ),
-                            dataSizeBytes: 4000,
-                            description: string.Create(
-                                CultureInfo.InvariantCulture,
-                                $"Cross-component test {iteration}_{metadataIndex}"
-                            )
-                        );
-
-                        var output = new MemoryTestOutput
-                        {
-                            Id = input.Id,
-                            ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
-                            ProcessedData = new string('X', 3000), // 3KB
-                            Success = true,
-                            Message = string.Create(
-                                CultureInfo.InvariantCulture,
-                                $"Cross-component test output {iteration}_{metadataIndex}"
-                            ),
-                        };
-
-                        var metadata = new Metadata
-                        {
-                            Name = string.Create(
-                                CultureInfo.InvariantCulture,
-                                $"CrossComponentMetadata_{iteration}_{metadataIndex}"
-                            ),
-                        };
-                        metadata.SetInputObject(input);
-                        metadata.SetOutputObject(output);
+                        var metadata = CrossComponentMetadata(iteration, metadataIndex);
 
                         // Track with both providers
-                        await parameterEffect.Track(metadata).ConfigureAwait(false);
-                        await jsonEffect.Track(metadata).ConfigureAwait(false);
-
-                        // Save changes on both providers
-                        await parameterEffect
-                            .SaveChanges(CancellationToken.None)
+                        await TrackAndSaveWithBothAsync(parameterEffect, jsonEffect, metadata)
                             .ConfigureAwait(false);
-                        await jsonEffect.SaveChanges(CancellationToken.None).ConfigureAwait(false);
                     }
 
                     // Force periodic GC to test cleanup
@@ -171,63 +127,12 @@ public class CrossComponentMemoryTests
             {
                 for (int iteration = 0; iteration < 25; iteration++)
                 {
-                    // Create provider factories
-                    var parameterFactory = new TestParameterEffectProviderFactory(
-                        _jsonOptions.NotNull()
-                    );
-                    var jsonFactory = new TestJsonEffectProviderFactory(
-                        _jsonOptions.NotNull(),
-                        _configuration.NotNull()
-                    );
-
-                    var providerFactories = new List<IEffectProviderFactory>
-                    {
-                        parameterFactory,
-                        jsonFactory,
-                    };
-
-                    using var effectRunner = new EffectRunner(
-                        providerFactories,
-                        _serviceProvider.NotNull().GetRequiredService<IEffectRegistry>(),
-                        _serviceProvider.NotNull().GetService<ILogger<EffectRunner>>()
-                    );
+                    using var effectRunner = NewTwoProviderEffectRunner();
 
                     // Create and track multiple metadata objects
                     for (int metadataIndex = 0; metadataIndex < 8; metadataIndex++)
                     {
-                        var input = MemoryTestModelFactory.CreateInput(
-                            id: string.Create(
-                                CultureInfo.InvariantCulture,
-                                $"EffectRunner_{iteration}_{metadataIndex}"
-                            ),
-                            dataSizeBytes: 3500,
-                            description: string.Create(
-                                CultureInfo.InvariantCulture,
-                                $"Effect runner test {iteration}_{metadataIndex}"
-                            )
-                        );
-
-                        var output = new MemoryTestOutput
-                        {
-                            Id = input.Id,
-                            ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
-                            ProcessedData = new string('R', 2500), // 2.5KB
-                            Success = true,
-                            Message = string.Create(
-                                CultureInfo.InvariantCulture,
-                                $"Effect runner output {iteration}_{metadataIndex}"
-                            ),
-                        };
-
-                        var metadata = new Metadata
-                        {
-                            Name = string.Create(
-                                CultureInfo.InvariantCulture,
-                                $"EffectRunnerMetadata_{iteration}_{metadataIndex}"
-                            ),
-                        };
-                        metadata.SetInputObject(input);
-                        metadata.SetOutputObject(output);
+                        var metadata = EffectRunnerMetadata(iteration, metadataIndex);
 
                         await effectRunner.Track(metadata).ConfigureAwait(false);
                     }
@@ -280,70 +185,7 @@ public class CrossComponentMemoryTests
                 {
                     try
                     {
-                        using var parameterEffect = new ParameterEffect(
-                            _jsonOptions.NotNull(),
-                            new ParameterEffectConfiguration()
-                        );
-                        using var jsonEffect = new JsonEffectProvider(
-                            _serviceProvider
-                                .NotNull()
-                                .GetService<ILogger<JsonEffectProvider>>()
-                                .NotNull(),
-                            _configuration.NotNull()
-                        );
-
-                        var input = MemoryTestModelFactory.CreateFailingInput(
-                            id: string.Create(
-                                CultureInfo.InvariantCulture,
-                                $"ExceptionTest_{iteration}"
-                            ),
-                            dataSizeBytes: 3000,
-                            description: string.Create(
-                                CultureInfo.InvariantCulture,
-                                $"Exception test {iteration}"
-                            )
-                        );
-
-                        var output = new MemoryTestOutput
-                        {
-                            Id = input.Id,
-                            ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
-                            ProcessedData = new string('E', 2000), // 2KB
-                            Success = iteration % 3 != 0, // Fail every 3rd iteration
-                            Message = string.Create(
-                                CultureInfo.InvariantCulture,
-                                $"Exception test output {iteration}"
-                            ),
-                        };
-
-                        var metadata = new Metadata
-                        {
-                            Name = string.Create(
-                                CultureInfo.InvariantCulture,
-                                $"ExceptionMetadata_{iteration}"
-                            ),
-                        };
-                        metadata.SetInputObject(input);
-                        metadata.SetOutputObject(output);
-
-                        await parameterEffect.Track(metadata).ConfigureAwait(false);
-                        await jsonEffect.Track(metadata).ConfigureAwait(false);
-
-                        // Simulate failure scenario
-                        if (iteration % 3 == 0)
-                        {
-                            throw new InvalidOperationException(
-                                string.Create(
-                                    CultureInfo.InvariantCulture,
-                                    $"Simulated failure for iteration {iteration}"
-                                )
-                            );
-                        }
-
-                        await parameterEffect
-                            .SaveChanges(CancellationToken.None)
-                            .ConfigureAwait(false);
-                        await jsonEffect.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+                        await TrackFailingIterationAsync(iteration).ConfigureAwait(false);
                     }
                     catch (Exception)
                     {
@@ -398,67 +240,7 @@ public class CrossComponentMemoryTests
             {
                 var tasks = Enumerable
                     .Range(0, 6) // 6 concurrent tasks
-                    .Select(async taskId =>
-                    {
-                        for (int iteration = 0; iteration < 15; iteration++)
-                        {
-                            using var parameterEffect = new ParameterEffect(
-                                _jsonOptions.NotNull(),
-                                new ParameterEffectConfiguration()
-                            );
-                            using var jsonEffect = new JsonEffectProvider(
-                                NullLogger<JsonEffectProvider>.Instance, // No logging for the concurrent test
-                                _configuration.NotNull()
-                            );
-
-                            var input = MemoryTestModelFactory.CreateInput(
-                                id: string.Create(
-                                    CultureInfo.InvariantCulture,
-                                    $"Concurrent_{taskId}_{iteration}"
-                                ),
-                                dataSizeBytes: 3000,
-                                description: string.Create(
-                                    CultureInfo.InvariantCulture,
-                                    $"Concurrent test task {taskId} iteration {iteration}"
-                                )
-                            );
-
-                            var output = new MemoryTestOutput
-                            {
-                                Id = input.Id,
-                                ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
-                                ProcessedData = new string('C', 2000), // 2KB
-                                Success = true,
-                                Message = string.Create(
-                                    CultureInfo.InvariantCulture,
-                                    $"Concurrent output {taskId}_{iteration}"
-                                ),
-                            };
-
-                            var metadata = new Metadata
-                            {
-                                Name = string.Create(
-                                    CultureInfo.InvariantCulture,
-                                    $"ConcurrentMetadata_{taskId}_{iteration}"
-                                ),
-                            };
-                            metadata.SetInputObject(input);
-                            metadata.SetOutputObject(output);
-
-                            await parameterEffect.Track(metadata).ConfigureAwait(false);
-                            await jsonEffect.Track(metadata).ConfigureAwait(false);
-
-                            await parameterEffect
-                                .SaveChanges(CancellationToken.None)
-                                .ConfigureAwait(false);
-                            await jsonEffect
-                                .SaveChanges(CancellationToken.None)
-                                .ConfigureAwait(false);
-
-                            // Small delay to simulate realistic concurrency
-                            await Task.Delay(1).ConfigureAwait(false);
-                        }
-                    });
+                    .Select(RunConcurrentTaskAsync);
 
                 await Task.WhenAll(tasks).ConfigureAwait(false);
 
@@ -487,5 +269,241 @@ public class CrossComponentMemoryTests
                 5_000_000,
                 "Memory should be properly managed under concurrent cross-component load"
             );
+    }
+
+    private JsonEffectProvider NewLoggingJsonEffect() =>
+        new JsonEffectProvider(
+            _serviceProvider.NotNull().GetService<ILogger<JsonEffectProvider>>().NotNull(),
+            _configuration.NotNull()
+        );
+
+    private static Metadata CrossComponentMetadata(int iteration, int metadataIndex)
+    {
+        var input = MemoryTestModelFactory.CreateInput(
+            id: string.Create(
+                CultureInfo.InvariantCulture,
+                $"CrossComponent_{iteration}_{metadataIndex}"
+            ),
+            dataSizeBytes: 4000,
+            description: string.Create(
+                CultureInfo.InvariantCulture,
+                $"Cross-component test {iteration}_{metadataIndex}"
+            )
+        );
+
+        var output = new MemoryTestOutput
+        {
+            Id = input.Id,
+            ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            ProcessedData = new string('X', 3000), // 3KB
+            Success = true,
+            Message = string.Create(
+                CultureInfo.InvariantCulture,
+                $"Cross-component test output {iteration}_{metadataIndex}"
+            ),
+        };
+
+        var metadata = new Metadata
+        {
+            Name = string.Create(
+                CultureInfo.InvariantCulture,
+                $"CrossComponentMetadata_{iteration}_{metadataIndex}"
+            ),
+        };
+        metadata.SetInputObject(input);
+        metadata.SetOutputObject(output);
+
+        return metadata;
+    }
+
+    private static async Task TrackAndSaveWithBothAsync(
+        ParameterEffect parameterEffect,
+        JsonEffectProvider jsonEffect,
+        Metadata metadata
+    )
+    {
+        await parameterEffect.Track(metadata).ConfigureAwait(false);
+        await jsonEffect.Track(metadata).ConfigureAwait(false);
+
+        // Save changes on both providers
+        await parameterEffect.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        await jsonEffect.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+    }
+
+    private EffectRunner NewTwoProviderEffectRunner()
+    {
+        // Create provider factories
+        var parameterFactory = new TestParameterEffectProviderFactory(_jsonOptions.NotNull());
+        var jsonFactory = new TestJsonEffectProviderFactory(
+            _jsonOptions.NotNull(),
+            _configuration.NotNull()
+        );
+
+        var providerFactories = new List<IEffectProviderFactory> { parameterFactory, jsonFactory };
+
+        return new EffectRunner(
+            providerFactories,
+            _serviceProvider.NotNull().GetRequiredService<IEffectRegistry>(),
+            _serviceProvider.NotNull().GetService<ILogger<EffectRunner>>()
+        );
+    }
+
+    private static Metadata EffectRunnerMetadata(int iteration, int metadataIndex)
+    {
+        var input = MemoryTestModelFactory.CreateInput(
+            id: string.Create(
+                CultureInfo.InvariantCulture,
+                $"EffectRunner_{iteration}_{metadataIndex}"
+            ),
+            dataSizeBytes: 3500,
+            description: string.Create(
+                CultureInfo.InvariantCulture,
+                $"Effect runner test {iteration}_{metadataIndex}"
+            )
+        );
+
+        var output = new MemoryTestOutput
+        {
+            Id = input.Id,
+            ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            ProcessedData = new string('R', 2500), // 2.5KB
+            Success = true,
+            Message = string.Create(
+                CultureInfo.InvariantCulture,
+                $"Effect runner output {iteration}_{metadataIndex}"
+            ),
+        };
+
+        var metadata = new Metadata
+        {
+            Name = string.Create(
+                CultureInfo.InvariantCulture,
+                $"EffectRunnerMetadata_{iteration}_{metadataIndex}"
+            ),
+        };
+        metadata.SetInputObject(input);
+        metadata.SetOutputObject(output);
+
+        return metadata;
+    }
+
+    private async Task TrackFailingIterationAsync(int iteration)
+    {
+        using var parameterEffect = new ParameterEffect(
+            _jsonOptions.NotNull(),
+            new ParameterEffectConfiguration()
+        );
+        using var jsonEffect = NewLoggingJsonEffect();
+
+        var metadata = ExceptionMetadata(iteration);
+
+        await parameterEffect.Track(metadata).ConfigureAwait(false);
+        await jsonEffect.Track(metadata).ConfigureAwait(false);
+
+        // Simulate failure scenario
+        if (iteration % 3 == 0)
+        {
+            throw new InvalidOperationException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Simulated failure for iteration {iteration}"
+                )
+            );
+        }
+
+        await parameterEffect.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        await jsonEffect.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+    }
+
+    private static Metadata ExceptionMetadata(int iteration)
+    {
+        var input = MemoryTestModelFactory.CreateFailingInput(
+            id: string.Create(CultureInfo.InvariantCulture, $"ExceptionTest_{iteration}"),
+            dataSizeBytes: 3000,
+            description: string.Create(CultureInfo.InvariantCulture, $"Exception test {iteration}")
+        );
+
+        var output = new MemoryTestOutput
+        {
+            Id = input.Id,
+            ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            ProcessedData = new string('E', 2000), // 2KB
+            Success = iteration % 3 != 0, // Fail every 3rd iteration
+            Message = string.Create(
+                CultureInfo.InvariantCulture,
+                $"Exception test output {iteration}"
+            ),
+        };
+
+        var metadata = new Metadata
+        {
+            Name = string.Create(CultureInfo.InvariantCulture, $"ExceptionMetadata_{iteration}"),
+        };
+        metadata.SetInputObject(input);
+        metadata.SetOutputObject(output);
+
+        return metadata;
+    }
+
+    private async Task RunConcurrentTaskAsync(int taskId)
+    {
+        for (int iteration = 0; iteration < 15; iteration++)
+        {
+            using var parameterEffect = new ParameterEffect(
+                _jsonOptions.NotNull(),
+                new ParameterEffectConfiguration()
+            );
+            using var jsonEffect = new JsonEffectProvider(
+                NullLogger<JsonEffectProvider>.Instance, // No logging for the concurrent test
+                _configuration.NotNull()
+            );
+
+            var metadata = ConcurrentMetadata(taskId, iteration);
+
+            await parameterEffect.Track(metadata).ConfigureAwait(false);
+            await jsonEffect.Track(metadata).ConfigureAwait(false);
+
+            await parameterEffect.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+            await jsonEffect.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+
+            // Small delay to simulate realistic concurrency
+            await Task.Delay(1).ConfigureAwait(false);
+        }
+    }
+
+    private static Metadata ConcurrentMetadata(int taskId, int iteration)
+    {
+        var input = MemoryTestModelFactory.CreateInput(
+            id: string.Create(CultureInfo.InvariantCulture, $"Concurrent_{taskId}_{iteration}"),
+            dataSizeBytes: 3000,
+            description: string.Create(
+                CultureInfo.InvariantCulture,
+                $"Concurrent test task {taskId} iteration {iteration}"
+            )
+        );
+
+        var output = new MemoryTestOutput
+        {
+            Id = input.Id,
+            ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            ProcessedData = new string('C', 2000), // 2KB
+            Success = true,
+            Message = string.Create(
+                CultureInfo.InvariantCulture,
+                $"Concurrent output {taskId}_{iteration}"
+            ),
+        };
+
+        var metadata = new Metadata
+        {
+            Name = string.Create(
+                CultureInfo.InvariantCulture,
+                $"ConcurrentMetadata_{taskId}_{iteration}"
+            ),
+        };
+        metadata.SetInputObject(input);
+        metadata.SetOutputObject(output);
+
+        return metadata;
     }
 }

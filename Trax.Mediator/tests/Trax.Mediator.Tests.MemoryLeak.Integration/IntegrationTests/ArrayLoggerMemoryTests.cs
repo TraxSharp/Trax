@@ -23,28 +23,7 @@ public class ArrayLoggerMemoryTests
         var result = await MemoryProfiler.MonitorMemoryUsageAsync(
             async () =>
             {
-                for (int i = 0; i < 100; i++)
-                {
-                    using var provider = new ArrayLoggingProvider();
-
-                    // Create multiple loggers
-                    for (int j = 0; j < 10; j++)
-                    {
-                        var logger = provider.CreateLogger(
-                            string.Create(CultureInfo.InvariantCulture, $"TestLogger_{i}_{j}")
-                        );
-
-                        loggerReferences.Add(new WeakReference(logger));
-
-                        // Generate some log entries
-                        for (int k = 0; k < 20; k++)
-                        {
-                            logger.LogInformation("Test log message {Index}", k);
-                        }
-                    }
-
-                    // Provider gets disposed here, should clean up all loggers
-                }
+                CreateAndDisposeManyLoggers(loggerReferences);
 
                 // Force GC to see if loggers are properly collected
                 GC.Collect();
@@ -78,6 +57,32 @@ public class ArrayLoggerMemoryTests
                 "every logger's provider was disposed and nothing else references them, so a logger "
                     + "still reachable is a provider that did not let go of it"
             );
+    }
+
+    private static void CreateAndDisposeManyLoggers(List<WeakReference> loggerReferences)
+    {
+        for (int i = 0; i < 100; i++)
+        {
+            using var provider = new ArrayLoggingProvider();
+
+            // Create multiple loggers
+            for (int j = 0; j < 10; j++)
+            {
+                var logger = provider.CreateLogger(
+                    string.Create(CultureInfo.InvariantCulture, $"TestLogger_{i}_{j}")
+                );
+
+                loggerReferences.Add(new WeakReference(logger));
+
+                // Generate some log entries
+                for (int k = 0; k < 20; k++)
+                {
+                    logger.LogInformation("Test log message {Index}", k);
+                }
+            }
+
+            // Provider gets disposed here, should clean up all loggers
+        }
     }
 
     [Test]

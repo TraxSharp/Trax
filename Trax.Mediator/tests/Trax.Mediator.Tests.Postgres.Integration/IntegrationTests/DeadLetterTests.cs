@@ -219,43 +219,21 @@ public class DeadLetterTests : TestSetup
         var manifestGroup = await CreateTestManifestGroup(context);
 
         // Create manifest
-        var manifest = Manifest.Create(
-            new CreateManifest
-            {
-                Name = typeof(DeadLetterTests),
-                IsEnabled = true,
-                ScheduleType = ScheduleType.None,
-                MaxRetries = 3,
-            }
-        );
-        manifest.ManifestGroupId = manifestGroup.Id;
+        var manifest = NewTestManifest(manifestGroup);
 
         await context.Track(manifest);
         await context.SaveChanges(CancellationToken.None);
 
         // Create dead letter
-        var deadLetter = DeadLetter.Create(
-            new CreateDeadLetter
-            {
-                Manifest = manifest,
-                Reason = "Max retries exceeded",
-                RetryCount = 3,
-            },
-            TimeProvider.System
-        );
+        var deadLetter = NewDeadLetter(manifest, "Max retries exceeded", 3);
         await context.Track(deadLetter);
         await context.SaveChanges(CancellationToken.None);
         var deadLetterId = deadLetter.Id;
 
         // Create retry metadata
-        var retryMetadata = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = nameof(TestDeadLetterMarkRetriedPersists) + "_Retry",
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = new { Test = "value", Retry = true },
-            },
-            TimeProvider.System
+        var retryMetadata = NewRetryMetadata(
+            nameof(TestDeadLetterMarkRetriedPersists) + "_Retry",
+            new { Test = "value", Retry = true }
         );
 
         await context.Track(retryMetadata);
@@ -352,41 +330,19 @@ public class DeadLetterTests : TestSetup
 
         var manifestGroup = await CreateTestManifestGroup(context);
 
-        var manifest = Manifest.Create(
-            new CreateManifest
-            {
-                Name = typeof(DeadLetterTests),
-                IsEnabled = true,
-                ScheduleType = ScheduleType.None,
-                MaxRetries = 3,
-            }
-        );
-        manifest.ManifestGroupId = manifestGroup.Id;
+        var manifest = NewTestManifest(manifestGroup);
 
         await context.Track(manifest);
         await context.SaveChanges(CancellationToken.None);
 
-        var deadLetter = DeadLetter.Create(
-            new CreateDeadLetter
-            {
-                Manifest = manifest,
-                Reason = "Max retries exceeded",
-                RetryCount = 3,
-            },
-            TimeProvider.System
-        );
+        var deadLetter = NewDeadLetter(manifest, "Max retries exceeded", 3);
         await context.Track(deadLetter);
         await context.SaveChanges(CancellationToken.None);
 
         // Create retry metadata
-        var retryMetadata = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = nameof(TestDeadLetterLinkRetryMetadataPersists),
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = new { Test = "value" },
-            },
-            TimeProvider.System
+        var retryMetadata = NewRetryMetadata(
+            nameof(TestDeadLetterLinkRetryMetadataPersists),
+            new { Test = "value" }
         );
         await context.Track(retryMetadata);
         await context.SaveChanges(CancellationToken.None);
@@ -487,70 +443,19 @@ public class DeadLetterTests : TestSetup
         var manifestGroup = await CreateTestManifestGroup(context);
 
         // Create manifests for multiple dead letters
-        var manifest1 = Manifest.Create(
-            new CreateManifest
-            {
-                Name = typeof(DeadLetterTests),
-                IsEnabled = true,
-                ScheduleType = ScheduleType.None,
-                MaxRetries = 3,
-            }
-        );
-        manifest1.ManifestGroupId = manifestGroup.Id;
-        var manifest2 = Manifest.Create(
-            new CreateManifest
-            {
-                Name = typeof(DeadLetterTests),
-                IsEnabled = true,
-                ScheduleType = ScheduleType.None,
-                MaxRetries = 3,
-            }
-        );
-        manifest2.ManifestGroupId = manifestGroup.Id;
-        var manifest3 = Manifest.Create(
-            new CreateManifest
-            {
-                Name = typeof(DeadLetterTests),
-                IsEnabled = true,
-                ScheduleType = ScheduleType.None,
-                MaxRetries = 3,
-            }
-        );
-        manifest3.ManifestGroupId = manifestGroup.Id;
+        var manifest1 = NewTestManifest(manifestGroup);
+        var manifest2 = NewTestManifest(manifestGroup);
+        var manifest3 = NewTestManifest(manifestGroup);
 
         await context.Track(manifest1);
         await context.Track(manifest2);
         await context.Track(manifest3);
         await context.SaveChanges(CancellationToken.None);
 
-        var deadLetter1 = DeadLetter.Create(
-            new CreateDeadLetter
-            {
-                Manifest = manifest1,
-                Reason = "Reason 1",
-                RetryCount = 1,
-            },
-            TimeProvider.System
-        );
-        var deadLetter2 = DeadLetter.Create(
-            new CreateDeadLetter
-            {
-                Manifest = manifest2,
-                Reason = "Reason 2",
-                RetryCount = 2,
-            },
-            TimeProvider.System
-        );
+        var deadLetter1 = NewDeadLetter(manifest1, "Reason 1", 1);
+        var deadLetter2 = NewDeadLetter(manifest2, "Reason 2", 2);
         deadLetter2.Acknowledge("Acknowledged", TimeProvider.System);
-        var deadLetter3 = DeadLetter.Create(
-            new CreateDeadLetter
-            {
-                Manifest = manifest3,
-                Reason = "Reason 3",
-                RetryCount = 3,
-            },
-            TimeProvider.System
-        );
+        var deadLetter3 = NewDeadLetter(manifest3, "Reason 3", 3);
 
         await context.Track(deadLetter1);
         await context.Track(deadLetter2);
@@ -572,4 +477,41 @@ public class DeadLetterTests : TestSetup
         awaitingIntervention.Should().Contain(d => d.ManifestId == manifest3.Id);
         acknowledged.Should().Contain(d => d.ManifestId == manifest2.Id);
     }
+
+    private static Manifest NewTestManifest(ManifestGroup manifestGroup)
+    {
+        var manifest = Manifest.Create(
+            new CreateManifest
+            {
+                Name = typeof(DeadLetterTests),
+                IsEnabled = true,
+                ScheduleType = ScheduleType.None,
+                MaxRetries = 3,
+            }
+        );
+        manifest.ManifestGroupId = manifestGroup.Id;
+        return manifest;
+    }
+
+    private static DeadLetter NewDeadLetter(Manifest manifest, string reason, int retryCount) =>
+        DeadLetter.Create(
+            new CreateDeadLetter
+            {
+                Manifest = manifest,
+                Reason = reason,
+                RetryCount = retryCount,
+            },
+            TimeProvider.System
+        );
+
+    private static Metadata NewRetryMetadata(string name, object input) =>
+        Metadata.Create(
+            new CreateMetadata
+            {
+                Name = name,
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = input,
+            },
+            TimeProvider.System
+        );
 }

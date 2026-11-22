@@ -249,25 +249,7 @@ internal partial class TrainBus(
             }
 
             // Standard case: Get the 1-param Run method from cache
-            var runMethod = RunMethodCache.GetOrAdd(
-                trainType,
-                type =>
-                {
-                    var method = type.GetMethods()
-                        // Run function on Train/ServiceTrain
-                        // Run(input, cancellationToken = default) has 2 parameters (second is optional CancellationToken).
-                        // Run has an implementation in Trax.Core and Trax.Effect (the latter with the "new" keyword).
-                        // We want the one from Trax.Effect
-                        .FirstOrDefault(x =>
-                            string.Equals(x.Name, "Run", StringComparison.Ordinal)
-                            && x.GetParameters().Length == 2
-                            && x.GetParameters()[1].ParameterType == typeof(CancellationToken)
-                            && x.Module.Name.Contains("Effect", StringComparison.Ordinal)
-                        );
-
-                    return method ?? MissingMethod<MethodInfo>("Run", type.Name);
-                }
-            );
+            var runMethod = RunMethod(trainType);
 
             // And finally run the train, casting the return type to preserve type safety.
             var taskRunMethod =
@@ -353,21 +335,7 @@ internal partial class TrainBus(
         }
 
         // Find Run(input, ct) — 2 params where second is CancellationToken
-        var runWithCtMethod = RunWithCtMethodCache.GetOrAdd(
-            trainType,
-            type =>
-            {
-                var method = type.GetMethods()
-                    .FirstOrDefault(x =>
-                        string.Equals(x.Name, "Run", StringComparison.Ordinal)
-                        && x.GetParameters().Length == 2
-                        && x.GetParameters()[1].ParameterType == typeof(CancellationToken)
-                        && x.Module.Name.Contains("Effect", StringComparison.Ordinal)
-                    );
-
-                return method ?? MissingMethod<MethodInfo>("Run(input, ct)", type.Name);
-            }
-        );
+        var runWithCtMethod = RunWithCtMethod(trainType);
 
         var taskRunMethod =
             (Task<TOut>?)runWithCtMethod.Invoke(trainService, [trainInput, cancellationToken])
@@ -509,21 +477,7 @@ internal partial class TrainBus(
                 return;
             }
 
-            var runMethod = RunWithCtMethodCache.GetOrAdd(
-                trainType,
-                type =>
-                {
-                    var m = type.GetMethods()
-                        .FirstOrDefault(x =>
-                            string.Equals(x.Name, "Run", StringComparison.Ordinal)
-                            && x.GetParameters().Length == 2
-                            && x.GetParameters()[1].ParameterType == typeof(CancellationToken)
-                            && x.Module.Name.Contains("Effect", StringComparison.Ordinal)
-                        );
-
-                    return m ?? MissingMethod<MethodInfo>("Run(input, ct)", type.Name);
-                }
-            );
+            var runMethod = RunWithCtMethod(trainType);
 
             var taskRun =
                 (Task?)runMethod.Invoke(trainService, [trainInput, cancellationToken])
@@ -532,4 +486,42 @@ internal partial class TrainBus(
             await taskRun.ConfigureAwait(false);
         }
     }
+
+    private static MethodInfo RunMethod(Type trainType) =>
+        RunMethodCache.GetOrAdd(
+            trainType,
+            type =>
+            {
+                var method = type.GetMethods()
+                    // Run function on Train/ServiceTrain
+                    // Run(input, cancellationToken = default) has 2 parameters (second is optional CancellationToken).
+                    // Run has an implementation in Trax.Core and Trax.Effect (the latter with the "new" keyword).
+                    // We want the one from Trax.Effect
+                    .FirstOrDefault(x =>
+                        string.Equals(x.Name, "Run", StringComparison.Ordinal)
+                        && x.GetParameters().Length == 2
+                        && x.GetParameters()[1].ParameterType == typeof(CancellationToken)
+                        && x.Module.Name.Contains("Effect", StringComparison.Ordinal)
+                    );
+
+                return method ?? MissingMethod<MethodInfo>("Run", type.Name);
+            }
+        );
+
+    private static MethodInfo RunWithCtMethod(Type trainType) =>
+        RunWithCtMethodCache.GetOrAdd(
+            trainType,
+            type =>
+            {
+                var method = type.GetMethods()
+                    .FirstOrDefault(x =>
+                        string.Equals(x.Name, "Run", StringComparison.Ordinal)
+                        && x.GetParameters().Length == 2
+                        && x.GetParameters()[1].ParameterType == typeof(CancellationToken)
+                        && x.Module.Name.Contains("Effect", StringComparison.Ordinal)
+                    );
+
+                return method ?? MissingMethod<MethodInfo>("Run(input, ct)", type.Name);
+            }
+        );
 }

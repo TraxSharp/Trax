@@ -71,12 +71,7 @@ internal sealed class TrainChainStartupValidator(
 
         if (configuration.SkipChainVerification)
         {
-            logger?.LogWarning(
-                "Chain verification is off, so a train whose chain cannot run will not be found "
-                    + "until something runs it. The check of each train's [Inject] properties is "
-                    + "off with it, so one the container cannot fill is null on every run instead "
-                    + "of stopping the host."
-            );
+            LogVerificationOff();
 
             return;
         }
@@ -127,20 +122,35 @@ internal sealed class TrainChainStartupValidator(
             }
 
             if (failedTrains > 0)
-                throw new TrainException(
-                    string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"{failedTrains} of {checkedTrains} registered trains cannot run:"
-                    )
-                        + Environment.NewLine
-                        + string.Join(Environment.NewLine, problems.Select(p => "  - " + p))
-                        + Environment.NewLine
-                        + "See https://traxsharp.net/docs/cross-cutting/troubleshooting#n-of-m-registered-trains-cannot-run"
-                );
+                throw Refusal(failedTrains, checkedTrains, problems);
 
             logger?.LogDebug("Verified the chains of {TrainCount} trains.", checkedTrains);
         }
     }
+
+    private void LogVerificationOff() =>
+        logger?.LogWarning(
+            "Chain verification is off, so a train whose chain cannot run will not be found "
+                + "until something runs it. The check of each train's [Inject] properties is "
+                + "off with it, so one the container cannot fill is null on every run instead "
+                + "of stopping the host."
+        );
+
+    private static TrainException Refusal(
+        int failedTrains,
+        int checkedTrains,
+        List<string> problems
+    ) =>
+        new(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"{failedTrains} of {checkedTrains} registered trains cannot run:"
+            )
+                + Environment.NewLine
+                + string.Join(Environment.NewLine, problems.Select(p => "  - " + p))
+                + Environment.NewLine
+                + "See https://traxsharp.net/docs/cross-cutting/troubleshooting#n-of-m-registered-trains-cannot-run"
+        );
 
     public Task StartAsync(CancellationToken cancellationToken) =>
         _checked ? Task.CompletedTask : StartingAsync(cancellationToken);
@@ -175,31 +185,7 @@ internal sealed class TrainChainStartupValidator(
         }
         catch (Exception ex)
         {
-            // A constructor argument the container does not register at all fails every run of
-            // the train, so it is refused here, naming the type, rather than surfacing as the raw
-            // DI error on the first run.
-            if (CannotEverBeBuilt(services, registration) is { } reason)
-                return [$"{registration.ServiceTypeName} cannot be built: {reason}"];
-
-            // The class without its [Inject] properties filled. When it builds, what failed was
-            // filling them, and the instance shows which of them its constructor or initializers
-            // already set, which filling skips.
-            if (
-                UnfilledInjectProperties(
-                    services,
-                    registration,
-                    warnings,
-                    BareTrain(services, registration)
-                ) is
-                { Count: > 0 } unbuildable
-            )
-                return unbuildable.Select(r => $"{registration.ServiceTypeName}: {r}").ToList();
-
-            // A train whose constructor needs something only a request provides, a current user
-            // read from HttpContext say, cannot be built at boot and still runs fine. Refusing
-            // to start over it would make the upgrade that adds this check break such hosts.
-            skipped = $"it could not be constructed outside a request ({ex.Message})";
-            return null;
+            return Unconstructed(services, registration, warnings, ex, out skipped);
         }
 
         // An [Inject] property is filled by GetService, so a type nothing registers leaves it null
@@ -247,6 +233,60 @@ internal sealed class TrainChainStartupValidator(
             ];
         }
 
+        return VerifyDeclaredChain(services, registration, warnings, train, chain);
+    }
+
+    /// <summary>
+    /// What <see cref="Check"/> returns for a train the container failed to build.
+    /// </summary>
+    private static IReadOnlyList<string>? Unconstructed(
+        IServiceProvider services,
+        TrainRegistration registration,
+        List<string> warnings,
+        Exception ex,
+        out string? skipped
+    )
+    {
+        skipped = null;
+
+        // A constructor argument the container does not register at all fails every run of
+        // the train, so it is refused here, naming the type, rather than surfacing as the raw
+        // DI error on the first run.
+        if (CannotEverBeBuilt(services, registration) is { } reason)
+            return [$"{registration.ServiceTypeName} cannot be built: {reason}"];
+
+        // The class without its [Inject] properties filled. When it builds, what failed was
+        // filling them, and the instance shows which of them its constructor or initializers
+        // already set, which filling skips.
+        if (
+            UnfilledInjectProperties(
+                services,
+                registration,
+                warnings,
+                BareTrain(services, registration)
+            ) is
+            { Count: > 0 } unbuildable
+        )
+            return unbuildable.Select(r => $"{registration.ServiceTypeName}: {r}").ToList();
+
+        // A train whose constructor needs something only a request provides, a current user
+        // read from HttpContext say, cannot be built at boot and still runs fine. Refusing
+        // to start over it would make the upgrade that adds this check break such hosts.
+        skipped = $"it could not be constructed outside a request ({ex.Message})";
+        return null;
+    }
+
+    /// <summary>
+    /// The rest of <see cref="Check"/>, once the train's chain is read.
+    /// </summary>
+    private static IReadOnlyList<string>? VerifyDeclaredChain(
+        IServiceProvider services,
+        TrainRegistration registration,
+        List<string> warnings,
+        object train,
+        ChainRecorder chain
+    )
+    {
         warnings.AddRange(BuiltJunctionsWithInjectProperties(chain));
 
         // A run takes its chain from here rather than calling Junctions() again (Trax.Docs/adr/0047).
@@ -468,21 +508,13 @@ internal sealed class TrainChainStartupValidator(
 
             try
             {
-                registered = isService.IsService(type);
-                reason = registered
-                    ? new DependencyWalk(
-                        isService,
-                        services.GetService<IServiceCollection>(),
-                        $"the train's [Inject] property '{property.Name}'"
-                    ).WhyNotRegistered(type)
-                    : $"its [Inject] property '{property.Name}' needs '{Readable(type)}', which "
-                        + "is not registered, so the property is null on every run."
-                        + (
-                            optional
-                                ? ""
-                                : " Register it before building the host, or declare the "
-                                    + "property nullable if the train runs without it."
-                        );
+                reason = WhyPropertyUnfilled(
+                    isService,
+                    services,
+                    property,
+                    optional,
+                    out registered
+                );
             }
             catch (Exception)
             {
@@ -493,23 +525,62 @@ internal sealed class TrainChainStartupValidator(
             if (reason is null)
                 continue;
 
-            // A registered type that cannot be built throws out of GetService, which fails the
-            // train's resolution on every run however the property is declared.
-            if (optional && !registered)
-                warnings.Add(
-                    reason + " It is declared nullable, so the train is taken to cope without it."
-                );
-            else if (instance is null)
-                warnings.Add(
-                    reason
-                        + " The train could not be built here, so whether its constructor or an "
-                        + "initializer sets the property could not be checked."
-                );
-            else
-                faults.Add(reason);
+            ReportUnfilled(reason, optional, registered, instance, warnings, faults);
         }
 
         return faults;
+    }
+
+    private static string? WhyPropertyUnfilled(
+        IServiceProviderIsService isService,
+        IServiceProvider services,
+        PropertyInfo property,
+        bool optional,
+        out bool registered
+    )
+    {
+        var type = property.PropertyType;
+
+        registered = isService.IsService(type);
+        return registered
+            ? new DependencyWalk(
+                isService,
+                services.GetService<IServiceCollection>(),
+                $"the train's [Inject] property '{property.Name}'"
+            ).WhyNotRegistered(type)
+            : $"its [Inject] property '{property.Name}' needs '{Readable(type)}', which "
+                + "is not registered, so the property is null on every run."
+                + (
+                    optional
+                        ? ""
+                        : " Register it before building the host, or declare the "
+                            + "property nullable if the train runs without it."
+                );
+    }
+
+    private static void ReportUnfilled(
+        string reason,
+        bool optional,
+        bool registered,
+        object? instance,
+        List<string> warnings,
+        List<string> faults
+    )
+    {
+        // A registered type that cannot be built throws out of GetService, which fails the
+        // train's resolution on every run however the property is declared.
+        if (optional && !registered)
+            warnings.Add(
+                reason + " It is declared nullable, so the train is taken to cope without it."
+            );
+        else if (instance is null)
+            warnings.Add(
+                reason
+                    + " The train could not be built here, so whether its constructor or an "
+                    + "initializer sets the property could not be checked."
+            );
+        else
+            faults.Add(reason);
     }
 
     /// <summary>

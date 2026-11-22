@@ -58,22 +58,7 @@ public class SavedInputJsonbTests : TestSetup
         );
         row.Input = JsonSerializer.Serialize(original, legacy);
 
-        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        var context = (IDataContext)factory.Create();
-        await using (context.ConfigureAwait(false))
-        {
-            await context.Track(row);
-            await context.SaveChanges(CancellationToken.None);
-        }
-
-        string saved;
-        var readContext = (IDataContext)factory.Create();
-        await using (readContext.ConfigureAwait(false))
-        {
-            saved = (
-                await readContext.Metadatas.AsNoTracking().SingleAsync(m => m.Id == row.Id)
-            ).Input.NotNull();
-        }
+        var saved = await SaveAndReadBackInputAsync(row);
 
         // What makes this test worth having: the column reordered the metadata away from the
         // front of the root and of every object with a shorter property, and still carries it.
@@ -100,6 +85,35 @@ public class SavedInputJsonbTests : TestSetup
                 "the second occurrence of the shared object is a $ref, which must read back as the "
                     + "object it names, not as one with every member at its default"
             );
+    }
+
+    /// <summary>
+    /// Writes <paramref name="row"/> through one context and reads its input column back through
+    /// another.
+    /// </summary>
+    private async Task<string> SaveAndReadBackInputAsync(Metadata row)
+    {
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var context = (IDataContext)factory.Create();
+        await using (context.ConfigureAwait(false))
+        {
+            await context.Track(row).ConfigureAwait(false);
+            await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        }
+
+        string saved;
+        var readContext = (IDataContext)factory.Create();
+        await using (readContext.ConfigureAwait(false))
+        {
+            saved = (
+                await readContext
+                    .Metadatas.AsNoTracking()
+                    .SingleAsync(m => m.Id == row.Id)
+                    .ConfigureAwait(false)
+            ).Input.NotNull();
+        }
+
+        return saved;
     }
 
     public class Spot

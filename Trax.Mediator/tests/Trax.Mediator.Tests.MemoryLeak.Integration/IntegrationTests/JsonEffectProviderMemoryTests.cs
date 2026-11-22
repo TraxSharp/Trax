@@ -42,36 +42,7 @@ public class JsonEffectProviderMemoryTests
                     // Track multiple models
                     for (int j = 0; j < 20; j++)
                     {
-                        var metadata = new Metadata
-                        {
-                            Name = string.Create(
-                                CultureInfo.InvariantCulture,
-                                $"TestMetadata_{i}_{j}"
-                            ),
-                        };
-                        metadata.SetInputObject(
-                            MemoryTestModelFactory.CreateInput(
-                                id: string.Create(CultureInfo.InvariantCulture, $"Input_{i}_{j}"),
-                                dataSizeBytes: 1000,
-                                description: string.Create(
-                                    CultureInfo.InvariantCulture,
-                                    $"Test input {i}_{j}"
-                                )
-                            )
-                        );
-                        metadata.SetOutputObject(
-                            new MemoryTestOutput
-                            {
-                                Id = string.Create(CultureInfo.InvariantCulture, $"Output_{i}_{j}"),
-                                Message = string.Create(
-                                    CultureInfo.InvariantCulture,
-                                    $"Test output {i}_{j}"
-                                ),
-                                ProcessedData = new string('X', 500), // 500 characters
-                                Success = true,
-                                ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
-                            }
-                        );
+                        var metadata = ModelTrackingMetadata(i, j);
 
                         await provider.Track(metadata).ConfigureAwait(false);
                     }
@@ -114,53 +85,7 @@ public class JsonEffectProviderMemoryTests
         var result = await MemoryProfiler.MonitorMemoryUsageAsync(
             async () =>
             {
-                using var provider = new JsonEffectProvider(_logger, _configuration);
-
-                // Track many models with large JSON serialization
-                for (int i = 0; i < 100; i++)
-                {
-                    var metadata = new Metadata
-                    {
-                        Name = string.Create(CultureInfo.InvariantCulture, $"AccumulationTest_{i}"),
-                    };
-                    metadata.SetInputObject(
-                        MemoryTestModelFactory.CreateInput(
-                            id: string.Create(CultureInfo.InvariantCulture, $"LargeInput_{i}"),
-                            dataSizeBytes: 5000,
-                            description: string.Create(
-                                CultureInfo.InvariantCulture,
-                                $"Large input {i}"
-                            )
-                        )
-                    );
-                    metadata.SetOutputObject(
-                        new MemoryTestOutput
-                        {
-                            Id = string.Create(CultureInfo.InvariantCulture, $"LargeOutput_{i}"),
-                            Message = string.Create(
-                                CultureInfo.InvariantCulture,
-                                $"Large output {i}"
-                            ),
-                            ProcessedData = new string('Y', 2000), // 2KB string
-                            Success = true,
-                            ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
-                        }
-                    );
-
-                    modelReferences.Add(new WeakReference(metadata));
-                    await provider.Track(metadata).ConfigureAwait(false);
-
-                    // Trigger serialization periodically
-                    if (i % 10 == 0)
-                    {
-                        await provider.SaveChanges(CancellationToken.None).ConfigureAwait(false);
-                    }
-                }
-
-                // Final save
-                await provider.SaveChanges(CancellationToken.None).ConfigureAwait(false);
-
-                // Provider disposal should clean up all tracked models
+                await TrackAccumulatingModelsAsync(modelReferences).ConfigureAwait(false);
             },
             "JsonEffectProvider_ModelAccumulation"
         );
@@ -208,61 +133,7 @@ public class JsonEffectProviderMemoryTests
 
                 var tasks = Enumerable
                     .Range(0, 8)
-                    .Select(async taskId =>
-                    {
-                        for (int i = 0; i < 25; i++)
-                        {
-                            var metadata = new Metadata
-                            {
-                                Name = string.Create(
-                                    CultureInfo.InvariantCulture,
-                                    $"ConcurrentTest_{taskId}_{i}"
-                                ),
-                            };
-                            metadata.SetInputObject(
-                                MemoryTestModelFactory.CreateInput(
-                                    id: string.Create(
-                                        CultureInfo.InvariantCulture,
-                                        $"ConcurrentInput_{taskId}_{i}"
-                                    ),
-                                    dataSizeBytes: 2000,
-                                    description: string.Create(
-                                        CultureInfo.InvariantCulture,
-                                        $"Concurrent input {taskId}_{i}"
-                                    )
-                                )
-                            );
-
-                            await provider.Track(metadata).ConfigureAwait(false);
-
-                            // Simulate concurrent state changes
-                            await Task.Delay(1).ConfigureAwait(false); // Small delay to simulate work
-
-                            metadata.SetOutputObject(
-                                new MemoryTestOutput
-                                {
-                                    Id = string.Create(
-                                        CultureInfo.InvariantCulture,
-                                        $"ConcurrentOutput_{taskId}_{i}"
-                                    ),
-                                    Message = string.Create(
-                                        CultureInfo.InvariantCulture,
-                                        $"Concurrent output {taskId}_{i}"
-                                    ),
-                                    ProcessedData = new string('Z', 1000), // 1KB string
-                                    Success = true,
-                                    ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
-                                }
-                            );
-
-                            if (i % 5 == 0)
-                            {
-                                await provider
-                                    .SaveChanges(CancellationToken.None)
-                                    .ConfigureAwait(false);
-                            }
-                        }
-                    });
+                    .Select(taskId => TrackConcurrentlyAsync(provider, taskId));
 
                 await Task.WhenAll(tasks).ConfigureAwait(false);
 
@@ -293,27 +164,8 @@ public class JsonEffectProviderMemoryTests
                 using var provider = new JsonEffectProvider(_logger, _configuration);
 
                 // Track a few models
-                var metadataList = new List<Metadata>();
-                for (int i = 0; i < 10; i++)
-                {
-                    var metadata = new Metadata
-                    {
-                        Name = string.Create(CultureInfo.InvariantCulture, $"RepeatedTest_{i}"),
-                    };
-                    metadata.SetInputObject(
-                        MemoryTestModelFactory.CreateInput(
-                            id: string.Create(CultureInfo.InvariantCulture, $"Input_{i}"),
-                            dataSizeBytes: 3000,
-                            description: string.Create(
-                                CultureInfo.InvariantCulture,
-                                $"Repeated input {i}"
-                            )
-                        )
-                    );
-
-                    metadataList.Add(metadata);
-                    await provider.Track(metadata).ConfigureAwait(false);
-                }
+                var metadataList = await TrackRepeatedTestModelsAsync(provider)
+                    .ConfigureAwait(false);
 
                 // Repeatedly modify and save changes
                 for (int iteration = 0; iteration < 50; iteration++)
@@ -399,33 +251,7 @@ public class JsonEffectProviderMemoryTests
                 // Track models with very large serializable data
                 for (int i = 0; i < 20; i++)
                 {
-                    var metadata = new Metadata
-                    {
-                        Name = string.Create(CultureInfo.InvariantCulture, $"LargeObjectTest_{i}"),
-                    };
-                    metadata.SetInputObject(
-                        MemoryTestModelFactory.CreateInput(
-                            id: string.Create(CultureInfo.InvariantCulture, $"LargeInput_{i}"),
-                            dataSizeBytes: 50_000,
-                            description: string.Create(
-                                CultureInfo.InvariantCulture,
-                                $"Large input {i}"
-                            )
-                        )
-                    );
-                    metadata.SetOutputObject(
-                        new MemoryTestOutput
-                        {
-                            Id = string.Create(CultureInfo.InvariantCulture, $"LargeOutput_{i}"),
-                            Message = string.Create(
-                                CultureInfo.InvariantCulture,
-                                $"Large output {i}"
-                            ),
-                            ProcessedData = new string('L', 25_000), // 25KB string
-                            Success = true,
-                            ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
-                        }
-                    );
+                    var metadata = LargeObjectMetadata(i);
 
                     await provider.Track(metadata).ConfigureAwait(false);
 
@@ -514,6 +340,182 @@ public class JsonEffectProviderMemoryTests
                 5 * 1024 * 1024,
                 "Duplicate model tracking should not cause excessive memory growth"
             );
+    }
+
+    private static Metadata ModelTrackingMetadata(int i, int j)
+    {
+        var metadata = new Metadata
+        {
+            Name = string.Create(CultureInfo.InvariantCulture, $"TestMetadata_{i}_{j}"),
+        };
+        metadata.SetInputObject(
+            MemoryTestModelFactory.CreateInput(
+                id: string.Create(CultureInfo.InvariantCulture, $"Input_{i}_{j}"),
+                dataSizeBytes: 1000,
+                description: string.Create(CultureInfo.InvariantCulture, $"Test input {i}_{j}")
+            )
+        );
+        metadata.SetOutputObject(
+            new MemoryTestOutput
+            {
+                Id = string.Create(CultureInfo.InvariantCulture, $"Output_{i}_{j}"),
+                Message = string.Create(CultureInfo.InvariantCulture, $"Test output {i}_{j}"),
+                ProcessedData = new string('X', 500), // 500 characters
+                Success = true,
+                ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            }
+        );
+
+        return metadata;
+    }
+
+    private async Task TrackAccumulatingModelsAsync(List<WeakReference> modelReferences)
+    {
+        using var provider = new JsonEffectProvider(_logger, _configuration);
+
+        // Track many models with large JSON serialization
+        for (int i = 0; i < 100; i++)
+        {
+            var metadata = new Metadata
+            {
+                Name = string.Create(CultureInfo.InvariantCulture, $"AccumulationTest_{i}"),
+            };
+            metadata.SetInputObject(
+                MemoryTestModelFactory.CreateInput(
+                    id: string.Create(CultureInfo.InvariantCulture, $"LargeInput_{i}"),
+                    dataSizeBytes: 5000,
+                    description: string.Create(CultureInfo.InvariantCulture, $"Large input {i}")
+                )
+            );
+            metadata.SetOutputObject(
+                new MemoryTestOutput
+                {
+                    Id = string.Create(CultureInfo.InvariantCulture, $"LargeOutput_{i}"),
+                    Message = string.Create(CultureInfo.InvariantCulture, $"Large output {i}"),
+                    ProcessedData = new string('Y', 2000), // 2KB string
+                    Success = true,
+                    ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+                }
+            );
+
+            modelReferences.Add(new WeakReference(metadata));
+            await provider.Track(metadata).ConfigureAwait(false);
+
+            // Trigger serialization periodically
+            if (i % 10 == 0)
+            {
+                await provider.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+            }
+        }
+
+        // Final save
+        await provider.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+
+        // Provider disposal should clean up all tracked models
+    }
+
+    private static async Task TrackConcurrentlyAsync(JsonEffectProvider provider, int taskId)
+    {
+        for (int i = 0; i < 25; i++)
+        {
+            var metadata = new Metadata
+            {
+                Name = string.Create(CultureInfo.InvariantCulture, $"ConcurrentTest_{taskId}_{i}"),
+            };
+            metadata.SetInputObject(
+                MemoryTestModelFactory.CreateInput(
+                    id: string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"ConcurrentInput_{taskId}_{i}"
+                    ),
+                    dataSizeBytes: 2000,
+                    description: string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Concurrent input {taskId}_{i}"
+                    )
+                )
+            );
+
+            await provider.Track(metadata).ConfigureAwait(false);
+
+            // Simulate concurrent state changes
+            await Task.Delay(1).ConfigureAwait(false); // Small delay to simulate work
+
+            metadata.SetOutputObject(
+                new MemoryTestOutput
+                {
+                    Id = string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"ConcurrentOutput_{taskId}_{i}"
+                    ),
+                    Message = string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Concurrent output {taskId}_{i}"
+                    ),
+                    ProcessedData = new string('Z', 1000), // 1KB string
+                    Success = true,
+                    ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+                }
+            );
+
+            if (i % 5 == 0)
+            {
+                await provider.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private static async Task<List<Metadata>> TrackRepeatedTestModelsAsync(
+        JsonEffectProvider provider
+    )
+    {
+        var metadataList = new List<Metadata>();
+        for (int i = 0; i < 10; i++)
+        {
+            var metadata = new Metadata
+            {
+                Name = string.Create(CultureInfo.InvariantCulture, $"RepeatedTest_{i}"),
+            };
+            metadata.SetInputObject(
+                MemoryTestModelFactory.CreateInput(
+                    id: string.Create(CultureInfo.InvariantCulture, $"Input_{i}"),
+                    dataSizeBytes: 3000,
+                    description: string.Create(CultureInfo.InvariantCulture, $"Repeated input {i}")
+                )
+            );
+
+            metadataList.Add(metadata);
+            await provider.Track(metadata).ConfigureAwait(false);
+        }
+
+        return metadataList;
+    }
+
+    private static Metadata LargeObjectMetadata(int i)
+    {
+        var metadata = new Metadata
+        {
+            Name = string.Create(CultureInfo.InvariantCulture, $"LargeObjectTest_{i}"),
+        };
+        metadata.SetInputObject(
+            MemoryTestModelFactory.CreateInput(
+                id: string.Create(CultureInfo.InvariantCulture, $"LargeInput_{i}"),
+                dataSizeBytes: 50_000,
+                description: string.Create(CultureInfo.InvariantCulture, $"Large input {i}")
+            )
+        );
+        metadata.SetOutputObject(
+            new MemoryTestOutput
+            {
+                Id = string.Create(CultureInfo.InvariantCulture, $"LargeOutput_{i}"),
+                Message = string.Create(CultureInfo.InvariantCulture, $"Large output {i}"),
+                ProcessedData = new string('L', 25_000), // 25KB string
+                Success = true,
+                ProcessedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            }
+        );
+
+        return metadata;
     }
 
     private sealed class StubEffectConfiguration : ITraxEffectConfiguration

@@ -110,15 +110,7 @@ public class LocalRunExecutor : IRunExecutor
 
         async Task<Metadata> CreatePendingAsync(CancellationToken token)
         {
-            var metadata = Metadata.Create(
-                new CreateMetadata
-                {
-                    Name = trainName,
-                    ExternalId = Guid.NewGuid().ToString("N"),
-                    Input = null,
-                    StarterHash = starterHash,
-                }
-            );
+            var metadata = Metadata.Create(PendingMetadataRequest(trainName, starterHash));
 
             var dataContext = await dataContextFactory
                 .CreateDbContextAsync(token)
@@ -169,6 +161,15 @@ public class LocalRunExecutor : IRunExecutor
             outputType == typeof(Unit) ? null : output
         );
     }
+
+    private static CreateMetadata PendingMetadataRequest(string trainName, string? starterHash) =>
+        new()
+        {
+            Name = trainName,
+            ExternalId = Guid.NewGuid().ToString("N"),
+            Input = null,
+            StarterHash = starterHash,
+        };
 
     private async Task<object?> RunBoxedAsync<TOut>(
         string trainName,

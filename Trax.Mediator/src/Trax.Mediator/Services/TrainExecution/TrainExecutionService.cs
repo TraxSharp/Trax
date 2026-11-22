@@ -128,140 +128,210 @@ public class TrainExecutionService(
         var train = new EnqueueTrain(serviceProvider, registration);
         await using (train.ConfigureAwait(false))
         {
-            // An enqueue started from inside another train's OnQueue hook joins that enqueue's
-            // transaction, so it commits with the outer entry or not at all (mediator/0003).
-            var outer = FindEnqueueToJoin();
-            using var joined = outer?.TryJoin();
-            if (joined is null)
-                outer = null;
+            return await QueueWithTrainAsync(
+                    registration,
+                    train,
+                    input,
+                    serializedInput,
+                    options,
+                    priority,
+                    scheduledAt,
+                    ct
+                )
+                .ConfigureAwait(false);
+        }
+    }
 
-            // A deferring train that joins is not staged: nothing outside the outer transaction can
-            // see its entry until that commits, so there is no window for staging to cover.
-            var declaresDeferral = ResolveDeferPromotion(registration, train);
-            var deferPromotion = declaresDeferral && outer is null;
+    private async Task<QueueTrainResult> QueueWithTrainAsync(
+        TrainRegistration registration,
+        EnqueueTrain train,
+        object input,
+        string serializedInput,
+        QueueTrainOptions options,
+        int priority,
+        DateTime? scheduledAt,
+        CancellationToken ct
+    )
+    {
+        // An enqueue started from inside another train's OnQueue hook joins that enqueue's
+        // transaction, so it commits with the outer entry or not at all (mediator/0003).
+        var outer = FindEnqueueToJoin();
+        using var joined = outer?.TryJoin();
+        if (joined is null)
+            outer = null;
 
-            // The key is resolved before the entry exists and handed to WorkQueue.Create, so Create's
-            // own checks see it. The train computes it from the entry's ExternalId, which Create
-            // would otherwise generate, so the enqueue chooses it first (in Create's format) and
-            // stamps it on the entry: CreateWorkQueue has no ExternalId to pass it through.
-            var externalId = Guid.NewGuid().ToString("N");
-            var subjectKey = ResolveSubjectKey(registration, train, input, externalId);
+        // A deferring train that joins is not staged: nothing outside the outer transaction can
+        // see its entry until that commits, so there is no window for staging to cover.
+        var declaresDeferral = ResolveDeferPromotion(registration, train);
+        var deferPromotion = declaresDeferral && outer is null;
 
-            var entry = CreateEntry(
+        // The key is resolved before the entry exists and handed to WorkQueue.Create, so Create's
+        // own checks see it. The train computes it from the entry's ExternalId, which Create
+        // would otherwise generate, so the enqueue chooses it first (in Create's format) and
+        // stamps it on the entry: CreateWorkQueue has no ExternalId to pass it through.
+        var externalId = Guid.NewGuid().ToString("N");
+        var subjectKey = ResolveSubjectKey(registration, train, input, externalId);
+
+        var entry = CreateEntry(
+            registration,
+            QueuedWorkQueue(
                 registration,
-                new CreateWorkQueue
-                {
-                    TrainName = registration.ServiceType.FullName,
-                    Input = serializedInput,
-                    InputTypeName = registration.InputType.FullName,
-                    Priority = priority,
-                    ScheduledAt = ToUtc(scheduledAt),
-                    DeferPromotion = deferPromotion,
-                    SubjectKey = subjectKey,
-                    ReplayDecisionsOf = options.ReplayDecisionsOf,
-                    ResumeFrom = options.ResumeFrom,
-                    ResumeAt = options.ResumeAt,
-                    StarterHash =
-                        options.StarterHash ?? (options.RecordCaller ? CallerHash() : null),
-                }
-            );
-            entry.ExternalId = externalId;
+                serializedInput,
+                options,
+                priority,
+                scheduledAt,
+                deferPromotion,
+                subjectKey
+            )
+        );
+        entry.ExternalId = externalId;
 
-            if (outer is not null)
-                return await QueueIntoOuterAsync(
-                        outer,
+        if (outer is not null)
+            return await QueueIntoOuterAsync(
+                    outer,
+                    registration,
+                    train,
+                    input,
+                    entry,
+                    declaresDeferral,
+                    ct
+                )
+                .ConfigureAwait(false);
+
+        if (deferPromotion)
+            return await QueueWithDeferredPromotionAsync(registration, train, input, entry, ct)
+                .ConfigureAwait(false);
+
+        return await QueueDirectAsync(registration, train, input, entry, ct).ConfigureAwait(false);
+    }
+
+    private CreateWorkQueue QueuedWorkQueue(
+        TrainRegistration registration,
+        string serializedInput,
+        QueueTrainOptions options,
+        int priority,
+        DateTime? scheduledAt,
+        bool deferPromotion,
+        string? subjectKey
+    ) =>
+        new()
+        {
+            TrainName = registration.ServiceType.FullName.NotNull(),
+            Input = serializedInput,
+            InputTypeName = registration.InputType.FullName,
+            Priority = priority,
+            ScheduledAt = ToUtc(scheduledAt),
+            DeferPromotion = deferPromotion,
+            SubjectKey = subjectKey,
+            ReplayDecisionsOf = options.ReplayDecisionsOf,
+            ResumeFrom = options.ResumeFrom,
+            ResumeAt = options.ResumeAt,
+            StarterHash = options.StarterHash ?? (options.RecordCaller ? CallerHash() : null),
+        };
+
+    private async Task<QueueTrainResult> QueueDirectAsync(
+        TrainRegistration registration,
+        EnqueueTrain train,
+        object input,
+        WorkQueue entry,
+        CancellationToken ct
+    )
+    {
+        var dataContext = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dataContextDisposal = dataContext.ConfigureAwait(false);
+
+        // Queue-time hook: fire OnQueue before the work queue row is inserted, so a consumer
+        // can perform a side-effect (e.g. an optimistic shadow write) the moment the mutation
+        // is accepted. The entry's ExternalId is the correlation key; the eventual run executes
+        // under the same ExternalId. Exceptions propagate and abort the enqueue.
+        //
+        // Track() is change-tracking only, so the row still has not been INSERTed when the hook
+        // runs. Tracking it first lets the hook's own writes join the same SaveChanges, and the
+        // transaction below makes the pair atomic: a hook that throws after writing leaves
+        // nothing behind, which is the crash window this path used to carry. A hook that writes
+        // through its OWN DbContext is not covered: a separately-pooled context has its own
+        // connection and therefore its own transaction.
+        // Only a train with a hook needs the transaction: without one there is a single write,
+        // and an explicit BEGIN/COMMIT would add two round trips to every enqueue for nothing.
+        var hasHook = ResolveOnQueueOverride(registration.ImplementationType) is not null;
+        using var transaction = hasHook
+            ? await TryBeginTransactionAsync(dataContext, ct).ConfigureAwait(false)
+            : null;
+        try
+        {
+            await dataContext.Track(entry).ConfigureAwait(false);
+
+            if (hasHook)
+                await RunQueueHookAsync(
                         registration,
                         train,
                         input,
                         entry,
-                        declaresDeferral,
+                        dataContext,
+                        transaction,
                         ct
                     )
                     .ConfigureAwait(false);
 
-            if (deferPromotion)
-                return await QueueWithDeferredPromotionAsync(registration, train, input, entry, ct)
-                    .ConfigureAwait(false);
+            await dataContext.SaveChanges(ct).ConfigureAwait(false);
 
-            var dataContext = await dataContextFactory
-                .CreateDbContextAsync(ct)
-                .ConfigureAwait(false);
-            await using var dataContextDisposal = dataContext.ConfigureAwait(false);
+            if (transaction is not null)
+                await transaction.Commit().ConfigureAwait(false);
+        }
+        catch
+        {
+            if (transaction is not null)
+                await RollbackQuietlyAsync(transaction).ConfigureAwait(false);
 
-            // Queue-time hook: fire OnQueue before the work queue row is inserted, so a consumer
-            // can perform a side-effect (e.g. an optimistic shadow write) the moment the mutation
-            // is accepted. The entry's ExternalId is the correlation key; the eventual run executes
-            // under the same ExternalId. Exceptions propagate and abort the enqueue.
-            //
-            // Track() is change-tracking only, so the row still has not been INSERTed when the hook
-            // runs. Tracking it first lets the hook's own writes join the same SaveChanges, and the
-            // transaction below makes the pair atomic: a hook that throws after writing leaves
-            // nothing behind, which is the crash window this path used to carry. A hook that writes
-            // through its OWN DbContext is not covered: a separately-pooled context has its own
-            // connection and therefore its own transaction.
-            // Only a train with a hook needs the transaction: without one there is a single write,
-            // and an explicit BEGIN/COMMIT would add two round trips to every enqueue for nothing.
-            var hasHook = ResolveOnQueueOverride(registration.ImplementationType) is not null;
-            using var transaction = hasHook
-                ? await TryBeginTransactionAsync(dataContext, ct).ConfigureAwait(false)
-                : null;
+            throw;
+        }
+
+        return new QueueTrainResult(entry.Id, entry.ExternalId);
+    }
+
+    private async Task RunQueueHookAsync(
+        TrainRegistration registration,
+        EnqueueTrain train,
+        object input,
+        WorkQueue entry,
+        IDataContext dataContext,
+        IDataContextTransaction? transaction,
+        CancellationToken ct
+    )
+    {
+        // Resolved rather than injected so the public constructor signature is
+        // unchanged: adding a parameter to a public service type is a breaking API
+        // change for anyone constructing it directly.
+        var enqueueContext = serviceProvider.GetRequiredService<IEnqueueContextAccessor>();
+
+        // Only a real transaction can take a nested enqueue with it, so a provider that
+        // has none leaves nested enqueues to commit on their own, as they always did.
+        var joinable = transaction is null
+            ? null
+            : new JoinableEnqueue(dataContext, dataContextFactory);
+
+        using (enqueueContext.Enter(dataContext))
+        using (joinable?.Enter())
+        {
             try
             {
-                await dataContext.Track(entry).ConfigureAwait(false);
-
-                if (hasHook)
-                {
-                    // Resolved rather than injected so the public constructor signature is
-                    // unchanged: adding a parameter to a public service type is a breaking API
-                    // change for anyone constructing it directly.
-                    var enqueueContext =
-                        serviceProvider.GetRequiredService<IEnqueueContextAccessor>();
-
-                    // Only a real transaction can take a nested enqueue with it, so a provider that
-                    // has none leaves nested enqueues to commit on their own, as they always did.
-                    var joinable = transaction is null
-                        ? null
-                        : new JoinableEnqueue(dataContext, dataContextFactory);
-
-                    using (enqueueContext.Enter(dataContext))
-                    using (joinable?.Enter())
-                    {
-                        try
-                        {
-                            await InvokeQueueHookWithinLimitAsync(
-                                    registration,
-                                    train,
-                                    input,
-                                    entry.ExternalId,
-                                    joinable,
-                                    ct
-                                )
-                                .ConfigureAwait(false);
-                        }
-                        finally
-                        {
-                            joinable?.Close();
-                        }
-                    }
-
-                    joinable?.ThrowIfNestedIncomplete(registration);
-                }
-
-                await dataContext.SaveChanges(ct).ConfigureAwait(false);
-
-                if (transaction is not null)
-                    await transaction.Commit().ConfigureAwait(false);
+                await InvokeQueueHookWithinLimitAsync(
+                        registration,
+                        train,
+                        input,
+                        entry.ExternalId,
+                        joinable,
+                        ct
+                    )
+                    .ConfigureAwait(false);
             }
-            catch
+            finally
             {
-                if (transaction is not null)
-                    await RollbackQuietlyAsync(transaction).ConfigureAwait(false);
-
-                throw;
+                joinable?.Close();
             }
-
-            return new QueueTrainResult(entry.Id, entry.ExternalId);
         }
+
+        joinable?.ThrowIfNestedIncomplete(registration);
     }
 
     /// <summary>
@@ -298,57 +368,9 @@ public class TrainExecutionService(
 
         var registration = FindTrain(launch.TrainType.FullName ?? launch.TrainType.Name);
 
-        if (ResolveOnQueueOverride(registration.ImplementationType) is not null)
-            throw new InvalidOperationException(
-                $"{registration.ServiceTypeName} has an OnQueue hook, which commits on its own, so a "
-                    + "state machine cannot queue it in the transaction that enters its state."
-            );
+        RefuseUninvokable(launch, registration);
 
-        // The startup check refuses both; this refuses them again, fail-closed, so a host that skipped the check
-        // (its hosted services never started) still queues neither.
-        var at = InvokeRefusals.At(launch.InvokedBy.Machine, launch.State, launch.TrainType);
-        if (
-            launch.InvokedBy.OwnerKind != SnapshotOwnerKind.System
-            && registration.IsBroadcastEnabled
-        )
-            throw new InvalidOperationException(InvokeRefusals.Broadcast(at));
-        if (TraxRedaction.ReachesSensitiveMember(registration.OutputType))
-            throw new InvalidOperationException(
-                InvokeRefusals.SensitiveOutput(at, registration.OutputType)
-            );
-
-        // A run entered by the outcome of the run before it has no user present to authorize it. Only a
-        // system-owned instance may launch one (the state-machine startup check refuses a user-owned machine
-        // that declares such an edge), so a user-owned one is refused here too, fail-closed, rather than
-        // authorized in the trusted scope.
-        if (launch.FromOutcome && launch.InvokedBy.OwnerKind != SnapshotOwnerKind.System)
-            throw new UnauthorizedAccessException(
-                $"{registration.ServiceTypeName} was launched by an outcome of a user-owned instance of "
-                    + $"'{launch.InvokedBy.Machine}', which no user is present to authorize. Only a "
-                    + "system-owned machine chains runs through outcomes."
-            );
-
-        // A system-owned instance's run is authorized as a scheduled manifest run is. The trusted scope does not
-        // check a user's requirements, so a train that declares any is refused here, fail-closed, as the
-        // state-machine startup check refuses it, rather than approved without a user.
-        if (launch.InvokedBy.OwnerKind == SnapshotOwnerKind.System)
-        {
-            if (registration.HasAuthorizeAttribute)
-                throw new UnauthorizedAccessException(
-                    $"{registration.ServiceTypeName} declares [TraxAuthorize], and a system-owned instance of "
-                        + $"'{launch.InvokedBy.Machine}' has no user to check it against. A system-owned machine "
-                        + "invokes only a train with no [TraxAuthorize]."
-                );
-
-            using (
-                serviceProvider
-                    .GetRequiredService<ITrustedExecutionScope>()
-                    .BeginTrusted("state machine")
-            )
-                await AuthorizeAsync(registration, ct).ConfigureAwait(false);
-        }
-        else
-            await AuthorizeAsync(registration, ct).ConfigureAwait(false);
+        await AuthorizeInvokedAsync(launch, registration, ct).ConfigureAwait(false);
 
         if (!registration.InputType.IsInstanceOfType(launch.Input))
             throw new InvalidOperationException(
@@ -396,6 +418,71 @@ public class TrainExecutionService(
 
             return new QueueTrainResult(entry.Id, entry.ExternalId);
         }
+    }
+
+    /// <summary>
+    /// Refuses a train <see cref="QueueInvokedAsync"/> must not queue, before it is authorized.
+    /// </summary>
+    private static void RefuseUninvokable(InvokedTrainLaunch launch, TrainRegistration registration)
+    {
+        if (ResolveOnQueueOverride(registration.ImplementationType) is not null)
+            throw new InvalidOperationException(
+                $"{registration.ServiceTypeName} has an OnQueue hook, which commits on its own, so a "
+                    + "state machine cannot queue it in the transaction that enters its state."
+            );
+
+        // The startup check refuses both; this refuses them again, fail-closed, so a host that skipped the check
+        // (its hosted services never started) still queues neither.
+        var at = InvokeRefusals.At(launch.InvokedBy.Machine, launch.State, launch.TrainType);
+        if (
+            launch.InvokedBy.OwnerKind != SnapshotOwnerKind.System
+            && registration.IsBroadcastEnabled
+        )
+            throw new InvalidOperationException(InvokeRefusals.Broadcast(at));
+        if (TraxRedaction.ReachesSensitiveMember(registration.OutputType))
+            throw new InvalidOperationException(
+                InvokeRefusals.SensitiveOutput(at, registration.OutputType)
+            );
+
+        // A run entered by the outcome of the run before it has no user present to authorize it. Only a
+        // system-owned instance may launch one (the state-machine startup check refuses a user-owned machine
+        // that declares such an edge), so a user-owned one is refused here too, fail-closed, rather than
+        // authorized in the trusted scope.
+        if (launch.FromOutcome && launch.InvokedBy.OwnerKind != SnapshotOwnerKind.System)
+            throw new UnauthorizedAccessException(
+                $"{registration.ServiceTypeName} was launched by an outcome of a user-owned instance of "
+                    + $"'{launch.InvokedBy.Machine}', which no user is present to authorize. Only a "
+                    + "system-owned machine chains runs through outcomes."
+            );
+    }
+
+    private async Task AuthorizeInvokedAsync(
+        InvokedTrainLaunch launch,
+        TrainRegistration registration,
+        CancellationToken ct
+    )
+    {
+        // A system-owned instance's run is authorized as a scheduled manifest run is. The trusted scope does not
+        // check a user's requirements, so a train that declares any is refused here, fail-closed, as the
+        // state-machine startup check refuses it, rather than approved without a user.
+        if (launch.InvokedBy.OwnerKind == SnapshotOwnerKind.System)
+        {
+            if (registration.HasAuthorizeAttribute)
+                throw new UnauthorizedAccessException(
+                    $"{registration.ServiceTypeName} declares [TraxAuthorize], and a system-owned instance of "
+                        + $"'{launch.InvokedBy.Machine}' has no user to check it against. A system-owned machine "
+                        + "invokes only a train with no [TraxAuthorize]."
+                );
+
+            using (
+                serviceProvider
+                    .GetRequiredService<ITrustedExecutionScope>()
+                    .BeginTrusted("state machine")
+            )
+                await AuthorizeAsync(registration, ct).ConfigureAwait(false);
+        }
+        else
+            await AuthorizeAsync(registration, ct).ConfigureAwait(false);
     }
 
     /// <summary>

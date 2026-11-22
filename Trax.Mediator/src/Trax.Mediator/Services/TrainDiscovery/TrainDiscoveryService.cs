@@ -88,29 +88,60 @@ public class TrainDiscoveryService : ITrainDiscoveryService
 
         RefuseSharedClassServiceTypes(classes);
 
-        // A subsystem that registers a train's route without exposing it adds an exposure only when the host opts
-        // in; it is read here as the class's own attribute would be.
-        var exposures = _serviceCollection
+        var exposures = MutationExposures();
+
+        var registrations = new List<(int Index, TrainRegistration Registration)>();
+        var pairedInterfaces = new HashSet<Type>();
+
+        AddClassRegistrations(classes, interfaces, exposures, registrations, pairedInterfaces);
+        AddUnpairedInterfaceRegistrations(
+            classes,
+            interfaces,
+            exposures,
+            registrations,
+            pairedInterfaces
+        );
+
+        _cachedRegistrations = registrations
+            .OrderBy(r => r.Index)
+            .Select(r => r.Registration)
+            .ToList()
+            .AsReadOnly();
+
+        return _cachedRegistrations;
+    }
+
+    // A subsystem that registers a train's route without exposing it adds an exposure only when the host opts
+    // in; it is read here as the class's own attribute would be.
+    private Dictionary<Type, TrainMutationExposure> MutationExposures() =>
+        _serviceCollection
             .Where(d => d.ServiceType == typeof(TrainMutationExposure))
             .Select(d => d.ImplementationInstance)
             .OfType<TrainMutationExposure>()
             .GroupBy(e => e.Implementation)
             .ToDictionary(g => g.Key, g => g.Last());
-        TrainRegistration Build(
-            Type serviceType,
-            Type implementationType,
-            ServiceLifetime lifetime
-        ) =>
-            TrainDiscoveryService.Build(
-                serviceType,
-                implementationType,
-                lifetime,
-                exposures.GetValueOrDefault(implementationType)
-            );
 
-        var registrations = new List<(int Index, TrainRegistration Registration)>();
-        var pairedInterfaces = new HashSet<Type>();
+    private static TrainRegistration BuildExposed(
+        Type serviceType,
+        Type implementationType,
+        ServiceLifetime lifetime,
+        Dictionary<Type, TrainMutationExposure> exposures
+    ) =>
+        Build(
+            serviceType,
+            implementationType,
+            lifetime,
+            exposures.GetValueOrDefault(implementationType)
+        );
 
+    private static void AddClassRegistrations(
+        List<RegisteredClass> classes,
+        Dictionary<Type, (int Index, ServiceDescriptor Descriptor)> interfaces,
+        Dictionary<Type, TrainMutationExposure> exposures,
+        List<(int Index, TrainRegistration Registration)> registrations,
+        HashSet<Type> pairedInterfaces
+    )
+    {
         foreach (var registered in classes)
         {
             var own =
@@ -128,7 +159,12 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                 registrations.Add(
                     (
                         registered.Index,
-                        Build(own, registered.Implementation, entry.Descriptor.Lifetime)
+                        BuildExposed(
+                            own,
+                            registered.Implementation,
+                            entry.Descriptor.Lifetime,
+                            exposures
+                        )
                     )
                 );
                 continue;
@@ -137,11 +173,25 @@ public class TrainDiscoveryService : ITrainDiscoveryService
             registrations.Add(
                 (
                     registered.Index,
-                    Build(registered.ServiceType, registered.Implementation, registered.Lifetime)
+                    BuildExposed(
+                        registered.ServiceType,
+                        registered.Implementation,
+                        registered.Lifetime,
+                        exposures
+                    )
                 )
             );
         }
+    }
 
+    private static void AddUnpairedInterfaceRegistrations(
+        List<RegisteredClass> classes,
+        Dictionary<Type, (int Index, ServiceDescriptor Descriptor)> interfaces,
+        Dictionary<Type, TrainMutationExposure> exposures,
+        List<(int Index, TrainRegistration Registration)> registrations,
+        HashSet<Type> pairedInterfaces
+    )
+    {
         foreach (var (serviceType, (index, descriptor)) in interfaces)
         {
             if (pairedInterfaces.Contains(serviceType))
@@ -160,16 +210,10 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                 implementation = serviceType;
             }
 
-            registrations.Add((index, Build(serviceType, implementation, descriptor.Lifetime)));
+            registrations.Add(
+                (index, BuildExposed(serviceType, implementation, descriptor.Lifetime, exposures))
+            );
         }
-
-        _cachedRegistrations = registrations
-            .OrderBy(r => r.Index)
-            .Select(r => r.Registration)
-            .ToList()
-            .AsReadOnly();
-
-        return _cachedRegistrations;
     }
 
     /// <summary>
@@ -363,6 +407,15 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                 policies.Add(policy);
         }
 
+        var (roles, roleSets) = ReadRoles(attributes);
+
+        return (true, policies.AsReadOnly(), roles.AsReadOnly(), roleSets.AsReadOnly());
+    }
+
+    private static (List<string> Roles, List<IReadOnlyList<string>> RoleSets) ReadRoles(
+        List<TraxAuthorizeAttribute> attributes
+    )
+    {
         var roles = new List<string>();
         var roleSets = new List<IReadOnlyList<string>>();
         foreach (var attr in attributes.Where(a => a.Roles is not null))
@@ -396,7 +449,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                 roleSets.Add(parsed.AsReadOnly());
         }
 
-        return (true, policies.AsReadOnly(), roles.AsReadOnly(), roleSets.AsReadOnly());
+        return (roles, roleSets);
     }
 
     private static (

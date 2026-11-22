@@ -99,6 +99,20 @@ internal sealed class InvokedTrainLauncher(
                     + "outside the transaction that enters the state, so an invoked train may not defer it."
             );
 
+        AddOwnershipProblems(at, declaration, registration, problems);
+
+        problems.AddRange(ChainProblems(at, registration, services));
+        return problems;
+    }
+
+    // What about who owns the machine stops it from invoking the train.
+    private static void AddOwnershipProblems(
+        string at,
+        InvokedTrainDeclaration declaration,
+        TrainRegistration registration,
+        List<string> problems
+    )
+    {
         if (declaration.SystemOwned)
         {
             if (registration.HasAuthorizeAttribute)
@@ -134,9 +148,6 @@ internal sealed class InvokedTrainLauncher(
             if (registration.IsBroadcastEnabled)
                 problems.Add(InvokeRefusals.Broadcast(at));
         }
-
-        problems.AddRange(ChainProblems(at, registration, services));
-        return problems;
     }
 
     private static string Requirements(TrainRegistration registration)
@@ -225,56 +236,64 @@ internal sealed class InvokedTrainLauncher(
 
         var collection = services.GetService<IServiceCollection>();
         var problems = new List<string>();
-        Walk(chain, "", problems);
+        Walk(at, collection, chain, "", problems);
         return problems;
+    }
 
-        void Walk(ChainRecorder recorder, string where, List<string> into)
+    private static void Walk(
+        string at,
+        IServiceCollection? collection,
+        ChainRecorder recorder,
+        string where,
+        List<string> into
+    )
+    {
+        foreach (var refusal in recorder.Refusals)
+            into.Add($"{at}, whose chain{where} is refused: {refusal}");
+
+        for (var i = 0; i < recorder.Steps.Count; i++)
         {
-            foreach (var refusal in recorder.Refusals)
-                into.Add($"{at}, whose chain{where} is refused: {refusal}");
-
-            for (var i = 0; i < recorder.Steps.Count; i++)
+            var step = recorder.Steps[i];
+            switch (step.Kind)
             {
-                var step = recorder.Steps[i];
-                switch (step.Kind)
-                {
-                    case ChainStepKind.Chain
-                    or ChainStepKind.ShortCircuit
-                        when step.Junction is { } junction
-                            && !DerivesFrom(junction, typeof(EffectJunction<,>)):
-                        into.Add(
-                            $"{at}, whose chain{where} runs the plain junction {junction.Name} at step "
-                                + string.Create(
-                                    CultureInfo.InvariantCulture,
-                                    $"{i + 1}. Only an EffectJunction reads the run's cancel flag, so leaving the "
-                                )
-                                + $"state could not stop the run on another host. Derive {junction.Name} from "
-                                + "EffectJunction."
-                        );
-                        break;
-                    case ChainStepKind.IChain when step.Junction is { } contract:
-                        if (EffectImplementation(collection, contract) is { } why)
-                            into.Add(
-                                string.Create(
-                                    CultureInfo.InvariantCulture,
-                                    $"{at}, whose chain{where} runs IChain<{contract.Name}> at step {i + 1}, {why} "
-                                )
-                                    + "Only an EffectJunction reads the run's cancel flag, so leaving the state "
-                                    + "could not stop the run on another host."
-                            );
-                        break;
-                }
-
-                foreach (var track in recorder.TracksAt(i))
-                    Walk(
-                        track.Steps,
-                        string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"{where} ({step.Kind} step {i + 1}, '{track.Name}')"
-                        ),
-                        into
+                case ChainStepKind.Chain
+                or ChainStepKind.ShortCircuit
+                    when step.Junction is { } junction
+                        && !DerivesFrom(junction, typeof(EffectJunction<,>)):
+                    into.Add(
+                        $"{at}, whose chain{where} runs the plain junction {junction.Name} at step "
+                            + string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"{i + 1}. Only an EffectJunction reads the run's cancel flag, so leaving the "
+                            )
+                            + $"state could not stop the run on another host. Derive {junction.Name} from "
+                            + "EffectJunction."
                     );
+                    break;
+                case ChainStepKind.IChain when step.Junction is { } contract:
+                    if (EffectImplementation(collection, contract) is { } why)
+                        into.Add(
+                            string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"{at}, whose chain{where} runs IChain<{contract.Name}> at step {i + 1}, {why} "
+                            )
+                                + "Only an EffectJunction reads the run's cancel flag, so leaving the state "
+                                + "could not stop the run on another host."
+                        );
+                    break;
             }
+
+            foreach (var track in recorder.TracksAt(i))
+                Walk(
+                    at,
+                    collection,
+                    track.Steps,
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{where} ({step.Kind} step {i + 1}, '{track.Name}')"
+                    ),
+                    into
+                );
         }
     }
 
