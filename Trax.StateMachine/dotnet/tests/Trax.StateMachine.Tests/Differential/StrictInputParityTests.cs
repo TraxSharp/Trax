@@ -65,26 +65,7 @@ public class StrictInputParityTests
                 AdvanceResult.Rejected r => ("rejected", r.Reason.ToWire()),
                 _ => ("unknown", null),
             };
-            var answer = twin[i][0];
-            if (
-                !string.Equals(answer.Outcome, outcome, StringComparison.Ordinal)
-                || !string.Equals(answer.Reason, reason, StringComparison.Ordinal)
-            )
-                diffs.Add(
-                    $"{names[i]}: C# {outcome} {reason}, twin {answer.Outcome} {answer.Reason}"
-                );
-            var want = expected[i] ? "transitioned" : "rejected";
-            if (!string.Equals(outcome, want, StringComparison.Ordinal))
-                diffs.Add($"{names[i]}: C# {outcome} {reason}, the CLR type says {want}");
-            if (
-                !expected[i]
-                && !string.Equals(
-                    reason,
-                    RefusalCode.InvalidInput.ToWire(),
-                    StringComparison.Ordinal
-                )
-            )
-                diffs.Add($"{names[i]}: refused as {reason}, not invalid-input");
+            CompareVerdict(diffs, names[i], expected[i], outcome, reason, twin[i][0]);
         }
 
         diffs
@@ -93,5 +74,30 @@ public class StrictInputParityTests
                 $"both engines give each value the verdict of its CLR type ({Adr}):\n"
                     + string.Join('\n', diffs)
             );
+    }
+
+    // Records where the C# engine's verdict on one input differs from the twin's, or from its CLR type's.
+    private static void CompareVerdict(
+        List<string> diffs,
+        string name,
+        bool valid,
+        string outcome,
+        string? reason,
+        TwinEngine.Answer answer
+    )
+    {
+        if (
+            !string.Equals(answer.Outcome, outcome, StringComparison.Ordinal)
+            || !string.Equals(answer.Reason, reason, StringComparison.Ordinal)
+        )
+            diffs.Add($"{name}: C# {outcome} {reason}, twin {answer.Outcome} {answer.Reason}");
+        var want = valid ? "transitioned" : "rejected";
+        if (!string.Equals(outcome, want, StringComparison.Ordinal))
+            diffs.Add($"{name}: C# {outcome} {reason}, the CLR type says {want}");
+        if (
+            !valid
+            && !string.Equals(reason, RefusalCode.InvalidInput.ToWire(), StringComparison.Ordinal)
+        )
+            diffs.Add($"{name}: refused as {reason}, not invalid-input");
     }
 }

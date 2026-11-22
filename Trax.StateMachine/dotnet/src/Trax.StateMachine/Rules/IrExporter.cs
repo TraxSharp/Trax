@@ -85,6 +85,22 @@ public static class IrExporter
             ["transitions"] = transitions,
         };
 
+        AddOptionalSections(ir, machine, declarative);
+
+        return CanonicalJson.Serialize(ir);
+    }
+
+    // The sections an IR holds only when the machine has them, so a machine without them exports as before.
+    private static void AddOptionalSections<TState, TTrigger>(
+        JsonObject ir,
+        BuiltMachine<TState, TTrigger> machine,
+        DeclarativeModel<TState, TTrigger> declarative
+    )
+        where TState : struct, Enum
+        where TTrigger : struct, Enum
+    {
+        var def = machine.Definition;
+
         // Per-state invariants (the .Requires(...) policy, on top of the context schema). Omitted when a
         // machine has none, so a shape-only machine's IR is unchanged.
         if (declarative.StateInvariants.Count > 0)
@@ -110,8 +126,6 @@ public static class IrExporter
         // hand-written machine.json. Omitted when empty, so a machine without .Differential has identical IR.
         if (declarative.Differential is { IsEmpty: false } differential)
             ir["differential"] = WriteDifferential(differential);
-
-        return CanonicalJson.Serialize(ir);
     }
 
     // A delegate is opaque, so the IR would carry its edge with no guard or reducer (which a generated twin reads
@@ -460,35 +474,13 @@ public static class IrExporter
                 return o;
             }
             case Rule.OneOf r:
-            {
-                var o = FieldRule("oneOf", r.Source, r.Field);
-                var values = new JsonArray();
-                foreach (var v in r.Values)
-                    values.Add(v);
-                o["values"] = values;
-                return o;
-            }
+                return WriteOneOf(r);
             case Rule.Compare r:
-            {
-                var o = FieldRule("compare", r.Source, r.Field);
-                o["op"] = OpName(r.Op);
-                o["value"] = r.Value;
-                return o;
-            }
+                return WriteCompare(r);
             case Rule.Count r:
-            {
-                var o = FieldRule("count", r.Source, r.Field);
-                o["op"] = OpName(r.Op);
-                o["value"] = r.Value;
-                return o;
-            }
+                return WriteCount(r);
             case Rule.Length r:
-            {
-                var o = FieldRule("length", r.Source, r.Field);
-                o["op"] = OpName(r.Op);
-                o["value"] = r.Value;
-                return o;
-            }
+                return WriteLength(r);
             case Rule.BoolEquals r:
             {
                 var o = FieldRule("boolEquals", r.Source, r.Field);
@@ -510,6 +502,40 @@ public static class IrExporter
             default:
                 throw new InvalidOperationException($"Unknown rule {rule.GetType().Name}.");
         }
+    }
+
+    private static JsonObject WriteOneOf(Rule.OneOf r)
+    {
+        var o = FieldRule("oneOf", r.Source, r.Field);
+        var values = new JsonArray();
+        foreach (var v in r.Values)
+            values.Add(v);
+        o["values"] = values;
+        return o;
+    }
+
+    private static JsonObject WriteCompare(Rule.Compare r)
+    {
+        var o = FieldRule("compare", r.Source, r.Field);
+        o["op"] = OpName(r.Op);
+        o["value"] = r.Value;
+        return o;
+    }
+
+    private static JsonObject WriteCount(Rule.Count r)
+    {
+        var o = FieldRule("count", r.Source, r.Field);
+        o["op"] = OpName(r.Op);
+        o["value"] = r.Value;
+        return o;
+    }
+
+    private static JsonObject WriteLength(Rule.Length r)
+    {
+        var o = FieldRule("length", r.Source, r.Field);
+        o["op"] = OpName(r.Op);
+        o["value"] = r.Value;
+        return o;
     }
 
     private static JsonArray WriteRules(IReadOnlyList<Rule> rules)

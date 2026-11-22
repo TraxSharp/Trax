@@ -41,25 +41,14 @@ internal static class MachineViewReader
                 .ToList();
             if (read.Key is { } key)
             {
-                var id = SystemInstanceStarter.IdOf(read.Machine, key);
-                var row = await context
-                    .SnapshotDrafts.AsNoTracking()
-                    .Where(d =>
-                        d.Id == id
-                        && d.Machine == read.Machine
-                        && d.OwnerKind == SnapshotOwnerKind.System
+                result[read.Machine] = await ReadSystemRow(
+                        context,
+                        read.Machine,
+                        key,
+                        fields,
+                        cancellationToken
                     )
-                    .Select(d => new
-                    {
-                        d.Id,
-                        d.State,
-                        d.Context,
-                    })
-                    .FirstOrDefaultAsync(cancellationToken)
                     .ConfigureAwait(false);
-                result[read.Machine] = row is null
-                    ? null
-                    : Row(row.Id, row.State, row.Context, fields);
                 continue;
             }
             // A machine served some other way than from features has no rules to hold the caller to: it is left out.
@@ -98,6 +87,32 @@ internal static class MachineViewReader
             );
         }
         return result;
+    }
+
+    // The one row of a system machine, at the key the view names; null before it is started.
+    private static async Task<JsonNode?> ReadSystemRow(
+        IDataContext context,
+        string machine,
+        string key,
+        List<ViewField> fields,
+        CancellationToken cancellationToken
+    )
+    {
+        var id = SystemInstanceStarter.IdOf(machine, key);
+        var row = await context
+            .SnapshotDrafts.AsNoTracking()
+            .Where(d =>
+                d.Id == id && d.Machine == machine && d.OwnerKind == SnapshotOwnerKind.System
+            )
+            .Select(d => new
+            {
+                d.Id,
+                d.State,
+                d.Context,
+            })
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return row is null ? null : Row(row.Id, row.State, row.Context, fields);
     }
 
     private static JsonObject Row(

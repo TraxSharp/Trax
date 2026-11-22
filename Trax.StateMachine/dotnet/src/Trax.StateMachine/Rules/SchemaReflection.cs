@@ -240,38 +240,7 @@ internal static class SchemaReflection
     )
     {
         type = Nullable.GetUnderlyingType(type) ?? type;
-        Type? value;
-        NullabilityInfo? valueNullability;
-        if (IsDictionary(type))
-        {
-            if (type == typeof(JsonObject))
-                return null;
-            value = DictionaryValueType(type);
-            valueNullability =
-                type.IsGenericType && nullability?.GenericTypeArguments.Length == 2
-                    ? nullability.GenericTypeArguments[1]
-                    : null;
-        }
-        else if (
-            type != typeof(string)
-            && ScalarTypeOf(type) is null
-            && !Unmappable(type)
-            && type != typeof(JsonObject)
-            && typeof(IEnumerable).IsAssignableFrom(type)
-            && ElementType(type) is { } element
-            && !IsRecord(Nullable.GetUnderlyingType(element) ?? element)
-        )
-        {
-            value = element;
-            valueNullability =
-                nullability?.ElementType
-                ?? (
-                    nullability?.GenericTypeArguments.Length == 1
-                        ? nullability.GenericTypeArguments[0]
-                        : null
-                );
-        }
-        else
+        if (!TryValueType(type, nullability, out var value, out var valueNullability))
             return null;
 
         // Values with no fixed JSON type (a Hashtable's, an object[]'s, a JsonNode list's) are any JSON, as a
@@ -299,6 +268,50 @@ internal static class SchemaReflection
             EnumExact = ExactEnumOf(value),
             Format = FormatOf(value),
         };
+    }
+
+    // The type a dictionary's values or a list's elements have, and its nullability; false when the type is neither.
+    private static bool TryValueType(
+        Type type,
+        NullabilityInfo? nullability,
+        out Type? value,
+        out NullabilityInfo? valueNullability
+    )
+    {
+        value = null;
+        valueNullability = null;
+        if (IsDictionary(type))
+        {
+            if (type == typeof(JsonObject))
+                return false;
+            value = DictionaryValueType(type);
+            valueNullability =
+                type.IsGenericType && nullability?.GenericTypeArguments.Length == 2
+                    ? nullability.GenericTypeArguments[1]
+                    : null;
+        }
+        else if (
+            type != typeof(string)
+            && ScalarTypeOf(type) is null
+            && !Unmappable(type)
+            && type != typeof(JsonObject)
+            && typeof(IEnumerable).IsAssignableFrom(type)
+            && ElementType(type) is { } element
+            && !IsRecord(Nullable.GetUnderlyingType(element) ?? element)
+        )
+        {
+            value = element;
+            valueNullability =
+                nullability?.ElementType
+                ?? (
+                    nullability?.GenericTypeArguments.Length == 1
+                        ? nullability.GenericTypeArguments[0]
+                        : null
+                );
+        }
+        else
+            return false;
+        return true;
     }
 
     // The schema a dictionary's keys are checked against, from its key type, as System.Text.Json reads a key of that

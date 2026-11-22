@@ -120,6 +120,25 @@ public class MigrationSchemaTests
         const string userKey = "mig-user";
         var id = Guid.NewGuid();
 
+        var (advanced, after) = await InsertAndAdvanceUserDraft(ctx, dialect, userKey, id)
+            .ConfigureAwait(false);
+        var scoped = await AssertRequestScope(ctx, dialect, userKey, id, after)
+            .ConfigureAwait(false);
+        var token = await InsertSystemRowWithToken(ctx, dialect, id).ConfigureAwait(false);
+        await AssertTokenAppliedAndCreatedAt(ctx, dialect, userKey, id, token, advanced, scoped)
+            .ConfigureAwait(false);
+        await AssertEffectClaimLifecycle(ctx, dialect, id).ConfigureAwait(false);
+        await AssertEffectClaimFingerprint(ctx, dialect, id).ConfigureAwait(false);
+    }
+
+    // snapshot_draft through the store: insert, read back, then a token-guarded update with a replay marker.
+    private static async Task<(Snapshot Advanced, StoredSnapshot After)> InsertAndAdvanceUserDraft(
+        Func<IDataContext> ctx,
+        ISqlDialect dialect,
+        string userKey,
+        Guid id
+    )
+    {
         // snapshot_draft: insert, read back (context survives), then a token-guarded update + replay marker.
         (
             await With(ctx, c => new EfSnapshotStore(c, dialect).Upsert(userKey, id, Sample()))
@@ -162,7 +181,17 @@ public class MigrationSchemaTests
         after.Should().NotBeNull();
         after.NotNull().Json.Should().Contain("\"state\":\"Locked\"");
         after.LastRequestId.Should().Be("req-1");
+        return (advanced, after.NotNull());
+    }
 
+    private static async Task<StoredSnapshot> AssertRequestScope(
+        Func<IDataContext> ctx,
+        ISqlDialect dialect,
+        string userKey,
+        Guid id,
+        StoredSnapshot after
+    )
+    {
         // The request scope columns (048 / 013): the trigger and from-state recorded with the request id.
         (
             await With(
@@ -183,7 +212,15 @@ public class MigrationSchemaTests
         var scoped = await With(ctx, c => new EfSnapshotStore(c, dialect).Get(userKey, id))
             .ConfigureAwait(false);
         scoped.NotNull().LastRequest.Should().Be(new AppliedRequest("req-2", "Coin", "Locked"));
+        return scoped.NotNull();
+    }
 
+    private static async Task<string> InsertSystemRowWithToken(
+        Func<IDataContext> ctx,
+        ISqlDialect dialect,
+        Guid id
+    )
+    {
         // The owner kind and the invoke token (070 / 032): a system row beside the user's under the same id,
         // a token set on it, and the conditional update by that token.
         (
@@ -228,6 +265,19 @@ public class MigrationSchemaTests
         )
             .Should()
             .BeTrue();
+        return token;
+    }
+
+    private static async Task AssertTokenAppliedAndCreatedAt(
+        Func<IDataContext> ctx,
+        ISqlDialect dialect,
+        string userKey,
+        Guid id,
+        string token,
+        Snapshot advanced,
+        StoredSnapshot scoped
+    )
+    {
         (
             await With(
                     ctx,
@@ -266,7 +316,14 @@ public class MigrationSchemaTests
                 x => x.CreatedAt != null && x.CreatedAt <= x.UpdatedAt,
                 "the store records when it created each row, and the updates since moved only updated_at"
             );
+    }
 
+    private static async Task AssertEffectClaimLifecycle(
+        Func<IDataContext> ctx,
+        ISqlDialect dialect,
+        Guid id
+    )
+    {
         // effect_claim: claim, confirm in-flight (no receipt), fenced complete, receipt readable back.
         var key = $"charge:{id}";
         var claim = await With(
@@ -295,7 +352,14 @@ public class MigrationSchemaTests
         )
             .Should()
             .Be("rcpt-1");
+    }
 
+    private static async Task AssertEffectClaimFingerprint(
+        Func<IDataContext> ctx,
+        ISqlDialect dialect,
+        Guid id
+    )
+    {
         // The content fingerprint (053 / 018): recorded with the claim, read back with its receipt.
         var bound = $"charge-bound:{id}";
         var fingerprint = SnapshotFingerprint.Of("{\"machine\":\"turnstile\"}");

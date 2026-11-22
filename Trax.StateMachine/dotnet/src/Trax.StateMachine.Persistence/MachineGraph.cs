@@ -37,10 +37,6 @@ internal sealed record MachineGraph(
             JsonNode.Parse(irJson) as JsonObject
             ?? throw new InvalidOperationException("The machine's IR is not a JSON object.");
 
-        static string Required(JsonObject o, string name) =>
-            o[name]?.ToString()
-            ?? throw new InvalidOperationException($"The machine's IR has no '{name}'.");
-
         var transitions = (root["transitions"] as JsonArray ?? [])
             .OfType<JsonObject>()
             .Select(t => new MachineEdge(
@@ -58,9 +54,38 @@ internal sealed record MachineGraph(
             })
             .ToList();
 
+        var timers = ReadTimers(root);
+        transitions.AddRange(
+            timers.Select(t => new MachineEdge(t.State, t.Trigger, t.Target, MachineEdgeKind.Timer)
+            {
+                Timer = t.Duration,
+            })
+        );
+
+        AddOutcomeEdges(root, transitions);
+
+        return new MachineGraph(
+            Required(root, "id"),
+            root["version"]?.ToString() ?? "?",
+            Required(root, "initialState"),
+            (root["states"] as JsonArray ?? []).Select(s => s.NotNull().ToString()).ToList(),
+            (root["committedStates"] as JsonArray ?? [])
+                .Select(s => s.NotNull().ToString())
+                .ToHashSet(StringComparer.Ordinal),
+            transitions,
+            timers
+        );
+    }
+
+    private static string Required(JsonObject o, string name) =>
+        o[name]?.ToString()
+        ?? throw new InvalidOperationException($"The machine's IR has no '{name}'.");
+
+    private static List<MachineTimer> ReadTimers(JsonObject root)
+    {
         // A timer is an edge the server takes once its state has been held long enough: fixed (`after`), or for the
         // duration a context field holds within its bounds.
-        var timers = (root["timers"] as JsonArray ?? [])
+        return (root["timers"] as JsonArray ?? [])
             .OfType<JsonObject>()
             .Select(t => new MachineTimer(
                 Required(t, "state"),
@@ -74,13 +99,10 @@ internal sealed record MachineGraph(
                 Max = (t["field"] as JsonObject)?["max"]?.ToString(),
             })
             .ToList();
-        transitions.AddRange(
-            timers.Select(t => new MachineEdge(t.State, t.Trigger, t.Target, MachineEdgeKind.Timer)
-            {
-                Timer = t.Duration,
-            })
-        );
+    }
 
+    private static void AddOutcomeEdges(JsonObject root, List<MachineEdge> transitions)
+    {
         // A state that invokes a train is left by the train's outcome (Dealing.done, .failed, .cancelled), whose
         // edges are tried in order. They are edges like any other: a state reached only through one is reachable.
         foreach (var (trigger, node) in root["outcomes"] as JsonObject ?? [])
@@ -103,18 +125,6 @@ internal sealed record MachineGraph(
                     })
             );
         }
-
-        return new MachineGraph(
-            Required(root, "id"),
-            root["version"]?.ToString() ?? "?",
-            Required(root, "initialState"),
-            (root["states"] as JsonArray ?? []).Select(s => s.NotNull().ToString()).ToList(),
-            (root["committedStates"] as JsonArray ?? [])
-                .Select(s => s.NotNull().ToString())
-                .ToHashSet(StringComparer.Ordinal),
-            transitions,
-            timers
-        );
     }
 
     /// <summary>Every state some path of edges reaches from <see cref="Initial"/>, the initial state included.</summary>

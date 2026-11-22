@@ -47,78 +47,7 @@ internal sealed partial class StepResolver
         );
 
         foreach (var machine in glossary.Machines.Values)
-        {
-            var reference = Reference(machine);
-            if (machine.Start is { } start)
-                Add(
-                    $@"(?<person>{NamePattern})\s+{Words(start)}",
-                    m => new Meaning.Start(m.Groups["person"].Value, machine.Id)
-                );
-            foreach (var (state, phrase) in machine.States)
-            {
-                Add(
-                    $@"{reference}\s+{Words(phrase)}",
-                    m => new Meaning.InState(machine.Id, Owner(m), state, Still: false, KeyOf(m))
-                );
-                Add(
-                    $@"{reference}\s+{Still(phrase)}",
-                    m => new Meaning.InState(machine.Id, Owner(m), state, Still: true, KeyOf(m))
-                );
-            }
-            foreach (var guard in machine.Guards.Values)
-            {
-                // A guard on the input alone has no phrases: a When shows it.
-                if (guard.Holds is { } holds)
-                    Add(
-                        $@"{reference}\s+{Words(holds)}",
-                        m => new Meaning.Guard(
-                            machine.Id,
-                            Owner(m),
-                            guard.Name,
-                            Holds: true,
-                            KeyOf(m)
-                        )
-                    );
-                if (guard.Fails is { } fails)
-                    Add(
-                        $@"{reference}\s+{Words(fails)}",
-                        m => new Meaning.Guard(
-                            machine.Id,
-                            Owner(m),
-                            guard.Name,
-                            Holds: false,
-                            KeyOf(m)
-                        )
-                    );
-            }
-            foreach (var trigger in machine.Triggers.Values)
-            {
-                var template = Template(trigger.Phrase, reference);
-                Add(
-                    $@"(?<person>{NamePattern})\s+{template}",
-                    m => new Meaning.Act(
-                        m.Groups["person"].Value,
-                        machine.Id,
-                        Owner(m),
-                        trigger.Name,
-                        Inputs(m, trigger)
-                    )
-                );
-                Add(
-                    template,
-                    m => new Meaning.Happens(
-                        machine.Id,
-                        Owner(m),
-                        trigger.Name,
-                        Inputs(m, trigger),
-                        KeyOf(m)
-                    )
-                );
-            }
-            foreach (var invoke in machine.Invokes.Values)
-            foreach (var phrase in invoke.Outcomes.Keys)
-                Add(Words(phrase), _ => new Meaning.Outcome(machine.Id, invoke.State, phrase));
-        }
+            AddMachine(machine);
 
         // A person reading one field of a view, the field named: "Ada's orders show status "In the oven"".
         foreach (var view in glossary.Views.Values)
@@ -132,6 +61,79 @@ internal sealed partial class StepResolver
                     m.Groups["value"].Value
                 )
             );
+    }
+
+    // A machine's phrases: its start, its states, its guards, its triggers and its outcomes.
+    private void AddMachine(GlossaryMachine machine)
+    {
+        var reference = Reference(machine);
+        if (machine.Start is { } start)
+            Add(
+                $@"(?<person>{NamePattern})\s+{Words(start)}",
+                m => new Meaning.Start(m.Groups["person"].Value, machine.Id)
+            );
+        foreach (var (state, phrase) in machine.States)
+        {
+            Add(
+                $@"{reference}\s+{Words(phrase)}",
+                m => new Meaning.InState(machine.Id, Owner(m), state, Still: false, KeyOf(m))
+            );
+            Add(
+                $@"{reference}\s+{Still(phrase)}",
+                m => new Meaning.InState(machine.Id, Owner(m), state, Still: true, KeyOf(m))
+            );
+        }
+        AddGuards(machine, reference);
+        AddTriggers(machine, reference);
+        foreach (var invoke in machine.Invokes.Values)
+        foreach (var phrase in invoke.Outcomes.Keys)
+            Add(Words(phrase), _ => new Meaning.Outcome(machine.Id, invoke.State, phrase));
+    }
+
+    private void AddGuards(GlossaryMachine machine, string reference)
+    {
+        foreach (var guard in machine.Guards.Values)
+        {
+            // A guard on the input alone has no phrases: a When shows it.
+            if (guard.Holds is { } holds)
+                Add(
+                    $@"{reference}\s+{Words(holds)}",
+                    m => new Meaning.Guard(machine.Id, Owner(m), guard.Name, Holds: true, KeyOf(m))
+                );
+            if (guard.Fails is { } fails)
+                Add(
+                    $@"{reference}\s+{Words(fails)}",
+                    m => new Meaning.Guard(machine.Id, Owner(m), guard.Name, Holds: false, KeyOf(m))
+                );
+        }
+    }
+
+    private void AddTriggers(GlossaryMachine machine, string reference)
+    {
+        foreach (var trigger in machine.Triggers.Values)
+        {
+            var template = Template(trigger.Phrase, reference);
+            Add(
+                $@"(?<person>{NamePattern})\s+{template}",
+                m => new Meaning.Act(
+                    m.Groups["person"].Value,
+                    machine.Id,
+                    Owner(m),
+                    trigger.Name,
+                    Inputs(m, trigger)
+                )
+            );
+            Add(
+                template,
+                m => new Meaning.Happens(
+                    machine.Id,
+                    Owner(m),
+                    trigger.Name,
+                    Inputs(m, trigger),
+                    KeyOf(m)
+                )
+            );
+        }
     }
 
     /// <summary>
@@ -191,14 +193,26 @@ internal sealed partial class StepResolver
         }
 
         var resolved = meanings[0];
+        problem = Unowned(text, resolved, people);
+        if (problem is not null)
+            return null;
+        return resolved;
+    }
+
+    // Why a resolved meaning names someone it may not: a person the scenario never introduced, or a user's instance
+    // named by a person whose actor does not own that machine. Null when it names no one wrongly.
+    private string? Unowned(
+        string text,
+        Meaning resolved,
+        IReadOnlyDictionary<string, string> people
+    )
+    {
         // A person named in a step was introduced by the scenario, and a user's instance is named by a person whose
         // actor owns that machine.
         foreach (var name in Names(resolved))
             if (resolved is not Meaning.Named && !people.ContainsKey(name))
             {
-                problem =
-                    $"'{text}' names {name}, and the scenario never says who {name} is. Add 'Given {name} is {_glossary.Actors.Values.First().Noun}'.";
-                return null;
+                return $"'{text}' names {name}, and the scenario never says who {name} is. Add 'Given {name} is {_glossary.Actors.Values.First().Noun}'.";
             }
         if (
             OwnerOf(resolved) is ({ } machine, { } owner)
@@ -208,12 +222,10 @@ internal sealed partial class StepResolver
             var ownedBy = _glossary.Machines[machine].OwnedBy ?? [];
             if (!ownedBy.Contains(actor, StringComparer.Ordinal))
             {
-                problem =
-                    $"'{text}' names {owner}'s {_glossary.Machines[machine].Reference}, and {owner} is {_glossary.Actors[actor].Noun}: a {_glossary.Machines[machine].Reference} belongs to {string.Join(" or ", ownedBy.Select(o => _glossary.Actors[o].Noun))}.";
-                return null;
+                return $"'{text}' names {owner}'s {_glossary.Machines[machine].Reference}, and {owner} is {_glossary.Actors[actor].Noun}: a {_glossary.Machines[machine].Reference} belongs to {string.Join(" or ", ownedBy.Select(o => _glossary.Actors[o].Noun))}.";
             }
         }
-        return resolved;
+        return null;
     }
 
     private static IEnumerable<string> Names(Meaning meaning) =>

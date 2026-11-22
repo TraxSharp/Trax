@@ -48,50 +48,7 @@ internal static class FeatureFiles
             var lines = Lines(document);
             foreach (var pickle in new PickleCompiler(ids).Compile(document))
             {
-                var steps = new List<FeatureStep>();
-                foreach (var step in pickle.Steps)
-                {
-                    var line = lines.GetValueOrDefault(step.AstNodeIds[0]);
-                    if (step.Argument?.DataTable is not null)
-                        problems.Add(
-                            new Problem(
-                                path,
-                                line,
-                                "A data table is not read. Write one step per value."
-                            )
-                        );
-                    if (step.Argument?.DocString is not null)
-                        problems.Add(
-                            new Problem(
-                                path,
-                                line,
-                                "A DocString is not read. Put the value in quotes in the step."
-                            )
-                        );
-                    if (step.Type is PickleStepType.UNKNOWN)
-                    {
-                        problems.Add(
-                            new Problem(
-                                path,
-                                line,
-                                $"'* {step.Text}' has no Given, When or Then meaning. Write it with one of them."
-                            )
-                        );
-                        continue;
-                    }
-                    steps.Add(
-                        new FeatureStep(
-                            step.Type switch
-                            {
-                                PickleStepType.CONTEXT => StepKind.Given,
-                                PickleStepType.ACTION => StepKind.When,
-                                _ => StepKind.Then,
-                            },
-                            step.Text,
-                            line
-                        )
-                    );
-                }
+                var steps = ReadSteps(path, pickle, lines, problems);
                 // A pickle's line is its example row's for an outline and its scenario's otherwise. Read from
                 // the ids, since the Cucumber.Messages major Reqnroll is built against has no Pickle.Location.
                 var scenarioLine = lines.GetValueOrDefault(pickle.AstNodeIds[0]);
@@ -108,6 +65,57 @@ internal static class FeatureFiles
             }
         }
         return (scenarios, problems);
+    }
+
+    // A pickle's steps, refusing what derivation does not read.
+    private static List<FeatureStep> ReadSteps(
+        string path,
+        Pickle pickle,
+        Dictionary<string, long> lines,
+        List<Problem> problems
+    )
+    {
+        var steps = new List<FeatureStep>();
+        foreach (var step in pickle.Steps)
+        {
+            var line = lines.GetValueOrDefault(step.AstNodeIds[0]);
+            if (step.Argument?.DataTable is not null)
+                problems.Add(
+                    new Problem(path, line, "A data table is not read. Write one step per value.")
+                );
+            if (step.Argument?.DocString is not null)
+                problems.Add(
+                    new Problem(
+                        path,
+                        line,
+                        "A DocString is not read. Put the value in quotes in the step."
+                    )
+                );
+            if (step.Type is PickleStepType.UNKNOWN)
+            {
+                problems.Add(
+                    new Problem(
+                        path,
+                        line,
+                        $"'* {step.Text}' has no Given, When or Then meaning. Write it with one of them."
+                    )
+                );
+                continue;
+            }
+            steps.Add(
+                new FeatureStep(
+                    step.Type switch
+                    {
+                        PickleStepType.CONTEXT => StepKind.Given,
+                        PickleStepType.ACTION => StepKind.When,
+                        _ => StepKind.Then,
+                    },
+                    step.Text,
+                    line
+                )
+            );
+        }
+        return steps;
     }
 
     // The line of every scenario, step and example row, by its id.

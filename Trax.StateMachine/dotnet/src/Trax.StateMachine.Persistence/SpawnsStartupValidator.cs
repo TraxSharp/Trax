@@ -76,85 +76,102 @@ internal sealed class SpawnsStartupValidator(
             );
 
         if (!internals.SystemOwned)
-        {
-            foreach (
-                var chained in internals.ChainedOutcomes.Where(c => spawning.Contains(c.Target))
-            )
-                problems.Add(
-                    $"The machine '{name}' is user-owned, and the {chained.Outcome} outcome of {chained.State} "
-                        + $"enters {chained.Target}, which spawns a child. The child would be started with no user "
-                        + $"present. Enter {chained.Target} through an event the user sends, or declare the machine "
-                        + "SystemOwned()."
-                );
-            foreach (
-                var (timed, target) in internals.TimerTargets.OrderBy(
-                    t => t.Key,
-                    StringComparer.Ordinal
-                )
-            )
-                if (spawning.Contains(target))
-                    problems.Add(
-                        $"The machine '{name}' is user-owned, and the timer of {timed} enters {target}, which spawns "
-                            + "a child. The child would be started by the server with no user present. Let an event "
-                            + "the user sends enter it, or declare the machine SystemOwned()."
-                    );
-            foreach (var edge in internals.ServerEdges.Where(e => spawning.Contains(e.To)))
-                problems.Add(
-                    $"The machine '{name}' is user-owned, and the server-only trigger {edge.Trigger} enters "
-                        + $"{edge.To} from {edge.From}, which spawns a child. The child would be started by the "
-                        + "server with no user present. Let an event the user sends enter it, or declare the machine "
-                        + "SystemOwned()."
-                );
-        }
+            AddUnattendedSpawns(problems, internals, spawning, name);
 
         foreach (var spawn in spawns)
-        {
-            var at = $"The machine '{name}' state {spawn.State} spawns {spawn.ChildMachine.Name}";
-            if (
-                registered.FirstOrDefault(m => m.GetType() == spawn.ChildMachine)
-                is not IMachineInternals child
-            )
-            {
-                problems.Add(
-                    $"{at}, which this host does not register as a machine. Register it with AddStateMachines, "
-                        + "in an assembly the host scans."
-                );
-                continue;
-            }
-
-            if (child.SystemOwned != spawn.SystemOwned)
-                problems.Add(
-                    spawn.SystemOwned
-                        ? $"{at}, which is user-owned, but the parent is system-owned, so the child would have no "
-                            + "user. Declare the child SystemOwned()."
-                        : $"{at}, which is system-owned, but the parent is user-owned, and a user-owned parent's "
-                            + "child is its user's. Remove SystemOwned() from the child, or spawn another machine."
-                );
-
-            if (child.Ends.Count == 0)
-                problems.Add(
-                    $"{at}, which declares no state it ends in, so the parent would wait for good. Mark the child's "
-                        + "final states with Ends() or Fails()."
-                );
-
-            string initial;
-            try
-            {
-                initial = child.InitialSnapshot(context: null).State;
-            }
-            catch (ArgumentException ex)
-            {
-                problems.Add($"{at}, whose declared initial context is not valid: {ex.Message}");
-                continue;
-            }
-            if (child.Entering(initial) is { } work)
-                problems.Add(
-                    $"{at}, whose initial state {initial} {(work.Spawn is null ? "invokes a train" : "spawns a child")}. "
-                        + "A spawned child is created in its initial state with nothing started there; give it a "
-                        + "first state that waits for an event."
-                );
-        }
+            AddSpawnProblems(problems, name, spawn, registered);
 
         return problems;
+    }
+
+    // A user-owned machine's child is its user's, so nothing the server does with nobody present (an outcome, a
+    // timer, a policy's trigger) may start one.
+    private static void AddUnattendedSpawns(
+        List<string> problems,
+        IMachineInternals internals,
+        HashSet<string> spawning,
+        string name
+    )
+    {
+        foreach (var chained in internals.ChainedOutcomes.Where(c => spawning.Contains(c.Target)))
+            problems.Add(
+                $"The machine '{name}' is user-owned, and the {chained.Outcome} outcome of {chained.State} "
+                    + $"enters {chained.Target}, which spawns a child. The child would be started with no user "
+                    + $"present. Enter {chained.Target} through an event the user sends, or declare the machine "
+                    + "SystemOwned()."
+            );
+        foreach (
+            var (timed, target) in internals.TimerTargets.OrderBy(
+                t => t.Key,
+                StringComparer.Ordinal
+            )
+        )
+            if (spawning.Contains(target))
+                problems.Add(
+                    $"The machine '{name}' is user-owned, and the timer of {timed} enters {target}, which spawns "
+                        + "a child. The child would be started by the server with no user present. Let an event "
+                        + "the user sends enter it, or declare the machine SystemOwned()."
+                );
+        foreach (var edge in internals.ServerEdges.Where(e => spawning.Contains(e.To)))
+            problems.Add(
+                $"The machine '{name}' is user-owned, and the server-only trigger {edge.Trigger} enters "
+                    + $"{edge.To} from {edge.From}, which spawns a child. The child would be started by the "
+                    + "server with no user present. Let an event the user sends enter it, or declare the machine "
+                    + "SystemOwned()."
+            );
+    }
+
+    // What stops one spawning state from starting its child.
+    private static void AddSpawnProblems(
+        List<string> problems,
+        string name,
+        SpawnDeclaration spawn,
+        IReadOnlyCollection<IMachine> registered
+    )
+    {
+        var at = $"The machine '{name}' state {spawn.State} spawns {spawn.ChildMachine.Name}";
+        if (
+            registered.FirstOrDefault(m => m.GetType() == spawn.ChildMachine)
+            is not IMachineInternals child
+        )
+        {
+            problems.Add(
+                $"{at}, which this host does not register as a machine. Register it with AddStateMachines, "
+                    + "in an assembly the host scans."
+            );
+            return;
+        }
+
+        if (child.SystemOwned != spawn.SystemOwned)
+            problems.Add(
+                spawn.SystemOwned
+                    ? $"{at}, which is user-owned, but the parent is system-owned, so the child would have no "
+                        + "user. Declare the child SystemOwned()."
+                    : $"{at}, which is system-owned, but the parent is user-owned, and a user-owned parent's "
+                        + "child is its user's. Remove SystemOwned() from the child, or spawn another machine."
+            );
+
+        if (child.Ends.Count == 0)
+            problems.Add(
+                $"{at}, which declares no state it ends in, so the parent would wait for good. Mark the child's "
+                    + "final states with Ends() or Fails()."
+            );
+
+        string initial;
+        try
+        {
+            initial = child.InitialSnapshot(context: null).State;
+        }
+        catch (ArgumentException ex)
+        {
+            problems.Add($"{at}, whose declared initial context is not valid: {ex.Message}");
+            return;
+        }
+        if (child.Entering(initial) is { } work)
+            problems.Add(
+                $"{at}, whose initial state {initial} {(work.Spawn is null ? "invokes a train" : "spawns a child")}. "
+                    + "A spawned child is created in its initial state with nothing started there; give it a "
+                    + "first state that waits for an event."
+            );
     }
 }

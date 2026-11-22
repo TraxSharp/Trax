@@ -91,35 +91,7 @@ public sealed class IrMachine
             );
         try
         {
-            // An IR built in memory, where no parser held it to a depth, is refused before anything recurses over it.
-            if (EventPlanner.NestsTooDeep(ir))
-                throw new ArgumentException(
-                    $"The IR nests deeper than {EventPlanner.MaxNesting} arrays and objects.",
-                    nameof(ir)
-                );
-            // A twin records the IR format it was generated for; an IR of a format this engine does not read, newer or
-            // older, is refused, and so is one that names its format as anything but a number.
-            if (ir.TryGetPropertyValue("irFormat", out var format))
-            {
-                // A format is read by its number, as the other engines read it: 1.0 is format 1, 1.5 is none.
-                var number =
-                    format?.GetValueKind() == JsonValueKind.Number
-                        ? double.Parse(format.ToJsonString(), CultureInfo.InvariantCulture)
-                        : double.NaN;
-                if (!double.IsInteger(number))
-                    throw new ArgumentException(
-                        $"The IR names its format as {format?.ToJsonString() ?? "null"}, which is not a format number.",
-                        nameof(ir)
-                    );
-                if (number > IrExporter.FormatVersion || number < IrExporter.OldestFormatRead)
-                    throw new ArgumentException(
-                        string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"The IR is in format {number}, and this engine reads formats {IrExporter.OldestFormatRead} to {IrExporter.FormatVersion}."
-                        ),
-                        nameof(ir)
-                    );
-            }
+            CheckDepthAndFormat(ir);
             Id = Text(ir["id"], "id");
             Version = ir["version"].NotNull().GetValue<int>();
             InitialState = Text(ir["initialState"], "initialState");
@@ -142,46 +114,10 @@ public sealed class IrMachine
                 .Where(t => t["effect"] is JsonObject)
                 .Select(t => t["trigger"].NotNull().GetValue<string>())
                 .ToHashSet(StringComparer.Ordinal);
-            // Every trigger's input is checked against one schema before a guard reads it: the record it declares, else
-            // nothing, except that an effect-bound trigger takes the receipt the effect runner hands it.
-            foreach (var trigger in _triggers)
-                if (!_inputs.ContainsKey(trigger))
-                    _inputs[trigger] = EffectTriggers.Contains(trigger)
-                        ? ReceiptInput
-                        : ContextSchema.Empty;
+            AddDefaultInputs();
 
-            _outcomes = new Dictionary<string, Outcome>(StringComparer.Ordinal);
-            foreach (var (name, node) in ir["outcomes"] as JsonObject ?? [])
-            {
-                var o = node.NotNull().AsObject();
-                var state = Text(o["state"], "outcomes.state");
-                var kind = Text(o["outcome"], "outcomes.outcome");
-                var edges = (o["edges"] as JsonArray ?? [])
-                    .Select(e => ReadEdge(e.NotNull().AsObject(), state, name))
-                    .ToList();
-                var output =
-                    string.Equals(kind, "done", StringComparison.Ordinal)
-                    && o["output"] is JsonObject schema
-                        ? ReadSchema(schema)
-                        : ContextSchema.Empty;
-                _outcomes[name] = new Outcome(state, kind, edges, output);
-            }
-
-            _timers = new Dictionary<string, Timer>(StringComparer.Ordinal);
-            foreach (var node in ir["timers"] as JsonArray ?? [])
-            {
-                var t = node.NotNull().AsObject();
-                var field = t["field"] as JsonObject;
-                _timers[Text(t["state"], "timers.state")] = new Timer(
-                    Text(t["state"], "timers.state"),
-                    Text(t["trigger"], "timers.trigger"),
-                    Text(t["target"], "timers.target"),
-                    t["after"] is { } after ? Duration(after) : null,
-                    field is null ? null : Text(field["name"], "timers.field.name"),
-                    field is null ? TimeSpan.Zero : Duration(field["min"]),
-                    field is null ? TimeSpan.Zero : Duration(field["max"])
-                );
-            }
+            _outcomes = ReadOutcomes(ir);
+            _timers = ReadTimers(ir);
         }
         catch (Exception ex) when (ex is not ArgumentException)
         {
@@ -192,6 +128,98 @@ public sealed class IrMachine
             );
         }
 
+        _serverGuards = ServerGuards();
+        _undetermined = FindUndetermined();
+    }
+
+    // Refuses an IR nested too deep, or in a format this engine does not read.
+    private static void CheckDepthAndFormat(JsonObject ir)
+    {
+        // An IR built in memory, where no parser held it to a depth, is refused before anything recurses over it.
+        if (EventPlanner.NestsTooDeep(ir))
+            throw new ArgumentException(
+                $"The IR nests deeper than {EventPlanner.MaxNesting} arrays and objects.",
+                nameof(ir)
+            );
+        // A twin records the IR format it was generated for; an IR of a format this engine does not read, newer or
+        // older, is refused, and so is one that names its format as anything but a number.
+        if (ir.TryGetPropertyValue("irFormat", out var format))
+        {
+            // A format is read by its number, as the other engines read it: 1.0 is format 1, 1.5 is none.
+            var number =
+                format?.GetValueKind() == JsonValueKind.Number
+                    ? double.Parse(format.ToJsonString(), CultureInfo.InvariantCulture)
+                    : double.NaN;
+            if (!double.IsInteger(number))
+                throw new ArgumentException(
+                    $"The IR names its format as {format?.ToJsonString() ?? "null"}, which is not a format number.",
+                    nameof(ir)
+                );
+            if (number > IrExporter.FormatVersion || number < IrExporter.OldestFormatRead)
+                throw new ArgumentException(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"The IR is in format {number}, and this engine reads formats {IrExporter.OldestFormatRead} to {IrExporter.FormatVersion}."
+                    ),
+                    nameof(ir)
+                );
+        }
+    }
+
+    private void AddDefaultInputs()
+    {
+        // Every trigger's input is checked against one schema before a guard reads it: the record it declares, else
+        // nothing, except that an effect-bound trigger takes the receipt the effect runner hands it.
+        foreach (var trigger in _triggers)
+            if (!_inputs.ContainsKey(trigger))
+                _inputs[trigger] = EffectTriggers.Contains(trigger)
+                    ? ReceiptInput
+                    : ContextSchema.Empty;
+    }
+
+    private static Dictionary<string, Outcome> ReadOutcomes(JsonObject ir)
+    {
+        var outcomes = new Dictionary<string, Outcome>(StringComparer.Ordinal);
+        foreach (var (name, node) in ir["outcomes"] as JsonObject ?? [])
+        {
+            var o = node.NotNull().AsObject();
+            var state = Text(o["state"], "outcomes.state");
+            var kind = Text(o["outcome"], "outcomes.outcome");
+            var edges = (o["edges"] as JsonArray ?? [])
+                .Select(e => ReadEdge(e.NotNull().AsObject(), state, name))
+                .ToList();
+            var output =
+                string.Equals(kind, "done", StringComparison.Ordinal)
+                && o["output"] is JsonObject schema
+                    ? ReadSchema(schema)
+                    : ContextSchema.Empty;
+            outcomes[name] = new Outcome(state, kind, edges, output);
+        }
+        return outcomes;
+    }
+
+    private static Dictionary<string, Timer> ReadTimers(JsonObject ir)
+    {
+        var timers = new Dictionary<string, Timer>(StringComparer.Ordinal);
+        foreach (var node in ir["timers"] as JsonArray ?? [])
+        {
+            var t = node.NotNull().AsObject();
+            var field = t["field"] as JsonObject;
+            timers[Text(t["state"], "timers.state")] = new Timer(
+                Text(t["state"], "timers.state"),
+                Text(t["trigger"], "timers.trigger"),
+                Text(t["target"], "timers.target"),
+                t["after"] is { } after ? Duration(after) : null,
+                field is null ? null : Text(field["name"], "timers.field.name"),
+                field is null ? TimeSpan.Zero : Duration(field["min"]),
+                field is null ? TimeSpan.Zero : Duration(field["max"])
+            );
+        }
+        return timers;
+    }
+
+    private Dictionary<string, Func<JsonObject, JsonNode?, bool>> ServerGuards()
+    {
         // On a snapshot the server sent, a custom state requirement with no handler here counts as passed.
         var trusted = new Dictionary<string, Func<JsonObject, JsonNode?, bool>>(
             _guards,
@@ -199,9 +227,11 @@ public sealed class IrMachine
         );
         foreach (var rule in _invariants.Values)
             TrustUnhandled(rule, trusted);
-        _serverGuards = trusted;
+        return trusted;
+    }
 
-        _undetermined = _transitions
+    private HashSet<(string State, string Trigger)> FindUndetermined() =>
+        _transitions
             .Where(t =>
                 NamesUnhandled(t.Guard)
                 || (t.Reduce is Reduction.Custom r && !_reducers.ContainsKey(r.Name))
@@ -209,7 +239,6 @@ public sealed class IrMachine
             )
             .Select(t => (t.From, t.Trigger))
             .ToHashSet();
-    }
 
     /// <summary>The machine's id (<c>checkout</c>).</summary>
     public string Id { get; }
@@ -510,28 +539,8 @@ public sealed class IrMachine
                 RefusalCode.Malformed,
                 "Snapshot is missing required fields (machine, version, state, context)."
             );
-        if (!string.Equals(machine, Id, StringComparison.Ordinal))
-            return new RehydrationResult.Error(
-                RefusalCode.UnknownMachine,
-                $"Snapshot machine '{machine}' does not match '{Id}'."
-            );
-        // An IR carries no migrations, so a snapshot of another version is refused rather than misread.
-        if (version.Value > Version)
-            return new RehydrationResult.Error(
-                RefusalCode.VersionMismatch,
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"Snapshot version {version.Value} is newer than definition version {Version}."
-                )
-            );
-        if (version.Value < Version)
-            return new RehydrationResult.Error(
-                RefusalCode.VersionMismatch,
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"No migration from version {version.Value} to {Version}."
-                )
-            );
+        if (RefuseMachineOrVersion(machine, version.Value) is { } refused)
+            return refused;
         if (!_states.Contains(state))
             return new RehydrationResult.Error(
                 RefusalCode.UnknownState,
@@ -553,6 +562,34 @@ public sealed class IrMachine
                 Context = copy,
             }
         );
+    }
+
+    // A snapshot of another machine, or of another version, is refused.
+    private RehydrationResult.Error? RefuseMachineOrVersion(string machine, int version)
+    {
+        if (!string.Equals(machine, Id, StringComparison.Ordinal))
+            return new RehydrationResult.Error(
+                RefusalCode.UnknownMachine,
+                $"Snapshot machine '{machine}' does not match '{Id}'."
+            );
+        // An IR carries no migrations, so a snapshot of another version is refused rather than misread.
+        if (version > Version)
+            return new RehydrationResult.Error(
+                RefusalCode.VersionMismatch,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Snapshot version {version} is newer than definition version {Version}."
+                )
+            );
+        if (version < Version)
+            return new RehydrationResult.Error(
+                RefusalCode.VersionMismatch,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"No migration from version {version} to {Version}."
+                )
+            );
+        return null;
     }
 
     // The successor of a transition into `state`: the target's timer reads its duration first, so a duration the context

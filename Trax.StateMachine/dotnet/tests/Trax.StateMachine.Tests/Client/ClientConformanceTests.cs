@@ -42,33 +42,7 @@ public partial class ClientConformanceTests
 
         // Each request is started as it arrives, so two sends are sent in the order the runner sent them, and answered
         // when it settles: a send waits on the host while the runner goes on.
-        var conversation = Task.Run(async () =>
-        {
-            while (
-                await process.StandardOutput.ReadLineAsync().ConfigureAwait(false) is { } request
-            )
-            {
-                var answering = testee.AnswerAsync(request);
-                answers.Add(
-                    Task.Run(async () =>
-                    {
-                        var answer = await answering.ConfigureAwait(false);
-                        await writing.WaitAsync().ConfigureAwait(false);
-                        try
-                        {
-                            await process
-                                .StandardInput.WriteLineAsync(answer)
-                                .ConfigureAwait(false);
-                            await process.StandardInput.FlushAsync().ConfigureAwait(false);
-                        }
-                        finally
-                        {
-                            writing.Release();
-                        }
-                    })
-                );
-            }
-        });
+        var conversation = Converse(process, testee, writing, answers);
 
         // The test owns its wait (ADR 0014): the runner finishes well within it, or the test fails.
         using var timeout = new CancellationTokenSource(RunnerTimeout);
@@ -100,6 +74,40 @@ public partial class ClientConformanceTests
                 )
             );
     }
+
+    private static Task Converse(
+        Process process,
+        ClientTestee testee,
+        SemaphoreSlim writing,
+        List<Task> answers
+    ) =>
+        Task.Run(async () =>
+        {
+            while (
+                await process.StandardOutput.ReadLineAsync().ConfigureAwait(false) is { } request
+            )
+            {
+                var answering = testee.AnswerAsync(request);
+                answers.Add(
+                    Task.Run(async () =>
+                    {
+                        var answer = await answering.ConfigureAwait(false);
+                        await writing.WaitAsync().ConfigureAwait(false);
+                        try
+                        {
+                            await process
+                                .StandardInput.WriteLineAsync(answer)
+                                .ConfigureAwait(false);
+                            await process.StandardInput.FlushAsync().ConfigureAwait(false);
+                        }
+                        finally
+                        {
+                            writing.Release();
+                        }
+                    })
+                );
+            }
+        });
 
     // The transcripts expected-failures/dotnet.json names, by case or by prefix; none when it is absent.
     private static async Task<int> ExpectedFailures()

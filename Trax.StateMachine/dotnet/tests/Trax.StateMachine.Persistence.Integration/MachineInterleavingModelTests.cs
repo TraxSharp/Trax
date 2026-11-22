@@ -81,80 +81,7 @@ public class MachineInterleavingModelTests(StoreProvider provider)
             var id = ids.Count == 0 ? (Guid?)null : ids[random.Next(ids.Count)];
             log.Add($"{step} {id}");
             charge.Clear();
-            switch (step)
-            {
-                case Step.Start:
-                    if (
-                        await Drive.TryStart(host, owner, Machine).ConfigureAwait(false)
-                        is StartOutcome.Started started
-                    )
-                        ids.Add(started.Id);
-                    break;
-                case Step.Go or Step.Cancel or Step.Restart when id is { } target:
-                    await Drive
-                        .Event(host, owner, Machine, target, step.ToString())
-                        .ConfigureAwait(false);
-                    break;
-                case Step.Edit when id is { } target:
-                    await Drive
-                        .Event(
-                            host,
-                            owner,
-                            Machine,
-                            target,
-                            nameof(PendingPayTrigger.Edit),
-                            new JsonObject
-                            {
-                                ["note"] = string.Create(CultureInfo.InvariantCulture, $"n{n}"),
-                            }
-                        )
-                        .ConfigureAwait(false);
-                    break;
-                case Step.Send when id is { } target:
-                    await Swallow(Drive.Send(host, owner, Machine, target)).ConfigureAwait(false);
-                    break;
-                case Step.SendHeld when id is { } target && held is null:
-                    charge.Script(ChargeRun.Hold);
-                    held = Drive.Send(host, owner, Machine, target);
-                    // The send either holds the effect or is refused before it: wait for whichever comes first.
-                    await Task.WhenAny(charge.Entered, held).ConfigureAwait(false);
-                    break;
-                case Step.SendFailing when id is { } target:
-                    charge.Script(ChargeRun.Fail);
-                    await Swallow(Drive.Send(host, owner, Machine, target)).ConfigureAwait(false);
-                    break;
-                case Step.SendTimingOut when id is { } target:
-                    charge.Script(ChargeRun.TimeOut);
-                    await Swallow(Drive.Send(host, owner, Machine, target)).ConfigureAwait(false);
-                    break;
-                case Step.Release when held is not null:
-                    charge.Release();
-                    await Swallow(held).ConfigureAwait(false);
-                    held = null;
-                    break;
-                case Step.Discard when id is { } target:
-                    await Drive.Discard(host, owner, Machine, target).ConfigureAwait(false);
-                    break;
-                case Step.Timer when id is { } target:
-                    await RawSql
-                        .Execute(
-                            host,
-                            $"UPDATE {RawSql.Table(host)} SET due_at = created_at WHERE due_at IS NOT NULL"
-                        )
-                        .ConfigureAwait(false);
-                    await Drive.SweepTimers(host).ConfigureAwait(false);
-                    break;
-                case Step.PassLease:
-                    if (held is null)
-                    {
-                        await PassLeases(host).ConfigureAwait(false);
-                        await Drive.SweepTimers(host).ConfigureAwait(false);
-                    }
-                    break;
-                case Step.SweepDrafts:
-                    await Drive.SweepDrafts(host).ConfigureAwait(false);
-                    break;
-            }
+            held = await RunStep(host, owner, charge, ids, held, step, id, n).ConfigureAwait(false);
 
             await Check(host, owner, charge, seed, log).ConfigureAwait(false);
         }
@@ -179,6 +106,103 @@ public class MachineInterleavingModelTests(StoreProvider provider)
                         $"seed {seed}: every mark is finished once its lease has passed ({Adr})"
                     )
                 );
+    }
+
+    // Runs one step of a sequence; answers the send it leaves holding its effect, if any.
+    private static async Task<Task<AdvanceOutcome>?> RunStep(
+        InstanceHost host,
+        Actor.Client owner,
+        ControlledCharge charge,
+        List<Guid> ids,
+        Task<AdvanceOutcome>? held,
+        Step step,
+        Guid? id,
+        int n
+    )
+    {
+        switch (step)
+        {
+            case Step.Start:
+                if (
+                    await Drive.TryStart(host, owner, Machine).ConfigureAwait(false)
+                    is StartOutcome.Started started
+                )
+                    ids.Add(started.Id);
+                break;
+            case Step.Go or Step.Cancel or Step.Restart when id is { } target:
+                await Drive
+                    .Event(host, owner, Machine, target, step.ToString())
+                    .ConfigureAwait(false);
+                break;
+            case Step.Edit when id is { } target:
+                await Edit(host, owner, target, n).ConfigureAwait(false);
+                break;
+            case Step.Send when id is { } target:
+                await Swallow(Drive.Send(host, owner, Machine, target)).ConfigureAwait(false);
+                break;
+            case Step.SendHeld when id is { } target && held is null:
+                charge.Script(ChargeRun.Hold);
+                held = Drive.Send(host, owner, Machine, target);
+                // The send either holds the effect or is refused before it: wait for whichever comes first.
+                await Task.WhenAny(charge.Entered, held).ConfigureAwait(false);
+                break;
+            case Step.SendFailing when id is { } target:
+                charge.Script(ChargeRun.Fail);
+                await Swallow(Drive.Send(host, owner, Machine, target)).ConfigureAwait(false);
+                break;
+            case Step.SendTimingOut when id is { } target:
+                charge.Script(ChargeRun.TimeOut);
+                await Swallow(Drive.Send(host, owner, Machine, target)).ConfigureAwait(false);
+                break;
+            case Step.Release when held is not null:
+                charge.Release();
+                await Swallow(held).ConfigureAwait(false);
+                held = null;
+                break;
+            case Step.Discard when id is { } target:
+                await Drive.Discard(host, owner, Machine, target).ConfigureAwait(false);
+                break;
+            case Step.Timer when id is { } target:
+                await ExpireTimers(host).ConfigureAwait(false);
+                break;
+            case Step.PassLease:
+                if (held is null)
+                {
+                    await PassLeases(host).ConfigureAwait(false);
+                    await Drive.SweepTimers(host).ConfigureAwait(false);
+                }
+                break;
+            case Step.SweepDrafts:
+                await Drive.SweepDrafts(host).ConfigureAwait(false);
+                break;
+        }
+        return held;
+    }
+
+    private static async Task Edit(InstanceHost host, Actor.Client owner, Guid target, int n)
+    {
+        await Drive
+            .Event(
+                host,
+                owner,
+                Machine,
+                target,
+                nameof(PendingPayTrigger.Edit),
+                new JsonObject { ["note"] = string.Create(CultureInfo.InvariantCulture, $"n{n}") }
+            )
+            .ConfigureAwait(false);
+    }
+
+    // Every armed timer is due now, and the sweep fires them.
+    private static async Task ExpireTimers(InstanceHost host)
+    {
+        await RawSql
+            .Execute(
+                host,
+                $"UPDATE {RawSql.Table(host)} SET due_at = created_at WHERE due_at IS NOT NULL"
+            )
+            .ConfigureAwait(false);
+        await Drive.SweepTimers(host).ConfigureAwait(false);
     }
 
     private static async Task Swallow(Task task)

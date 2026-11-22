@@ -14,18 +14,28 @@ internal static class TagExpression
     internal static Func<IReadOnlyList<string>, bool> Parse(string expression)
     {
         var tokens = Tokens(expression);
-        var at = 0;
-        var parsed = Or();
-        if (at < tokens.Count)
-            throw new FormatException($"'{expression}': '{tokens[at]}' is not expected here.");
+        var reader = new Reader(expression, tokens);
+        var parsed = reader.Or();
+        if (reader.At < tokens.Count)
+            throw new FormatException(
+                $"'{expression}': '{tokens[reader.At]}' is not expected here."
+            );
         return parsed;
+    }
 
-        Func<IReadOnlyList<string>, bool> Or()
+    // The recursive descent over the tokens, from where it has read to.
+    private sealed class Reader(string expression, List<string> tokens)
+    {
+        private int _at;
+
+        internal int At => _at;
+
+        internal Func<IReadOnlyList<string>, bool> Or()
         {
             var left = And();
-            while (at < tokens.Count && string.Equals(tokens[at], "or", StringComparison.Ordinal))
+            while (_at < tokens.Count && string.Equals(tokens[_at], "or", StringComparison.Ordinal))
             {
-                at++;
+                _at++;
                 var l = left;
                 var r = And();
                 left = t => l(t) || r(t);
@@ -33,12 +43,14 @@ internal static class TagExpression
             return left;
         }
 
-        Func<IReadOnlyList<string>, bool> And()
+        private Func<IReadOnlyList<string>, bool> And()
         {
             var left = Not();
-            while (at < tokens.Count && string.Equals(tokens[at], "and", StringComparison.Ordinal))
+            while (
+                _at < tokens.Count && string.Equals(tokens[_at], "and", StringComparison.Ordinal)
+            )
             {
-                at++;
+                _at++;
                 var l = left;
                 var r = Not();
                 left = t => l(t) && r(t);
@@ -46,28 +58,31 @@ internal static class TagExpression
             return left;
         }
 
-        Func<IReadOnlyList<string>, bool> Not()
+        private Func<IReadOnlyList<string>, bool> Not()
         {
-            if (at < tokens.Count && string.Equals(tokens[at], "not", StringComparison.Ordinal))
+            if (_at < tokens.Count && string.Equals(tokens[_at], "not", StringComparison.Ordinal))
             {
-                at++;
+                _at++;
                 var inner = Not();
                 return t => !inner(t);
             }
             return Atom();
         }
 
-        Func<IReadOnlyList<string>, bool> Atom()
+        private Func<IReadOnlyList<string>, bool> Atom()
         {
-            if (at >= tokens.Count)
+            if (_at >= tokens.Count)
                 throw new FormatException($"'{expression}' ends where a tag is expected.");
-            var token = tokens[at++];
+            var token = tokens[_at++];
             if (string.Equals(token, "(", StringComparison.Ordinal))
             {
                 var inner = Or();
-                if (at >= tokens.Count || !string.Equals(tokens[at], ")", StringComparison.Ordinal))
+                if (
+                    _at >= tokens.Count
+                    || !string.Equals(tokens[_at], ")", StringComparison.Ordinal)
+                )
                     throw new FormatException($"'{expression}' has a '(' that is not closed.");
-                at++;
+                _at++;
                 return inner;
             }
             if (token is ")" or "and" or "or")

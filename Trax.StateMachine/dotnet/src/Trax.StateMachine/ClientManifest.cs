@@ -220,6 +220,12 @@ public sealed record ClientManifest
             throw Malformed(path: null, ex.Message, ex);
         }
 
+        RefuseNullEntries(manifest);
+        return manifest;
+    }
+
+    private static void RefuseNullEntries(ClientManifest manifest)
+    {
         // A null in a list is not a nullable annotation's to refuse: it is found here.
         if (manifest.Machines.Any(m => m is null || m.Documents.Any(d => d is null)))
             throw Malformed("$.machines", "A machine or one of its documents is null.");
@@ -245,7 +251,6 @@ public sealed record ClientManifest
             )
         )
             throw Malformed(path: null, "A role set, role or policy is null.");
-        return manifest;
     }
 
     private static InvalidOperationException Malformed(

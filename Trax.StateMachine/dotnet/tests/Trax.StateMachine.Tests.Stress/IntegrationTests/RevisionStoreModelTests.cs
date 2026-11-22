@@ -102,21 +102,7 @@ public class RevisionStoreModelTests : StressFixture
         foreach (var (starters, burst) in incarnations)
         {
             // Racing starts: one creates the row, the rest find it there.
-            var created = await Task.WhenAll(
-                    Enumerable
-                        .Range(0, starters)
-                        .Select(_ =>
-                            Task.Run(async () =>
-                            {
-                                var ctx = StressDb.NewContext();
-                                await using var ctxDisposal = ctx.ConfigureAwait(false);
-                                return await ((ISnapshotStore)StressDb.NewStore(ctx))
-                                    .Insert(User, id, Draft(0))
-                                    .ConfigureAwait(false);
-                            })
-                        )
-                )
-                .ConfigureAwait(false);
+            var created = await RaceStarts(id, starters).ConfigureAwait(false);
             created.Count(c => c).Should().Be(1, "one insert creates the incarnation");
 
             var (rowId, start, _) = await ReadRow(id).ConfigureAwait(false);
@@ -144,41 +130,70 @@ public class RevisionStoreModelTests : StressFixture
                 .OnlyHaveUniqueItems("no two writes committed the same revision")
                 .And.OnlyContain(r => r >= 2 && r <= revision, "none was skipped past the last");
 
-            // Replaying the model in revision order ends where the database does. The last write reports its
-            // revision unless it was a blind upsert, which then wrote the row as it is.
-            var last = reported.SingleOrDefault(c => c.Revision == revision);
-            if (last is not null)
-                Expected(last.Op, row)
-                    .Should()
-                    .BeTrue(
-                        string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"the write that took revision {revision} left the final row"
-                        )
-                    );
-            else if (committed.IsEmpty)
-                (
-                    string.Equals(
-                        row["state"].NotNull().GetValue<string>(),
-                        "Draft",
-                        StringComparison.Ordinal
-                    )
-                    && Items(row).Length == 0
-                )
-                    .Should()
-                    .BeTrue("with no write committed, the row is the one the insert wrote");
-            else
-                committed
-                    .Should()
-                    .Contain(
-                        c => c.Op.Kind == Kind.Upsert && IsDraftOf(row, c.Op.Value),
-                        "an unreported last write is an upsert, and the row is what it wrote"
-                    );
+            AssertFinalRow(committed, reported, revision, row);
 
             var ctx = StressDb.NewContext();
             await using (ctx.ConfigureAwait(false))
                 await StressDb.NewStore(ctx).Delete(User, id).ConfigureAwait(false);
         }
+    }
+
+    private static async Task<bool[]> RaceStarts(Guid id, int starters)
+    {
+        return await Task.WhenAll(
+                Enumerable
+                    .Range(0, starters)
+                    .Select(_ =>
+                        Task.Run(async () =>
+                        {
+                            var ctx = StressDb.NewContext();
+                            await using var ctxDisposal = ctx.ConfigureAwait(false);
+                            return await ((ISnapshotStore)StressDb.NewStore(ctx))
+                                .Insert(User, id, Draft(0))
+                                .ConfigureAwait(false);
+                        })
+                    )
+            )
+            .ConfigureAwait(false);
+    }
+
+    private static void AssertFinalRow(
+        ConcurrentBag<Committed> committed,
+        List<Committed> reported,
+        long revision,
+        JsonObject row
+    )
+    {
+        // Replaying the model in revision order ends where the database does. The last write reports its
+        // revision unless it was a blind upsert, which then wrote the row as it is.
+        var last = reported.SingleOrDefault(c => c.Revision == revision);
+        if (last is not null)
+            Expected(last.Op, row)
+                .Should()
+                .BeTrue(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"the write that took revision {revision} left the final row"
+                    )
+                );
+        else if (committed.IsEmpty)
+            (
+                string.Equals(
+                    row["state"].NotNull().GetValue<string>(),
+                    "Draft",
+                    StringComparison.Ordinal
+                )
+                && Items(row).Length == 0
+            )
+                .Should()
+                .BeTrue("with no write committed, the row is the one the insert wrote");
+        else
+            committed
+                .Should()
+                .Contain(
+                    c => c.Op.Kind == Kind.Upsert && IsDraftOf(row, c.Op.Value),
+                    "an unreported last write is an upsert, and the row is what it wrote"
+                );
     }
 
     private static async Task Apply(Guid id, Op op, ConcurrentBag<Committed> committed)

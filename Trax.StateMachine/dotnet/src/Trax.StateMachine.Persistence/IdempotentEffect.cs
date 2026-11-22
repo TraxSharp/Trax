@@ -81,52 +81,7 @@ public sealed class IdempotentEffect(IEffectClaimStore claims)
         )
         {
             case ClaimResult.Won won:
-                string receipt;
-                try
-                {
-                    receipt = await effect().ConfigureAwait(false);
-                }
-                catch (OperationCanceledException)
-                {
-                    // A cancellation says nothing about whether the effect happened: a charge can land and its
-                    // response time out. Keep the claim in flight, so no one runs the effect again until the lease
-                    // passes, rather than releasing it for an immediate retry.
-                    throw;
-                }
-                catch
-                {
-                    // The effect failed before completing — release (fenced on our token) so a retry can
-                    // re-run rather than being stuck behind an in-flight claim. Assumes throw = did not run.
-                    await claims
-                        .ReleaseOwned(effectKey, won.OwnerToken, CancellationToken.None)
-                        .ConfigureAwait(false);
-                    throw;
-                }
-
-                // The ledger reads a claim with no receipt as still in flight, and reclaims it once the lease
-                // passes, so recording a null or empty receipt would let the effect run again. Treat it as a
-                // failed effect instead: release the claim and say so.
-                if (string.IsNullOrEmpty(receipt))
-                {
-                    await claims
-                        .ReleaseOwned(effectKey, won.OwnerToken, CancellationToken.None)
-                        .ConfigureAwait(false);
-                    throw new InvalidOperationException(
-                        $"The effect for '{effectKey}' returned no receipt, so it was treated as failed and its "
-                            + "claim was released. An effect must return a non-empty receipt once it has run."
-                    );
-                }
-
-                // Record the receipt against OUR claim. If this returns false our lease expired and the
-                // claim was reclaimed mid-effect; the fence stops us corrupting the new owner's row. The
-                // effect still ran exactly once here, so we hand back its receipt. The effect has happened, so
-                // the caller's token no longer applies: a cancelled write here would leave the claim in flight
-                // and let the next caller run the effect again. The same rule as a train's outcome, in
-                // docs/adr/0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md.
-                await claims
-                    .Complete(effectKey, won.OwnerToken, receipt, CancellationToken.None)
-                    .ConfigureAwait(false);
-                return new EffectOutcome.Ran(receipt);
+                return await RunWon(effectKey, effect, won).ConfigureAwait(false);
 
             case ClaimResult.Lost:
                 var existing = await claims
@@ -142,5 +97,61 @@ public sealed class IdempotentEffect(IEffectClaimStore claims)
             default:
                 return new EffectOutcome.InProgress();
         }
+    }
+
+    // Runs the effect under the claim this caller won, and records its receipt. Nothing here takes the caller's token:
+    // an effect that happened must be recorded.
+    private async Task<EffectOutcome> RunWon(
+        string effectKey,
+        Func<Task<string>> effect,
+        ClaimResult.Won won
+    )
+    {
+        string receipt;
+        try
+        {
+            receipt = await effect().ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // A cancellation says nothing about whether the effect happened: a charge can land and its
+            // response time out. Keep the claim in flight, so no one runs the effect again until the lease
+            // passes, rather than releasing it for an immediate retry.
+            throw;
+        }
+        catch
+        {
+            // The effect failed before completing — release (fenced on our token) so a retry can
+            // re-run rather than being stuck behind an in-flight claim. Assumes throw = did not run.
+            await claims
+                .ReleaseOwned(effectKey, won.OwnerToken, CancellationToken.None)
+                .ConfigureAwait(false);
+            throw;
+        }
+
+        // The ledger reads a claim with no receipt as still in flight, and reclaims it once the lease
+        // passes, so recording a null or empty receipt would let the effect run again. Treat it as a
+        // failed effect instead: release the claim and say so.
+        if (string.IsNullOrEmpty(receipt))
+        {
+            await claims
+                .ReleaseOwned(effectKey, won.OwnerToken, CancellationToken.None)
+                .ConfigureAwait(false);
+            throw new InvalidOperationException(
+                $"The effect for '{effectKey}' returned no receipt, so it was treated as failed and its "
+                    + "claim was released. An effect must return a non-empty receipt once it has run."
+            );
+        }
+
+        // Record the receipt against OUR claim. If this returns false our lease expired and the
+        // claim was reclaimed mid-effect; the fence stops us corrupting the new owner's row. The
+        // effect still ran exactly once here, so we hand back its receipt. The effect has happened, so
+        // the caller's token no longer applies: a cancelled write here would leave the claim in flight
+        // and let the next caller run the effect again. The same rule as a train's outcome, in
+        // docs/adr/0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md.
+        await claims
+            .Complete(effectKey, won.OwnerToken, receipt, CancellationToken.None)
+            .ConfigureAwait(false);
+        return new EffectOutcome.Ran(receipt);
     }
 }

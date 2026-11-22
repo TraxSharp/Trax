@@ -301,33 +301,8 @@ public partial class ClientSurfaceTests
             var first = headerCells[0];
             var columns = headerCells[1..];
             var isTypes = string.Equals(first, "Type", StringComparison.Ordinal);
-            if (
-                (!isTypes && !string.Equals(first, "Member", StringComparison.Ordinal))
-                || columns.Length == 0
-                || columns.Any(c => c.Length == 0)
-                || columns.Distinct(StringComparer.Ordinal).Take(columns.Length + 1).Count()
-                    != columns.Length
-            )
-                throw new AssertionException(
-                    string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"PROTOCOL.md:{i + 1}: a table this test does not know: {header}"
-                    )
-                );
-            if ((isTypes ? types : members) is not null)
-                throw new AssertionException(
-                    string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"PROTOCOL.md:{i + 1}: a second {first} table"
-                    )
-                );
-            if (languages is not null && !languages.SequenceEqual(columns, StringComparer.Ordinal))
-                throw new AssertionException(
-                    string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"PROTOCOL.md:{i + 1}: the tables name different languages: "
-                    ) + $"{string.Join(", ", languages)} and {string.Join(", ", columns)}"
-                );
+            RequireKnownTable(header, i, first, columns, isTypes);
+            RequireConsistent(i, first, isTypes ? types : members, languages, columns);
             languages = columns;
             var column = Array.IndexOf(columns, language) + 1;
             if (column == 0)
@@ -337,35 +312,10 @@ public partial class ClientSurfaceTests
                         $"PROTOCOL.md:{i + 1}: the {first} table has no {language} column: {header}"
                     )
                 );
-            var separator = "|" + string.Concat(Enumerable.Repeat(" --- |", headerCells.Length));
-            if (
-                i + 1 >= lines.Length
-                || !string.Equals(lines[i + 1], separator, StringComparison.Ordinal)
-            )
-                throw new AssertionException(
-                    string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"PROTOCOL.md:{i + 2}: no separator row"
-                    )
-                );
+            RequireSeparator(lines, i, headerCells.Length);
             i += 2;
 
-            var names = new List<Named>();
-            var seen = new HashSet<string>(StringComparer.Ordinal);
-            for (; i < end && lines[i].StartsWith('|'); i++)
-            {
-                var name = NameOf(Cells(lines[i], i + 1, headerCells.Length)[column], i + 1);
-                if (name is null)
-                    continue;
-                if (!seen.Add(name))
-                    throw new AssertionException(
-                        string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"PROTOCOL.md:{i + 1}: `{name}` is named twice in this table"
-                        )
-                    );
-                names.Add(new Named(i + 1, name));
-            }
+            var names = ReadNames(lines, ref i, end, column, headerCells.Length);
             if (isTypes)
                 types = names;
             else
@@ -377,6 +327,90 @@ public partial class ClientSurfaceTests
             types ?? throw new AssertionException("PROTOCOL.md: no `| Type | ... |` table"),
             members ?? throw new AssertionException("PROTOCOL.md: no `| Member | ... |` table")
         );
+    }
+
+    private static void RequireKnownTable(
+        string header,
+        int i,
+        string first,
+        string[] columns,
+        bool isTypes
+    )
+    {
+        if (
+            (!isTypes && !string.Equals(first, "Member", StringComparison.Ordinal))
+            || columns.Length == 0
+            || columns.Any(c => c.Length == 0)
+            || columns.Distinct(StringComparer.Ordinal).Take(columns.Length + 1).Count()
+                != columns.Length
+        )
+            throw new AssertionException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"PROTOCOL.md:{i + 1}: a table this test does not know: {header}"
+                )
+            );
+    }
+
+    private static void RequireConsistent(
+        int i,
+        string first,
+        List<Named>? table,
+        string[]? languages,
+        string[] columns
+    )
+    {
+        if (table is not null)
+            throw new AssertionException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"PROTOCOL.md:{i + 1}: a second {first} table"
+                )
+            );
+        if (languages is not null && !languages.SequenceEqual(columns, StringComparer.Ordinal))
+            throw new AssertionException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"PROTOCOL.md:{i + 1}: the tables name different languages: "
+                ) + $"{string.Join(", ", languages)} and {string.Join(", ", columns)}"
+            );
+    }
+
+    private static void RequireSeparator(string[] lines, int i, int cells)
+    {
+        var separator = "|" + string.Concat(Enumerable.Repeat(" --- |", cells));
+        if (
+            i + 1 >= lines.Length
+            || !string.Equals(lines[i + 1], separator, StringComparison.Ordinal)
+        )
+            throw new AssertionException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"PROTOCOL.md:{i + 2}: no separator row"
+                )
+            );
+    }
+
+    // The names one table's rows give in the column, from i until the table ends; i is left after its last row.
+    private static List<Named> ReadNames(string[] lines, ref int i, int end, int column, int cells)
+    {
+        var names = new List<Named>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        for (; i < end && lines[i].StartsWith('|'); i++)
+        {
+            var name = NameOf(Cells(lines[i], i + 1, cells)[column], i + 1);
+            if (name is null)
+                continue;
+            if (!seen.Add(name))
+                throw new AssertionException(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"PROTOCOL.md:{i + 1}: `{name}` is named twice in this table"
+                    )
+                );
+            names.Add(new Named(i + 1, name));
+        }
+        return names;
     }
 
     private static string[] Cells(string line, int number, int? count)

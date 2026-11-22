@@ -38,23 +38,8 @@ internal sealed class AdvanceSnapshotJunction(
         )
             return Problem(mismatch.Code, mismatch.Message);
 
-        // The same bound autosave applies, checked before parsing: a reducer that copies its input into the
-        // context would otherwise store whatever the request body carried.
-        if (
-            SnapshotGuards.Bytes(input.Input) + SnapshotGuards.Bytes(input.SensitiveInput)
-            > SnapshotLimits.MaxSnapshotBytes
-        )
-            return Problem(
-                RefusalCode.TooLarge,
-                $"The trigger input exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
-            );
-
-        // A client's prediction is a snapshot, bounded like one, and refused before it is compared.
-        if (SnapshotGuards.Bytes(input.ClientResult) > SnapshotLimits.MaxSnapshotBytes)
-            return Problem(
-                RefusalCode.TooLarge,
-                $"The client result exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
-            );
+        if (Oversized(input) is { } oversized)
+            return oversized;
 
         JsonNode? triggerInput;
         try
@@ -82,6 +67,35 @@ internal sealed class AdvanceSnapshotJunction(
             )
             .ConfigureAwait(false);
 
+        LogDivergence(input, outcome);
+
+        return Answer(outcome, service, input);
+    }
+
+    private static AdvanceSnapshotOutput? Oversized(AdvanceSnapshotInput input)
+    {
+        // The same bound autosave applies, checked before parsing: a reducer that copies its input into the
+        // context would otherwise store whatever the request body carried.
+        if (
+            SnapshotGuards.Bytes(input.Input) + SnapshotGuards.Bytes(input.SensitiveInput)
+            > SnapshotLimits.MaxSnapshotBytes
+        )
+            return Problem(
+                RefusalCode.TooLarge,
+                $"The trigger input exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
+            );
+
+        // A client's prediction is a snapshot, bounded like one, and refused before it is compared.
+        if (SnapshotGuards.Bytes(input.ClientResult) > SnapshotLimits.MaxSnapshotBytes)
+            return Problem(
+                RefusalCode.TooLarge,
+                $"The client result exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
+            );
+        return null;
+    }
+
+    private void LogDivergence(AdvanceSnapshotInput input, AdvanceOutcome outcome)
+    {
         // Twin drift is worth an operator's attention, but the client's prediction can carry anything the context
         // holds: only its length and hash are logged.
         if (
@@ -99,8 +113,14 @@ internal sealed class AdvanceSnapshotJunction(
                     System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(predicted))
                 )
             );
+    }
 
-        return outcome switch
+    private AdvanceSnapshotOutput Answer(
+        AdvanceOutcome outcome,
+        ISnapshotDraftService service,
+        AdvanceSnapshotInput input
+    ) =>
+        outcome switch
         {
             AdvanceOutcome.Advanced advanced => new AdvanceSnapshotOutput
             {
@@ -137,7 +157,6 @@ internal sealed class AdvanceSnapshotJunction(
             ),
             _ => Problem(RefusalCode.InternalError, "Unknown advance outcome."),
         };
-    }
 
     private static AdvanceSnapshotOutput Problem(RefusalCode code, string message) =>
         new()

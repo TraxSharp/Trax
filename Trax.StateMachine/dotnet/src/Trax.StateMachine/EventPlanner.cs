@@ -35,6 +35,31 @@ internal static class EventPlanner
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(navigation);
 
+        var refused = Refuse(graph, snapshot, target, fields, navigation);
+        if (refused is not null)
+            return refused;
+
+        // A trigger listed twice is tried once, where it is first listed.
+        navigation = navigation.Distinct(StringComparer.Ordinal).ToList();
+        fields = fields is null ? null : fields with { Input = fields.Input?.DeepClone() };
+        var edges = new List<PlannedEvent>(navigation.Count + 1);
+        if (fields is not null)
+            edges.Add(fields);
+        edges.AddRange(navigation.Select(t => new PlannedEvent(t)));
+        var depthLimit = maxDepth ?? 2 * graph.StateCount;
+
+        return new Search(graph, target, fields).Run(snapshot, edges, depthLimit);
+    }
+
+    // The arguments the search refuses before it starts.
+    private static PlanResult.Invalid? Refuse(
+        PlanGraph graph,
+        Snapshot snapshot,
+        string target,
+        PlannedEvent? fields,
+        IReadOnlyList<string> navigation
+    )
+    {
         // Checked first, as advance would refuse them: the search copies and compares both.
         if (NestsTooDeep(fields?.Input))
             return new PlanResult.Invalid { Code = RefusalCode.InvalidInput };
@@ -50,24 +75,25 @@ internal static class EventPlanner
                 || string.Equals(trigger, fields?.Trigger, StringComparison.Ordinal)
             )
                 return new PlanResult.Invalid(Trigger: trigger);
+        return null;
+    }
 
-        // A trigger listed twice is tried once, where it is first listed.
-        navigation = navigation.Distinct(StringComparer.Ordinal).ToList();
-        fields = fields is null ? null : fields with { Input = fields.Input?.DeepClone() };
-        var edges = new List<PlannedEvent>(navigation.Count + 1);
-        if (fields is not null)
-            edges.Add(fields);
-        edges.AddRange(navigation.Select(t => new PlannedEvent(t)));
-        var depthLimit = maxDepth ?? 2 * graph.StateCount;
+    // One search: the graph, the target and the fields event it plans for, and what it has met so far.
+    private sealed class Search(PlanGraph graph, string target, PlannedEvent? fields)
+    {
+        private readonly HashSet<string> _seen = new(StringComparer.Ordinal);
+        private readonly Queue<Node> _queue = new();
+        private (string Trigger, Node From)? _undetermined;
 
         // A host omits a member whose value is null, at any depth, so a snapshot it confirmed never carries one: two
         // snapshots that differ only there are the same.
-        string Key(Snapshot s) => graph.Serialize(s with { Context = WithoutNulls(s.Context) });
+        private string Key(Snapshot s) =>
+            graph.Serialize(s with { Context = WithoutNulls(s.Context) });
 
         // The goal: the target state, where the fields event, when there is one, changes nothing. A fields event this
         // engine cannot evaluate there, or one the target refuses, never reaches it. `key` is the snapshot's own, and
         // `applied` the fields event's step when the test took one, with its wire when it transitioned.
-        bool IsGoal(Snapshot s, string key, out Applied? applied)
+        private bool IsGoal(Snapshot s, string key, out Applied? applied)
         {
             applied = null;
             if (!string.Equals(s.State, target, StringComparison.Ordinal))
@@ -84,32 +110,49 @@ internal static class EventPlanner
             return string.Equals(applied.Key, key, StringComparison.Ordinal);
         }
 
-        var startKey = Key(snapshot);
-        if (IsGoal(snapshot, startKey, out var startApplied))
-            return new PlanResult.Planned([]);
-
-        var seen = new HashSet<string>(StringComparer.Ordinal) { startKey };
-        var queue = new Queue<Node>();
-        queue.Enqueue(new Node(snapshot, Parent: null, Event: null, 0) { Fields = startApplied });
-        var expanded = 0;
-        var cut = false;
-        (string Trigger, Node From)? undetermined = null;
-
-        while (queue.Count > 0)
+        public PlanResult Run(Snapshot snapshot, List<PlannedEvent> edges, int depthLimit)
         {
-            var node = queue.Dequeue();
-            if (node.Depth >= depthLimit)
+            var startKey = Key(snapshot);
+            if (IsGoal(snapshot, startKey, out var startApplied))
+                return new PlanResult.Planned([]);
+
+            _seen.Add(startKey);
+            _queue.Enqueue(
+                new Node(snapshot, Parent: null, Event: null, 0) { Fields = startApplied }
+            );
+            var expanded = 0;
+            var cut = false;
+
+            while (_queue.Count > 0)
             {
-                cut = true;
-                continue;
+                var node = _queue.Dequeue();
+                if (node.Depth >= depthLimit)
+                {
+                    cut = true;
+                    continue;
+                }
+                // A snapshot still waiting after the last expansion the search may make.
+                if (expanded == MaxExpansions)
+                {
+                    cut = true;
+                    break;
+                }
+                expanded++;
+                var reached = Expand(node, edges);
+                if (reached is not null)
+                    return new PlanResult.Planned(PathTo(reached));
+                node.Fields = null;
             }
-            // A snapshot still waiting after the last expansion the search may make.
-            if (expanded == MaxExpansions)
-            {
-                cut = true;
-                break;
-            }
-            expanded++;
+
+            if (_undetermined is { } u)
+                return new PlanResult.Undetermined(u.Trigger, PathTo(u.From));
+            return cut ? new PlanResult.Exceeded() : new PlanResult.Unreachable();
+        }
+
+        // Tries every edge from one snapshot, queueing the snapshots it reaches first. Returns the node that reached
+        // the goal, if one did.
+        private Node? Expand(Node node, List<PlannedEvent> edges)
+        {
             for (var k = 0; k < edges.Count; k++)
             {
                 var edge = edges[k];
@@ -117,7 +160,7 @@ internal static class EventPlanner
                 // reaches the target.
                 if (!graph.Determines(node.Snapshot.State, edge.Trigger))
                 {
-                    undetermined ??= (edge.Trigger, node);
+                    _undetermined ??= (edge.Trigger, node);
                     continue;
                 }
                 // The fields event is the first edge, and the goal test may have taken that step already.
@@ -131,7 +174,7 @@ internal static class EventPlanner
                 )
                     continue;
                 var key = reused?.Key ?? Key(next.Snapshot);
-                if (!seen.Add(key))
+                if (!_seen.Add(key))
                     continue;
                 var goal = IsGoal(next.Snapshot, key, out var applied);
                 var reached = new Node(next.Snapshot, node, edge, node.Depth + 1)
@@ -139,15 +182,11 @@ internal static class EventPlanner
                     Fields = applied,
                 };
                 if (goal)
-                    return new PlanResult.Planned(PathTo(reached));
-                queue.Enqueue(reached);
+                    return reached;
+                _queue.Enqueue(reached);
             }
-            node.Fields = null;
+            return null;
         }
-
-        if (undetermined is { } u)
-            return new PlanResult.Undetermined(u.Trigger, PathTo(u.From));
-        return cut ? new PlanResult.Exceeded() : new PlanResult.Unreachable();
     }
 
     // Whether a value nests deeper than MaxNesting. Never recurses, so a value built in memory cannot exhaust the stack.

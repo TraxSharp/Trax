@@ -307,19 +307,7 @@ internal sealed class InvokeOutcomeReconciler(
             if (until <= now)
                 _effectNotHere.TryRemove(rowId, out _);
 
-        IReadOnlyList<AbandonedEffect> abandoned;
-        var readScope = scopes.CreateAsyncScope();
-        await using (readScope.ConfigureAwait(false))
-        {
-            var services = readScope.ServiceProvider;
-            abandoned = await new EfSnapshotStore(
-                services.GetRequiredService<IDataContext>(),
-                services.GetService<ISqlDialect>(),
-                _clock
-            )
-                .ReadAbandonedEffects(withEffects, AbandonedEffectBatch, cancellationToken)
-                .ConfigureAwait(false);
-        }
+        var abandoned = await ReadAbandoned(withEffects, cancellationToken).ConfigureAwait(false);
 
         foreach (var effect in abandoned)
         {
@@ -366,6 +354,25 @@ internal sealed class InvokeOutcomeReconciler(
         }
     }
 
+    private async Task<IReadOnlyList<AbandonedEffect>> ReadAbandoned(
+        List<string> withEffects,
+        CancellationToken cancellationToken
+    )
+    {
+        var readScope = scopes.CreateAsyncScope();
+        await using (readScope.ConfigureAwait(false))
+        {
+            var services = readScope.ServiceProvider;
+            return await new EfSnapshotStore(
+                services.GetRequiredService<IDataContext>(),
+                services.GetService<ISqlDialect>(),
+                _clock
+            )
+                .ReadAbandonedEffects(withEffects, AbandonedEffectBatch, cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
+
     private async Task<IReadOnlyList<DueRow>> DuePage(
         IReadOnlyCollection<long> skip,
         CancellationToken cancellationToken
@@ -408,37 +415,15 @@ internal sealed class InvokeOutcomeReconciler(
             await using var contextDisposal = context.ConfigureAwait(false);
             var store = outbox.StoreOver(context, services.GetService<ISqlDialect>());
 
-            TimerFireResult result;
-            var transaction = await context
-                .BeginTransaction(cancellationToken)
+            var result = await FireInTransaction(
+                    context,
+                    store,
+                    outbox,
+                    services,
+                    row,
+                    cancellationToken
+                )
                 .ConfigureAwait(false);
-            try
-            {
-                // Locked before anything is decided, so neither a client's write nor an effect runner's check can
-                // slip between what the fire reads and what it writes.
-                result = await store.LockDue(row, cancellationToken).ConfigureAwait(false)
-                    ? await FireOne(context, store, outbox, row, cancellationToken)
-                        .ConfigureAwait(false)
-                    : new TimerFireResult(row.Id, TimerFireResult.Lost);
-                await transaction.Commit().ConfigureAwait(false);
-                services.GetService<SnapshotWriteSignal>()?.Written();
-            }
-            catch
-            {
-                try
-                {
-                    await transaction.Rollback().ConfigureAwait(false);
-                }
-                catch (Exception)
-                {
-                    // The failure that led here is the one to report; the database rolls back a lost connection.
-                }
-                throw;
-            }
-            finally
-            {
-                transaction.Dispose();
-            }
 
             _timerErrors.TryRemove(row.RowId, out _);
 
@@ -466,6 +451,48 @@ internal sealed class InvokeOutcomeReconciler(
         {
             return await FireThrew(row, ex, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    // Locks the row and fires it in a transaction of its own, committed here or rolled back on a throw.
+    private async Task<TimerFireResult> FireInTransaction(
+        IDataContext context,
+        EfSnapshotStore store,
+        InvokeOutbox outbox,
+        IServiceProvider services,
+        DueRow row,
+        CancellationToken cancellationToken
+    )
+    {
+        TimerFireResult result;
+        var transaction = await context.BeginTransaction(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            // Locked before anything is decided, so neither a client's write nor an effect runner's check can
+            // slip between what the fire reads and what it writes.
+            result = await store.LockDue(row, cancellationToken).ConfigureAwait(false)
+                ? await FireOne(context, store, outbox, row, cancellationToken)
+                    .ConfigureAwait(false)
+                : new TimerFireResult(row.Id, TimerFireResult.Lost);
+            await transaction.Commit().ConfigureAwait(false);
+            services.GetService<SnapshotWriteSignal>()?.Written();
+        }
+        catch
+        {
+            try
+            {
+                await transaction.Rollback().ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                // The failure that led here is the one to report; the database rolls back a lost connection.
+            }
+            throw;
+        }
+        finally
+        {
+            transaction.Dispose();
+        }
+        return result;
     }
 
     // A fire that threw is tried again after a back-off that doubles from TimerErrorBackoff, and after
@@ -506,6 +533,35 @@ internal sealed class InvokeOutcomeReconciler(
             return new TimerFireResult(row.Id, TimerFireResult.Retrying);
         }
 
+        if (
+            await ClearAfterAttempts(row, attempts, cancellationToken).ConfigureAwait(false)
+            is not { } cleared
+        )
+            return new TimerFireResult(row.Id, TimerFireResult.Retrying);
+
+        _timerErrors.TryRemove(row.RowId, out _);
+        if (!cleared)
+            return new TimerFireResult(row.Id, TimerFireResult.Lost);
+        StateMachineMeter.TimerFireFailed.Add(1, machineTag);
+        logger.LogError(
+            exception,
+            "The timer of {Machine} {Id} threw {Attempts} times and was cleared; the instance stays in {State}.",
+            row.Machine,
+            row.Id,
+            attempts,
+            row.State
+        );
+        return new TimerFireResult(row.Id, TimerFireResult.Failed);
+    }
+
+    // Clears the due time of a row whose timer threw too often; null when the clear itself failed, which the next
+    // sweep tries again.
+    private async Task<bool?> ClearAfterAttempts(
+        DueRow row,
+        int attempts,
+        CancellationToken cancellationToken
+    )
+    {
         bool cleared;
         try
         {
@@ -537,22 +593,9 @@ internal sealed class InvokeOutcomeReconciler(
                 row.Id,
                 attempts
             );
-            return new TimerFireResult(row.Id, TimerFireResult.Retrying);
+            return null;
         }
-
-        _timerErrors.TryRemove(row.RowId, out _);
-        if (!cleared)
-            return new TimerFireResult(row.Id, TimerFireResult.Lost);
-        StateMachineMeter.TimerFireFailed.Add(1, machineTag);
-        logger.LogError(
-            exception,
-            "The timer of {Machine} {Id} threw {Attempts} times and was cleared; the instance stays in {State}.",
-            row.Machine,
-            row.Id,
-            attempts,
-            row.State
-        );
-        return new TimerFireResult(row.Id, TimerFireResult.Failed);
+        return cleared;
     }
 
     private async Task<TimerFireResult> FireOne(
@@ -600,6 +643,62 @@ internal sealed class InvokeOutcomeReconciler(
         if (AfterClaimCheck is { } afterClaimCheck)
             await afterClaimCheck(row).ConfigureAwait(false);
 
+        var (fired, failure) = await AdvanceTimer(
+                context,
+                store,
+                outbox,
+                machine,
+                row,
+                current,
+                trigger,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        if (fired is not null)
+            return fired;
+
+        return await ClearUnfirable(store, row, current, failure, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<TimerFireResult> ClearUnfirable(
+        EfSnapshotStore store,
+        DueRow row,
+        Snapshot current,
+        string? failure,
+        CancellationToken cancellationToken
+    )
+    {
+        // A timer that cannot be applied would be read and refused at every sweep, so its due time is cleared and the
+        // failure counted once. The instance stays where it is, and an event still moves it.
+        if (!await store.ClearDue(row, cancellationToken).ConfigureAwait(false))
+            return new TimerFireResult(row.Id, TimerFireResult.Lost);
+        StateMachineMeter.TimerFireFailed.Add(
+            1,
+            new KeyValuePair<string, object?>("machine", row.Machine)
+        );
+        logger.LogWarning(
+            "The timer of {Machine} {Id} in {State} could not be fired and was cleared: {Failure}",
+            row.Machine,
+            row.Id,
+            current.State,
+            failure
+        );
+        return new TimerFireResult(row.Id, TimerFireResult.Failed);
+    }
+
+    // Fires the timer's trigger; a result when the write landed or lost, else why the timer cannot be applied.
+    private async Task<(TimerFireResult? Fired, string? Failure)> AdvanceTimer(
+        IDataContext context,
+        EfSnapshotStore store,
+        InvokeOutbox outbox,
+        IMachineInternals machine,
+        DueRow row,
+        Snapshot current,
+        string trigger,
+        CancellationToken cancellationToken
+    )
+    {
         string? failure;
         switch (machine.AdvanceTimer(current, trigger))
         {
@@ -624,12 +723,12 @@ internal sealed class InvokeOutcomeReconciler(
                 switch (write)
                 {
                     case InvokeWrite.Written:
-                        return new TimerFireResult(row.Id, TimerFireResult.Fired);
+                        return (new TimerFireResult(row.Id, TimerFireResult.Fired), null);
                     case InvokeWrite.Refused refused:
                         failure = refused.Exception?.Message ?? refused.Message;
                         break;
                     default:
-                        return new TimerFireResult(row.Id, TimerFireResult.Lost);
+                        return (new TimerFireResult(row.Id, TimerFireResult.Lost), null);
                 }
                 break;
             case AdvanceResult.Rejected rejected:
@@ -639,23 +738,7 @@ internal sealed class InvokeOutcomeReconciler(
                 failure = "Unknown result.";
                 break;
         }
-
-        // A timer that cannot be applied would be read and refused at every sweep, so its due time is cleared and the
-        // failure counted once. The instance stays where it is, and an event still moves it.
-        if (!await store.ClearDue(row, cancellationToken).ConfigureAwait(false))
-            return new TimerFireResult(row.Id, TimerFireResult.Lost);
-        StateMachineMeter.TimerFireFailed.Add(
-            1,
-            new KeyValuePair<string, object?>("machine", row.Machine)
-        );
-        logger.LogWarning(
-            "The timer of {Machine} {Id} in {State} could not be fired and was cleared: {Failure}",
-            row.Machine,
-            row.Id,
-            current.State,
-            failure
-        );
-        return new TimerFireResult(row.Id, TimerFireResult.Failed);
+        return (null, failure);
     }
 
     // How long the timer waits before the row is read again, when a claim the earlier effect-claim ledger recorded
@@ -1022,46 +1105,12 @@ internal sealed class InvokeOutcomeReconciler(
             {
                 Interlocked.Exchange(ref _sweepAsked, 0);
                 Sweeping?.Invoke(this, EventArgs.Empty);
-                try
-                {
-                    await SweepOnce(stoppingToken).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-                {
+                if (!await SweepOutcomes(stoppingToken).ConfigureAwait(false))
                     break;
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(
-                        ex,
-                        "The sweep for invoked runs' outcomes failed; the next one tries again."
-                    );
-                }
 
-                TimeSpan? nextTimer = null;
-                try
-                {
-                    // A full batch may leave more due behind it, so the next one is fired at once.
-                    while (
-                        (await FireDueTimersOnce(stoppingToken).ConfigureAwait(false))
-                            .Where(r => r.Moved)
-                            .Take(PageSize)
-                            .Count() >= PageSize
-                    )
-                        stoppingToken.ThrowIfCancellationRequested();
-                    nextTimer = await UntilNextTimer(stoppingToken).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-                {
+                var (stopped, nextTimer) = await FireTimers(stoppingToken).ConfigureAwait(false);
+                if (stopped)
                     break;
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(
-                        ex,
-                        "The sweep for due timers failed; the next one tries again."
-                    );
-                }
                 _firstSweep.TrySetResult();
 
                 await Wait(wake.Reader, nextTimer, stoppingToken).ConfigureAwait(false);
@@ -1073,6 +1122,57 @@ internal sealed class InvokeOutcomeReconciler(
         }
 
         await listening.ConfigureAwait(false);
+    }
+
+    // One sweep for invoked runs' outcomes; false when the host is stopping.
+    private async Task<bool> SweepOutcomes(CancellationToken stoppingToken)
+    {
+        try
+        {
+            await SweepOnce(stoppingToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            return false;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(
+                ex,
+                "The sweep for invoked runs' outcomes failed; the next one tries again."
+            );
+        }
+        return true;
+    }
+
+    // Fires the due timers, a page at a time while pages come back full; true when the host is stopping, else when
+    // the next timer is due.
+    private async Task<(bool Stopped, TimeSpan? NextTimer)> FireTimers(
+        CancellationToken stoppingToken
+    )
+    {
+        TimeSpan? nextTimer = null;
+        try
+        {
+            // A full batch may leave more due behind it, so the next one is fired at once.
+            while (
+                (await FireDueTimersOnce(stoppingToken).ConfigureAwait(false))
+                    .Where(r => r.Moved)
+                    .Take(PageSize)
+                    .Count() >= PageSize
+            )
+                stoppingToken.ThrowIfCancellationRequested();
+            nextTimer = await UntilNextTimer(stoppingToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            return (true, null);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "The sweep for due timers failed; the next one tries again.");
+        }
+        return (false, nextTimer);
     }
 
     // Delivers the notices as they come, in deduplicated batches, until the next full sweep is due: the interval

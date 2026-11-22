@@ -65,19 +65,8 @@ public sealed class SnapshotMachine<TState, TTrigger>
                 RefusalCode.NoTransition,
                 $"Unknown state '{snapshot.State}'."
             );
-        // An outcome records what an invoked run produced. Taken from a caller, its input would be whatever the
-        // caller sent and no run would have produced it.
-        if (IsOutcomeTrigger(trigger))
-            return new AdvanceResult.Rejected(
-                RefusalCode.OutcomeBound,
-                "This step is completed by the outcome of its work, not by an action."
-            );
-        // A timer is the server acting when a state has been held long enough; no caller fires it.
-        if (IsTimerTrigger(trigger))
-            return new AdvanceResult.Rejected(
-                RefusalCode.TimerBound,
-                "This step moves on by itself when its time is up, not by an action."
-            );
+        if (RefuseServerTrigger(trigger) is { } serverOnly)
+            return serverOnly;
         if (!TriggerNames.TryGetValue(trigger, out var triggerValue))
             return new AdvanceResult.Rejected(
                 RefusalCode.NoTransition,
@@ -106,20 +95,7 @@ public sealed class SnapshotMachine<TState, TTrigger>
             // the totality backstop: a throwing guard degrades to internal-error rather than escaping
             // Advance (PD4). The chosen edge is the single source of BOTH the destination and the reducer —
             // no separate engine recomputes the target (which could disagree). Matches the TS engine.
-            var chosen = matches.FirstOrDefault(t => GuardPasses(t, context, input));
-            if (chosen is null)
-            {
-                var message =
-                    matches.Select(m => m.GuardMessage).FirstOrDefault(m => m is not null)
-                    ?? $"A transition from '{snapshot.State}' on '{trigger}' exists but its guard rejected the input.";
-                return new AdvanceResult.Rejected(RefusalCode.GuardFailed, message);
-            }
-
-            var toState = chosen.To;
-
-            var newContext =
-                chosen.Reduce?.Invoke(context, input) ?? (JsonObject)context.DeepClone();
-            return Enter(toState, newContext);
+            return FireFirstPassing(matches, snapshot, trigger, context, input);
         }
         catch (Exception ex)
         {
@@ -134,6 +110,48 @@ public sealed class SnapshotMachine<TState, TTrigger>
                 Exception = ex,
             };
         }
+    }
+
+    // Outcome and timer triggers are the server's to fire, never a caller's.
+    private AdvanceResult.Rejected? RefuseServerTrigger(string trigger)
+    {
+        // An outcome records what an invoked run produced. Taken from a caller, its input would be whatever the
+        // caller sent and no run would have produced it.
+        if (IsOutcomeTrigger(trigger))
+            return new AdvanceResult.Rejected(
+                RefusalCode.OutcomeBound,
+                "This step is completed by the outcome of its work, not by an action."
+            );
+        // A timer is the server acting when a state has been held long enough; no caller fires it.
+        if (IsTimerTrigger(trigger))
+            return new AdvanceResult.Rejected(
+                RefusalCode.TimerBound,
+                "This step moves on by itself when its time is up, not by an action."
+            );
+        return null;
+    }
+
+    private AdvanceResult FireFirstPassing(
+        List<TransitionDefinition<TState, TTrigger>> matches,
+        Snapshot snapshot,
+        string trigger,
+        JsonObject context,
+        JsonNode? input
+    )
+    {
+        var chosen = matches.FirstOrDefault(t => GuardPasses(t, context, input));
+        if (chosen is null)
+        {
+            var message =
+                matches.Select(m => m.GuardMessage).FirstOrDefault(m => m is not null)
+                ?? $"A transition from '{snapshot.State}' on '{trigger}' exists but its guard rejected the input.";
+            return new AdvanceResult.Rejected(RefusalCode.GuardFailed, message);
+        }
+
+        var toState = chosen.To;
+
+        var newContext = chosen.Reduce?.Invoke(context, input) ?? (JsonObject)context.DeepClone();
+        return Enter(toState, newContext);
     }
 
     /// <summary>
@@ -405,7 +423,27 @@ public sealed class SnapshotMachine<TState, TTrigger>
         // snapshot newer than the definition, or a gap in the migration chain, is a version-mismatch.
         var effectiveState = stateToken;
         var effectiveContext = (JsonObject)context.DeepClone();
-        var effectiveVersion = version.Value;
+        if (MigrateToCurrent(version.Value, ref effectiveState, ref effectiveContext) is { } stale)
+            return stale;
+
+        if (!TryParseState(effectiveState, out var state))
+            return new RehydrationResult.Error(
+                RefusalCode.UnknownState,
+                $"Unknown state '{effectiveState}'."
+            );
+
+        return Validated(machine, state, effectiveContext);
+    }
+
+    // Applies the forward migrations from `version` to the definition's, in sequence; an error when the snapshot is
+    // newer than the definition or the chain has a gap.
+    private RehydrationResult.Error? MigrateToCurrent(
+        int version,
+        ref string effectiveState,
+        ref JsonObject effectiveContext
+    )
+    {
+        var effectiveVersion = version;
 
         if (effectiveVersion > _def.Version)
             return new RehydrationResult.Error(
@@ -432,13 +470,11 @@ public sealed class SnapshotMachine<TState, TTrigger>
             effectiveContext = migrated.Context;
             effectiveVersion++;
         }
+        return null;
+    }
 
-        if (!TryParseState(effectiveState, out var state))
-            return new RehydrationResult.Error(
-                RefusalCode.UnknownState,
-                $"Unknown state '{effectiveState}'."
-            );
-
+    private RehydrationResult Validated(string machine, TState state, JsonObject effectiveContext)
+    {
         // A value with no canonical wire (a number outside double range) or that no store can hold (a NUL
         // character) is refused here, before anything persists it: accepting it would store a row that every
         // later read fails to serialize.
@@ -545,33 +581,7 @@ public sealed class SnapshotMachine<TState, TTrigger>
             .Order(StringComparer.Ordinal)
             .ToArray();
 
-        // An invoking state's outcome edges are edges too, under their outcome trigger (Fetching.done), as the
-        // TypeScript twin lists them.
-        var edges = _def
-            .Transitions.Select(t =>
-                (
-                    From: t.From.ToString().NotNull(),
-                    Trigger: t.Trigger.ToString().NotNull(),
-                    To: t.To.ToString().NotNull()
-                )
-            )
-            .Concat(
-                _def.Invokes.Values.SelectMany(invoke =>
-                    Enum.GetValues<InvokeOutcomeKind>()
-                        .SelectMany(kind =>
-                            invoke
-                                .EdgesFor(kind)
-                                .Select(e =>
-                                    (
-                                        From: invoke.State.ToString().NotNull(),
-                                        Trigger: invoke.TriggerName(kind),
-                                        To: e.To.ToString().NotNull()
-                                    )
-                                )
-                        )
-                )
-            )
-            .ToList();
+        var edges = DescribedEdges();
 
         var triggers = edges
             .Select(t => t.Trigger)
@@ -614,6 +624,35 @@ public sealed class SnapshotMachine<TState, TTrigger>
             ["transitions"] = transitionsArray,
         };
     }
+
+    // An invoking state's outcome edges are edges too, under their outcome trigger (Fetching.done), as the
+    // TypeScript twin lists them.
+    private List<(string From, string Trigger, string To)> DescribedEdges() =>
+        _def
+            .Transitions.Select(t =>
+                (
+                    From: t.From.ToString().NotNull(),
+                    Trigger: t.Trigger.ToString().NotNull(),
+                    To: t.To.ToString().NotNull()
+                )
+            )
+            .Concat(
+                _def.Invokes.Values.SelectMany(invoke =>
+                    Enum.GetValues<InvokeOutcomeKind>()
+                        .SelectMany(kind =>
+                            invoke
+                                .EdgesFor(kind)
+                                .Select(e =>
+                                    (
+                                        From: invoke.State.ToString().NotNull(),
+                                        Trigger: invoke.TriggerName(kind),
+                                        To: e.To.ToString().NotNull()
+                                    )
+                                )
+                        )
+                )
+            )
+            .ToList();
 
     private static bool GuardPasses(
         TransitionDefinition<TState, TTrigger> t,

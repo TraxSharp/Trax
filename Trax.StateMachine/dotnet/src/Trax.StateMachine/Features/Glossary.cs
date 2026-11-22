@@ -90,6 +90,74 @@ internal sealed partial record Glossary(
 
     private static GlossaryMachine ReadMachine(At at, string id, JsonObject machine)
     {
+        CloseMachine(at, machine);
+        var head = ReadMachineHead(at, machine);
+
+        var (states, shapes) = ReadStates(at, machine);
+        var version = ReadVersion(at, machine);
+        var initialContext = machine.ContainsKey("initialContext")
+            ? (JsonObject)at["initialContext"].Object(machine["initialContext"]).DeepClone()
+            : null;
+        var differential = machine.ContainsKey("differential");
+        if (differential)
+            at["differential"].True(machine["differential"]);
+
+        var triggers = machine.ContainsKey("triggers")
+            ? Map(at["triggers"], machine["triggers"], 0, Names.MemberAt, ReadTrigger)
+            : new(StringComparer.Ordinal);
+        var guards = machine.ContainsKey("guards")
+            ? Map(at["guards"], machine["guards"], 0, Names.WordAt, ReadGuard)
+            : new(StringComparer.Ordinal);
+        var invokes = machine.ContainsKey("invokes")
+            ? Map(at["invokes"], machine["invokes"], 0, Names.MemberAt, ReadInvoke)
+            : new(StringComparer.Ordinal);
+        var links = machine.ContainsKey("links")
+            ? Map(at["links"], machine["links"], 0, Names.PhraseAt, ReadLink)
+            : new(StringComparer.Ordinal);
+        var rules = ReadHandlers(at, machine, "rules", rule: true);
+        var reductions = ReadHandlers(at, machine, "reductions", rule: false);
+        var migrations = ReadMigrations(at, machine);
+
+        return new GlossaryMachine(
+            id,
+            head.OwnedBy,
+            head.Key,
+            head.Reference,
+            head.Start,
+            head.Initial,
+            head.Context,
+            head.ContextNames,
+            states,
+            triggers,
+            guards,
+            invokes,
+            links
+        )
+        {
+            KeyedBy = head.KeyedBy,
+            Version = version,
+            InitialContext = initialContext,
+            Differential = differential,
+            Shapes = shapes,
+            Rules = rules,
+            Reductions = reductions,
+            Migrations = migrations,
+        };
+    }
+
+    // What a machine is and who owns it: everything it gives before its states.
+    private sealed record MachineHead(
+        IReadOnlyList<string>? OwnedBy,
+        string? Key,
+        IReadOnlyList<string>? KeyedBy,
+        string Reference,
+        string? Start,
+        string Initial,
+        JsonArray Context,
+        IReadOnlyList<string> ContextNames
+    );
+
+    private static void CloseMachine(At at, JsonObject machine) =>
         at.Closed(
             machine,
             "ownedBy",
@@ -111,6 +179,9 @@ internal sealed partial record Glossary(
             "reductions",
             "migrations"
         );
+
+    private static MachineHead ReadMachineHead(At at, JsonObject machine)
+    {
         var owned = machine.ContainsKey("ownedBy");
         var system = machine.ContainsKey("system");
         if (owned == system)
@@ -144,7 +215,23 @@ internal sealed partial record Glossary(
         var (context, contextNames) = machine.ContainsKey("context")
             ? IrShapes.Fields(at["context"], machine["context"])
             : ([], []);
+        return new MachineHead(
+            ownedBy,
+            key,
+            keyedBy,
+            reference,
+            start,
+            initial,
+            context,
+            contextNames
+        );
+    }
 
+    private static (
+        Dictionary<string, string> States,
+        Dictionary<string, GlossaryState> Shapes
+    ) ReadStates(At at, JsonObject machine)
+    {
         var statesAt = at["states"];
         var given = statesAt.Object(at.Required(machine, "states"));
         if (given.Count == 0)
@@ -158,6 +245,11 @@ internal sealed partial record Glossary(
             states[name] = shape.Phrase;
             shapes[name] = shape;
         }
+        return (states, shapes);
+    }
+
+    private static int ReadVersion(At at, JsonObject machine)
+    {
         var version = 1;
         if (machine.ContainsKey("version"))
         {
@@ -166,43 +258,21 @@ internal sealed partial record Glossary(
                 throw at["version"].Fail($"must be from 1 to {int.MaxValue}.");
             version = (int)number;
         }
-        var initialContext = machine.ContainsKey("initialContext")
-            ? (JsonObject)at["initialContext"].Object(machine["initialContext"]).DeepClone()
-            : null;
-        var differential = machine.ContainsKey("differential");
-        if (differential)
-            at["differential"].True(machine["differential"]);
+        return version;
+    }
 
-        var triggers = machine.ContainsKey("triggers")
-            ? Map(at["triggers"], machine["triggers"], 0, Names.MemberAt, ReadTrigger)
+    private static Dictionary<string, GlossaryHandler> ReadHandlers(
+        At at,
+        JsonObject machine,
+        string key,
+        bool rule
+    ) =>
+        machine.ContainsKey(key)
+            ? Map(at[key], machine[key], 0, CustomNameAt, (a, n, o) => ReadHandler(a, n, o, rule))
             : new(StringComparer.Ordinal);
-        var guards = machine.ContainsKey("guards")
-            ? Map(at["guards"], machine["guards"], 0, Names.WordAt, ReadGuard)
-            : new(StringComparer.Ordinal);
-        var invokes = machine.ContainsKey("invokes")
-            ? Map(at["invokes"], machine["invokes"], 0, Names.MemberAt, ReadInvoke)
-            : new(StringComparer.Ordinal);
-        var links = machine.ContainsKey("links")
-            ? Map(at["links"], machine["links"], 0, Names.PhraseAt, ReadLink)
-            : new(StringComparer.Ordinal);
-        var rules = machine.ContainsKey("rules")
-            ? Map(
-                at["rules"],
-                machine["rules"],
-                0,
-                CustomNameAt,
-                (a, n, o) => ReadHandler(a, n, o, rule: true)
-            )
-            : new(StringComparer.Ordinal);
-        var reductions = machine.ContainsKey("reductions")
-            ? Map(
-                at["reductions"],
-                machine["reductions"],
-                0,
-                CustomNameAt,
-                (a, n, o) => ReadHandler(a, n, o, rule: false)
-            )
-            : new(StringComparer.Ordinal);
+
+    private static SortedDictionary<int, string> ReadMigrations(At at, JsonObject machine)
+    {
         var migrations = new SortedDictionary<int, string>();
         if (machine.ContainsKey("migrations"))
             foreach (var (from, type) in at["migrations"].Object(machine["migrations"]))
@@ -210,32 +280,7 @@ internal sealed partial record Glossary(
                 var m = at["migrations"][from];
                 migrations[HostFile.MigrationVersionAt(m, from)] = Names.TrainAt(m, type);
             }
-
-        return new GlossaryMachine(
-            id,
-            ownedBy,
-            key,
-            reference,
-            start,
-            initial,
-            context,
-            contextNames,
-            states,
-            triggers,
-            guards,
-            invokes,
-            links
-        )
-        {
-            KeyedBy = keyedBy,
-            Version = version,
-            InitialContext = initialContext,
-            Differential = differential,
-            Shapes = shapes,
-            Rules = rules,
-            Reductions = reductions,
-            Migrations = migrations,
-        };
+        return migrations;
     }
 
     // A state is its phrase, or { phrase, committed, requires, context }: committed, the rule its context must meet, and
@@ -428,13 +473,6 @@ internal sealed partial record Glossary(
         var steps = new Dictionary<string, string>(StringComparer.Ordinal);
         var nouns = new Dictionary<string, string>(StringComparer.Ordinal);
         var references = new Dictionary<string, string>(StringComparer.Ordinal);
-        void Unique(Dictionary<string, string> seen, At where, string phrase)
-        {
-            if (!seen.TryAdd(Names.Normal(phrase), where.Pointer))
-                throw where.Fail(
-                    $"'{phrase}' is also at {seen[Names.Normal(phrase)]}: a step must mean one thing."
-                );
-        }
 
         foreach (var actor in Actors.Values)
             Unique(nouns, at["actors"][actor.Name]["noun"], actor.Noun);
@@ -445,176 +483,218 @@ internal sealed partial record Glossary(
             StringComparer.Ordinal
         );
         foreach (var machine in Machines.Values)
-        {
-            var m = at["machines"][machine.Id];
-            foreach (var owner in machine.OwnedBy ?? [])
-                if (!Actors.ContainsKey(owner))
-                    throw m["ownedBy"].Fail($"'{owner}' is not an actor.");
-            if (
-                machine.SystemKey is { } key
-                && !key.StartsWith(machine.Id + "/", StringComparison.Ordinal)
-            )
-                throw m["system"].Fail($"must start with the machine's id, '{machine.Id}/'.");
-            if (machine.IsSystem && machine.Start is not null)
-                throw m["start"]
-                    .Fail(
-                        "a system machine is started by the host (or, keyed, by host code), never by a step."
-                    );
-            if (!machine.States.ContainsKey(machine.Initial))
-                throw m["initial"].Fail($"'{machine.Initial}' is not one of its states.");
-
-            Distinct(m["context"], machine.ContextNames);
-            if (machine.AllContextNames.Contains(HostInvoke.Owner))
-                throw m["context"]
-                    .Fail(
-                        $"has a field named '{HostInvoke.Owner}', which a train's input reads as the owner."
-                    );
-            if (machine.ContextNames.Contains(ViewField.State, StringComparer.Ordinal))
-                throw m["context"]
-                    .Fail("has a field named 'state', which a view reads as the machine's state.");
-            foreach (var shape in machine.Shapes.Values.Where(s => s.ContextNames is not null))
-            {
-                var c = m["states"][shape.Name]["context"];
-                Distinct(c, shape.ContextNames.NotNull());
-                if (shape.ContextNames.NotNull().Contains(ViewField.State, StringComparer.Ordinal))
-                    throw c.Fail(
-                        "has a field named 'state', which a view reads as the machine's state."
-                    );
-            }
-
-            Unique(references, ReferenceAt(m, machine), machine.Reference);
-            if (machine.Start is { } start)
-                Unique(steps, m["start"], start);
-
-            var own = new Dictionary<string, string>(StringComparer.Ordinal);
-            foreach (var (state, phrase) in machine.States)
-                Unique(own, m["states"][state], phrase);
-            foreach (var guard in machine.Guards.Values)
-            {
-                if (guard.Holds is { } holds)
-                    Unique(own, m["guards"][guard.Name]["holds"], holds);
-                if (guard.Fails is { } fails)
-                    Unique(own, m["guards"][guard.Name]["fails"], fails);
-            }
-
-            foreach (var trigger in machine.Triggers.Values)
-            {
-                var t = m["triggers"][trigger.Name];
-                if (trigger.Guard is { } named && !machine.Guards.ContainsKey(named))
-                    throw t["guard"].Fail($"'{named}' is not one of the machine's guards.");
-                Unique(steps, t["phrase"], Said(trigger.Phrase, machine));
-                Distinct(t["input"], trigger.InputNames);
-                if (trigger.InputNames.Contains(SubjectSlot, StringComparer.Ordinal))
-                    throw t["input"]
-                        .Fail(
-                            $"has a field named '{SubjectSlot}', which a phrase uses for the machine."
-                        );
-                var placeholders = Placeholders(t["phrase"], trigger.Phrase).ToList();
-                var subjects = placeholders.Count(p =>
-                    string.Equals(p, SubjectSlot, StringComparison.Ordinal)
-                );
-                // A user's instance is named by its owner where {subject} is, a keyed system machine's by its name and
-                // key there; a system machine at a fixed key is named by its name.
-                if (!machine.IsSystem && subjects != 1)
-                    throw t["phrase"]
-                        .Fail(
-                            $"must say where the {machine.Reference} goes, once, as {{{SubjectSlot}}}: "
-                                + $"'places {{{SubjectSlot}}}' is said 'Ada places her {machine.Reference}'."
-                        );
-                if (machine.KeyedBy is not null && subjects != 1)
-                    throw t["phrase"]
-                        .Fail(
-                            $"must say where the {machine.Reference} and its key go, once, as {{{SubjectSlot}}}: "
-                                + $"'{{{SubjectSlot}}} is closed' is said '{machine.Reference} \"T-1\" is closed'."
-                        );
-                if (machine.SystemKey is not null && subjects != 0)
-                    throw t["phrase"]
-                        .Fail(
-                            $"names a system machine, which is '{machine.Reference}', never {{{SubjectSlot}}}."
-                        );
-                foreach (
-                    var placeholder in placeholders.Where(p =>
-                        !string.Equals(p, SubjectSlot, StringComparison.Ordinal)
-                    )
-                )
-                    if (!trigger.InputNames.Contains(placeholder, StringComparer.Ordinal))
-                        throw t["phrase"]
-                            .Fail($"'{{{placeholder}}}' is not one of the trigger's input fields.");
-            }
-
-            foreach (var invoke in machine.Invokes.Values)
-            {
-                var v = m["invokes"][invoke.State];
-                if (!machine.States.ContainsKey(invoke.State))
-                    throw v.Fail($"'{invoke.State}' is not one of the machine's states.");
-                foreach (var (field, from) in invoke.Input)
-                    if (string.Equals(from, HostInvoke.Owner, StringComparison.Ordinal))
-                    {
-                        // The owner's id is the server's to give, and a system machine has none.
-                        if (machine.IsSystem)
-                            throw v["input"]
-                                [field]
-                                .Fail(
-                                    $"a system machine has no owner, so nothing is {HostInvoke.Owner}."
-                                );
-                    }
-                    else if (!machine.AllContextNames.Contains(from))
-                        throw v["input"]
-                            [field]
-                            .Fail($"'{from}' is not one of the machine's context fields.");
-                Distinct(v["output"], invoke.OutputNames);
-                foreach (var outcome in invoke.Outcomes.Values)
-                    Unique(steps, v["outcomes"][outcome.Phrase], outcome.Phrase);
-                foreach (var phrase in invoke.Examples.Keys)
-                {
-                    if (!invoke.Outcomes.TryGetValue(phrase, out var outcome))
-                        throw v["examples"][phrase].Fail("is not one of the outcomes.");
-                    if (!string.Equals(outcome.Kind, "done", StringComparison.Ordinal))
-                        throw v["examples"]
-                            [phrase]
-                            .Fail($"is a {outcome.Kind} outcome, which has no output to give.");
-                }
-            }
-
-            foreach (var link in machine.Links.Values)
-            {
-                var l = m["links"][link.Phrase];
-                if (Placeholders(l, link.Phrase).ToList() is not [SubjectSlot])
-                    throw l.Fail(
-                        $"must say where the linked instance goes, once, as {{{SubjectSlot}}}: "
-                            + $"'the receipt for {{{SubjectSlot}}}'."
-                    );
-                if (!Machines.TryGetValue(link.Machine, out var linked))
-                    throw l["machine"].Fail($"'{link.Machine}' is not a machine.");
-                Unique(steps, l, Said(link.Phrase, linked));
-                if (linked.IsSystem)
-                    throw l["machine"]
-                        .Fail(
-                            $"'{link.Machine}' is a system machine, reached at its key, never by a link."
-                        );
-                if (!machine.AllContextNames.Contains(link.Field))
-                    throw l["field"]
-                        .Fail($"'{link.Field}' is not one of the machine's context fields.");
-            }
-
-            CheckHandlers(m, machine);
-
-            // Only a trigger's or a link's phrase holds a placeholder, so a brace anywhere else is a mistake.
-            foreach (var (where, phrase) in OtherPhrases(m, machine))
-                if (phrase.AsSpan().IndexOfAny('{', '}') >= 0)
-                    throw where.Fail(
-                        "only a trigger's or a link's phrase may hold a {placeholder}."
-                    );
-
-            // Features name their people, so no phrase speaks as one of them.
-            foreach (var (where, phrase) in AllPhrases(m, machine))
-                FirstPerson(where, phrase);
-        }
+            CheckMachine(at["machines"][machine.Id], machine, steps, references);
 
         foreach (var actor in Actors.Values)
             FirstPerson(at["actors"][actor.Name]["noun"], actor.Noun);
 
         Features.Views.CheckNames(at["views"], Views.Values.Select(v => (v.Name, v.Reads)));
+        CheckViews(at, systemKeys);
+    }
+
+    private static void Unique(Dictionary<string, string> seen, At where, string phrase)
+    {
+        if (!seen.TryAdd(Names.Normal(phrase), where.Pointer))
+            throw where.Fail(
+                $"'{phrase}' is also at {seen[Names.Normal(phrase)]}: a step must mean one thing."
+            );
+    }
+
+    private void CheckMachine(
+        At m,
+        GlossaryMachine machine,
+        Dictionary<string, string> steps,
+        Dictionary<string, string> references
+    )
+    {
+        CheckOwnerAndContext(m, machine);
+
+        Unique(references, ReferenceAt(m, machine), machine.Reference);
+        if (machine.Start is { } start)
+            Unique(steps, m["start"], start);
+
+        var own = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (state, phrase) in machine.States)
+            Unique(own, m["states"][state], phrase);
+        foreach (var guard in machine.Guards.Values)
+        {
+            if (guard.Holds is { } holds)
+                Unique(own, m["guards"][guard.Name]["holds"], holds);
+            if (guard.Fails is { } fails)
+                Unique(own, m["guards"][guard.Name]["fails"], fails);
+        }
+
+        foreach (var trigger in machine.Triggers.Values)
+            CheckTrigger(m, machine, trigger, steps);
+
+        foreach (var invoke in machine.Invokes.Values)
+            CheckInvoke(m, machine, invoke, steps);
+
+        foreach (var link in machine.Links.Values)
+            CheckLink(m, machine, link, steps);
+
+        CheckHandlers(m, machine);
+
+        // Only a trigger's or a link's phrase holds a placeholder, so a brace anywhere else is a mistake.
+        foreach (var (where, phrase) in OtherPhrases(m, machine))
+            if (phrase.AsSpan().IndexOfAny('{', '}') >= 0)
+                throw where.Fail("only a trigger's or a link's phrase may hold a {placeholder}.");
+
+        // Features name their people, so no phrase speaks as one of them.
+        foreach (var (where, phrase) in AllPhrases(m, machine))
+            FirstPerson(where, phrase);
+    }
+
+    private void CheckOwnerAndContext(At m, GlossaryMachine machine)
+    {
+        foreach (var owner in machine.OwnedBy ?? [])
+            if (!Actors.ContainsKey(owner))
+                throw m["ownedBy"].Fail($"'{owner}' is not an actor.");
+        if (
+            machine.SystemKey is { } key
+            && !key.StartsWith(machine.Id + "/", StringComparison.Ordinal)
+        )
+            throw m["system"].Fail($"must start with the machine's id, '{machine.Id}/'.");
+        if (machine.IsSystem && machine.Start is not null)
+            throw m["start"]
+                .Fail(
+                    "a system machine is started by the host (or, keyed, by host code), never by a step."
+                );
+        if (!machine.States.ContainsKey(machine.Initial))
+            throw m["initial"].Fail($"'{machine.Initial}' is not one of its states.");
+
+        Distinct(m["context"], machine.ContextNames);
+        if (machine.AllContextNames.Contains(HostInvoke.Owner))
+            throw m["context"]
+                .Fail(
+                    $"has a field named '{HostInvoke.Owner}', which a train's input reads as the owner."
+                );
+        if (machine.ContextNames.Contains(ViewField.State, StringComparer.Ordinal))
+            throw m["context"]
+                .Fail("has a field named 'state', which a view reads as the machine's state.");
+        foreach (var shape in machine.Shapes.Values.Where(s => s.ContextNames is not null))
+        {
+            var c = m["states"][shape.Name]["context"];
+            Distinct(c, shape.ContextNames.NotNull());
+            if (shape.ContextNames.NotNull().Contains(ViewField.State, StringComparer.Ordinal))
+                throw c.Fail(
+                    "has a field named 'state', which a view reads as the machine's state."
+                );
+        }
+    }
+
+    private static void CheckTrigger(
+        At m,
+        GlossaryMachine machine,
+        GlossaryTrigger trigger,
+        Dictionary<string, string> steps
+    )
+    {
+        var t = m["triggers"][trigger.Name];
+        if (trigger.Guard is { } named && !machine.Guards.ContainsKey(named))
+            throw t["guard"].Fail($"'{named}' is not one of the machine's guards.");
+        Unique(steps, t["phrase"], Said(trigger.Phrase, machine));
+        Distinct(t["input"], trigger.InputNames);
+        if (trigger.InputNames.Contains(SubjectSlot, StringComparer.Ordinal))
+            throw t["input"]
+                .Fail($"has a field named '{SubjectSlot}', which a phrase uses for the machine.");
+        var placeholders = Placeholders(t["phrase"], trigger.Phrase).ToList();
+        var subjects = placeholders.Count(p =>
+            string.Equals(p, SubjectSlot, StringComparison.Ordinal)
+        );
+        // A user's instance is named by its owner where {subject} is, a keyed system machine's by its name and
+        // key there; a system machine at a fixed key is named by its name.
+        if (!machine.IsSystem && subjects != 1)
+            throw t["phrase"]
+                .Fail(
+                    $"must say where the {machine.Reference} goes, once, as {{{SubjectSlot}}}: "
+                        + $"'places {{{SubjectSlot}}}' is said 'Ada places her {machine.Reference}'."
+                );
+        if (machine.KeyedBy is not null && subjects != 1)
+            throw t["phrase"]
+                .Fail(
+                    $"must say where the {machine.Reference} and its key go, once, as {{{SubjectSlot}}}: "
+                        + $"'{{{SubjectSlot}}} is closed' is said '{machine.Reference} \"T-1\" is closed'."
+                );
+        if (machine.SystemKey is not null && subjects != 0)
+            throw t["phrase"]
+                .Fail(
+                    $"names a system machine, which is '{machine.Reference}', never {{{SubjectSlot}}}."
+                );
+        foreach (
+            var placeholder in placeholders.Where(p =>
+                !string.Equals(p, SubjectSlot, StringComparison.Ordinal)
+            )
+        )
+            if (!trigger.InputNames.Contains(placeholder, StringComparer.Ordinal))
+                throw t["phrase"]
+                    .Fail($"'{{{placeholder}}}' is not one of the trigger's input fields.");
+    }
+
+    private static void CheckInvoke(
+        At m,
+        GlossaryMachine machine,
+        GlossaryInvoke invoke,
+        Dictionary<string, string> steps
+    )
+    {
+        var v = m["invokes"][invoke.State];
+        if (!machine.States.ContainsKey(invoke.State))
+            throw v.Fail($"'{invoke.State}' is not one of the machine's states.");
+        foreach (var (field, from) in invoke.Input)
+            if (string.Equals(from, HostInvoke.Owner, StringComparison.Ordinal))
+            {
+                // The owner's id is the server's to give, and a system machine has none.
+                if (machine.IsSystem)
+                    throw v["input"]
+                        [field]
+                        .Fail($"a system machine has no owner, so nothing is {HostInvoke.Owner}.");
+            }
+            else if (!machine.AllContextNames.Contains(from))
+                throw v["input"]
+                    [field]
+                    .Fail($"'{from}' is not one of the machine's context fields.");
+        Distinct(v["output"], invoke.OutputNames);
+        foreach (var outcome in invoke.Outcomes.Values)
+            Unique(steps, v["outcomes"][outcome.Phrase], outcome.Phrase);
+        foreach (var phrase in invoke.Examples.Keys)
+        {
+            if (!invoke.Outcomes.TryGetValue(phrase, out var outcome))
+                throw v["examples"][phrase].Fail("is not one of the outcomes.");
+            if (!string.Equals(outcome.Kind, "done", StringComparison.Ordinal))
+                throw v["examples"]
+                    [phrase]
+                    .Fail($"is a {outcome.Kind} outcome, which has no output to give.");
+        }
+    }
+
+    private void CheckLink(
+        At m,
+        GlossaryMachine machine,
+        GlossaryLink link,
+        Dictionary<string, string> steps
+    )
+    {
+        var l = m["links"][link.Phrase];
+        if (Placeholders(l, link.Phrase).ToList() is not [SubjectSlot])
+            throw l.Fail(
+                $"must say where the linked instance goes, once, as {{{SubjectSlot}}}: "
+                    + $"'the receipt for {{{SubjectSlot}}}'."
+            );
+        if (!Machines.TryGetValue(link.Machine, out var linked))
+            throw l["machine"].Fail($"'{link.Machine}' is not a machine.");
+        Unique(steps, l, Said(link.Phrase, linked));
+        if (linked.IsSystem)
+            throw l["machine"]
+                .Fail(
+                    $"'{link.Machine}' is a system machine, reached at its key, never by a link."
+                );
+        if (!machine.AllContextNames.Contains(link.Field))
+            throw l["field"].Fail($"'{link.Field}' is not one of the machine's context fields.");
+    }
+
+    private void CheckViews(At at, Dictionary<string, string?> systemKeys)
+    {
         foreach (var view in Views.Values)
         {
             var v = at["views"][view.Name];
@@ -669,6 +749,12 @@ internal sealed partial record Glossary(
         foreach (var name in machine.Reductions.Keys.Where(n => !reductions.Contains(n)))
             throw m["reductions"][name].Fail("is a custom reduction nothing in the machine names.");
 
+        CheckEffects(m, machine);
+        CheckMigrations(m, machine);
+    }
+
+    private static void CheckEffects(At m, GlossaryMachine machine)
+    {
         var effects = machine.Triggers.Values.Where(t => t.Effect is not null).ToList();
         if (effects.Count > 1)
             throw m["triggers"]
@@ -708,7 +794,10 @@ internal sealed partial record Glossary(
                         $"is fired by the effect runner with the receipt alone: one string field, '{ReceiptField}'."
                     );
         }
+    }
 
+    private static void CheckMigrations(At m, GlossaryMachine machine)
+    {
         for (var from = 1; from < machine.Version; from++)
             if (!machine.Migrations.ContainsKey(from))
                 throw m["migrations"]

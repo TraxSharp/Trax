@@ -82,34 +82,7 @@ public sealed partial class GraphQLMachineServer : IMachineServer
     public GraphQLMachineServer(GraphQLMachineServerOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
-        TraxHttpTransport.RequireSize(
-            options.MaxResponseSize,
-            "largest response size",
-            nameof(options)
-        );
-        TraxHttpTransport.RequireDelays(
-            options.ResubscribeDelays,
-            "resubscribe delay",
-            nameof(options)
-        );
-        TraxHttpTransport.RequireTimeout(
-            options.RequestTimeout,
-            "request timeout",
-            nameof(options)
-        );
-        TransportSecurity.RequireNoRedirects(
-            options.Http,
-            options.HandlerFollowsNoRedirects,
-            nameof(options)
-        );
-        TransportSecurity.RequireSecure(
-            options.Endpoint.IsAbsoluteUri || options.Http?.BaseAddress is not { } baseAddress
-                ? options.Endpoint
-                : new Uri(baseAddress, options.Endpoint),
-            options.AllowInsecureTransport,
-            Uri.UriSchemeHttps,
-            nameof(options)
-        );
+        ValidateOptions(options);
         _options = options;
         _shape = MachineShape.Of(options.Machine);
         _field = MachineField(_shape.Id);
@@ -143,6 +116,38 @@ public sealed partial class GraphQLMachineServer : IMachineServer
         _terminal = (options.TerminalStreamErrors ?? []).ToHashSet(StringComparer.Ordinal);
         _time = options.Time ?? TimeProvider.System;
         _random = options.Random ?? NextJitter;
+    }
+
+    private static void ValidateOptions(GraphQLMachineServerOptions options)
+    {
+        TraxHttpTransport.RequireSize(
+            options.MaxResponseSize,
+            "largest response size",
+            nameof(options)
+        );
+        TraxHttpTransport.RequireDelays(
+            options.ResubscribeDelays,
+            "resubscribe delay",
+            nameof(options)
+        );
+        TraxHttpTransport.RequireTimeout(
+            options.RequestTimeout,
+            "request timeout",
+            nameof(options)
+        );
+        TransportSecurity.RequireNoRedirects(
+            options.Http,
+            options.HandlerFollowsNoRedirects,
+            nameof(options)
+        );
+        TransportSecurity.RequireSecure(
+            options.Endpoint.IsAbsoluteUri || options.Http?.BaseAddress is not { } baseAddress
+                ? options.Endpoint
+                : new Uri(baseAddress, options.Endpoint),
+            options.AllowInsecureTransport,
+            Uri.UriSchemeHttps,
+            nameof(options)
+        );
     }
 
     /// <inheritdoc/>

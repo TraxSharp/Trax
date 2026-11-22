@@ -76,47 +76,11 @@ public sealed class ClientTestee : IAsyncDisposable
         return op switch
         {
             "start" => await Settled(controller.StartAsync()).ConfigureAwait(false),
-            "send" => OutcomeOf(
-                await controller
-                    .SendAsync(
-                        request["trigger"].NotNull().GetValue<string>(),
-                        string.Equals(
-                            request["tooDeep"]?.GetValue<string>(),
-                            "input",
-                            StringComparison.Ordinal
-                        )
-                            ? TooDeep()
-                            : request["input"]?.DeepClone()
-                    )
-                    .ConfigureAwait(false)
-            ),
+            "send" => await AnswerSendAsync(controller, request).ConfigureAwait(false),
             "build" => await AnswerBuildAsync(request).ConfigureAwait(false),
             "headers" => Headers(request),
             "retry" => OutcomeOf(await controller.RetryAsync().ConfigureAwait(false)),
-            "sync" => SyncOf(
-                await controller
-                    .SyncToAsync(
-                        request["target"].NotNull().GetValue<string>(),
-                        request["fields"] is JsonObject fields
-                            ? new PlannedEvent(
-                                fields["trigger"].NotNull().GetValue<string>(),
-                                string.Equals(
-                                    request["tooDeep"]?.GetValue<string>(),
-                                    "input",
-                                    StringComparison.Ordinal
-                                )
-                                    ? TooDeep()
-                                    : fields["input"]?.DeepClone()
-                            )
-                            : null,
-                        request["navigation"]
-                            .NotNull()
-                            .AsArray()
-                            .Select(t => t.NotNull().GetValue<string>())
-                            .ToList()
-                    )
-                    .ConfigureAwait(false)
-            ),
+            "sync" => await AnswerSyncAsync(controller, request).ConfigureAwait(false),
             "view" => ViewOf(controller.View),
             "can" => new JsonObject
             {
@@ -139,6 +103,54 @@ public sealed class ClientTestee : IAsyncDisposable
             _ => new JsonObject { ["unsupported"] = true },
         };
     }
+
+    private static async Task<JsonObject> AnswerSendAsync(
+        ServerMachineController controller,
+        JsonObject request
+    ) =>
+        OutcomeOf(
+            await controller
+                .SendAsync(
+                    request["trigger"].NotNull().GetValue<string>(),
+                    string.Equals(
+                        request["tooDeep"]?.GetValue<string>(),
+                        "input",
+                        StringComparison.Ordinal
+                    )
+                        ? TooDeep()
+                        : request["input"]?.DeepClone()
+                )
+                .ConfigureAwait(false)
+        );
+
+    private static async Task<JsonObject> AnswerSyncAsync(
+        ServerMachineController controller,
+        JsonObject request
+    ) =>
+        SyncOf(
+            await controller
+                .SyncToAsync(
+                    request["target"].NotNull().GetValue<string>(),
+                    request["fields"] is JsonObject fields
+                        ? new PlannedEvent(
+                            fields["trigger"].NotNull().GetValue<string>(),
+                            string.Equals(
+                                request["tooDeep"]?.GetValue<string>(),
+                                "input",
+                                StringComparison.Ordinal
+                            )
+                                ? TooDeep()
+                                : fields["input"]?.DeepClone()
+                        )
+                        : null,
+                    request["navigation"]
+                        .NotNull()
+                        .AsArray()
+                        .Select(t => t.NotNull().GetValue<string>())
+                        .ToList()
+                )
+                .ConfigureAwait(false)
+        );
 
     // The controller has no discard of its own: an app discards through the server it built, under a request id it
     // mints. The discard is total: one that throws is not an outcome, and fails the transcript as the testee's error.
@@ -236,22 +248,7 @@ public sealed class ClientTestee : IAsyncDisposable
     private Built Build(JsonObject request)
     {
         var name = request["machine"].NotNull().GetValue<string>();
-        var machine = new ClientManifestMachine
-        {
-            Id = name,
-            IrHash = request["irHash"].NotNull().GetValue<string>(),
-            Ir = (JsonObject)request["ir"].NotNull().DeepClone(),
-            Documents = request["documents"]
-                .NotNull()
-                .AsArray()
-                .Select(d => new ClientManifestDocument
-                {
-                    Id = d.NotNull()["id"].NotNull().GetValue<string>(),
-                    Operation = d["operation"].NotNull().GetValue<string>(),
-                    Document = d["document"].NotNull().GetValue<string>(),
-                })
-                .ToList(),
-        };
+        var machine = ManifestOf(request, name);
         var insecure = request["allowInsecureTransport"]?.GetValue<bool>() ?? false;
         var maxResponseSize = request["maxResponseSize"]?.GetValue<long>();
         var requestTimeout = request["requestTimeout"]?.GetValue<double>();
@@ -260,55 +257,24 @@ public sealed class ClientTestee : IAsyncDisposable
         GraphQLSubscriptionSocket? socket = null;
         try
         {
-            // Only what the transcript sets is set: every other option keeps the client's default, as an app's would.
-            var socketOptions = new GraphQLSubscriptionSocketOptions
-            {
-                Endpoint = new Uri(request["socket"].NotNull().GetValue<string>()),
-                AllowInsecureTransport = insecure,
-            };
-            if (maxResponseSize is { } socketMax)
-                socketOptions = socketOptions with { MaxMessageSize = (int)socketMax };
-            if (connectTimeout is { } connect)
-                socketOptions = socketOptions with
-                {
-                    ConnectTimeout = TimeSpan.FromMilliseconds(connect),
-                };
-            if (idleTimeout is { } idle)
-                socketOptions = socketOptions with
-                {
-                    KeepAliveTimeout = TimeSpan.FromMilliseconds(idle),
-                };
+            var socketOptions = SocketOptions(
+                request,
+                insecure,
+                maxResponseSize,
+                connectTimeout,
+                idleTimeout
+            );
             socket = new GraphQLSubscriptionSocket(socketOptions);
-            var serverOptions = new GraphQLMachineServerOptions
-            {
-                Http = _http,
-                Endpoint = new Uri(request["endpoint"].NotNull().GetValue<string>()),
-                AllowInsecureTransport = insecure,
-                Machine = machine,
-                Socket = socket,
-                ResubscribeDelays = Delays(request["resubscribeDelays"]),
-            };
-            if (maxResponseSize is { } max)
-                serverOptions = serverOptions with { MaxResponseSize = max };
-            if (requestTimeout is { } ms)
-                serverOptions = serverOptions with
-                {
-                    RequestTimeout = TimeSpan.FromMilliseconds(ms),
-                };
+            var serverOptions = ServerOptions(
+                request,
+                insecure,
+                machine,
+                socket,
+                maxResponseSize,
+                requestTimeout
+            );
             var server = new GraphQLMachineServer(serverOptions);
-            var minted = 0;
-            var calls = 0;
-            var throwingAt = request["throwingRequestId"]?.GetValue<int>();
-            // Counts r1, r2, ... from each open; the call numbered throwingRequestId throws and mints nothing.
-            Func<string> newRequestId = () =>
-            {
-                if (Interlocked.Increment(ref calls) == throwingAt)
-                    throw new InvalidOperationException("the request id minter threw");
-                return string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"r{Interlocked.Increment(ref minted)}"
-                );
-            };
+            var newRequestId = RequestIdMinter(request["throwingRequestId"]?.GetValue<int>());
             var controller = new ServerMachineController(
                 new ServerMachineOptions
                 {
@@ -339,6 +305,95 @@ public sealed class ClientTestee : IAsyncDisposable
                     : "INVALID_OPTION"
             );
         }
+    }
+
+    private GraphQLMachineServerOptions ServerOptions(
+        JsonObject request,
+        bool insecure,
+        ClientManifestMachine machine,
+        GraphQLSubscriptionSocket socket,
+        long? maxResponseSize,
+        double? requestTimeout
+    )
+    {
+        var serverOptions = new GraphQLMachineServerOptions
+        {
+            Http = _http,
+            Endpoint = new Uri(request["endpoint"].NotNull().GetValue<string>()),
+            AllowInsecureTransport = insecure,
+            Machine = machine,
+            Socket = socket,
+            ResubscribeDelays = Delays(request["resubscribeDelays"]),
+        };
+        if (maxResponseSize is { } max)
+            serverOptions = serverOptions with { MaxResponseSize = max };
+        if (requestTimeout is { } ms)
+            serverOptions = serverOptions with { RequestTimeout = TimeSpan.FromMilliseconds(ms) };
+        return serverOptions;
+    }
+
+    private static ClientManifestMachine ManifestOf(JsonObject request, string name) =>
+        new ClientManifestMachine
+        {
+            Id = name,
+            IrHash = request["irHash"].NotNull().GetValue<string>(),
+            Ir = (JsonObject)request["ir"].NotNull().DeepClone(),
+            Documents = request["documents"]
+                .NotNull()
+                .AsArray()
+                .Select(d => new ClientManifestDocument
+                {
+                    Id = d.NotNull()["id"].NotNull().GetValue<string>(),
+                    Operation = d["operation"].NotNull().GetValue<string>(),
+                    Document = d["document"].NotNull().GetValue<string>(),
+                })
+                .ToList(),
+        };
+
+    private static GraphQLSubscriptionSocketOptions SocketOptions(
+        JsonObject request,
+        bool insecure,
+        long? maxResponseSize,
+        double? connectTimeout,
+        double? idleTimeout
+    )
+    {
+        // Only what the transcript sets is set: every other option keeps the client's default, as an app's would.
+        var socketOptions = new GraphQLSubscriptionSocketOptions
+        {
+            Endpoint = new Uri(request["socket"].NotNull().GetValue<string>()),
+            AllowInsecureTransport = insecure,
+        };
+        if (maxResponseSize is { } socketMax)
+            socketOptions = socketOptions with { MaxMessageSize = (int)socketMax };
+        if (connectTimeout is { } connect)
+            socketOptions = socketOptions with
+            {
+                ConnectTimeout = TimeSpan.FromMilliseconds(connect),
+            };
+        if (idleTimeout is { } idle)
+            socketOptions = socketOptions with
+            {
+                KeepAliveTimeout = TimeSpan.FromMilliseconds(idle),
+            };
+        return socketOptions;
+    }
+
+    private static Func<string> RequestIdMinter(int? throwingAt)
+    {
+        var minted = 0;
+        var calls = 0;
+        // Counts r1, r2, ... from each open; the call numbered throwingRequestId throws and mints nothing.
+        Func<string> newRequestId = () =>
+        {
+            if (Interlocked.Increment(ref calls) == throwingAt)
+                throw new InvalidOperationException("the request id minter threw");
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"r{Interlocked.Increment(ref minted)}"
+            );
+        };
+        return newRequestId;
     }
 
     // As an app builds one: redirects off, which the client requires, and every other setting, its timeout among

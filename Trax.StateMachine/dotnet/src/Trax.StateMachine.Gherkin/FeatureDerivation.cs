@@ -50,14 +50,7 @@ internal static class FeatureDerivation
 
         var access = problems.Count == 0 ? Access.Derive(glossary, walks, irs, problems) : null;
         if (problems.Count > 0 || access is null)
-            return new Derived(
-                new Dictionary<string, string>(StringComparer.Ordinal),
-                Host: null,
-                Access: null,
-                Sorted(problems),
-                Sorted(uiSteps),
-                Sorted(warnings)
-            );
+            return Failed(problems, uiSteps, warnings);
 
         foreach (var (id, ir) in irs)
             TimerRules.Fill(ir, access.Entries[id]);
@@ -71,6 +64,23 @@ internal static class FeatureDerivation
         // Every scenario is run on what was derived, access included, as the host would answer it. A derivation its
         // own features fail is a problem, never a machine.
         var hostFile = HostFile.Read(host);
+        await ReplayAsync(walks, glossary, irs, hostFile, problems).ConfigureAwait(false);
+        if (problems.Count > 0)
+            return Failed(problems, uiSteps, warnings);
+
+        return new Derived(written, host, access.Table, [], Sorted(uiSteps), Sorted(warnings));
+    }
+
+    // Runs every walk on the derived machines through the in-memory driver, adding a problem for each scenario they
+    // answer differently or cannot run.
+    private static async Task ReplayAsync(
+        List<Walk> walks,
+        Glossary glossary,
+        SortedDictionary<string, JsonObject> irs,
+        HostFile hostFile,
+        List<Problem> problems
+    )
+    {
         foreach (var walk in walks)
         {
             ScenarioResult run;
@@ -101,17 +111,6 @@ internal static class FeatureDerivation
                     )
                 );
         }
-        if (problems.Count > 0)
-            return new Derived(
-                new Dictionary<string, string>(StringComparer.Ordinal),
-                Host: null,
-                Access: null,
-                Sorted(problems),
-                Sorted(uiSteps),
-                Sorted(warnings)
-            );
-
-        return new Derived(written, host, access.Table, [], Sorted(uiSteps), Sorted(warnings));
     }
 
     // The server half of what the glossary names in C#: the effect each effect-bound edge of the IR runs, the type of each
@@ -224,6 +223,21 @@ internal static class FeatureDerivation
         return used;
     }
 
+    // A derivation with problems: no machine, no host file, no access table.
+    private static Derived Failed(
+        List<Problem> problems,
+        List<Problem> uiSteps,
+        List<Problem> warnings
+    ) =>
+        new(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            Host: null,
+            Access: null,
+            Sorted(problems),
+            Sorted(uiSteps),
+            Sorted(warnings)
+        );
+
     private static List<Problem> Sorted(IEnumerable<Problem> problems) =>
         problems
             .Distinct()
@@ -268,31 +282,7 @@ internal static class FeatureDerivation
             foreach (var (name, value) in access.Entries[id])
                 entry[name] = value.NotNull().DeepClone();
             if (machine.Invokes.Count > 0)
-            {
-                var invokes = new JsonObject();
-                foreach (
-                    var invoke in machine.Invokes.Values.OrderBy(
-                        i => i.State,
-                        StringComparer.Ordinal
-                    )
-                )
-                {
-                    var input = new JsonObject();
-                    foreach (
-                        var (field, from) in invoke.Input.OrderBy(
-                            kv => kv.Key,
-                            StringComparer.Ordinal
-                        )
-                    )
-                        input[field] = from;
-                    invokes[invoke.State] = new JsonObject
-                    {
-                        ["train"] = invoke.Train,
-                        ["input"] = input,
-                    };
-                }
-                entry["invokes"] = invokes;
-            }
+                entry["invokes"] = Invokes(machine);
             Handlers(entry, machine, JsonNode.Parse(ir).NotNull().AsObject());
             machines[id] = entry;
         }
@@ -304,5 +294,21 @@ internal static class FeatureDerivation
                 Provenance.Derive(glossary, walks, irs.Keys.ToList(), access.Views)
             )
         );
+    }
+
+    // The train each invoking state runs, and the input it is given, by state.
+    private static JsonObject Invokes(GlossaryMachine machine)
+    {
+        var invokes = new JsonObject();
+        foreach (var invoke in machine.Invokes.Values.OrderBy(i => i.State, StringComparer.Ordinal))
+        {
+            var input = new JsonObject();
+            foreach (
+                var (field, from) in invoke.Input.OrderBy(kv => kv.Key, StringComparer.Ordinal)
+            )
+                input[field] = from;
+            invokes[invoke.State] = new JsonObject { ["train"] = invoke.Train, ["input"] = input };
+        }
+        return invokes;
     }
 }

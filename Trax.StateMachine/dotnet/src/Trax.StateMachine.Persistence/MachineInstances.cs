@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Persistence;
 
@@ -153,59 +154,15 @@ internal sealed class MachineInstances(
         if (stored is null)
             return new AdvanceOutcome.NotFound();
 
-        Snapshot current;
-        switch (internals.Rehydrate(stored.Json))
-        {
-            case RehydrationResult.Ok ok:
-                current = ok.Snapshot;
-                break;
-            case RehydrationResult.Error error:
-                return new AdvanceOutcome.LoadError(error.Code, error.Message)
-                {
-                    Exception = error.Exception,
-                };
-            default:
-                return new AdvanceOutcome.LoadError(
-                    RefusalCode.Malformed,
-                    "Unknown rehydration result."
-                );
-        }
+        var (read, unreadable) = ReadCurrent(internals, stored, trigger);
+        if (unreadable is not null)
+            return unreadable;
+        var current = read.NotNull();
 
-        // The same reserved triggers a user's advance refuses: the system may move its instance, but only a run or an
-        // effect records what it produced.
-        if (internals.IsEffectBound(current.State, trigger))
-            return new AdvanceOutcome.Rejected(
-                RefusalCode.EffectBound,
-                "This action runs an irreversible effect, which only its send fires."
-            );
-        if (internals.IsOutcomeTrigger(trigger))
-            return new AdvanceOutcome.Rejected(
-                RefusalCode.OutcomeBound,
-                "This step is completed by the outcome of its work, not by an action."
-            );
-
-        Snapshot next;
-        switch (internals.Advance(current, trigger, input))
-        {
-            case AdvanceResult.Rejected rejected:
-                return new AdvanceOutcome.Rejected(rejected.Reason, rejected.Detail)
-                {
-                    Exception = rejected.Exception,
-                };
-            case AdvanceResult.Transitioned transitioned:
-                next = transitioned.Snapshot;
-                break;
-            default:
-                return new AdvanceOutcome.Rejected(RefusalCode.InternalError, Detail: null);
-        }
-
-        if (StorableJson.Problem(next.Context) is { } unstorable)
-            return new AdvanceOutcome.Rejected(RefusalCode.Malformed, unstorable);
-        if (Encoding.UTF8.GetByteCount(internals.Serialize(next)) > SnapshotLimits.MaxSnapshotBytes)
-            return new AdvanceOutcome.Rejected(
-                RefusalCode.TooLarge,
-                $"The advanced snapshot exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
-            );
+        var (advanced, refused) = AdvanceChecked(internals, current, trigger, input);
+        if (refused is not null)
+            return refused;
+        var next = advanced.NotNull();
 
         // Leaving an invoking state cancels its run and entering one queues a new run, with the snapshot, in one
         // transaction. A self-loop neither leaves nor enters, and the state keeps its run.
@@ -234,7 +191,102 @@ internal sealed class MachineInstances(
                     cancellationToken
                 )
                 .ConfigureAwait(false);
-        return write switch
+        return Answer(write, next, stored);
+    }
+
+    // The stored snapshot, read and held to the triggers the system may not fire; or why it cannot be advanced.
+    private static (Snapshot? Current, AdvanceOutcome? Refused) ReadCurrent(
+        IMachineInternals internals,
+        StoredSnapshot stored,
+        string trigger
+    )
+    {
+        Snapshot current;
+        switch (internals.Rehydrate(stored.Json))
+        {
+            case RehydrationResult.Ok ok:
+                current = ok.Snapshot;
+                break;
+            case RehydrationResult.Error error:
+                return (
+                    null,
+                    new AdvanceOutcome.LoadError(error.Code, error.Message)
+                    {
+                        Exception = error.Exception,
+                    }
+                );
+            default:
+                return (
+                    null,
+                    new AdvanceOutcome.LoadError(
+                        RefusalCode.Malformed,
+                        "Unknown rehydration result."
+                    )
+                );
+        }
+
+        // The same reserved triggers a user's advance refuses: the system may move its instance, but only a run or an
+        // effect records what it produced.
+        if (internals.IsEffectBound(current.State, trigger))
+            return (
+                null,
+                new AdvanceOutcome.Rejected(
+                    RefusalCode.EffectBound,
+                    "This action runs an irreversible effect, which only its send fires."
+                )
+            );
+        if (internals.IsOutcomeTrigger(trigger))
+            return (
+                null,
+                new AdvanceOutcome.Rejected(
+                    RefusalCode.OutcomeBound,
+                    "This step is completed by the outcome of its work, not by an action."
+                )
+            );
+        return (current, null);
+    }
+
+    // The snapshot the trigger moves current to, checked as storable; or why it is refused.
+    private static (Snapshot? Next, AdvanceOutcome? Refused) AdvanceChecked(
+        IMachineInternals internals,
+        Snapshot current,
+        string trigger,
+        JsonNode? input
+    )
+    {
+        Snapshot next;
+        switch (internals.Advance(current, trigger, input))
+        {
+            case AdvanceResult.Rejected rejected:
+                return (
+                    null,
+                    new AdvanceOutcome.Rejected(rejected.Reason, rejected.Detail)
+                    {
+                        Exception = rejected.Exception,
+                    }
+                );
+            case AdvanceResult.Transitioned transitioned:
+                next = transitioned.Snapshot;
+                break;
+            default:
+                return (null, new AdvanceOutcome.Rejected(RefusalCode.InternalError, Detail: null));
+        }
+
+        if (StorableJson.Problem(next.Context) is { } unstorable)
+            return (null, new AdvanceOutcome.Rejected(RefusalCode.Malformed, unstorable));
+        if (Encoding.UTF8.GetByteCount(internals.Serialize(next)) > SnapshotLimits.MaxSnapshotBytes)
+            return (
+                null,
+                new AdvanceOutcome.Rejected(
+                    RefusalCode.TooLarge,
+                    $"The advanced snapshot exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
+                )
+            );
+        return (next, null);
+    }
+
+    private static AdvanceOutcome Answer(InvokeWrite write, Snapshot next, StoredSnapshot stored) =>
+        write switch
         {
             InvokeWrite.Written written => new AdvanceOutcome.Advanced(next)
             {
@@ -251,7 +303,6 @@ internal sealed class MachineInstances(
             },
             _ => new AdvanceOutcome.Conflict(),
         };
-    }
 
     // The registered, system-owned machine TMachine names, or why there is none.
     private (IMachine Machine, IMachineInternals Internals) SystemMachine<TMachine>(string action)

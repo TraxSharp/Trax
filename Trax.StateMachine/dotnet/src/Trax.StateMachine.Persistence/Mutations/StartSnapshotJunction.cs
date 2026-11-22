@@ -72,7 +72,14 @@ internal sealed class StartSnapshotJunction(
             )
             .ConfigureAwait(false);
 
-        return outcome switch
+        return Answer(outcome, service);
+    }
+
+    private static StartSnapshotOutput Answer(
+        StartOutcome outcome,
+        ISnapshotDraftService service
+    ) =>
+        outcome switch
         {
             StartOutcome.Started started => new StartSnapshotOutput
             {
@@ -85,7 +92,6 @@ internal sealed class StartSnapshotJunction(
             StartOutcome.Rejected rejected => Problem(rejected.Code, rejected.Message),
             _ => Problem(RefusalCode.InternalError, "Unknown start outcome."),
         };
-    }
 
     private static StartSnapshotOutput Problem(RefusalCode code, string message) =>
         new()

@@ -557,6 +557,13 @@ internal sealed class HostDriver(
                 .Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false))
                 ?.AsObject()
             ?? [];
+        return Answered(body, operation, path);
+    }
+
+    // What the host answered: a refusal, an operation it does not serve, or the state the answer at path is in. A
+    // posture refusal is the host not running the operation at all, and throws.
+    private Sent Answered(JsonObject body, Operation operation, string[] path)
+    {
         if (body["errors"] is JsonArray { Count: > 0 } errors)
         {
             var error = errors[0].NotNull();

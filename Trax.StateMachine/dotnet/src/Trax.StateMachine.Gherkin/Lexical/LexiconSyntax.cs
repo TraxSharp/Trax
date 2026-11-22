@@ -298,35 +298,9 @@ internal static class LexiconSyntax
             if (c == '"')
             {
                 EndWord();
-                var text = new StringBuilder();
-                var closed = false;
-                for (i++; i < line.Length; i++)
-                {
-                    var q = line[i];
-                    if (q == '\\')
-                    {
-                        if (i + 1 < line.Length && line[i + 1] is '"' or '\\')
-                        {
-                            text.Append(line[++i]);
-                            continue;
-                        }
-                        problem =
-                            "a backslash in quotes escapes only a quote (\\\") or a backslash (\\\\).";
-                        return false;
-                    }
-                    if (q == '"')
-                    {
-                        closed = true;
-                        break;
-                    }
-                    text.Append(q);
-                }
-                if (!closed)
-                {
-                    problem = "a quote is opened and never closed.";
+                if (QuotedText(line, ref i, out problem) is not { } quoted)
                     return false;
-                }
-                tokens.Add(new Token(TokenKind.Text, text.ToString()));
+                tokens.Add(new Token(TokenKind.Text, quoted));
                 continue;
             }
             if (char.IsWhiteSpace(c))
@@ -351,6 +325,42 @@ internal static class LexiconSyntax
         }
         EndWord();
         return true;
+    }
+
+    // The text of the quotes opened at line[i], with i left on the closing quote; null, with the problem, when the
+    // quotes hold a bad escape or never close.
+    private static string? QuotedText(string line, ref int i, out string? problem)
+    {
+        problem = null;
+        var text = new StringBuilder();
+        var closed = false;
+        for (i++; i < line.Length; i++)
+        {
+            var q = line[i];
+            if (q == '\\')
+            {
+                if (i + 1 < line.Length && line[i + 1] is '"' or '\\')
+                {
+                    text.Append(line[++i]);
+                    continue;
+                }
+                problem =
+                    "a backslash in quotes escapes only a quote (\\\") or a backslash (\\\\).";
+                return null;
+            }
+            if (q == '"')
+            {
+                closed = true;
+                break;
+            }
+            text.Append(q);
+        }
+        if (!closed)
+        {
+            problem = "a quote is opened and never closed.";
+            return null;
+        }
+        return text.ToString();
     }
 
     /// <summary>A word as a number, read as JSON reads one.</summary>

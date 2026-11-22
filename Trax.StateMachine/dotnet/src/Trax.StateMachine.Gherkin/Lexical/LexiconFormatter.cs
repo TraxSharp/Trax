@@ -39,6 +39,45 @@ internal static class LexiconFormatter
             return (null, problems);
         var byNumber = lines.ToDictionary(l => l.Number);
 
+        var rows = Rows(text, byNumber);
+
+        // A note alone on its line takes the depth of the next keyword line.
+        var depths = new int[rows.Count];
+        var next = 0;
+        for (var i = rows.Count - 1; i >= 0; i--)
+        {
+            if (rows[i].Keyword is not null)
+                next = rows[i].Depth;
+            depths[i] = rows[i].Keyword is not null ? rows[i].Depth : next;
+        }
+
+        var widths = Widths(rows);
+
+        var output = new StringBuilder();
+        var blank = true;
+        for (var i = 0; i < rows.Count; i++)
+        {
+            var row = rows[i];
+            if (row.Blank)
+            {
+                if (!blank)
+                    output.Append('\n');
+                blank = true;
+                continue;
+            }
+            blank = false;
+            var indent = new string(' ', 2 * depths[i]);
+            var content = row.Keyword is null ? "" : Content(row, widths[i]);
+            var note = row.Note is null ? "" : (content.Length == 0 ? row.Note : "  " + row.Note);
+            output.Append(indent).Append(content).Append(note).Append('\n');
+        }
+        // One newline at the end, never a blank line.
+        var result = output.ToString().TrimEnd('\n') + "\n";
+        return (result, []);
+    }
+
+    private static List<Row> Rows(string text, Dictionary<int, LexLine> byNumber)
+    {
         // Each keyword line's depth is where it attaches, by the reader's own rule.
         var open = new List<Block> { Block.Root };
         var rows = new List<Row>();
@@ -60,17 +99,11 @@ internal static class LexiconFormatter
             if (line.Keyword.Opens is { } block)
                 open.Add(block);
         }
+        return rows;
+    }
 
-        // A note alone on its line takes the depth of the next keyword line.
-        var depths = new int[rows.Count];
-        var next = 0;
-        for (var i = rows.Count - 1; i >= 0; i--)
-        {
-            if (rows[i].Keyword is not null)
-                next = rows[i].Depth;
-            depths[i] = rows[i].Keyword is not null ? rows[i].Depth : next;
-        }
-
+    private static int[] Widths(List<Row> rows)
+    {
         // The widths of each run's first column.
         var widths = new int[rows.Count];
         for (var i = 0; i < rows.Count; )
@@ -94,28 +127,7 @@ internal static class LexiconFormatter
                 widths[j] = width;
             i = end;
         }
-
-        var output = new StringBuilder();
-        var blank = true;
-        for (var i = 0; i < rows.Count; i++)
-        {
-            var row = rows[i];
-            if (row.Blank)
-            {
-                if (!blank)
-                    output.Append('\n');
-                blank = true;
-                continue;
-            }
-            blank = false;
-            var indent = new string(' ', 2 * depths[i]);
-            var content = row.Keyword is null ? "" : Content(row, widths[i]);
-            var note = row.Note is null ? "" : (content.Length == 0 ? row.Note : "  " + row.Note);
-            output.Append(indent).Append(content).Append(note).Append('\n');
-        }
-        // One newline at the end, never a blank line.
-        var result = output.ToString().TrimEnd('\n') + "\n";
-        return (result, []);
+        return widths;
     }
 
     private static string Content(Row row, int width)

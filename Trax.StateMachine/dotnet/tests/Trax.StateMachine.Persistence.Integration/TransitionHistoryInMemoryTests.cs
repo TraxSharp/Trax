@@ -44,18 +44,6 @@ public class TransitionHistoryInMemoryTests
         await using var hostDisposal = host.ConfigureAwait(false);
         var id = Guid.NewGuid();
 
-        async Task<List<SnapshotTransition>> Rows()
-        {
-            var readScope = host.CreateAsyncScope();
-            await using var readScopeDisposal = readScope.ConfigureAwait(false);
-            return await readScope
-                .ServiceProvider.GetRequiredService<IDataContext>()
-                .SnapshotTransitions.AsNoTracking()
-                .OrderBy(t => t.Revision)
-                .ToListAsync()
-                .ConfigureAwait(false);
-        }
-
         var scope = host.CreateAsyncScope();
         await using (scope.ConfigureAwait(false))
         {
@@ -75,7 +63,7 @@ public class TransitionHistoryInMemoryTests
                 .BeOfType<AdvanceOutcome.Advanced>();
         }
 
-        var rows = await Rows();
+        var rows = await Rows(host);
         rows.Select(t => (t.Revision, t.Kind, t.Trigger))
             .Should()
             .Equal(
@@ -98,8 +86,20 @@ public class TransitionHistoryInMemoryTests
                 .Should()
                 .BeOfType<DiscardOutcome.Discarded>();
 
-        (await Rows())
+        (await Rows(host))
             .Should()
             .BeEmpty("InMemory enforces no foreign key, so the store removes it");
+    }
+
+    private static async Task<List<SnapshotTransition>> Rows(ServiceProvider host)
+    {
+        var readScope = host.CreateAsyncScope();
+        await using var readScopeDisposal = readScope.ConfigureAwait(false);
+        return await readScope
+            .ServiceProvider.GetRequiredService<IDataContext>()
+            .SnapshotTransitions.AsNoTracking()
+            .OrderBy(t => t.Revision)
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 }

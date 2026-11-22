@@ -43,23 +43,7 @@ internal static class ServerFire
     {
         var outbox = services.GetRequiredService<InvokeOutbox>();
         var store = outbox.StoreOver(context, services.GetService<ISqlDialect>());
-        var due = await context
-            .SnapshotDrafts.AsNoTracking()
-            .Where(d => d.RowId == rowId)
-            .Select(x => new DueRow(
-                x.RowId,
-                x.Id,
-                x.Machine,
-                x.OwnerKind,
-                x.UserKey,
-                x.Version,
-                x.State,
-                x.Context,
-                x.Revision,
-                x.InvokeToken
-            ))
-            .FirstOrDefaultAsync(cancellationToken)
-            .ConfigureAwait(false);
+        var due = await ReadDue(context, rowId, cancellationToken).ConfigureAwait(false);
         if (due is null)
             return new Fired.Failed("the instance is gone");
         if (beforeFiring?.Invoke(due.State) is { } skip)
@@ -108,6 +92,31 @@ internal static class ServerFire
             default:
                 return new Fired.Failed("unknown result");
         }
+    }
+
+    private static async Task<DueRow?> ReadDue(
+        IDataContext context,
+        long rowId,
+        CancellationToken cancellationToken
+    )
+    {
+        return await context
+            .SnapshotDrafts.AsNoTracking()
+            .Where(d => d.RowId == rowId)
+            .Select(x => new DueRow(
+                x.RowId,
+                x.Id,
+                x.Machine,
+                x.OwnerKind,
+                x.UserKey,
+                x.Version,
+                x.State,
+                x.Context,
+                x.Revision,
+                x.InvokeToken
+            ))
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>The row of an instance, or null when it has none.</summary>

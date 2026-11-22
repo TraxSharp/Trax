@@ -80,24 +80,7 @@ public class GlossaryStateShapesTests
             .Be("nonEmpty");
         ir["invariants"].NotNull().AsObject().ContainsKey("Cart").Should().BeFalse();
         ir["initialContext"].NotNull().ToJsonString().Should().Be("""{"receipt":null}""");
-        ir["context"]
-            .NotNull()["Paid"]
-            .NotNull()["fields"]
-            .NotNull()[0]
-            .NotNull()["nullable"]
-            .NotNull()
-            .GetValue<bool>()
-            .Should()
-            .BeFalse();
-        ir["context"]
-            .NotNull()["Cart"]
-            .NotNull()["fields"]
-            .NotNull()[0]
-            .NotNull()["nullable"]
-            .NotNull()
-            .GetValue<bool>()
-            .Should()
-            .BeTrue();
+        AssertReceiptNullableOnlyInCart(ir);
 
         var host = HostFile.Read(derived.Host.NotNull());
         IrMachines
@@ -126,6 +109,29 @@ public class GlossaryStateShapesTests
             )
             .Should()
             .BeOfType<RehydrationResult.Ok>();
+    }
+
+    // Paid's own context holds the receipt as not nullable; Cart's holds it nullable.
+    private static void AssertReceiptNullableOnlyInCart(JsonObject ir)
+    {
+        ir["context"]
+            .NotNull()["Paid"]
+            .NotNull()["fields"]
+            .NotNull()[0]
+            .NotNull()["nullable"]
+            .NotNull()
+            .GetValue<bool>()
+            .Should()
+            .BeFalse();
+        ir["context"]
+            .NotNull()["Cart"]
+            .NotNull()["fields"]
+            .NotNull()[0]
+            .NotNull()["nullable"]
+            .NotNull()
+            .GetValue<bool>()
+            .Should()
+            .BeTrue();
     }
 
     [Test]

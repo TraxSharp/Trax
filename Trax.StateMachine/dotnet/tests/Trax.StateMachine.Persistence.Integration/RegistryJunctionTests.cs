@@ -135,42 +135,7 @@ public class RegistryJunctionTests
         const string Stale = "0000000000000000000000000000000000000000000000000000000000000000";
         var server = NewRegistry().SchemaHash("declarative-turnstile").NotNull();
 
-        // Save/advance/load refuse a client whose hash differs from the server's (a declarative machine).
-        (
-            await new SaveSnapshotJunction(NewRegistry(), User).Run(
-                new SaveSnapshotInput
-                {
-                    Machine = "declarative-turnstile",
-                    Id = Guid.NewGuid(),
-                    Snapshot = DeclarativeTurnstileLocked,
-                    SchemaHash = Stale,
-                }
-            )
-        )
-            .Problem.NotNull()
-            .Code.Should()
-            .Be(RefusalCode.SchemaMismatch);
-        (
-            await new AdvanceSnapshotJunction(NewRegistry(), User).Run(
-                new AdvanceSnapshotInput
-                {
-                    Machine = "declarative-turnstile",
-                    Id = Guid.NewGuid(),
-                    Trigger = "Coin",
-                    SchemaHash = Stale,
-                }
-            )
-        ).Problem.NotNull().Code.Should().Be(RefusalCode.SchemaMismatch);
-        (
-            await new LoadSnapshotJunction(NewRegistry(), User).Run(
-                new LoadSnapshotInput
-                {
-                    Machine = "declarative-turnstile",
-                    Id = Guid.NewGuid(),
-                    SchemaHash = Stale,
-                }
-            )
-        ).Problem.NotNull().Code.Should().Be(RefusalCode.SchemaMismatch);
+        await AssertStaleHashRefused(Stale);
 
         // The matching hash passes the check, and so does omitting it: the save is then refused for the machine's
         // guard, not its hash.
@@ -216,6 +181,52 @@ public class RegistryJunctionTests
             .Problem.NotNull()
             .Code.Should()
             .Be(RefusalCode.NotFound);
+    }
+
+    private static async Task AssertStaleHashRefused(string stale)
+    {
+        // Save/advance/load refuse a client whose hash differs from the server's (a declarative machine).
+        (
+            await new SaveSnapshotJunction(NewRegistry(), User)
+                .Run(
+                    new SaveSnapshotInput
+                    {
+                        Machine = "declarative-turnstile",
+                        Id = Guid.NewGuid(),
+                        Snapshot = DeclarativeTurnstileLocked,
+                        SchemaHash = stale,
+                    }
+                )
+                .ConfigureAwait(false)
+        )
+            .Problem.NotNull()
+            .Code.Should()
+            .Be(RefusalCode.SchemaMismatch);
+        (
+            await new AdvanceSnapshotJunction(NewRegistry(), User)
+                .Run(
+                    new AdvanceSnapshotInput
+                    {
+                        Machine = "declarative-turnstile",
+                        Id = Guid.NewGuid(),
+                        Trigger = "Coin",
+                        SchemaHash = stale,
+                    }
+                )
+                .ConfigureAwait(false)
+        ).Problem.NotNull().Code.Should().Be(RefusalCode.SchemaMismatch);
+        (
+            await new LoadSnapshotJunction(NewRegistry(), User)
+                .Run(
+                    new LoadSnapshotInput
+                    {
+                        Machine = "declarative-turnstile",
+                        Id = Guid.NewGuid(),
+                        SchemaHash = stale,
+                    }
+                )
+                .ConfigureAwait(false)
+        ).Problem.NotNull().Code.Should().Be(RefusalCode.SchemaMismatch);
     }
 
     [Test]

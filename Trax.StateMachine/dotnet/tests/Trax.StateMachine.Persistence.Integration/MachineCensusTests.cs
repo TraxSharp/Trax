@@ -40,6 +40,37 @@ public class MachineCensusTests
     {
         var census = Census();
 
+        AssertDeskEntries(census);
+
+        // The effect-bound event is listed with its rule, though send names no trigger.
+        var ship = Entry(census, RuledShipMachine.Id, nameof(ShipTrigger.Ship));
+        ship.Kind.Should().Be(nameof(TriggerKind.EffectBound));
+        ship.Rule.Should().Contain(DeskRoles.Operator);
+
+        // Outcome triggers are the server's own: listed, never reachable by a client.
+        var outcomes = census
+            .Where(e =>
+                string.Equals(e.Machine, RuledBuildMachine.Id, StringComparison.Ordinal)
+                && string.Equals(e.Kind, nameof(TriggerKind.Outcome), StringComparison.Ordinal)
+            )
+            .ToList();
+        outcomes
+            .Select(e => e.Name)
+            .Should()
+            .BeEquivalentTo(["Building.done", "Building.failed", "Building.cancelled"]);
+        outcomes
+            .Should()
+            .AllSatisfy(e =>
+                e.Rule.Should()
+                    .ContainEquivalentOf(
+                        "server",
+                        $"an outcome is applied by the server only. See {Adr}"
+                    )
+            );
+    }
+
+    private static void AssertDeskEntries(IReadOnlyList<MachineCensusEntry> census)
+    {
         foreach (var trigger in Enum.GetNames<DeskTrigger>())
             Entry(census, RuledDeskMachine.Id, trigger)
                 .Kind.Should()
@@ -76,32 +107,6 @@ public class MachineCensusTests
             .AllSatisfy(e =>
                 e.Surfaces.Should()
                     .NotBeEmpty($"every client event names the surfaces that reach it. See {Adr}")
-            );
-
-        // The effect-bound event is listed with its rule, though send names no trigger.
-        var ship = Entry(census, RuledShipMachine.Id, nameof(ShipTrigger.Ship));
-        ship.Kind.Should().Be(nameof(TriggerKind.EffectBound));
-        ship.Rule.Should().Contain(DeskRoles.Operator);
-
-        // Outcome triggers are the server's own: listed, never reachable by a client.
-        var outcomes = census
-            .Where(e =>
-                string.Equals(e.Machine, RuledBuildMachine.Id, StringComparison.Ordinal)
-                && string.Equals(e.Kind, nameof(TriggerKind.Outcome), StringComparison.Ordinal)
-            )
-            .ToList();
-        outcomes
-            .Select(e => e.Name)
-            .Should()
-            .BeEquivalentTo(["Building.done", "Building.failed", "Building.cancelled"]);
-        outcomes
-            .Should()
-            .AllSatisfy(e =>
-                e.Rule.Should()
-                    .ContainEquivalentOf(
-                        "server",
-                        $"an outcome is applied by the server only. See {Adr}"
-                    )
             );
     }
 

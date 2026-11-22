@@ -85,6 +85,12 @@ public static class IngestMachine
             .On(IngestTrigger.Retry)
             .To(IngestState.Fetching);
 
+        AddDifferential(m);
+
+        return m.Build();
+    }
+
+    private static void AddDifferential(MachineBuilder<IngestState, IngestTrigger> m) =>
         m.Differential(d =>
             d.OutcomeSample(
                     IngestState.Fetching,
@@ -99,7 +105,4 @@ public static class IngestMachine
                     new FetchOutput { Fingerprint = "", Unsure = false }
                 )
         );
-
-        return m.Build();
-    }
 }

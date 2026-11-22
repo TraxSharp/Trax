@@ -279,24 +279,7 @@ internal sealed class SnapshotChangeListener(
                 if (known is null || (scope.EveryRow && !(knew?.Covers(scope) ?? false)))
                     Live(stoppingToken);
                 else
-                {
-                    foreach (var (rowId, row) in current)
-                        if (
-                            !known.TryGetValue(rowId, out var before)
-                            || before.Revision != row.Revision
-                        )
-                            Broadcast(new SnapshotChange.Row(rowId), stoppingToken);
-                    var gone = new HashSet<long>();
-                    if (scope.EveryRow)
-                        foreach (var (rowId, row) in known)
-                            if (!current.ContainsKey(rowId) && scope.Reads(row.Machine))
-                                gone.Add(rowId);
-                    foreach (var rowId in scope.Rows)
-                        if (!current.ContainsKey(rowId) && !missing.Contains(rowId))
-                            gone.Add(rowId);
-                    foreach (var rowId in gone)
-                        Broadcast(new SnapshotChange.Row(rowId), stoppingToken);
-                }
+                    BroadcastChanges(scope, current, known, missing, stoppingToken);
                 missing = [.. scope.Rows.Where(r => !current.ContainsKey(r))];
                 known = current;
                 knew = scope;
@@ -325,6 +308,30 @@ internal sealed class SnapshotChangeListener(
             }
         }
         Lost(stoppingToken);
+    }
+
+    // Tells the readers about every row this poll read new or moved, and every watched row that is gone since.
+    private void BroadcastChanges(
+        PollScope scope,
+        Dictionary<long, PolledRow> current,
+        Dictionary<long, PolledRow> known,
+        HashSet<long> missing,
+        CancellationToken stoppingToken
+    )
+    {
+        foreach (var (rowId, row) in current)
+            if (!known.TryGetValue(rowId, out var before) || before.Revision != row.Revision)
+                Broadcast(new SnapshotChange.Row(rowId), stoppingToken);
+        var gone = new HashSet<long>();
+        if (scope.EveryRow)
+            foreach (var (rowId, row) in known)
+                if (!current.ContainsKey(rowId) && scope.Reads(row.Machine))
+                    gone.Add(rowId);
+        foreach (var rowId in scope.Rows)
+            if (!current.ContainsKey(rowId) && !missing.Contains(rowId))
+                gone.Add(rowId);
+        foreach (var rowId in gone)
+            Broadcast(new SnapshotChange.Row(rowId), stoppingToken);
     }
 
     // The rows the readers watch one by one, and whether every row is watched as well (when a reader watches every

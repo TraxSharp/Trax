@@ -71,6 +71,14 @@ internal static class Provenance
                         Add(read.Machine, $"view {v.View}", v.Scenario);
         }
 
+        return Document(parts);
+    }
+
+    // Each machine's parts, each with the scenarios that show it.
+    private static JsonObject Document(
+        SortedDictionary<string, SortedDictionary<string, SortedSet<Scenario>>> parts
+    )
+    {
         var document = new JsonObject();
         foreach (var (machine, byPart) in parts)
         {

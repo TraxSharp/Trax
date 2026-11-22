@@ -113,14 +113,7 @@ public sealed class TraxHttpTransport : ITraxTransport
         ArgumentNullException.ThrowIfNull(http);
         ArgumentNullException.ThrowIfNull(endpoint);
         ArgumentNullException.ThrowIfNull(body);
-        using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
-        {
-            Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"),
-        };
-        request.Headers.Accept.Add(
-            new MediaTypeWithQualityHeaderValue("application/graphql-response+json")
-        );
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        using var request = CreateRequest(endpoint, body);
         var asked =
             endpoint.IsAbsoluteUri ? endpoint
             : http.BaseAddress is { } baseAddress ? new Uri(baseAddress, endpoint)
@@ -142,23 +135,8 @@ public sealed class TraxHttpTransport : ITraxTransport
                     timeout.Token
                 )
                 .ConfigureAwait(false);
-            // A handler the caller vouched for followed a redirect anyway: its answer is not the endpoint's.
-            if (
-                asked is not null
-                && response.RequestMessage?.RequestUri is { IsAbsoluteUri: true } answeredBy
-                && Uri.Compare(
-                    asked,
-                    answeredBy,
-                    UriComponents.SchemeAndServer,
-                    UriFormat.Unescaped,
-                    StringComparison.OrdinalIgnoreCase
-                ) != 0
-            )
-                return TraxAnswer.Failed(
-                    $"The request was redirected to {answeredBy.GetLeftPart(UriPartial.Authority)}, which is not "
-                        + "the endpoint's host. Build the HttpClient on a handler with automatic redirects off.",
-                    (int)response.StatusCode
-                );
+            if (RedirectedAway(asked, response) is { } redirected)
+                return redirected;
             var text = await ReadBoundedAsync(response.Content, maxResponseSize, timeout.Token)
                 .ConfigureAwait(false);
             return AnswerOf(response, text, maxResponseSize);
@@ -182,6 +160,41 @@ public sealed class TraxHttpTransport : ITraxTransport
             // IOException (HttpIOException among them) is a body that broke off while it was read.
             return TraxAnswer.Failed($"The host could not be reached: {ex.Message}");
         }
+    }
+
+    private static HttpRequestMessage CreateRequest(Uri endpoint, JsonObject body)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
+        {
+            Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"),
+        };
+        request.Headers.Accept.Add(
+            new MediaTypeWithQualityHeaderValue("application/graphql-response+json")
+        );
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        return request;
+    }
+
+    private static TraxAnswer? RedirectedAway(Uri? asked, HttpResponseMessage response)
+    {
+        // A handler the caller vouched for followed a redirect anyway: its answer is not the endpoint's.
+        if (
+            asked is not null
+            && response.RequestMessage?.RequestUri is { IsAbsoluteUri: true } answeredBy
+            && Uri.Compare(
+                asked,
+                answeredBy,
+                UriComponents.SchemeAndServer,
+                UriFormat.Unescaped,
+                StringComparison.OrdinalIgnoreCase
+            ) != 0
+        )
+            return TraxAnswer.Failed(
+                $"The request was redirected to {answeredBy.GetLeftPart(UriPartial.Authority)}, which is not "
+                    + "the endpoint's host. Build the HttpClient on a handler with automatic redirects off.",
+                (int)response.StatusCode
+            );
+        return null;
     }
 
     /// <summary>

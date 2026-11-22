@@ -48,114 +48,25 @@ internal sealed class ScenarioSession(Glossary glossary, IScenarioDriver driver)
                 return null;
 
             case (StepKind.Given, Meaning.Start s):
-            {
-                var key = new InstanceKey(s.Machine, s.Person);
-                Know(key);
-                var answer = await driver.Start(people[s.Person], s.Machine).ConfigureAwait(false);
-                return answer is Answer.Moved
-                    ? null
-                    : $"{s.Person} could not start it: {ScenarioRunner.Describe(answer)}.";
-            }
+                return await GivenStart(s).ConfigureAwait(false);
 
             case (StepKind.Given, Meaning.InState s):
-            {
-                var key = new InstanceKey(s.Machine, s.Owner, s.Key);
-                Know(key);
-                var context = (await driver.Read(key).ConfigureAwait(false))?.Context;
-                await driver.Seed(key, s.State, context).ConfigureAwait(false);
+                await GivenInState(s).ConfigureAwait(false);
                 return null;
-            }
 
             case (StepKind.Given, Meaning.Guard g):
-            {
-                var key = new InstanceKey(g.Machine, g.Owner, g.Key);
-                Know(key);
-                // An instance no step has started yet is arranged from its initial state and context, as the walk
-                // reads it; a later Given puts it in the state the scenario names.
-                if (await driver.Read(key).ConfigureAwait(false) is null)
-                    await driver
-                        .Seed(key, glossary.Machines[g.Machine].Initial, context: null)
-                        .ConfigureAwait(false);
-                var now =
-                    await driver.Read(key).ConfigureAwait(false)
-                    ?? throw new InvalidOperationException($"{key.Machine} could not be arranged.");
-                var context = Satisfy.Context(
-                    glossary.Machines[g.Machine],
-                    g.Name,
-                    g.Holds,
-                    now.Context,
-                    out var why
-                );
-                if (context is null)
-                    return why ?? $"nothing sets up '{g.Name}'.";
-                await driver.Seed(key, now.State, context).ConfigureAwait(false);
-                return null;
-            }
+                return await GivenGuard(g).ConfigureAwait(false);
 
             case (StepKind.When, Meaning.Act a):
-            {
-                var key = new InstanceKey(a.Machine, a.Owner);
-                Know(key);
-                var actor = people[a.Person];
-                await BeginWhen().ConfigureAwait(false);
-                last = (
-                    key,
-                    actor,
-                    await driver.Fire(actor, key, a.Trigger, a.Input).ConfigureAwait(false)
-                );
+                await WhenAct(a).ConfigureAwait(false);
                 return null;
-            }
 
             case (StepKind.When, Meaning.Happens h):
-            {
-                var key = new InstanceKey(h.Machine, h.Owner, h.Key);
-                Know(key);
-                await BeginWhen().ConfigureAwait(false);
-                last = (
-                    key,
-                    null,
-                    await driver.Fire(person: null, key, h.Trigger, h.Input).ConfigureAwait(false)
-                );
+                await WhenHappens(h).ConfigureAwait(false);
                 return null;
-            }
 
             case (StepKind.When, Meaning.Outcome o):
-            {
-                InstanceKey? waiting = null;
-                foreach (
-                    var key in known.Where(k =>
-                        string.Equals(k.Machine, o.Machine, StringComparison.Ordinal)
-                    )
-                )
-                    if (
-                        string.Equals(
-                            (await driver.Read(key).ConfigureAwait(false))?.State,
-                            o.State,
-                            StringComparison.Ordinal
-                        )
-                    )
-                    {
-                        waiting = key;
-                        break;
-                    }
-                if (waiting is null)
-                    return $"no {o.Machine} is in {o.State} to be told '{o.Phrase}'.";
-                var invoke = glossary.Machines[o.Machine].Invokes[o.State];
-                await BeginWhen().ConfigureAwait(false);
-                last = (
-                    waiting,
-                    null,
-                    await driver
-                        .Outcome(
-                            waiting,
-                            o.State,
-                            invoke.Outcomes[o.Phrase].Kind,
-                            invoke.Examples.GetValueOrDefault(o.Phrase)?.DeepClone()
-                        )
-                        .ConfigureAwait(false)
-                );
-                return null;
-            }
+                return await WhenOutcome(o).ConfigureAwait(false);
 
             case (StepKind.When, Meaning.Passes p):
                 await BeginWhen().ConfigureAwait(false);
@@ -164,80 +75,198 @@ internal sealed class ScenarioSession(Glossary glossary, IScenarioDriver driver)
                 return null;
 
             case (StepKind.Then, Meaning.InState s):
-            {
-                var key = new InstanceKey(s.Machine, s.Owner, s.Key);
-                if (last is { } l && l.Key == key && l.Answer is not Answer.Moved && !s.Still)
-                    return $"'{step.Text}', and it was refused: {ScenarioRunner.Describe(l.Answer)}.";
-                var now = await driver.Read(key).ConfigureAwait(false);
-                // The Thens after a When follow the cascade in order: one may name where the When took the instance
-                // before a policy it set off moved it on, but not a state an earlier Then has read past, nor one a
-                // previous When's cascade entered. A still-Then says it did not move, so only where it is counts.
-                if (!s.Still)
-                {
-                    var cascade = await driver.Cascaded(key).ConfigureAwait(false);
-                    var from = cursors.GetValueOrDefault(key);
-                    for (var i = from; i < cascade.Count; i++)
-                        if (string.Equals(cascade[i], s.State, StringComparison.Ordinal))
-                        {
-                            cursors[key] = i + 1;
-                            return null;
-                        }
-                }
-                if (string.Equals(now?.State, s.State, StringComparison.Ordinal))
-                    return null;
-                return $"'{step.Text}', and it is {(now is null ? "not started" : $"in {now.Value.State}")}.";
-            }
+                return await ThenInState(step, s).ConfigureAwait(false);
 
             case (StepKind.Then, Meaning.ViewShows v):
-            {
-                var (values, refused) = await driver
-                    .View(people[v.Person], v.View, v.Field)
-                    .ConfigureAwait(false);
-                if (refused is not null)
-                    return $"'{step.Text}', and {v.Person} may not read it: {ScenarioRunner.Describe(refused)}.";
-                return values.NotNull().Contains(v.Value, StringComparer.Ordinal)
-                    ? null
-                    : $"'{step.Text}', and it shows {(values.NotNull().Count == 0 ? "nothing" : string.Join(" or ", values.Select(x => $"\"{x}\"")))}.";
-            }
+                return await ThenViewShows(step, v).ConfigureAwait(false);
 
             case (StepKind.Then, Meaning.Told t):
-                return
-                    last?.Answer is Answer.Refused { Code: RefusalCode.GuardFailed } told
-                    && string.Equals(told.Message, t.Message, StringComparison.Ordinal)
-                    ? null
-                    : $"'{step.Text}', and the answer was {ScenarioRunner.Describe(last?.Answer)}.";
+                return ThenTold(step, t);
 
             case (StepKind.Then, Meaning.Denied d):
-                return
-                    last is { By: { } by } denied
-                    && string.Equals(by.Name, d.Person, StringComparison.Ordinal)
-                    && denied.Answer
-                        is Answer.NotServed
-                            or Answer.Refused { Code: RefusalCode.Forbidden }
-                    ? null
-                    : $"'{step.Text}', and the answer was {ScenarioRunner.Describe(last?.Answer)}.";
+                return ThenDenied(step, d);
 
             case (StepKind.Then, Meaning.Guard g):
-            {
-                var now = await driver
-                    .Read(new InstanceKey(g.Machine, g.Owner, g.Key))
-                    .ConfigureAwait(false);
-                if (now is null)
-                    return $"'{step.Text}', and it is not started.";
-                var rule = glossary.Machines[g.Machine].Guards[g.Name].Rule;
-                return
-                    RuleEvaluator.Evaluate(
-                        IrMachine.ReadRule(rule),
-                        now.Value.Context,
-                        input: null,
-                        glossary.Machines[g.Machine].ExampleRules
-                    ) == g.Holds
-                    ? null
-                    : $"'{step.Text}' does not hold.";
-            }
+                return await ThenGuard(step, g).ConfigureAwait(false);
 
             default:
                 return $"'{step.Text}' is not something a {step.Kind} step can say.";
         }
+    }
+
+    private async ValueTask<string?> GivenStart(Meaning.Start s)
+    {
+        var key = new InstanceKey(s.Machine, s.Person);
+        Know(key);
+        var answer = await driver.Start(people[s.Person], s.Machine).ConfigureAwait(false);
+        return answer is Answer.Moved
+            ? null
+            : $"{s.Person} could not start it: {ScenarioRunner.Describe(answer)}.";
+    }
+
+    private async ValueTask GivenInState(Meaning.InState s)
+    {
+        var key = new InstanceKey(s.Machine, s.Owner, s.Key);
+        Know(key);
+        var context = (await driver.Read(key).ConfigureAwait(false))?.Context;
+        await driver.Seed(key, s.State, context).ConfigureAwait(false);
+    }
+
+    private async ValueTask<string?> GivenGuard(Meaning.Guard g)
+    {
+        var key = new InstanceKey(g.Machine, g.Owner, g.Key);
+        Know(key);
+        // An instance no step has started yet is arranged from its initial state and context, as the walk
+        // reads it; a later Given puts it in the state the scenario names.
+        if (await driver.Read(key).ConfigureAwait(false) is null)
+            await driver
+                .Seed(key, glossary.Machines[g.Machine].Initial, context: null)
+                .ConfigureAwait(false);
+        var now =
+            await driver.Read(key).ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"{key.Machine} could not be arranged.");
+        var context = Satisfy.Context(
+            glossary.Machines[g.Machine],
+            g.Name,
+            g.Holds,
+            now.Context,
+            out var why
+        );
+        if (context is null)
+            return why ?? $"nothing sets up '{g.Name}'.";
+        await driver.Seed(key, now.State, context).ConfigureAwait(false);
+        return null;
+    }
+
+    private async ValueTask WhenAct(Meaning.Act a)
+    {
+        var key = new InstanceKey(a.Machine, a.Owner);
+        Know(key);
+        var actor = people[a.Person];
+        await BeginWhen().ConfigureAwait(false);
+        last = (
+            key,
+            actor,
+            await driver.Fire(actor, key, a.Trigger, a.Input).ConfigureAwait(false)
+        );
+    }
+
+    private async ValueTask WhenHappens(Meaning.Happens h)
+    {
+        var key = new InstanceKey(h.Machine, h.Owner, h.Key);
+        Know(key);
+        await BeginWhen().ConfigureAwait(false);
+        last = (
+            key,
+            null,
+            await driver.Fire(person: null, key, h.Trigger, h.Input).ConfigureAwait(false)
+        );
+    }
+
+    private async ValueTask<string?> WhenOutcome(Meaning.Outcome o)
+    {
+        InstanceKey? waiting = null;
+        foreach (
+            var key in known.Where(k =>
+                string.Equals(k.Machine, o.Machine, StringComparison.Ordinal)
+            )
+        )
+            if (
+                string.Equals(
+                    (await driver.Read(key).ConfigureAwait(false))?.State,
+                    o.State,
+                    StringComparison.Ordinal
+                )
+            )
+            {
+                waiting = key;
+                break;
+            }
+        if (waiting is null)
+            return $"no {o.Machine} is in {o.State} to be told '{o.Phrase}'.";
+        var invoke = glossary.Machines[o.Machine].Invokes[o.State];
+        await BeginWhen().ConfigureAwait(false);
+        last = (
+            waiting,
+            null,
+            await driver
+                .Outcome(
+                    waiting,
+                    o.State,
+                    invoke.Outcomes[o.Phrase].Kind,
+                    invoke.Examples.GetValueOrDefault(o.Phrase)?.DeepClone()
+                )
+                .ConfigureAwait(false)
+        );
+        return null;
+    }
+
+    private async ValueTask<string?> ThenInState(FeatureStep step, Meaning.InState s)
+    {
+        var key = new InstanceKey(s.Machine, s.Owner, s.Key);
+        if (last is { } l && l.Key == key && l.Answer is not Answer.Moved && !s.Still)
+            return $"'{step.Text}', and it was refused: {ScenarioRunner.Describe(l.Answer)}.";
+        var now = await driver.Read(key).ConfigureAwait(false);
+        // The Thens after a When follow the cascade in order: one may name where the When took the instance
+        // before a policy it set off moved it on, but not a state an earlier Then has read past, nor one a
+        // previous When's cascade entered. A still-Then says it did not move, so only where it is counts.
+        if (!s.Still)
+        {
+            var cascade = await driver.Cascaded(key).ConfigureAwait(false);
+            var from = cursors.GetValueOrDefault(key);
+            for (var i = from; i < cascade.Count; i++)
+                if (string.Equals(cascade[i], s.State, StringComparison.Ordinal))
+                {
+                    cursors[key] = i + 1;
+                    return null;
+                }
+        }
+        if (string.Equals(now?.State, s.State, StringComparison.Ordinal))
+            return null;
+        return $"'{step.Text}', and it is {(now is null ? "not started" : $"in {now.Value.State}")}.";
+    }
+
+    private async ValueTask<string?> ThenViewShows(FeatureStep step, Meaning.ViewShows v)
+    {
+        var (values, refused) = await driver
+            .View(people[v.Person], v.View, v.Field)
+            .ConfigureAwait(false);
+        if (refused is not null)
+            return $"'{step.Text}', and {v.Person} may not read it: {ScenarioRunner.Describe(refused)}.";
+        return values.NotNull().Contains(v.Value, StringComparer.Ordinal)
+            ? null
+            : $"'{step.Text}', and it shows {(values.NotNull().Count == 0 ? "nothing" : string.Join(" or ", values.Select(x => $"\"{x}\"")))}.";
+    }
+
+    private string? ThenTold(FeatureStep step, Meaning.Told t) =>
+        last?.Answer is Answer.Refused { Code: RefusalCode.GuardFailed } told
+        && string.Equals(told.Message, t.Message, StringComparison.Ordinal)
+            ? null
+            : $"'{step.Text}', and the answer was {ScenarioRunner.Describe(last?.Answer)}.";
+
+    private string? ThenDenied(FeatureStep step, Meaning.Denied d) =>
+        last is { By: { } by } denied
+        && string.Equals(by.Name, d.Person, StringComparison.Ordinal)
+        && denied.Answer is Answer.NotServed or Answer.Refused { Code: RefusalCode.Forbidden }
+            ? null
+            : $"'{step.Text}', and the answer was {ScenarioRunner.Describe(last?.Answer)}.";
+
+    private async ValueTask<string?> ThenGuard(FeatureStep step, Meaning.Guard g)
+    {
+        var now = await driver
+            .Read(new InstanceKey(g.Machine, g.Owner, g.Key))
+            .ConfigureAwait(false);
+        if (now is null)
+            return $"'{step.Text}', and it is not started.";
+        var rule = glossary.Machines[g.Machine].Guards[g.Name].Rule;
+        return
+            RuleEvaluator.Evaluate(
+                IrMachine.ReadRule(rule),
+                now.Value.Context,
+                input: null,
+                glossary.Machines[g.Machine].ExampleRules
+            ) == g.Holds
+            ? null
+            : $"'{step.Text}' does not hold.";
     }
 }

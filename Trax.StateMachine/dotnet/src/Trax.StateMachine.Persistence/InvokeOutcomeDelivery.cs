@@ -80,27 +80,8 @@ internal sealed class InvokeOutcomeDelivery(
             )
                 return new InvokeDelivery.NotHere(row.Machine);
 
-            Snapshot current;
-            switch (machine.Rehydrate(row.Snapshot.Json))
-            {
-                case RehydrationResult.Ok ok:
-                    current = ok.Snapshot;
-                    break;
-                case RehydrationResult.Error error:
-                    // Another host, with the definition this row was written under, can read it.
-                    logger.LogWarning(
-                        error.Exception,
-                        "The outcome of run {RunId} cannot be applied to {Machine} instance {InstanceId} on this "
-                            + "host, which cannot read the stored snapshot ({Code}).",
-                        invokeToken,
-                        row.Machine,
-                        row.Id,
-                        error.Code.ToWire()
-                    );
-                    return new InvokeDelivery.NotHere(row.Machine);
-                default:
-                    return new InvokeDelivery.NotHere(row.Machine);
-            }
+            if (ReadCurrent(machine, row, invokeToken) is not { } current)
+                return new InvokeDelivery.NotHere(row.Machine);
 
             InvokedRunEnd? end;
             if (
@@ -134,6 +115,30 @@ internal sealed class InvokeOutcomeDelivery(
         return new InvokeDelivery.Contended();
     }
 
+    // The row's snapshot as this host reads it; null when another host must apply the outcome.
+    private Snapshot? ReadCurrent(IMachineInternals machine, StoredInstance row, string invokeToken)
+    {
+        switch (machine.Rehydrate(row.Snapshot.Json))
+        {
+            case RehydrationResult.Ok ok:
+                return ok.Snapshot;
+            case RehydrationResult.Error error:
+                // Another host, with the definition this row was written under, can read it.
+                logger.LogWarning(
+                    error.Exception,
+                    "The outcome of run {RunId} cannot be applied to {Machine} instance {InstanceId} on this "
+                        + "host, which cannot read the stored snapshot ({Code}).",
+                    invokeToken,
+                    row.Machine,
+                    row.Id,
+                    error.Code.ToWire()
+                );
+                return null;
+            default:
+                return null;
+        }
+    }
+
     /// <summary>
     /// One page of the live tokens of <paramref name="machines"/> whose runs have ended, in token order after
     /// <paramref name="after"/>, restricted to <paramref name="among"/> when it is given. The reconciler's sweep
@@ -157,24 +162,7 @@ internal sealed class InvokeOutcomeDelivery(
         if (machines.Count == 0 || among is { Count: 0 })
             return new EndedPage([], Next: null);
 
-        var names = machines.ToList();
-        // A token a child carries is a spawn still waiting, which the sweep of child ends delivers; one whose child is
-        // gone reads like a run whose records were, and is delivered here, as the child's cancel.
-        var children = context.SnapshotDrafts;
-        var drafts = context
-            .SnapshotDrafts.AsNoTracking()
-            .Where(d =>
-                d.InvokeToken != null
-                && names.Contains(d.Machine)
-                && !children.Any(c => c.SpawnedBy == d.InvokeToken)
-            );
-        if (among is not null)
-        {
-            var tokens = among.ToList();
-            drafts = drafts.Where(d => d.InvokeToken != null && tokens.Contains(d.InvokeToken));
-        }
-        if (after is not null)
-            drafts = drafts.Where(d => string.Compare(d.InvokeToken, after) > 0);
+        var drafts = WaitingDrafts(machines, after, among);
 
         // A row is a candidate when its run has ended by its entry and the entry's run, or when its entry is
         // gone and only the runs under its token can say. Ordered by the token, which the partial unique index
@@ -215,9 +203,53 @@ internal sealed class InvokeOutcomeDelivery(
         if (unqueued.Count == 0)
             return new EndedPage(rows.Select(r => r.Token).ToList(), next);
 
+        var latest = await LatestRunStates(unqueued, cancellationToken).ConfigureAwait(false);
+
+        var ended = rows.Where(r =>
+                !r.Unqueued
+                || !latest.TryGetValue(r.Token, out var state)
+                || Terminal.Contains(state)
+            )
+            .Select(r => r.Token)
+            .ToList();
+        return new EndedPage(ended, next);
+    }
+
+    private IQueryable<Trax.Effect.Models.SnapshotDraft.SnapshotDraft> WaitingDrafts(
+        IReadOnlyCollection<string> machines,
+        string? after,
+        IReadOnlyCollection<string>? among
+    )
+    {
+        var names = machines.ToList();
+        // A token a child carries is a spawn still waiting, which the sweep of child ends delivers; one whose child is
+        // gone reads like a run whose records were, and is delivered here, as the child's cancel.
+        var children = context.SnapshotDrafts;
+        var drafts = context
+            .SnapshotDrafts.AsNoTracking()
+            .Where(d =>
+                d.InvokeToken != null
+                && names.Contains(d.Machine)
+                && !children.Any(c => c.SpawnedBy == d.InvokeToken)
+            );
+        if (among is not null)
+        {
+            var tokens = among.ToList();
+            drafts = drafts.Where(d => d.InvokeToken != null && tokens.Contains(d.InvokeToken));
+        }
+        if (after is not null)
+            drafts = drafts.Where(d => string.Compare(d.InvokeToken, after) > 0);
+        return drafts;
+    }
+
+    private async Task<Dictionary<string, TrainState>> LatestRunStates(
+        List<string> unqueued,
+        CancellationToken cancellationToken
+    )
+    {
         // The latest run under each token that is not a requeued dispatch; a token with none has ended as far as
         // its machine can tell, and the delivery applies it as a failure (see ReadEnd).
-        var latest = (
+        return (
             await context
                 .Metadatas.AsNoTracking()
                 .Where(m =>
@@ -235,15 +267,6 @@ internal sealed class InvokeOutcomeDelivery(
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false)
         ).GroupBy(m => m.ExternalId.Trim(), StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.MaxBy(m => m.Id).NotNull().TrainState, StringComparer.Ordinal);
-
-        var ended = rows.Where(r =>
-                !r.Unqueued
-                || !latest.TryGetValue(r.Token, out var state)
-                || Terminal.Contains(state)
-            )
-            .Select(r => r.Token)
-            .ToList();
-        return new EndedPage(ended, next);
     }
 
     /// <summary>
@@ -492,15 +515,7 @@ internal sealed class InvokeOutcomeDelivery(
         CancellationToken cancellationToken
     )
     {
-        var reason = end.Reason;
-        InvokeOutcome outcome = end.Kind switch
-        {
-            InvokeOutcomeKind.Failed => new InvokeOutcome.Failed(),
-            InvokeOutcomeKind.Cancelled => new InvokeOutcome.Cancelled(),
-            _ when end.Oversize => Fail(InvokeOutcomeReasons.TooLarge, out reason),
-            _ when end.Output is null => Fail(InvokeOutcomeReasons.OutputUnrecorded, out reason),
-            _ => DoneWith(end.Output, out reason),
-        };
+        var outcome = OutcomeOf(end, out var reason);
 
         while (true)
         {
@@ -523,44 +538,21 @@ internal sealed class InvokeOutcomeDelivery(
                 switch (write)
                 {
                     case InvokeWrite.Written written:
-                        var moved = new InvokeDelivery.Moved(
-                            row.Machine,
-                            row.Id,
-                            current.State,
-                            planned.State,
-                            OutcomeTriggers.Suffix(outcome.Kind),
-                            reason,
-                            written.InvokeToken
-                        );
-                        if (reason is not null)
-                            logger.LogWarning(
-                                "The run {RunId} that {Machine} instance {InstanceId} invoked in {State} "
-                                    + "ended {Ended}, applied as its failure ({Reason}): the instance is now "
-                                    + "in {Target}.",
+                        return await AnswerMoved(
+                                row,
+                                machine,
+                                current,
                                 invokeToken,
-                                row.Machine,
-                                row.Id,
-                                current.State,
-                                end.Kind,
+                                end,
+                                outcome,
                                 reason,
-                                planned.State
-                            );
-                        // The outcome may have ended this instance, when another machine spawned it.
-                        if (machine.Ends.ContainsKey(planned.State))
-                            await DeliverEndOf(row.Owner, row.Machine, row.Id, cancellationToken)
-                                .ConfigureAwait(false);
-                        return moved;
+                                planned,
+                                written,
+                                cancellationToken
+                            )
+                            .ConfigureAwait(false);
                     case InvokeWrite.Refused refused:
-                        if (refused.Exception is not null)
-                            logger.LogError(
-                                refused.Exception,
-                                "The run {Machine} instance {InstanceId} would start in {Target} could not be "
-                                    + "queued ({Code}).",
-                                row.Machine,
-                                row.Id,
-                                planned.State,
-                                refused.Code.ToWire()
-                            );
+                        LogRefused(row, planned, refused);
                         problem = InvokeOutcomeReasons.NextRunRefused;
                         break;
                     default:
@@ -580,6 +572,76 @@ internal sealed class InvokeOutcomeDelivery(
             return await Strand(row, current, invokeToken, problem.NotNull(), cancellationToken)
                 .ConfigureAwait(false);
         }
+    }
+
+    // The outcome the run's end applies, and the reason it is applied as a failure when it ended otherwise.
+    private static InvokeOutcome OutcomeOf(InvokedRunEnd end, out string? reason)
+    {
+        reason = end.Reason;
+        return end.Kind switch
+        {
+            InvokeOutcomeKind.Failed => new InvokeOutcome.Failed(),
+            InvokeOutcomeKind.Cancelled => new InvokeOutcome.Cancelled(),
+            _ when end.Oversize => Fail(InvokeOutcomeReasons.TooLarge, out reason),
+            _ when end.Output is null => Fail(InvokeOutcomeReasons.OutputUnrecorded, out reason),
+            _ => DoneWith(end.Output, out reason),
+        };
+    }
+
+    private async Task<InvokeDelivery> AnswerMoved(
+        StoredInstance row,
+        IMachineInternals machine,
+        Snapshot current,
+        string invokeToken,
+        InvokedRunEnd end,
+        InvokeOutcome outcome,
+        string? reason,
+        Snapshot planned,
+        InvokeWrite.Written written,
+        CancellationToken cancellationToken
+    )
+    {
+        var moved = new InvokeDelivery.Moved(
+            row.Machine,
+            row.Id,
+            current.State,
+            planned.State,
+            OutcomeTriggers.Suffix(outcome.Kind),
+            reason,
+            written.InvokeToken
+        );
+        if (reason is not null)
+            logger.LogWarning(
+                "The run {RunId} that {Machine} instance {InstanceId} invoked in {State} "
+                    + "ended {Ended}, applied as its failure ({Reason}): the instance is now "
+                    + "in {Target}.",
+                invokeToken,
+                row.Machine,
+                row.Id,
+                current.State,
+                end.Kind,
+                reason,
+                planned.State
+            );
+        // The outcome may have ended this instance, when another machine spawned it.
+        if (machine.Ends.ContainsKey(planned.State))
+            await DeliverEndOf(row.Owner, row.Machine, row.Id, cancellationToken)
+                .ConfigureAwait(false);
+        return moved;
+    }
+
+    private void LogRefused(StoredInstance row, Snapshot planned, InvokeWrite.Refused refused)
+    {
+        if (refused.Exception is not null)
+            logger.LogError(
+                refused.Exception,
+                "The run {Machine} instance {InstanceId} would start in {Target} could not be "
+                    + "queued ({Code}).",
+                row.Machine,
+                row.Id,
+                planned.State,
+                refused.Code.ToWire()
+            );
     }
 
     private static InvokeOutcome Fail(string why, out string? reason)

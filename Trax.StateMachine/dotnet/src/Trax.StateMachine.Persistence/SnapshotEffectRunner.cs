@@ -247,109 +247,13 @@ internal sealed class SnapshotEffectRunner<TState, TTrigger>
                         DueAt = loaded.DueAt,
                     };
 
-                var owner = DraftOwner.User(userKey);
-                // The key the earlier ledger recorded claims under, before the upgrade.
-                var ledgerKey = _effectKey(userKey, id);
-
-                // An effect already pending is finished by its claimant. Once its lease has passed on the database's
-                // clock, this send takes it over and runs it again under the same key.
-                if (loaded.Effect is { } pending)
-                {
-                    if (!string.Equals(pending.Trigger, _trigger, StringComparison.Ordinal))
-                        return EffectInProgressRefusal;
-                    var takeover = Guid.NewGuid();
-                    if (
-                        !await marks
-                            .TakeOverEffect(
-                                owner,
-                                _drafts.MachineId,
-                                id,
-                                pending.Token,
-                                takeover,
-                                _lease ?? SnapshotLimits.DefaultEffectLease,
-                                cancellationToken
-                            )
-                            .ConfigureAwait(false)
-                    )
-                        return EffectInProgressRefusal;
-                    return await Finish(
-                            marks,
-                            owner,
-                            id,
-                            takeover,
-                            loaded.Snapshot,
-                            pending.Key ?? ledgerKey,
-                            ledgerKey,
-                            requestId,
-                            ledgerReceipt: null,
-                            releaseLedger: false
-                        )
-                        .ConfigureAwait(false);
-                }
-
-                // Only the required state may run the effect. Refuse BEFORE the effect, so a wrong-state
-                // request can't trigger a real delivery.
-                if (!string.Equals(loaded.Snapshot.State, _fromState, StringComparison.Ordinal))
-                    return new AdvanceOutcome.Rejected(
-                        RefusalCode.NoTransition,
-                        $"Only a {_fromState} draft can run this effect."
-                    );
-
-                // A claim the earlier ledger recorded before the upgrade: one in flight within its lease is still
-                // running; a completed one for this content is recorded instead of running the effect again. Any other
-                // is dropped once this send's record lands.
-                var ledger = (
-                    await marks.LedgerClaims([ledgerKey], cancellationToken).ConfigureAwait(false)
-                ).SingleOrDefault();
-                if (ledger is { Receipt: null, LeaseLive: true })
-                    return EffectInProgressRefusal;
-                string? ledgerReceipt = null;
-                if (ledger is { Receipt: { } earlier })
-                {
-                    var fingerprint = SnapshotFingerprint.Of(_drafts.Serialize(loaded.Snapshot));
-                    if (
-                        ledger.ContentFingerprint is null
-                        || string.Equals(
-                            ledger.ContentFingerprint,
-                            fingerprint,
-                            StringComparison.Ordinal
-                        )
-                    )
-                        ledgerReceipt = earlier;
-                }
-
-                // One intent, one key: every run of this effect, a run again after its claimant stopped included, uses
-                // it, and the next send of the event mints another.
-                var token = Guid.NewGuid();
-                var key = $"{ledgerKey}:{token:N}";
-                if (
-                    !await marks
-                        .MarkEffect(
-                            owner,
-                            _drafts.MachineId,
-                            id,
-                            loaded.Token,
-                            key,
-                            _trigger,
-                            requestId,
-                            token,
-                            _lease ?? SnapshotLimits.DefaultEffectLease,
-                            cancellationToken
-                        )
-                        .ConfigureAwait(false)
-                )
-                    return Moved;
-                return await Finish(
+                return await RunMarkedLoaded(
                         marks,
-                        owner,
+                        userKey,
                         id,
-                        token,
-                        loaded.Snapshot,
-                        key,
-                        ledgerKey,
                         requestId,
-                        ledgerReceipt,
-                        releaseLedger: ledger is not null
+                        loaded,
+                        cancellationToken
                     )
                     .ConfigureAwait(false);
 
@@ -359,6 +263,185 @@ internal sealed class SnapshotEffectRunner<TState, TTrigger>
                     "Unknown load result."
                 );
         }
+    }
+
+    private async Task<AdvanceOutcome> RunMarkedLoaded(
+        EfSnapshotStore marks,
+        string userKey,
+        Guid id,
+        string requestId,
+        LoadResult.Loaded loaded,
+        CancellationToken cancellationToken
+    )
+    {
+        var owner = DraftOwner.User(userKey);
+        // The key the earlier ledger recorded claims under, before the upgrade.
+        var ledgerKey = _effectKey(userKey, id);
+
+        // An effect already pending is finished by its claimant. Once its lease has passed on the database's
+        // clock, this send takes it over and runs it again under the same key.
+        if (loaded.Effect is { } pending)
+            return await TakeOverPending(
+                    marks,
+                    owner,
+                    id,
+                    pending,
+                    loaded,
+                    ledgerKey,
+                    requestId,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+
+        // Only the required state may run the effect. Refuse BEFORE the effect, so a wrong-state
+        // request can't trigger a real delivery.
+        if (!string.Equals(loaded.Snapshot.State, _fromState, StringComparison.Ordinal))
+            return new AdvanceOutcome.Rejected(
+                RefusalCode.NoTransition,
+                $"Only a {_fromState} draft can run this effect."
+            );
+
+        var (ledgerRefused, ledgerReceipt, ledgerFound) = await ReadLedger(
+                marks,
+                ledgerKey,
+                loaded,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        if (ledgerRefused is not null)
+            return ledgerRefused;
+
+        return await MarkAndFinish(
+                marks,
+                owner,
+                id,
+                requestId,
+                loaded,
+                ledgerKey,
+                ledgerReceipt,
+                ledgerFound,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+    }
+
+    private async Task<AdvanceOutcome> MarkAndFinish(
+        EfSnapshotStore marks,
+        DraftOwner owner,
+        Guid id,
+        string requestId,
+        LoadResult.Loaded loaded,
+        string ledgerKey,
+        string? ledgerReceipt,
+        bool ledgerFound,
+        CancellationToken cancellationToken
+    )
+    {
+        // One intent, one key: every run of this effect, a run again after its claimant stopped included, uses
+        // it, and the next send of the event mints another.
+        var token = Guid.NewGuid();
+        var key = $"{ledgerKey}:{token:N}";
+        if (
+            !await marks
+                .MarkEffect(
+                    owner,
+                    _drafts.MachineId,
+                    id,
+                    loaded.Token,
+                    key,
+                    _trigger,
+                    requestId,
+                    token,
+                    _lease ?? SnapshotLimits.DefaultEffectLease,
+                    cancellationToken
+                )
+                .ConfigureAwait(false)
+        )
+            return Moved;
+        return await Finish(
+                marks,
+                owner,
+                id,
+                token,
+                loaded.Snapshot,
+                key,
+                ledgerKey,
+                requestId,
+                ledgerReceipt,
+                releaseLedger: ledgerFound
+            )
+            .ConfigureAwait(false);
+    }
+
+    private async Task<AdvanceOutcome> TakeOverPending(
+        EfSnapshotStore marks,
+        DraftOwner owner,
+        Guid id,
+        PendingEffect pending,
+        LoadResult.Loaded loaded,
+        string ledgerKey,
+        string requestId,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!string.Equals(pending.Trigger, _trigger, StringComparison.Ordinal))
+            return EffectInProgressRefusal;
+        var takeover = Guid.NewGuid();
+        if (
+            !await marks
+                .TakeOverEffect(
+                    owner,
+                    _drafts.MachineId,
+                    id,
+                    pending.Token,
+                    takeover,
+                    _lease ?? SnapshotLimits.DefaultEffectLease,
+                    cancellationToken
+                )
+                .ConfigureAwait(false)
+        )
+            return EffectInProgressRefusal;
+        return await Finish(
+                marks,
+                owner,
+                id,
+                takeover,
+                loaded.Snapshot,
+                pending.Key ?? ledgerKey,
+                ledgerKey,
+                requestId,
+                ledgerReceipt: null,
+                releaseLedger: false
+            )
+            .ConfigureAwait(false);
+    }
+
+    private async Task<(AdvanceOutcome? Refused, string? Receipt, bool Found)> ReadLedger(
+        EfSnapshotStore marks,
+        string ledgerKey,
+        LoadResult.Loaded loaded,
+        CancellationToken cancellationToken
+    )
+    {
+        // A claim the earlier ledger recorded before the upgrade: one in flight within its lease is still
+        // running; a completed one for this content is recorded instead of running the effect again. Any other
+        // is dropped once this send's record lands.
+        var ledger = (
+            await marks.LedgerClaims([ledgerKey], cancellationToken).ConfigureAwait(false)
+        ).SingleOrDefault();
+        if (ledger is { Receipt: null, LeaseLive: true })
+            return (EffectInProgressRefusal, null, false);
+        string? ledgerReceipt = null;
+        if (ledger is { Receipt: { } earlier })
+        {
+            var fingerprint = SnapshotFingerprint.Of(_drafts.Serialize(loaded.Snapshot));
+            if (
+                ledger.ContentFingerprint is null
+                || string.Equals(ledger.ContentFingerprint, fingerprint, StringComparison.Ordinal)
+            )
+                ledgerReceipt = earlier;
+        }
+        return (null, ledgerReceipt, ledger is not null);
     }
 
     private static readonly AdvanceOutcome.Rejected EffectInProgressRefusal = new(
@@ -534,109 +617,155 @@ internal sealed class SnapshotEffectRunner<TState, TTrigger>
                         DueAt = loaded.DueAt,
                     };
 
-                // Only the required state may run the effect. Refuse BEFORE the effect, so a wrong-state
-                // request can't trigger a real delivery.
-                if (!string.Equals(loaded.Snapshot.State, _fromState, StringComparison.Ordinal))
-                    return new AdvanceOutcome.Rejected(
-                        RefusalCode.NoTransition,
-                        $"Only a {_fromState} draft can run this effect."
-                    );
-
-                // Exactly-once DELIVERY: claim the effect key BEFORE running. Two concurrent runs (or a
-                // crash-retry) run the effect once and replay the receipt. The claim records the fingerprint of the
-                // content the effect runs on, so its receipt is only ever replayed onto that content.
-                var fingerprint = SnapshotFingerprint.Of(_drafts.Serialize(loaded.Snapshot));
-                var key = _effectKey(userKey, id);
-                string receipt;
-                EffectOutcome effected;
-                try
-                {
-                    effected = await _idempotent
-                        .RunOnce(
-                            key,
-                            fingerprint,
-                            async () =>
-                            {
-                                // The claim is held, so a timer that has not fired yet waits for it; one that fired
-                                // between the load and the claim has moved the row, and the effect must not run on the
-                                // state it left. Throwing releases the claim, and the send starts over from the load.
-                                if (
-                                    !await _drafts
-                                        .StillAsLoaded(userKey, id, loaded, cancellationToken)
-                                        .ConfigureAwait(false)
-                                )
-                                    throw new DraftMovedException();
-                                // The request's token stops here: a request that goes away while the effect runs must
-                                // not turn an effect that happened into a cancellation.
-                                return await _effect
-                                    .Run(loaded.Snapshot, key, CancellationToken.None)
-                                    .ConfigureAwait(false);
-                            },
-                            _lease,
-                            cancellationToken
-                        )
-                        .ConfigureAwait(false);
-                }
-                catch (DraftMovedException)
-                {
-                    return Moved;
-                }
-                switch (effected)
-                {
-                    case EffectOutcome.Ran ran:
-                        receipt = ran.Receipt;
-                        break;
-                    case EffectOutcome.AlreadyRan already:
-                        // The effect ran on content this draft no longer holds. Committing its receipt here would
-                        // record it against content it was not produced for, and running the effect again would
-                        // repeat it, so neither happens. A claim with no fingerprint predates the check and
-                        // replays as it always did.
-                        if (
-                            already.ContentFingerprint is { } ranOn
-                            && !string.Equals(ranOn, fingerprint, StringComparison.Ordinal)
-                        )
-                            return new AdvanceOutcome.Rejected(
-                                RefusalCode.DraftChanged,
-                                "This draft's action already ran, on content that has changed since. Restore the "
-                                    + "content it ran on to record its result."
-                            );
-                        receipt = already.Receipt;
-                        break;
-                    case EffectOutcome.InProgress:
-                        return new AdvanceOutcome.Rejected(
-                            EffectInProgress,
-                            "This effect is already running."
-                        );
-                    default:
-                        return new AdvanceOutcome.Rejected(
-                            RefusalCode.InternalError,
-                            "Unknown effect outcome."
-                        );
-                }
-
-                // Fold the receipt into the terminal snapshot, on the draft exactly as the effect loaded it: if it
-                // was written since (an edit, a reset, a concurrent run's commit) the CAS loses (Conflict) and the
-                // receipt is not recorded on content the effect did not act on. The claim keeps it, so the next
-                // send replays it onto that same content rather than running the effect again. The effect has
-                // happened, so this write runs on a token the caller cannot cancel: a request that goes away now
-                // must still leave the draft showing what was done. The same rule as a train's outcome, in
-                // docs/adr/0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md.
-                return await _drafts
-                    .AdvanceAfterEffect(
-                        userKey,
-                        id,
-                        _trigger,
-                        new JsonObject { [_receiptKey] = receipt },
-                        requestId,
-                        loaded.Token,
-                        CancellationToken.None
-                    )
+                return await RunLedgerEffect(userKey, id, requestId, loaded, cancellationToken)
                     .ConfigureAwait(false);
 
             default:
                 return new AdvanceOutcome.LoadError(
                     RefusalCode.InternalError,
                     "Unknown load result."
+                );
+        }
+    }
+
+    private async Task<AdvanceOutcome> RunLedgerEffect(
+        string userKey,
+        Guid id,
+        string requestId,
+        LoadResult.Loaded loaded,
+        CancellationToken cancellationToken
+    )
+    {
+        // Only the required state may run the effect. Refuse BEFORE the effect, so a wrong-state
+        // request can't trigger a real delivery.
+        if (!string.Equals(loaded.Snapshot.State, _fromState, StringComparison.Ordinal))
+            return new AdvanceOutcome.Rejected(
+                RefusalCode.NoTransition,
+                $"Only a {_fromState} draft can run this effect."
+            );
+
+        // Exactly-once DELIVERY: claim the effect key BEFORE running. Two concurrent runs (or a
+        // crash-retry) run the effect once and replay the receipt. The claim records the fingerprint of the
+        // content the effect runs on, so its receipt is only ever replayed onto that content.
+        var fingerprint = SnapshotFingerprint.Of(_drafts.Serialize(loaded.Snapshot));
+        var key = _effectKey(userKey, id);
+        string receipt;
+        if (
+            await RunClaimed(userKey, id, loaded, key, fingerprint, cancellationToken)
+                .ConfigureAwait(false)
+            is not { } effected
+        )
+            return Moved;
+        var (ranReceipt, notRan) = ReceiptOf(effected, fingerprint);
+        if (notRan is not null)
+            return notRan;
+        receipt = ranReceipt.NotNull();
+
+        // Fold the receipt into the terminal snapshot, on the draft exactly as the effect loaded it: if it
+        // was written since (an edit, a reset, a concurrent run's commit) the CAS loses (Conflict) and the
+        // receipt is not recorded on content the effect did not act on. The claim keeps it, so the next
+        // send replays it onto that same content rather than running the effect again. The effect has
+        // happened, so this write runs on a token the caller cannot cancel: a request that goes away now
+        // must still leave the draft showing what was done. The same rule as a train's outcome, in
+        // docs/adr/0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md.
+        return await _drafts
+            .AdvanceAfterEffect(
+                userKey,
+                id,
+                _trigger,
+                new JsonObject { [_receiptKey] = receipt },
+                requestId,
+                loaded.Token,
+                CancellationToken.None
+            )
+            .ConfigureAwait(false);
+    }
+
+    // Runs the effect under its claim; null when the draft moved before the claim was held.
+    private async Task<EffectOutcome?> RunClaimed(
+        string userKey,
+        Guid id,
+        LoadResult.Loaded loaded,
+        string key,
+        string fingerprint,
+        CancellationToken cancellationToken
+    )
+    {
+        EffectOutcome effected;
+        try
+        {
+            effected = await _idempotent
+                .RunOnce(
+                    key,
+                    fingerprint,
+                    async () =>
+                    {
+                        // The claim is held, so a timer that has not fired yet waits for it; one that fired
+                        // between the load and the claim has moved the row, and the effect must not run on the
+                        // state it left. Throwing releases the claim, and the send starts over from the load.
+                        if (
+                            !await _drafts
+                                .StillAsLoaded(userKey, id, loaded, cancellationToken)
+                                .ConfigureAwait(false)
+                        )
+                            throw new DraftMovedException();
+                        // The request's token stops here: a request that goes away while the effect runs must
+                        // not turn an effect that happened into a cancellation.
+                        return await _effect
+                            .Run(loaded.Snapshot, key, CancellationToken.None)
+                            .ConfigureAwait(false);
+                    },
+                    _lease,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+        }
+        catch (DraftMovedException)
+        {
+            return null;
+        }
+        return effected;
+    }
+
+    private static (string? Receipt, AdvanceOutcome? Refused) ReceiptOf(
+        EffectOutcome effected,
+        string fingerprint
+    )
+    {
+        switch (effected)
+        {
+            case EffectOutcome.Ran ran:
+                return (ran.Receipt, null);
+            case EffectOutcome.AlreadyRan already:
+                // The effect ran on content this draft no longer holds. Committing its receipt here would
+                // record it against content it was not produced for, and running the effect again would
+                // repeat it, so neither happens. A claim with no fingerprint predates the check and
+                // replays as it always did.
+                if (
+                    already.ContentFingerprint is { } ranOn
+                    && !string.Equals(ranOn, fingerprint, StringComparison.Ordinal)
+                )
+                    return (
+                        null,
+                        new AdvanceOutcome.Rejected(
+                            RefusalCode.DraftChanged,
+                            "This draft's action already ran, on content that has changed since. Restore the "
+                                + "content it ran on to record its result."
+                        )
+                    );
+                return (already.Receipt, null);
+            case EffectOutcome.InProgress:
+                return (
+                    null,
+                    new AdvanceOutcome.Rejected(EffectInProgress, "This effect is already running.")
+                );
+            default:
+                return (
+                    null,
+                    new AdvanceOutcome.Rejected(
+                        RefusalCode.InternalError,
+                        "Unknown effect outcome."
+                    )
                 );
         }
     }

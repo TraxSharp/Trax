@@ -184,27 +184,7 @@ public class EventAuthorizationTests(StoreProvider provider)
 
         if (surface == Surface.Send)
         {
-            await _host.NotNull().Seed(owner, id, RuledShipMachine.Packing);
-            AdvanceOutcome sent;
-            using (var scope = _host.NotNull().Scope())
-                sent = await _host
-                    .NotNull()
-                    .Service(scope, RuledShipMachine.Id)
-                    .Send(actor, id, "send-1");
-
-            if (allowed)
-                sent.Should().BeOfType<AdvanceOutcome.Advanced>();
-            else
-                sent.Should()
-                    .BeOfType<AdvanceOutcome.Rejected>()
-                    .Which.Reason.Should()
-                    .BeOneOf(
-                        refusedAs,
-                        $"the effect-bound event's rule is checked though send names no trigger. See {Adr}"
-                    );
-            (await StateOf(id))
-                .Should()
-                .Be(allowed ? nameof(ShipState.Shipped) : nameof(ShipState.Packing));
+            await AssertSendSurface(owner, id, actor, allowed, refusedAs);
             return;
         }
 
@@ -249,6 +229,38 @@ public class EventAuthorizationTests(StoreProvider provider)
         }
 
         (await StateOf(id)).Should().Be(allowed ? nameof(DeskState.Done) : nameof(DeskState.Open));
+    }
+
+    private async Task AssertSendSurface(
+        string owner,
+        Guid id,
+        Actor.Client actor,
+        bool allowed,
+        RefusalCode[] refusedAs
+    )
+    {
+        await _host.NotNull().Seed(owner, id, RuledShipMachine.Packing).ConfigureAwait(false);
+        AdvanceOutcome sent;
+        using (var scope = _host.NotNull().Scope())
+            sent = await _host
+                .NotNull()
+                .Service(scope, RuledShipMachine.Id)
+                .Send(actor, id, "send-1")
+                .ConfigureAwait(false);
+
+        if (allowed)
+            sent.Should().BeOfType<AdvanceOutcome.Advanced>();
+        else
+            sent.Should()
+                .BeOfType<AdvanceOutcome.Rejected>()
+                .Which.Reason.Should()
+                .BeOneOf(
+                    refusedAs,
+                    $"the effect-bound event's rule is checked though send names no trigger. See {Adr}"
+                );
+        (await StateOf(id).ConfigureAwait(false))
+            .Should()
+            .Be(allowed ? nameof(ShipState.Shipped) : nameof(ShipState.Packing));
     }
 
     [Test]

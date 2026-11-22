@@ -56,55 +56,8 @@ internal sealed class SendSnapshotJunction(
         try
         {
             // The effect-bound event's rule is checked against the request's user before the effect is claimed.
-            var sent = runner is IActorEffectRunner actorRunner
-                ? await actorRunner
-                    .Run(
-                        CallerRules.Client(userKey, CallerRules.Caller(services)),
-                        input.Id,
-                        requestId,
-                        CancellationToken
-                    )
-                    .ConfigureAwait(false)
-                : await runner
-                    .Run(userKey, input.Id, requestId, CancellationToken)
-                    .ConfigureAwait(false);
-            return sent switch
-            {
-                AdvanceOutcome.Advanced advanced => new SendSnapshotOutput
-                {
-                    Snapshot = registryService.Serialize(advanced.Snapshot),
-                    Revision = advanced.Revision,
-                    RowId = advanced.RowId,
-                    DueAt = advanced.DueAt,
-                    DueAtKnown = advanced.DueAtKnown,
-                },
-                AdvanceOutcome.Rejected rejected => Failed(
-                    SnapshotGuards.Failure(
-                        logger,
-                        rejected.Reason,
-                        rejected.Detail ?? rejected.Reason.ToWire(),
-                        rejected.Exception,
-                        input.Machine,
-                        input.Id
-                    )
-                ),
-                AdvanceOutcome.NotFound => Problem(RefusalCode.NotFound, "No draft with that id."),
-                AdvanceOutcome.LoadError loadError => Failed(
-                    SnapshotGuards.Failure(
-                        logger,
-                        loadError.Code,
-                        loadError.Message,
-                        loadError.Exception,
-                        input.Machine,
-                        input.Id
-                    )
-                ),
-                AdvanceOutcome.Conflict => Problem(
-                    RefusalCode.Conflict,
-                    "The draft changed elsewhere; reload and retry."
-                ),
-                _ => Problem(RefusalCode.InternalError, "Unknown send outcome."),
-            };
+            var sent = await RunEffect(runner, userKey, input, requestId).ConfigureAwait(false);
+            return Answer(sent, registryService, input);
         }
         catch (Exception ex)
             when (ex is not OperationCanceledException || !CancellationToken.IsCancellationRequested
@@ -125,6 +78,70 @@ internal sealed class SendSnapshotJunction(
             );
         }
     }
+
+    private async Task<AdvanceOutcome> RunEffect(
+        ISnapshotEffectRunner runner,
+        string userKey,
+        SendSnapshotInput input,
+        string requestId
+    )
+    {
+        return runner is IActorEffectRunner actorRunner
+            ? await actorRunner
+                .Run(
+                    CallerRules.Client(userKey, CallerRules.Caller(services)),
+                    input.Id,
+                    requestId,
+                    CancellationToken
+                )
+                .ConfigureAwait(false)
+            : await runner
+                .Run(userKey, input.Id, requestId, CancellationToken)
+                .ConfigureAwait(false);
+    }
+
+    private SendSnapshotOutput Answer(
+        AdvanceOutcome sent,
+        ISnapshotDraftService registryService,
+        SendSnapshotInput input
+    ) =>
+        sent switch
+        {
+            AdvanceOutcome.Advanced advanced => new SendSnapshotOutput
+            {
+                Snapshot = registryService.Serialize(advanced.Snapshot),
+                Revision = advanced.Revision,
+                RowId = advanced.RowId,
+                DueAt = advanced.DueAt,
+                DueAtKnown = advanced.DueAtKnown,
+            },
+            AdvanceOutcome.Rejected rejected => Failed(
+                SnapshotGuards.Failure(
+                    logger,
+                    rejected.Reason,
+                    rejected.Detail ?? rejected.Reason.ToWire(),
+                    rejected.Exception,
+                    input.Machine,
+                    input.Id
+                )
+            ),
+            AdvanceOutcome.NotFound => Problem(RefusalCode.NotFound, "No draft with that id."),
+            AdvanceOutcome.LoadError loadError => Failed(
+                SnapshotGuards.Failure(
+                    logger,
+                    loadError.Code,
+                    loadError.Message,
+                    loadError.Exception,
+                    input.Machine,
+                    input.Id
+                )
+            ),
+            AdvanceOutcome.Conflict => Problem(
+                RefusalCode.Conflict,
+                "The draft changed elsewhere; reload and retry."
+            ),
+            _ => Problem(RefusalCode.InternalError, "Unknown send outcome."),
+        };
 
     private static SendSnapshotOutput Problem(RefusalCode code, string message) =>
         new()

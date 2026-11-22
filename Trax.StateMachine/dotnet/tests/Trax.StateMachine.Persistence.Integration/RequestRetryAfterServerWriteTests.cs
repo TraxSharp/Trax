@@ -163,29 +163,36 @@ public class RequestRetryAfterServerWriteTests(StoreProvider provider)
                 $"a null due time on a stale replay means unknown, not cleared, and the answer says so. See {Adr}"
             );
 
+        await AssertGenericSendReplaysUnknownDue(id);
+        _charge.NotNull().Calls.Should().Be(1, "one send runs the effect once");
+        var row = (await RawSql.Timer(_host.NotNull(), id)).NotNull();
+        row.State.Should().Be(nameof(RenewalState.Lapsed), "a replay writes nothing");
+        row.Revision.Should().Be(afterTimer.Revision);
+    }
+
+    private async Task AssertGenericSendReplaysUnknownDue(Guid id)
+    {
         SendSnapshotOutput generic;
         using (var scope = _host.NotNull().Scope())
             generic = await new SendSnapshotJunction(
                 scope.ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>(),
                 new FakePrincipal(User),
                 services: scope.ServiceProvider
-            ).Run(
-                new SendSnapshotInput
-                {
-                    Machine = RenewalMachine.Id,
-                    Id = id,
-                    RequestId = "c1",
-                }
-            );
+            )
+                .Run(
+                    new SendSnapshotInput
+                    {
+                        Machine = RenewalMachine.Id,
+                        Id = id,
+                        RequestId = "c1",
+                    }
+                )
+                .ConfigureAwait(false);
         generic.Problem.Should().BeNull();
         generic.DueAt.Should().BeNull();
         generic
             .DueAtKnown.Should()
             .BeFalse($"the generic send says the same of the same replay. See {Adr}");
-        _charge.NotNull().Calls.Should().Be(1, "one send runs the effect once");
-        var row = (await RawSql.Timer(_host.NotNull(), id)).NotNull();
-        row.State.Should().Be(nameof(RenewalState.Lapsed), "a replay writes nothing");
-        row.Revision.Should().Be(afterTimer.Revision);
     }
 
     [Test]

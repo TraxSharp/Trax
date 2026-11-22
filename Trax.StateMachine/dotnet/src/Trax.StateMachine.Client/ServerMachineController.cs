@@ -551,10 +551,7 @@ public sealed class ServerMachineController : IDisposable
         {
             if (_disposed)
                 return;
-            _problem = TransportFailure(ex);
-            _startFailed = true;
-            Emit();
-            SettleStart(new SendOutcome.Failed(_problem));
+            FailStart(ex);
             return;
         }
         if (_disposed)
@@ -576,32 +573,47 @@ public sealed class ServerMachineController : IDisposable
                     .ConfigureAwait(true);
                 return;
             }
-            if (string.Equals(problem.Code, ClientOutdated, StringComparison.Ordinal))
-            {
-                Stop(new MachineError(ClientOutdated, problem.Message));
-                return;
-            }
-            _problem = Refusal(problem.Code, problem.Message);
-            var retryable = string.Equals(problem.Code, ServerOutdated, StringComparison.Ordinal);
-            _startFailed = retryable;
-            Emit();
-            SettleStart(
-                retryable ? new SendOutcome.Failed(_problem) : new SendOutcome.Refused(_problem)
-            );
+            RefuseStart(problem);
             return;
         }
         if (answer.Id is not { } id)
         {
-            _problem = TransportFailure(
+            FailStart(
                 new InvalidOperationException(
                     "The server started an instance without answering its id."
                 )
             );
-            _startFailed = true;
-            Emit();
-            SettleStart(new SendOutcome.Failed(_problem));
             return;
         }
+        Started(id, answer);
+    }
+
+    private void FailStart(Exception ex)
+    {
+        _problem = TransportFailure(ex);
+        _startFailed = true;
+        Emit();
+        SettleStart(new SendOutcome.Failed(_problem));
+    }
+
+    private void RefuseStart(ServerProblem problem)
+    {
+        if (string.Equals(problem.Code, ClientOutdated, StringComparison.Ordinal))
+        {
+            Stop(new MachineError(ClientOutdated, problem.Message));
+            return;
+        }
+        _problem = Refusal(problem.Code, problem.Message);
+        var retryable = string.Equals(problem.Code, ServerOutdated, StringComparison.Ordinal);
+        _startFailed = retryable;
+        Emit();
+        SettleStart(
+            retryable ? new SendOutcome.Failed(_problem) : new SendOutcome.Refused(_problem)
+        );
+    }
+
+    private void Started(string id, ServerAnswer answer)
+    {
         _id = id;
         _problem = null;
         Listen(id);
@@ -787,28 +799,7 @@ public sealed class ServerMachineController : IDisposable
                     .ConfigureAwait(true);
                 return;
             }
-            var first = _confirmed is null;
-            EndRead();
-            if (string.Equals(problem.Code, ClientOutdated, StringComparison.Ordinal))
-                Stop(new MachineError(ClientOutdated, problem.Message));
-            else if (string.Equals(problem.Code, NotFound, StringComparison.Ordinal))
-                Stop(new MachineError(ClientProblemCodes.Gone, problem.Message, Deleted: false));
-            else
-            {
-                _problem = Refusal(problem.Code, problem.Message);
-                // A first read another version kept answering failed past every retry; any other refusal is the
-                // host's answer, and reading again would get it again.
-                var failed = string.Equals(problem.Code, ServerOutdated, StringComparison.Ordinal);
-                _readFailed = first && failed;
-                Emit();
-                // A push may have opened the instance meanwhile: whoever waits for the start has it.
-                SettleStart(
-                    !first ? new SendOutcome.Confirmed(ConfirmedSnapshot())
-                    : failed ? new SendOutcome.Failed(_problem)
-                    : new SendOutcome.Refused(_problem)
-                );
-                Pump();
-            }
+            ReadRefused(problem);
             return;
         }
         var snapshot = answer.Snapshot.NotNull() with
@@ -822,6 +813,37 @@ public sealed class ServerMachineController : IDisposable
             await ReadFailedAsync(rowId, attempt, unreadable).ConfigureAwait(true);
             return;
         }
+        FinishRead(rowId, changed, unopened);
+    }
+
+    private void ReadRefused(ServerProblem problem)
+    {
+        var first = _confirmed is null;
+        EndRead();
+        if (string.Equals(problem.Code, ClientOutdated, StringComparison.Ordinal))
+            Stop(new MachineError(ClientOutdated, problem.Message));
+        else if (string.Equals(problem.Code, NotFound, StringComparison.Ordinal))
+            Stop(new MachineError(ClientProblemCodes.Gone, problem.Message, Deleted: false));
+        else
+        {
+            _problem = Refusal(problem.Code, problem.Message);
+            // A first read another version kept answering failed past every retry; any other refusal is the
+            // host's answer, and reading again would get it again.
+            var failed = string.Equals(problem.Code, ServerOutdated, StringComparison.Ordinal);
+            _readFailed = first && failed;
+            Emit();
+            // A push may have opened the instance meanwhile: whoever waits for the start has it.
+            SettleStart(
+                !first ? new SendOutcome.Confirmed(ConfirmedSnapshot())
+                : failed ? new SendOutcome.Failed(_problem)
+                : new SendOutcome.Refused(_problem)
+            );
+            Pump();
+        }
+    }
+
+    private void FinishRead(string? rowId, bool changed, bool unopened)
+    {
         // A push of the incarnation now held is taken after the read; one of another incarnation is kept until a read
         // of that incarnation answers.
         var buffered = _buffered;
@@ -938,17 +960,7 @@ public sealed class ServerMachineController : IDisposable
 
         if (otherIncarnation && source != Source.Load)
         {
-            // The row was deleted and created again: its revisions restart, so they say nothing against the ones held.
-            // A read already pending answers without saying which incarnation it read, so unless it asked for this one,
-            // another read asks for it after.
-            if (!_reloading || !string.Equals(_reloadRowId, rowId, StringComparison.Ordinal))
-                Reload(rowId);
-            if (
-                _buffered is null
-                || !string.Equals(_buffered.RowId, rowId, StringComparison.Ordinal)
-                || !OlderOrSame(incoming.Revision, _buffered.Revision)
-            )
-                _buffered = incoming;
+            BufferOtherIncarnation(incoming, rowId);
             return false;
         }
         if (!otherIncarnation && OlderOrSame(incoming.Revision, _revision))
@@ -979,35 +991,80 @@ public sealed class ServerMachineController : IDisposable
         };
         if (_predictor is not null)
         {
-            RehydrationResult parsed;
-            try
-            {
-                parsed = _predictor.Rehydrate(_predictor.Serialize(snapshot));
-            }
-            catch (Exception ex)
-            {
-                unreadable = new MachineProblem(
-                    MachineProblemKind.Transport,
-                    ClientProblemCodes.TransportError,
-                    $"The server sent a snapshot this client cannot hold: {ex.Message}"
-                );
+            if (Rehydrated(_predictor, snapshot, out unreadable) is not { } rehydrated)
                 return false;
-            }
-            if (parsed is not RehydrationResult.Ok ok)
-            {
-                // The server serves a snapshot this client's machine cannot read: it was built for another version.
-                var error = (RehydrationResult.Error)parsed;
-                Stop(
-                    new MachineError(
-                        ClientOutdated,
-                        $"The server's snapshot is not one this client's machine can read ({error.Code.ToWire()}): {error.Message}"
-                    )
-                );
-                return false;
-            }
-            snapshot = ok.Snapshot;
+            snapshot = rehydrated;
         }
 
+        TakeDueAt(incoming, snapshot, source, otherIncarnation);
+        _confirmed = snapshot;
+        _rowId = rowId ?? _rowId;
+        _revision = incoming.Revision;
+        if (_status == MachineStatus.Loading)
+            _status = MachineStatus.Ready;
+        return true;
+    }
+
+    private void BufferOtherIncarnation(ServerSnapshot incoming, string? rowId)
+    {
+        // The row was deleted and created again: its revisions restart, so they say nothing against the ones held.
+        // A read already pending answers without saying which incarnation it read, so unless it asked for this one,
+        // another read asks for it after.
+        if (!_reloading || !string.Equals(_reloadRowId, rowId, StringComparison.Ordinal))
+            Reload(rowId);
+        if (
+            _buffered is null
+            || !string.Equals(_buffered.RowId, rowId, StringComparison.Ordinal)
+            || !OlderOrSame(incoming.Revision, _buffered.Revision)
+        )
+            _buffered = incoming;
+    }
+
+    // The snapshot as this client's machine reads it, or null when it cannot: `unreadable` says why when this client
+    // cannot write it, and a snapshot of another version stops the controller.
+    private Snapshot? Rehydrated(
+        IMachinePredictor predictor,
+        Snapshot snapshot,
+        out MachineProblem? unreadable
+    )
+    {
+        unreadable = null;
+        RehydrationResult parsed;
+        try
+        {
+            parsed = predictor.Rehydrate(predictor.Serialize(snapshot));
+        }
+        catch (Exception ex)
+        {
+            unreadable = new MachineProblem(
+                MachineProblemKind.Transport,
+                ClientProblemCodes.TransportError,
+                $"The server sent a snapshot this client cannot hold: {ex.Message}"
+            );
+            return null;
+        }
+        if (parsed is not RehydrationResult.Ok ok)
+        {
+            // The server serves a snapshot this client's machine cannot read: it was built for another version.
+            var error = (RehydrationResult.Error)parsed;
+            Stop(
+                new MachineError(
+                    ClientOutdated,
+                    $"The server's snapshot is not one this client's machine can read ({error.Code.ToWire()}): {error.Message}"
+                )
+            );
+            return null;
+        }
+        return ok.Snapshot;
+    }
+
+    private void TakeDueAt(
+        ServerSnapshot incoming,
+        Snapshot snapshot,
+        Source source,
+        bool otherIncarnation
+    )
+    {
         // The due time is the server's: a known one replaces the one held, null included. An answer that does not know
         // it keeps the one held only while the instance stays in the state it was given for; in any other state a timed
         // state is read once for it.
@@ -1028,12 +1085,6 @@ public sealed class ServerMachineController : IDisposable
             if (timed && source != Source.Load)
                 Reload(rowId: null);
         }
-        _confirmed = snapshot;
-        _rowId = rowId ?? _rowId;
-        _revision = incoming.Revision;
-        if (_status == MachineStatus.Loading)
-            _status = MachineStatus.Ready;
-        return true;
     }
 
     // ── Sending ────────────────────────────────────────────────────────────────────────────────
@@ -1143,20 +1194,7 @@ public sealed class ServerMachineController : IDisposable
 
         if (answer.Problem is not { } problem)
         {
-            var snapshot = answer.Snapshot.NotNull();
-            Accept(snapshot, Source.Answer, out var unreadable);
-            if (unreadable is not null)
-            {
-                // Applied, perhaps, but not an answer this client can hold; a retry replays it under the same request id.
-                _lastFailed = request;
-                _problem = unreadable;
-                Finish(entry, new SendOutcome.Failed(unreadable));
-                return;
-            }
-            // A confirmed event supersedes one that failed before it: resending that one now would apply it out of order.
-            _lastFailed = null;
-            _problem = null;
-            Finish(entry, new SendOutcome.Confirmed(snapshot));
+            Delivered(entry, request, answer);
             return;
         }
 
@@ -1182,6 +1220,29 @@ public sealed class ServerMachineController : IDisposable
             Finish(entry, new SendOutcome.Failed(_problem));
             return;
         }
+        RefuseDelivery(entry, problem);
+    }
+
+    private void Delivered(QueuedEvent entry, EventRequest request, ServerAnswer answer)
+    {
+        var snapshot = answer.Snapshot.NotNull();
+        Accept(snapshot, Source.Answer, out var unreadable);
+        if (unreadable is not null)
+        {
+            // Applied, perhaps, but not an answer this client can hold; a retry replays it under the same request id.
+            _lastFailed = request;
+            _problem = unreadable;
+            Finish(entry, new SendOutcome.Failed(unreadable));
+            return;
+        }
+        // A confirmed event supersedes one that failed before it: resending that one now would apply it out of order.
+        _lastFailed = null;
+        _problem = null;
+        Finish(entry, new SendOutcome.Confirmed(snapshot));
+    }
+
+    private void RefuseDelivery(QueuedEvent entry, ServerProblem problem)
+    {
         if (string.Equals(problem.Code, ClientDivergence, StringComparison.Ordinal))
         {
             // The predictor and the server disagree about this step: what the client holds cannot be trusted, and the
@@ -1254,61 +1315,8 @@ public sealed class ServerMachineController : IDisposable
             if (generation != _syncGeneration)
                 return new SyncOutcome.Superseded();
 
-            PlannedEvent next;
-            switch (Plan(_confirmed.NotNull(), request))
-            {
-                case PlanResult.Planned { Events.Count: 0 }:
-                    return new SyncOutcome.Synced(ConfirmedSnapshot());
-                case PlanResult.Planned planned:
-                    next = planned.Events[0];
-                    break;
-                // At the target with only the fields event left, which rests on a rule this client cannot evaluate: the
-                // server applied it there when it confirmed it, and nothing has been confirmed since.
-                case PlanResult.Undetermined { Events.Count: 0 } undetermined
-                    when string.Equals(
-                        undetermined.Trigger,
-                        request.Fields?.Trigger,
-                        StringComparison.Ordinal
-                    )
-                        && string.Equals(
-                            _confirmed.NotNull().State,
-                            request.Target,
-                            StringComparison.Ordinal
-                        )
-                        && fieldsAnswered.Set
-                        && fieldsAnswered.Revision == _revision:
-                    return new SyncOutcome.Synced(ConfirmedSnapshot());
-                case PlanResult.Undetermined undetermined:
-                    // The events up to the edge, then the edge itself, which the controller sends with no prediction: the
-                    // fields event with the fields' input.
-                    next =
-                        undetermined.Events.Count > 0 ? undetermined.Events[0]
-                        : request.Fields is { } fields
-                        && string.Equals(
-                            undetermined.Trigger,
-                            fields.Trigger,
-                            StringComparison.Ordinal
-                        )
-                            ? fields
-                        : new PlannedEvent(undetermined.Trigger);
-                    break;
-                case PlanResult.Invalid invalid:
-                    return new SyncOutcome.Invalid(invalid.Trigger, invalid.Target)
-                    {
-                        Code = invalid.Code,
-                    };
-                case PlanResult.Unreachable:
-                    return new SyncOutcome.Unreachable();
-                case null:
-                    return new SyncOutcome.Failed(
-                        Refusal(
-                            ClientOutdated,
-                            "This client's engine cannot read the machine's IR, so it cannot plan."
-                        )
-                    );
-                default:
-                    return new SyncOutcome.Exceeded();
-            }
+            if (PlanNext(request, fieldsAnswered, out var planEnded) is not { } next)
+                return planEnded.NotNull();
             if (sent == budget)
                 return new SyncOutcome.Exceeded();
             sent++;
@@ -1322,32 +1330,99 @@ public sealed class ServerMachineController : IDisposable
                 && string.Equals(next.Trigger, request.Fields?.Trigger, StringComparison.Ordinal)
                     ? (confirmed.Snapshot.Revision, true)
                     : default;
-            switch (outcome)
-            {
-                case SendOutcome.Confirmed:
-                    continue;
-                case SendOutcome.Refused refused when Replans.Contains(refused.Problem.Code):
-                    if (reread)
-                        return new SyncOutcome.Refused(refused.Problem);
-                    reread = true;
-                    // A divergence is read again already, and nothing is sent until it answers.
-                    if (
-                        !string.Equals(
-                            refused.Problem.Code,
-                            ClientDivergence,
-                            StringComparison.Ordinal
-                        )
-                    )
-                        Reload(rowId: null);
-                    continue;
-                case SendOutcome.Refused refused:
-                    return new SyncOutcome.Refused(refused.Problem);
-                case SendOutcome.Failed failed:
-                    return new SyncOutcome.Failed(failed.Problem);
-                case SendOutcome.Stopped stopped:
-                    return new SyncOutcome.Stopped(stopped.Error);
-            }
+            if (SyncEnded(outcome, ref reread) is { } ended)
+                return ended;
         }
+    }
+
+    // The next event to send toward the request's target, or null when the sync ends here: `ended` says how.
+    private PlannedEvent? PlanNext(
+        SyncRequest request,
+        (long? Revision, bool Set) fieldsAnswered,
+        out SyncOutcome? ended
+    )
+    {
+        ended = null;
+        switch (Plan(_confirmed.NotNull(), request))
+        {
+            case PlanResult.Planned { Events.Count: 0 }:
+                ended = new SyncOutcome.Synced(ConfirmedSnapshot());
+                return null;
+            case PlanResult.Planned planned:
+                return planned.Events[0];
+            // At the target with only the fields event left, which rests on a rule this client cannot evaluate: the
+            // server applied it there when it confirmed it, and nothing has been confirmed since.
+            case PlanResult.Undetermined { Events.Count: 0 } undetermined
+                when string.Equals(
+                    undetermined.Trigger,
+                    request.Fields?.Trigger,
+                    StringComparison.Ordinal
+                )
+                    && string.Equals(
+                        _confirmed.NotNull().State,
+                        request.Target,
+                        StringComparison.Ordinal
+                    )
+                    && fieldsAnswered.Set
+                    && fieldsAnswered.Revision == _revision:
+                ended = new SyncOutcome.Synced(ConfirmedSnapshot());
+                return null;
+            case PlanResult.Undetermined undetermined:
+                // The events up to the edge, then the edge itself, which the controller sends with no prediction: the
+                // fields event with the fields' input.
+                return undetermined.Events.Count > 0 ? undetermined.Events[0]
+                    : request.Fields is { } fields
+                    && string.Equals(undetermined.Trigger, fields.Trigger, StringComparison.Ordinal)
+                        ? fields
+                    : new PlannedEvent(undetermined.Trigger);
+            case PlanResult.Invalid invalid:
+                ended = new SyncOutcome.Invalid(invalid.Trigger, invalid.Target)
+                {
+                    Code = invalid.Code,
+                };
+                return null;
+            case PlanResult.Unreachable:
+                ended = new SyncOutcome.Unreachable();
+                return null;
+            case null:
+                ended = new SyncOutcome.Failed(
+                    Refusal(
+                        ClientOutdated,
+                        "This client's engine cannot read the machine's IR, so it cannot plan."
+                    )
+                );
+                return null;
+            default:
+                ended = new SyncOutcome.Exceeded();
+                return null;
+        }
+    }
+
+    // What a sent event's outcome ends the sync with, or null when the sync goes on.
+    private SyncOutcome? SyncEnded(SendOutcome outcome, ref bool reread)
+    {
+        switch (outcome)
+        {
+            case SendOutcome.Confirmed:
+                return null;
+            case SendOutcome.Refused refused when Replans.Contains(refused.Problem.Code):
+                if (reread)
+                    return new SyncOutcome.Refused(refused.Problem);
+                reread = true;
+                // A divergence is read again already, and nothing is sent until it answers.
+                if (
+                    !string.Equals(refused.Problem.Code, ClientDivergence, StringComparison.Ordinal)
+                )
+                    Reload(rowId: null);
+                return null;
+            case SendOutcome.Refused refused:
+                return new SyncOutcome.Refused(refused.Problem);
+            case SendOutcome.Failed failed:
+                return new SyncOutcome.Failed(failed.Problem);
+            case SendOutcome.Stopped stopped:
+                return new SyncOutcome.Stopped(stopped.Error);
+        }
+        return null;
     }
 
     // Nothing in flight, queued or being read, and a snapshot confirmed to plan from.

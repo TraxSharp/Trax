@@ -388,67 +388,63 @@ public class FeatureMachinesTests
         scenario.Steps.Single(s => s.Status == FeatureStatus.Failed).Text.Should().EndWith(failing);
     }
 
+    private const string SystemCascadeGlossary = """
+        {
+          "version": 1,
+          "actors": { "customer": { "noun": "a customer", "roles": ["customer"] } },
+          "machines": {
+            "order": {
+              "ownedBy": "customer",
+              "noun": "order",
+              "start": "has an order",
+              "initial": "Draft",
+              "states": { "Draft": "is a draft", "Placed": "is placed", "Baking": "is baking" },
+              "triggers": { "Bake": { "phrase": "{subject} starts baking" } }
+            },
+            "shop": {
+              "system": "shop/main",
+              "name": "the shop",
+              "initial": "Closed",
+              "states": { "Closed": "is closed", "Open": "is open", "Busy": "is busy" },
+              "triggers": {
+                "Open": { "phrase": "the shop opens" },
+                "Rush": { "phrase": "the shop gets busy" }
+              }
+            }
+          }
+        }
+        """;
+
+    private const string CascadeShopFeature = """
+        Feature: Shop
+          Scenario: Opening bakes the waiting orders, which keeps the shop busy
+            Given Ada is a customer
+            And Ada has an order
+            And Ada's order is placed
+            And the shop is closed
+            When the shop opens
+            Then the shop is open
+            And Ada's order is baking
+            And the shop is busy
+
+          Scenario: The shop gets busy
+            Given the shop is open
+            When the shop gets busy
+            Then the shop is busy
+
+          Scenario: An order goes in the oven
+            Given Ada is a customer
+            And Ada has an order
+            And Ada's order is placed
+            When Ada's order starts baking
+            Then Ada's order is baking
+        """;
+
     [Test]
     public void A_cascade_that_comes_back_to_a_system_instance_is_caused_by_the_step_before_it()
     {
-        var glossary = FeatureGlossary.Read(
-            """
-            {
-              "version": 1,
-              "actors": { "customer": { "noun": "a customer", "roles": ["customer"] } },
-              "machines": {
-                "order": {
-                  "ownedBy": "customer",
-                  "noun": "order",
-                  "start": "has an order",
-                  "initial": "Draft",
-                  "states": { "Draft": "is a draft", "Placed": "is placed", "Baking": "is baking" },
-                  "triggers": { "Bake": { "phrase": "{subject} starts baking" } }
-                },
-                "shop": {
-                  "system": "shop/main",
-                  "name": "the shop",
-                  "initial": "Closed",
-                  "states": { "Closed": "is closed", "Open": "is open", "Busy": "is busy" },
-                  "triggers": {
-                    "Open": { "phrase": "the shop opens" },
-                    "Rush": { "phrase": "the shop gets busy" }
-                  }
-                }
-              }
-            }
-            """
-        );
-        FeatureFile[] features =
-        [
-            new(
-                "shop.feature",
-                """
-                Feature: Shop
-                  Scenario: Opening bakes the waiting orders, which keeps the shop busy
-                    Given Ada is a customer
-                    And Ada has an order
-                    And Ada's order is placed
-                    And the shop is closed
-                    When the shop opens
-                    Then the shop is open
-                    And Ada's order is baking
-                    And the shop is busy
-
-                  Scenario: The shop gets busy
-                    Given the shop is open
-                    When the shop gets busy
-                    Then the shop is busy
-
-                  Scenario: An order goes in the oven
-                    Given Ada is a customer
-                    And Ada has an order
-                    And Ada's order is placed
-                    When Ada's order starts baking
-                    Then Ada's order is baking
-                """
-            ),
-        ];
+        var glossary = FeatureGlossary.Read(SystemCascadeGlossary);
+        FeatureFile[] features = [new("shop.feature", CascadeShopFeature)];
 
         var derived = FeatureMachines.Derive(glossary, features);
 

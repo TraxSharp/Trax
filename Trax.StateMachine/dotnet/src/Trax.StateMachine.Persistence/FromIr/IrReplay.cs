@@ -86,6 +86,19 @@ internal sealed class IrReplay(
         foreach (var (state, rule) in ir["invariants"] as JsonObject ?? [])
             m.In(State<TState>(state)).Requires(IrMachine.ReadRule(rule.NotNull().AsObject()));
 
+        ConfigureTransitions(m);
+
+        ConfigureOutcomes(m);
+        ConfigureTimers(m);
+        ConfigureAccess(m);
+        if (ir["differential"] is JsonObject differential)
+            m.Differential(d => ConfigureDifferential(d, differential));
+    }
+
+    private void ConfigureTransitions<TState, TTrigger>(IMachineBuilder<TState, TTrigger> m)
+        where TState : struct, Enum
+        where TTrigger : struct, Enum
+    {
         var inputs = ir["inputs"].NotNull().AsObject();
         foreach (var node in ir["transitions"].NotNull().AsArray())
         {
@@ -113,12 +126,6 @@ internal sealed class IrReplay(
                     .Invoke(t, [effect["keyPrefix"].NotNull().GetValue<string>()]);
             t.To(State<TState>(edge["to"]));
         }
-
-        ConfigureOutcomes(m);
-        ConfigureTimers(m);
-        ConfigureAccess(m);
-        if (ir["differential"] is JsonObject differential)
-            m.Differential(d => ConfigureDifferential(d, differential));
     }
 
     // Each invoking state runs the train the host file names for it, given the context fields it maps, and routes each

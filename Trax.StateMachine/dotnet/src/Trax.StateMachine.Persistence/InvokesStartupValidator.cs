@@ -72,47 +72,7 @@ internal sealed class InvokesStartupValidator(
         var problems = new List<string>();
         var name = machine.Name;
 
-        // An outcome that enters another invoking state queues the next run with no user present, so it could be
-        // authorized only in Trax's trusted scope. A user owns this machine's instances, and their runs are
-        // authorized against them, so the chain goes through an event the user sends instead.
-        if (!internals.SystemOwned)
-            foreach (var chained in internals.ChainedOutcomes)
-                problems.Add(
-                    $"The machine '{name}' is user-owned, and the {chained.Outcome} outcome of {chained.State} "
-                        + $"enters {chained.Target}, which invokes a train of its own. Its run would be queued "
-                        + "with no user present to authorize it. Chain through an event the user sends (a "
-                        + $"continue or retry edge into {chained.Target}), or declare the machine SystemOwned() (in a glossary, a \"system\" machine)."
-                );
-
-        // A timer is the server acting with nobody present, so on a user-owned machine it may not enter an invoking
-        // state: the run would be queued for a user who never asked for it, with no one to authorize it. A timer that
-        // leaves an invoking state goes through the advance's leaving path and is allowed.
-        if (!internals.SystemOwned)
-        {
-            var invoking = declarations.Select(d => d.State).ToHashSet(StringComparer.Ordinal);
-            foreach (
-                var (timed, target) in internals.TimerTargets.OrderBy(
-                    t => t.Key,
-                    StringComparer.Ordinal
-                )
-            )
-                if (invoking.Contains(target))
-                    problems.Add(
-                        $"The machine '{name}' is user-owned, and the timer of {timed} enters {target}, which "
-                            + "invokes a train. Its run would be queued by the server with no user present to "
-                            + "authorize it. Let an event the user sends enter it, or declare the machine "
-                            + "SystemOwned() (in a glossary, a \"system\" machine)."
-                    );
-
-            // A server-only trigger is a policy's, fired with nobody present, so it may not enter one either.
-            foreach (var edge in internals.ServerEdges.Where(e => invoking.Contains(e.To)))
-                problems.Add(
-                    $"The machine '{name}' is user-owned, and the server-only trigger {edge.Trigger} enters "
-                        + $"{edge.To} from {edge.From}, which invokes a train. Its run would be queued by the "
-                        + "server with no user present to authorize it. Let an event the user sends enter it, or "
-                        + "declare the machine SystemOwned() (in a glossary, a \"system\" machine)."
-                );
-        }
+        AddUnattendedRuns(problems, internals, declarations, name);
 
         var launcher = services.GetService<IInvokedTrainLauncher>();
         if (launcher is null)
@@ -155,5 +115,57 @@ internal sealed class InvokesStartupValidator(
         }
 
         return problems;
+    }
+
+    // A user-owned machine's runs are authorized against its user, so nothing the server does with nobody present
+    // (an outcome, a timer, a policy's trigger) may queue one.
+    private static void AddUnattendedRuns(
+        List<string> problems,
+        IMachineInternals internals,
+        IReadOnlyList<InvokedTrainDeclaration> declarations,
+        string name
+    )
+    {
+        // An outcome that enters another invoking state queues the next run with no user present, so it could be
+        // authorized only in Trax's trusted scope. A user owns this machine's instances, and their runs are
+        // authorized against them, so the chain goes through an event the user sends instead.
+        if (!internals.SystemOwned)
+            foreach (var chained in internals.ChainedOutcomes)
+                problems.Add(
+                    $"The machine '{name}' is user-owned, and the {chained.Outcome} outcome of {chained.State} "
+                        + $"enters {chained.Target}, which invokes a train of its own. Its run would be queued "
+                        + "with no user present to authorize it. Chain through an event the user sends (a "
+                        + $"continue or retry edge into {chained.Target}), or declare the machine SystemOwned() (in a glossary, a \"system\" machine)."
+                );
+
+        // A timer is the server acting with nobody present, so on a user-owned machine it may not enter an invoking
+        // state: the run would be queued for a user who never asked for it, with no one to authorize it. A timer that
+        // leaves an invoking state goes through the advance's leaving path and is allowed.
+        if (!internals.SystemOwned)
+        {
+            var invoking = declarations.Select(d => d.State).ToHashSet(StringComparer.Ordinal);
+            foreach (
+                var (timed, target) in internals.TimerTargets.OrderBy(
+                    t => t.Key,
+                    StringComparer.Ordinal
+                )
+            )
+                if (invoking.Contains(target))
+                    problems.Add(
+                        $"The machine '{name}' is user-owned, and the timer of {timed} enters {target}, which "
+                            + "invokes a train. Its run would be queued by the server with no user present to "
+                            + "authorize it. Let an event the user sends enter it, or declare the machine "
+                            + "SystemOwned() (in a glossary, a \"system\" machine)."
+                    );
+
+            // A server-only trigger is a policy's, fired with nobody present, so it may not enter one either.
+            foreach (var edge in internals.ServerEdges.Where(e => invoking.Contains(e.To)))
+                problems.Add(
+                    $"The machine '{name}' is user-owned, and the server-only trigger {edge.Trigger} enters "
+                        + $"{edge.To} from {edge.From}, which invokes a train. Its run would be queued by the "
+                        + "server with no user present to authorize it. Let an event the user sends enter it, or "
+                        + "declare the machine SystemOwned() (in a glossary, a \"system\" machine)."
+                );
+        }
     }
 }

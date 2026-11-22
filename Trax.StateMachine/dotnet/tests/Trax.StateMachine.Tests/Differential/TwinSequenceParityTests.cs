@@ -98,6 +98,16 @@ public class TwinSequenceParityTests
 
     private static IEnumerable<Subject> Subjects(JsonObject checkoutIr)
     {
+        foreach (var subject in TurnstileAndCheckout(checkoutIr))
+            yield return subject;
+        foreach (var subject in IngestAndReminder())
+            yield return subject;
+        foreach (var subject in Wait())
+            yield return subject;
+    }
+
+    private static IEnumerable<Subject> TurnstileAndCheckout(JsonObject checkoutIr)
+    {
         yield return For(
             "turnstile",
             DeclarativeTurnstile.Machine,
@@ -150,7 +160,10 @@ public class TwinSequenceParityTests
             [],
             [null, new JsonObject(), new JsonObject { ["receipt"] = "r-1" }]
         );
+    }
 
+    private static IEnumerable<Subject> IngestAndReminder()
+    {
         var output = IngestMachine.Built.Invokes[IngestState.Fetching];
         yield return For(
             "ingest",
@@ -183,7 +196,10 @@ public class TwinSequenceParityTests
             ["Review.after"],
             [null]
         );
+    }
 
+    private static IEnumerable<Subject> Wait()
+    {
         // A timer that reads its duration from the context: the duration grammar is ASCII in both engines, so a
         // duration written with other digits is invalid-input in each.
         var fetched = WaitMachine.Built.Invokes[WaitState.Fetching];
@@ -279,7 +295,34 @@ public class TwinSequenceParityTests
         string engineRoot
     )
     {
-        var request = new JsonObject
+        var request = TwinRequest(subject, batch, engineRoot);
+
+        var twin = (JsonArray)
+            JsonNode
+                .Parse(await RunTool(engineRoot, request.ToJsonString()).ConfigureAwait(false))
+                .NotNull();
+
+        var diffs = new List<string>();
+        for (var i = 0; i < batch.Length; i++)
+        {
+            var current = subject.Starts[batch[i].Start];
+            var answers = (JsonArray)twin[i].NotNull();
+            CompareSequence(subject, batch[i], current, answers, i, diffs);
+        }
+
+        diffs
+            .Should()
+            .BeEmpty(
+                $"the engines agree after every step ({Adr}):\n" + string.Join('\n', diffs.Take(10))
+            );
+    }
+
+    private static JsonObject TwinRequest(
+        Subject subject,
+        (int Start, Step[] Steps)[] batch,
+        string engineRoot
+    ) =>
+        new JsonObject
         {
             ["engineSrc"] = Path.Combine(engineRoot, "src"),
             ["machines"] = new JsonObject
@@ -312,74 +355,67 @@ public class TwinSequenceParityTests
             ),
         };
 
-        var twin = (JsonArray)
-            JsonNode
-                .Parse(await RunTool(engineRoot, request.ToJsonString()).ConfigureAwait(false))
-                .NotNull();
-
-        var diffs = new List<string>();
-        for (var i = 0; i < batch.Length; i++)
+    // Steps both engines through one sequence, and records the first step they disagree on.
+    private static void CompareSequence(
+        Subject subject,
+        (int Start, Step[] Steps) sequence,
+        Snapshot current,
+        JsonArray answers,
+        int i,
+        List<string> diffs
+    )
+    {
+        for (var n = 0; n < sequence.Steps.Length; n++)
         {
-            var current = subject.Starts[batch[i].Start];
-            var answers = (JsonArray)twin[i].NotNull();
-            for (var n = 0; n < batch[i].Steps.Length; n++)
+            var step = sequence.Steps[n];
+            var result = subject.Apply(current, step);
+            if (result is AdvanceResult.Transitioned t)
+                current = t.Snapshot;
+            var (outcome, reason) = result switch
             {
-                var step = batch[i].Steps[n];
-                var result = subject.Apply(current, step);
-                if (result is AdvanceResult.Transitioned t)
-                    current = t.Snapshot;
-                var (outcome, reason) = result switch
-                {
-                    AdvanceResult.Transitioned => ("transitioned", (string?)null),
-                    AdvanceResult.Rejected r => ("rejected", r.Reason.ToWire()),
-                    _ => ("unknown", null),
-                };
-                var wire = subject.Serialize(current);
+                AdvanceResult.Transitioned => ("transitioned", (string?)null),
+                AdvanceResult.Rejected r => ("rejected", r.Reason.ToWire()),
+                _ => ("unknown", null),
+            };
+            var wire = subject.Serialize(current);
 
-                // The C# half of the contract: an outcome or a timer is never applied through advance.
-                if (
-                    step.Op == Op.Advance
-                    && (
-                        subject.OutcomeTriggers.Contains(step.Trigger, StringComparer.Ordinal)
-                        || subject.TimerTriggers.Contains(step.Trigger, StringComparer.Ordinal)
+            // The C# half of the contract: an outcome or a timer is never applied through advance.
+            if (
+                step.Op == Op.Advance
+                && (
+                    subject.OutcomeTriggers.Contains(step.Trigger, StringComparer.Ordinal)
+                    || subject.TimerTriggers.Contains(step.Trigger, StringComparer.Ordinal)
+                )
+                && !string.Equals(outcome, "rejected", StringComparison.Ordinal)
+            )
+                diffs.Add(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"[{subject.Name} #{i} step {n}] C# advance applied {step.Trigger}"
                     )
-                    && !string.Equals(outcome, "rejected", StringComparison.Ordinal)
-                )
-                    diffs.Add(
-                        string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"[{subject.Name} #{i} step {n}] C# advance applied {step.Trigger}"
-                        )
-                    );
+                );
 
-                var answer = (JsonObject)answers[n].NotNull();
-                var twinOutcome = answer["outcome"].NotNull().GetValue<string>();
-                var twinReason = answer["reason"]?.GetValue<string>();
-                var twinWire = answer["wire"].NotNull().GetValue<string>();
-                if (
-                    !string.Equals(outcome, twinOutcome, StringComparison.Ordinal)
-                    || !string.Equals(reason, twinReason, StringComparison.Ordinal)
-                    || !string.Equals(wire, twinWire, StringComparison.Ordinal)
-                )
-                {
-                    diffs.Add(
-                        string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"[{subject.Name} #{i} step {n}: {step.Op} {step.Trigger} "
-                        )
-                            + $"{step.Input?.ToJsonString()}] C# {outcome} {reason ?? wire}, "
-                            + $"twin {twinOutcome} {twinReason ?? twinWire}"
-                    );
-                    break;
-                }
+            var answer = (JsonObject)answers[n].NotNull();
+            var twinOutcome = answer["outcome"].NotNull().GetValue<string>();
+            var twinReason = answer["reason"]?.GetValue<string>();
+            var twinWire = answer["wire"].NotNull().GetValue<string>();
+            if (
+                !string.Equals(outcome, twinOutcome, StringComparison.Ordinal)
+                || !string.Equals(reason, twinReason, StringComparison.Ordinal)
+                || !string.Equals(wire, twinWire, StringComparison.Ordinal)
+            )
+            {
+                diffs.Add(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"[{subject.Name} #{i} step {n}: {step.Op} {step.Trigger} "
+                    )
+                        + $"{step.Input?.ToJsonString()}] C# {outcome} {reason ?? wire}, "
+                        + $"twin {twinOutcome} {twinReason ?? twinWire}"
+                );
+                break;
             }
         }
-
-        diffs
-            .Should()
-            .BeEmpty(
-                $"the engines agree after every step ({Adr}):\n" + string.Join('\n', diffs.Take(10))
-            );
     }
 
     private static JsonObject ToJson(Snapshot snapshot) =>

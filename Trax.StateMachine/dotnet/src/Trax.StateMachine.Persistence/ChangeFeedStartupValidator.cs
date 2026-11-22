@@ -70,6 +70,12 @@ internal sealed class ChangeFeedStartupValidator(
                     + "string that sets it)."
             );
 
+        WarnAboutSwitch(read);
+    }
+
+    // What the switch says that does not stop the host, but that its operator should hear.
+    private void WarnAboutSwitch(SnapshotNoticeSwitch read)
+    {
         if (options.ChangeFeed == StateMachineChangeFeed.Poll && read.DatabaseSends)
             _logger.LogWarning(
                 "StateMachineOptions.ChangeFeed is Poll, but the database still sends a change notice for every "
@@ -104,6 +110,7 @@ internal sealed class ChangeFeedStartupValidator(
             );
     }
 
+    // Why some write would send no notice
     // Why some write would send no notice, as far as this host can tell; empty when every write it can see sends one.
     private static List<string> Silent(SnapshotNoticeSwitch read)
     {

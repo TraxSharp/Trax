@@ -24,18 +24,7 @@ internal static class Satisfy
         var phrase =
             (holds ? machine.Guards[guardName].Holds : machine.Guards[guardName].Fails)
             ?? guardName;
-        string? field = rule switch
-        {
-            Rule.Present r when r.Source == RuleSource.Context => r.Field,
-            Rule.Absent r when r.Source == RuleSource.Context => r.Field,
-            Rule.NonEmpty r when r.Source == RuleSource.Context => r.Field,
-            Rule.Compare r when r.Source == RuleSource.Context => r.Field,
-            Rule.BoolEquals r when r.Source == RuleSource.Context => r.Field,
-            Rule.Count r when r.Source == RuleSource.Context => r.Field,
-            Rule.Length r when r.Source == RuleSource.Context => r.Field,
-            Rule.OneOf r when r.Source == RuleSource.Context => r.Field,
-            _ => null,
-        };
+        var field = ContextField(rule);
         if (field is null)
         {
             why = rule is Rule.All or Rule.Any or Rule.Custom
@@ -51,7 +40,34 @@ internal static class Satisfy
             return null;
         }
 
-        JsonNode? value = (rule, holds) switch
+        var value = Value(rule, holds, type);
+        copy[field] = value;
+        if (RuleEvaluator.Evaluate(rule, copy, input: null) != holds)
+        {
+            why = $"No value of '{field}' makes '{phrase}' {(holds ? "hold" : "fail")}.";
+            return null;
+        }
+        return copy;
+    }
+
+    // The one context field a guard reads, or null when it reads the input or combines rules.
+    private static string? ContextField(Rule rule) =>
+        rule switch
+        {
+            Rule.Present r when r.Source == RuleSource.Context => r.Field,
+            Rule.Absent r when r.Source == RuleSource.Context => r.Field,
+            Rule.NonEmpty r when r.Source == RuleSource.Context => r.Field,
+            Rule.Compare r when r.Source == RuleSource.Context => r.Field,
+            Rule.BoolEquals r when r.Source == RuleSource.Context => r.Field,
+            Rule.Count r when r.Source == RuleSource.Context => r.Field,
+            Rule.Length r when r.Source == RuleSource.Context => r.Field,
+            Rule.OneOf r when r.Source == RuleSource.Context => r.Field,
+            _ => null,
+        };
+
+    // A value of the field's type that makes the rule hold or fail.
+    private static JsonNode? Value(Rule rule, bool holds, string type) =>
+        (rule, holds) switch
         {
             (Rule.Present, true) or (Rule.Absent, false) or (Rule.NonEmpty, true) => Sample(type),
             (Rule.Present, false) or (Rule.Absent, true) => null,
@@ -71,14 +87,6 @@ internal static class Satisfy
             (Rule.OneOf o, _) => JsonValue.Create(string.Concat(o.Values) + "-other"),
             _ => null,
         };
-        copy[field] = value;
-        if (RuleEvaluator.Evaluate(rule, copy, input: null) != holds)
-        {
-            why = $"No value of '{field}' makes '{phrase}' {(holds ? "hold" : "fail")}.";
-            return null;
-        }
-        return copy;
-    }
 
     // A number on the side of the comparison the guard should land on.
     private static double Side(CompareOp op, double value, bool holds) =>

@@ -56,6 +56,20 @@ public class SnapshotOwnerKeyTests
             .ToListAsync()
             .ConfigureAwait(false);
 
+    private static Task<SendSnapshotOutput> SendOrder(
+        CountingEffect effect,
+        FakePrincipal principal,
+        Guid orderId
+    ) =>
+        new SendSnapshotJunction(NewRegistry(effect), principal).Run(
+            new SendSnapshotInput
+            {
+                Machine = "order",
+                Id = orderId,
+                RequestId = "r1",
+            }
+        );
+
     [TestCase("")]
     [TestCase("  ")]
     public async Task An_empty_or_whitespace_key_is_unauthenticated_for_every_mutation_and_writes_nothing(
@@ -94,14 +108,7 @@ public class SnapshotOwnerKeyTests
         var load = await new LoadSnapshotJunction(NewRegistry(effect), principal).Run(
             new LoadSnapshotInput { Machine = "turnstile", Id = turnstileId }
         );
-        var send = await new SendSnapshotJunction(NewRegistry(effect), principal).Run(
-            new SendSnapshotInput
-            {
-                Machine = "order",
-                Id = orderId,
-                RequestId = "r1",
-            }
-        );
+        var send = await SendOrder(effect, principal, orderId);
 
         save.Problem.NotNull().Code.Should().Be(RefusalCode.Unauthenticated);
         save.Snapshot.Should().BeNull();

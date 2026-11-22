@@ -561,26 +561,7 @@ public class InvokesDeclarationTests
                 "the twin never starts a train, so the IR shipped to the browser does not name the server's "
                     + "train interface"
             );
-        var edges = done["edges"].NotNull().AsArray().Cast<JsonObject>().ToList();
-        edges
-            .Select(e => e["to"].NotNull().GetValue<string>())
-            .Should()
-            .Equal("NeedsReview", "Fetched");
-        edges[0]["guard"].NotNull()["rule"].NotNull().GetValue<string>().Should().Be("boolEquals");
-        edges[0]["guard"].NotNull()["source"].NotNull().GetValue<string>().Should().Be("input");
-        edges[0]["reduce"].NotNull()["reduce"].NotNull().GetValue<string>().Should().Be("set");
-        edges[1].ContainsKey("guard").Should().BeFalse();
-
-        outcomes["Fetching.cancelled"]
-            .NotNull()["edges"]
-            .NotNull()
-            .AsArray()
-            .Single()
-            .NotNull()["to"]
-            .NotNull()
-            .GetValue<string>()
-            .Should()
-            .Be("Cancelled");
+        AssertOutcomeEdges(outcomes, done);
 
         // The success outcome's input schema is the train's output type, exported under the outcome rather than
         // with the inputs a client sends; failure and cancel take none.
@@ -607,6 +588,31 @@ public class InvokesDeclarationTests
             .Should()
             .NotContain(t => t.Contains('.'));
         done.Select(kv => kv.Key).Should().BeEquivalentTo("edges", "outcome", "output", "state");
+    }
+
+    // The done outcome's two edges, the guarded one first, and the cancelled outcome's one.
+    private static void AssertOutcomeEdges(JsonObject outcomes, JsonObject done)
+    {
+        var edges = done["edges"].NotNull().AsArray().Cast<JsonObject>().ToList();
+        edges
+            .Select(e => e["to"].NotNull().GetValue<string>())
+            .Should()
+            .Equal("NeedsReview", "Fetched");
+        edges[0]["guard"].NotNull()["rule"].NotNull().GetValue<string>().Should().Be("boolEquals");
+        edges[0]["guard"].NotNull()["source"].NotNull().GetValue<string>().Should().Be("input");
+        edges[0]["reduce"].NotNull()["reduce"].NotNull().GetValue<string>().Should().Be("set");
+        edges[1].ContainsKey("guard").Should().BeFalse();
+
+        outcomes["Fetching.cancelled"]
+            .NotNull()["edges"]
+            .NotNull()
+            .AsArray()
+            .Single()
+            .NotNull()["to"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("Cancelled");
     }
 
     [Test]

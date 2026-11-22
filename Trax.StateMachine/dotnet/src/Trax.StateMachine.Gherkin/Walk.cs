@@ -153,20 +153,7 @@ internal sealed class Walk
                 _people[p.Name] = p.Actor;
                 break;
             case Meaning.Start s:
-                var key = new InstanceKey(s.Machine, s.Person);
-                if (_instances.ContainsKey(key))
-                    Fail(
-                        step.Line,
-                        $"{s.Person} already has a {_glossary.Machines[s.Machine].Reference} in this scenario."
-                    );
-                _instances[key] = new Instance(
-                    Initial(s.Machine),
-                    InitialContext(_glossary.Machines[s.Machine]),
-                    _clock
-                );
-                Starts.Add(
-                    new StartObservation(s.Machine, _people[s.Person], _scenario, step.Line)
-                );
+                GivenStart(step, s);
                 break;
             case Meaning.InState { Still: false } s:
                 var arranged = InstanceAt(new InstanceKey(s.Machine, s.Owner, s.Key));
@@ -174,23 +161,7 @@ internal sealed class Walk
                 arranged.Arranged = true;
                 break;
             case Meaning.Guard g:
-                var instance = InstanceAt(new InstanceKey(g.Machine, g.Owner, g.Key));
-                if (
-                    Satisfy.Context(
-                        _glossary.Machines[g.Machine],
-                        g.Name,
-                        g.Holds,
-                        instance.Context,
-                        out var why
-                    ) is
-                    { } context
-                )
-                {
-                    instance.Context = context;
-                    instance.Arranged = true;
-                }
-                else
-                    Fail(step.Line, why.NotNull());
+                GivenGuard(step, g);
                 break;
             default:
                 Fail(
@@ -201,97 +172,52 @@ internal sealed class Walk
         }
     }
 
+    private void GivenStart(FeatureStep step, Meaning.Start s)
+    {
+        var key = new InstanceKey(s.Machine, s.Person);
+        if (_instances.ContainsKey(key))
+            Fail(
+                step.Line,
+                $"{s.Person} already has a {_glossary.Machines[s.Machine].Reference} in this scenario."
+            );
+        _instances[key] = new Instance(
+            Initial(s.Machine),
+            InitialContext(_glossary.Machines[s.Machine]),
+            _clock
+        );
+        Starts.Add(new StartObservation(s.Machine, _people[s.Person], _scenario, step.Line));
+    }
+
+    private void GivenGuard(FeatureStep step, Meaning.Guard g)
+    {
+        var instance = InstanceAt(new InstanceKey(g.Machine, g.Owner, g.Key));
+        if (
+            Satisfy.Context(
+                _glossary.Machines[g.Machine],
+                g.Name,
+                g.Holds,
+                instance.Context,
+                out var why
+            ) is
+            { } context
+        )
+        {
+            instance.Context = context;
+            instance.Arranged = true;
+        }
+        else
+            Fail(step.Line, why.NotNull());
+    }
+
     private void When(FeatureStep step, Meaning meaning)
     {
         switch (meaning)
         {
             case Meaning.Act or Meaning.Happens:
-                var (machine, owner, instanceKey, trigger, input) = meaning switch
-                {
-                    Meaning.Act a => (a.Machine, a.Owner, (string?)null, a.Trigger, a.Input),
-                    Meaning.Happens h => (h.Machine, h.Owner, h.Key, h.Trigger, h.Input),
-                    _ => throw new InvalidOperationException(),
-                };
-                // A person acts on their own instance, and a system machine is moved by the server alone (ADR
-                // 0058).
-                if (meaning is Meaning.Act act)
-                {
-                    var acted = _glossary.Machines[act.Machine];
-                    if (acted.IsSystem)
-                    {
-                        Fail(
-                            step.Line,
-                            $"'{step.Text}': {act.Person} fires {acted.Reference}, and only the server moves a system machine. Say what happens instead: '{acted.Reference} ...'."
-                        );
-                        return;
-                    }
-                    if (!string.Equals(act.Owner, act.Person, StringComparison.Ordinal))
-                    {
-                        Fail(
-                            step.Line,
-                            $"'{step.Text}': {act.Person} acts on {act.Owner}'s {acted.Reference}. A person acts on their own; one acting on another's needs instances shared between people, which Trax does not have yet."
-                        );
-                        return;
-                    }
-                }
-                // An effect's trigger is sent by its instance's owner, and the effect runner fires it with the receipt,
-                // which an in-memory run takes from the glossary's example.
-                if (_glossary.Machines[machine].Triggers[trigger].Effect is { } effect)
-                {
-                    if (meaning is Meaning.Happens)
-                    {
-                        Fail(
-                            step.Line,
-                            $"'{step.Text}' sends an effect with no person, and an effect's trigger is sent by its owner."
-                        );
-                        return;
-                    }
-                    input = new JsonObject { [Glossary.ReceiptField] = effect.Example };
-                }
-                var key = new InstanceKey(machine, owner, instanceKey);
-                if (!_instances.TryGetValue(key, out var instance) || instance.State is null)
-                {
-                    Fail(
-                        step.Line,
-                        $"'{step.Text}' fires on {Name(key)}, and the scenario has not said what state it is in. Give it with a Given."
-                    );
-                    return;
-                }
-                _pending = new Pending(
-                    meaning,
-                    key,
-                    instance.State,
-                    (JsonObject)instance.Context.DeepClone(),
-                    input,
-                    step.Line,
-                    instance.Arranged
-                );
+                WhenFires(step, meaning);
                 break;
             case Meaning.Outcome o:
-                var waiting = _instances
-                    .Where(i =>
-                        string.Equals(i.Key.Machine, o.Machine, StringComparison.Ordinal)
-                        && string.Equals(i.Value.State, o.State, StringComparison.Ordinal)
-                    )
-                    .ToList();
-                if (waiting.Count != 1)
-                {
-                    Fail(
-                        step.Line,
-                        waiting.Count == 0
-                            ? $"'{step.Text}' is an outcome of {o.State}, and no {_glossary.Machines[o.Machine].Reference} in this scenario is in it."
-                            : $"'{step.Text}' is an outcome of {o.State}, and more than one {_glossary.Machines[o.Machine].Reference} here is in it."
-                    );
-                    return;
-                }
-                _pending = new Pending(
-                    meaning,
-                    waiting[0].Key,
-                    o.State,
-                    (JsonObject)waiting[0].Value.Context.DeepClone(),
-                    Input: null,
-                    step.Line
-                );
+                WhenOutcome(step, o);
                 break;
             case Meaning.Passes p:
                 if (_clock > TimeSpan.MaxValue - p.Time)
@@ -318,6 +244,104 @@ internal sealed class Walk
         }
     }
 
+    // A trigger fired by a person or by no one: what it fires on, and what it was sent with.
+    private void WhenFires(FeatureStep step, Meaning meaning)
+    {
+        var (machine, owner, instanceKey, trigger, input) = meaning switch
+        {
+            Meaning.Act a => (a.Machine, a.Owner, (string?)null, a.Trigger, a.Input),
+            Meaning.Happens h => (h.Machine, h.Owner, h.Key, h.Trigger, h.Input),
+            _ => throw new InvalidOperationException(),
+        };
+        // A person acts on their own instance, and a system machine is moved by the server alone (ADR
+        // 0058).
+        if (meaning is Meaning.Act act && RefusedAct(step, act))
+            return;
+        // An effect's trigger is sent by its instance's owner, and the effect runner fires it with the receipt,
+        // which an in-memory run takes from the glossary's example.
+        if (_glossary.Machines[machine].Triggers[trigger].Effect is { } effect)
+        {
+            if (meaning is Meaning.Happens)
+            {
+                Fail(
+                    step.Line,
+                    $"'{step.Text}' sends an effect with no person, and an effect's trigger is sent by its owner."
+                );
+                return;
+            }
+            input = new JsonObject { [Glossary.ReceiptField] = effect.Example };
+        }
+        var key = new InstanceKey(machine, owner, instanceKey);
+        if (!_instances.TryGetValue(key, out var instance) || instance.State is null)
+        {
+            Fail(
+                step.Line,
+                $"'{step.Text}' fires on {Name(key)}, and the scenario has not said what state it is in. Give it with a Given."
+            );
+            return;
+        }
+        _pending = new Pending(
+            meaning,
+            key,
+            instance.State,
+            (JsonObject)instance.Context.DeepClone(),
+            input,
+            step.Line,
+            instance.Arranged
+        );
+    }
+
+    // True when the person may not fire on the instance: a system machine, or another person's.
+    private bool RefusedAct(FeatureStep step, Meaning.Act act)
+    {
+        var acted = _glossary.Machines[act.Machine];
+        if (acted.IsSystem)
+        {
+            Fail(
+                step.Line,
+                $"'{step.Text}': {act.Person} fires {acted.Reference}, and only the server moves a system machine. Say what happens instead: '{acted.Reference} ...'."
+            );
+            return true;
+        }
+        if (!string.Equals(act.Owner, act.Person, StringComparison.Ordinal))
+        {
+            Fail(
+                step.Line,
+                $"'{step.Text}': {act.Person} acts on {act.Owner}'s {acted.Reference}. A person acts on their own; one acting on another's needs instances shared between people, which Trax does not have yet."
+            );
+            return true;
+        }
+        return false;
+    }
+
+    private void WhenOutcome(FeatureStep step, Meaning.Outcome o)
+    {
+        var waiting = _instances
+            .Where(i =>
+                string.Equals(i.Key.Machine, o.Machine, StringComparison.Ordinal)
+                && string.Equals(i.Value.State, o.State, StringComparison.Ordinal)
+            )
+            .ToList();
+        if (waiting.Count != 1)
+        {
+            Fail(
+                step.Line,
+                waiting.Count == 0
+                    ? $"'{step.Text}' is an outcome of {o.State}, and no {_glossary.Machines[o.Machine].Reference} in this scenario is in it."
+                    : $"'{step.Text}' is an outcome of {o.State}, and more than one {_glossary.Machines[o.Machine].Reference} here is in it."
+            );
+            return;
+        }
+        _pending = new Pending(
+            o,
+            waiting[0].Key,
+            o.State,
+            (JsonObject)waiting[0].Value.Context.DeepClone(),
+            Input: null,
+            step.Line
+        );
+    }
+
     private void Then(FeatureStep step, Meaning meaning)
     {
         if (_afterTime && meaning is Meaning.InState timed)
@@ -330,37 +354,10 @@ internal sealed class Walk
             case Meaning.InState s
                 when _pending is not null
                     && _pending.Key == new InstanceKey(s.Machine, s.Owner, s.Key):
-                // After another instance moved, a Then naming this one in another state than its first Then is a
-                // policy that came back to it: the Thens follow the cascade in order (EFF-220).
-                if (
-                    !s.Still
-                    && _pending.Cascades.Count > 0
-                    && _pending.Thens.OfType<Meaning.InState>().Any(t => !t.Still)
-                    && _pending.Cascades[^1].Key != _pending.Key
-                    && !string.Equals(
-                        _pending.Thens.OfType<Meaning.InState>().Last(t => !t.Still).State,
-                        s.State,
-                        StringComparison.Ordinal
-                    )
-                )
-                    _pending.Cascades.Add((_pending.Key, s.State, step.Line));
-                else
-                    _pending.Thens.Add(s);
+                ThenPendingInState(step, s, _pending);
                 break;
             case Meaning.Told or Meaning.Denied:
-                var person = meaning is Meaning.Told t
-                    ? t.Person
-                    : ((Meaning.Denied)meaning).Person;
-                if (
-                    _pending?.When is Meaning.Act act
-                    && string.Equals(act.Person, person, StringComparison.Ordinal)
-                )
-                    _pending.Thens.Add(meaning);
-                else
-                    Fail(
-                        step.Line,
-                        $"'{step.Text}' answers no act of {person}'s. It follows the When in which {person} acts."
-                    );
+                ThenAnswered(step, meaning);
                 break;
             case Meaning.InState { Still: false } s
                 when _pending is not null
@@ -375,15 +372,7 @@ internal sealed class Walk
                 );
                 break;
             case Meaning.InState s:
-                var key = new InstanceKey(s.Machine, s.Owner, s.Key);
-                if (
-                    !_instances.TryGetValue(key, out var instance)
-                    || !string.Equals(instance.State, s.State, StringComparison.Ordinal)
-                )
-                    Fail(
-                        step.Line,
-                        $"'{step.Text}': {Name(key)} is {(instance?.State ?? "not started")} here, and nothing in this scenario moves it."
-                    );
+                ThenUnmoved(step, s);
                 break;
             case Meaning.ViewShows v when _pending is not null:
                 // Read once the When is settled, so the view shows what the When did.
@@ -393,20 +382,7 @@ internal sealed class Walk
                 CheckView(step, v);
                 break;
             case Meaning.Guard g:
-                var guarded = InstanceAt(new InstanceKey(g.Machine, g.Owner, g.Key));
-                var guard = _glossary.Machines[g.Machine].Guards[g.Name];
-                if (
-                    RuleEvaluator.Evaluate(
-                        IrMachine.ReadRule(guard.Rule),
-                        guarded.Context,
-                        input: null,
-                        _glossary.Machines[g.Machine].ExampleRules
-                    ) != g.Holds
-                )
-                    Fail(
-                        step.Line,
-                        $"'{step.Text}' does not hold of {Name(new InstanceKey(g.Machine, g.Owner, g.Key))} here."
-                    );
+                ThenGuard(step, g);
                 break;
             default:
                 Fail(
@@ -415,6 +391,73 @@ internal sealed class Walk
                 );
                 break;
         }
+    }
+
+    private static void ThenPendingInState(FeatureStep step, Meaning.InState s, Pending pending)
+    {
+        // After another instance moved, a Then naming this one in another state than its first Then is a
+        // policy that came back to it: the Thens follow the cascade in order (EFF-220).
+        if (
+            !s.Still
+            && pending.Cascades.Count > 0
+            && pending.Thens.OfType<Meaning.InState>().Any(t => !t.Still)
+            && pending.Cascades[^1].Key != pending.Key
+            && !string.Equals(
+                pending.Thens.OfType<Meaning.InState>().Last(t => !t.Still).State,
+                s.State,
+                StringComparison.Ordinal
+            )
+        )
+            pending.Cascades.Add((pending.Key, s.State, step.Line));
+        else
+            pending.Thens.Add(s);
+    }
+
+    // A told or a not-allowed Then answers the act of the person it names.
+    private void ThenAnswered(FeatureStep step, Meaning meaning)
+    {
+        var person = meaning is Meaning.Told t ? t.Person : ((Meaning.Denied)meaning).Person;
+        if (
+            _pending?.When is Meaning.Act act
+            && string.Equals(act.Person, person, StringComparison.Ordinal)
+        )
+            _pending.Thens.Add(meaning);
+        else
+            Fail(
+                step.Line,
+                $"'{step.Text}' answers no act of {person}'s. It follows the When in which {person} acts."
+            );
+    }
+
+    private void ThenUnmoved(FeatureStep step, Meaning.InState s)
+    {
+        var key = new InstanceKey(s.Machine, s.Owner, s.Key);
+        if (
+            !_instances.TryGetValue(key, out var instance)
+            || !string.Equals(instance.State, s.State, StringComparison.Ordinal)
+        )
+            Fail(
+                step.Line,
+                $"'{step.Text}': {Name(key)} is {(instance?.State ?? "not started")} here, and nothing in this scenario moves it."
+            );
+    }
+
+    private void ThenGuard(FeatureStep step, Meaning.Guard g)
+    {
+        var guarded = InstanceAt(new InstanceKey(g.Machine, g.Owner, g.Key));
+        var guard = _glossary.Machines[g.Machine].Guards[g.Name];
+        if (
+            RuleEvaluator.Evaluate(
+                IrMachine.ReadRule(guard.Rule),
+                guarded.Context,
+                input: null,
+                _glossary.Machines[g.Machine].ExampleRules
+            ) != g.Holds
+        )
+            Fail(
+                step.Line,
+                $"'{step.Text}' does not hold of {Name(new InstanceKey(g.Machine, g.Owner, g.Key))} here."
+            );
     }
 
     // A Then after time passed: the instance moved, which is its state's timer firing, or it is still where it was,
@@ -544,39 +587,63 @@ internal sealed class Walk
 
         if (pending.When is Meaning.Outcome outcome)
         {
-            if (moved.Count != 1)
-            {
-                Fail(
-                    pending.Line,
-                    $"Say where '{outcome.Phrase}' takes {Name(pending.Key)}: 'Then {Name(pending.Key)} is ...'."
-                );
-                return;
-            }
-            Outcomes.Add(
-                new OutcomeObservation(
-                    outcome.Machine,
-                    outcome.State,
-                    outcome.Phrase,
-                    moved[0],
-                    _scenario,
-                    pending.Line
-                )
-            );
-            var invoke = _glossary.Machines[outcome.Machine].Invokes[outcome.State];
-            var definition = invoke.Outcomes[outcome.Phrase];
-            if (definition.Reduce is { } outcomeReduce)
-                instance.Context = ReductionEvaluator.Apply(
-                    IrMachine.ReadReduction(outcomeReduce),
-                    instance.Context,
-                    invoke.Examples.GetValueOrDefault(outcome.Phrase),
-                    InitialContext(_glossary.Machines[outcome.Machine]),
-                    _glossary.Machines[outcome.Machine].ExampleReductions
-                );
-            instance.Enter(moved[0], _clock);
-            Cascade(pending, moved[0]);
+            SettleOutcome(pending, instance, outcome, moved);
             return;
         }
 
+        SettleFired(pending, instance, moved, still, told, denied);
+    }
+
+    // An outcome of an invoked train: where it took the instance, and what it did to its context.
+    private void SettleOutcome(
+        Pending pending,
+        Instance instance,
+        Meaning.Outcome outcome,
+        List<string> moved
+    )
+    {
+        if (moved.Count != 1)
+        {
+            Fail(
+                pending.Line,
+                $"Say where '{outcome.Phrase}' takes {Name(pending.Key)}: 'Then {Name(pending.Key)} is ...'."
+            );
+            return;
+        }
+        Outcomes.Add(
+            new OutcomeObservation(
+                outcome.Machine,
+                outcome.State,
+                outcome.Phrase,
+                moved[0],
+                _scenario,
+                pending.Line
+            )
+        );
+        var invoke = _glossary.Machines[outcome.Machine].Invokes[outcome.State];
+        var definition = invoke.Outcomes[outcome.Phrase];
+        if (definition.Reduce is { } outcomeReduce)
+            instance.Context = ReductionEvaluator.Apply(
+                IrMachine.ReadReduction(outcomeReduce),
+                instance.Context,
+                invoke.Examples.GetValueOrDefault(outcome.Phrase),
+                InitialContext(_glossary.Machines[outcome.Machine]),
+                _glossary.Machines[outcome.Machine].ExampleReductions
+            );
+        instance.Enter(moved[0], _clock);
+        Cascade(pending, moved[0]);
+    }
+
+    // A trigger fired: what it did, as an observation, and the instance moved or not.
+    private void SettleFired(
+        Pending pending,
+        Instance instance,
+        List<string> moved,
+        List<Meaning.InState> still,
+        List<string> told,
+        Meaning.Denied? denied
+    )
+    {
         var (machine, trigger, person) = pending.When switch
         {
             Meaning.Act a => (a.Machine, a.Trigger, (string?)a.Person),

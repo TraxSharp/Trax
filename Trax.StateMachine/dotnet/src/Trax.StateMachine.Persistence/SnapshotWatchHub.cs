@@ -388,65 +388,87 @@ internal sealed class SnapshotWatchHub(
             var rows = await db
                 .SnapshotDrafts.AsNoTracking()
                 .Where(d => chunk.Contains(d.RowId))
-                .Select(d => new
+                .Select(d => new ReadRow
                 {
-                    d.RowId,
-                    d.Id,
-                    d.Machine,
-                    d.OwnerKind,
-                    d.UserKey,
-                    d.Revision,
-                    d.Version,
-                    d.State,
-                    d.Context,
-                    d.IrHash,
-                    d.UpdatedAt,
-                    d.CreatedAt,
-                    d.DueAt,
+                    RowId = d.RowId,
+                    Id = d.Id,
+                    Machine = d.Machine,
+                    OwnerKind = d.OwnerKind,
+                    UserKey = d.UserKey,
+                    Revision = d.Revision,
+                    Version = d.Version,
+                    State = d.State,
+                    Context = d.Context,
+                    IrHash = d.IrHash,
+                    UpdatedAt = d.UpdatedAt,
+                    CreatedAt = d.CreatedAt,
+                    DueAt = d.DueAt,
                     HasInvokeToken = d.InvokeToken != null,
                 })
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
             foreach (var row in rows)
-                found[row.RowId] = Unreadable(row.Machine, row.State, row.Context) is { } reason
-                    ? SnapshotRowChange.UnreadableRow(
-                        row.RowId,
-                        row.Revision,
-                        row.Machine,
-                        row.Id,
-                        row.OwnerKind,
-                        row.UserKey,
-                        row.IrHash
-                    ) with
-                    {
-                        Version = row.Version,
-                        State = row.State,
-                        UnreadableReason = reason,
-                        HasInvokeToken = row.HasInvokeToken,
-                        CreatedAt = row.CreatedAt,
-                        UpdatedAt = row.UpdatedAt,
-                    }
-                    : new SnapshotRowChange(
-                        SnapshotRowChangeKind.Changed,
-                        row.RowId,
-                        row.Revision,
-                        row.Machine,
-                        row.Id,
-                        row.OwnerKind,
-                        row.UserKey,
-                        row.Version,
-                        row.State,
-                        row.Context,
-                        row.IrHash,
-                        row.UpdatedAt
-                    )
-                    {
-                        HasInvokeToken = row.HasInvokeToken,
-                        CreatedAt = row.CreatedAt,
-                        DueAt = row.DueAt,
-                    };
+                found[row.RowId] = Change(row);
         }
         return found;
+    }
+
+    private SnapshotRowChange Change(ReadRow row) =>
+        Unreadable(row.Machine, row.State, row.Context) is { } reason
+            ? SnapshotRowChange.UnreadableRow(
+                row.RowId,
+                row.Revision,
+                row.Machine,
+                row.Id,
+                row.OwnerKind,
+                row.UserKey,
+                row.IrHash
+            ) with
+            {
+                Version = row.Version,
+                State = row.State,
+                UnreadableReason = reason,
+                HasInvokeToken = row.HasInvokeToken,
+                CreatedAt = row.CreatedAt,
+                UpdatedAt = row.UpdatedAt,
+            }
+            : new SnapshotRowChange(
+                SnapshotRowChangeKind.Changed,
+                row.RowId,
+                row.Revision,
+                row.Machine,
+                row.Id,
+                row.OwnerKind,
+                row.UserKey,
+                row.Version,
+                row.State,
+                row.Context,
+                row.IrHash,
+                row.UpdatedAt
+            )
+            {
+                HasInvokeToken = row.HasInvokeToken,
+                CreatedAt = row.CreatedAt,
+                DueAt = row.DueAt,
+            };
+
+    // A row as the hub reads it.
+    private sealed class ReadRow
+    {
+        public long RowId { get; init; }
+        public Guid Id { get; init; }
+        public required string Machine { get; init; }
+        public SnapshotOwnerKind OwnerKind { get; init; }
+        public string? UserKey { get; init; }
+        public long Revision { get; init; }
+        public int Version { get; init; }
+        public required string State { get; init; }
+        public required string Context { get; init; }
+        public string? IrHash { get; init; }
+        public DateTimeOffset UpdatedAt { get; init; }
+        public DateTimeOffset? CreatedAt { get; init; }
+        public DateTimeOffset? DueAt { get; init; }
+        public bool HasInvokeToken { get; init; }
     }
 
     // Under the gate: hands one re-read row (null when it is gone) to the watchers that have not seen it.

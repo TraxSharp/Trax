@@ -681,6 +681,28 @@ public class PolicyRunnerTests(StoreProvider provider)
                 ("Placed", "Bake", "Baking"),
             ]
         );
+        var receipt = ReceiptIr();
+        var shop = Ir(
+            "p-shop",
+            "Closed",
+            ["Closed", "Opened"],
+            ["Open"],
+            [("Closed", "Open", "Opened")]
+        );
+
+        var host = PolicyHost(order, receipt, shop);
+        var irs = new Dictionary<string, JsonObject>(StringComparer.Ordinal)
+        {
+            ["p-order"] = order,
+            ["p-receipt"] = receipt,
+            ["p-shop"] = shop,
+        };
+        return (irs, host);
+    }
+
+    // The receipt machine, whose Attach takes the order's id and records it as the link the policy follows.
+    private static JsonObject ReceiptIr()
+    {
         var receipt = Ir(
             "p-receipt",
             "Open",
@@ -714,14 +736,11 @@ public class PolicyRunnerTests(StoreProvider provider)
                 }
             ),
         };
-        var shop = Ir(
-            "p-shop",
-            "Closed",
-            ["Closed", "Opened"],
-            ["Open"],
-            [("Closed", "Open", "Opened")]
-        );
+        return receipt;
+    }
 
+    private static JsonObject PolicyHost(JsonObject order, JsonObject receipt, JsonObject shop)
+    {
         var any = new JsonObject { ["anyAuthenticated"] = true };
         var server = new JsonObject { ["server"] = true };
         var host = new JsonObject
@@ -761,39 +780,37 @@ public class PolicyRunnerTests(StoreProvider provider)
                     ["triggers"] = new JsonObject { ["Open"] = server.DeepClone() },
                 },
             },
-            ["policies"] = new JsonArray(
-                new JsonObject
-                {
-                    ["shape"] = "linked",
-                    ["when"] = new JsonObject { ["machine"] = "p-order", ["enters"] = "Expired" },
-                    ["then"] = new JsonObject
-                    {
-                        ["machine"] = "p-receipt",
-                        ["link"] = "orderId",
-                        ["trigger"] = "Cancel",
-                    },
-                },
-                new JsonObject
-                {
-                    ["shape"] = "broadcast",
-                    ["when"] = new JsonObject { ["machine"] = "p-shop", ["enters"] = "Opened" },
-                    ["then"] = new JsonObject
-                    {
-                        ["machine"] = "p-order",
-                        ["inState"] = "Placed",
-                        ["trigger"] = "Bake",
-                    },
-                }
-            ),
+            ["policies"] = Policies(),
         };
-        var irs = new Dictionary<string, JsonObject>(StringComparer.Ordinal)
-        {
-            ["p-order"] = order,
-            ["p-receipt"] = receipt,
-            ["p-shop"] = shop,
-        };
-        return (irs, host);
+        return host;
     }
+
+    // A linked policy from an order's expiry to its receipt, and a broadcast from the shop opening to the placed orders.
+    private static JsonArray Policies() =>
+        new JsonArray(
+            new JsonObject
+            {
+                ["shape"] = "linked",
+                ["when"] = new JsonObject { ["machine"] = "p-order", ["enters"] = "Expired" },
+                ["then"] = new JsonObject
+                {
+                    ["machine"] = "p-receipt",
+                    ["link"] = "orderId",
+                    ["trigger"] = "Cancel",
+                },
+            },
+            new JsonObject
+            {
+                ["shape"] = "broadcast",
+                ["when"] = new JsonObject { ["machine"] = "p-shop", ["enters"] = "Opened" },
+                ["then"] = new JsonObject
+                {
+                    ["machine"] = "p-order",
+                    ["inState"] = "Placed",
+                    ["trigger"] = "Bake",
+                },
+            }
+        );
 
     private static JsonObject Ir(
         string id,

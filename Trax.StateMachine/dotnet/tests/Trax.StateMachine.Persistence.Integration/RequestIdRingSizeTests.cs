@@ -151,6 +151,11 @@ public class RequestIdRingSizeTests(StoreProvider provider)
                     .Select(i => string.Create(CultureInfo.InvariantCulture, $"edit-{i}"))
             );
 
+        await AssertStoredNoLargerThanCounted(id, ring);
+    }
+
+    private async Task AssertStoredNoLargerThanCounted(Guid id, IReadOnlyList<RecordedRequest> ring)
+    {
         // What the column holds is no larger than what was counted.
         var storedBytes = Convert.ToInt64(
             await _host
@@ -159,8 +164,9 @@ public class RequestIdRingSizeTests(StoreProvider provider)
                     provider == StoreProvider.Postgres
                         ? $"SELECT sum(octet_length(e->>'result')) FROM {_host.NotNull().DraftTable}, jsonb_array_elements(recent_requests) e WHERE row_id = @p0"
                         : $"SELECT length(CAST(recent_requests AS BLOB)) FROM {_host.NotNull().DraftTable} WHERE row_id = @p0",
-                    await _host.NotNull().RowId(id)
-                ),
+                    await _host.NotNull().RowId(id).ConfigureAwait(false)
+                )
+                .ConfigureAwait(false),
             System.Globalization.CultureInfo.InvariantCulture
         );
         storedBytes.Should().BeLessThanOrEqualTo(RequestIdRing.MaxBytes);

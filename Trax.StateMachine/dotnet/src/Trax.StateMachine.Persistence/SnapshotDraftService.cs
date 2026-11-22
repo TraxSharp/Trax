@@ -324,30 +324,8 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                     .ConfigureAwait(false);
             else
             {
-                // A store that cannot delete on the row as read deletes by id, once one more read finds the row
-                // unchanged; the claims go after it, outside any transaction.
-                deleted =
-                    await store
-                        .Get(userKey, _machineId, id, CancellationToken.None)
-                        .ConfigureAwait(false)
-                        is { } now
-                    && now.Token == read.Token;
-                if (deleted && Invokes is { } invokes)
-                    deleted = await invokes
-                        .Store.DeleteHolding(
-                            DraftOwner.User(userKey),
-                            _machineId,
-                            id,
-                            read.InvokeToken,
-                            CancellationToken.None
-                        )
-                        .ConfigureAwait(false);
-                else if (deleted)
-                    await store
-                        .Delete(userKey, _machineId, id, CancellationToken.None)
-                        .ConfigureAwait(false);
-                if (deleted)
-                    await hold.Release().ConfigureAwait(false);
+                deleted = await DeleteByIdWhenUnchanged(userKey, id, read, hold)
+                    .ConfigureAwait(false);
             }
             if (!deleted)
                 await hold.Drop().ConfigureAwait(false);
@@ -358,6 +336,38 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
             await hold.Drop().ConfigureAwait(false);
             throw;
         }
+    }
+
+    private async Task<bool> DeleteByIdWhenUnchanged(
+        string userKey,
+        Guid id,
+        StoredSnapshot read,
+        DraftClaimHold hold
+    )
+    {
+        // A store that cannot delete on the row as read deletes by id, once one more read finds the row
+        // unchanged; the claims go after it, outside any transaction.
+        var deleted =
+            await store.Get(userKey, _machineId, id, CancellationToken.None).ConfigureAwait(false)
+                is { } now
+            && now.Token == read.Token;
+        if (deleted && Invokes is { } invokes)
+            deleted = await invokes
+                .Store.DeleteHolding(
+                    DraftOwner.User(userKey),
+                    _machineId,
+                    id,
+                    read.InvokeToken,
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
+        else if (deleted)
+            await store
+                .Delete(userKey, _machineId, id, CancellationToken.None)
+                .ConfigureAwait(false);
+        if (deleted)
+            await hold.Release().ConfigureAwait(false);
+        return deleted;
     }
 
     private async Task<AutosaveResult> Persisted(
@@ -585,63 +595,13 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 $"A start needs a request id of 1 to {RequestIdRing.MaxRequestIdLength} characters that is not blank and holds no control character."
             );
 
-        // The input is bounded before it is read, then checked against the start's own record, never the context.
-        if (SnapshotLimits.InputTooLarge(input))
-            return new StartOutcome.Rejected(
-                RefusalCode.TooLarge,
-                $"The input exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
-            );
-        if (SchemaValidator.ValidateInput(start.InputSchema, input) is { } invalid)
-            return new StartOutcome.Rejected(RefusalCode.InvalidInput, invalid);
+        if (RefuseStartInput(start, input) is { } badInput)
+            return badInput;
 
-        // The declared reduction applied to the initial context, validated exactly as a stored snapshot is read back,
-        // so nothing is stored that a later read refuses.
-        Snapshot initial;
-        try
-        {
-            var definition = machine.Definition;
-            var fresh = definition.CreateInitialSnapshot();
-            initial = fresh with { Context = start.Apply(fresh.Context, input) };
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
-        {
-            return new StartOutcome.Rejected(
-                RefusalCode.InvalidContext,
-                "The start could not build its initial context."
-            );
-        }
-        if (StorableJson.Problem(initial.Context) is { } unstorable)
-            return new StartOutcome.Rejected(RefusalCode.Malformed, unstorable);
-        var wire = machine.Serialize(initial);
-        if (Encoding.UTF8.GetByteCount(wire) > SnapshotLimits.MaxSnapshotBytes)
-            return new StartOutcome.Rejected(
-                RefusalCode.TooLarge,
-                $"The started snapshot exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
-            );
-        switch (machine.Rehydrate(wire))
-        {
-            case RehydrationResult.Ok ok:
-                initial = ok.Snapshot;
-                break;
-            case RehydrationResult.Error error:
-                return new StartOutcome.Rejected(RefusalCode.InvalidContext, error.Message);
-            default:
-                return new StartOutcome.Rejected(
-                    RefusalCode.Malformed,
-                    "Unknown rehydration result."
-                );
-        }
-
-        // A started instance enters its initial state: a timed one arms its timer now, with a duration its context
-        // must hold within bounds.
-        switch (machine.TimerFor(initial.State, initial.Context, restart: true))
-        {
-            case ({ } timer, _):
-                initial = initial with { Timer = timer, ServerRecord = false };
-                break;
-            case (_, var problem):
-                return new StartOutcome.Rejected(RefusalCode.InvalidInput, problem.NotNull());
-        }
+        var (built, refused) = BuildInitial(start, input);
+        if (refused is not null)
+            return refused;
+        var initial = built.NotNull();
 
         if (Creates is not { } creates)
             throw new InvalidOperationException(
@@ -651,16 +611,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
 
         var owner = DraftOwner.User(client.UserKey);
         var request = new StartRequest(requestId, RequestIdRing.Fingerprint("start", input));
-        var entering = InvokingNames.Contains(initial.State)
-            ? new EnteringInvoke(
-                InvokeTrain(initial.State),
-                InvokeInput(initial.State),
-                InvokedRunLimit
-            )
-            {
-                Spawn = Invoke(initial.State).Spawn,
-            }
-            : null;
+        var entering = EnteringAtStart(initial);
 
         var write = await creates
             .Create(owner, Guid.NewGuid(), initial, request, entering, Cap, cancellationToken)
@@ -673,6 +624,111 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 .Create(owner, Guid.NewGuid(), initial, request, entering, Cap, cancellationToken)
                 .ConfigureAwait(false);
 
+        return AnswerCreate(write, initial);
+    }
+
+    // The run a started instance's initial state invokes, queued with the instance; null when it invokes none.
+    private EnteringInvoke? EnteringAtStart(Snapshot initial) =>
+        InvokingNames.Contains(initial.State)
+            ? new EnteringInvoke(
+                InvokeTrain(initial.State),
+                InvokeInput(initial.State),
+                InvokedRunLimit
+            )
+            {
+                Spawn = Invoke(initial.State).Spawn,
+            }
+            : null;
+
+    private static StartOutcome.Rejected? RefuseStartInput(
+        StartDeclaration start,
+        JsonObject? input
+    )
+    {
+        // The input is bounded before it is read, then checked against the start's own record, never the context.
+        if (SnapshotLimits.InputTooLarge(input))
+            return new StartOutcome.Rejected(
+                RefusalCode.TooLarge,
+                $"The input exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
+            );
+        if (SchemaValidator.ValidateInput(start.InputSchema, input) is { } invalid)
+            return new StartOutcome.Rejected(RefusalCode.InvalidInput, invalid);
+        return null;
+    }
+
+    private (Snapshot? Initial, StartOutcome.Rejected? Refused) BuildInitial(
+        StartDeclaration start,
+        JsonObject? input
+    )
+    {
+        // The declared reduction applied to the initial context, validated exactly as a stored snapshot is read back,
+        // so nothing is stored that a later read refuses.
+        Snapshot initial;
+        try
+        {
+            var definition = machine.Definition;
+            var fresh = definition.CreateInitialSnapshot();
+            initial = fresh with { Context = start.Apply(fresh.Context, input) };
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            return (
+                null,
+                new StartOutcome.Rejected(
+                    RefusalCode.InvalidContext,
+                    "The start could not build its initial context."
+                )
+            );
+        }
+        return CheckStarted(initial);
+    }
+
+    // The started snapshot validated as a stored one is read back, with its initial state's timer armed.
+    private (Snapshot? Initial, StartOutcome.Rejected? Refused) CheckStarted(Snapshot initial)
+    {
+        if (StorableJson.Problem(initial.Context) is { } unstorable)
+            return (null, new StartOutcome.Rejected(RefusalCode.Malformed, unstorable));
+        var wire = machine.Serialize(initial);
+        if (Encoding.UTF8.GetByteCount(wire) > SnapshotLimits.MaxSnapshotBytes)
+            return (
+                null,
+                new StartOutcome.Rejected(
+                    RefusalCode.TooLarge,
+                    $"The started snapshot exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
+                )
+            );
+        switch (machine.Rehydrate(wire))
+        {
+            case RehydrationResult.Ok ok:
+                initial = ok.Snapshot;
+                break;
+            case RehydrationResult.Error error:
+                return (null, new StartOutcome.Rejected(RefusalCode.InvalidContext, error.Message));
+            default:
+                return (
+                    null,
+                    new StartOutcome.Rejected(RefusalCode.Malformed, "Unknown rehydration result.")
+                );
+        }
+
+        // A started instance enters its initial state: a timed one arms its timer now, with a duration its context
+        // must hold within bounds.
+        switch (machine.TimerFor(initial.State, initial.Context, restart: true))
+        {
+            case ({ } timer, _):
+                initial = initial with { Timer = timer, ServerRecord = false };
+                break;
+            case (_, var problem):
+                return (
+                    null,
+                    new StartOutcome.Rejected(RefusalCode.InvalidInput, problem.NotNull())
+                );
+        }
+        return (initial, null);
+    }
+
+    private StartOutcome AnswerCreate(CreateWrite write, Snapshot initial)
+    {
         switch (write)
         {
             case CreateWrite.Created created:
@@ -763,34 +819,15 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 .ConfigureAwait(false);
             if (stored is null)
                 return new DiscardOutcome.Discarded();
-            if (stored.Effect is not null)
-                return new DiscardOutcome.Rejected(
-                    RefusalCode.DiscardNotAllowed,
-                    "An effect on this instance is running, so the instance is becoming the record of what the "
-                        + "server did, and cannot be discarded."
-                );
-            if (stored.ParentWaits)
-                return new DiscardOutcome.Rejected(
-                    RefusalCode.DiscardNotAllowed,
-                    "This instance belongs to the step that started it, which is waiting for it to finish, so it "
-                        + "cannot be discarded."
-                );
-            if (StoredState(stored.Json) is { } state && KeptRecord(stored, state))
-                return new DiscardOutcome.Rejected(
-                    RefusalCode.DiscardNotAllowed,
-                    $"An instance in {state} is the record of what the server did, and cannot be discarded."
-                );
-            switch (await DeleteAsRead(client.UserKey, id, stored).ConfigureAwait(false))
-            {
-                case DeleteResult.Deleted:
-                    return new DiscardOutcome.Discarded();
-                case DeleteResult.EffectLive:
-                    return new DiscardOutcome.Rejected(
-                        RefusalCode.DiscardNotAllowed,
-                        "An effect on this instance is running or recording its result, so the instance is "
-                            + "becoming the record of what the server did, and cannot be discarded."
-                    );
-            }
+            if (KeptOnDiscard(stored) is { } kept)
+                return kept;
+            if (
+                AnswerDiscardDelete(
+                    await DeleteAsRead(client.UserKey, id, stored).ConfigureAwait(false)
+                ) is
+                { } answer
+            )
+                return answer;
         }
         return
             await store.Get(client.UserKey, _machineId, id, cancellationToken).ConfigureAwait(false)
@@ -800,6 +837,45 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 RefusalCode.Conflict,
                 "The draft changed while it was being discarded; retry."
             );
+    }
+
+    private DiscardOutcome.Rejected? KeptOnDiscard(StoredSnapshot stored)
+    {
+        if (stored.Effect is not null)
+            return new DiscardOutcome.Rejected(
+                RefusalCode.DiscardNotAllowed,
+                "An effect on this instance is running, so the instance is becoming the record of what the "
+                    + "server did, and cannot be discarded."
+            );
+        if (stored.ParentWaits)
+            return new DiscardOutcome.Rejected(
+                RefusalCode.DiscardNotAllowed,
+                "This instance belongs to the step that started it, which is waiting for it to finish, so it "
+                    + "cannot be discarded."
+            );
+        if (StoredState(stored.Json) is { } state && KeptRecord(stored, state))
+            return new DiscardOutcome.Rejected(
+                RefusalCode.DiscardNotAllowed,
+                $"An instance in {state} is the record of what the server did, and cannot be discarded."
+            );
+        return null;
+    }
+
+    // Null when the delete found the draft changed, so the discard reads it again.
+    private static DiscardOutcome? AnswerDiscardDelete(DeleteResult result)
+    {
+        switch (result)
+        {
+            case DeleteResult.Deleted:
+                return new DiscardOutcome.Discarded();
+            case DeleteResult.EffectLive:
+                return new DiscardOutcome.Rejected(
+                    RefusalCode.DiscardNotAllowed,
+                    "An effect on this instance is running or recording its result, so the instance is "
+                        + "becoming the record of what the server did, and cannot be discarded."
+                );
+        }
+        return null;
     }
 
     // Whether a row is the record of what the server did: one waiting on the run its state invoked, or one the server put
@@ -931,146 +1007,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         switch (machine.Rehydrate(snapshotJson))
         {
             case RehydrationResult.Ok saved:
-                // A saved draft in a timed state keeps the due time it was given at entry, or arms one when it is
-                // created or moved there; a duration its context cannot give is refused, never stored.
-                if (
-                    machine.TimerFor(saved.Snapshot.State, saved.Snapshot.Context, restart: false)
-                    is not
-                    ({ } savedTimer, _)
-                )
-                    return new AutosaveResult.Rejected(
-                        RefusalCode.InvalidInput,
-                        machine
-                            .TimerFor(saved.Snapshot.State, saved.Snapshot.Context, restart: false)
-                            .Problem.NotNull()
-                    );
-                var ok = new RehydrationResult.Ok(
-                    saved.Snapshot with
-                    {
-                        Timer = savedTimer,
-                        ServerRecord = false,
-                    }
-                );
-
-                // Fast path: nothing to protect => blind last-writer-wins autosave. A store that does not key by
-                // machine is read first, so a draft of another machine under this id is never overwritten.
-                if (ReservedNames.Count == 0)
-                {
-                    // A capped save that creates a draft counts the user's drafts in the same transaction.
-                    if (
-                        Cap is not null
-                        && Creates is not null
-                        && await store
-                            .Get(userKey, _machineId, id, cancellationToken)
-                            .ConfigureAwait(false)
-                            is null
-                    )
-                        return await CreateCapped(userKey, id, ok.Snapshot, cancellationToken)
-                            .ConfigureAwait(false);
-
-                    var upserted = await Blind(
-                            userKey,
-                            id,
-                            ok.Snapshot,
-                            insertOnly: !KeysByMachine(store)
-                                && await store
-                                    .Get(userKey, _machineId, id, cancellationToken)
-                                    .ConfigureAwait(false)
-                                    is null,
-                            cancellationToken
-                        )
-                        .ConfigureAwait(false);
-                    return await Persisted(upserted, userKey, id, ok.Snapshot, replacedJson: null)
-                        .ConfigureAwait(false);
-                }
-
-                // Guarded path. A soft save never creates a committed state: it may not create a draft in, or
-                // move one into, a committed state or an effect's target, because only the effect runner puts a
-                // draft there. Nor may it rewrite a draft already there: the receipt such a draft holds is the one
-                // the effect produced for exactly that content, so the only write allowed is a reset the machine
-                // itself declares, and a save identical to what is stored is answered without writing.
-                var stored = await store
-                    .Get(userKey, _machineId, id, cancellationToken)
-                    .ConfigureAwait(false);
-                var entering = ReservedNames.Contains(ok.Snapshot.State);
-                if (stored is null)
-                {
-                    if (entering)
-                        return Reserved();
-                    if (Cap is not null && Creates is not null)
-                        return await CreateCapped(userKey, id, ok.Snapshot, cancellationToken)
-                            .ConfigureAwait(false);
-                    // Insert, never Upsert: a draft created since the read above (and sent, perhaps) must make
-                    // this save lose rather than be overwritten by it.
-                    var inserted = await Blind(
-                            userKey,
-                            id,
-                            ok.Snapshot,
-                            insertOnly: true,
-                            cancellationToken
-                        )
-                        .ConfigureAwait(false);
-                    return await Persisted(inserted, userKey, id, ok.Snapshot, replacedJson: null)
-                        .ConfigureAwait(false);
-                }
-
-                var readable = machine.Rehydrate(stored.Json) as RehydrationResult.Ok;
-                var unchanged =
-                    readable is not null
-                    && string.Equals(
-                        machine.Serialize(ok.Snapshot),
-                        machine.Serialize(readable.Snapshot),
-                        StringComparison.Ordinal
-                    );
-
-                // A draft whose state invoked a train holds that run: the soft path neither leaves the state, which
-                // would strand the run, nor rewrites the context it was started from. Only a declared transition
-                // or the run's outcome moves it on. Decided by the token as well as the state, so an unreadable
-                // draft holding a run is not reset from under it either.
-                if (
-                    stored.InvokeToken is not null
-                    || (readable is not null && InvokingNames.Contains(readable.Snapshot.State))
-                )
-                    return unchanged ? Unwritten(readable.NotNull().Snapshot, stored) : Invoking();
-
-                // A stored draft that cannot be read may be committed, so nothing but a reset overwrites it.
-                if (readable is not { } current)
-                {
-                    if (!string.Equals(ok.Snapshot.State, _initialState, StringComparison.Ordinal))
-                        return new AutosaveResult.Rejected(
-                            RefusalCode.DraftUnreadable,
-                            "The saved draft can't be read, so it can only be started over."
-                        );
-                }
-                else if (LockedNames.Contains(current.Snapshot.State))
-                {
-                    if (unchanged)
-                        return Unwritten(current.Snapshot, stored);
-                    if (
-                        !string.Equals(ok.Snapshot.State, _initialState, StringComparison.Ordinal)
-                        || !MachineResets(current.Snapshot.State)
-                    )
-                        return new AutosaveResult.Rejected(
-                            RefusalCode.DraftCommitted,
-                            "This draft was already completed and can't be overwritten by an edit."
-                        );
-                }
-                else if (entering)
-                    return unchanged ? Unwritten(current.Snapshot, stored) : Reserved();
-
-                // Atomic overwrite guarded by the token we just read: a commit that lands between this read
-                // and this write makes the soft save LOSE (Conflict) instead of resurrecting the draft.
-                var wrote = await Swap(
-                        userKey,
-                        id,
-                        ok.Snapshot,
-                        stored,
-                        stored.LastRequest,
-                        TransitionNote.Save(DraftOwner.User(userKey)),
-                        cancellationToken
-                    )
-                    .ConfigureAwait(false);
-                return await Persisted(wrote, userKey, id, ok.Snapshot, stored.Json)
+                return await SaveRehydrated(userKey, id, saved, cancellationToken)
                     .ConfigureAwait(false);
 
             case RehydrationResult.Error error:
@@ -1084,6 +1021,182 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                     "Unknown rehydration result."
                 );
         }
+    }
+
+    private async Task<AutosaveResult> SaveRehydrated(
+        string userKey,
+        Guid id,
+        RehydrationResult.Ok saved,
+        CancellationToken cancellationToken
+    )
+    {
+        // A saved draft in a timed state keeps the due time it was given at entry, or arms one when it is
+        // created or moved there; a duration its context cannot give is refused, never stored.
+        if (
+            machine.TimerFor(saved.Snapshot.State, saved.Snapshot.Context, restart: false)
+            is not
+            ({ } savedTimer, _)
+        )
+            return new AutosaveResult.Rejected(
+                RefusalCode.InvalidInput,
+                machine
+                    .TimerFor(saved.Snapshot.State, saved.Snapshot.Context, restart: false)
+                    .Problem.NotNull()
+            );
+        var ok = new RehydrationResult.Ok(
+            saved.Snapshot with
+            {
+                Timer = savedTimer,
+                ServerRecord = false,
+            }
+        );
+
+        // Fast path: nothing to protect => blind last-writer-wins autosave. A store that does not key by
+        // machine is read first, so a draft of another machine under this id is never overwritten.
+        if (ReservedNames.Count == 0)
+            return await SaveUnguarded(userKey, id, ok, cancellationToken).ConfigureAwait(false);
+
+        return await SaveGuarded(userKey, id, ok, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<AutosaveResult> SaveUnguarded(
+        string userKey,
+        Guid id,
+        RehydrationResult.Ok ok,
+        CancellationToken cancellationToken
+    )
+    {
+        // A capped save that creates a draft counts the user's drafts in the same transaction.
+        if (
+            Cap is not null
+            && Creates is not null
+            && await store.Get(userKey, _machineId, id, cancellationToken).ConfigureAwait(false)
+                is null
+        )
+            return await CreateCapped(userKey, id, ok.Snapshot, cancellationToken)
+                .ConfigureAwait(false);
+
+        var upserted = await Blind(
+                userKey,
+                id,
+                ok.Snapshot,
+                insertOnly: !KeysByMachine(store)
+                    && await store
+                        .Get(userKey, _machineId, id, cancellationToken)
+                        .ConfigureAwait(false)
+                        is null,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        return await Persisted(upserted, userKey, id, ok.Snapshot, replacedJson: null)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<AutosaveResult> SaveGuarded(
+        string userKey,
+        Guid id,
+        RehydrationResult.Ok ok,
+        CancellationToken cancellationToken
+    )
+    {
+        // Guarded path. A soft save never creates a committed state: it may not create a draft in, or
+        // move one into, a committed state or an effect's target, because only the effect runner puts a
+        // draft there. Nor may it rewrite a draft already there: the receipt such a draft holds is the one
+        // the effect produced for exactly that content, so the only write allowed is a reset the machine
+        // itself declares, and a save identical to what is stored is answered without writing.
+        var stored = await store
+            .Get(userKey, _machineId, id, cancellationToken)
+            .ConfigureAwait(false);
+        var entering = ReservedNames.Contains(ok.Snapshot.State);
+        if (stored is null)
+        {
+            if (entering)
+                return Reserved();
+            if (Cap is not null && Creates is not null)
+                return await CreateCapped(userKey, id, ok.Snapshot, cancellationToken)
+                    .ConfigureAwait(false);
+            // Insert, never Upsert: a draft created since the read above (and sent, perhaps) must make
+            // this save lose rather than be overwritten by it.
+            var inserted = await Blind(
+                    userKey,
+                    id,
+                    ok.Snapshot,
+                    insertOnly: true,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            return await Persisted(inserted, userKey, id, ok.Snapshot, replacedJson: null)
+                .ConfigureAwait(false);
+        }
+
+        if (RefuseOverwrite(ok, stored, entering) is { } refused)
+            return refused;
+
+        // Atomic overwrite guarded by the token we just read: a commit that lands between this read
+        // and this write makes the soft save LOSE (Conflict) instead of resurrecting the draft.
+        var wrote = await Swap(
+                userKey,
+                id,
+                ok.Snapshot,
+                stored,
+                stored.LastRequest,
+                TransitionNote.Save(DraftOwner.User(userKey)),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        return await Persisted(wrote, userKey, id, ok.Snapshot, stored.Json).ConfigureAwait(false);
+    }
+
+    private AutosaveResult? RefuseOverwrite(
+        RehydrationResult.Ok ok,
+        StoredSnapshot stored,
+        bool entering
+    )
+    {
+        var readable = machine.Rehydrate(stored.Json) as RehydrationResult.Ok;
+        var unchanged =
+            readable is not null
+            && string.Equals(
+                machine.Serialize(ok.Snapshot),
+                machine.Serialize(readable.Snapshot),
+                StringComparison.Ordinal
+            );
+
+        // A draft whose state invoked a train holds that run: the soft path neither leaves the state, which
+        // would strand the run, nor rewrites the context it was started from. Only a declared transition
+        // or the run's outcome moves it on. Decided by the token as well as the state, so an unreadable
+        // draft holding a run is not reset from under it either.
+        if (
+            stored.InvokeToken is not null
+            || (readable is not null && InvokingNames.Contains(readable.Snapshot.State))
+        )
+            return unchanged ? Unwritten(readable.NotNull().Snapshot, stored) : Invoking();
+
+        // A stored draft that cannot be read may be committed, so nothing but a reset overwrites it.
+        if (readable is not { } current)
+        {
+            if (!string.Equals(ok.Snapshot.State, _initialState, StringComparison.Ordinal))
+                return new AutosaveResult.Rejected(
+                    RefusalCode.DraftUnreadable,
+                    "The saved draft can't be read, so it can only be started over."
+                );
+        }
+        else if (LockedNames.Contains(current.Snapshot.State))
+        {
+            if (unchanged)
+                return Unwritten(current.Snapshot, stored);
+            if (
+                !string.Equals(ok.Snapshot.State, _initialState, StringComparison.Ordinal)
+                || !MachineResets(current.Snapshot.State)
+            )
+                return new AutosaveResult.Rejected(
+                    RefusalCode.DraftCommitted,
+                    "This draft was already completed and can't be overwritten by an edit."
+                );
+        }
+        else if (entering)
+            return unchanged ? Unwritten(current.Snapshot, stored) : Reserved();
+        return null;
     }
 
     /// <summary>
@@ -1383,6 +1496,113 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
     {
         SnapshotOwner.Require(userKey);
 
+        if (RefuseBeforeRead(trigger, input, requestId) is { } early)
+            return early;
+
+        var stored = await store
+            .Get(userKey, _machineId, id, cancellationToken)
+            .ConfigureAwait(false);
+        if (stored is null)
+            return new AdvanceOutcome.NotFound();
+
+        if (StaleForEffect(stored, effectOwner, expectedToken))
+            return new AdvanceOutcome.Conflict();
+
+        var (rehydrated, loadError) = RehydrateCurrent(stored);
+        if (loadError is not null)
+            return loadError;
+        var current = rehydrated.NotNull();
+
+        if (RefuseBoundTrigger(current, trigger, effectRan) is { } bound)
+            return bound;
+
+        // The caller is told whether they may send the event before anything about the request: a retry is checked
+        // against the rule as it is now, so a caller who lost the role is refused rather than replayed.
+        if (
+            actor is not null
+            && await Refusal(actor, trigger, cancellationToken).ConfigureAwait(false) is { } refused
+        )
+            return refused;
+
+        // The request as the client sent it: the effect runner's receipt is the server's input, not the client's.
+        var fingerprint = requestId is null
+            ? null
+            : RequestIdRing.Fingerprint(trigger, effectRan ? null : input);
+        var retry = Retry(stored, requestId, fingerprint, trigger);
+        if (AnswerRetry(retry, replayOnly, current, stored, clientResult) is { } retried)
+            return retried;
+
+        // A row with a pending effect is written by that effect only: every other event waits for it to be recorded.
+        if (effectOwner is null && stored.Effect is not null)
+            return EffectInProgress();
+
+        return await AdvanceChecked(
+                userKey,
+                id,
+                trigger,
+                input,
+                requestId,
+                fingerprint,
+                clientResult,
+                current,
+                stored,
+                effectRan,
+                effectOwner,
+                refusalOnly,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+    }
+
+    private async Task<AdvanceOutcome> AdvanceChecked(
+        string userKey,
+        Guid id,
+        string trigger,
+        JsonNode? input,
+        string? requestId,
+        string? fingerprint,
+        string? clientResult,
+        Snapshot current,
+        StoredSnapshot stored,
+        bool effectRan,
+        Guid? effectOwner,
+        bool refusalOnly,
+        CancellationToken cancellationToken
+    )
+    {
+        var (computed, computedWire, refusedNext) = ComputeNext(
+            current,
+            trigger,
+            input,
+            clientResult,
+            refusalOnly
+        );
+        if (refusedNext is not null)
+            return refusedNext;
+        var next = computed.NotNull();
+        var wire = computedWire.NotNull();
+
+        return await WriteAdvance(
+                userKey,
+                id,
+                trigger,
+                current,
+                next,
+                stored,
+                Recorded(stored, requestId, fingerprint, trigger, current.State, wire),
+                effectRan,
+                effectOwner,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+    }
+
+    private AdvanceOutcome.Rejected? RefuseBeforeRead(
+        string trigger,
+        JsonNode? input,
+        string? requestId
+    )
+    {
         // A timer trigger is the server acting once a state has been held long enough: no caller fires it, whoever
         // they are, and it is refused before the draft, the caller or the request is read.
         if (machine.IsTimerTrigger(trigger))
@@ -1407,42 +1627,34 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 RefusalCode.TooLarge,
                 $"The input exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
             );
+        return null;
+    }
 
-        var stored = await store
-            .Get(userKey, _machineId, id, cancellationToken)
-            .ConfigureAwait(false);
-        if (stored is null)
-            return new AdvanceOutcome.NotFound();
-
+    private static bool StaleForEffect(
+        StoredSnapshot stored,
+        Guid? effectOwner,
+        Guid? expectedToken
+    )
+    {
         // The effect's record lands only while the effect is still this claimant's: one taken over is the new
         // claimant's to record.
         if (effectOwner is { } claimant)
         {
             if (stored.Effect?.Token != claimant)
-                return new AdvanceOutcome.Conflict();
+                return true;
         }
         // The draft changed after the effect's load: whatever is stored now is not what the effect acted on.
         else if (expectedToken is { } expected && stored.Token != expected)
-            return new AdvanceOutcome.Conflict();
+            return true;
+        return false;
+    }
 
-        Snapshot current;
-        switch (machine.Rehydrate(stored.Json))
-        {
-            case RehydrationResult.Ok ok:
-                current = ok.Snapshot;
-                break;
-            case RehydrationResult.Error error:
-                return new AdvanceOutcome.LoadError(error.Code, error.Message)
-                {
-                    Exception = error.Exception,
-                };
-            default:
-                return new AdvanceOutcome.LoadError(
-                    RefusalCode.Malformed,
-                    "Unknown rehydration result."
-                );
-        }
-
+    private AdvanceOutcome.Rejected? RefuseBoundTrigger(
+        Snapshot current,
+        string trigger,
+        bool effectRan
+    )
+    {
         // An effect-bound edge records the effect's receipt. Fired from here, the receipt would be whatever the
         // caller put in the input and the effect would never have run, so only the effect runner fires it.
         if (!effectRan && _effectEdges.Contains((current.State, trigger)))
@@ -1458,20 +1670,97 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 RefusalCode.OutcomeBound,
                 "This step is completed by the outcome of its work, not by an action."
             );
+        return null;
+    }
 
-        // The caller is told whether they may send the event before anything about the request: a retry is checked
-        // against the rule as it is now, so a caller who lost the role is refused rather than replayed.
-        if (
-            actor is not null
-            && await Refusal(actor, trigger, cancellationToken).ConfigureAwait(false) is { } refused
-        )
-            return refused;
+    private (Snapshot? Next, string? Wire, AdvanceOutcome? Refused) ComputeNext(
+        Snapshot current,
+        string trigger,
+        JsonNode? input,
+        string? clientResult,
+        bool refusalOnly
+    )
+    {
+        // Compute the advance and check it in full before anything is written, so a refusal below leaves the
+        // stored draft exactly as it was.
+        Snapshot next;
+        switch (machine.Advance(current, trigger, input))
+        {
+            case AdvanceResult.Rejected rejected:
+                return (
+                    null,
+                    null,
+                    new AdvanceOutcome.Rejected(rejected.Reason, rejected.Detail)
+                    {
+                        Exception = rejected.Exception,
+                    }
+                );
+            case AdvanceResult.Transitioned when refusalOnly:
+                return (null, null, new AdvanceOutcome.Conflict());
+            case AdvanceResult.Transitioned transitioned:
+                next = transitioned.Snapshot;
+                break;
+            default:
+                return (
+                    null,
+                    null,
+                    new AdvanceOutcome.Rejected(RefusalCode.InternalError, Detail: null)
+                );
+        }
 
-        // The request as the client sent it: the effect runner's receipt is the server's input, not the client's.
-        var fingerprint = requestId is null
-            ? null
-            : RequestIdRing.Fingerprint(trigger, effectRan ? null : input);
-        var retry = Retry(stored, requestId, fingerprint, trigger);
+        if (StorableJson.Problem(next.Context) is { } unstorable)
+            return (null, null, new AdvanceOutcome.Rejected(RefusalCode.Malformed, unstorable));
+
+        var wire = machine.Serialize(next);
+        if (Encoding.UTF8.GetByteCount(wire) > SnapshotLimits.MaxSnapshotBytes)
+            return (
+                null,
+                null,
+                new AdvanceOutcome.Rejected(
+                    RefusalCode.TooLarge,
+                    $"The advanced snapshot exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
+                )
+            );
+
+        if (Checked(wire, clientResult) is { } divergence)
+            return (null, null, divergence);
+
+        return (next, wire, null);
+    }
+
+    private (Snapshot? Current, AdvanceOutcome? LoadError) RehydrateCurrent(StoredSnapshot stored)
+    {
+        switch (machine.Rehydrate(stored.Json))
+        {
+            case RehydrationResult.Ok ok:
+                return (ok.Snapshot, null);
+            case RehydrationResult.Error error:
+                return (
+                    null,
+                    new AdvanceOutcome.LoadError(error.Code, error.Message)
+                    {
+                        Exception = error.Exception,
+                    }
+                );
+            default:
+                return (
+                    null,
+                    new AdvanceOutcome.LoadError(
+                        RefusalCode.Malformed,
+                        "Unknown rehydration result."
+                    )
+                );
+        }
+    }
+
+    private AdvanceOutcome? AnswerRetry(
+        RetryDecision retry,
+        bool replayOnly,
+        Snapshot current,
+        StoredSnapshot stored,
+        string? clientResult
+    )
+    {
         if (replayOnly && retry.Kind != RetryKind.Replay)
             return new AdvanceOutcome.Conflict();
         switch (retry.Kind)
@@ -1484,43 +1773,22 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                     "This request id was already used for a different action. Send a new id."
                 );
         }
+        return null;
+    }
 
-        // A row with a pending effect is written by that effect only: every other event waits for it to be recorded.
-        if (effectOwner is null && stored.Effect is not null)
-            return EffectInProgress();
-
-        // Compute the advance and check it in full before anything is written, so a refusal below leaves the
-        // stored draft exactly as it was.
-        Snapshot next;
-        switch (machine.Advance(current, trigger, input))
-        {
-            case AdvanceResult.Rejected rejected:
-                return new AdvanceOutcome.Rejected(rejected.Reason, rejected.Detail)
-                {
-                    Exception = rejected.Exception,
-                };
-            case AdvanceResult.Transitioned when refusalOnly:
-                return new AdvanceOutcome.Conflict();
-            case AdvanceResult.Transitioned transitioned:
-                next = transitioned.Snapshot;
-                break;
-            default:
-                return new AdvanceOutcome.Rejected(RefusalCode.InternalError, Detail: null);
-        }
-
-        if (StorableJson.Problem(next.Context) is { } unstorable)
-            return new AdvanceOutcome.Rejected(RefusalCode.Malformed, unstorable);
-
-        var wire = machine.Serialize(next);
-        if (Encoding.UTF8.GetByteCount(wire) > SnapshotLimits.MaxSnapshotBytes)
-            return new AdvanceOutcome.Rejected(
-                RefusalCode.TooLarge,
-                $"The advanced snapshot exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
-            );
-
-        if (Checked(wire, clientResult) is { } divergence)
-            return divergence;
-
+    private async Task<AdvanceOutcome> WriteAdvance(
+        string userKey,
+        Guid id,
+        string trigger,
+        Snapshot current,
+        Snapshot next,
+        StoredSnapshot stored,
+        AppliedRequest? applied,
+        bool effectRan,
+        Guid? effectOwner,
+        CancellationToken cancellationToken
+    )
+    {
         // The row records whether the server put it in its state: an effect's record, or an event gated by a role or a
         // policy, is the server's; any other event is the client's.
         next = next with
@@ -1531,23 +1799,8 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         };
 
         if (effectOwner is { } owner)
-        {
-            var recorded = await Marks
-                .NotNull()
-                .CompleteEffect(
-                    DraftOwner.User(userKey),
-                    id,
-                    next,
-                    stored,
-                    Recorded(stored, requestId, fingerprint, trigger, current.State, wire),
-                    owner,
-                    CancellationToken.None
-                )
+            return await CompleteEffectAdvance(userKey, id, next, stored, applied, owner)
                 .ConfigureAwait(false);
-            return recorded is { } row
-                ? Advanced(next, stored, row.DueAt)
-                : new AdvanceOutcome.Conflict();
-        }
 
         // Entering or leaving an invoking state writes the snapshot together with the run it queues or cancels.
         // A self-loop neither leaves nor enters: the state keeps its run.
@@ -1564,7 +1817,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                     current,
                     next,
                     stored,
-                    Recorded(stored, requestId, fingerprint, trigger, current.State, wire),
+                    applied,
                     leaving,
                     enteringInvoke,
                     trigger,
@@ -1577,7 +1830,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 id,
                 next,
                 stored,
-                Recorded(stored, requestId, fingerprint, trigger, current.State, wire),
+                applied,
                 TransitionNote.Command(DraftOwner.User(userKey), trigger),
                 cancellationToken
             )
@@ -1587,6 +1840,32 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         if (string.Equals(next.State, _initialState, StringComparison.Ordinal) && Marks is null)
             await ReleaseSettledClaims(userKey, id, stored.Json).ConfigureAwait(false);
         return Advanced(next, stored, updated.DueAt);
+    }
+
+    private async Task<AdvanceOutcome> CompleteEffectAdvance(
+        string userKey,
+        Guid id,
+        Snapshot next,
+        StoredSnapshot stored,
+        AppliedRequest? applied,
+        Guid owner
+    )
+    {
+        var recorded = await Marks
+            .NotNull()
+            .CompleteEffect(
+                DraftOwner.User(userKey),
+                id,
+                next,
+                stored,
+                applied,
+                owner,
+                CancellationToken.None
+            )
+            .ConfigureAwait(false);
+        return recorded is { } row
+            ? Advanced(next, stored, row.DueAt)
+            : new AdvanceOutcome.Conflict();
     }
 
     // The outcome of a write guarded by the token read with stored: it landed on the revision read, so it reports

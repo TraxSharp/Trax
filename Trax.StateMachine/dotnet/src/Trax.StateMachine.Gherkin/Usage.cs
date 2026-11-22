@@ -67,19 +67,7 @@ internal static class Usage
         foreach (var scenario in scenarios)
         foreach (var (step, meaning) in Walk.Run(scenario, glossary, resolver).Steps)
         {
-            var part = meaning switch
-            {
-                Meaning.Named n => $"actor {n.Actor}",
-                Meaning.Start s => $"{s.Machine} start",
-                Meaning.InState s => $"{s.Machine} state {s.State}",
-                Meaning.Guard g => $"{g.Machine} guard {g.Name} {(g.Holds ? "holds" : "fails")}",
-                Meaning.Act a => $"{a.Machine} trigger {a.Trigger}",
-                Meaning.Happens h => $"{h.Machine} trigger {h.Trigger}",
-                Meaning.Outcome o =>
-                    $"{o.Machine} outcome {o.State} {glossary.Machines[o.Machine].Invokes[o.State].Outcomes[o.Phrase].Kind}",
-                Meaning.ViewShows v => $"view {v.View} {v.Field}",
-                _ => null,
-            };
+            var part = Part(glossary, meaning);
             if (part is not null && uses.TryGetValue(part, out var set))
                 set.Add((scenario.File, step.Line));
         }
@@ -89,4 +77,20 @@ internal static class Usage
             problems
         );
     }
+
+    // The glossary part a step's meaning uses, or null for one that uses none.
+    private static string? Part(Glossary glossary, Meaning meaning) =>
+        meaning switch
+        {
+            Meaning.Named n => $"actor {n.Actor}",
+            Meaning.Start s => $"{s.Machine} start",
+            Meaning.InState s => $"{s.Machine} state {s.State}",
+            Meaning.Guard g => $"{g.Machine} guard {g.Name} {(g.Holds ? "holds" : "fails")}",
+            Meaning.Act a => $"{a.Machine} trigger {a.Trigger}",
+            Meaning.Happens h => $"{h.Machine} trigger {h.Trigger}",
+            Meaning.Outcome o =>
+                $"{o.Machine} outcome {o.State} {glossary.Machines[o.Machine].Invokes[o.State].Outcomes[o.Phrase].Kind}",
+            Meaning.ViewShows v => $"view {v.View} {v.Field}",
+            _ => null,
+        };
 }

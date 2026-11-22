@@ -242,16 +242,7 @@ internal sealed class Cursor(LexLine line)
                     minimum = bound;
             }
             else if (Peek.Is("one"))
-            {
-                Expect("one");
-                Expect("of");
-                values = [Text("a value")];
-                while (Peek.Kind == TokenKind.Comma && PeekAt(1).Kind == TokenKind.Text)
-                {
-                    _at++;
-                    values.Add(Text("a value"));
-                }
-            }
+                values = OneOfValues();
             else
             {
                 Expect("where");
@@ -263,6 +254,20 @@ internal sealed class Cursor(LexLine line)
                 $"'{Peek}' is not a clause of a field: may be empty, at least, at most, one of, where"
             );
         return new LxField(name, type, mayBeEmpty, minimum, maximum, values, where, Line);
+    }
+
+    // "one of" and its values, comma-separated texts.
+    private List<string> OneOfValues()
+    {
+        Expect("one");
+        Expect("of");
+        var values = new List<string> { Text("a value") };
+        while (Peek.Kind == TokenKind.Comma && PeekAt(1).Kind == TokenKind.Text)
+        {
+            _at++;
+            values.Add(Text("a value"));
+        }
+        return values;
     }
 
     private void MayBeEmpty()
@@ -402,50 +407,9 @@ internal sealed class Cursor(LexLine line)
             return new LxAtom("nonEmpty", source, field, Line);
         }
         if (next.Is("a") || next.Is("an"))
-        {
-            var type = Type();
-            if (
-                string.Equals(type.Kind, LxTypeRef.List, StringComparison.Ordinal)
-                && string.Equals(
-                    type.Element.NotNull().Kind,
-                    LxTypeRef.Simple,
-                    StringComparison.Ordinal
-                )
-            )
-                return new LxAtom(
-                    "arrayOf",
-                    source,
-                    field,
-                    Line,
-                    Type: JsonType(type.Element.Name)
-                );
-            if (
-                string.Equals(type.Kind, LxTypeRef.Simple, StringComparison.Ordinal)
-                && type.Name
-                    is "string"
-                        or "number"
-                        or "integer"
-                        or "boolean"
-                        or "array"
-                        or "object"
-            )
-                return new LxAtom("ofType", source, field, Line, Type: type.Name);
-            throw Form(
-                $"'{type}' is not a type a rule checks: a string, a number, an integer, a boolean, a list, an object, or a list of one of them"
-            );
-        }
+            return TypeAtom(source, field);
         if (next.Is("one"))
-        {
-            Expect("one");
-            Expect("of");
-            var values = new List<string> { Text("a value") };
-            while (Peek.Kind == TokenKind.Comma && PeekAt(1).Kind == TokenKind.Text)
-            {
-                _at++;
-                values.Add(Text("a value"));
-            }
-            return new LxAtom("oneOf", source, field, Line, Values: values);
-        }
+            return new LxAtom("oneOf", source, field, Line, Values: OneOfValues());
         if (next.Is("true") || next.Is("false") || next.Kind == TokenKind.Text)
             return new LxAtom("equals", source, field, Line, Value: Value());
         var (comparison, bound) = Compare(fewer: null);
@@ -456,6 +420,29 @@ internal sealed class Cursor(LexLine line)
             return new LxAtom("length", source, field, Line, comparison, new LxNumber(bound, Line));
         }
         return new LxAtom("compare", source, field, Line, comparison, new LxNumber(bound, Line));
+    }
+
+    // "is a <type>": a field of a JSON type, or a list of one.
+    private LxAtom TypeAtom(string? source, string field)
+    {
+        var type = Type();
+        if (
+            string.Equals(type.Kind, LxTypeRef.List, StringComparison.Ordinal)
+            && string.Equals(
+                type.Element.NotNull().Kind,
+                LxTypeRef.Simple,
+                StringComparison.Ordinal
+            )
+        )
+            return new LxAtom("arrayOf", source, field, Line, Type: JsonType(type.Element.Name));
+        if (
+            string.Equals(type.Kind, LxTypeRef.Simple, StringComparison.Ordinal)
+            && type.Name is "string" or "number" or "integer" or "boolean" or "array" or "object"
+        )
+            return new LxAtom("ofType", source, field, Line, Type: type.Name);
+        throw Form(
+            $"'{type}' is not a type a rule checks: a string, a number, an integer, a boolean, a list, an object, or a list of one of them"
+        );
     }
 
     // "at least 3", "at most 3", "more than 3", "less than 3", "fewer than 3", "3".

@@ -190,33 +190,19 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
         await InTransaction(
                 async (context, store) =>
                 {
-                    // No user is present for a run an outcome queues, so only a system-owned instance may chain one;
-                    // the startup check refuses a user-owned machine that declares such an edge, and this refuses the
-                    // write again rather than authorize it in the trusted scope.
-                    if (entering is not null && owner.Kind != SnapshotOwnerKind.System)
-                        return new InvokeWrite.Refused(
-                            ChainRefused,
-                            "The step's work could not be started.",
-                            new InvalidOperationException(
-                                $"An outcome of '{next.Machine}' entered {next.State}, which invokes a train, but the "
-                                    + "instance is user-owned: a run an outcome queues has no user to authorize it. "
-                                    + "The startup check refuses such a machine."
-                            )
-                        );
-
                     if (
-                        entering is { Spawn: null }
-                        && await OverLimit(
+                        await RefuseDelivery(
                                 context,
                                 owner,
-                                leavingToken: invokeToken,
-                                entering.Limit,
+                                invokeToken,
+                                next,
+                                entering,
                                 cancellationToken
                             )
-                            .ConfigureAwait(false)
-                            is { } refused
+                            .ConfigureAwait(false) is
+                        { } refusal
                     )
-                        return refused;
+                        return refusal;
 
                     var launch = entering is null
                         ? null
@@ -254,6 +240,42 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
                 cancellationToken
             )
             .ConfigureAwait(false);
+
+    // Why an outcome may not be applied as it stands; null when it may.
+    private async Task<InvokeWrite.Refused?> RefuseDelivery(
+        IDataContext context,
+        DraftOwner owner,
+        string invokeToken,
+        Snapshot next,
+        EnteringInvoke? entering,
+        CancellationToken cancellationToken
+    )
+    {
+        // No user is present for a run an outcome queues, so only a system-owned instance may chain one;
+        // the startup check refuses a user-owned machine that declares such an edge, and this refuses the
+        // write again rather than authorize it in the trusted scope.
+        if (entering is not null && owner.Kind != SnapshotOwnerKind.System)
+            return new InvokeWrite.Refused(
+                ChainRefused,
+                "The step's work could not be started.",
+                new InvalidOperationException(
+                    $"An outcome of '{next.Machine}' entered {next.State}, which invokes a train, but the "
+                        + "instance is user-owned: a run an outcome queues has no user to authorize it. "
+                        + "The startup check refuses such a machine."
+                )
+            );
+
+        if (entering is { Spawn: null })
+            return await OverLimit(
+                    context,
+                    owner,
+                    leavingToken: invokeToken,
+                    entering.Limit,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+        return null;
+    }
 
     /// <summary>
     /// Creates <paramref name="owner"/>'s row for <paramref name="snapshot"/> in one transaction, under a lock on the
@@ -349,87 +371,22 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
             owner.UserKey
             ?? throw new ArgumentException("Only a user's draft is created here.", nameof(owner));
 
-        // One user's creates take turns, on every host, so a count and the insert after it cannot interleave with
-        // another create of theirs. SQLite serializes writing transactions already (BEGIN IMMEDIATE).
-        if (dialect is not null && context is DbContext db)
-            await db
-                .Database.ExecuteSqlRawAsync(
-                    dialect.LockSubject(),
-                    [$"trax:drafts:{userKey}"],
-                    cancellationToken
-                )
-                .ConfigureAwait(false);
+        await LockUserDrafts(context, dialect, userKey, cancellationToken).ConfigureAwait(false);
 
-        if (start is not null)
-        {
-            var existing = await store
-                .FindStarted(owner, snapshot.Machine, start.RequestId, cancellationToken)
-                .ConfigureAwait(false);
-            if (existing is not null)
-            {
-                if (
-                    !string.Equals(
-                        existing.Fingerprint,
-                        start.Fingerprint,
-                        StringComparison.Ordinal
-                    )
-                )
-                    return new CreateWrite.Reused();
+        if (
+            start is not null
+            && await ExistingStart(store, owner, snapshot, start, cancellationToken)
+                .ConfigureAwait(false)
+                is { } answered
+        )
+            return answered;
 
-                // A retry is activity: marking the row active moves its revision, so a sweep that read it as expired
-                // deletes nothing, and the id answered here is never one it deletes. A row written since it was read
-                // is active already.
-                var touched = await store
-                    .Touch(
-                        owner,
-                        snapshot.Machine,
-                        existing.Id,
-                        existing.Stored.Token,
-                        cancellationToken
-                    )
-                    .ConfigureAwait(false);
-                var current = touched
-                    ? existing.Stored with
-                    {
-                        Revision = existing.Stored.Revision + 1,
-                    }
-                    : (
-                        await store
-                            .FindStarted(
-                                owner,
-                                snapshot.Machine,
-                                start.RequestId,
-                                cancellationToken
-                            )
-                            .ConfigureAwait(false)
-                    )?.Stored;
-                return current is null
-                    ? new CreateWrite.Conflict()
-                    : new CreateWrite.Existing(existing.Id, current);
-            }
-        }
-
-        if (cap is { } limit)
-        {
-            var held = await store
-                .CountDrafts(
-                    userKey,
-                    limit.Ttl is { } ttl
-                        ? services.GetRequiredService<TimeProvider>().GetUtcNow() - ttl
-                        : null,
-                    limit.Kept,
-                    cancellationToken
-                )
-                .ConfigureAwait(false);
-            if (held >= limit.Max)
-                return new CreateWrite.Refused(
-                    RefusalCode.TooManyDrafts,
-                    string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"You already have {held} drafts, the most allowed. Finish or discard one, then try again."
-                    )
-                );
-        }
+        if (
+            cap is { } limit
+            && await CapRefusal(store, userKey, limit, cancellationToken).ConfigureAwait(false)
+                is { } full
+        )
+            return full;
 
         if (
             entering is { Spawn: null }
@@ -464,6 +421,92 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
             await LaunchIn(run, context, store, owner, cancellationToken).ConfigureAwait(false);
 
         return new CreateWrite.Created(id, written);
+    }
+
+    // One user's creates take turns, on every host, so a count and the insert after it cannot interleave with
+    // another create of theirs. SQLite serializes writing transactions already (BEGIN IMMEDIATE).
+    private static async Task LockUserDrafts(
+        IDataContext context,
+        ISqlDialect? dialect,
+        string userKey,
+        CancellationToken cancellationToken
+    )
+    {
+        if (dialect is not null && context is DbContext db)
+            await db
+                .Database.ExecuteSqlRawAsync(
+                    dialect.LockSubject(),
+                    [$"trax:drafts:{userKey}"],
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+    }
+
+    // The instance a start with this request id created already, answered instead of creating another; null when
+    // there is none.
+    private static async Task<CreateWrite?> ExistingStart(
+        EfSnapshotStore store,
+        DraftOwner owner,
+        Snapshot snapshot,
+        StartRequest start,
+        CancellationToken cancellationToken
+    )
+    {
+        var existing = await store
+            .FindStarted(owner, snapshot.Machine, start.RequestId, cancellationToken)
+            .ConfigureAwait(false);
+        if (existing is null)
+            return null;
+        if (!string.Equals(existing.Fingerprint, start.Fingerprint, StringComparison.Ordinal))
+            return new CreateWrite.Reused();
+
+        // A retry is activity: marking the row active moves its revision, so a sweep that read it as expired
+        // deletes nothing, and the id answered here is never one it deletes. A row written since it was read
+        // is active already.
+        var touched = await store
+            .Touch(owner, snapshot.Machine, existing.Id, existing.Stored.Token, cancellationToken)
+            .ConfigureAwait(false);
+        var current = touched
+            ? existing.Stored with
+            {
+                Revision = existing.Stored.Revision + 1,
+            }
+            : (
+                await store
+                    .FindStarted(owner, snapshot.Machine, start.RequestId, cancellationToken)
+                    .ConfigureAwait(false)
+            )?.Stored;
+        return current is null
+            ? new CreateWrite.Conflict()
+            : new CreateWrite.Existing(existing.Id, current);
+    }
+
+    private async Task<CreateWrite.Refused?> CapRefusal(
+        EfSnapshotStore store,
+        string userKey,
+        DraftCap limit,
+        CancellationToken cancellationToken
+    )
+    {
+        var held = await store
+            .CountDrafts(
+                userKey,
+                limit.Ttl is { } ttl
+                    ? services.GetRequiredService<TimeProvider>().GetUtcNow() - ttl
+                    : null,
+                limit.Kept,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        if (held >= limit.Max)
+            return new CreateWrite.Refused(
+                RefusalCode.TooManyDrafts,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"You already have {held} drafts, the most allowed. Finish or discard one, then try again."
+                )
+            );
+        return null;
     }
 
     // What entering a state starts, prepared before anything is written, with the token the row will hold.
@@ -566,6 +609,28 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
                 )
                 .ConfigureAwait(false);
 
+        var live = await CountLiveRuns(context, userKey, starter, leavingToken, cancellationToken)
+            .ConfigureAwait(false);
+        return live >= limit
+            ? new InvokeWrite.Refused(
+                LimitReached,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"You already have {live} steps running, the most allowed at once. "
+                ) + "Wait for one to finish, then try again."
+            )
+            : null;
+    }
+
+    // The user's runs that have not ended: queued, other than the one leavingToken names, and running.
+    private static async Task<int> CountLiveRuns(
+        IDataContext context,
+        string userKey,
+        string starter,
+        string? leavingToken,
+        CancellationToken cancellationToken
+    )
+    {
         // A run records its starter, the instance's owner, so it is counted even after a draft lifetime deleted the
         // instance. A run written before the starter was recorded is joined to the user's instances, as it was.
         var instances = context.SnapshotDrafts.Where(x =>
@@ -610,17 +675,7 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
                     cancellationToken
                 )
                 .ConfigureAwait(false);
-
-        var live = queued + running;
-        return live >= limit
-            ? new InvokeWrite.Refused(
-                LimitReached,
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"You already have {live} steps running, the most allowed at once. "
-                ) + "Wait for one to finish, then try again."
-            )
-            : null;
+        return queued + running;
     }
 
     // The runs a user's instances invoked that have not ended, by the starter they recorded. Shaped to match the

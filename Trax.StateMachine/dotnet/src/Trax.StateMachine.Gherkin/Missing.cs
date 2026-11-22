@@ -25,7 +25,6 @@ internal static class Missing
             return ([], baseline.Problems);
         var host = JsonNode.Parse(baseline.Host.NotNull()).NotNull().AsObject();
         var provenance = host["provenance"] as JsonObject ?? [];
-        bool Shown(string machine, string part) => provenance[machine]?[part] is not null;
 
         var (scenarios, _) = FeatureFiles.Parse(features);
         var resolver = new StepResolver(glossary);
@@ -38,8 +37,73 @@ internal static class Missing
         var guardsUsed = guardSteps.Select(g => (g.Machine, g.Name)).ToHashSet();
         var heldFor = HeldFor(walks);
 
-        var gaps = new List<Gap>();
-        async Task Add(
+        var finder = new Finder(
+            glossary,
+            features,
+            baseline,
+            provenance,
+            guardSteps,
+            guardsUsed,
+            heldFor
+        );
+        var gaps = finder.Gaps;
+
+        foreach (var machine in glossary.Machines.Values.OrderBy(m => m.Id, StringComparer.Ordinal))
+            await finder.MachineAsync(machine).ConfigureAwait(false);
+
+        foreach (var view in glossary.Views.Values.OrderBy(v => v.Name, StringComparer.Ordinal))
+            if (host["views"]?[view.Name] is null)
+                await finder
+                    .AddAsync(
+                        GapKind.View,
+                        view.Reads[0].Machine,
+                        view.Name,
+                        $"view {view.Name}: no scenario reads it, so it is not served.",
+                        [ViewStub(glossary, view, baseline)]
+                    )
+                    .ConfigureAwait(false);
+
+        AddGrantGaps(baseline, gaps);
+        return (gaps, []);
+    }
+
+    // Each grant an actor holds by its roles alone, which no scenario shows.
+    private static void AddGrantGaps(Derived baseline, List<Gap> gaps)
+    {
+        foreach (
+            var line in baseline
+                .Access.NotNull()
+                .Split('\n')
+                .Where(l => l.Contains("(no scenario)", StringComparison.Ordinal))
+        )
+            gaps.Add(
+                new Gap(
+                    GapKind.Grant,
+                    line[..line.IndexOf(' ', StringComparison.Ordinal)],
+                    line[..line.IndexOf(':', StringComparison.Ordinal)],
+                    $"{line}: an actor marked (no scenario) is admitted by its roles alone. Give it roles of its own, or "
+                        + "show it in a scenario.",
+                    Stub: null
+                )
+            );
+    }
+
+    // What finding the gaps of one set of features shares: the baseline derivation, what it shows, and the gaps found.
+    private sealed class Finder(
+        Glossary glossary,
+        IReadOnlyList<(string Path, string Text)> features,
+        Derived baseline,
+        JsonObject provenance,
+        List<Meaning.Guard> guardSteps,
+        HashSet<(string Machine, string Name)> guardsUsed,
+        HashSet<(string Machine, string Trigger, string Guard)> heldFor
+    )
+    {
+        internal List<Gap> Gaps { get; } = [];
+
+        private bool Shown(string machine, string part) => provenance[machine]?[part] is not null;
+
+        internal async Task AddAsync(
             GapKind kind,
             string machine,
             string what,
@@ -54,15 +118,15 @@ internal static class Missing
                     stub = claim.Scenario;
                     break;
                 }
-            gaps.Add(new Gap(kind, machine, what, message, stub));
+            Gaps.Add(new Gap(kind, machine, what, message, stub));
         }
 
-        foreach (var machine in glossary.Machines.Values.OrderBy(m => m.Id, StringComparer.Ordinal))
+        internal async Task MachineAsync(GlossaryMachine machine)
         {
             var m = machine.Id;
             if (!baseline.Irs.ContainsKey(m))
             {
-                await Add(
+                await AddAsync(
                         GapKind.Machine,
                         m,
                         m,
@@ -70,7 +134,7 @@ internal static class Missing
                         MachineStubs(glossary, machine)
                     )
                     .ConfigureAwait(false);
-                continue;
+                return;
             }
             var ir = JsonNode.Parse(baseline.Irs[m]).NotNull().AsObject();
             var edges = ir["transitions"]
@@ -85,15 +149,6 @@ internal static class Missing
                     )
                 )
                 .ToList();
-            // A guard decides a move when the derived edge carries its rule and a scenario shows it refusing there:
-            // the scenarios showed it holding on the move and failing on the refusal, whether a Given set it up or
-            // the When's value did. A guard the trigger names is on its edge with no refusal shown, which shows nothing.
-            bool Decides(GlossaryGuard guard) =>
-                edges.Exists(e =>
-                    e.Guard is not null
-                    && JsonNode.DeepEquals(e.Guard, guard.Rule)
-                    && Shown(m, $"guard {e.From} {e.Trigger}")
-                );
             var reached = edges
                 .Select(e => e.To)
                 .Append(machine.Initial)
@@ -106,11 +161,35 @@ internal static class Missing
                 )
                 .ToHashSet(StringComparer.Ordinal);
 
+            await TriggersAsync(machine, reached).ConfigureAwait(false);
+            await StatesAsync(machine, reached).ConfigureAwait(false);
+            await GuardsAsync(machine, edges).ConfigureAwait(false);
+            await RefusalsAsync(machine, edges).ConfigureAwait(false);
+            await OutcomesAsync(machine).ConfigureAwait(false);
+        }
+
+        // A guard decides a move when the derived edge carries its rule and a scenario shows it refusing there:
+        // the scenarios showed it holding on the move and failing on the refusal, whether a Given set it up or
+        // the When's value did. A guard the trigger names is on its edge with no refusal shown, which shows nothing.
+        private bool Decides(
+            string m,
+            List<(string From, string Trigger, string To, JsonNode? Guard)> edges,
+            GlossaryGuard guard
+        ) =>
+            edges.Exists(e =>
+                e.Guard is not null
+                && JsonNode.DeepEquals(e.Guard, guard.Rule)
+                && Shown(m, $"guard {e.From} {e.Trigger}")
+            );
+
+        private async Task TriggersAsync(GlossaryMachine machine, HashSet<string> reached)
+        {
+            var m = machine.Id;
             foreach (
                 var trigger in machine.Triggers.Values.OrderBy(t => t.Name, StringComparer.Ordinal)
             )
                 if (!Shown(m, $"command {trigger.Name}"))
-                    await Add(
+                    await AddAsync(
                             GapKind.Trigger,
                             m,
                             trigger.Name,
@@ -134,10 +213,14 @@ internal static class Missing
                                 .OfType<Claim>()
                         )
                         .ConfigureAwait(false);
+        }
 
+        private async Task StatesAsync(GlossaryMachine machine, HashSet<string> reached)
+        {
+            var m = machine.Id;
             foreach (var (state, _) in machine.States.OrderBy(s => s.Key, StringComparer.Ordinal))
                 if (!reached.Contains(state))
-                    await Add(
+                    await AddAsync(
                             GapKind.State,
                             m,
                             state,
@@ -168,12 +251,19 @@ internal static class Missing
                                 .OfType<Claim>()
                         )
                         .ConfigureAwait(false);
+        }
 
+        private async Task GuardsAsync(
+            GlossaryMachine machine,
+            List<(string From, string Trigger, string To, JsonNode? Guard)> edges
+        )
+        {
+            var m = machine.Id;
             foreach (
                 var guard in machine.Guards.Values.OrderBy(g => g.Name, StringComparer.Ordinal)
             )
-                if (!guardsUsed.Contains((m, guard.Name)) && !Decides(guard))
-                    await Add(
+                if (!guardsUsed.Contains((m, guard.Name)) && !Decides(m, edges, guard))
+                    await AddAsync(
                             GapKind.Guard,
                             m,
                             guard.Name,
@@ -194,7 +284,14 @@ internal static class Missing
                                 .OfType<Claim>()
                         )
                         .ConfigureAwait(false);
+        }
 
+        private async Task RefusalsAsync(
+            GlossaryMachine machine,
+            List<(string From, string Trigger, string To, JsonNode? Guard)> edges
+        )
+        {
+            var m = machine.Id;
             // A move no scenario shows refused: a guarded edge, or one a guard is shown holding for and never failing.
             foreach (var edge in edges.DistinctBy(e => (e.From, e.Trigger)))
             {
@@ -211,7 +308,7 @@ internal static class Missing
                         )
                         .ToList();
                 if (!Shown(m, $"guard {edge.From} {edge.Trigger}") && guards.Count > 0)
-                    await Add(
+                    await AddAsync(
                             GapKind.Refusal,
                             m,
                             $"{edge.From} {edge.Trigger}",
@@ -230,7 +327,11 @@ internal static class Missing
                         )
                         .ConfigureAwait(false);
             }
+        }
 
+        private async Task OutcomesAsync(GlossaryMachine machine)
+        {
+            var m = machine.Id;
             foreach (
                 var invoke in machine.Invokes.Values.OrderBy(i => i.State, StringComparer.Ordinal)
             )
@@ -238,7 +339,7 @@ internal static class Missing
                 var (phrase, outcome) in invoke.Outcomes.OrderBy(o => o.Key, StringComparer.Ordinal)
             )
                 if (!Shown(m, $"outcome {invoke.State} {outcome.Kind}"))
-                    await Add(
+                    await AddAsync(
                             GapKind.Outcome,
                             m,
                             $"{invoke.State} {outcome.Kind}",
@@ -257,35 +358,6 @@ internal static class Missing
                         )
                         .ConfigureAwait(false);
         }
-
-        foreach (var view in glossary.Views.Values.OrderBy(v => v.Name, StringComparer.Ordinal))
-            if (host["views"]?[view.Name] is null)
-                await Add(
-                        GapKind.View,
-                        view.Reads[0].Machine,
-                        view.Name,
-                        $"view {view.Name}: no scenario reads it, so it is not served.",
-                        [ViewStub(glossary, view, baseline)]
-                    )
-                    .ConfigureAwait(false);
-
-        foreach (
-            var line in baseline
-                .Access.NotNull()
-                .Split('\n')
-                .Where(l => l.Contains("(no scenario)", StringComparison.Ordinal))
-        )
-            gaps.Add(
-                new Gap(
-                    GapKind.Grant,
-                    line[..line.IndexOf(' ', StringComparison.Ordinal)],
-                    line[..line.IndexOf(':', StringComparison.Ordinal)],
-                    $"{line}: an actor marked (no scenario) is admitted by its roles alone. Give it roles of its own, or "
-                        + "show it in a scenario.",
-                    Stub: null
-                )
-            );
-        return (gaps, []);
     }
 
     // What a stub says it shows, and the parts of the derivation it may change.
@@ -344,6 +416,12 @@ internal static class Missing
         )
             return false;
 
+        return AccessChangesOnlyClaim(baseline, stubbed, claim);
+    }
+
+    // No line of the access table changes but the claim's.
+    private static bool AccessChangesOnlyClaim(Derived baseline, Derived stubbed, Claim claim)
+    {
         var before = baseline.Access.NotNull().Split('\n').ToHashSet(StringComparer.Ordinal);
         var after = stubbed.Access.NotNull().Split('\n').ToHashSet(StringComparer.Ordinal);
         return before

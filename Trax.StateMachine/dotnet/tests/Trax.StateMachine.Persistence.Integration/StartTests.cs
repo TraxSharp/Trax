@@ -388,35 +388,7 @@ public class StartTests(StoreProvider provider)
     {
         if (provider == StoreProvider.Postgres)
         {
-            var conn = new NpgsqlConnection(PostgresSetup.ConnectionString);
-            await using var connDisposal = conn.ConfigureAwait(false);
-            await conn.OpenAsync();
-            var column = conn.CreateCommand();
-            await using var columnDisposal = column.ConfigureAwait(false);
-            column.CommandText =
-                "SELECT count(*) FROM information_schema.columns "
-                + "WHERE table_schema = 'trax' AND table_name = 'snapshot_draft' AND column_name = 'start_request_id'";
-            ((long)(await column.ExecuteScalarAsync()).NotNull())
-                .Should()
-                .Be(1, $"start keeps its request id on the row. See {Adr}");
-
-            var index = conn.CreateCommand();
-            await using var indexDisposal = index.ConfigureAwait(false);
-            index.CommandText =
-                "SELECT indexdef FROM pg_indexes WHERE schemaname = 'trax' AND tablename = 'snapshot_draft' "
-                + "AND indexdef LIKE '%start_request_id%'";
-            var definitions = new List<string>();
-            var reader = await index.ExecuteReaderAsync();
-            await using (reader.ConfigureAwait(false))
-                while (await reader.ReadAsync())
-                    definitions.Add(reader.GetString(0));
-            definitions
-                .Should()
-                .ContainSingle()
-                .Which.Should()
-                .StartWith("CREATE UNIQUE INDEX")
-                .And.Contain("user_key")
-                .And.Contain("machine");
+            await AssertPostgresStartRequestIdIndex();
             return;
         }
 
@@ -451,5 +423,38 @@ public class StartTests(StoreProvider provider)
             SqliteConnection.ClearAllPools();
             File.Delete(file);
         }
+    }
+
+    private static async Task AssertPostgresStartRequestIdIndex()
+    {
+        var conn = new NpgsqlConnection(PostgresSetup.ConnectionString);
+        await using var connDisposal = conn.ConfigureAwait(false);
+        await conn.OpenAsync().ConfigureAwait(false);
+        var column = conn.CreateCommand();
+        await using var columnDisposal = column.ConfigureAwait(false);
+        column.CommandText =
+            "SELECT count(*) FROM information_schema.columns "
+            + "WHERE table_schema = 'trax' AND table_name = 'snapshot_draft' AND column_name = 'start_request_id'";
+        ((long)(await column.ExecuteScalarAsync().ConfigureAwait(false)).NotNull())
+            .Should()
+            .Be(1, $"start keeps its request id on the row. See {Adr}");
+
+        var index = conn.CreateCommand();
+        await using var indexDisposal = index.ConfigureAwait(false);
+        index.CommandText =
+            "SELECT indexdef FROM pg_indexes WHERE schemaname = 'trax' AND tablename = 'snapshot_draft' "
+            + "AND indexdef LIKE '%start_request_id%'";
+        var definitions = new List<string>();
+        var reader = await index.ExecuteReaderAsync().ConfigureAwait(false);
+        await using (reader.ConfigureAwait(false))
+            while (await reader.ReadAsync().ConfigureAwait(false))
+                definitions.Add(reader.GetString(0));
+        definitions
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .StartWith("CREATE UNIQUE INDEX")
+            .And.Contain("user_key")
+            .And.Contain("machine");
     }
 }

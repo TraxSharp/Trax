@@ -384,6 +384,18 @@ public sealed partial class MachineBuilder<TState, TTrigger>
             Ends = new Dictionary<TState, InvokeOutcomeKind>(_ends),
         };
 
+        var declarative = BuildDeclarative(declaredInputs);
+        var serverWrites = CollectServerWrites(invokes);
+        RefuseOpenWritesAndServerOnlyRules(rules, serverWrites);
+
+        return BuildMachine(definition, declarative, declaredInputs, rules, serverWrites);
+    }
+
+    // The declarative model, with the differential inputs it carries; null for a raw-delegate machine.
+    private DeclarativeModel<TState, TTrigger>? BuildDeclarative(
+        Dictionary<TTrigger, (Type Type, ContextSchema Schema)> declaredInputs
+    )
+    {
         var differential =
             _diffSamples.Count > 0
             || _diffSeeds.Count > 0
@@ -432,7 +444,13 @@ public sealed partial class MachineBuilder<TState, TTrigger>
                 DelegateValidatedStates = _delegateValidators.ToHashSet(),
             }
             : null;
+        return declarative;
+    }
 
+    private List<ServerWrite> CollectServerWrites(
+        Dictionary<TState, InvokeDefinition<TState>> invokes
+    )
+    {
         var serverWrites = _serverWrites
             .Concat(
                 invokes.Values.SelectMany(invoke =>
@@ -461,6 +479,14 @@ public sealed partial class MachineBuilder<TState, TTrigger>
                     ))
             )
             .ToList();
+        return serverWrites;
+    }
+
+    private void RefuseOpenWritesAndServerOnlyRules(
+        MachineRules rules,
+        List<ServerWrite> serverWrites
+    )
+    {
         // Only a machine that declares rules is reached event by event, so only there is an open event a caller's.
         if (
             rules.Any
@@ -478,7 +504,16 @@ public sealed partial class MachineBuilder<TState, TTrigger>
                     $"The machine '{_id}' cannot be built: {trigger} is fired by the server only, and declares a "
                         + $"client rule ({clientRule})."
                 );
+    }
 
+    private BuiltMachine<TState, TTrigger> BuildMachine(
+        MachineDefinition<TState, TTrigger> definition,
+        DeclarativeModel<TState, TTrigger>? declarative,
+        Dictionary<TTrigger, (Type Type, ContextSchema Schema)> declaredInputs,
+        MachineRules rules,
+        List<ServerWrite> serverWrites
+    )
+    {
         return new BuiltMachine<TState, TTrigger>(definition, _committed, _effects, declarative)
         {
             SystemOwned = _systemOwned,
@@ -775,82 +810,13 @@ public sealed partial class MachineBuilder<TState, TTrigger>
     private Dictionary<TState, InvokeDefinition<TState>> BuildInvokes()
     {
         var problems = new List<string>();
-        foreach (var group in _invokes.GroupBy(i => i.State))
-        {
-            var drafts = group.ToList();
-            if (drafts.Count > 1)
-                problems.Add(
-                    drafts.TrueForAll(d => d.Spawn is null)
-                        ? $"the state {group.Key} invokes {drafts.Count} trains "
-                            + $"({string.Join(", ", drafts.Select(d => d.TrainType.Name))}), but a state invokes at "
-                            + "most one. Give each train a state of its own."
-                        : $"the state {group.Key} invokes or spawns {drafts.Count} things "
-                            + $"({string.Join(", ", drafts.Select(d => d.TrainType.Name))}), but a state invokes "
-                            + "or spawns at most one. Give each its own state."
-                );
-        }
+        AddSharedStateProblems(problems);
         foreach (var draft in _invokes)
-        {
-            var state = draft.State;
-            var train = draft.TrainType.Name;
-            if (draft.Spawn is { } spawn)
-                problems.AddRange(SpawnProblems(state, spawn));
-            else if (!draft.TrainType.IsInterface)
-                problems.Add(
-                    $"the state {state} invokes {train}, which is a class. Name the train by its interface "
-                        + "(Invokes<IMyTrain, TInput, TOutput>), which is the train's canonical name."
-                );
-            // A value tuple's elements are fields, which neither the output's stored JSON nor its exported schema
-            // carries: every guard and reduction would read nothing, and the run would take whichever OnDone edge
-            // has no guard, its reductions writing null.
-            if (IsValueTuple(draft.OutputType))
-                problems.Add(
-                    $"the state {state} invokes {train}, whose output {draft.OutputType.Name} is a tuple. A tuple's "
-                        + "elements are fields, which the output's JSON does not carry, so no OnDone guard or "
-                        + "reduction could read them. Return a record with properties instead."
-                );
-            if (draft.Done.Count == 0)
-                problems.Add(
-                    $"the state {state} {draft.Doing} but declares no OnDone. Add `.OnDone({typeof(TState).Name}.X)` "
-                        + "for where a successful run goes."
-                );
-            problems.AddRange(
-                ExactlyOnce(draft.Failed.Count, state, draft.Doing, "OnFailed", "a failed")
-            );
-            problems.AddRange(
-                ExactlyOnce(draft.Cancelled.Count, state, draft.Doing, "OnCancelled", "a cancelled")
-            );
-            foreach (var target in draft.Done.Concat(draft.Failed).Concat(draft.Cancelled))
-            {
-                var effect = _effects.FirstOrDefault(e =>
-                    EqualityComparer<TState>.Default.Equals(e.To, target.To)
-                );
-                if (effect is not null)
-                    problems.Add(
-                        $"the state {state} sends an outcome of {train} to {target.To}, which is the target of the "
-                            + $"effect bound with RunsOnce on {effect.From} -> {effect.Trigger}. Only the effect may "
-                            + "enter the state that records its receipt; send the outcome to another state."
-                    );
-            }
-        }
+            AddDraftProblems(problems, draft);
 
         // The success outcome's input is the train's output, validated against its type's schema like a trigger's
         // input, so the output type needs one.
-        var outputSchemas = new Dictionary<InvokeDraft, ContextSchema>(
-            ReferenceEqualityComparer.Instance
-        );
-        foreach (var draft in _invokes.Where(d => !IsValueTuple(d.OutputType)))
-            try
-            {
-                outputSchemas[draft] = SchemaReflection.ForInput(draft.OutputType);
-            }
-            catch (InvalidOperationException ex)
-            {
-                problems.Add(
-                    $"the state {draft.State} invokes {draft.TrainType.Name}, whose output "
-                        + $"{draft.OutputType.Name} has no schema to check it against: {ex.Message}"
-                );
-            }
+        var outputSchemas = OutputSchemas(problems);
 
         foreach (
             var state in _diffOutcomeSamples.Keys.Where(s =>
@@ -890,6 +856,90 @@ public sealed partial class MachineBuilder<TState, TTrigger>
                 Spawn = d.Spawn,
             }
         );
+    }
+
+    // A state invokes, or spawns, one thing at most.
+    private void AddSharedStateProblems(List<string> problems)
+    {
+        foreach (var group in _invokes.GroupBy(i => i.State))
+        {
+            var drafts = group.ToList();
+            if (drafts.Count > 1)
+                problems.Add(
+                    drafts.TrueForAll(d => d.Spawn is null)
+                        ? $"the state {group.Key} invokes {drafts.Count} trains "
+                            + $"({string.Join(", ", drafts.Select(d => d.TrainType.Name))}), but a state invokes at "
+                            + "most one. Give each train a state of its own."
+                        : $"the state {group.Key} invokes or spawns {drafts.Count} things "
+                            + $"({string.Join(", ", drafts.Select(d => d.TrainType.Name))}), but a state invokes "
+                            + "or spawns at most one. Give each its own state."
+                );
+        }
+    }
+
+    private void AddDraftProblems(List<string> problems, InvokeDraft draft)
+    {
+        var state = draft.State;
+        var train = draft.TrainType.Name;
+        if (draft.Spawn is { } spawn)
+            problems.AddRange(SpawnProblems(state, spawn));
+        else if (!draft.TrainType.IsInterface)
+            problems.Add(
+                $"the state {state} invokes {train}, which is a class. Name the train by its interface "
+                    + "(Invokes<IMyTrain, TInput, TOutput>), which is the train's canonical name."
+            );
+        // A value tuple's elements are fields, which neither the output's stored JSON nor its exported schema
+        // carries: every guard and reduction would read nothing, and the run would take whichever OnDone edge
+        // has no guard, its reductions writing null.
+        if (IsValueTuple(draft.OutputType))
+            problems.Add(
+                $"the state {state} invokes {train}, whose output {draft.OutputType.Name} is a tuple. A tuple's "
+                    + "elements are fields, which the output's JSON does not carry, so no OnDone guard or "
+                    + "reduction could read them. Return a record with properties instead."
+            );
+        if (draft.Done.Count == 0)
+            problems.Add(
+                $"the state {state} {draft.Doing} but declares no OnDone. Add `.OnDone({typeof(TState).Name}.X)` "
+                    + "for where a successful run goes."
+            );
+        problems.AddRange(
+            ExactlyOnce(draft.Failed.Count, state, draft.Doing, "OnFailed", "a failed")
+        );
+        problems.AddRange(
+            ExactlyOnce(draft.Cancelled.Count, state, draft.Doing, "OnCancelled", "a cancelled")
+        );
+        foreach (var target in draft.Done.Concat(draft.Failed).Concat(draft.Cancelled))
+        {
+            var effect = _effects.FirstOrDefault(e =>
+                EqualityComparer<TState>.Default.Equals(e.To, target.To)
+            );
+            if (effect is not null)
+                problems.Add(
+                    $"the state {state} sends an outcome of {train} to {target.To}, which is the target of the "
+                        + $"effect bound with RunsOnce on {effect.From} -> {effect.Trigger}. Only the effect may "
+                        + "enter the state that records its receipt; send the outcome to another state."
+                );
+        }
+    }
+
+    private Dictionary<InvokeDraft, ContextSchema> OutputSchemas(List<string> problems)
+    {
+        var outputSchemas = new Dictionary<InvokeDraft, ContextSchema>(
+            ReferenceEqualityComparer.Instance
+        );
+        foreach (var draft in _invokes.Where(d => !IsValueTuple(d.OutputType)))
+            try
+            {
+                outputSchemas[draft] = SchemaReflection.ForInput(draft.OutputType);
+            }
+            catch (InvalidOperationException ex)
+            {
+                problems.Add(
+                    $"the state {draft.State} invokes {draft.TrainType.Name}, whose output "
+                        + $"{draft.OutputType.Name} has no schema to check it against: {ex.Message}"
+                );
+            }
+        return outputSchemas;
     }
 
     // The child's id goes into a field the state's declared context holds, so the snapshot a client reads names it. A
@@ -1036,83 +1086,7 @@ public sealed partial class MachineBuilder<TState, TTrigger>
 
         var built = new Dictionary<TState, TimerDefinition<TState>>();
         foreach (var draft in _timers)
-        {
-            var state = draft.State;
-            if (draft.Target is not { } target)
-            {
-                problems.Add(
-                    $"the timer of {state} has no target. Finish After(...) with `.GoTo({typeof(TState).Name}.X)`."
-                );
-                continue;
-            }
-            if (EqualityComparer<TState>.Default.Equals(target, state))
-            {
-                problems.Add(
-                    $"the timer of {state} goes back to {state}, so it would fire again every time it fired. Send it "
-                        + "to another state, or restart the wait with an event that enters the state."
-                );
-                continue;
-            }
-            if (
-                _effects.FirstOrDefault(e =>
-                    EqualityComparer<TState>.Default.Equals(e.To, target)
-                ) is
-                { } effect
-            )
-                problems.Add(
-                    $"the timer of {state} goes to {target}, which is the target of the effect bound with RunsOnce on "
-                        + $"{effect.From} -> {effect.Trigger}. Only the effect may enter the state that records its "
-                        + "receipt; send the timer to another state."
-                );
-            if (
-                !invokes.ContainsKey(target)
-                && invokes.Values.FirstOrDefault(i => i.Targets.Contains(target)) is { } invoke
-            )
-                problems.Add(
-                    $"the timer of {state} goes to {target}, which is where the outcome of {invoke.TrainType.Name}, "
-                        + $"invoked in {invoke.State}, goes. Only the outcome may enter it; send the timer to another "
-                        + "state."
-                );
-
-            TimerField? field = null;
-            Func<JsonObject, TimeSpan?>? computed = null;
-            if (draft.Fixed is { } fixedDuration)
-            {
-                if (fixedDuration <= TimeSpan.Zero)
-                    problems.Add(
-                        $"the timer of {state} waits {fixedDuration}, but a timer waits a positive time."
-                    );
-                else if (fixedDuration > MachineTimers.MaxDuration)
-                    problems.Add(MachineTimers.TooLong(state.ToString(), fixedDuration));
-            }
-            else
-            {
-                if (draft.Min <= TimeSpan.Zero || draft.Min > draft.Max)
-                    problems.Add(
-                        $"the timer of {state} is bounded by {draft.Min} to {draft.Max}, but its minimum must be "
-                            + "positive and no more than its maximum."
-                    );
-                else if (draft.Max > MachineTimers.MaxDuration)
-                    problems.Add(
-                        $"the timer of {state} may wait up to {draft.Max}, longer than the "
-                            + string.Create(
-                                CultureInfo.InvariantCulture,
-                                $"{MachineTimers.MaxDuration.TotalDays} days a timer may wait (MachineTimers.MaxDuration)."
-                            )
-                    );
-                (field, computed) = TimerDuration(draft, problems);
-            }
-
-            built[state] = new TimerDefinition<TState>(
-                state,
-                target,
-                draft.Fixed,
-                field?.Name,
-                draft.Fixed ?? draft.Min,
-                draft.Fixed ?? draft.Max,
-                computed
-            );
-        }
+            BuildTimer(draft, invokes, problems, built);
 
         problems.AddRange(TimerCycles(built));
 
@@ -1127,6 +1101,110 @@ public sealed partial class MachineBuilder<TState, TTrigger>
                     )
             );
         return built;
+    }
+
+    // Checks one timer and, when it has a target that is not its own state, adds it to `built`.
+    private void BuildTimer(
+        TimerDraft draft,
+        IReadOnlyDictionary<TState, InvokeDefinition<TState>> invokes,
+        List<string> problems,
+        Dictionary<TState, TimerDefinition<TState>> built
+    )
+    {
+        var state = draft.State;
+        if (draft.Target is not { } target)
+        {
+            problems.Add(
+                $"the timer of {state} has no target. Finish After(...) with `.GoTo({typeof(TState).Name}.X)`."
+            );
+            return;
+        }
+        if (EqualityComparer<TState>.Default.Equals(target, state))
+        {
+            problems.Add(
+                $"the timer of {state} goes back to {state}, so it would fire again every time it fired. Send it "
+                    + "to another state, or restart the wait with an event that enters the state."
+            );
+            return;
+        }
+        AddTimerTargetProblems(state, target, invokes, problems);
+
+        var (field, computed) = TimerDurationOf(draft, problems);
+
+        built[state] = new TimerDefinition<TState>(
+            state,
+            target,
+            draft.Fixed,
+            field?.Name,
+            draft.Fixed ?? draft.Min,
+            draft.Fixed ?? draft.Max,
+            computed
+        );
+    }
+
+    private void AddTimerTargetProblems(
+        TState state,
+        TState target,
+        IReadOnlyDictionary<TState, InvokeDefinition<TState>> invokes,
+        List<string> problems
+    )
+    {
+        if (
+            _effects.FirstOrDefault(e => EqualityComparer<TState>.Default.Equals(e.To, target)) is
+            { } effect
+        )
+            problems.Add(
+                $"the timer of {state} goes to {target}, which is the target of the effect bound with RunsOnce on "
+                    + $"{effect.From} -> {effect.Trigger}. Only the effect may enter the state that records its "
+                    + "receipt; send the timer to another state."
+            );
+        if (
+            !invokes.ContainsKey(target)
+            && invokes.Values.FirstOrDefault(i => i.Targets.Contains(target)) is { } invoke
+        )
+            problems.Add(
+                $"the timer of {state} goes to {target}, which is where the outcome of {invoke.TrainType.Name}, "
+                    + $"invoked in {invoke.State}, goes. Only the outcome may enter it; send the timer to another "
+                    + "state."
+            );
+    }
+
+    // A fixed wait, or a bounded one read from the context.
+    private (TimerField? Field, Func<JsonObject, TimeSpan?>? Computed) TimerDurationOf(
+        TimerDraft draft,
+        List<string> problems
+    )
+    {
+        var state = draft.State;
+        TimerField? field = null;
+        Func<JsonObject, TimeSpan?>? computed = null;
+        if (draft.Fixed is { } fixedDuration)
+        {
+            if (fixedDuration <= TimeSpan.Zero)
+                problems.Add(
+                    $"the timer of {state} waits {fixedDuration}, but a timer waits a positive time."
+                );
+            else if (fixedDuration > MachineTimers.MaxDuration)
+                problems.Add(MachineTimers.TooLong(state.ToString(), fixedDuration));
+        }
+        else
+        {
+            if (draft.Min <= TimeSpan.Zero || draft.Min > draft.Max)
+                problems.Add(
+                    $"the timer of {state} is bounded by {draft.Min} to {draft.Max}, but its minimum must be "
+                        + "positive and no more than its maximum."
+                );
+            else if (draft.Max > MachineTimers.MaxDuration)
+                problems.Add(
+                    $"the timer of {state} may wait up to {draft.Max}, longer than the "
+                        + string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{MachineTimers.MaxDuration.TotalDays} days a timer may wait (MachineTimers.MaxDuration)."
+                        )
+                );
+            (field, computed) = TimerDuration(draft, problems);
+        }
+        return (field, computed);
     }
 
     // The field a context duration reads, or the delegate it compiles to when its selector is not a single field. The
@@ -1277,7 +1355,8 @@ public sealed partial class MachineBuilder<TState, TTrigger>
         var problems = new List<string>();
         foreach (var t in _declarativeTransitions)
             if (t.Guard is { } guard)
-                Check(
+                CheckComparisons(
+                    problems,
                     guard,
                     $"the guard of {t.From} -> {t.Trigger}",
                     t.From,
@@ -1286,11 +1365,19 @@ public sealed partial class MachineBuilder<TState, TTrigger>
                 );
         foreach (var (state, invariants) in _stateInvariants)
         foreach (var rule in invariants)
-            Check(rule, $"the Requires of {state}", state, input: null, inputName: null);
+            CheckComparisons(
+                problems,
+                rule,
+                $"the Requires of {state}",
+                state,
+                input: null,
+                inputName: null
+            );
         foreach (var invoke in invokes.Values)
         foreach (var edge in invoke.Done)
             if (edge.Guard is { } guard)
-                Check(
+                CheckComparisons(
+                    problems,
                     guard,
                     $"the OnDone guard of {invoke.State} -> {edge.To}",
                     invoke.State,
@@ -1308,50 +1395,57 @@ public sealed partial class MachineBuilder<TState, TTrigger>
                             .Select(p => char.ToUpperInvariant(p[0]) + p[1..])
                     )
             );
+    }
 
-        void Check(Rule rule, string site, TState state, ContextSchema? input, string? inputName)
+    private void CheckComparisons(
+        List<string> problems,
+        Rule rule,
+        string site,
+        TState state,
+        ContextSchema? input,
+        string? inputName
+    )
+    {
+        switch (rule)
         {
-            switch (rule)
-            {
-                case Rule.All all:
-                    foreach (var inner in all.Rules)
-                        Check(inner, site, state, input, inputName);
-                    break;
-                case Rule.Any any:
-                    foreach (var inner in any.Rules)
-                        Check(inner, site, state, input, inputName);
-                    break;
-                case Rule.Compare compare:
-                    var method = CompareMethod(compare.Op);
-                    if (!double.IsFinite(compare.Value))
-                    {
-                        problems.Add(
-                            $"{site} compares '{compare.Field}' with {method}"
-                                + $"({compare.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)}), "
-                                + "but a comparison needs a finite bound. NaN makes every comparison false, and "
-                                + "the IR has no number for an infinity."
-                        );
-                        break;
-                    }
-                    var (schema, owner) =
-                        compare.Source == RuleSource.Input
-                            ? (input, inputName)
-                            : (_contextSchemas.GetValueOrDefault(state), $"the context of {state}");
-                    var described = schema?.Fields.FirstOrDefault(f =>
-                        string.Equals(f.Name, compare.Field, StringComparison.Ordinal)
+            case Rule.All all:
+                foreach (var inner in all.Rules)
+                    CheckComparisons(problems, inner, site, state, input, inputName);
+                break;
+            case Rule.Any any:
+                foreach (var inner in any.Rules)
+                    CheckComparisons(problems, inner, site, state, input, inputName);
+                break;
+            case Rule.Compare compare:
+                var method = CompareMethod(compare.Op);
+                if (!double.IsFinite(compare.Value))
+                {
+                    problems.Add(
+                        $"{site} compares '{compare.Field}' with {method}"
+                            + $"({compare.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)}), "
+                            + "but a comparison needs a finite bound. NaN makes every comparison false, and "
+                            + "the IR has no number for an infinity."
                     );
-                    if (
-                        described is not null
-                        && described.Type is not (JsonFieldType.Number or JsonFieldType.Integer)
-                    )
-                        problems.Add(
-                            $"{site} compares the field '{compare.Field}' of {owner} with {method}, but its "
-                                + $"schema type is {described.Type.ToString().ToLowerInvariant()}, not a number, "
-                                + "so the comparison would be false for every value. Compare a number field, or "
-                                + "use a rule for its type (IsOneOf for an enum or a string)."
-                        );
                     break;
-            }
+                }
+                var (schema, owner) =
+                    compare.Source == RuleSource.Input
+                        ? (input, inputName)
+                        : (_contextSchemas.GetValueOrDefault(state), $"the context of {state}");
+                var described = schema?.Fields.FirstOrDefault(f =>
+                    string.Equals(f.Name, compare.Field, StringComparison.Ordinal)
+                );
+                if (
+                    described is not null
+                    && described.Type is not (JsonFieldType.Number or JsonFieldType.Integer)
+                )
+                    problems.Add(
+                        $"{site} compares the field '{compare.Field}' of {owner} with {method}, but its "
+                            + $"schema type is {described.Type.ToString().ToLowerInvariant()}, not a number, "
+                            + "so the comparison would be false for every value. Compare a number field, or "
+                            + "use a rule for its type (IsOneOf for an enum or a string)."
+                    );
+                break;
         }
     }
 
@@ -1779,6 +1873,13 @@ public sealed partial class MachineBuilder<TState, TTrigger>
                     _reduction
                 )
             );
+            RecordRuleAndWrites(target);
+            return state;
+        }
+
+        // The edge's client rule, what the server alone writes on it, and what it reads as input.
+        private void RecordRuleAndWrites(TState target)
+        {
             var rule = _rule.Build();
             owner._edgeRules.Add(new EdgeRule(from, trigger, target, rule));
             // What only the server writes: the effect's receipt, and what a gated event (a role or a policy) writes.
@@ -1817,7 +1918,6 @@ public sealed partial class MachineBuilder<TState, TTrigger>
                     RunsEffect: _effectType is not null
                 )
             );
-            return state;
         }
 
         public ITransitionBuilder<TState, TTrigger> Requires(params string[] roles)

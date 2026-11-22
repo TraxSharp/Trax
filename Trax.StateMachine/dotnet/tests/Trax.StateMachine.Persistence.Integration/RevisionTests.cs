@@ -532,218 +532,226 @@ public class RevisionTests(StoreProvider provider)
         switch (refusal)
         {
             case nameof(RefusalCode.GuardFailed):
-            {
-                var id = await Saved("turnstile", TestTurnstile.InitialJson).ConfigureAwait(false);
-                return (
-                    id,
-                    async () =>
-                        (
-                            await Advance(
-                                    "turnstile",
-                                    id,
-                                    "Coin",
-                                    new JsonObject { ["coin"] = "penny" }
-                                )
-                                .ConfigureAwait(false)
-                        )
-                            .Should()
-                            .BeOfType<AdvanceOutcome.Rejected>()
-                            .Which.Reason.Should()
-                            .Be(RefusalCode.GuardFailed)
-                );
-            }
+                return await GuardFailedRefusal().ConfigureAwait(false);
             case nameof(RefusalCode.InvalidInput):
-            {
-                var machine = "declarative-turnstile";
-                var id = await Saved(
-                        machine,
-                        new JsonObject
-                        {
-                            ["machine"] = machine,
-                            ["version"] = 1,
-                            ["state"] = "Locked",
-                            ["context"] = new JsonObject(),
-                        }.ToJsonString()
-                    )
-                    .ConfigureAwait(false);
-                return (
-                    id,
-                    async () =>
-                        (
-                            await Advance(
-                                    machine,
-                                    id,
-                                    "Coin",
-                                    new JsonObject { ["coin"] = "quarter", ["x"] = 1 }
-                                )
-                                .ConfigureAwait(false)
-                        )
-                            .Should()
-                            .BeOfType<AdvanceOutcome.Rejected>()
-                            .Which.Reason.Should()
-                            .Be(RefusalCode.InvalidInput)
-                );
-            }
+                return await InvalidInputRefusal().ConfigureAwait(false);
             case nameof(RefusalCode.Forbidden):
-            {
-                var id = await Saved(GatedTurnstileMachine.Id, GatedTurnstileMachine.Json("Locked"))
-                    .ConfigureAwait(false);
-                return (
-                    id,
-                    async () =>
-                    {
-                        using var scope = _host.NotNull().Scope();
-                        (
-                            await _host
-                                .NotNull()
-                                .Service(scope, GatedTurnstileMachine.Id)
-                                .Advance(new Actor.Client(User), id, "Coin")
-                                .ConfigureAwait(false)
-                        )
-                            .Should()
-                            .BeOfType<AdvanceOutcome.Rejected>()
-                            .Which.Reason.Should()
-                            .Be(RefusalCode.Forbidden);
-                    }
-                );
-            }
+                return await ForbiddenRefusal().ConfigureAwait(false);
             case nameof(RefusalCode.EffectBound):
-            {
-                var id = await Saved("order", OrderMachine.ReviewSnapshot(1)).ConfigureAwait(false);
-                return (
-                    id,
-                    async () =>
-                        (
-                            await Advance(
-                                    "order",
-                                    id,
-                                    "Place",
-                                    new JsonObject { ["receipt"] = "forged" }
-                                )
-                                .ConfigureAwait(false)
-                        )
-                            .Should()
-                            .BeOfType<AdvanceOutcome.Rejected>()
-                            .Which.Reason.Should()
-                            .Be(RefusalCode.EffectBound)
-                );
-            }
+                return await EffectBoundRefusal().ConfigureAwait(false);
             case nameof(RefusalCode.RequestIdReused):
-            {
-                var id = await Saved("turnstile", TestTurnstile.InitialJson).ConfigureAwait(false);
-                (await Advance("turnstile", id, "Coin", Quarter, "r1").ConfigureAwait(false))
-                    .Should()
-                    .BeOfType<AdvanceOutcome.Advanced>();
-                return (
-                    id,
-                    async () =>
-                        (
-                            await Advance("turnstile", id, "Push", requestId: "r1")
-                                .ConfigureAwait(false)
-                        )
-                            .Should()
-                            .BeOfType<AdvanceOutcome.Rejected>()
-                            .Which.Reason.Should()
-                            .Be(RefusalCode.RequestIdReused)
-                );
-            }
+                return await RequestIdReusedRefusal().ConfigureAwait(false);
             case "ring-replay":
-            {
-                var id = await Saved("turnstile", TestTurnstile.InitialJson).ConfigureAwait(false);
-                (await Advance("turnstile", id, "Coin", Quarter, "r1").ConfigureAwait(false))
-                    .Should()
-                    .BeOfType<AdvanceOutcome.Advanced>();
-                return (
-                    id,
-                    async () =>
-                        (
-                            await Advance("turnstile", id, "Coin", Quarter, "r1")
-                                .ConfigureAwait(false)
-                        )
-                            .Should()
-                            .BeOfType<AdvanceOutcome.Advanced>("a retry replays")
-                            .Which.Snapshot.State.Should()
-                            .Be("Unlocked")
-                );
-            }
+                return await RingReplayRefusal().ConfigureAwait(false);
             case "stale-token-conflict":
-            {
-                var id = await Saved("turnstile", TestTurnstile.InitialJson).ConfigureAwait(false);
-                return (
-                    id,
-                    async () =>
-                    {
-                        using var scope = _host.NotNull().Scope();
-                        (
-                            await scope
-                                .ServiceProvider.GetRequiredService<ISnapshotStore>()
-                                .Update(User, id, UnlockedTurnstile, Guid.NewGuid())
-                                .ConfigureAwait(false)
-                        )
-                            .Should()
-                            .BeFalse("the token is stale");
-                    }
-                );
-            }
+                return await StaleTokenRefusal().ConfigureAwait(false);
             case "unchanged-autosave":
-            {
-                // A draft in a committed state answers an identical save without writing.
-                var closed = LedgerMachine.Json(LedgerState.Closed, 1);
-                var id = await Saved(LedgerMachine.Id, LedgerMachine.Json(LedgerState.Counting, 1))
-                    .ConfigureAwait(false);
-                (
-                    await Advance(LedgerMachine.Id, id, nameof(LedgerTrigger.Close))
-                        .ConfigureAwait(false)
-                )
-                    .Should()
-                    .BeOfType<AdvanceOutcome.Advanced>();
-                return (
-                    id,
-                    async () =>
-                    {
-                        using var scope = _host.NotNull().Scope();
-                        (
-                            await _host
-                                .NotNull()
-                                .Service(scope, LedgerMachine.Id)
-                                .Autosave(User, id, closed)
-                                .ConfigureAwait(false)
-                        )
-                            .Should()
-                            .BeOfType<AutosaveResult.Saved>();
-                    }
-                );
-            }
+                return await UnchangedAutosaveRefusal().ConfigureAwait(false);
             case "refused-save":
-            {
-                var id = await Saved(LedgerMachine.Id, LedgerMachine.Json(LedgerState.Open))
-                    .ConfigureAwait(false);
-                return (
-                    id,
-                    async () =>
-                    {
-                        using var scope = _host.NotNull().Scope();
-                        (
-                            await _host
-                                .NotNull()
-                                .Service(scope, LedgerMachine.Id)
-                                .Autosave(
-                                    User,
-                                    id,
-                                    """{"machine":"ledger","version":1,"state":"Open","context":{}}"""
-                                )
-                                .ConfigureAwait(false)
-                        )
-                            .Should()
-                            .BeOfType<AutosaveResult.Rejected>()
-                            .Which.Code.Should()
-                            .Be(RefusalCode.InvalidContext);
-                    }
-                );
-            }
+                return await RefusedSaveRefusal().ConfigureAwait(false);
             default:
                 throw new ArgumentOutOfRangeException(nameof(refusal), refusal, message: null);
         }
+    }
+
+    private async Task<(Guid Id, Func<Task> Act)> GuardFailedRefusal()
+    {
+        var id = await Saved("turnstile", TestTurnstile.InitialJson).ConfigureAwait(false);
+        return (
+            id,
+            async () =>
+                (
+                    await Advance("turnstile", id, "Coin", new JsonObject { ["coin"] = "penny" })
+                        .ConfigureAwait(false)
+                )
+                    .Should()
+                    .BeOfType<AdvanceOutcome.Rejected>()
+                    .Which.Reason.Should()
+                    .Be(RefusalCode.GuardFailed)
+        );
+    }
+
+    private async Task<(Guid Id, Func<Task> Act)> InvalidInputRefusal()
+    {
+        var machine = "declarative-turnstile";
+        var id = await Saved(
+                machine,
+                new JsonObject
+                {
+                    ["machine"] = machine,
+                    ["version"] = 1,
+                    ["state"] = "Locked",
+                    ["context"] = new JsonObject(),
+                }.ToJsonString()
+            )
+            .ConfigureAwait(false);
+        return (
+            id,
+            async () =>
+                (
+                    await Advance(
+                            machine,
+                            id,
+                            "Coin",
+                            new JsonObject { ["coin"] = "quarter", ["x"] = 1 }
+                        )
+                        .ConfigureAwait(false)
+                )
+                    .Should()
+                    .BeOfType<AdvanceOutcome.Rejected>()
+                    .Which.Reason.Should()
+                    .Be(RefusalCode.InvalidInput)
+        );
+    }
+
+    private async Task<(Guid Id, Func<Task> Act)> ForbiddenRefusal()
+    {
+        var id = await Saved(GatedTurnstileMachine.Id, GatedTurnstileMachine.Json("Locked"))
+            .ConfigureAwait(false);
+        return (
+            id,
+            async () =>
+            {
+                using var scope = _host.NotNull().Scope();
+                (
+                    await _host
+                        .NotNull()
+                        .Service(scope, GatedTurnstileMachine.Id)
+                        .Advance(new Actor.Client(User), id, "Coin")
+                        .ConfigureAwait(false)
+                )
+                    .Should()
+                    .BeOfType<AdvanceOutcome.Rejected>()
+                    .Which.Reason.Should()
+                    .Be(RefusalCode.Forbidden);
+            }
+        );
+    }
+
+    private async Task<(Guid Id, Func<Task> Act)> EffectBoundRefusal()
+    {
+        var id = await Saved("order", OrderMachine.ReviewSnapshot(1)).ConfigureAwait(false);
+        return (
+            id,
+            async () =>
+                (
+                    await Advance("order", id, "Place", new JsonObject { ["receipt"] = "forged" })
+                        .ConfigureAwait(false)
+                )
+                    .Should()
+                    .BeOfType<AdvanceOutcome.Rejected>()
+                    .Which.Reason.Should()
+                    .Be(RefusalCode.EffectBound)
+        );
+    }
+
+    private async Task<(Guid Id, Func<Task> Act)> RequestIdReusedRefusal()
+    {
+        var id = await Saved("turnstile", TestTurnstile.InitialJson).ConfigureAwait(false);
+        (await Advance("turnstile", id, "Coin", Quarter, "r1").ConfigureAwait(false))
+            .Should()
+            .BeOfType<AdvanceOutcome.Advanced>();
+        return (
+            id,
+            async () =>
+                (await Advance("turnstile", id, "Push", requestId: "r1").ConfigureAwait(false))
+                    .Should()
+                    .BeOfType<AdvanceOutcome.Rejected>()
+                    .Which.Reason.Should()
+                    .Be(RefusalCode.RequestIdReused)
+        );
+    }
+
+    private async Task<(Guid Id, Func<Task> Act)> RingReplayRefusal()
+    {
+        var id = await Saved("turnstile", TestTurnstile.InitialJson).ConfigureAwait(false);
+        (await Advance("turnstile", id, "Coin", Quarter, "r1").ConfigureAwait(false))
+            .Should()
+            .BeOfType<AdvanceOutcome.Advanced>();
+        return (
+            id,
+            async () =>
+                (await Advance("turnstile", id, "Coin", Quarter, "r1").ConfigureAwait(false))
+                    .Should()
+                    .BeOfType<AdvanceOutcome.Advanced>("a retry replays")
+                    .Which.Snapshot.State.Should()
+                    .Be("Unlocked")
+        );
+    }
+
+    private async Task<(Guid Id, Func<Task> Act)> StaleTokenRefusal()
+    {
+        var id = await Saved("turnstile", TestTurnstile.InitialJson).ConfigureAwait(false);
+        return (
+            id,
+            async () =>
+            {
+                using var scope = _host.NotNull().Scope();
+                (
+                    await scope
+                        .ServiceProvider.GetRequiredService<ISnapshotStore>()
+                        .Update(User, id, UnlockedTurnstile, Guid.NewGuid())
+                        .ConfigureAwait(false)
+                )
+                    .Should()
+                    .BeFalse("the token is stale");
+            }
+        );
+    }
+
+    private async Task<(Guid Id, Func<Task> Act)> UnchangedAutosaveRefusal()
+    {
+        // A draft in a committed state answers an identical save without writing.
+        var closed = LedgerMachine.Json(LedgerState.Closed, 1);
+        var id = await Saved(LedgerMachine.Id, LedgerMachine.Json(LedgerState.Counting, 1))
+            .ConfigureAwait(false);
+        (await Advance(LedgerMachine.Id, id, nameof(LedgerTrigger.Close)).ConfigureAwait(false))
+            .Should()
+            .BeOfType<AdvanceOutcome.Advanced>();
+        return (
+            id,
+            async () =>
+            {
+                using var scope = _host.NotNull().Scope();
+                (
+                    await _host
+                        .NotNull()
+                        .Service(scope, LedgerMachine.Id)
+                        .Autosave(User, id, closed)
+                        .ConfigureAwait(false)
+                )
+                    .Should()
+                    .BeOfType<AutosaveResult.Saved>();
+            }
+        );
+    }
+
+    private async Task<(Guid Id, Func<Task> Act)> RefusedSaveRefusal()
+    {
+        var id = await Saved(LedgerMachine.Id, LedgerMachine.Json(LedgerState.Open))
+            .ConfigureAwait(false);
+        return (
+            id,
+            async () =>
+            {
+                using var scope = _host.NotNull().Scope();
+                (
+                    await _host
+                        .NotNull()
+                        .Service(scope, LedgerMachine.Id)
+                        .Autosave(
+                            User,
+                            id,
+                            """{"machine":"ledger","version":1,"state":"Open","context":{}}"""
+                        )
+                        .ConfigureAwait(false)
+                )
+                    .Should()
+                    .BeOfType<AutosaveResult.Rejected>()
+                    .Which.Code.Should()
+                    .Be(RefusalCode.InvalidContext);
+            }
+        );
     }
 
     [Test]
@@ -973,40 +981,7 @@ public class RevisionTests(StoreProvider provider)
 
         try
         {
-            var setup = new NpgsqlConnection(connectionString);
-            await using (setup.ConfigureAwait(false))
-            {
-                await setup.OpenAsync().ConfigureAwait(false);
-                await Exec(setup, "CREATE SCHEMA IF NOT EXISTS trax;").ConfigureAwait(false);
-            }
-            var upTo = DeployChanges
-                .To.PostgresqlDatabase(connectionString)
-                .JournalToPostgresqlTable("trax", "migrations")
-                .WithScriptsEmbeddedInAssembly(
-                    typeof(Trax.Effect.Data.Postgres.Utils.DatabaseMigrator).Assembly,
-                    name => MigrationNumber(name) <= LastPostgresMigrationBeforeRevision
-                )
-                .LogToNowhere()
-                .Build()
-                .PerformUpgrade();
-            upTo.Successful.Should().BeTrue(upTo.Error?.ToString());
-
-            var before = new NpgsqlConnection(connectionString);
-            await using (before.ConfigureAwait(false))
-            {
-                await before.OpenAsync().ConfigureAwait(false);
-                await Exec(
-                        before,
-                        """
-                        INSERT INTO trax.snapshot_draft
-                            (id, user_key, owner_kind, machine, version, state, context, concurrency_token, updated_at)
-                        VALUES
-                            (gen_random_uuid(), 'u1', 'user', 'turnstile', 1, 'Locked', '{}', gen_random_uuid(), now()),
-                            (gen_random_uuid(), NULL, 'system', 'turnstile', 1, 'Locked', '{}', gen_random_uuid(), now())
-                        """
-                    )
-                    .ConfigureAwait(false);
-            }
+            await SeedPostgresBeforeRevision(connectionString).ConfigureAwait(false);
 
             await Effect
                 .Data.Postgres.Utils.DatabaseMigrator.Migrate(connectionString)
@@ -1027,6 +1002,46 @@ public class RevisionTests(StoreProvider provider)
             await using var adminDisposal = admin.ConfigureAwait(false);
             await admin.OpenAsync().ConfigureAwait(false);
             await Exec(admin, $"DROP DATABASE IF EXISTS {database} WITH (FORCE)")
+                .ConfigureAwait(false);
+        }
+    }
+
+    // Migrates a fresh database up to the last migration before the revision column, and writes a user's row and a
+    // system row there.
+    private static async Task SeedPostgresBeforeRevision(string connectionString)
+    {
+        var setup = new NpgsqlConnection(connectionString);
+        await using (setup.ConfigureAwait(false))
+        {
+            await setup.OpenAsync().ConfigureAwait(false);
+            await Exec(setup, "CREATE SCHEMA IF NOT EXISTS trax;").ConfigureAwait(false);
+        }
+        var upTo = DeployChanges
+            .To.PostgresqlDatabase(connectionString)
+            .JournalToPostgresqlTable("trax", "migrations")
+            .WithScriptsEmbeddedInAssembly(
+                typeof(Trax.Effect.Data.Postgres.Utils.DatabaseMigrator).Assembly,
+                name => MigrationNumber(name) <= LastPostgresMigrationBeforeRevision
+            )
+            .LogToNowhere()
+            .Build()
+            .PerformUpgrade();
+        upTo.Successful.Should().BeTrue(upTo.Error?.ToString());
+
+        var before = new NpgsqlConnection(connectionString);
+        await using (before.ConfigureAwait(false))
+        {
+            await before.OpenAsync().ConfigureAwait(false);
+            await Exec(
+                    before,
+                    """
+                    INSERT INTO trax.snapshot_draft
+                        (id, user_key, owner_kind, machine, version, state, context, concurrency_token, updated_at)
+                    VALUES
+                        (gen_random_uuid(), 'u1', 'user', 'turnstile', 1, 'Locked', '{}', gen_random_uuid(), now()),
+                        (gen_random_uuid(), NULL, 'system', 'turnstile', 1, 'Locked', '{}', gen_random_uuid(), now())
+                    """
+                )
                 .ConfigureAwait(false);
         }
     }
@@ -1352,22 +1367,7 @@ public class RevisionTests(StoreProvider provider)
                     await Save("Draft", 0).ConfigureAwait(false);
                     break;
                 case Kind.AdvanceValid:
-                    if (_orderState is { } current)
-                        await Fire(
-                                TriggerFrom(current),
-                                string.Create(CultureInfo.InvariantCulture, $"a{_step}")
-                            )
-                            .ConfigureAwait(false);
-                    else
-                        (
-                            await Advance(
-                                    "Next",
-                                    string.Create(CultureInfo.InvariantCulture, $"a{_step}")
-                                )
-                                .ConfigureAwait(false)
-                        )
-                            .Should()
-                            .BeOfType<AdvanceOutcome.NotFound>();
+                    await AdvanceValid().ConfigureAwait(false);
                     break;
                 case Kind.AdvanceInvalid:
                     // Place is effect-bound from Review and has no edge elsewhere: refused either way.
@@ -1386,21 +1386,7 @@ public class RevisionTests(StoreProvider provider)
                     await Replay().ConfigureAwait(false);
                     break;
                 case Kind.StaleAdvance:
-                    using (var scope = Host.Scope())
-                        (
-                            await scope
-                                .ServiceProvider.GetRequiredService<ISnapshotStore>()
-                                .UpdateWithRequest(
-                                    _user,
-                                    _order,
-                                    Order("Review", 3),
-                                    Guid.NewGuid(),
-                                    request: null
-                                )
-                                .ConfigureAwait(false)
-                        )
-                            .Should()
-                            .BeFalse("a stale token writes nothing");
+                    await StaleAdvance().ConfigureAwait(false);
                     break;
                 case Kind.Send:
                     await Send().ConfigureAwait(false);
@@ -1409,6 +1395,42 @@ public class RevisionTests(StoreProvider provider)
                     await StepBuild().ConfigureAwait(false);
                     break;
             }
+        }
+
+        private async Task AdvanceValid()
+        {
+            if (_orderState is { } current)
+                await Fire(
+                        TriggerFrom(current),
+                        string.Create(CultureInfo.InvariantCulture, $"a{_step}")
+                    )
+                    .ConfigureAwait(false);
+            else
+                (
+                    await Advance("Next", string.Create(CultureInfo.InvariantCulture, $"a{_step}"))
+                        .ConfigureAwait(false)
+                )
+                    .Should()
+                    .BeOfType<AdvanceOutcome.NotFound>();
+        }
+
+        private async Task StaleAdvance()
+        {
+            using (var scope = Host.Scope())
+                (
+                    await scope
+                        .ServiceProvider.GetRequiredService<ISnapshotStore>()
+                        .UpdateWithRequest(
+                            _user,
+                            _order,
+                            Order("Review", 3),
+                            Guid.NewGuid(),
+                            request: null
+                        )
+                        .ConfigureAwait(false)
+                )
+                    .Should()
+                    .BeFalse("a stale token writes nothing");
         }
 
         private static string TriggerFrom(string state) =>

@@ -190,30 +190,7 @@ public class IrExporterTests
 
         var transitions = ir["transitions"].NotNull().AsArray().Cast<JsonObject>().ToList();
 
-        // The Cst transition carries an effect (key derived from machine id + trigger), a custom guard, and
-        // a custom reducer.
-        var cst = transitions.Single(t =>
-            string.Equals(
-                t["trigger"].NotNull().GetValue<string>(),
-                "Cst",
-                StringComparison.Ordinal
-            )
-        );
-        ((JsonObject)cst["effect"].NotNull())["keyPrefix"]
-            .NotNull()
-            .GetValue<string>()
-            .Should()
-            .Be("rich:Cst");
-        ((JsonObject)cst["guard"].NotNull())["rule"]
-            .NotNull()
-            .GetValue<string>()
-            .Should()
-            .Be("custom");
-        ((JsonObject)cst["reduce"].NotNull())["reduce"]
-            .NotNull()
-            .GetValue<string>()
-            .Should()
-            .Be("custom");
+        AssertCustomEffectEdge(transitions);
 
         // The Set1 guard is an `all` containing every simple rule kind.
         var set1 = transitions.Single(t =>
@@ -250,6 +227,34 @@ public class IrExporterTests
             .Select(t => ((JsonObject)t["reduce"].NotNull())["reduce"].NotNull().GetValue<string>())
             .ToList();
         reduceKinds.Should().Contain(new[] { "set", "clear", "reset", "keep", "custom" });
+    }
+
+    private static void AssertCustomEffectEdge(List<JsonObject> transitions)
+    {
+        // The Cst transition carries an effect (key derived from machine id + trigger), a custom guard, and
+        // a custom reducer.
+        var cst = transitions.Single(t =>
+            string.Equals(
+                t["trigger"].NotNull().GetValue<string>(),
+                "Cst",
+                StringComparison.Ordinal
+            )
+        );
+        ((JsonObject)cst["effect"].NotNull())["keyPrefix"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("rich:Cst");
+        ((JsonObject)cst["guard"].NotNull())["rule"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("custom");
+        ((JsonObject)cst["reduce"].NotNull())["reduce"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("custom");
     }
 
     // A machine whose every edge and state is declarative except where a test adds a delegate.

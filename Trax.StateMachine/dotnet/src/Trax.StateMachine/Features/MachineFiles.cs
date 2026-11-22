@@ -57,6 +57,39 @@ internal static class MachineFiles
             StringComparer.Ordinal
         );
 
+        AddTriggerAndInvokeProblems(problems, host, machines);
+
+        foreach (var (id, machine) in host.Machines)
+            problems.AddRange(HandlerProblems(machine, irs[id]));
+
+        AddPolicyProblems(problems, host, machines);
+
+        foreach (var view in host.Views.Values)
+        foreach (var field in view.Fields)
+        {
+            var names = machines[field.Machine];
+            if (!field.IsState && !names.Fields.Contains(field.Source))
+                problems.Add(
+                    $"{HostFileName} view '{view.Name}' shows '{field.Machine}.{field.Source}', which no context of '{field.Machine}' has."
+                );
+            foreach (var state in field.Labels?.Keys ?? [])
+                if (!names.States.Contains(state))
+                    problems.Add(
+                        $"{HostFileName} view '{view.Name}' labels '{state}', which is not a state of '{field.Machine}'."
+                    );
+        }
+
+        // Derivation refuses the same loops through the same check, so a hand-edited host file cannot add one.
+        problems.AddRange(PolicyLoops.Find(host.Policies, irs).Select(PolicyLoops.Problem));
+        return problems;
+    }
+
+    private static void AddTriggerAndInvokeProblems(
+        List<string> problems,
+        HostFile host,
+        Dictionary<string, IrNames> machines
+    )
+    {
         foreach (var (id, machine) in host.Machines)
         {
             var names = machines[id];
@@ -90,10 +123,14 @@ internal static class MachineFiles
                     );
             }
         }
+    }
 
-        foreach (var (id, machine) in host.Machines)
-            problems.AddRange(HandlerProblems(machine, irs[id]));
-
+    private static void AddPolicyProblems(
+        List<string> problems,
+        HostFile host,
+        Dictionary<string, IrNames> machines
+    )
+    {
         for (var i = 0; i < host.Policies.Count; i++)
         {
             var policy = host.Policies[i];
@@ -125,25 +162,6 @@ internal static class MachineFiles
                     $"{at} links by '{policy.By}', which no context of '{policy.Target}' has."
                 );
         }
-
-        foreach (var view in host.Views.Values)
-        foreach (var field in view.Fields)
-        {
-            var names = machines[field.Machine];
-            if (!field.IsState && !names.Fields.Contains(field.Source))
-                problems.Add(
-                    $"{HostFileName} view '{view.Name}' shows '{field.Machine}.{field.Source}', which no context of '{field.Machine}' has."
-                );
-            foreach (var state in field.Labels?.Keys ?? [])
-                if (!names.States.Contains(state))
-                    problems.Add(
-                        $"{HostFileName} view '{view.Name}' labels '{state}', which is not a state of '{field.Machine}'."
-                    );
-        }
-
-        // Derivation refuses the same loops through the same check, so a hand-edited host file cannot add one.
-        problems.AddRange(PolicyLoops.Find(host.Policies, irs).Select(PolicyLoops.Problem));
-        return problems;
     }
 
     /// <summary>

@@ -161,6 +161,24 @@ public static class StateMachinesBuilderExtensions
                     + $"{nameof(StateMachineOptions.DraftTtl)}, or set it to null for no bound."
             );
 
+        ExposeGenericMutations(services, options);
+
+        services.AddSingleton(options);
+
+        // Resolves only inside a run a machine invoked, which the job runner starts.
+        InvokedRunScope.Register(services);
+
+        RegisterMachineTypes(services, assemblies);
+        RegisterSnapshotStores(services);
+        RegisterInvokesAndSweeps(services);
+        RegisterChangeFeedAndRoutes(services, options);
+    }
+
+    private static void ExposeGenericMutations(
+        IServiceCollection services,
+        StateMachineOptions options
+    )
+    {
         // The generic mutations fail closed: serving them names the policy that gates them.
         if (options.GenericMutationsExposed)
         {
@@ -185,12 +203,10 @@ public static class StateMachinesBuilderExtensions
                     )
                 );
         }
+    }
 
-        services.AddSingleton(options);
-
-        // Resolves only inside a run a machine invoked, which the job runner starts.
-        InvokedRunScope.Register(services);
-
+    private static void RegisterMachineTypes(IServiceCollection services, Assembly[] assemblies)
+    {
         var machineTypes = assemblies
             .SelectMany(assembly => assembly.GetTypes())
             .Where(type =>
@@ -229,7 +245,10 @@ public static class StateMachinesBuilderExtensions
         // refused at startup, once the host's own registrations are in.
         foreach (var type in machineTypes)
             services.TryAddEnumerable(ServiceDescriptor.Singleton(typeof(IMachine), type));
+    }
 
+    private static void RegisterSnapshotStores(IServiceCollection services)
+    {
         // The stores use the request's data context, and the provider's dialect to read a unique violation as a
         // lost race. InMemory registers no dialect, so there a race throws rather than being misread.
         // Each write records the IR hash of the definition that made it, so a machine whose hash cannot be
@@ -258,7 +277,10 @@ public static class StateMachinesBuilderExtensions
         ));
         services.AddScoped<IdempotentEffect>();
         services.AddScoped<ISnapshotMachineRegistry, SnapshotMachineRegistry>();
+    }
 
+    private static void RegisterInvokesAndSweeps(IServiceCollection services)
+    {
         // System-owned instances and invoke tokens: server-only, so reached through the provider's data context
         // whatever ISnapshotStore a host substitutes. The outbox writes a snapshot entering or leaving an invoking
         // state together with its run, through the launcher Trax.Mediator registers; the cancellation cancels a
@@ -305,7 +327,13 @@ public static class StateMachinesBuilderExtensions
         // Drafts idle past the TTL are deleted by a sweep on every host that registers machines, never by a read.
         services.AddSingleton<DraftSweeper>();
         services.AddHostedService(sp => sp.GetRequiredService<DraftSweeper>());
+    }
 
+    private static void RegisterChangeFeedAndRoutes(
+        IServiceCollection services,
+        StateMachineOptions options
+    )
+    {
         // The change feed: one listener per host (a Postgres session on the provider's notices, or a poll of the
         // table on SQLite and InMemory, and on Postgres when the host chose to poll) and the hub that re-reads a
         // changed row for whoever watches it. Neither opens anything until something watches. Stopped in reverse

@@ -527,7 +527,32 @@ public class TransportTests
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        var host = Task.Run(async () =>
+        var host = ServeOversizedMessage(listener);
+        var client = new GraphQLSubscriptionSocket(
+            new GraphQLSubscriptionSocketOptions
+            {
+                Endpoint = new Uri(
+                    string.Create(CultureInfo.InvariantCulture, $"ws://127.0.0.1:{port}/graphql")
+                ),
+                MaxMessageSize = 1024,
+            }
+        );
+        await using var clientDisposal = client.ConfigureAwait(false);
+        var sink = new Sink();
+
+        using var subscription = client.Subscribe(
+            new JsonObject { ["id"] = "changed-1", ["variables"] = new JsonObject() },
+            sink
+        );
+        var error = await sink.Failed.Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
+
+        error.Message.Should().Contain("larger than 1024");
+        await host.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
+    }
+
+    // Accepts the client, acknowledges it, then sends a message past its limit.
+    private static Task ServeOversizedMessage(TcpListener listener) =>
+        Task.Run(async () =>
         {
             using var tcp = await listener.AcceptTcpClientAsync().ConfigureAwait(false);
             var stream = tcp.GetStream();
@@ -570,27 +595,6 @@ public class TransportTests
                 // The client gave up on the connection.
             }
         });
-        var client = new GraphQLSubscriptionSocket(
-            new GraphQLSubscriptionSocketOptions
-            {
-                Endpoint = new Uri(
-                    string.Create(CultureInfo.InvariantCulture, $"ws://127.0.0.1:{port}/graphql")
-                ),
-                MaxMessageSize = 1024,
-            }
-        );
-        await using var clientDisposal = client.ConfigureAwait(false);
-        var sink = new Sink();
-
-        using var subscription = client.Subscribe(
-            new JsonObject { ["id"] = "changed-1", ["variables"] = new JsonObject() },
-            sink
-        );
-        var error = await sink.Failed.Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
-
-        error.Message.Should().Contain("larger than 1024");
-        await host.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
-    }
 
     // The server half of the opening handshake (RFC 6455), so a test needs no web host.
     private static async Task HandshakeAsync(NetworkStream stream)
