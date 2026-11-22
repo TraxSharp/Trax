@@ -62,18 +62,7 @@ public class OperationsConformanceTests
 
         (
             await ClientGenerator
-                .CheckAsync(
-                    options,
-                    Path.Combine(
-                        root,
-                        "Trax.StateMachine",
-                        "ts",
-                        "tools",
-                        "conformance",
-                        "operations",
-                        "client"
-                    )
-                )
+                .CheckAsync(options, CommittedTypeScriptClient(root))
                 .ConfigureAwait(false)
         )
             .Select(d => $"{d.Status} {d.Path}")
@@ -81,19 +70,7 @@ public class OperationsConformanceTests
             .BeEmpty($"the TypeScript client is what the fixture generates. {Regenerate}");
         (
             await ClientGenerator
-                .CheckCSharpAsync(
-                    options,
-                    Namespace,
-                    Path.Combine(
-                        root,
-                        "Trax.Cli",
-                        "tests",
-                        "Trax.Cli.Tests",
-                        "IntegrationTests",
-                        "OperationsConformance",
-                        "Generated"
-                    )
-                )
+                .CheckCSharpAsync(options, Namespace, CommittedCSharpClient(root))
                 .ConfigureAwait(false)
         )
             .Select(d => $"{d.Status} {d.Path}")
@@ -120,6 +97,30 @@ public class OperationsConformanceTests
                 $"the host registers the documents the clients send. {Regenerate}"
             );
     }
+
+    // Where the TypeScript client generated for the fixture is committed.
+    private static string CommittedTypeScriptClient(string root) =>
+        Path.Combine(
+            root,
+            "Trax.StateMachine",
+            "ts",
+            "tools",
+            "conformance",
+            "operations",
+            "client"
+        );
+
+    // Where the C# client generated for the fixture is committed.
+    private static string CommittedCSharpClient(string root) =>
+        Path.Combine(
+            root,
+            "Trax.Cli",
+            "tests",
+            "Trax.Cli.Tests",
+            "IntegrationTests",
+            "OperationsConformance",
+            "Generated"
+        );
 
     [Test]
     public async Task The_CSharp_operations_client_passes_every_transcript_of_the_kit()
@@ -153,7 +154,31 @@ public class OperationsConformanceTests
 
         // Each request is started as it arrives and answered when it settles: a send waits on the host while the runner
         // goes on.
-        var conversation = Task.Run(async () =>
+        var conversation = Converse(process, testee, writing);
+
+        // The test owns its wait (ADR 0014): the runner finishes well within it, or the test fails.
+        using var timeout = new CancellationTokenSource(RunnerTimeout);
+        try
+        {
+            await conversation.WaitAsync(timeout.Token);
+            await process.WaitForExitAsync(timeout.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            process.Kill(entireProcessTree: true);
+            Assert.Fail(
+                $"conformance/operations/run.mjs did not finish within {RunnerTimeout}. It reported:\n{await stderr}"
+            );
+        }
+        var report = await stderr;
+
+        process.ExitCode.Should().Be(0, report);
+        report.Should().MatchRegex(@"([1-9]\d*) of \1 transcripts passed, 0 expected failures\.");
+    }
+
+    // Answers each request the runner writes, in its own task, writing one answer at a time.
+    private static Task Converse(Process process, OperationsTestee testee, SemaphoreSlim writing) =>
+        Task.Run(async () =>
         {
             var answers = new List<Task>();
             while (
@@ -181,26 +206,6 @@ public class OperationsConformanceTests
                 );
             }
         });
-
-        // The test owns its wait (ADR 0014): the runner finishes well within it, or the test fails.
-        using var timeout = new CancellationTokenSource(RunnerTimeout);
-        try
-        {
-            await conversation.WaitAsync(timeout.Token);
-            await process.WaitForExitAsync(timeout.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            process.Kill(entireProcessTree: true);
-            Assert.Fail(
-                $"conformance/operations/run.mjs did not finish within {RunnerTimeout}. It reported:\n{await stderr}"
-            );
-        }
-        var report = await stderr;
-
-        process.ExitCode.Should().Be(0, report);
-        report.Should().MatchRegex(@"([1-9]\d*) of \1 transcripts passed, 0 expected failures\.");
-    }
 
     // The repository's root: the directory above the test binary that holds global.json and Trax.StateMachine. Under CI,
     // which always builds from a checkout, not finding it fails rather than skipping.

@@ -57,12 +57,107 @@ internal sealed partial class ClientGenerator
             names.Claim(name, "the client's runtime");
         var types = new SdlTypes(ParseTypes(manifest.Types), manifest.FilterInputs);
 
+        var index = NewIndex();
+
+        // Every name is claimed before anything runs, so a manifest that cannot be generated is refused before node is.
+        var machines = ClaimMachines(manifest, names);
+        foreach (var train in manifest.Trains)
+            CheckTrain(train);
+        // A train's functions come only from the documents a frontend wrote, under documents/, claimed by their path in
+        // lower case, so two that differ only in case are refused before a case-insensitive disk writes one over the
+        // other.
+        var paths = new Names(StringComparer.OrdinalIgnoreCase);
+        var progress = Progress(manifest);
+        // types.g.ts is exported from the index beside everything else, so its names are claimed with them.
+        var typesText =
+            options.Documents is not null || progress is not null || manifest.Views.Count > 0
+                ? types.Render()
+                : null;
+        if (typesText is not null)
+            ClaimTypes(types, names);
+
+        var clientDocuments = options.Documents is { } documentFiles
+            ? ClientDocumentSet.Read(documentFiles, manifest, types)
+            : null;
+        var documentModules = DocumentModules(clientDocuments, names, paths, types);
+
+        ClaimProgressAndViews(names, progress, manifest);
+
+        // The IR is checked before node reads it: its id names the twin's files, and its names are written as code.
+        foreach (var (machine, _, _) in machines)
+            CheckIr(machine);
+
+        await AppendMachinesAsync(files, index, machines, spec, options.ToolsDir)
+            .ConfigureAwait(false);
+
+        AppendDocumentModules(
+            files,
+            index,
+            options,
+            typesText,
+            documentModules,
+            clientDocuments,
+            types
+        );
+        AppendProgressAndViews(files, index, manifest, progress, types);
+
+        files.Add(new("index.g.ts", index.ToString()));
+        return files.OrderBy(f => f.Path, StringComparer.Ordinal).ToList();
+    }
+
+    // The index module's start: the format check and the runtime's exports.
+    private static StringBuilder NewIndex()
+    {
         var index = new StringBuilder(Header).Append("import \"./format.g\";\n");
         index.Append(
             "export { configureTrax, requireSecureSocket, TraxOperationError, type TraxConnection } from \"./client.g\";\n"
         );
+        return index;
+    }
 
-        // Every name is claimed before anything runs, so a manifest that cannot be generated is refused before node is.
+    private static void ClaimProgressAndViews(
+        Names names,
+        (ClientManifestDocument Query, ClientManifestDocument Stream)? progress,
+        ClientManifest manifest
+    )
+    {
+        if (progress is not null)
+            foreach (var name in ProgressNames.Concat(ProgressTypeNames))
+                names.Claim(name, "runProgress");
+        foreach (var view in manifest.Views)
+        foreach (var name in ViewNames(view))
+            names.Claim(name, $"the view {view.Operation}");
+    }
+
+    // Each machine's twin and client module, exported from the index.
+    private async Task AppendMachinesAsync(
+        List<ClientFile> files,
+        StringBuilder index,
+        List<(ClientManifestMachine Machine, string Camel, string Pascal)> machines,
+        string spec,
+        string? toolsDir
+    )
+    {
+        foreach (var (machine, camel, pascal) in machines)
+        {
+            files.AddRange(await TwinAsync(machine, spec, toolsDir).ConfigureAwait(false));
+            files.Add(
+                new(
+                    $"{machine.Id}/{machine.Id}.client.g.ts",
+                    MachineClient(machine, camel, pascal, spec)
+                )
+            );
+            index.Append(
+                $"export {{ {camel}, {camel}Server, use{pascal}, useRemembered{pascal} }} from \"./{machine.Id}/{machine.Id}.client.g\";\n"
+            );
+        }
+    }
+
+    private static List<(ClientManifestMachine Machine, string Camel, string Pascal)> ClaimMachines(
+        ClientManifest manifest,
+        Names names
+    )
+    {
         var machines = new List<(ClientManifestMachine Machine, string Camel, string Pascal)>();
         foreach (var machine in manifest.Machines.OrderBy(m => m.Id, StringComparer.Ordinal))
         {
@@ -100,32 +195,29 @@ internal sealed partial class ClientGenerator
             names.Claim($"{camel}Server", machine.Id);
             machines.Add((machine, camel, pascal));
         }
-        foreach (var train in manifest.Trains)
-            CheckTrain(train);
-        // A train's functions come only from the documents a frontend wrote, under documents/, claimed by their path in
-        // lower case, so two that differ only in case are refused before a case-insensitive disk writes one over the
-        // other.
-        var paths = new Names(StringComparer.OrdinalIgnoreCase);
-        var progress = Progress(manifest);
-        // types.g.ts is exported from the index beside everything else, so its names are claimed with them.
-        var typesText =
-            options.Documents is not null || progress is not null || manifest.Views.Count > 0
-                ? types.Render()
-                : null;
-        if (typesText is not null)
-            foreach (var type in types.Declared)
-            {
-                // The document and progress modules import their types beside sendDocument.
-                if (DocumentModuleNames.Contains(type))
-                    throw new InvalidOperationException(
-                        $"The GraphQL type '{type}' takes a name its generated modules use. Rename it on the host."
-                    );
-                names.Claim(type, $"the GraphQL type {type}");
-            }
+        return machines;
+    }
 
-        var clientDocuments = options.Documents is { } documentFiles
-            ? ClientDocumentSet.Read(documentFiles, manifest, types)
-            : null;
+    private static void ClaimTypes(SdlTypes types, Names names)
+    {
+        foreach (var type in types.Declared)
+        {
+            // The document and progress modules import their types beside sendDocument.
+            if (DocumentModuleNames.Contains(type))
+                throw new InvalidOperationException(
+                    $"The GraphQL type '{type}' takes a name its generated modules use. Rename it on the host."
+                );
+            names.Claim(type, $"the GraphQL type {type}");
+        }
+    }
+
+    private static List<(string Function, string Result, string Text)> DocumentModules(
+        ClientDocumentSet? clientDocuments,
+        Names names,
+        Names paths,
+        SdlTypes types
+    )
+    {
         var documentModules = new List<(string Function, string Result, string Text)>();
         if (clientDocuments is not null)
         {
@@ -161,32 +253,20 @@ internal sealed partial class ClientGenerator
                 );
             }
         }
+        return documentModules;
+    }
 
-        if (progress is not null)
-            foreach (var name in ProgressNames.Concat(ProgressTypeNames))
-                names.Claim(name, "runProgress");
-        foreach (var view in manifest.Views)
-        foreach (var name in ViewNames(view))
-            names.Claim(name, $"the view {view.Operation}");
-
-        // The IR is checked before node reads it: its id names the twin's files, and its names are written as code.
-        foreach (var (machine, _, _) in machines)
-            CheckIr(machine);
-
-        foreach (var (machine, camel, pascal) in machines)
-        {
-            files.AddRange(await TwinAsync(machine, spec, options.ToolsDir).ConfigureAwait(false));
-            files.Add(
-                new(
-                    $"{machine.Id}/{machine.Id}.client.g.ts",
-                    MachineClient(machine, camel, pascal, spec)
-                )
-            );
-            index.Append(
-                $"export {{ {camel}, {camel}Server, use{pascal}, useRemembered{pascal} }} from \"./{machine.Id}/{machine.Id}.client.g\";\n"
-            );
-        }
-
+    private static void AppendDocumentModules(
+        List<ClientFile> files,
+        StringBuilder index,
+        ClientGenerateOptions options,
+        string? typesText,
+        List<(string Function, string Result, string Text)> documentModules,
+        ClientDocumentSet? clientDocuments,
+        SdlTypes types
+    )
+    {
+        var manifest = options.Manifest;
         if (typesText is not null)
         {
             files.Add(new("types.g.ts", typesText));
@@ -224,7 +304,16 @@ internal sealed partial class ClientGenerator
                 )
             );
         }
+    }
 
+    private static void AppendProgressAndViews(
+        List<ClientFile> files,
+        StringBuilder index,
+        ClientManifest manifest,
+        (ClientManifestDocument Query, ClientManifestDocument Stream)? progress,
+        SdlTypes types
+    )
+    {
         if (progress is { } documents)
         {
             files.Add(
@@ -245,9 +334,6 @@ internal sealed partial class ClientGenerator
                 $"export {{ {string.Join(", ", manifest.Views.SelectMany(v => ViewNames(v).Select((n, i) => i == 1 ? "type " + n : n)))} }} from \"./views.g\";\n"
             );
         }
-
-        files.Add(new("index.g.ts", index.ToString()));
-        return files.OrderBy(f => f.Path, StringComparer.Ordinal).ToList();
     }
 
     /// <summary>
@@ -849,55 +935,8 @@ internal sealed partial class ClientGenerator
             throw new InvalidOperationException(
                 $"The IR of the machine '{machine.Id}' is the IR of '{id}'. Export the manifest again from the host."
             );
-        var declared = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
-        foreach (var (key, what) in new[] { ("states", "state"), ("triggers", "trigger") })
-        {
-            var names = declared[what] = new HashSet<string>(StringComparer.Ordinal);
-            if (ir[key] is not JsonArray list)
-                throw new InvalidOperationException(
-                    $"The IR of the machine '{machine.Id}' has no {key}. Export the manifest again from the host."
-                );
-            foreach (var item in list)
-            {
-                if (
-                    item is not JsonValue v
-                    || !v.TryGetValue<string>(out var name)
-                    || !TypeScript.IsIdentifier(name)
-                )
-                    throw NotAnIdentifier(machine.Id, what, item?.ToJsonString());
-
-                if (TypeScript.IsPrototypeMember(name))
-                    throw new InvalidOperationException(
-                        $"The machine '{machine.Id}' has the {what} {TypeScript.Literal(name)}, a name every "
-                            + "JavaScript object has, so the twin would read it as something else. Rename it on the host."
-                    );
-
-                names.Add(name);
-            }
-        }
-        // The twin looks a state's context and invariant, and a trigger's input, up by name: a key that is none of them
-        // is not the host's.
-        foreach (
-            var (key, what) in new[]
-            {
-                ("context", "state"),
-                ("invariants", "state"),
-                ("inputs", "trigger"),
-            }
-        )
-        {
-            if (ir[key] is not (null or JsonObject))
-                throw new InvalidOperationException(
-                    $"The IR of the machine '{machine.Id}' has {key} that are not an object. Export the manifest "
-                        + "again from the host."
-                );
-            foreach (var (name, _) in ir[key] as JsonObject ?? [])
-                if (!declared[what].Contains(name))
-                    throw new InvalidOperationException(
-                        $"The IR of the machine '{machine.Id}' has {key} for {TypeScript.Literal(name)}, which is not "
-                            + $"one of its {what}s. Export the manifest again from the host."
-                    );
-        }
+        var declared = DeclaredNames(machine, ir);
+        CheckKeyedByName(machine, ir, declared);
         if (HasProtoKey(ir))
             throw new InvalidOperationException(
                 $"The IR of the machine '{machine.Id}' has a key \"__proto__\", which the twin's object literal would "
@@ -925,6 +964,72 @@ internal sealed partial class ClientGenerator
                 $"The IR of the machine '{machine.Id}' hashes to {hash}, and the manifest names {machine.IrHash}: "
                     + "its documents were registered for another IR. Export the manifest again from the host."
             );
+    }
+
+    // The machine's states and triggers by kind, each an identifier the twin can write.
+    private static Dictionary<string, HashSet<string>> DeclaredNames(
+        ClientManifestMachine machine,
+        JsonObject ir
+    )
+    {
+        var declared = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        foreach (var (key, what) in new[] { ("states", "state"), ("triggers", "trigger") })
+        {
+            var names = declared[what] = new HashSet<string>(StringComparer.Ordinal);
+            if (ir[key] is not JsonArray list)
+                throw new InvalidOperationException(
+                    $"The IR of the machine '{machine.Id}' has no {key}. Export the manifest again from the host."
+                );
+            foreach (var item in list)
+            {
+                if (
+                    item is not JsonValue v
+                    || !v.TryGetValue<string>(out var name)
+                    || !TypeScript.IsIdentifier(name)
+                )
+                    throw NotAnIdentifier(machine.Id, what, item?.ToJsonString());
+
+                if (TypeScript.IsPrototypeMember(name))
+                    throw new InvalidOperationException(
+                        $"The machine '{machine.Id}' has the {what} {TypeScript.Literal(name)}, a name every "
+                            + "JavaScript object has, so the twin would read it as something else. Rename it on the host."
+                    );
+
+                names.Add(name);
+            }
+        }
+        return declared;
+    }
+
+    // The twin looks a state's context and invariant, and a trigger's input, up by name: a key that is none of them
+    // is not the host's.
+    private static void CheckKeyedByName(
+        ClientManifestMachine machine,
+        JsonObject ir,
+        Dictionary<string, HashSet<string>> declared
+    )
+    {
+        foreach (
+            var (key, what) in new[]
+            {
+                ("context", "state"),
+                ("invariants", "state"),
+                ("inputs", "trigger"),
+            }
+        )
+        {
+            if (ir[key] is not (null or JsonObject))
+                throw new InvalidOperationException(
+                    $"The IR of the machine '{machine.Id}' has {key} that are not an object. Export the manifest "
+                        + "again from the host."
+                );
+            foreach (var (name, _) in ir[key] as JsonObject ?? [])
+                if (!declared[what].Contains(name))
+                    throw new InvalidOperationException(
+                        $"The IR of the machine '{machine.Id}' has {key} for {TypeScript.Literal(name)}, which is not "
+                            + $"one of its {what}s. Export the manifest again from the host."
+                    );
+        }
     }
 
     private static bool HasProtoKey(JsonNode? node) =>
@@ -1130,159 +1235,168 @@ internal sealed partial class ClientGenerator
         + "import \"./format.g\";\n"
         + "import { createClient, type Client } from \"graphql-ws\";\n"
         + $"import {{ persistedMessageReplacer, requireSecureEndpoint }} from {TypeScript.Literal(spec + "/client")};\n"
-        + """
-
-            /** Where the host is, and what each request carries. Nothing here is generated: the app gives it at run time. */
-            export interface TraxConnection {
-              /** The GraphQL endpoint (`https://api.example.com/trax/graphql`). */
-              url: string;
-              /** The GraphQL socket (`wss://api.example.com/trax/graphql`), for a machine's push. */
-              socketUrl: string;
-              /** The headers each request carries, read per request so a rotating token stays fresh. */
-              headers?: () => Record<string, string>;
-              /** What the socket sends in `connection_init`: a browser cannot set headers on a socket. */
-              connectionParams?: () => Record<string, unknown> | Promise<Record<string, unknown>>;
-              /**
-               * The signed-in user's id. A remembered machine is kept under it, so a browser two people sign in to never
-               * opens one's instance for the other, and a start in flight is never sent again as another user. Given here,
-               * with the headers, so the two cannot disagree for a render.
-               */
-              user?: string;
-              /**
-               * Lets the client send to an absolute `http:` url, or open a `ws:` socketUrl, on a host that is not loopback.
-               * Only for a trusted network: the headers and connectionParams would travel in cleartext. Off by default, and
-               * every train function, machine server and socket refuses such a url.
-               */
-              allowInsecureTransport?: boolean;
-              /**
-               * The most bytes of an answer a train function or machine server reads before it refuses it, a positive whole
-               * number. 16 MiB when not given; configureTrax refuses anything else.
-               */
-              maxResponseBytes?: number;
-              /**
-               * How long one request of a train function or machine server may take, in milliseconds, from sending it to the
-               * last byte of its answer; 30 seconds when not given, `Infinity` to wait as long as the host takes. A request past
-               * it is aborted and fails. configureTrax refuses anything else that is not a positive number.
-               */
-              requestTimeout?: number;
-            }
-
-            let connection: TraxConnection | null = null;
-            let socket: Client | null = null;
-            let generation = 0;
-            const listeners = new Set<() => void>();
-
-            /**
-             * Tells the generated client where the host is and who is signed in. Call it before any hook or train function
-             * runs, and again when the connection changes (another user signs in): the socket is closed, a machine's server
-             * made before refuses to send, every machine's server is made anew on its next use, and every mounted machine
-             * hook renders again onto it.
-             */
-            export function configureTrax(next: TraxConnection): void {
-              if (next.requestTimeout !== undefined) requireRequestTimeout(next.requestTimeout);
-              if (next.maxResponseBytes !== undefined) requireMaxResponseBytes(next.maxResponseBytes);
-              connection = next;
-              generation += 1;
-              const closing = socket;
-              socket = null;
-              void closing?.dispose();
-              for (const listener of [...listeners]) listener();
-            }
-
-            /** How many times configureTrax was called: a machine's server made under an earlier count is made again. */
-            export function traxGeneration(): number {
-              return generation;
-            }
-
-            /** Calls `listener` after each configureTrax, until the function it returns is called. The machine hooks render on it. */
-            export function subscribeTrax(listener: () => void): () => void {
-              listeners.add(listener);
-              return () => {
-                listeners.delete(listener);
-              };
-            }
-
-            /** The connection, or a refusal naming what to call. */
-            export function traxConnection(): TraxConnection {
-              if (!connection) throw new Error("Call configureTrax({ url, socketUrl }) before using the generated client.");
-              return connection;
-            }
-
-            /** The one socket every push shares, opened with the first subscription. */
-            export function traxSocket(): Client {
-              const { socketUrl, connectionParams, allowInsecureTransport } = traxConnection();
-              if (socket) return socket;
-              requireSecureSocket(socketUrl, allowInsecureTransport);
-              return (socket = createClient({
-                url: socketUrl,
-                connectionParams,
-                lazy: true,
-                retryAttempts: Number.POSITIVE_INFINITY,
-                // A 4403 close reaches the stream, which stops as FORBIDDEN, rather than being retried forever.
-                shouldRetry: retryClosedSocket,
-                jsonMessageReplacer: persistedMessageReplacer,
-              }));
-            }
-
-            /** A train operation the host refused: `code` is its `extensions.code` (`CLIENT_OUTDATED`, `TRAX_AUTHORIZATION`, ...). */
-            export class TraxOperationError extends Error {
-              readonly code: string | undefined;
-
-              constructor(code: string | undefined, message: string) {
-                super(message);
-                this.name = "TraxOperationError";
-                this.code = code;
-              }
-            }
-
-            /** Sends a persisted document by its id, never its text, and returns the field at `path` of its answer. */
-            export async function sendDocument<T>(id: string, variables: Record<string, unknown>, path: readonly string[]): Promise<T> {
-              const { url, headers, allowInsecureTransport, maxResponseBytes, requestTimeout } = traxConnection();
-              requireSecureEndpoint(url, allowInsecureTransport);
-              type Answer = { data?: Record<string, unknown> | null; errors?: { message: string; extensions?: { code?: string } }[] };
-              // The request and the whole of its answer, under the request timeout.
-              const { response, answer } = await withRequestTimeout(
-                requestTimeout ?? defaultRequestTimeout,
-                async (signal) => {
-                  const response = await fetch(url, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json", ...headers?.() },
-                    body: JSON.stringify({ id, variables: withoutUndefined(variables) }),
-                    // A redirect would carry the headers to wherever it points.
-                    redirect: "error",
-                    signal,
-                  });
-                  requireNoRedirect(response);
-                  try {
-                    return { response, answer: (await readJson(response, maxResponseBytes)) as Answer | null };
-                  } catch (cause) {
-                    // A body that is not JSON is the status's to explain; one past the limit is refused either way.
-                    if (response.ok || cause instanceof RangeError) throw cause;
-                    return { response, answer: null };
-                  }
-                },
-                (message) => new TraxOperationError(undefined, message),
-              );
-              const error = answer?.errors?.[0];
-              if (error) throw new TraxOperationError(error.extensions?.code, error.message);
-              // Not 2xx, and no GraphQL error to say why: the request failed, whatever data the body holds.
-              if (!response.ok)
-                throw new TraxOperationError(undefined, `The host answered ${[response.status, response.statusText].filter(Boolean).join(" ")}.`);
-              // 2xx with no error and no data to read the field from: neither a GraphQL answer nor a value.
-              const data: unknown = answer?.data;
-              if (typeof data !== "object" || data === null)
-                throw new TraxOperationError(undefined, `The host answered ${response.status} with no GraphQL answer.`);
-              let value: unknown = data;
-              for (const key of path) value = (value as Record<string, unknown> | null | undefined)?.[key];
-              return value as T;
-            }
-
-            function withoutUndefined(values: Record<string, unknown>): Record<string, unknown> {
-              return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined));
-            }
-
-            """
+        + ClientConnection
+        + ClientRequests
         + TransportGuards;
+
+    // The client module's connection: configureTrax, its listeners and the shared socket's state.
+    private const string ClientConnection = """
+
+        /** Where the host is, and what each request carries. Nothing here is generated: the app gives it at run time. */
+        export interface TraxConnection {
+          /** The GraphQL endpoint (`https://api.example.com/trax/graphql`). */
+          url: string;
+          /** The GraphQL socket (`wss://api.example.com/trax/graphql`), for a machine's push. */
+          socketUrl: string;
+          /** The headers each request carries, read per request so a rotating token stays fresh. */
+          headers?: () => Record<string, string>;
+          /** What the socket sends in `connection_init`: a browser cannot set headers on a socket. */
+          connectionParams?: () => Record<string, unknown> | Promise<Record<string, unknown>>;
+          /**
+           * The signed-in user's id. A remembered machine is kept under it, so a browser two people sign in to never
+           * opens one's instance for the other, and a start in flight is never sent again as another user. Given here,
+           * with the headers, so the two cannot disagree for a render.
+           */
+          user?: string;
+          /**
+           * Lets the client send to an absolute `http:` url, or open a `ws:` socketUrl, on a host that is not loopback.
+           * Only for a trusted network: the headers and connectionParams would travel in cleartext. Off by default, and
+           * every train function, machine server and socket refuses such a url.
+           */
+          allowInsecureTransport?: boolean;
+          /**
+           * The most bytes of an answer a train function or machine server reads before it refuses it, a positive whole
+           * number. 16 MiB when not given; configureTrax refuses anything else.
+           */
+          maxResponseBytes?: number;
+          /**
+           * How long one request of a train function or machine server may take, in milliseconds, from sending it to the
+           * last byte of its answer; 30 seconds when not given, `Infinity` to wait as long as the host takes. A request past
+           * it is aborted and fails. configureTrax refuses anything else that is not a positive number.
+           */
+          requestTimeout?: number;
+        }
+
+        let connection: TraxConnection | null = null;
+        let socket: Client | null = null;
+        let generation = 0;
+        const listeners = new Set<() => void>();
+
+        /**
+         * Tells the generated client where the host is and who is signed in. Call it before any hook or train function
+         * runs, and again when the connection changes (another user signs in): the socket is closed, a machine's server
+         * made before refuses to send, every machine's server is made anew on its next use, and every mounted machine
+         * hook renders again onto it.
+         */
+        export function configureTrax(next: TraxConnection): void {
+          if (next.requestTimeout !== undefined) requireRequestTimeout(next.requestTimeout);
+          if (next.maxResponseBytes !== undefined) requireMaxResponseBytes(next.maxResponseBytes);
+          connection = next;
+          generation += 1;
+          const closing = socket;
+          socket = null;
+          void closing?.dispose();
+          for (const listener of [...listeners]) listener();
+        }
+
+        /** How many times configureTrax was called: a machine's server made under an earlier count is made again. */
+        export function traxGeneration(): number {
+          return generation;
+        }
+
+        /** Calls `listener` after each configureTrax, until the function it returns is called. The machine hooks render on it. */
+        export function subscribeTrax(listener: () => void): () => void {
+          listeners.add(listener);
+          return () => {
+            listeners.delete(listener);
+          };
+        }
+
+        /** The connection, or a refusal naming what to call. */
+        export function traxConnection(): TraxConnection {
+          if (!connection) throw new Error("Call configureTrax({ url, socketUrl }) before using the generated client.");
+          return connection;
+        }
+
+
+        """;
+
+    // The client module's socket, its refusal and sendDocument.
+    private const string ClientRequests = """
+        /** The one socket every push shares, opened with the first subscription. */
+        export function traxSocket(): Client {
+          const { socketUrl, connectionParams, allowInsecureTransport } = traxConnection();
+          if (socket) return socket;
+          requireSecureSocket(socketUrl, allowInsecureTransport);
+          return (socket = createClient({
+            url: socketUrl,
+            connectionParams,
+            lazy: true,
+            retryAttempts: Number.POSITIVE_INFINITY,
+            // A 4403 close reaches the stream, which stops as FORBIDDEN, rather than being retried forever.
+            shouldRetry: retryClosedSocket,
+            jsonMessageReplacer: persistedMessageReplacer,
+          }));
+        }
+
+        /** A train operation the host refused: `code` is its `extensions.code` (`CLIENT_OUTDATED`, `TRAX_AUTHORIZATION`, ...). */
+        export class TraxOperationError extends Error {
+          readonly code: string | undefined;
+
+          constructor(code: string | undefined, message: string) {
+            super(message);
+            this.name = "TraxOperationError";
+            this.code = code;
+          }
+        }
+
+        /** Sends a persisted document by its id, never its text, and returns the field at `path` of its answer. */
+        export async function sendDocument<T>(id: string, variables: Record<string, unknown>, path: readonly string[]): Promise<T> {
+          const { url, headers, allowInsecureTransport, maxResponseBytes, requestTimeout } = traxConnection();
+          requireSecureEndpoint(url, allowInsecureTransport);
+          type Answer = { data?: Record<string, unknown> | null; errors?: { message: string; extensions?: { code?: string } }[] };
+          // The request and the whole of its answer, under the request timeout.
+          const { response, answer } = await withRequestTimeout(
+            requestTimeout ?? defaultRequestTimeout,
+            async (signal) => {
+              const response = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", ...headers?.() },
+                body: JSON.stringify({ id, variables: withoutUndefined(variables) }),
+                // A redirect would carry the headers to wherever it points.
+                redirect: "error",
+                signal,
+              });
+              requireNoRedirect(response);
+              try {
+                return { response, answer: (await readJson(response, maxResponseBytes)) as Answer | null };
+              } catch (cause) {
+                // A body that is not JSON is the status's to explain; one past the limit is refused either way.
+                if (response.ok || cause instanceof RangeError) throw cause;
+                return { response, answer: null };
+              }
+            },
+            (message) => new TraxOperationError(undefined, message),
+          );
+          const error = answer?.errors?.[0];
+          if (error) throw new TraxOperationError(error.extensions?.code, error.message);
+          // Not 2xx, and no GraphQL error to say why: the request failed, whatever data the body holds.
+          if (!response.ok)
+            throw new TraxOperationError(undefined, `The host answered ${[response.status, response.statusText].filter(Boolean).join(" ")}.`);
+          // 2xx with no error and no data to read the field from: neither a GraphQL answer nor a value.
+          const data: unknown = answer?.data;
+          if (typeof data !== "object" || data === null)
+            throw new TraxOperationError(undefined, `The host answered ${response.status} with no GraphQL answer.`);
+          let value: unknown = data;
+          for (const key of path) value = (value as Record<string, unknown> | null | undefined)?.[key];
+          return value as T;
+        }
+
+        function withoutUndefined(values: Record<string, unknown>): Record<string, unknown> {
+          return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined));
+        }
+
+        """;
 
     private async Task<IReadOnlyList<ClientFile>> TwinAsync(
         ClientManifestMachine machine,
@@ -1299,39 +1413,7 @@ internal sealed partial class ClientGenerator
             await File.WriteAllTextAsync(ir, machine.IrText() + "\n").ConfigureAwait(false);
             var outDir = Path.Combine(staging, "twin");
             Directory.CreateDirectory(outDir);
-            var script = Path.Combine(toolsDir ?? _bundledToolsDir, "generate-twin.mjs");
-            if (!await _node.IsAvailableAsync().ConfigureAwait(false))
-                throw new InvalidOperationException(
-                    "Generating a machine's twin needs Node.js 22 or later, and node was not found on PATH (or --node "
-                        + "is not an executable)."
-                );
-            if (!File.Exists(script))
-                throw new InvalidOperationException(
-                    $"The twin generator is not found at {script}. This trax was built from source, not installed "
-                        + "from its package: pass --tools-dir with the engine's tools/ directory."
-                );
-            var result = await _node
-                .RunAsync(
-                    script,
-                    [
-                        "--ir",
-                        ir,
-                        "--out-dir",
-                        outDir,
-                        "--import-style",
-                        "specifier",
-                        "--specifier",
-                        spec,
-                    ]
-                )
-                .ConfigureAwait(false);
-            if (result.ExitCode != 0)
-                throw new InvalidOperationException(
-                    string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"node generate-twin.mjs failed (exit {result.ExitCode}): {result.StdErr.Trim()}"
-                    )
-                );
+            await RunGenerateTwinAsync(ir, outDir, spec, toolsDir).ConfigureAwait(false);
             foreach (var kind in new[] { "contexts", "machine" })
             {
                 var file = Path.Combine(outDir, $"{machine.Id}.{kind}.g.ts");
@@ -1350,6 +1432,44 @@ internal sealed partial class ClientGenerator
         {
             Directory.Delete(staging, recursive: true);
         }
+    }
+
+    // Runs the engine's generate-twin.mjs under node on the IR at `ir`, writing into `outDir`.
+    private async Task RunGenerateTwinAsync(string ir, string outDir, string spec, string? toolsDir)
+    {
+        var script = Path.Combine(toolsDir ?? _bundledToolsDir, "generate-twin.mjs");
+        if (!await _node.IsAvailableAsync().ConfigureAwait(false))
+            throw new InvalidOperationException(
+                "Generating a machine's twin needs Node.js 22 or later, and node was not found on PATH (or --node "
+                    + "is not an executable)."
+            );
+        if (!File.Exists(script))
+            throw new InvalidOperationException(
+                $"The twin generator is not found at {script}. This trax was built from source, not installed "
+                    + "from its package: pass --tools-dir with the engine's tools/ directory."
+            );
+        var result = await _node
+            .RunAsync(
+                script,
+                [
+                    "--ir",
+                    ir,
+                    "--out-dir",
+                    outDir,
+                    "--import-style",
+                    "specifier",
+                    "--specifier",
+                    spec,
+                ]
+            )
+            .ConfigureAwait(false);
+        if (result.ExitCode != 0)
+            throw new InvalidOperationException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"node generate-twin.mjs failed (exit {result.ExitCode}): {result.StdErr.Trim()}"
+                )
+            );
     }
 
     private static string MachineClient(
@@ -1388,6 +1508,18 @@ internal sealed partial class ClientGenerator
                 .Append($"    document: {TypeScript.Literal(document.Document)},\n")
                 .Append("  },\n");
         sb.Append("];\n\n");
+        AppendMachineServer(sb, machine, camel);
+        AppendMachineHooks(sb, machine, camel, pascal);
+        return sb.ToString();
+    }
+
+    // The module's server over the configured connection, made anew after each configureTrax.
+    private static void AppendMachineServer(
+        StringBuilder sb,
+        ClientManifestMachine machine,
+        string camel
+    )
+    {
         sb.Append($"let server: ReturnType<typeof createMachineServer> | null = null;\n");
         sb.Append("let serverGeneration = -1;\n\n");
         sb.Append(
@@ -1438,6 +1570,16 @@ internal sealed partial class ClientGenerator
         sb.Append("    serverGeneration = generation;\n");
         sb.Append("  }\n");
         sb.Append("  return server;\n}\n\n");
+    }
+
+    // The module's two hooks: one instance by id or start, and the one this browser remembers.
+    private static void AppendMachineHooks(
+        StringBuilder sb,
+        ClientManifestMachine machine,
+        string camel,
+        string pascal
+    )
+    {
         sb.Append(
                 $"/**\n * One instance of '{EscapeDocText(machine.Id)}': the given id, or one started with `startInput`. It renders again\n"
             )
@@ -1486,7 +1628,6 @@ internal sealed partial class ClientGenerator
         sb.Append(
             $"  return useRememberedMachine({camel}, {{ ...options, rememberKey: key, server: {camel}Server() }});\n}}\n"
         );
-        return sb.ToString();
     }
 
     private const string RunProgressField = "runProgress";
@@ -1707,6 +1848,34 @@ internal sealed partial class ClientGenerator
             .Order(StringComparer.Ordinal)
             .ToList();
         var sb = new StringBuilder(Header);
+        AppendProgressTypes(sb, query, stream, used, progress, progressEvent);
+        sb.Append(
+            TypeScript.Doc(
+                "Your run, read once: where it stands and the steps it took. Any run you did not start answers "
+                    + "`problem.code` NOT_FOUND."
+                    + (
+                        followable.Count == 0
+                            ? ""
+                            : " Runs of these trains can be followed: "
+                                + string.Join(", ", followable)
+                                + "."
+                    )
+            )
+        );
+        sb.Append(ProgressRuntime);
+        return sb.ToString();
+    }
+
+    // The module's imports, its two types and the ids of its two documents.
+    private static void AppendProgressTypes(
+        StringBuilder sb,
+        ClientManifestDocument query,
+        ClientManifestDocument stream,
+        HashSet<string> used,
+        string progress,
+        string progressEvent
+    )
+    {
         sb.Append("import \"./format.g\";\n");
         sb.Append("import { useEffect, useState, useSyncExternalStore } from \"react\";\n");
         sb.Append(
@@ -1733,211 +1902,197 @@ internal sealed partial class ClientGenerator
         sb.Append(
             $"export const runProgressEventsDocumentId = {TypeScript.Literal(stream.Id)};\n\n"
         );
-        sb.Append(
-            TypeScript.Doc(
-                "Your run, read once: where it stands and the steps it took. Any run you did not start answers "
-                    + "`problem.code` NOT_FOUND."
-                    + (
-                        followable.Count == 0
-                            ? ""
-                            : " Runs of these trains can be followed: "
-                                + string.Join(", ", followable)
-                                + "."
-                    )
-            )
-        );
-        sb.Append(
-            """
-            export function readRunProgress(runId: string): Promise<RunProgress> {
-              return sendDocument(runProgressDocumentId, { runId }, ["runProgress"]);
-            }
-
-            /**
-             * Follows your run: `onEvent` gets each change of state and each step as it happens, then `onEnd()` once the
-             * stream ends, after the run does, or `onEnd(error)` when the host refused it. When configureTrax is called
-             * while following, it closes the socket the stream is on and the run has not ended: `onEnd` gets a
-             * TraxOperationError with the code `CONNECTION_CHANGED`, so call this again to follow the run over the new
-             * connection. A `sequence` that skips a number means events were lost: read the run again. Returns the
-             * function that stops following.
-             */
-            export function followRunProgress(
-              runId: string,
-              onEvent: (event: RunProgressEvent) => void,
-              onEnd?: (error?: unknown) => void,
-            ): () => void {
-              const payload = { query: "", id: runProgressEventsDocumentId, variables: { runId } };
-              const generation = traxGeneration();
-              // A stream ended by configureTrax closing its socket says so, rather than reading as the run's end.
-              const end = (error?: unknown) =>
-                onEnd?.(
-                  generation === traxGeneration()
-                    ? error
-                    : new TraxOperationError("CONNECTION_CHANGED", "configureTrax was called while following this run: follow it again."),
-                );
-              // Set once a frame has ended the stream (a refusal, or neither data nor an error), which then says nothing more.
-              let failed = false;
-              const fail = (error: TraxOperationError) => {
-                failed = true;
-                stop();
-                end(error);
-              };
-              const stop = traxSocket().subscribe<{ runProgress: RunProgressEvent }>(payload, {
-                next: (result) => {
-                  if (failed) return;
-                  const error = result.errors?.[0];
-                  if (error) fail(new TraxOperationError(error.extensions?.code as string | undefined, error.message));
-                  else if (typeof result.data === "object" && result.data !== null) onEvent(result.data.runProgress);
-                  // Neither a refusal nor an event: the stream ends with that failure, as a send answered so does.
-                  else fail(new TraxOperationError(undefined, "The host sent a frame with neither data nor an error."));
-                },
-                error: (error) => {
-                  if (!failed) end(error);
-                },
-                complete: () => {
-                  if (!failed) end();
-                },
-              });
-              return stop;
-            }
-
-            /** A run as useRunProgress shows it. */
-            export interface RunProgressView {
-              /** The run shown: the one asked for, or the retry that followed it. */
-              runId: string | null;
-              /** The runs before it, oldest first: each failed, and the scheduler retried it. */
-              earlier: string[];
-              state: RunProgress["state"];
-              steps: RunProgress["steps"];
-              failure: string | null;
-              problem: RunProgress["problem"];
-              /** The stream ended: the run ended with no retry to follow, or the host refused it. */
-              ended: boolean;
-            }
-
-            const nothingYet: RunProgressView = { runId: null, earlier: [], state: null, steps: [], failure: null, problem: null, ended: false };
-
-            /**
-             * Your run, kept current: read once, then followed until it ends. A step replaces the one at its position, a lost
-             * event reads the run again, and a failed run the scheduler retries is followed into its retry. After
-             * configureTrax the run is read and followed again over the new connection, starting from nothing: what was
-             * shown before, ended or refused included, belonged to the connection before. When configureTrax names another
-             * `user`, a run id given before is the previous user's and is not followed until a run id is given again. Pass
-             * null to follow nothing.
-             */
-            export function useRunProgress(runId: string | null | undefined): RunProgressView {
-              // configureTrax closes the socket the stream is on: the run is followed again over the new one.
-              const generation = useSyncExternalStore(subscribeTrax, traxGeneration, traxGeneration);
-              // The view, and the configureTrax it was made under: one made under an earlier one is never shown.
-              const [held, setHeld] = useState<{ generation: number; view: RunProgressView }>({ generation, view: nothingYet });
-              // The user given to configureTrax: a run id is followed only for the user it was given under.
-              const user = generation === 0 ? undefined : traxConnection().user;
-              const [current, setCurrent] = useState<{
-                asked: string | null | undefined;
-                run: string | null | undefined;
-                earlier: string[];
-                user: string | undefined;
-              }>({ asked: runId, run: runId, earlier: [], user });
-              if (current.asked !== runId) setCurrent({ asked: runId, run: runId, earlier: [], user });
-              // Another user signed in while the run id stayed: it was the previous user's, so nothing is followed until a
-              // run id is given again. A token refresh for the same user follows it again.
-              const kept = current.asked === runId && current.user === user;
-              const following = current.asked === runId ? (kept ? current.run : null) : runId;
-              const earlier = kept ? current.earlier : [];
-
-              useEffect(() => {
-                if (!following) return;
-                let live = true;
-                let last = 0;
-                // How many events the stream delivered: a read sent before the last of them answers with an older run.
-                let events = 0;
-                // The view of this run on this connection: what was held, when it was, else an empty one.
-                const setView = (change: (v: RunProgressView) => RunProgressView) =>
-                  setHeld((h) => ({
-                    generation,
-                    view: change(h.generation === generation && h.view.runId === following ? h.view : { ...nothingYet, runId: following }),
-                  }));
-                // The read and the stream can both report the retry: the first moves on to it, the second finds it moved.
-                const retry = (next: string) => {
-                  if (live) setCurrent((c) => (c.run === following ? { ...c, run: next, earlier: [...c.earlier, following] } : c));
-                };
-                // A read answered after an event arrived never shows its state over the event's: only the steps it holds that
-                // no event has reported are added. One that was sent for lost events is sent again, until it answers with no
-                // event since.
-                const read = (forLost: boolean) => {
-                  const sent = events;
-                  return readRunProgress(following).then(
-                    (run) => {
-                      if (!live) return;
-                      if (run.retriedAs) return retry(run.retriedAs);
-                      if (events !== sent) {
-                        setView((v) => ({ ...v, steps: v.steps.reduce(withStep, run.steps) }));
-                        if (forLost) void read(true);
-                        return;
-                      }
-                      setView((v) => ({ ...v, state: run.state, steps: run.steps, failure: run.failure, problem: run.problem }));
-                    },
-                    () => undefined,
-                  );
-                };
-                // The host pushes a step as the run takes it and writes it for a read a little later, so a hook mounted
-                // mid-run can miss a step in both: its read was answered before the step was written, its stream began
-                // after the step was pushed. The run is read again once the stream is open and once more after it ends,
-                // and the steps it holds that the stream did not report are added, in order of position.
-                const fill = () =>
-                  readRunProgress(following).then(
-                    (run) => {
-                      if (live && !run.retriedAs)
-                        setView((v) => ({ ...v, steps: v.steps.reduce(withStep, run.steps).sort((a, b) => a.position - b.position) }));
-                    },
-                    () => undefined,
-                  );
-                void read(false);
-                const stop = followRunProgress(
-                  following,
-                  (event) => {
-                    events += 1;
-                    if (event.retriedAs) return retry(event.retriedAs);
-                    if (last !== 0 && event.sequence !== last + 1) void read(true);
-                    else if (events === 1) void fill();
-                    last = event.sequence;
-                    setView((v) => ({
-                      ...v,
-                      state: event.state ?? v.state,
-                      steps: event.step ? withStep(v.steps, event.step) : v.steps,
-                      failure: event.failure ?? v.failure,
-                      problem: event.problem ?? v.problem,
-                    }));
-                  },
-                  (error) => {
-                    // The stream of an earlier connection ends when configureTrax closes its socket, not when the run does.
-                    if (!live || generation !== traxGeneration()) return;
-                    setView((v) => ({ ...v, ended: true }));
-                    if (error === undefined) void fill();
-                  },
-                );
-                return () => {
-                  live = false;
-                  stop();
-                };
-              }, [following, generation]);
-              // A view of an earlier run or connection is not shown: a run just asked for, retried into, or followed again
-              // after configureTrax starts empty.
-              const shown = held.generation === generation && held.view.runId === (following ?? null);
-              return { ...(shown ? held.view : { ...nothingYet, runId: following ?? null }), earlier };
-            }
-
-            type Step = RunProgress["steps"][number];
-
-            function withStep(steps: readonly Step[], step: Step): Step[] {
-              const key = (s: Step) => `${s.position}:${s.kind}`;
-              const at = steps.findIndex((s) => key(s) === key(step));
-              return at < 0 ? [...steps, step] : steps.map((s, i) => (i === at ? step : s));
-            }
-
-            """
-        );
-        return sb.ToString();
     }
+
+    // What the progress module runs: reading a run, following it, and the useRunProgress hook.
+    private const string ProgressRuntime = """
+        export function readRunProgress(runId: string): Promise<RunProgress> {
+          return sendDocument(runProgressDocumentId, { runId }, ["runProgress"]);
+        }
+
+        /**
+         * Follows your run: `onEvent` gets each change of state and each step as it happens, then `onEnd()` once the
+         * stream ends, after the run does, or `onEnd(error)` when the host refused it. When configureTrax is called
+         * while following, it closes the socket the stream is on and the run has not ended: `onEnd` gets a
+         * TraxOperationError with the code `CONNECTION_CHANGED`, so call this again to follow the run over the new
+         * connection. A `sequence` that skips a number means events were lost: read the run again. Returns the
+         * function that stops following.
+         */
+        export function followRunProgress(
+          runId: string,
+          onEvent: (event: RunProgressEvent) => void,
+          onEnd?: (error?: unknown) => void,
+        ): () => void {
+          const payload = { query: "", id: runProgressEventsDocumentId, variables: { runId } };
+          const generation = traxGeneration();
+          // A stream ended by configureTrax closing its socket says so, rather than reading as the run's end.
+          const end = (error?: unknown) =>
+            onEnd?.(
+              generation === traxGeneration()
+                ? error
+                : new TraxOperationError("CONNECTION_CHANGED", "configureTrax was called while following this run: follow it again."),
+            );
+          // Set once a frame has ended the stream (a refusal, or neither data nor an error), which then says nothing more.
+          let failed = false;
+          const fail = (error: TraxOperationError) => {
+            failed = true;
+            stop();
+            end(error);
+          };
+          const stop = traxSocket().subscribe<{ runProgress: RunProgressEvent }>(payload, {
+            next: (result) => {
+              if (failed) return;
+              const error = result.errors?.[0];
+              if (error) fail(new TraxOperationError(error.extensions?.code as string | undefined, error.message));
+              else if (typeof result.data === "object" && result.data !== null) onEvent(result.data.runProgress);
+              // Neither a refusal nor an event: the stream ends with that failure, as a send answered so does.
+              else fail(new TraxOperationError(undefined, "The host sent a frame with neither data nor an error."));
+            },
+            error: (error) => {
+              if (!failed) end(error);
+            },
+            complete: () => {
+              if (!failed) end();
+            },
+          });
+          return stop;
+        }
+
+        /** A run as useRunProgress shows it. */
+        export interface RunProgressView {
+          /** The run shown: the one asked for, or the retry that followed it. */
+          runId: string | null;
+          /** The runs before it, oldest first: each failed, and the scheduler retried it. */
+          earlier: string[];
+          state: RunProgress["state"];
+          steps: RunProgress["steps"];
+          failure: string | null;
+          problem: RunProgress["problem"];
+          /** The stream ended: the run ended with no retry to follow, or the host refused it. */
+          ended: boolean;
+        }
+
+        const nothingYet: RunProgressView = { runId: null, earlier: [], state: null, steps: [], failure: null, problem: null, ended: false };
+
+        /**
+         * Your run, kept current: read once, then followed until it ends. A step replaces the one at its position, a lost
+         * event reads the run again, and a failed run the scheduler retries is followed into its retry. After
+         * configureTrax the run is read and followed again over the new connection, starting from nothing: what was
+         * shown before, ended or refused included, belonged to the connection before. When configureTrax names another
+         * `user`, a run id given before is the previous user's and is not followed until a run id is given again. Pass
+         * null to follow nothing.
+         */
+        export function useRunProgress(runId: string | null | undefined): RunProgressView {
+          // configureTrax closes the socket the stream is on: the run is followed again over the new one.
+          const generation = useSyncExternalStore(subscribeTrax, traxGeneration, traxGeneration);
+          // The view, and the configureTrax it was made under: one made under an earlier one is never shown.
+          const [held, setHeld] = useState<{ generation: number; view: RunProgressView }>({ generation, view: nothingYet });
+          // The user given to configureTrax: a run id is followed only for the user it was given under.
+          const user = generation === 0 ? undefined : traxConnection().user;
+          const [current, setCurrent] = useState<{
+            asked: string | null | undefined;
+            run: string | null | undefined;
+            earlier: string[];
+            user: string | undefined;
+          }>({ asked: runId, run: runId, earlier: [], user });
+          if (current.asked !== runId) setCurrent({ asked: runId, run: runId, earlier: [], user });
+          // Another user signed in while the run id stayed: it was the previous user's, so nothing is followed until a
+          // run id is given again. A token refresh for the same user follows it again.
+          const kept = current.asked === runId && current.user === user;
+          const following = current.asked === runId ? (kept ? current.run : null) : runId;
+          const earlier = kept ? current.earlier : [];
+
+          useEffect(() => {
+            if (!following) return;
+            let live = true;
+            let last = 0;
+            // How many events the stream delivered: a read sent before the last of them answers with an older run.
+            let events = 0;
+            // The view of this run on this connection: what was held, when it was, else an empty one.
+            const setView = (change: (v: RunProgressView) => RunProgressView) =>
+              setHeld((h) => ({
+                generation,
+                view: change(h.generation === generation && h.view.runId === following ? h.view : { ...nothingYet, runId: following }),
+              }));
+            // The read and the stream can both report the retry: the first moves on to it, the second finds it moved.
+            const retry = (next: string) => {
+              if (live) setCurrent((c) => (c.run === following ? { ...c, run: next, earlier: [...c.earlier, following] } : c));
+            };
+            // A read answered after an event arrived never shows its state over the event's: only the steps it holds that
+            // no event has reported are added. One that was sent for lost events is sent again, until it answers with no
+            // event since.
+            const read = (forLost: boolean) => {
+              const sent = events;
+              return readRunProgress(following).then(
+                (run) => {
+                  if (!live) return;
+                  if (run.retriedAs) return retry(run.retriedAs);
+                  if (events !== sent) {
+                    setView((v) => ({ ...v, steps: v.steps.reduce(withStep, run.steps) }));
+                    if (forLost) void read(true);
+                    return;
+                  }
+                  setView((v) => ({ ...v, state: run.state, steps: run.steps, failure: run.failure, problem: run.problem }));
+                },
+                () => undefined,
+              );
+            };
+            // The host pushes a step as the run takes it and writes it for a read a little later, so a hook mounted
+            // mid-run can miss a step in both: its read was answered before the step was written, its stream began
+            // after the step was pushed. The run is read again once the stream is open and once more after it ends,
+            // and the steps it holds that the stream did not report are added, in order of position.
+            const fill = () =>
+              readRunProgress(following).then(
+                (run) => {
+                  if (live && !run.retriedAs)
+                    setView((v) => ({ ...v, steps: v.steps.reduce(withStep, run.steps).sort((a, b) => a.position - b.position) }));
+                },
+                () => undefined,
+              );
+            void read(false);
+            const stop = followRunProgress(
+              following,
+              (event) => {
+                events += 1;
+                if (event.retriedAs) return retry(event.retriedAs);
+                if (last !== 0 && event.sequence !== last + 1) void read(true);
+                else if (events === 1) void fill();
+                last = event.sequence;
+                setView((v) => ({
+                  ...v,
+                  state: event.state ?? v.state,
+                  steps: event.step ? withStep(v.steps, event.step) : v.steps,
+                  failure: event.failure ?? v.failure,
+                  problem: event.problem ?? v.problem,
+                }));
+              },
+              (error) => {
+                // The stream of an earlier connection ends when configureTrax closes its socket, not when the run does.
+                if (!live || generation !== traxGeneration()) return;
+                setView((v) => ({ ...v, ended: true }));
+                if (error === undefined) void fill();
+              },
+            );
+            return () => {
+              live = false;
+              stop();
+            };
+          }, [following, generation]);
+          // A view of an earlier run or connection is not shown: a run just asked for, retried into, or followed again
+          // after configureTrax starts empty.
+          const shown = held.generation === generation && held.view.runId === (following ?? null);
+          return { ...(shown ? held.view : { ...nothingYet, runId: following ?? null }), earlier };
+        }
+
+        type Step = RunProgress["steps"][number];
+
+        function withStep(steps: readonly Step[], step: Step): Step[] {
+          const key = (s: Step) => `${s.position}:${s.kind}`;
+          const at = steps.findIndex((s) => key(s) === key(step));
+          return at < 0 ? [...steps, step] : steps.map((s, i) => (i === at ? step : s));
+        }
+
+        """;
 
     private static string Requirement(ClientManifestRequirement? requires)
     {

@@ -443,22 +443,7 @@ public class SchemaNameValidationTests
             )
             .ToList();
 
-        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES").NotNull())
-            .Split(Path.PathSeparator)
-            .Select(path => MetadataReference.CreateFromFile(path));
-        var errors = CSharpCompilation
-            .Create(
-                "Generated",
-                trees,
-                references,
-                new CSharpCompilationOptions(
-                    OutputKind.DynamicallyLinkedLibrary,
-                    nullableContextOptions: NullableContextOptions.Enable
-                )
-            )
-            .GetDiagnostics()
-            .Where(d => d.Severity == DiagnosticSeverity.Error)
-            .Select(d => d.ToString());
+        var errors = CompileErrors(trees);
 
         errors.Should().BeEmpty("schema text is rendered as data; " + Adr);
 
@@ -483,6 +468,27 @@ public class SchemaNameValidationTests
                 "GetPlayerJunction"
             );
         declared.Should().NotContain(n => n.StartsWith("Emitted"), Adr);
+    }
+
+    // The errors the generated sources compile with, as a library against the platform's assemblies.
+    private static IEnumerable<string> CompileErrors(List<SyntaxTree> trees)
+    {
+        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES").NotNull())
+            .Split(Path.PathSeparator)
+            .Select(path => MetadataReference.CreateFromFile(path));
+        return CSharpCompilation
+            .Create(
+                "Generated",
+                trees,
+                references,
+                new CSharpCompilationOptions(
+                    OutputKind.DynamicallyLinkedLibrary,
+                    nullableContextOptions: NullableContextOptions.Enable
+                )
+            )
+            .GetDiagnostics()
+            .Where(d => d.Severity == DiagnosticSeverity.Error)
+            .Select(d => d.ToString());
     }
 
     private static ApiSchema EmptySchema() => new() { SourceFile = "test", SchemaType = "openapi" };

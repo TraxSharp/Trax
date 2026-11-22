@@ -96,61 +96,14 @@ internal sealed partial class ClientDocumentSet
             return null;
         }
 
-        var fields = new List<GraphQLField>();
-        foreach (var selection in operation.SelectionSet.Selections)
-        {
-            if (selection is not GraphQLField { Alias: null } field)
-            {
-                errors.Add(
-                    At(
-                        file,
-                        selection,
-                        $"'{name}' selects something other than a field, or an alias, at its root."
-                    )
-                );
-                return null;
-            }
-            fields.Add(field);
-        }
-
-        string root;
-        string rootType;
-        if (operation.Operation == OperationType.Subscription)
-        {
-            if (fields is not [var stream] || !OperatorStreams.Contains(stream.Name.StringValue))
-            {
-                errors.Add(
-                    At(
-                        file,
-                        operation,
-                        $"'{name}' subscribes to something other than one of the operator's streams ({string.Join(", ", OperatorStreams.Order(StringComparer.Ordinal))})."
-                    )
-                );
-                return null;
-            }
-            root = stream.Name.StringValue;
-            rootType = roots.Subscription;
-        }
-        else
-        {
-            var names = fields
-                .Select(f => f.Name.StringValue)
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
-            if (names is not [var only] || only is not (OperationsField or ManagementField))
-            {
-                errors.Add(
-                    At(
-                        file,
-                        operation,
-                        $"'{name}' selects something other than '{OperationsField}', or '{ManagementField}' alone, at its root."
-                    )
-                );
-                return null;
-            }
-            root = only;
-            rootType = operation.Operation == OperationType.Mutation ? roots.Mutation : roots.Query;
-        }
+        if (RootFields(file, operation, name, errors) is not { } fields)
+            return null;
+        if (
+            OperationsRootOf(file, operation, name, fields, roots, errors)
+            is not
+            (string root, string rootType)
+        )
+            return null;
         if (types.Definition(rootType) is not GraphQLObjectTypeDefinition)
         {
             errors.Add(
@@ -168,19 +121,83 @@ internal sealed partial class ClientDocumentSet
         var scope = new Scope(file, variables);
         checker.Begin(operation);
         checker.Root(scope, operation.SelectionSet, rootType);
-        foreach (var (variable, definition) in variables)
-            if (!scope.UsedVariables.Contains(variable))
-                errors.Add(
-                    At(
-                        file,
-                        definition,
-                        $"'{name}' declares the variable '${variable}' and never uses it."
-                    )
-                );
+        RefuseUnusedVariables(file, name, variables, scope, errors);
 
         return errors.Count == before
             ? new ClientOperation(name, file.Source, operation, root, [], "", "")
             : null;
+    }
+
+    // The fields at the operation's root, or null (with the error) when it selects anything else or
+    // an alias there.
+    private static List<GraphQLField>? RootFields(
+        ClientDocumentFile file,
+        GraphQLOperationDefinition operation,
+        string name,
+        List<string> errors
+    )
+    {
+        var fields = new List<GraphQLField>();
+        foreach (var selection in operation.SelectionSet.Selections)
+        {
+            if (selection is not GraphQLField { Alias: null } field)
+            {
+                errors.Add(
+                    At(
+                        file,
+                        selection,
+                        $"'{name}' selects something other than a field, or an alias, at its root."
+                    )
+                );
+                return null;
+            }
+            fields.Add(field);
+        }
+        return fields;
+    }
+
+    // The root field and its type the operation reaches, or null (with the error) when it reaches
+    // none the operations schema serves.
+    private static (string Root, string RootType)? OperationsRootOf(
+        ClientDocumentFile file,
+        GraphQLOperationDefinition operation,
+        string name,
+        List<GraphQLField> fields,
+        OperationsRoots roots,
+        List<string> errors
+    )
+    {
+        if (operation.Operation == OperationType.Subscription)
+        {
+            if (fields is not [var stream] || !OperatorStreams.Contains(stream.Name.StringValue))
+            {
+                errors.Add(
+                    At(
+                        file,
+                        operation,
+                        $"'{name}' subscribes to something other than one of the operator's streams ({string.Join(", ", OperatorStreams.Order(StringComparer.Ordinal))})."
+                    )
+                );
+                return null;
+            }
+            return (stream.Name.StringValue, roots.Subscription);
+        }
+        var names = fields
+            .Select(f => f.Name.StringValue)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (names is not [var only] || only is not (OperationsField or ManagementField))
+        {
+            errors.Add(
+                At(
+                    file,
+                    operation,
+                    $"'{name}' selects something other than '{OperationsField}', or '{ManagementField}' alone, at its root."
+                )
+            );
+            return null;
+        }
+        return (only, operation.Operation == OperationType.Mutation ? roots.Mutation : roots.Query);
     }
 
     private sealed partial class Checker

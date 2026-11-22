@@ -93,6 +93,14 @@ internal sealed partial class DeployFile
             throw new InvalidOperationException(
                 Problem("the try profile serves on a CloudFront address and takes no domain.")
             );
+        CheckNetworkAndCounts(name, env);
+        CheckSettingsAndAuth(name, env);
+        return env;
+    }
+
+    private void CheckNetworkAndCounts(string name, DeployEnvironment env)
+    {
+        string Problem(string what) => $"Environment '{name}': {what}";
         if (env.Network is { } network)
         {
             if (string.IsNullOrWhiteSpace(network.VpcId) || string.IsNullOrWhiteSpace(network.Cidr))
@@ -112,6 +120,11 @@ internal sealed partial class DeployFile
                 throw new InvalidOperationException(
                     Problem($"counts names '{service}', which is not a service.")
                 );
+    }
+
+    private void CheckSettingsAndAuth(string name, DeployEnvironment env)
+    {
+        string Problem(string what) => $"Environment '{name}': {what}";
         var provided = env.Auth is { Kind: DeployAuth.Cognito } auth
             ? new HashSet<string>([auth.AuthorityKey, auth.AudienceKey], StringComparer.Ordinal)
             : [];
@@ -141,7 +154,6 @@ internal sealed partial class DeployFile
                         + "existing issuer's address in settings."
                 )
             );
-        return env;
     }
 
     /// <summary>The CloudFormation stack an environment deploys to: <c>&lt;app&gt;-&lt;environment&gt;</c>.</summary>
@@ -203,6 +215,31 @@ internal sealed partial class DeployFile
             throw new InvalidOperationException(
                 Problem("services is empty. Name at least one project to deploy.")
             );
+        CheckServices(path);
+        foreach (var setting in Settings.Concat(Secrets))
+            if (!Variable.IsMatch(setting))
+                throw new InvalidOperationException(
+                    Problem(
+                        $"'{setting}' is not an environment name: use letters, digits and underscores, and __ for "
+                            + "a ':' in configuration (Auth__Authority)."
+                    )
+                );
+        var both = Settings.Intersect(Secrets, StringComparer.Ordinal).ToList();
+        if (both.Count > 0)
+            throw new InvalidOperationException(
+                Problem($"'{both[0]}' is listed as both a setting and a secret.")
+            );
+        foreach (var connection in new[] { ConnectionStrings.Trax, ConnectionStrings.RabbitMq })
+            if (!Variable.IsMatch(connection))
+                throw new InvalidOperationException(
+                    Problem($"connection string name '{connection}' is not a configuration key.")
+                );
+    }
+
+    private void CheckServices(string path)
+    {
+        string Problem(string what) => $"{path}: {what}";
+
         var dir = Path.GetDirectoryName(Path.GetFullPath(path)).NotNull();
         var ports = new Dictionary<int, string>();
         foreach (var (name, service) in Services)
@@ -240,24 +277,6 @@ internal sealed partial class DeployFile
                     Problem($"service '{name}' has count {service.Count}; it must be at least 1.")
                 );
         }
-        foreach (var setting in Settings.Concat(Secrets))
-            if (!Variable.IsMatch(setting))
-                throw new InvalidOperationException(
-                    Problem(
-                        $"'{setting}' is not an environment name: use letters, digits and underscores, and __ for "
-                            + "a ':' in configuration (Auth__Authority)."
-                    )
-                );
-        var both = Settings.Intersect(Secrets, StringComparer.Ordinal).ToList();
-        if (both.Count > 0)
-            throw new InvalidOperationException(
-                Problem($"'{both[0]}' is listed as both a setting and a secret.")
-            );
-        foreach (var connection in new[] { ConnectionStrings.Trax, ConnectionStrings.RabbitMq })
-            if (!Variable.IsMatch(connection))
-                throw new InvalidOperationException(
-                    Problem($"connection string name '{connection}' is not a configuration key.")
-                );
     }
 
     /// <summary>The full path of <paramref name="service"/>'s project.</summary>

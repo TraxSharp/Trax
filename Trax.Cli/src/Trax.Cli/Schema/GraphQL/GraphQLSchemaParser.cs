@@ -56,112 +56,175 @@ public class GraphQLSchemaParser : ISchemaParser
         var document = await ReadAsync(filePath).ConfigureAwait(false);
 
         var schema = new ApiSchema { SourceFile = filePath, SchemaType = "graphql" };
+        var definitions = Collect(document);
+        var typeDefinitions = definitions.Types;
+        var inputDefinitions = definitions.Inputs;
+        var enumDefinitions = definitions.Enums;
+        var queryTypeName = definitions.QueryTypeName;
+        var mutationTypeName = definitions.MutationTypeName;
 
-        // Collect all type definitions first for reference resolution
-        var typeDefinitions = new Dictionary<string, GraphQLObjectTypeDefinition>(
-            StringComparer.Ordinal
-        );
-        var inputDefinitions = new Dictionary<string, GraphQLInputObjectTypeDefinition>(
-            StringComparer.Ordinal
-        );
-        var enumDefinitions = new Dictionary<string, GraphQLEnumTypeDefinition>(
-            StringComparer.Ordinal
-        );
+        MergeAllExtensions(definitions);
 
-        string queryTypeName = "Query";
-        string mutationTypeName = "Mutation";
+        foreach (var kind in definitions.Skipped.Distinct(StringComparer.Ordinal))
+            await _warnings
+                .WriteLineAsync($"Warning: {kind} definitions are not supported and were skipped.")
+                .ConfigureAwait(false);
 
-        var objectExtensions = new List<GraphQLObjectTypeExtension>();
-        var inputExtensions = new List<GraphQLInputObjectTypeExtension>();
-        var enumExtensions = new List<GraphQLEnumTypeExtension>();
-        var skipped = new List<string>();
-
-        void ReadOperationTypes(List<GraphQLRootOperationTypeDefinition>? operationTypes)
-        {
-            if (operationTypes == null)
-                return;
-            foreach (var op in operationTypes)
-            {
-                var typeName = op.Type?.Name.StringValue;
-                if (typeName == null)
-                    continue;
-
-                if (op.Operation == OperationType.Query)
-                    queryTypeName = typeName;
-                else if (op.Operation == OperationType.Mutation)
-                    mutationTypeName = typeName;
-            }
-        }
-
-        foreach (var definition in document.Definitions)
-        {
-            switch (definition)
-            {
-                case GraphQLSchemaDefinition schemaDef:
-                    ReadOperationTypes(schemaDef.OperationTypes);
-                    break;
-
-                case GraphQLSchemaExtension schemaExt:
-                    ReadOperationTypes(schemaExt.OperationTypes);
-                    break;
-
-                case GraphQLObjectTypeDefinition typeDef:
-                    typeDefinitions[typeDef.Name.StringValue] = typeDef;
-                    break;
-
-                case GraphQLInputObjectTypeDefinition inputDef:
-                    inputDefinitions[inputDef.Name.StringValue] = inputDef;
-                    break;
-
-                case GraphQLEnumTypeDefinition enumDef:
-                    if (!BuiltInTypes.Contains(enumDef.Name.StringValue))
-                        enumDefinitions[enumDef.Name.StringValue] = enumDef;
-                    break;
-
-                case GraphQLObjectTypeExtension objectExt:
-                    objectExtensions.Add(objectExt);
-                    break;
-
-                case GraphQLInputObjectTypeExtension inputExt:
-                    inputExtensions.Add(inputExt);
-                    break;
-
-                case GraphQLEnumTypeExtension enumExt:
-                    enumExtensions.Add(enumExt);
-                    break;
-
-                case GraphQLScalarTypeDefinition scalarDef:
-                    _customScalars.Add(scalarDef.Name.StringValue);
-                    break;
-
-                case GraphQLInterfaceTypeDefinition interfaceDef:
-                    _abstractTypes.Add(interfaceDef.Name.StringValue);
-                    break;
-
-                case GraphQLUnionTypeDefinition unionDef:
-                    _abstractTypes.Add(unionDef.Name.StringValue);
-                    break;
-
-                case GraphQLDirectiveDefinition:
-                    // A directive changes nothing the generated contract carries.
-                    break;
-
-                case GraphQLTypeExtension:
-                    // Scalar, interface and union extensions add nothing a generated type uses.
-                    break;
-
-                default:
-                    skipped.Add(definition.Kind.ToString());
-                    break;
-            }
-        }
-
-        // A type's fields may be spread over its definition and any number of `extend` blocks (a modular
-        // schema concatenated, or how HotChocolate prints type extensions). Merge them before anything
-        // reads the definitions, so an operation added by `extend type Query` becomes a train.
-        MergeExtensions(
-            objectExtensions,
+        AddSharedTypes(
+            schema,
             typeDefinitions,
+            inputDefinitions,
+            enumDefinitions,
+            queryTypeName,
+            mutationTypeName
+        );
+
+        AddOperations(
+            schema,
+            typeDefinitions,
+            inputDefinitions,
+            enumDefinitions,
+            queryTypeName,
+            mutationTypeName
+        );
+
+        // Warn about subscriptions
+        if (typeDefinitions.ContainsKey("Subscription"))
+        {
+            await _warnings
+                .WriteLineAsync("Warning: Subscription fields are not supported and were skipped.")
+                .ConfigureAwait(false);
+        }
+
+        return schema;
+    }
+
+    private void AddOperations(
+        ApiSchema schema,
+        Dictionary<string, GraphQLObjectTypeDefinition> typeDefinitions,
+        Dictionary<string, GraphQLInputObjectTypeDefinition> inputDefinitions,
+        Dictionary<string, GraphQLEnumTypeDefinition> enumDefinitions,
+        string queryTypeName,
+        string mutationTypeName
+    )
+    {
+        // Parse query operations
+        if (typeDefinitions.TryGetValue(queryTypeName, out var queryType))
+        {
+            ParseOperations(
+                queryType,
+                OperationKind.Query,
+                schema,
+                typeDefinitions,
+                inputDefinitions,
+                enumDefinitions
+            );
+        }
+
+        // Parse mutation operations
+        if (typeDefinitions.TryGetValue(mutationTypeName, out var mutationType))
+        {
+            ParseOperations(
+                mutationType,
+                OperationKind.Mutation,
+                schema,
+                typeDefinitions,
+                inputDefinitions,
+                enumDefinitions
+            );
+        }
+    }
+
+    // Collect all type definitions first for reference resolution
+    private Definitions Collect(GraphQLDocument document)
+    {
+        var definitions = new Definitions();
+        foreach (var definition in document.Definitions)
+            ReadDefinition(definitions, definition);
+        return definitions;
+    }
+
+    private void ReadDefinition(Definitions definitions, ASTNode definition)
+    {
+        switch (definition)
+        {
+            case GraphQLSchemaDefinition schemaDef:
+                definitions.ReadOperationTypes(schemaDef.OperationTypes);
+                break;
+
+            case GraphQLSchemaExtension schemaExt:
+                definitions.ReadOperationTypes(schemaExt.OperationTypes);
+                break;
+
+            case GraphQLObjectTypeDefinition typeDef:
+                definitions.Types[typeDef.Name.StringValue] = typeDef;
+                break;
+
+            case GraphQLInputObjectTypeDefinition inputDef:
+                definitions.Inputs[inputDef.Name.StringValue] = inputDef;
+                break;
+
+            case GraphQLEnumTypeDefinition enumDef:
+                if (!BuiltInTypes.Contains(enumDef.Name.StringValue))
+                    definitions.Enums[enumDef.Name.StringValue] = enumDef;
+                break;
+
+            case GraphQLObjectTypeExtension objectExt:
+                definitions.ObjectExtensions.Add(objectExt);
+                break;
+
+            case GraphQLInputObjectTypeExtension inputExt:
+                definitions.InputExtensions.Add(inputExt);
+                break;
+
+            case GraphQLEnumTypeExtension enumExt:
+                definitions.EnumExtensions.Add(enumExt);
+                break;
+
+            default:
+                ReadOtherDefinition(definitions, definition);
+                break;
+        }
+    }
+
+    private void ReadOtherDefinition(Definitions definitions, ASTNode definition)
+    {
+        switch (definition)
+        {
+            case GraphQLScalarTypeDefinition scalarDef:
+                _customScalars.Add(scalarDef.Name.StringValue);
+                break;
+
+            case GraphQLInterfaceTypeDefinition interfaceDef:
+                _abstractTypes.Add(interfaceDef.Name.StringValue);
+                break;
+
+            case GraphQLUnionTypeDefinition unionDef:
+                _abstractTypes.Add(unionDef.Name.StringValue);
+                break;
+
+            case GraphQLDirectiveDefinition:
+                // A directive changes nothing the generated contract carries.
+                break;
+
+            case GraphQLTypeExtension:
+                // Scalar, interface and union extensions add nothing a generated type uses.
+                break;
+
+            default:
+                definitions.Skipped.Add(definition.Kind.ToString());
+                break;
+        }
+    }
+
+    // A type's fields may be spread over its definition and any number of `extend` blocks (a modular
+    // schema concatenated, or how HotChocolate prints type extensions). Merge them before anything
+    // reads the definitions, so an operation added by `extend type Query` becomes a train.
+    private static void MergeAllExtensions(Definitions definitions)
+    {
+        MergeExtensions(
+            definitions.ObjectExtensions,
+            definitions.Types,
             e => e.Name.StringValue,
             (def, ext) =>
             {
@@ -172,8 +235,8 @@ public class GraphQLSchemaParser : ISchemaParser
             }
         );
         MergeExtensions(
-            inputExtensions,
-            inputDefinitions,
+            definitions.InputExtensions,
+            definitions.Inputs,
             e => e.Name.StringValue,
             (def, ext) =>
             {
@@ -184,8 +247,8 @@ public class GraphQLSchemaParser : ISchemaParser
             }
         );
         MergeExtensions(
-            enumExtensions,
-            enumDefinitions,
+            definitions.EnumExtensions,
+            definitions.Enums,
             e => e.Name.StringValue,
             (def, ext) =>
             {
@@ -195,12 +258,17 @@ public class GraphQLSchemaParser : ISchemaParser
                 def.Values.Items.AddRange(ext.Values.Items);
             }
         );
+    }
 
-        foreach (var kind in skipped.Distinct(StringComparer.Ordinal))
-            await _warnings
-                .WriteLineAsync($"Warning: {kind} definitions are not supported and were skipped.")
-                .ConfigureAwait(false);
-
+    private void AddSharedTypes(
+        ApiSchema schema,
+        Dictionary<string, GraphQLObjectTypeDefinition> typeDefinitions,
+        Dictionary<string, GraphQLInputObjectTypeDefinition> inputDefinitions,
+        Dictionary<string, GraphQLEnumTypeDefinition> enumDefinitions,
+        string queryTypeName,
+        string mutationTypeName
+    )
+    {
         // Parse enums
         foreach (var (name, enumDef) in enumDefinitions)
         {
@@ -235,42 +303,41 @@ public class GraphQLSchemaParser : ISchemaParser
         {
             schema.Types.Add(BuildApiTypeFromInput(inputDef, enumDefinitions));
         }
+    }
 
-        // Parse query operations
-        if (typeDefinitions.TryGetValue(queryTypeName, out var queryType))
+    // The definitions a schema document holds, its `extend` blocks, the kinds it skipped, and the
+    // names its schema block gives the query and mutation types.
+    private sealed class Definitions
+    {
+        public Dictionary<string, GraphQLObjectTypeDefinition> Types { get; } =
+            new(StringComparer.Ordinal);
+        public Dictionary<string, GraphQLInputObjectTypeDefinition> Inputs { get; } =
+            new(StringComparer.Ordinal);
+        public Dictionary<string, GraphQLEnumTypeDefinition> Enums { get; } =
+            new(StringComparer.Ordinal);
+        public string QueryTypeName { get; private set; } = "Query";
+        public string MutationTypeName { get; private set; } = "Mutation";
+        public List<GraphQLObjectTypeExtension> ObjectExtensions { get; } = [];
+        public List<GraphQLInputObjectTypeExtension> InputExtensions { get; } = [];
+        public List<GraphQLEnumTypeExtension> EnumExtensions { get; } = [];
+        public List<string> Skipped { get; } = [];
+
+        public void ReadOperationTypes(List<GraphQLRootOperationTypeDefinition>? operationTypes)
         {
-            ParseOperations(
-                queryType,
-                OperationKind.Query,
-                schema,
-                typeDefinitions,
-                inputDefinitions,
-                enumDefinitions
-            );
-        }
+            if (operationTypes == null)
+                return;
+            foreach (var op in operationTypes)
+            {
+                var typeName = op.Type?.Name.StringValue;
+                if (typeName == null)
+                    continue;
 
-        // Parse mutation operations
-        if (typeDefinitions.TryGetValue(mutationTypeName, out var mutationType))
-        {
-            ParseOperations(
-                mutationType,
-                OperationKind.Mutation,
-                schema,
-                typeDefinitions,
-                inputDefinitions,
-                enumDefinitions
-            );
+                if (op.Operation == OperationType.Query)
+                    QueryTypeName = typeName;
+                else if (op.Operation == OperationType.Mutation)
+                    MutationTypeName = typeName;
+            }
         }
-
-        // Warn about subscriptions
-        if (typeDefinitions.ContainsKey("Subscription"))
-        {
-            await _warnings
-                .WriteLineAsync("Warning: Subscription fields are not supported and were skipped.")
-                .ConfigureAwait(false);
-        }
-
-        return schema;
     }
 
     /// <summary>
@@ -460,56 +527,11 @@ public class GraphQLSchemaParser : ISchemaParser
 
         // If it's a scalar type, wrap it in an output record
         if (ScalarMap.ContainsKey(innerName) || _customScalars.Contains(innerName))
-        {
-            var csharpType = ResolveTypeName(graphqlType, enumDefinitions);
-            return new ApiType
-            {
-                Name = $"{operationName}Output",
-                Fields =
-                [
-                    new ApiField
-                    {
-                        Name = "Value",
-                        TypeName = csharpType,
-                        IsRequired = true,
-                        Description = Describe(description: null, graphqlType),
-                    },
-                ],
-                IsBuiltIn = false,
-            };
-        }
+            return ScalarOutputType(operationName, graphqlType, enumDefinitions);
 
         // If it's a known object type, reference it
         if (typeDefinitions.ContainsKey(innerName))
-        {
-            var isListType = IsListType(graphqlType);
-            var typeName = NamingConventions.ToPascalCase(innerName);
-
-            if (isListType)
-            {
-                return new ApiType
-                {
-                    Name = $"{operationName}Output",
-                    Fields =
-                    [
-                        new ApiField
-                        {
-                            Name = "Items",
-                            TypeName = $"List<{typeName}>",
-                            IsRequired = true,
-                        },
-                    ],
-                    IsBuiltIn = false,
-                };
-            }
-
-            return new ApiType
-            {
-                Name = typeName,
-                Fields = [],
-                IsBuiltIn = true,
-            };
-        }
+            return ObjectOutputType(operationName, graphqlType, innerName);
 
         // Enum types
         if (enumDefinitions.ContainsKey(innerName))
@@ -546,6 +568,65 @@ public class GraphQLSchemaParser : ISchemaParser
                 },
             ],
             IsBuiltIn = false,
+        };
+    }
+
+    private ApiType ScalarOutputType(
+        string operationName,
+        GraphQLType graphqlType,
+        Dictionary<string, GraphQLEnumTypeDefinition> enumDefinitions
+    )
+    {
+        var csharpType = ResolveTypeName(graphqlType, enumDefinitions);
+        return new ApiType
+        {
+            Name = $"{operationName}Output",
+            Fields =
+            [
+                new ApiField
+                {
+                    Name = "Value",
+                    TypeName = csharpType,
+                    IsRequired = true,
+                    Description = Describe(description: null, graphqlType),
+                },
+            ],
+            IsBuiltIn = false,
+        };
+    }
+
+    private static ApiType ObjectOutputType(
+        string operationName,
+        GraphQLType graphqlType,
+        string innerName
+    )
+    {
+        var isListType = IsListType(graphqlType);
+        var typeName = NamingConventions.ToPascalCase(innerName);
+
+        if (isListType)
+        {
+            return new ApiType
+            {
+                Name = $"{operationName}Output",
+                Fields =
+                [
+                    new ApiField
+                    {
+                        Name = "Items",
+                        TypeName = $"List<{typeName}>",
+                        IsRequired = true,
+                    },
+                ],
+                IsBuiltIn = false,
+            };
+        }
+
+        return new ApiType
+        {
+            Name = typeName,
+            Fields = [],
+            IsBuiltIn = true,
         };
     }
 

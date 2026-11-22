@@ -119,61 +119,7 @@ public class TraxProjectGeneratorTests
     public async Task GenerateTrainsLibrary_OperationsGroupedByGroup_CreatesFolderPerGroup()
     {
         var generator = new TraxProjectGenerator();
-        var schema = MakeSchema(
-            operations:
-            [
-                new ApiOperation
-                {
-                    Name = "GetPlayer",
-                    Kind = OperationKind.Query,
-                    Group = "Players",
-                    InputType = new ApiType
-                    {
-                        Name = "GetPlayerInput",
-                        Fields =
-                        [
-                            new ApiField
-                            {
-                                Name = "Id",
-                                TypeName = "Guid",
-                                IsRequired = true,
-                            },
-                        ],
-                    },
-                    OutputType = new ApiType
-                    {
-                        Name = "Player",
-                        Fields = [],
-                        IsBuiltIn = true,
-                    },
-                },
-                new ApiOperation
-                {
-                    Name = "ListItems",
-                    Kind = OperationKind.Query,
-                    Group = "Items",
-                    InputType = new ApiType
-                    {
-                        Name = "Unit",
-                        Fields = [],
-                        IsBuiltIn = true,
-                    },
-                    OutputType = new ApiType
-                    {
-                        Name = "ListItemsOutput",
-                        Fields =
-                        [
-                            new ApiField
-                            {
-                                Name = "Items",
-                                TypeName = "List<Item>",
-                                IsRequired = true,
-                            },
-                        ],
-                    },
-                },
-            ]
-        );
+        var schema = MakeSchema(operations: [GroupedGetPlayer(), GroupedListItems()]);
 
         await generator
             .GenerateTrainsLibraryAsync(schema, _tempDir, "TestProject")
@@ -185,6 +131,62 @@ public class TraxProjectGeneratorTests
             .BeTrue();
         Directory.Exists(Path.Combine(_tempDir, "Trains", "Items", "ListItems")).Should().BeTrue();
     }
+
+    // A query of the Players group that takes an id and answers a built-in Player.
+    private static ApiOperation GroupedGetPlayer() =>
+        new()
+        {
+            Name = "GetPlayer",
+            Kind = OperationKind.Query,
+            Group = "Players",
+            InputType = new ApiType
+            {
+                Name = "GetPlayerInput",
+                Fields =
+                [
+                    new ApiField
+                    {
+                        Name = "Id",
+                        TypeName = "Guid",
+                        IsRequired = true,
+                    },
+                ],
+            },
+            OutputType = new ApiType
+            {
+                Name = "Player",
+                Fields = [],
+                IsBuiltIn = true,
+            },
+        };
+
+    // A query of the Items group that takes nothing and answers a list of items.
+    private static ApiOperation GroupedListItems() =>
+        new()
+        {
+            Name = "ListItems",
+            Kind = OperationKind.Query,
+            Group = "Items",
+            InputType = new ApiType
+            {
+                Name = "Unit",
+                Fields = [],
+                IsBuiltIn = true,
+            },
+            OutputType = new ApiType
+            {
+                Name = "ListItemsOutput",
+                Fields =
+                [
+                    new ApiField
+                    {
+                        Name = "Items",
+                        TypeName = "List<Item>",
+                        IsRequired = true,
+                    },
+                ],
+            },
+        };
 
     // The same schema writes the same file on every machine, whatever culture it runs under.
     [Test]

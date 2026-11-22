@@ -122,78 +122,11 @@ public class MachineGenerateFromPackedToolTests
         generated.Should().Be(0, generateOutput);
 
         await GenerateClientAsync(tool, work).ConfigureAwait(false);
-        await File.WriteAllTextAsync(
-                Path.Combine(work, "page.ts"),
-                """
-                import { configureTrax, useReminder, useRememberedCheckout, startRun, useRunProgress, followRunProgress, type StartRunInput } from "./trax/index.g";
-
-                configureTrax({ url: "/graphql", socketUrl: "ws://localhost/graphql", user: "u-1" });
-
-                export function usePage() {
-                  const reminder = useReminder({ startInput: {} });
-                  void reminder.send("Approve");
-                  // @ts-expect-error a timer trigger is the server's to fire, never a client's send
-                  void reminder.send("Review.after");
-                  return reminder.state;
-                }
-
-                export function useDraft() {
-                  // @ts-expect-error the user is the connection's, given to configureTrax, never the hook's
-                  useRememberedCheckout({ user: "u-2" });
-                  return useRememberedCheckout({ rememberKey: "drafts" }).forget;
-                }
-
-                export function usePay() {
-                  const checkout = useRememberedCheckout();
-                  void checkout.send("Pay");
-                  // @ts-expect-error an effect-bound trigger's input is the receipt the server's effect runner hands it
-                  void checkout.send("Pay", { receipt: "made-up" });
-                  return checkout.can("Pay");
-                }
-
-                const input: StartRunInput = { scenario: "crash" };
-                export const run = () => startRun(input, { mode: "QUEUE" });
-
-                export function useRunPage(runId: string | null) {
-                  const progress = useRunProgress(runId);
-                  const names: string[] = progress.steps.map((s) => s.name);
-                  // @ts-expect-error a state is one of the run's states, never any string
-                  const wrong: typeof progress.state = "DONE";
-                  const attempts: string[] = [...progress.earlier, ...(progress.runId ? [progress.runId] : [])];
-                  return { names, attempts, done: progress.state === "COMPLETED", wrong };
-                }
-
-                export const stop = followRunProgress("r", (e) => void e.sequence);
-                """
-            )
+        await File.WriteAllTextAsync(Path.Combine(work, "page.ts"), PublishedPageTs)
             .ConfigureAwait(false);
-        await File.WriteAllTextAsync(
-                Path.Combine(work, "consumer.ts"),
-                """
-                import { requireClientFormat, clientFormat, RefusalCode } from "@traxsharp/state-machine";
-                import { createMachineExecutor } from "@traxsharp/state-machine/client";
-                import { turnstile } from "./twin/turnstile.machine.g";
-
-                requireClientFormat(clientFormat);
-                const code: RefusalCode = RefusalCode.GuardFailed;
-                export const state: string = turnstile.initial().state;
-                export const make = () => createMachineExecutor("/graphql", { machines: [{ machine: turnstile, documents: [] }] });
-                export { code };
-                """
-            )
+        await File.WriteAllTextAsync(Path.Combine(work, "consumer.ts"), PublishedConsumerTs)
             .ConfigureAwait(false);
-        await File.WriteAllTextAsync(
-                Path.Combine(work, "tsconfig.json"),
-                """
-                {
-                  "compilerOptions": {
-                    "strict": true, "noEmit": true, "target": "ES2022", "module": "ESNext",
-                    "moduleResolution": "bundler", "skipLibCheck": false, "lib": ["ES2022", "DOM"]
-                  },
-                  "include": ["consumer.ts", "page.ts", "twin/*.ts", "trax/**/*.ts"]
-                }
-                """
-            )
+        await File.WriteAllTextAsync(Path.Combine(work, "tsconfig.json"), PublishedTsConfig)
             .ConfigureAwait(false);
         var (checkedCode, checkOutput) = await RunAsync(
                 "node",
@@ -216,52 +149,11 @@ public class MachineGenerateFromPackedToolTests
         var work = await OutsideProjectAsync(RepoFolder(Path.Combine("Trax.StateMachine", "ts")))
             .ConfigureAwait(false);
         await GenerateClientAsync(tool, work).ConfigureAwait(false);
-        await File.WriteAllTextAsync(
-                Path.Combine(work, "main.ts"),
-                """
-                import { configureTrax, TraxOperationError, useRememberedCheckout, useRunProgress, startRun } from "./trax/index.g";
-
-                configureTrax({ url: "/graphql", socketUrl: "ws://localhost/graphql", user: "u-1" });
-
-                export function usePage(runId: string | null) {
-                  const checkout = useRememberedCheckout();
-                  const progress = useRunProgress(runId);
-                  return { state: checkout.state, steps: progress.steps.length };
-                }
-
-                export const failed = (e: unknown) => e instanceof TraxOperationError && e.code === "CLIENT_OUTDATED";
-                export const run = () => startRun({ scenario: "ok" });
-                """
-            )
+        await File.WriteAllTextAsync(Path.Combine(work, "main.ts"), ViteMainTs)
             .ConfigureAwait(false);
         await
         // The compiler options create-vite's react-ts template writes into tsconfig.app.json, less its vite/client types.
-        File.WriteAllTextAsync(
-                Path.Combine(work, "tsconfig.json"),
-                """
-                {
-                  "compilerOptions": {
-                    "target": "ES2022",
-                    "lib": ["ES2023", "DOM", "DOM.Iterable"],
-                    "module": "ESNext",
-                    "skipLibCheck": true,
-                    "moduleResolution": "bundler",
-                    "allowImportingTsExtensions": true,
-                    "verbatimModuleSyntax": true,
-                    "moduleDetection": "force",
-                    "noEmit": true,
-                    "jsx": "react-jsx",
-                    "strict": true,
-                    "noUnusedLocals": true,
-                    "noUnusedParameters": true,
-                    "erasableSyntaxOnly": true,
-                    "noFallthroughCasesInSwitch": true,
-                    "noUncheckedSideEffectImports": true
-                  },
-                  "include": ["main.ts", "trax/**/*.ts"]
-                }
-                """
-            )
+        File.WriteAllTextAsync(Path.Combine(work, "tsconfig.json"), ViteReactTsConfig)
             .ConfigureAwait(false);
 
         var (code, output) = await RunAsync(
@@ -1033,4 +925,107 @@ public class MachineGenerateFromPackedToolTests
         read.IsCompletedSuccessfully
             ? await read.ConfigureAwait(false)
             : "(output still held open by a child process)";
+
+    private const string ViteReactTsConfig = """
+        {
+          "compilerOptions": {
+            "target": "ES2022",
+            "lib": ["ES2023", "DOM", "DOM.Iterable"],
+            "module": "ESNext",
+            "skipLibCheck": true,
+            "moduleResolution": "bundler",
+            "allowImportingTsExtensions": true,
+            "verbatimModuleSyntax": true,
+            "moduleDetection": "force",
+            "noEmit": true,
+            "jsx": "react-jsx",
+            "strict": true,
+            "noUnusedLocals": true,
+            "noUnusedParameters": true,
+            "erasableSyntaxOnly": true,
+            "noFallthroughCasesInSwitch": true,
+            "noUncheckedSideEffectImports": true
+          },
+          "include": ["main.ts", "trax/**/*.ts"]
+        }
+        """;
+
+    private const string ViteMainTs = """
+        import { configureTrax, TraxOperationError, useRememberedCheckout, useRunProgress, startRun } from "./trax/index.g";
+
+        configureTrax({ url: "/graphql", socketUrl: "ws://localhost/graphql", user: "u-1" });
+
+        export function usePage(runId: string | null) {
+          const checkout = useRememberedCheckout();
+          const progress = useRunProgress(runId);
+          return { state: checkout.state, steps: progress.steps.length };
+        }
+
+        export const failed = (e: unknown) => e instanceof TraxOperationError && e.code === "CLIENT_OUTDATED";
+        export const run = () => startRun({ scenario: "ok" });
+        """;
+
+    private const string PublishedTsConfig = """
+        {
+          "compilerOptions": {
+            "strict": true, "noEmit": true, "target": "ES2022", "module": "ESNext",
+            "moduleResolution": "bundler", "skipLibCheck": false, "lib": ["ES2022", "DOM"]
+          },
+          "include": ["consumer.ts", "page.ts", "twin/*.ts", "trax/**/*.ts"]
+        }
+        """;
+
+    private const string PublishedConsumerTs = """
+        import { requireClientFormat, clientFormat, RefusalCode } from "@traxsharp/state-machine";
+        import { createMachineExecutor } from "@traxsharp/state-machine/client";
+        import { turnstile } from "./twin/turnstile.machine.g";
+
+        requireClientFormat(clientFormat);
+        const code: RefusalCode = RefusalCode.GuardFailed;
+        export const state: string = turnstile.initial().state;
+        export const make = () => createMachineExecutor("/graphql", { machines: [{ machine: turnstile, documents: [] }] });
+        export { code };
+        """;
+
+    private const string PublishedPageTs = """
+        import { configureTrax, useReminder, useRememberedCheckout, startRun, useRunProgress, followRunProgress, type StartRunInput } from "./trax/index.g";
+
+        configureTrax({ url: "/graphql", socketUrl: "ws://localhost/graphql", user: "u-1" });
+
+        export function usePage() {
+          const reminder = useReminder({ startInput: {} });
+          void reminder.send("Approve");
+          // @ts-expect-error a timer trigger is the server's to fire, never a client's send
+          void reminder.send("Review.after");
+          return reminder.state;
+        }
+
+        export function useDraft() {
+          // @ts-expect-error the user is the connection's, given to configureTrax, never the hook's
+          useRememberedCheckout({ user: "u-2" });
+          return useRememberedCheckout({ rememberKey: "drafts" }).forget;
+        }
+
+        export function usePay() {
+          const checkout = useRememberedCheckout();
+          void checkout.send("Pay");
+          // @ts-expect-error an effect-bound trigger's input is the receipt the server's effect runner hands it
+          void checkout.send("Pay", { receipt: "made-up" });
+          return checkout.can("Pay");
+        }
+
+        const input: StartRunInput = { scenario: "crash" };
+        export const run = () => startRun(input, { mode: "QUEUE" });
+
+        export function useRunPage(runId: string | null) {
+          const progress = useRunProgress(runId);
+          const names: string[] = progress.steps.map((s) => s.name);
+          // @ts-expect-error a state is one of the run's states, never any string
+          const wrong: typeof progress.state = "DONE";
+          const attempts: string[] = [...progress.earlier, ...(progress.runId ? [progress.runId] : [])];
+          return { names, attempts, done: progress.state === "COMPLETED", wrong };
+        }
+
+        export const stop = followRunProgress("r", (e) => void e.sequence);
+        """;
 }

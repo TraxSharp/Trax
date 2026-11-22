@@ -76,114 +76,111 @@ public partial class DeployComposeTests
     private static Dictionary<string, DeployManifest> Exports() =>
         new(StringComparer.Ordinal) { ["hub"] = Hub(), ["worker"] = Worker() };
 
+    private const string HubAndTwoWorkersCompose = """
+        # Written by `trax deploy --target compose` from trax.deploy.json. Running it again overwrites this file.
+        # Passwords, settings and secrets come from the environment, or from a .env file beside this one: copy
+        # .env.example to .env and fill it in. Never commit the .env.
+
+        # What every Trax service is given.
+        x-trax: &trax
+          ConnectionStrings__Trax: Host=database;Database=orders;Username=orders;GSS Encryption Mode=Disable
+          PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+          RabbitMq__Host: rabbitmq
+          RabbitMq__UserName: orders
+          RabbitMq__Password: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD}
+          Auth__Authority: ${Auth__Authority:?set Auth__Authority}
+          Stripe__ApiKey: ${Stripe__ApiKey:?set Stripe__ApiKey}
+
+        services:
+          database:
+            image: postgres:17
+            environment:
+              POSTGRES_DB: orders
+              POSTGRES_USER: orders
+              POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+            volumes:
+              - database:/var/lib/postgresql/data
+            healthcheck:
+              test: ["CMD", "pg_isready", "-U", "orders"]
+              interval: 5s
+            security_opt:
+              - no-new-privileges:true
+            restart: unless-stopped
+
+          rabbitmq:
+            image: rabbitmq:4
+            environment:
+              RABBITMQ_DEFAULT_USER: orders
+              RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD}
+            healthcheck:
+              test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+              interval: 5s
+            security_opt:
+              - no-new-privileges:true
+            restart: unless-stopped
+
+          # The new version migrates the database once, before any service of it starts.
+          migrate:
+            image: orders-hub:${TRAX_IMAGE_TAG:-latest}
+            command: ["--trax-migrate"]
+            environment: *trax
+            cap_drop:
+              - ALL
+            security_opt:
+              - no-new-privileges:true
+            depends_on:
+              database:
+                condition: service_healthy
+            restart: "no"
+
+          hub:
+            image: orders-hub:${TRAX_IMAGE_TAG:-latest}
+            environment:
+              <<: *trax
+              TRAX_MIGRATIONS: skip
+            ports:
+              - "127.0.0.1:8080:8080"
+            cap_drop:
+              - ALL
+            security_opt:
+              - no-new-privileges:true
+            depends_on:
+              migrate:
+                condition: service_completed_successfully
+              rabbitmq:
+                condition: service_healthy
+            restart: unless-stopped
+
+          worker:
+            image: orders-worker:${TRAX_IMAGE_TAG:-latest}
+            environment:
+              <<: *trax
+              TRAX_MIGRATIONS: skip
+            cap_drop:
+              - ALL
+            security_opt:
+              - no-new-privileges:true
+            deploy:
+              replicas: 2
+            depends_on:
+              migrate:
+                condition: service_completed_successfully
+              rabbitmq:
+                condition: service_healthy
+            restart: unless-stopped
+
+        volumes:
+          database:
+
+        """;
+
     [Test]
     public void A_hub_and_two_workers_become_this_stack()
     {
         var files = ComposeTarget.Render(File_(), Exports());
 
         files.Select(f => f.Path).Should().Equal("compose.yaml", ".env.example");
-        files[0]
-            .Content.ReplaceLineEndings("\n")
-            .Should()
-            .Be(
-                """
-                # Written by `trax deploy --target compose` from trax.deploy.json. Running it again overwrites this file.
-                # Passwords, settings and secrets come from the environment, or from a .env file beside this one: copy
-                # .env.example to .env and fill it in. Never commit the .env.
-
-                # What every Trax service is given.
-                x-trax: &trax
-                  ConnectionStrings__Trax: Host=database;Database=orders;Username=orders;GSS Encryption Mode=Disable
-                  PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
-                  RabbitMq__Host: rabbitmq
-                  RabbitMq__UserName: orders
-                  RabbitMq__Password: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD}
-                  Auth__Authority: ${Auth__Authority:?set Auth__Authority}
-                  Stripe__ApiKey: ${Stripe__ApiKey:?set Stripe__ApiKey}
-
-                services:
-                  database:
-                    image: postgres:17
-                    environment:
-                      POSTGRES_DB: orders
-                      POSTGRES_USER: orders
-                      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
-                    volumes:
-                      - database:/var/lib/postgresql/data
-                    healthcheck:
-                      test: ["CMD", "pg_isready", "-U", "orders"]
-                      interval: 5s
-                    security_opt:
-                      - no-new-privileges:true
-                    restart: unless-stopped
-
-                  rabbitmq:
-                    image: rabbitmq:4
-                    environment:
-                      RABBITMQ_DEFAULT_USER: orders
-                      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD}
-                    healthcheck:
-                      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-                      interval: 5s
-                    security_opt:
-                      - no-new-privileges:true
-                    restart: unless-stopped
-
-                  # The new version migrates the database once, before any service of it starts.
-                  migrate:
-                    image: orders-hub:${TRAX_IMAGE_TAG:-latest}
-                    command: ["--trax-migrate"]
-                    environment: *trax
-                    cap_drop:
-                      - ALL
-                    security_opt:
-                      - no-new-privileges:true
-                    depends_on:
-                      database:
-                        condition: service_healthy
-                    restart: "no"
-
-                  hub:
-                    image: orders-hub:${TRAX_IMAGE_TAG:-latest}
-                    environment:
-                      <<: *trax
-                      TRAX_MIGRATIONS: skip
-                    ports:
-                      - "127.0.0.1:8080:8080"
-                    cap_drop:
-                      - ALL
-                    security_opt:
-                      - no-new-privileges:true
-                    depends_on:
-                      migrate:
-                        condition: service_completed_successfully
-                      rabbitmq:
-                        condition: service_healthy
-                    restart: unless-stopped
-
-                  worker:
-                    image: orders-worker:${TRAX_IMAGE_TAG:-latest}
-                    environment:
-                      <<: *trax
-                      TRAX_MIGRATIONS: skip
-                    cap_drop:
-                      - ALL
-                    security_opt:
-                      - no-new-privileges:true
-                    deploy:
-                      replicas: 2
-                    depends_on:
-                      migrate:
-                        condition: service_completed_successfully
-                      rabbitmq:
-                        condition: service_healthy
-                    restart: unless-stopped
-
-                volumes:
-                  database:
-
-                """
-            );
+        files[0].Content.ReplaceLineEndings("\n").Should().Be(HubAndTwoWorkersCompose);
         files[1]
             .Content.ReplaceLineEndings("\n")
             .Should()

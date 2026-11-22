@@ -1029,48 +1029,15 @@ public partial class ClientDocumentsGeneratorTests
         {
             Directory.SetCurrentDirectory(dir);
             (
-                await ClientCommand
-                    .RunAsync(
-                        "react",
-                        manifest,
-                        src,
-                        check: false,
-                        specifier: null,
-                        toolsDir: null,
-                        new FakeNodeRunner(),
-                        TextWriter.Null,
-                        TextWriter.Null,
-                        ["src/**/*.graphql"]
-                    )
+                await RunReactClientAsync(manifest, src, check: false, "src/**/*.graphql")
                     .ConfigureAwait(false)
             )
                 .Should()
                 .Be(0);
 
-            var json = await File.ReadAllTextAsync(Path.Combine(src, "trax.documents.json"))
-                .ConfigureAwait(false);
-            json.Should().Contain("\"source\": \"src/trax/cards/orderCard.graphql\"");
+            await AssertWroteDocumentsAsync(src).ConfigureAwait(false);
             (
-                await File.ReadAllTextAsync(Path.Combine(src, "graphql.config.yml"))
-                    .ConfigureAwait(false)
-            )
-                .Should()
-                .Contain("  - \"../**/*.graphql\"");
-            File.Exists(Path.Combine(src, "documents", "orderCard.g.ts")).Should().BeTrue();
-            (
-                await ClientCommand
-                    .RunAsync(
-                        "react",
-                        manifest,
-                        src,
-                        check: true,
-                        specifier: null,
-                        toolsDir: null,
-                        new FakeNodeRunner(),
-                        TextWriter.Null,
-                        TextWriter.Null,
-                        ["src/**/*.graphql"]
-                    )
+                await RunReactClientAsync(manifest, src, check: true, "src/**/*.graphql")
                     .ConfigureAwait(false)
             )
                 .Should()
@@ -1081,19 +1048,7 @@ public partial class ClientDocumentsGeneratorTests
                 )
                 .ConfigureAwait(false);
             (
-                await ClientCommand
-                    .RunAsync(
-                        "react",
-                        manifest,
-                        src,
-                        check: true,
-                        specifier: null,
-                        toolsDir: null,
-                        new FakeNodeRunner(),
-                        TextWriter.Null,
-                        TextWriter.Null,
-                        ["src/**/*.graphql"]
-                    )
+                await RunReactClientAsync(manifest, src, check: true, "src/**/*.graphql")
                     .ConfigureAwait(false)
             )
                 .Should()
@@ -1103,19 +1058,7 @@ public partial class ClientDocumentsGeneratorTests
                 );
 
             (
-                await ClientCommand
-                    .RunAsync(
-                        "react",
-                        manifest,
-                        src,
-                        check: false,
-                        specifier: null,
-                        toolsDir: null,
-                        new FakeNodeRunner(),
-                        TextWriter.Null,
-                        TextWriter.Null,
-                        ["nowhere/*.graphql"]
-                    )
+                await RunReactClientAsync(manifest, src, check: false, "nowhere/*.graphql")
                     .ConfigureAwait(false)
             )
                 .Should()
@@ -1127,6 +1070,39 @@ public partial class ClientDocumentsGeneratorTests
             Directory.Delete(dir, recursive: true);
         }
     }
+
+    // What a run over the glob writes under --out: the documents file naming each document by its source, the editor's
+    // config, and each document's module.
+    private static async Task AssertWroteDocumentsAsync(string src)
+    {
+        var json = await File.ReadAllTextAsync(Path.Combine(src, "trax.documents.json"))
+            .ConfigureAwait(false);
+        json.Should().Contain("\"source\": \"src/trax/cards/orderCard.graphql\"");
+        (await File.ReadAllTextAsync(Path.Combine(src, "graphql.config.yml")).ConfigureAwait(false))
+            .Should()
+            .Contain("  - \"../**/*.graphql\"");
+        File.Exists(Path.Combine(src, "documents", "orderCard.g.ts")).Should().BeTrue();
+    }
+
+    // Runs `trax client react` over the glob with a fake node, writing nothing to the console.
+    private static Task<int> RunReactClientAsync(
+        string manifest,
+        string src,
+        bool check,
+        string glob
+    ) =>
+        ClientCommand.RunAsync(
+            "react",
+            manifest,
+            src,
+            check: check,
+            specifier: null,
+            toolsDir: null,
+            new FakeNodeRunner(),
+            TextWriter.Null,
+            TextWriter.Null,
+            [glob]
+        );
 
     // The schema written for the editor sits under --out, where the glob matches it too. Named through a link, --out
     // must still be the folder the glob finds it in, or the second run reads the schema as a document.

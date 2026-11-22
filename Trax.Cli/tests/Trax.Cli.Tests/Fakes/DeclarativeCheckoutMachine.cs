@@ -89,6 +89,13 @@ public sealed class DeclarativeCheckoutMachine : Machine<CheckoutState, Checkout
             .Reduce(Reset())
             .To(CheckoutState.Cart);
 
+        ConfigureDifferentialInputs(m);
+    }
+
+    private static void ConfigureDifferentialInputs(
+        IMachineBuilder<CheckoutState, CheckoutTrigger> m
+    )
+    {
         // Differential inputs, matching the retired machine.json: a receipt sample and the empty {} for Pay,
         // plus valid Review/Paid seeds (items/total arrive via autosave, so those states are not BFS-reachable).
         m.Differential(d =>

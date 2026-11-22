@@ -50,41 +50,50 @@ internal static class DeployCommand
         foreach (var subcommand in DeployAwsCommands.Create())
             command.Subcommands.Add(subcommand);
         command.SetAction(
-            async (parseResult, ct) =>
-            {
-                var stdout = parseResult.InvocationConfiguration.Output;
-                var stderr = parseResult.InvocationConfiguration.Error;
-                var path =
-                    parseResult.GetValue(file)?.FullName
-                    ?? Path.Combine(Directory.GetCurrentDirectory(), DeployFile.FileName);
-                var environment = parseResult.GetValue(env);
-                var chosen =
-                    parseResult.GetValue(target) ?? (environment is null ? "compose" : "aws");
-                if (!string.Equals(chosen, "aws", StringComparison.Ordinal))
-                    return await RunAsync(
-                            chosen,
-                            path,
-                            parseResult.GetValue(output)?.FullName,
-                            parseResult.GetValue(build),
-                            new DotnetHostExporter(ct),
-                            BuildImageAsync,
-                            stdout,
-                            stderr
-                        )
-                        .ConfigureAwait(false);
-                if (environment is null)
-                {
-                    await stderr
-                        .WriteLineAsync("--target aws deploys one environment: name it with --env.")
-                        .ConfigureAwait(false);
-                    return 1;
-                }
-                return await DeployAwsCommands
-                    .DeployAsync(path, environment, new DotnetHostExporter(ct), stdout, stderr, ct)
-                    .ConfigureAwait(false);
-            }
+            (parseResult, ct) => RunActionAsync(parseResult, target, env, file, output, build, ct)
         );
         return command;
+    }
+
+    private static async Task<int> RunActionAsync(
+        ParseResult parseResult,
+        Option<string?> target,
+        Option<string> env,
+        Option<FileInfo?> file,
+        Option<DirectoryInfo?> output,
+        Option<bool> build,
+        CancellationToken ct
+    )
+    {
+        var stdout = parseResult.InvocationConfiguration.Output;
+        var stderr = parseResult.InvocationConfiguration.Error;
+        var path =
+            parseResult.GetValue(file)?.FullName
+            ?? Path.Combine(Directory.GetCurrentDirectory(), DeployFile.FileName);
+        var environment = parseResult.GetValue(env);
+        var chosen = parseResult.GetValue(target) ?? (environment is null ? "compose" : "aws");
+        if (!string.Equals(chosen, "aws", StringComparison.Ordinal))
+            return await RunAsync(
+                    chosen,
+                    path,
+                    parseResult.GetValue(output)?.FullName,
+                    parseResult.GetValue(build),
+                    new DotnetHostExporter(ct),
+                    BuildImageAsync,
+                    stdout,
+                    stderr
+                )
+                .ConfigureAwait(false);
+        if (environment is null)
+        {
+            await stderr
+                .WriteLineAsync("--target aws deploys one environment: name it with --env.")
+                .ConfigureAwait(false);
+            return 1;
+        }
+        return await DeployAwsCommands
+            .DeployAsync(path, environment, new DotnetHostExporter(ct), stdout, stderr, ct)
+            .ConfigureAwait(false);
     }
 
     private static Command CreateInit()

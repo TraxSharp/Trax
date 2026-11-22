@@ -73,6 +73,43 @@ internal sealed partial class ClientDocumentSet
     )
     {
         var errors = new List<string>();
+        var parsed = ParseFiles(files, errors);
+        var fragments = DefinedFragments(parsed, errors);
+        var checker = new Checker(types, fragments, errors);
+        CheckFragments(parsed, fragments, types, errors);
+        var operations = OperationsOf(parsed, operationOf, checker, errors);
+        CheckNamesAndUse(parsed, fragments, operations, checker, errors);
+
+        if (errors.Count > 0)
+            throw new InvalidOperationException(
+                "The client documents are not ones the host can register:\n  "
+                    + string.Join("\n  ", errors)
+            );
+
+        // Each document is self-contained: its operation, then every fragment it spreads, in name order.
+        var texts = operations
+            .Select(o =>
+            {
+                var used = checker.FragmentsOf(o.Operation);
+                var text =
+                    Print(o.Operation)
+                    + string.Concat(
+                        used.Order(StringComparer.Ordinal)
+                            .Select(f => "\n\n" + Print(fragments[f].Definition))
+                    )
+                    + "\n";
+                return o with { Text = text, Id = idOf(o, text) };
+            })
+            .OrderBy(o => o.Name, StringComparer.Ordinal)
+            .ToList();
+        return new ClientDocumentSet(texts, fragments);
+    }
+
+    private static List<(ClientDocumentFile File, GraphQLDocument Document)> ParseFiles(
+        IReadOnlyList<ClientDocumentFile> files,
+        List<string> errors
+    )
+    {
         var parsed = new List<(ClientDocumentFile File, GraphQLDocument Document)>();
         foreach (var file in files.OrderBy(f => f.Source, StringComparer.Ordinal))
         {
@@ -98,7 +135,17 @@ internal sealed partial class ClientDocumentSet
                 );
             }
         }
+        return parsed;
+    }
 
+    private static Dictionary<
+        string,
+        (string Source, GraphQLFragmentDefinition Definition)
+    > DefinedFragments(
+        List<(ClientDocumentFile File, GraphQLDocument Document)> parsed,
+        List<string> errors
+    )
+    {
         var fragments = new Dictionary<
             string,
             (string Source, GraphQLFragmentDefinition Definition)
@@ -112,8 +159,16 @@ internal sealed partial class ClientDocumentSet
             else
                 fragments[name] = (file.Source, fragment);
         }
+        return fragments;
+    }
 
-        var checker = new Checker(types, fragments, errors);
+    private static void CheckFragments(
+        List<(ClientDocumentFile File, GraphQLDocument Document)> parsed,
+        Dictionary<string, (string Source, GraphQLFragmentDefinition Definition)> fragments,
+        SdlTypes types,
+        List<string> errors
+    )
+    {
         foreach (var (name, (source, fragment)) in fragments)
         {
             var file = parsed
@@ -144,7 +199,15 @@ internal sealed partial class ClientDocumentSet
                     )
                 );
         }
+    }
 
+    private static List<ClientOperation> OperationsOf(
+        List<(ClientDocumentFile File, GraphQLDocument Document)> parsed,
+        Func<ClientDocumentFile, GraphQLOperationDefinition, Checker, ClientOperation?> operationOf,
+        Checker checker,
+        List<string> errors
+    )
+    {
         var operations = new List<ClientOperation>();
         foreach (var (file, document) in parsed)
         {
@@ -170,7 +233,17 @@ internal sealed partial class ClientDocumentSet
             if (operationOf(file, ops[0], checker) is { } operation)
                 operations.Add(operation);
         }
+        return operations;
+    }
 
+    private static void CheckNamesAndUse(
+        List<(ClientDocumentFile File, GraphQLDocument Document)> parsed,
+        Dictionary<string, (string Source, GraphQLFragmentDefinition Definition)> fragments,
+        List<ClientOperation> operations,
+        Checker checker,
+        List<string> errors
+    )
+    {
         foreach (
             var group in operations
                 .GroupBy(o => o.Name, StringComparer.Ordinal)
@@ -192,30 +265,6 @@ internal sealed partial class ClientDocumentSet
                         $"the fragment '{name}' is spread by no operation."
                     )
                 );
-
-        if (errors.Count > 0)
-            throw new InvalidOperationException(
-                "The client documents are not ones the host can register:\n  "
-                    + string.Join("\n  ", errors)
-            );
-
-        // Each document is self-contained: its operation, then every fragment it spreads, in name order.
-        var texts = operations
-            .Select(o =>
-            {
-                var used = checker.FragmentsOf(o.Operation);
-                var text =
-                    Print(o.Operation)
-                    + string.Concat(
-                        used.Order(StringComparer.Ordinal)
-                            .Select(f => "\n\n" + Print(fragments[f].Definition))
-                    )
-                    + "\n";
-                return o with { Text = text, Id = idOf(o, text) };
-            })
-            .OrderBy(o => o.Name, StringComparer.Ordinal)
-            .ToList();
-        return new ClientDocumentSet(texts, fragments);
     }
 
     private static ClientOperation? Operation(
@@ -228,6 +277,65 @@ internal sealed partial class ClientDocumentSet
     {
         var errors = checker.Errors;
         var before = errors.Count;
+        if (OperationName(file, operation, errors) is not { } name)
+            return null;
+
+        var mutation = operation.Operation == OperationType.Mutation;
+        var root = mutation ? "dispatch" : "discover";
+        var rootKind = mutation ? "mutation" : "query";
+        if (
+            operation.SelectionSet.Selections
+                is not [GraphQLField { Alias: null, Arguments: null } top]
+            || !string.Equals(top.Name.StringValue, root, StringComparison.Ordinal)
+        )
+        {
+            errors.Add(
+                At(file, operation, $"'{name}' selects something other than '{root}' at its root.")
+            );
+            return null;
+        }
+
+        if (Variables(file, name, operation, errors) is not { } variables)
+            return null;
+        RefuseFilterVariables(file, name, variables, manifest, types, errors);
+        var scope = new Scope(file, variables);
+        checker.Begin(operation);
+        var trains = SelectTrains(
+            file,
+            scope,
+            checker,
+            manifest,
+            mutation,
+            root,
+            rootKind,
+            name,
+            top
+        );
+        if (trains.Count == 0 && errors.Count == before)
+            errors.Add(At(file, operation, $"'{name}' selects no train or query model."));
+        if (mutation && trains.Where(t => !t.QueryModel).Skip(1).Any())
+            errors.Add(
+                At(
+                    file,
+                    operation,
+                    $"'{name}' runs {trains.Count} trains in one mutation; a mutation runs one."
+                )
+            );
+        RefuseUnusedVariables(file, name, variables, scope, errors);
+
+        return errors.Count == before
+            ? new ClientOperation(name, file.Source, operation, root, trains, "", "")
+            : null;
+    }
+
+    // The operation's name, or null (with the error) when it has none, is no query or mutation,
+    // or uses a directive.
+    private static string? OperationName(
+        ClientDocumentFile file,
+        GraphQLOperationDefinition operation,
+        List<string> errors
+    )
+    {
         if (operation.Name is not { } nameNode)
         {
             errors.Add(
@@ -262,24 +370,18 @@ internal sealed partial class ClientDocumentSet
             );
             return null;
         }
+        return name;
+    }
 
-        var mutation = operation.Operation == OperationType.Mutation;
-        var root = mutation ? "dispatch" : "discover";
-        var rootKind = mutation ? "mutation" : "query";
-        if (
-            operation.SelectionSet.Selections
-                is not [GraphQLField { Alias: null, Arguments: null } top]
-            || !string.Equals(top.Name.StringValue, root, StringComparison.Ordinal)
-        )
-        {
-            errors.Add(
-                At(file, operation, $"'{name}' selects something other than '{root}' at its root.")
-            );
-            return null;
-        }
-
-        if (Variables(file, name, operation, errors) is not { } variables)
-            return null;
+    private static void RefuseFilterVariables(
+        ClientDocumentFile file,
+        string name,
+        Dictionary<string, GraphQLVariableDefinition> variables,
+        ClientManifest manifest,
+        SdlTypes types,
+        List<string> errors
+    )
+    {
         foreach (var (variable, definition) in variables)
             if (
                 types.NameOf(definition.Type) is { } typeName
@@ -293,108 +395,189 @@ internal sealed partial class ClientDocumentSet
                             + "the filter in the document and pass only its values as variables."
                     )
                 );
-        var scope = new Scope(file, variables);
-        checker.Begin(operation);
+    }
+
+    private static List<ClientTrainUse> SelectTrains(
+        ClientDocumentFile file,
+        Scope scope,
+        Checker checker,
+        ClientManifest manifest,
+        bool mutation,
+        string root,
+        string rootKind,
+        string name,
+        GraphQLField top
+    )
+    {
         var trains = new List<ClientTrainUse>();
         var trainsOf = Reachable(manifest, rootKind);
         foreach (var selection in top.SelectionSet?.Selections ?? [])
+            SelectUnderRoot(
+                file,
+                scope,
+                checker,
+                manifest,
+                mutation,
+                root,
+                name,
+                trainsOf,
+                selection,
+                trains
+            );
+        return trains;
+    }
+
+    private static void SelectUnderRoot(
+        ClientDocumentFile file,
+        Scope scope,
+        Checker checker,
+        ClientManifest manifest,
+        bool mutation,
+        string root,
+        string name,
+        IReadOnlyList<(ClientManifestTrain Train, bool QueryModel)> trainsOf,
+        ASTNode selection,
+        List<ClientTrainUse> trains
+    )
+    {
+        var errors = checker.Errors;
+        if (selection is not GraphQLField field)
         {
-            if (selection is not GraphQLField field)
-            {
-                errors.Add(
-                    At(
-                        file,
-                        selection,
-                        $"'{name}' spreads a fragment directly under '{root}'; select the trains themselves."
-                    )
-                );
-                continue;
-            }
-            var fieldName = field.Name.StringValue;
-            if (
-                trainsOf.FirstOrDefault(t =>
-                    t.Train.Namespace is null
-                    && string.Equals(t.Train.Field, fieldName, StringComparison.Ordinal)
-                )
-                    is var (train, queryModel)
-                && train is not null
-            )
-            {
-                trains.Add(checker.Train(scope, train, field, [root, Key(field)], queryModel));
-                continue;
-            }
-            var inNamespace = trainsOf
-                .Where(t => string.Equals(t.Train.Namespace, fieldName, StringComparison.Ordinal))
-                .ToList();
-            if (inNamespace.Count == 0)
-            {
-                errors.Add(
-                    At(
-                        file,
-                        field,
-                        mutation && IsQueryModel(manifest, ns: null, fieldName)
-                            ? $"'{root}.{fieldName}' is a query model; a mutation cannot hold one."
-                            : $"'{root}.{fieldName}' is no train, query model or namespace the host exposes."
-                    )
-                );
-                continue;
-            }
-            if (field.Alias is not null || field.Arguments is not null)
-            {
-                errors.Add(
-                    At(
-                        file,
-                        field,
-                        $"the namespace '{fieldName}' takes no alias and no argument; alias a train."
-                    )
-                );
-                continue;
-            }
-            foreach (var inner in field.SelectionSet?.Selections ?? [])
-            {
-                if (
-                    inner is not GraphQLField trainField
-                    || inNamespace.FirstOrDefault(t =>
-                        string.Equals(
-                            t.Train.Field,
-                            trainField.Name.StringValue,
-                            StringComparison.Ordinal
-                        )
-                    )
-                        is not
-                        ({ } nsTrain, var nsQueryModel)
-                )
-                {
-                    errors.Add(
-                        At(
-                            file,
-                            inner,
-                            $"selects something other than a train or query model under the namespace '{fieldName}'."
-                        )
-                    );
-                    continue;
-                }
-                trains.Add(
-                    checker.Train(
-                        scope,
-                        nsTrain,
-                        trainField,
-                        [root, fieldName, Key(trainField)],
-                        nsQueryModel
-                    )
-                );
-            }
-        }
-        if (trains.Count == 0 && errors.Count == before)
-            errors.Add(At(file, operation, $"'{name}' selects no train or query model."));
-        if (mutation && trains.Where(t => !t.QueryModel).Skip(1).Any())
             errors.Add(
                 At(
                     file,
-                    operation,
-                    $"'{name}' runs {trains.Count} trains in one mutation; a mutation runs one."
+                    selection,
+                    $"'{name}' spreads a fragment directly under '{root}'; select the trains themselves."
                 )
             );
+            return;
+        }
+        var fieldName = field.Name.StringValue;
+        if (
+            trainsOf.FirstOrDefault(t =>
+                t.Train.Namespace is null
+                && string.Equals(t.Train.Field, fieldName, StringComparison.Ordinal)
+            )
+                is var (train, queryModel)
+            && train is not null
+        )
+        {
+            trains.Add(checker.Train(scope, train, field, [root, Key(field)], queryModel));
+            return;
+        }
+        SelectUnderNamespace(
+            file,
+            scope,
+            checker,
+            manifest,
+            mutation,
+            root,
+            trainsOf,
+            field,
+            trains
+        );
+    }
+
+    private static void SelectUnderNamespace(
+        ClientDocumentFile file,
+        Scope scope,
+        Checker checker,
+        ClientManifest manifest,
+        bool mutation,
+        string root,
+        IReadOnlyList<(ClientManifestTrain Train, bool QueryModel)> trainsOf,
+        GraphQLField field,
+        List<ClientTrainUse> trains
+    )
+    {
+        var errors = checker.Errors;
+        var fieldName = field.Name.StringValue;
+        var inNamespace = trainsOf
+            .Where(t => string.Equals(t.Train.Namespace, fieldName, StringComparison.Ordinal))
+            .ToList();
+        if (inNamespace.Count == 0)
+        {
+            errors.Add(
+                At(
+                    file,
+                    field,
+                    mutation && IsQueryModel(manifest, ns: null, fieldName)
+                        ? $"'{root}.{fieldName}' is a query model; a mutation cannot hold one."
+                        : $"'{root}.{fieldName}' is no train, query model or namespace the host exposes."
+                )
+            );
+            return;
+        }
+        if (field.Alias is not null || field.Arguments is not null)
+        {
+            errors.Add(
+                At(
+                    file,
+                    field,
+                    $"the namespace '{fieldName}' takes no alias and no argument; alias a train."
+                )
+            );
+            return;
+        }
+        AddNamespaceTrains(file, scope, checker, root, field, fieldName, inNamespace, trains);
+    }
+
+    private static void AddNamespaceTrains(
+        ClientDocumentFile file,
+        Scope scope,
+        Checker checker,
+        string root,
+        GraphQLField field,
+        string fieldName,
+        List<(ClientManifestTrain Train, bool QueryModel)> inNamespace,
+        List<ClientTrainUse> trains
+    )
+    {
+        var errors = checker.Errors;
+        foreach (var inner in field.SelectionSet?.Selections ?? [])
+        {
+            if (
+                inner is not GraphQLField trainField
+                || inNamespace.FirstOrDefault(t =>
+                    string.Equals(
+                        t.Train.Field,
+                        trainField.Name.StringValue,
+                        StringComparison.Ordinal
+                    )
+                )
+                    is not
+                    ({ } nsTrain, var nsQueryModel)
+            )
+            {
+                errors.Add(
+                    At(
+                        file,
+                        inner,
+                        $"selects something other than a train or query model under the namespace '{fieldName}'."
+                    )
+                );
+                continue;
+            }
+            trains.Add(
+                checker.Train(
+                    scope,
+                    nsTrain,
+                    trainField,
+                    [root, fieldName, Key(trainField)],
+                    nsQueryModel
+                )
+            );
+        }
+    }
+
+    private static void RefuseUnusedVariables(
+        ClientDocumentFile file,
+        string name,
+        Dictionary<string, GraphQLVariableDefinition> variables,
+        Scope scope,
+        List<string> errors
+    )
+    {
         foreach (var (variable, definition) in variables)
             if (!scope.UsedVariables.Contains(variable))
                 errors.Add(
@@ -404,10 +587,6 @@ internal sealed partial class ClientDocumentSet
                         $"'{name}' declares the variable '${variable}' and never uses it."
                     )
                 );
-
-        return errors.Count == before
-            ? new ClientOperation(name, file.Source, operation, root, trains, "", "")
-            : null;
     }
 
     /// <summary>
@@ -731,52 +910,55 @@ internal sealed partial class ClientDocumentSet
                         Set(scope, inline.SelectionSet, on, fragmentStack);
                         break;
                     case GraphQLFragmentSpread spread:
-                        var name = spread.FragmentName.Name.StringValue;
-                        if (!_fragments.TryGetValue(name, out var fragment))
-                        {
-                            Errors.Add(
-                                At(scope.File, spread, $"no file defines the fragment '{name}'.")
-                            );
-                            break;
-                        }
-                        if (fragmentStack.Contains(name))
-                        {
-                            Errors.Add(
-                                At(
-                                    scope.File,
-                                    spread,
-                                    $"the fragment '{name}' spreads itself ({string.Join(" > ", fragmentStack.Append(name))})."
-                                )
-                            );
-                            break;
-                        }
-                        Used.Add(name);
-                        if (_current is { } op)
-                        {
-                            if (!_spreads.TryGetValue(op, out var spreads))
-                                _spreads[op] = spreads = new(StringComparer.Ordinal);
-                            spreads.Add(name);
-                        }
-                        var condition = fragment.Definition.TypeCondition.Type.Name.StringValue;
-                        if (!Overlaps(condition, typeName))
-                        {
-                            Errors.Add(
-                                At(
-                                    scope.File,
-                                    spread,
-                                    $"the fragment '{name}' is on {condition}, which can never apply to a {typeName}."
-                                )
-                            );
-                            break;
-                        }
-                        Set(
-                            scope,
-                            fragment.Definition.SelectionSet,
-                            condition,
-                            [.. fragmentStack, name]
-                        );
+                        Spread(scope, spread, typeName, fragmentStack);
                         break;
                 }
+        }
+
+        private void Spread(
+            Scope scope,
+            GraphQLFragmentSpread spread,
+            string typeName,
+            List<string> fragmentStack
+        )
+        {
+            var name = spread.FragmentName.Name.StringValue;
+            if (!_fragments.TryGetValue(name, out var fragment))
+            {
+                Errors.Add(At(scope.File, spread, $"no file defines the fragment '{name}'."));
+                return;
+            }
+            if (fragmentStack.Contains(name))
+            {
+                Errors.Add(
+                    At(
+                        scope.File,
+                        spread,
+                        $"the fragment '{name}' spreads itself ({string.Join(" > ", fragmentStack.Append(name))})."
+                    )
+                );
+                return;
+            }
+            Used.Add(name);
+            if (_current is { } op)
+            {
+                if (!_spreads.TryGetValue(op, out var spreads))
+                    _spreads[op] = spreads = new(StringComparer.Ordinal);
+                spreads.Add(name);
+            }
+            var condition = fragment.Definition.TypeCondition.Type.Name.StringValue;
+            if (!Overlaps(condition, typeName))
+            {
+                Errors.Add(
+                    At(
+                        scope.File,
+                        spread,
+                        $"the fragment '{name}' is on {condition}, which can never apply to a {typeName}."
+                    )
+                );
+                return;
+            }
+            Set(scope, fragment.Definition.SelectionSet, condition, [.. fragmentStack, name]);
         }
 
         private void Field(
@@ -834,6 +1016,20 @@ internal sealed partial class ClientDocumentSet
                 Errors.Add(At(scope.File, field, $"{typeName} has no field '{name}'."));
                 return;
             }
+            Arguments(scope, field, definition, typeName, name);
+            Selection(scope, field, definition.Type, $"{typeName}.{name}", fragmentStack);
+        }
+
+        // Each argument the field is given is one it declares, of a value it takes, and every
+        // required one is given.
+        private void Arguments(
+            Scope scope,
+            GraphQLField field,
+            GraphQLFieldDefinition definition,
+            string typeName,
+            string name
+        )
+        {
             var declared = (definition.Arguments?.Items ?? []).ToDictionary(
                 a => a.Name.StringValue,
                 a => a,
@@ -875,7 +1071,6 @@ internal sealed partial class ClientDocumentSet
                             $"{typeName}.{name} requires the argument '{argName}'."
                         )
                     );
-            Selection(scope, field, definition.Type, $"{typeName}.{name}", fragmentStack);
         }
 
         // A value given to an argument: each variable it holds is declared, used, and of a type the argument takes.
@@ -892,33 +1087,7 @@ internal sealed partial class ClientDocumentSet
             switch (value)
             {
                 case GraphQLVariable variable:
-                    var name = variable.Name.StringValue;
-                    if (!scope.Variables.TryGetValue(name, out var definition))
-                    {
-                        Errors.Add(
-                            At(
-                                scope.File,
-                                variable,
-                                $"'${name}' is used by {where} but the operation does not declare it."
-                            )
-                        );
-                        return;
-                    }
-                    scope.UsedVariables.Add(name);
-                    if (
-                        !Accepts(
-                            expected,
-                            definition.Type,
-                            definition.DefaultValue is not null || locationHasDefault
-                        )
-                    )
-                        Errors.Add(
-                            At(
-                                scope.File,
-                                variable,
-                                $"'${name}' is {Print(definition.Type)}, but {where} takes {Print(expected)}."
-                            )
-                        );
+                    VariableValue(scope, variable, expected, where, locationHasDefault);
                     break;
                 case GraphQLListValue list:
                     foreach (var item in list.Values ?? [])
@@ -933,73 +1102,7 @@ internal sealed partial class ClientDocumentSet
                         );
                     break;
                 case GraphQLObjectValue obj:
-                    if (
-                        _types.Definition(Named(expected))
-                        is not GraphQLInputObjectTypeDefinition input
-                    )
-                    {
-                        if (!string.Equals(Named(expected), "Unknown", StringComparison.Ordinal))
-                            Errors.Add(
-                                At(
-                                    scope.File,
-                                    obj,
-                                    $"{where} takes {Print(expected)}, not an object."
-                                )
-                            );
-                        foreach (var field in obj.Fields ?? [])
-                            Value(
-                                scope,
-                                field.Value,
-                                new GraphQLNamedType(new GraphQLName("Unknown")),
-                                where
-                            );
-                        break;
-                    }
-                    var declared = (input.Fields?.Items ?? []).ToDictionary(
-                        f => f.Name.StringValue,
-                        StringComparer.Ordinal
-                    );
-                    foreach (var field in obj.Fields ?? [])
-                    {
-                        var fieldName = field.Name.StringValue;
-                        if (!declared.TryGetValue(fieldName, out var inputField))
-                        {
-                            Errors.Add(
-                                At(
-                                    scope.File,
-                                    field,
-                                    $"{where} has no field '{fieldName}' in {input.Name.StringValue}."
-                                )
-                            );
-                            continue;
-                        }
-                        Value(
-                            scope,
-                            field.Value,
-                            inputField.Type,
-                            $"'{fieldName}' of {input.Name.StringValue}",
-                            inputField.DefaultValue is not null
-                        );
-                    }
-                    foreach (var (fieldName, inputField) in declared)
-                        if (
-                            inputField.Type is GraphQLNonNullType
-                            && inputField.DefaultValue is null
-                            && obj.Fields?.Exists(f =>
-                                string.Equals(
-                                    f.Name.StringValue,
-                                    fieldName,
-                                    StringComparison.Ordinal
-                                )
-                            ) != true
-                        )
-                            Errors.Add(
-                                At(
-                                    scope.File,
-                                    obj,
-                                    $"{where} requires '{fieldName}' of {input.Name.StringValue}."
-                                )
-                            );
+                    ObjectValue(scope, obj, expected, where);
                     break;
                 case GraphQLNullValue:
                     if (expected is GraphQLNonNullType)
@@ -1012,6 +1115,120 @@ internal sealed partial class ClientDocumentSet
                         Errors.Add(At(scope.File, value, $"{where} {refusal}"));
                     break;
             }
+        }
+
+        private void VariableValue(
+            Scope scope,
+            GraphQLVariable variable,
+            GraphQLType expected,
+            string where,
+            bool locationHasDefault
+        )
+        {
+            var name = variable.Name.StringValue;
+            if (!scope.Variables.TryGetValue(name, out var definition))
+            {
+                Errors.Add(
+                    At(
+                        scope.File,
+                        variable,
+                        $"'${name}' is used by {where} but the operation does not declare it."
+                    )
+                );
+                return;
+            }
+            scope.UsedVariables.Add(name);
+            if (
+                !Accepts(
+                    expected,
+                    definition.Type,
+                    definition.DefaultValue is not null || locationHasDefault
+                )
+            )
+                Errors.Add(
+                    At(
+                        scope.File,
+                        variable,
+                        $"'${name}' is {Print(definition.Type)}, but {where} takes {Print(expected)}."
+                    )
+                );
+        }
+
+        private void ObjectValue(
+            Scope scope,
+            GraphQLObjectValue obj,
+            GraphQLType expected,
+            string where
+        )
+        {
+            if (_types.Definition(Named(expected)) is not GraphQLInputObjectTypeDefinition input)
+            {
+                if (!string.Equals(Named(expected), "Unknown", StringComparison.Ordinal))
+                    Errors.Add(
+                        At(scope.File, obj, $"{where} takes {Print(expected)}, not an object.")
+                    );
+                foreach (var field in obj.Fields ?? [])
+                    Value(
+                        scope,
+                        field.Value,
+                        new GraphQLNamedType(new GraphQLName("Unknown")),
+                        where
+                    );
+                return;
+            }
+            var declared = (input.Fields?.Items ?? []).ToDictionary(
+                f => f.Name.StringValue,
+                StringComparer.Ordinal
+            );
+            foreach (var field in obj.Fields ?? [])
+            {
+                var fieldName = field.Name.StringValue;
+                if (!declared.TryGetValue(fieldName, out var inputField))
+                {
+                    Errors.Add(
+                        At(
+                            scope.File,
+                            field,
+                            $"{where} has no field '{fieldName}' in {input.Name.StringValue}."
+                        )
+                    );
+                    continue;
+                }
+                Value(
+                    scope,
+                    field.Value,
+                    inputField.Type,
+                    $"'{fieldName}' of {input.Name.StringValue}",
+                    inputField.DefaultValue is not null
+                );
+            }
+            RequireInputFields(scope, obj, input, declared, where);
+        }
+
+        // Every non-null field of the input with no default is given.
+        private void RequireInputFields(
+            Scope scope,
+            GraphQLObjectValue obj,
+            GraphQLInputObjectTypeDefinition input,
+            Dictionary<string, GraphQLInputValueDefinition> declared,
+            string where
+        )
+        {
+            foreach (var (fieldName, inputField) in declared)
+                if (
+                    inputField.Type is GraphQLNonNullType
+                    && inputField.DefaultValue is null
+                    && obj.Fields?.Exists(f =>
+                        string.Equals(f.Name.StringValue, fieldName, StringComparison.Ordinal)
+                    ) != true
+                )
+                    Errors.Add(
+                        At(
+                            scope.File,
+                            obj,
+                            $"{where} requires '{fieldName}' of {input.Name.StringValue}."
+                        )
+                    );
         }
 
         // Why a scalar or enum literal is not a value of `expected`, or null when it is one or the type is not one the

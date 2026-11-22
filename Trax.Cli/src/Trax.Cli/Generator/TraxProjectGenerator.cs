@@ -324,6 +324,21 @@ public partial class TraxProjectGenerator
             .ConfigureAwait(false);
 
         // Write GraphQLNamespaces.cs
+        await WriteGraphQLNamespacesAsync(schema, trainsDir, projectName).ConfigureAwait(false);
+
+        await WriteModelsAsync(schema, trainsDir, projectName).ConfigureAwait(false);
+
+        // Write trains
+        foreach (var operation in schema.Operations)
+            await WriteTrainAsync(operation, trainsDir, projectName).ConfigureAwait(false);
+    }
+
+    private async Task WriteGraphQLNamespacesAsync(
+        ApiSchema schema,
+        string trainsDir,
+        string projectName
+    )
+    {
         var groups = schema
             .Operations.Select(o => o.Group)
             .Where(g => g != null)
@@ -342,7 +357,10 @@ public partial class TraxProjectGenerator
                 )
                 .ConfigureAwait(false);
         }
+    }
 
+    private async Task WriteModelsAsync(ApiSchema schema, string trainsDir, string projectName)
+    {
         // Write shared types in Models/
         foreach (var apiType in schema.Types)
         {
@@ -371,56 +389,51 @@ public partial class TraxProjectGenerator
                 )
                 .ConfigureAwait(false);
         }
+    }
 
-        // Write trains
-        foreach (var operation in schema.Operations)
+    private async Task WriteTrainAsync(ApiOperation operation, string trainsDir, string projectName)
+    {
+        var group = operation.Group ?? "General";
+        var trainDir = Path.Combine(trainsDir, "Trains", group, operation.Name);
+        var junctionDir = Path.Combine(trainDir, "Junctions");
+        Directory.CreateDirectory(junctionDir);
+
+        await WriteFileAsync(
+                Path.Combine(trainDir, $"I{operation.Name}Train.cs"),
+                await _renderer
+                    .RenderTrainInterfaceAsync(operation, projectName)
+                    .ConfigureAwait(false)
+            )
+            .ConfigureAwait(false);
+
+        await WriteFileAsync(
+                Path.Combine(trainDir, $"{operation.Name}Train.cs"),
+                await _renderer
+                    .RenderTrainImplementationAsync(operation, projectName)
+                    .ConfigureAwait(false)
+            )
+            .ConfigureAwait(false);
+
+        await WriteFileAsync(
+                Path.Combine(trainDir, $"{operation.InputType.Name}.cs"),
+                await _renderer.RenderInputAsync(operation, projectName).ConfigureAwait(false)
+            )
+            .ConfigureAwait(false);
+
+        if (!operation.OutputType.IsBuiltIn && operation.OutputType.Fields.Count > 0)
         {
-            var group = operation.Group ?? "General";
-            var trainDir = Path.Combine(trainsDir, "Trains", group, operation.Name);
-            var junctionDir = Path.Combine(trainDir, "Junctions");
-            Directory.CreateDirectory(junctionDir);
-
             await WriteFileAsync(
-                    Path.Combine(trainDir, $"I{operation.Name}Train.cs"),
-                    await _renderer
-                        .RenderTrainInterfaceAsync(operation, projectName)
-                        .ConfigureAwait(false)
-                )
-                .ConfigureAwait(false);
-
-            await WriteFileAsync(
-                    Path.Combine(trainDir, $"{operation.Name}Train.cs"),
-                    await _renderer
-                        .RenderTrainImplementationAsync(operation, projectName)
-                        .ConfigureAwait(false)
-                )
-                .ConfigureAwait(false);
-
-            await WriteFileAsync(
-                    Path.Combine(trainDir, $"{operation.InputType.Name}.cs"),
-                    await _renderer.RenderInputAsync(operation, projectName).ConfigureAwait(false)
-                )
-                .ConfigureAwait(false);
-
-            if (!operation.OutputType.IsBuiltIn && operation.OutputType.Fields.Count > 0)
-            {
-                await WriteFileAsync(
-                        Path.Combine(trainDir, $"{operation.OutputType.Name}.cs"),
-                        await _renderer
-                            .RenderOutputAsync(operation, projectName)
-                            .ConfigureAwait(false)
-                    )
-                    .ConfigureAwait(false);
-            }
-
-            await WriteFileAsync(
-                    Path.Combine(junctionDir, $"{operation.Name}Junction.cs"),
-                    await _renderer
-                        .RenderJunctionAsync(operation, projectName)
-                        .ConfigureAwait(false)
+                    Path.Combine(trainDir, $"{operation.OutputType.Name}.cs"),
+                    await _renderer.RenderOutputAsync(operation, projectName).ConfigureAwait(false)
                 )
                 .ConfigureAwait(false);
         }
+
+        await WriteFileAsync(
+                Path.Combine(junctionDir, $"{operation.Name}Junction.cs"),
+                await _renderer.RenderJunctionAsync(operation, projectName).ConfigureAwait(false)
+            )
+            .ConfigureAwait(false);
     }
 
     internal static async Task AddProjectReferenceAsync(

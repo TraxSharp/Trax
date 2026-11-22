@@ -52,25 +52,7 @@ internal sealed partial class ClientGenerator
             )
         );
         var used = new HashSet<string>(StringComparer.Ordinal);
-        string resultType;
-        IReadOnlyList<string> path;
-        if (operation.Trains is [var single])
-        {
-            resultType = selections.Of(
-                SdlTypes
-                    .ParseType(single.Train.Answer, $"the train '{single.Train.Field}'")
-                    .NotNull(),
-                single.Field.SelectionSet,
-                owner,
-                used
-            );
-            path = single.Path;
-        }
-        else
-        {
-            resultType = Several(operation, selections, owner, used);
-            path = [operation.Root];
-        }
+        var (resultType, path) = ResultOf(operation, selections, owner, used);
 
         var variables = operation.Operation.Variables?.Items ?? [];
         var (parameters, values) = Signature(
@@ -116,6 +98,30 @@ internal sealed partial class ClientGenerator
         );
         sb.Append("}\n");
         return sb.ToString();
+    }
+
+    // The type of what the operation answers, and the path to it in the answer: its one train's
+    // field, or the root that holds several.
+    private static (string Type, IReadOnlyList<string> Path) ResultOf(
+        ClientOperation operation,
+        SelectionTypes selections,
+        string owner,
+        HashSet<string> used
+    )
+    {
+        if (operation.Trains is [var single])
+            return (
+                selections.Of(
+                    SdlTypes
+                        .ParseType(single.Train.Answer, $"the train '{single.Train.Field}'")
+                        .NotNull(),
+                    single.Field.SelectionSet,
+                    owner,
+                    used
+                ),
+                single.Path
+            );
+        return (Several(operation, selections, owner, used), [operation.Root]);
     }
 
     // What a query of several trains answers: each train under its key, inside its namespace when it has one.

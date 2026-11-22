@@ -383,25 +383,11 @@ internal static class MachineCommand
         try
         {
             FeatureDirectory.RefuseForeign(outDir);
-            // --out is the command's: what it does not derive there it removes, a glossary it was told to read included.
             if (
-                glossaryPath is not null
-                && Path.GetFullPath(glossaryPath)
-                    .StartsWith(
-                        Path.TrimEndingDirectorySeparator(Path.GetFullPath(outDir))
-                            + Path.DirectorySeparatorChar,
-                        StringComparison.Ordinal
-                    )
+                await RefuseGlossaryInsideOutAsync(glossaryPath, outDir, stderr)
+                    .ConfigureAwait(false)
             )
-            {
-                await stderr
-                    .WriteLineAsync(
-                        $"--glossary {glossaryPath} is inside --out {outDir}, which from-gherkin owns and would remove "
-                            + "it from. Keep a hand-written glossary outside --out, or write the lexicon it elaborates from."
-                    )
-                    .ConfigureAwait(false);
                 return 1;
-            }
             var result = await FeatureDirectory
                 .DeriveAsync(featuresDir, glossaryPath, trains)
                 .ConfigureAwait(false);
@@ -423,33 +409,8 @@ internal static class MachineCommand
                     .ConfigureAwait(false);
                 return 1;
             }
-            if (check)
-            {
-                var drift = await FeatureDirectory
-                    .CheckAsync(outDir, result.Files)
-                    .ConfigureAwait(false);
-                foreach (var line in drift)
-                    await stderr.WriteLineAsync(line).ConfigureAwait(false);
-                if (drift.Count > 0)
-                {
-                    await stderr
-                        .WriteLineAsync(
-                            "Run `trax machine from-gherkin` without --check and commit what it writes."
-                        )
-                        .ConfigureAwait(false);
-                    return 1;
-                }
-                await stdout.WriteLineAsync($"{outDir} is up to date.").ConfigureAwait(false);
-                return 0;
-            }
-            var changes = await FeatureDirectory
-                .WriteAsync(outDir, result.Files)
+            return await CheckOrWriteDerivedAsync(outDir, result.Files, check, stdout, stderr)
                 .ConfigureAwait(false);
-            foreach (var line in changes)
-                await stdout.WriteLineAsync(line).ConfigureAwait(false);
-            if (changes.Count == 0)
-                await stdout.WriteLineAsync($"{outDir} is up to date.").ConfigureAwait(false);
-            return 0;
         }
         catch (FeatureMachinesException ex)
         {
@@ -468,110 +429,190 @@ internal static class MachineCommand
         }
     }
 
+    // --out is the command's: what it does not derive there it removes, a glossary it was told to read included.
+    // True when the glossary is inside --out, once that is written to stderr.
+    private static async Task<bool> RefuseGlossaryInsideOutAsync(
+        string? glossaryPath,
+        string outDir,
+        TextWriter stderr
+    )
+    {
+        if (
+            glossaryPath is not null
+            && Path.GetFullPath(glossaryPath)
+                .StartsWith(
+                    Path.TrimEndingDirectorySeparator(Path.GetFullPath(outDir))
+                        + Path.DirectorySeparatorChar,
+                    StringComparison.Ordinal
+                )
+        )
+        {
+            await stderr
+                .WriteLineAsync(
+                    $"--glossary {glossaryPath} is inside --out {outDir}, which from-gherkin owns and would remove "
+                        + "it from. Keep a hand-written glossary outside --out, or write the lexicon it elaborates from."
+                )
+                .ConfigureAwait(false);
+            return true;
+        }
+        return false;
+    }
+
+    private static async Task<int> CheckOrWriteDerivedAsync(
+        string outDir,
+        IReadOnlyDictionary<string, string> files,
+        bool check,
+        TextWriter stdout,
+        TextWriter stderr
+    )
+    {
+        if (check)
+        {
+            var drift = await FeatureDirectory.CheckAsync(outDir, files).ConfigureAwait(false);
+            foreach (var line in drift)
+                await stderr.WriteLineAsync(line).ConfigureAwait(false);
+            if (drift.Count > 0)
+            {
+                await stderr
+                    .WriteLineAsync(
+                        "Run `trax machine from-gherkin` without --check and commit what it writes."
+                    )
+                    .ConfigureAwait(false);
+                return 1;
+            }
+            await stdout.WriteLineAsync($"{outDir} is up to date.").ConfigureAwait(false);
+            return 0;
+        }
+        var changes = await FeatureDirectory.WriteAsync(outDir, files).ConfigureAwait(false);
+        foreach (var line in changes)
+            await stdout.WriteLineAsync(line).ConfigureAwait(false);
+        if (changes.Count == 0)
+            await stdout.WriteLineAsync($"{outDir} is up to date.").ConfigureAwait(false);
+        return 0;
+    }
+
     private static Command CreateRun()
     {
-        var featuresOption = new Option<DirectoryInfo>("--features")
-        {
-            Description = "Directory of .feature files, read recursively.",
-            Required = true,
-        };
-        var glossaryOption = new Option<FileInfo?>("--glossary")
-        {
-            Description =
-                "A glossary's JSON file, for features not yet written with a lexicon. Without it, the features directory's lexicon is read.",
-        };
-        var runTrainsOption = TrainsOption();
-        var machinesOption = new Option<DirectoryInfo>("--machines")
-        {
-            Description =
-                "The directory from-gherkin wrote, as committed: the features run on these machines.",
-            Required = true,
-        };
-        var locationsArgument = new Argument<string[]>("locations")
-        {
-            Description =
-                "Scenarios to run, as file:line relative to --features (a scenario's or an example row's line).",
-            Arity = ArgumentArity.ZeroOrMore,
-        };
-        var tagsOption = new Option<string?>("--tags")
-        {
-            Description =
-                "A tag expression: @smoke, '@smoke and not @slow', '(@a or @b) and not @c'.",
-        };
-        var nameOption = new Option<string[]>("--name")
-        {
-            Description =
-                "Run only scenarios whose name matches this regular expression. Repeat for any of several.",
-            AllowMultipleArgumentsPerToken = false,
-        };
-        var formatOption = new Option<string>("--format")
-        {
-            Description = "pretty (default), json or junit.",
-            DefaultValueFactory = _ => "pretty",
-        };
-        formatOption.AcceptOnlyFromAmong(RunReportWriter.Formats);
-        var reportOption = new Option<FileInfo?>("--report")
-        {
-            Description = "Write the report to this file instead of standard output.",
-        };
-        var strictOption = new Option<bool>("--strict")
-        {
-            Description =
-                "Also fail on steps about the UI, which are not checked here. An undefined step always fails.",
-        };
-        var dryRunOption = new Option<bool>("--dry-run")
-        {
-            Description = "Read every step and run none: shows undefined steps.",
-        };
-        var failFastOption = new Option<bool>("--fail-fast")
-        {
-            Description = "Stop at the first scenario that does not pass.",
-        };
+        var options = new RunOptions();
         var command = new Command(
             "run",
             "Run features in memory on the machines a directory serves, access included, answering as the host does."
         )
         {
-            featuresOption,
-            glossaryOption,
-            runTrainsOption,
-            machinesOption,
-            locationsArgument,
-            tagsOption,
-            nameOption,
-            formatOption,
-            reportOption,
-            strictOption,
-            dryRunOption,
-            failFastOption,
+            options.Features,
+            options.Glossary,
+            options.TrainAssemblies,
+            options.Machines,
+            options.Locations,
+            options.Tags,
+            options.Name,
+            options.Format,
+            options.Report,
+            options.Strict,
+            options.DryRun,
+            options.FailFast,
         };
         command.SetAction(
             (parseResult, _) =>
-            {
-                var features = parseResult.GetRequiredValue(featuresOption).FullName;
-                return RunRunAsync(
-                    new RunArguments(
-                        features,
-                        parseResult.GetValue(glossaryOption)?.FullName,
-                        parseResult.GetRequiredValue(machinesOption).FullName,
-                        parseResult.GetValue(locationsArgument) ?? [],
-                        parseResult.GetValue(tagsOption),
-                        parseResult.GetValue(nameOption) ?? [],
-                        parseResult.GetValue(formatOption) ?? "pretty",
-                        parseResult.GetValue(reportOption)?.FullName,
-                        parseResult.GetValue(strictOption),
-                        parseResult.GetValue(dryRunOption),
-                        parseResult.GetValue(failFastOption)
-                    )
-                    {
-                        Trains = Trains(parseResult, runTrainsOption),
-                    },
+                RunRunAsync(
+                    options.Arguments(parseResult),
                     parseResult.InvocationConfiguration.Output,
                     parseResult.InvocationConfiguration.Error
-                );
-            }
+                )
         );
         return command;
+    }
+
+    // The options of 'trax machine run', and the arguments they give.
+    private sealed class RunOptions
+    {
+        public RunOptions() => Format.AcceptOnlyFromAmong(RunReportWriter.Formats);
+
+        public Option<DirectoryInfo> Features { get; } =
+            new("--features")
+            {
+                Description = "Directory of .feature files, read recursively.",
+                Required = true,
+            };
+        public Option<FileInfo?> Glossary { get; } =
+            new("--glossary")
+            {
+                Description =
+                    "A glossary's JSON file, for features not yet written with a lexicon. Without it, the features directory's lexicon is read.",
+            };
+        public Option<FileInfo[]> TrainAssemblies { get; } = TrainsOption();
+        public Option<DirectoryInfo> Machines { get; } =
+            new("--machines")
+            {
+                Description =
+                    "The directory from-gherkin wrote, as committed: the features run on these machines.",
+                Required = true,
+            };
+        public Argument<string[]> Locations { get; } =
+            new("locations")
+            {
+                Description =
+                    "Scenarios to run, as file:line relative to --features (a scenario's or an example row's line).",
+                Arity = ArgumentArity.ZeroOrMore,
+            };
+        public Option<string?> Tags { get; } =
+            new("--tags")
+            {
+                Description =
+                    "A tag expression: @smoke, '@smoke and not @slow', '(@a or @b) and not @c'.",
+            };
+        public Option<string[]> Name { get; } =
+            new("--name")
+            {
+                Description =
+                    "Run only scenarios whose name matches this regular expression. Repeat for any of several.",
+                AllowMultipleArgumentsPerToken = false,
+            };
+        public Option<string> Format { get; } =
+            new("--format")
+            {
+                Description = "pretty (default), json or junit.",
+                DefaultValueFactory = _ => "pretty",
+            };
+        public Option<FileInfo?> Report { get; } =
+            new("--report")
+            {
+                Description = "Write the report to this file instead of standard output.",
+            };
+        public Option<bool> Strict { get; } =
+            new("--strict")
+            {
+                Description =
+                    "Also fail on steps about the UI, which are not checked here. An undefined step always fails.",
+            };
+        public Option<bool> DryRun { get; } =
+            new("--dry-run")
+            {
+                Description = "Read every step and run none: shows undefined steps.",
+            };
+        public Option<bool> FailFast { get; } =
+            new("--fail-fast") { Description = "Stop at the first scenario that does not pass." };
+
+        public RunArguments Arguments(ParseResult parseResult)
+        {
+            var features = parseResult.GetRequiredValue(Features).FullName;
+            return new RunArguments(
+                features,
+                parseResult.GetValue(Glossary)?.FullName,
+                parseResult.GetRequiredValue(Machines).FullName,
+                parseResult.GetValue(Locations) ?? [],
+                parseResult.GetValue(Tags),
+                parseResult.GetValue(Name) ?? [],
+                parseResult.GetValue(Format) ?? "pretty",
+                parseResult.GetValue(Report)?.FullName,
+                parseResult.GetValue(Strict),
+                parseResult.GetValue(DryRun),
+                parseResult.GetValue(FailFast)
+            )
+            {
+                Trains = Trains(parseResult, TrainAssemblies),
+            };
+        }
     }
 
     internal sealed record RunArguments(
@@ -592,6 +633,17 @@ internal static class MachineCommand
         public IReadOnlyList<string> Trains { get; init; } = [];
     }
 
+    private static Task WriteSlowNamePatternAsync(
+        System.Text.RegularExpressions.RegexMatchTimeoutException ex,
+        TextWriter stderr
+    ) =>
+        stderr.WriteLineAsync(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"--name '{ex.Pattern}' took longer than {ex.MatchTimeout.TotalSeconds:0.#} s to match a scenario's name; give a simpler expression."
+            )
+        );
+
     internal static async Task<int> RunRunAsync(
         RunArguments args,
         TextWriter stdout,
@@ -607,58 +659,12 @@ internal static class MachineCommand
             var (host, irs) = await Trax
                 .StateMachine.Persistence.FromIr.IrDirectory.ReadAsync(args.MachinesDir)
                 .ConfigureAwait(false);
-            var locations = new List<(string File, long Line)>();
-            foreach (var location in args.Locations)
-            {
-                var colon = location.LastIndexOf(':');
-                if (
-                    colon <= 0
-                    || !long.TryParse(
-                        location[(colon + 1)..],
-                        System.Globalization.CultureInfo.InvariantCulture,
-                        out var line
-                    )
-                    || line < 1
-                )
-                {
-                    await stderr
-                        .WriteLineAsync(
-                            $"'{location}' is not file:line, such as ordering.feature:12."
-                        )
-                        .ConfigureAwait(false);
-                    return 1;
-                }
-                locations.Add((location[..colon].Replace('\\', '/'), line));
-            }
-            if (args.Names is { } names)
-                foreach (var name in names)
-                    try
-                    {
-                        _ = new System.Text.RegularExpressions.Regex(
-                            name,
-                            System.Text.RegularExpressions.RegexOptions.None,
-                            TimeSpan.FromSeconds(1)
-                        );
-                    }
-                    catch (ArgumentException ex)
-                    {
-                        await stderr
-                            .WriteLineAsync(
-                                $"--name '{name}' is not a regular expression: {ex.Message}"
-                            )
-                            .ConfigureAwait(false);
-                        return 1;
-                    }
-            if (args.Tags is { } tags)
-                try
-                {
-                    TagExpression.Parse(tags);
-                }
-                catch (FormatException ex)
-                {
-                    await stderr.WriteLineAsync($"--tags {ex.Message}").ConfigureAwait(false);
-                    return 1;
-                }
+            var locations = await ParseLocationsAsync(args.Locations, stderr).ConfigureAwait(false);
+            if (
+                locations is null
+                || !await ValidateSelectionAsync(args, stderr).ConfigureAwait(false)
+            )
+                return 1;
 
             var report = await FeatureRun
                 .RunAsync(
@@ -671,55 +677,11 @@ internal static class MachineCommand
                     args.FailFast
                 )
                 .ConfigureAwait(false);
-            foreach (var problem in report.Problems)
-                await stderr.WriteLineAsync(problem.ToString()).ConfigureAwait(false);
-            var text = RunReportWriter.Write(report, args.Format);
-            if (args.ReportPath is { } path)
-                await File.WriteAllTextAsync(
-                        path,
-                        text,
-                        new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
-                    )
-                    .ConfigureAwait(false);
-            else
-                await stdout.WriteAsync(text).ConfigureAwait(false);
-
-            // A selection that runs nothing is never a pass: no scenario matched (a typo in a tag or a location), or
-            // every one it matched is @host, which only the host bindings run. A @host scenario beside one that ran is
-            // skipped and does not fail the run.
-            var ran = report.Scenarios.Any(s => s.Status is not ScenarioStatus.Skipped);
-            var passed =
-                report.Problems.Count == 0
-                && ran
-                && report.Scenarios.All(s =>
-                    (s.Status is ScenarioStatus.Passed or ScenarioStatus.Skipped)
-                    && (
-                        !args.Strict
-                        || !s.Skipped.Any(x =>
-                            !string.Equals(x.Message, "not run", StringComparison.Ordinal)
-                        )
-                    )
-                );
-            if (report.Scenarios.Count == 0)
-                await stderr.WriteLineAsync("No scenario matched.").ConfigureAwait(false);
-            else if (!ran)
-                await stderr
-                    .WriteLineAsync(
-                        $"Every scenario selected ({report.Scenarios.Count}) is tagged @host, which only the host bindings run, so nothing ran."
-                    )
-                    .ConfigureAwait(false);
-            return passed ? 0 : 1;
+            return await ReportRunAsync(report, args, stdout, stderr).ConfigureAwait(false);
         }
         catch (System.Text.RegularExpressions.RegexMatchTimeoutException ex)
         {
-            await stderr
-                .WriteLineAsync(
-                    string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"--name '{ex.Pattern}' took longer than {ex.MatchTimeout.TotalSeconds:0.#} s to match a scenario's name; give a simpler expression."
-                    )
-                )
-                .ConfigureAwait(false);
+            await WriteSlowNamePatternAsync(ex, stderr).ConfigureAwait(false);
             return 1;
         }
         catch (FeatureMachinesException ex)
@@ -742,6 +704,118 @@ internal static class MachineCommand
             await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
+    }
+
+    // The --locations as (file, line), or null once one that is not file:line is written to stderr.
+    private static async Task<List<(string File, long Line)>?> ParseLocationsAsync(
+        IReadOnlyList<string> argLocations,
+        TextWriter stderr
+    )
+    {
+        var locations = new List<(string File, long Line)>();
+        foreach (var location in argLocations)
+        {
+            var colon = location.LastIndexOf(':');
+            if (
+                colon <= 0
+                || !long.TryParse(
+                    location[(colon + 1)..],
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var line
+                )
+                || line < 1
+            )
+            {
+                await stderr
+                    .WriteLineAsync($"'{location}' is not file:line, such as ordering.feature:12.")
+                    .ConfigureAwait(false);
+                return null;
+            }
+            locations.Add((location[..colon].Replace('\\', '/'), line));
+        }
+        return locations;
+    }
+
+    // False once a --name that is not a regular expression, or --tags that do not parse, is written to stderr.
+    private static async Task<bool> ValidateSelectionAsync(RunArguments args, TextWriter stderr)
+    {
+        if (args.Names is { } names)
+            foreach (var name in names)
+                try
+                {
+                    _ = new System.Text.RegularExpressions.Regex(
+                        name,
+                        System.Text.RegularExpressions.RegexOptions.None,
+                        TimeSpan.FromSeconds(1)
+                    );
+                }
+                catch (ArgumentException ex)
+                {
+                    await stderr
+                        .WriteLineAsync(
+                            $"--name '{name}' is not a regular expression: {ex.Message}"
+                        )
+                        .ConfigureAwait(false);
+                    return false;
+                }
+        if (args.Tags is { } tags)
+            try
+            {
+                TagExpression.Parse(tags);
+            }
+            catch (FormatException ex)
+            {
+                await stderr.WriteLineAsync($"--tags {ex.Message}").ConfigureAwait(false);
+                return false;
+            }
+        return true;
+    }
+
+    private static async Task<int> ReportRunAsync(
+        RunReport report,
+        RunArguments args,
+        TextWriter stdout,
+        TextWriter stderr
+    )
+    {
+        foreach (var problem in report.Problems)
+            await stderr.WriteLineAsync(problem.ToString()).ConfigureAwait(false);
+        var text = RunReportWriter.Write(report, args.Format);
+        if (args.ReportPath is { } path)
+            await File.WriteAllTextAsync(
+                    path,
+                    text,
+                    new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
+                )
+                .ConfigureAwait(false);
+        else
+            await stdout.WriteAsync(text).ConfigureAwait(false);
+
+        // A selection that runs nothing is never a pass: no scenario matched (a typo in a tag or a location), or
+        // every one it matched is @host, which only the host bindings run. A @host scenario beside one that ran is
+        // skipped and does not fail the run.
+        var ran = report.Scenarios.Any(s => s.Status is not ScenarioStatus.Skipped);
+        var passed =
+            report.Problems.Count == 0
+            && ran
+            && report.Scenarios.All(s =>
+                (s.Status is ScenarioStatus.Passed or ScenarioStatus.Skipped)
+                && (
+                    !args.Strict
+                    || !s.Skipped.Any(x =>
+                        !string.Equals(x.Message, "not run", StringComparison.Ordinal)
+                    )
+                )
+            );
+        if (report.Scenarios.Count == 0)
+            await stderr.WriteLineAsync("No scenario matched.").ConfigureAwait(false);
+        else if (!ran)
+            await stderr
+                .WriteLineAsync(
+                    $"Every scenario selected ({report.Scenarios.Count}) is tagged @host, which only the host bindings run, so nothing ran."
+                )
+                .ConfigureAwait(false);
+        return passed ? 0 : 1;
     }
 
     private static (
@@ -876,17 +950,7 @@ internal static class MachineCommand
             }
             await stdout.WriteLineAsync($"{wanted.Count} gap(s).").ConfigureAwait(false);
             if (outPath is not null)
-            {
-                var file = new System.Text.StringBuilder("Feature: Missing scenarios\n");
-                foreach (var gap in wanted.Where(g => g.Stub is not null))
-                    file.Append($"\n  # {gap.Message}\n").Append(gap.Stub);
-                await File.WriteAllTextAsync(
-                        outPath,
-                        file.ToString(),
-                        new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
-                    )
-                    .ConfigureAwait(false);
-            }
+                await WriteStubsAsync(outPath, wanted).ConfigureAwait(false);
             return 0;
         }
         catch (FeatureMachinesException ex)
@@ -904,6 +968,20 @@ internal static class MachineCommand
             await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
+    }
+
+    // The stubs, as one feature to paste from.
+    private static async Task WriteStubsAsync(string outPath, List<Gap> wanted)
+    {
+        var file = new System.Text.StringBuilder("Feature: Missing scenarios\n");
+        foreach (var gap in wanted.Where(g => g.Stub is not null))
+            file.Append($"\n  # {gap.Message}\n").Append(gap.Stub);
+        await File.WriteAllTextAsync(
+                outPath,
+                file.ToString(),
+                new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
+            )
+            .ConfigureAwait(false);
     }
 
     private static Command CreateUsage()
@@ -1045,18 +1123,7 @@ internal static class MachineCommand
                     .ConfigureAwait(false);
                 return 1;
             }
-            var shown = ScenarioExplanation
-                .Explain(result.Files)
-                .Where(s =>
-                    scenario is null
-                    || s.Name.Contains(scenario, StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(
-                        string.Create(CultureInfo.InvariantCulture, $"{s.File}:{s.Line}"),
-                        scenario,
-                        StringComparison.Ordinal
-                    )
-                )
-                .ToList();
+            var shown = SelectScenarios(result.Files, scenario);
             if (scenario is not null && shown.Count == 0)
             {
                 await stderr
@@ -1064,22 +1131,7 @@ internal static class MachineCommand
                     .ConfigureAwait(false);
                 return 1;
             }
-            foreach (var s in shown)
-            {
-                await stdout
-                    .WriteLineAsync(
-                        string.Create(CultureInfo.InvariantCulture, $"{s.File}:{s.Line} {s.Name}")
-                    )
-                    .ConfigureAwait(false);
-                foreach (var fact in s.Facts)
-                    await stdout.WriteLineAsync($"  {fact}").ConfigureAwait(false);
-            }
-            foreach (var step in result.UiSteps)
-                await stdout
-                    .WriteLineAsync($"not derived (about the UI): {step}")
-                    .ConfigureAwait(false);
-            foreach (var warning in result.Warnings)
-                await stderr.WriteLineAsync($"warning: {warning}").ConfigureAwait(false);
+            await WriteExplanationAsync(shown, result, stdout, stderr).ConfigureAwait(false);
             return 0;
         }
         catch (FeatureMachinesException ex)
@@ -1097,6 +1149,49 @@ internal static class MachineCommand
             await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
+    }
+
+    // The scenarios that derived anything, or with a scenario only those whose name or file:line it matches.
+    private static List<ScenarioExplanation.Scenario> SelectScenarios(
+        IReadOnlyDictionary<string, string> files,
+        string? scenario
+    ) =>
+        ScenarioExplanation
+            .Explain(files)
+            .Where(s =>
+                scenario is null
+                || s.Name.Contains(scenario, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(
+                    string.Create(CultureInfo.InvariantCulture, $"{s.File}:{s.Line}"),
+                    scenario,
+                    StringComparison.Ordinal
+                )
+            )
+            .ToList();
+
+    private static async Task WriteExplanationAsync(
+        List<ScenarioExplanation.Scenario> shown,
+        FeatureDirectory.Result result,
+        TextWriter stdout,
+        TextWriter stderr
+    )
+    {
+        foreach (var s in shown)
+        {
+            await stdout
+                .WriteLineAsync(
+                    string.Create(CultureInfo.InvariantCulture, $"{s.File}:{s.Line} {s.Name}")
+                )
+                .ConfigureAwait(false);
+            foreach (var fact in s.Facts)
+                await stdout.WriteLineAsync($"  {fact}").ConfigureAwait(false);
+        }
+        foreach (var step in result.UiSteps)
+            await stdout
+                .WriteLineAsync($"not derived (about the UI): {step}")
+                .ConfigureAwait(false);
+        foreach (var warning in result.Warnings)
+            await stderr.WriteLineAsync($"warning: {warning}").ConfigureAwait(false);
     }
 
     private static Command CreateDiagram()
@@ -1382,13 +1477,7 @@ internal static class MachineCommand
     {
         public static MachineOptions Create(string langHelp, bool assemblyRequired = false) =>
             new(
-                new Option<FileInfo>("--assembly")
-                {
-                    Description = assemblyRequired
-                        ? "Compiled assembly (.dll) containing the machine."
-                        : "Compiled assembly (.dll) containing the machine. Or pass --manifest.",
-                    Required = assemblyRequired,
-                },
+                AssemblyOption(assemblyRequired),
                 new Option<FileInfo?>("--manifest")
                 {
                     Description =
@@ -1431,11 +1520,7 @@ internal static class MachineCommand
                     Description =
                         "The generators' directory (default: the tools/ beside --engine-src, else the ones bundled into trax). Needs --engine-src.",
                 },
-                new Option<string?>("--node")
-                {
-                    Description =
-                        "The node executable: an absolute path, or a name looked up on PATH (default: node). Never resolved from the current directory; a relative path is refused, and on Windows so is a .cmd or .bat shim.",
-                },
+                NodeOption(),
                 new Option<string?>("--lang") { Description = langHelp },
                 new Option<string?>("--namespace")
                 {
@@ -1443,5 +1528,21 @@ internal static class MachineCommand
                         "The C# view's namespace with --lang csharp (default Trax.Machines).",
                 }
             );
+
+        private static Option<FileInfo> AssemblyOption(bool assemblyRequired) =>
+            new("--assembly")
+            {
+                Description = assemblyRequired
+                    ? "Compiled assembly (.dll) containing the machine."
+                    : "Compiled assembly (.dll) containing the machine. Or pass --manifest.",
+                Required = assemblyRequired,
+            };
+
+        private static Option<string?> NodeOption() =>
+            new("--node")
+            {
+                Description =
+                    "The node executable: an absolute path, or a name looked up on PATH (default: node). Never resolved from the current directory; a relative path is refused, and on Windows so is a .cmd or .bat shim.",
+            };
     }
 }

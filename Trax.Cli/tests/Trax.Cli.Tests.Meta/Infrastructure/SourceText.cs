@@ -31,136 +31,168 @@ internal static class SourceText
         var output = source.ToCharArray();
         var i = 0;
 
-        // Blanks source[from..to) in place, keeping line structure intact.
-        void Blank(int from, int to)
-        {
-            for (var k = from; k < to && k < output.Length; k++)
-            {
-                if (output[k] != '\n' && output[k] != '\r')
-                    output[k] = ' ';
-            }
-        }
-
         while (i < source.Length)
         {
-            var c = source[i];
+            var next = SkipComment(source, output, i);
+            if (next < 0)
+                next = SkipRawString(source, output, i);
+            if (next < 0)
+                next = SkipVerbatimString(source, output, i);
+            if (next < 0)
+                next = SkipQuotedLiteral(source, output, i);
 
-            if (c == '/' && i + 1 < source.Length && source[i + 1] == '/')
-            {
-                var end = source.IndexOf('\n', i);
-                if (end < 0)
-                    end = source.Length;
-                Blank(i, end);
-                i = end;
-                continue;
-            }
-
-            if (c == '/' && i + 1 < source.Length && source[i + 1] == '*')
-            {
-                var end = source.IndexOf("*/", i + 2, StringComparison.Ordinal);
-                end = end < 0 ? source.Length : end + 2;
-                Blank(i, end);
-                i = end;
-                continue;
-            }
-
-            // Raw string literal, optionally interpolated: three or more quotes closed by the same
-            // count, behind any number of leading '$'. The '$$"""' form has to be recognised here,
-            // before the verbatim branch below mistakes its '$$"' prefix for '$@"'.
-            var dollars = 0;
-            while (i + dollars < source.Length && source[i + dollars] == '$')
-                dollars++;
-
-            if (
-                i + dollars + 2 < source.Length
-                && source[i + dollars] == '"'
-                && source[i + dollars + 1] == '"'
-                && source[i + dollars + 2] == '"'
-            )
-            {
-                var quoteStart = i + dollars;
-                var open = 0;
-                while (quoteStart + open < source.Length && source[quoteStart + open] == '"')
-                    open++;
-
-                var scan = quoteStart + open;
-                while (scan < source.Length)
-                {
-                    if (source[scan] != '"')
-                    {
-                        scan++;
-                        continue;
-                    }
-
-                    var run = 0;
-                    while (scan + run < source.Length && source[scan + run] == '"')
-                        run++;
-                    if (run >= open)
-                        break;
-                    scan += run;
-                }
-
-                var end = scan >= source.Length ? source.Length : scan + open;
-                Blank(quoteStart + open, Math.Min(scan, end));
-                i = end;
-                continue;
-            }
-
-            // Verbatim string, optionally interpolated: @"...", $@"...", @$"...".
-            var verbatim = c == '@' && i + 1 < source.Length && source[i + 1] == '"';
-            var interpolatedVerbatim =
-                (c == '$' || c == '@')
-                && i + 2 < source.Length
-                && (
-                    (source[i + 1] == '@' && source[i + 2] == '"')
-                    || (source[i + 1] == '$' && source[i + 2] == '"')
-                );
-
-            if (verbatim || interpolatedVerbatim)
-            {
-                var quote = source.IndexOf('"', i);
-                var scan = quote + 1;
-                while (scan < source.Length)
-                {
-                    if (source[scan] != '"')
-                    {
-                        scan++;
-                        continue;
-                    }
-
-                    // "" is an escaped quote inside a verbatim string.
-                    if (scan + 1 < source.Length && source[scan + 1] == '"')
-                    {
-                        scan += 2;
-                        continue;
-                    }
-
-                    break;
-                }
-
-                Blank(quote + 1, scan);
-                i = scan < source.Length ? scan + 1 : source.Length;
-                continue;
-            }
-
-            if (c == '"' || c == '\'')
-            {
-                var scan = i + 1;
-                while (scan < source.Length && source[scan] != c)
-                {
-                    // A backslash escapes the next character, including the delimiter.
-                    scan += source[scan] == '\\' ? 2 : 1;
-                }
-
-                Blank(i + 1, Math.Min(scan, source.Length));
-                i = scan < source.Length ? scan + 1 : source.Length;
-                continue;
-            }
-
-            i++;
+            i = next < 0 ? i + 1 : next;
         }
 
         return new string(output);
+    }
+
+    // Blanks source[from..to) in place, keeping line structure intact.
+    private static void Blank(char[] output, int from, int to)
+    {
+        for (var k = from; k < to && k < output.Length; k++)
+        {
+            if (output[k] != '\n' && output[k] != '\r')
+                output[k] = ' ';
+        }
+    }
+
+    // A line or block comment starting at i: blanks it and returns the index after it, or -1.
+    private static int SkipComment(string source, char[] output, int i)
+    {
+        var c = source[i];
+
+        if (c == '/' && i + 1 < source.Length && source[i + 1] == '/')
+        {
+            var end = source.IndexOf('\n', i);
+            if (end < 0)
+                end = source.Length;
+            Blank(output, i, end);
+            return end;
+        }
+
+        if (c == '/' && i + 1 < source.Length && source[i + 1] == '*')
+        {
+            var end = source.IndexOf("*/", i + 2, StringComparison.Ordinal);
+            end = end < 0 ? source.Length : end + 2;
+            Blank(output, i, end);
+            return end;
+        }
+
+        return -1;
+    }
+
+    // A raw string literal starting at i: blanks its content and returns the index after it, or -1.
+    private static int SkipRawString(string source, char[] output, int i)
+    {
+        // Raw string literal, optionally interpolated: three or more quotes closed by the same
+        // count, behind any number of leading '$'. The '$$"""' form has to be recognised here,
+        // before the verbatim branch below mistakes its '$$"' prefix for '$@"'.
+        var dollars = 0;
+        while (i + dollars < source.Length && source[i + dollars] == '$')
+            dollars++;
+
+        if (
+            i + dollars + 2 < source.Length
+            && source[i + dollars] == '"'
+            && source[i + dollars + 1] == '"'
+            && source[i + dollars + 2] == '"'
+        )
+        {
+            var quoteStart = i + dollars;
+            var open = 0;
+            while (quoteStart + open < source.Length && source[quoteStart + open] == '"')
+                open++;
+
+            var scan = quoteStart + open;
+            while (scan < source.Length)
+            {
+                if (source[scan] != '"')
+                {
+                    scan++;
+                    continue;
+                }
+
+                var run = 0;
+                while (scan + run < source.Length && source[scan + run] == '"')
+                    run++;
+                if (run >= open)
+                    break;
+                scan += run;
+            }
+
+            var end = scan >= source.Length ? source.Length : scan + open;
+            Blank(output, quoteStart + open, Math.Min(scan, end));
+            return end;
+        }
+
+        return -1;
+    }
+
+    // A verbatim string starting at i: blanks its content and returns the index after it, or -1.
+    private static int SkipVerbatimString(string source, char[] output, int i)
+    {
+        var c = source[i];
+
+        // Verbatim string, optionally interpolated: @"...", $@"...", @$"...".
+        var verbatim = c == '@' && i + 1 < source.Length && source[i + 1] == '"';
+        var interpolatedVerbatim =
+            (c == '$' || c == '@')
+            && i + 2 < source.Length
+            && (
+                (source[i + 1] == '@' && source[i + 2] == '"')
+                || (source[i + 1] == '$' && source[i + 2] == '"')
+            );
+
+        if (verbatim || interpolatedVerbatim)
+        {
+            var quote = source.IndexOf('"', i);
+            var scan = quote + 1;
+            while (scan < source.Length)
+            {
+                if (source[scan] != '"')
+                {
+                    scan++;
+                    continue;
+                }
+
+                // "" is an escaped quote inside a verbatim string.
+                if (scan + 1 < source.Length && source[scan + 1] == '"')
+                {
+                    scan += 2;
+                    continue;
+                }
+
+                break;
+            }
+
+            Blank(output, quote + 1, scan);
+            return scan < source.Length ? scan + 1 : source.Length;
+        }
+
+        return -1;
+    }
+
+    // A regular string or char literal starting at i: blanks its content and returns the index
+    // after it, or -1.
+    private static int SkipQuotedLiteral(string source, char[] output, int i)
+    {
+        var c = source[i];
+
+        if (c == '"' || c == '\'')
+        {
+            var scan = i + 1;
+            while (scan < source.Length && source[scan] != c)
+            {
+                // A backslash escapes the next character, including the delimiter.
+                scan += source[scan] == '\\' ? 2 : 1;
+            }
+
+            Blank(output, i + 1, Math.Min(scan, source.Length));
+            return scan < source.Length ? scan + 1 : source.Length;
+        }
+
+        return -1;
     }
 
     public static IReadOnlyList<(int LineNumber, string Line)> MatchingLines(

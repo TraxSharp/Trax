@@ -47,18 +47,7 @@ internal sealed partial class ClientGenerator
     /// </summary>
     public static IReadOnlyList<ClientFile> Render(OperationsGenerateOptions options)
     {
-        GraphQLDocument sdl;
-        try
-        {
-            sdl = Parser.Parse(options.Schema);
-        }
-        catch (GraphQLParser.Exceptions.GraphQLParserException ex)
-        {
-            throw new InvalidOperationException(
-                $"The operations schema is not GraphQL SDL ({ex.Message.Trim()}).",
-                ex
-            );
-        }
+        var sdl = ParseOperationsSchema(options.Schema);
         var types = new SdlTypes(sdl);
         var roots = OperationsRoots.Of(sdl);
         var documents = ClientDocumentSet.ReadOperations(options.Documents, types, roots);
@@ -85,6 +74,39 @@ internal sealed partial class ClientGenerator
         );
         index.Append("export type * from \"./types.g\";\n");
 
+        AppendOperationModules(files, index, names, paths, documents, types, roots);
+
+        files.Add(new("index.g.ts", index.ToString()));
+        files.Add(new(ConsoleDocumentsFileName, ConsoleDocumentsJson(documents)));
+        return files.OrderBy(f => f.Path, StringComparer.Ordinal).ToList();
+    }
+
+    private static GraphQLDocument ParseOperationsSchema(string schema)
+    {
+        try
+        {
+            return Parser.Parse(schema);
+        }
+        catch (GraphQLParser.Exceptions.GraphQLParserException ex)
+        {
+            throw new InvalidOperationException(
+                $"The operations schema is not GraphQL SDL ({ex.Message.Trim()}).",
+                ex
+            );
+        }
+    }
+
+    // A module per document, each exported from the index.
+    private static void AppendOperationModules(
+        List<ClientFile> files,
+        StringBuilder index,
+        Names names,
+        Names paths,
+        ClientDocumentSet documents,
+        SdlTypes types,
+        OperationsRoots roots
+    )
+    {
         foreach (var operation in documents.Operations)
         {
             var owner = $"the console document {operation.Name} ({operation.Source})";
@@ -116,10 +138,6 @@ internal sealed partial class ClientGenerator
                 $"export {{ {function}, {document}, type {variables}, type {result} }} from \"./documents/{function}.g\";\n"
             );
         }
-
-        files.Add(new("index.g.ts", index.ToString()));
-        files.Add(new(ConsoleDocumentsFileName, ConsoleDocumentsJson(documents)));
-        return files.OrderBy(f => f.Path, StringComparer.Ordinal).ToList();
     }
 
     /// <summary>Writes the operations client under <paramref name="outDir"/>, as <see cref="WriteAsync(ClientGenerateOptions, string)"/> does.</summary>
@@ -148,45 +166,17 @@ internal sealed partial class ClientGenerator
     )
     {
         var owner = $"The console document {operation.Name} ({operation.Source})";
-        var selections = new SelectionTypes(
-            types,
-            documents.Fragments.ToDictionary(
-                f => f.Key,
-                f => f.Value.Definition,
-                StringComparer.Ordinal
-            )
-        );
         var kind = operation.Operation.Operation switch
         {
             OperationType.Mutation => "mutation",
             OperationType.Subscription => "subscription",
             _ => "query",
         };
-        var root = kind switch
-        {
-            "mutation" => roots.Mutation,
-            "subscription" => roots.Subscription,
-            _ => roots.Query,
-        };
         var used = new HashSet<string>(StringComparer.Ordinal);
-        var answer = selections.Of(
-            new GraphQLNonNullType(new GraphQLNamedType(new GraphQLName(root))),
-            operation.Operation.SelectionSet,
-            owner,
-            used
-        );
+        var answer = OperationAnswer(operation, kind, owner, types, roots, documents, used);
 
         var variables = operation.Operation.Variables?.Items ?? [];
-        var variableLines = new StringBuilder();
-        foreach (var variable in variables)
-        {
-            var name = variable.Variable.Name.StringValue;
-            var optional =
-                variable.Type is not GraphQLNonNullType || variable.DefaultValue is not null;
-            variableLines.Append(
-                $"  {SdlTypes.Property(name)}{(optional ? "?" : "")}: {types.InputType(variable.Type)};\n"
-            );
-        }
+        var variableLines = VariableLines(variables, types);
         var imports = types
             .NamesIn(variables.Select(v => v.Type))
             .Concat(used)
@@ -198,6 +188,98 @@ internal sealed partial class ClientGenerator
         );
 
         var sb = new StringBuilder(OperationsHeader);
+        AppendOperationDeclarations(
+            sb,
+            operation,
+            kind,
+            document,
+            variablesType,
+            resultType,
+            variables,
+            variableLines,
+            imports,
+            answer
+        );
+        AppendOperationFunction(
+            sb,
+            kind,
+            function,
+            document,
+            variablesType,
+            resultType,
+            variables,
+            required
+        );
+        sb.Append("}\n");
+        return sb.ToString();
+    }
+
+    // The type of what the operation selects from its root, adding each type it names to `used`.
+    private static string OperationAnswer(
+        ClientOperation operation,
+        string kind,
+        string owner,
+        SdlTypes types,
+        OperationsRoots roots,
+        ClientDocumentSet documents,
+        HashSet<string> used
+    )
+    {
+        var selections = new SelectionTypes(
+            types,
+            documents.Fragments.ToDictionary(
+                f => f.Key,
+                f => f.Value.Definition,
+                StringComparer.Ordinal
+            )
+        );
+        var root = kind switch
+        {
+            "mutation" => roots.Mutation,
+            "subscription" => roots.Subscription,
+            _ => roots.Query,
+        };
+        return selections.Of(
+            new GraphQLNonNullType(new GraphQLNamedType(new GraphQLName(root))),
+            operation.Operation.SelectionSet,
+            owner,
+            used
+        );
+    }
+
+    // The `?:` line of each variable in the variables type.
+    private static StringBuilder VariableLines(
+        List<GraphQLVariableDefinition> variables,
+        SdlTypes types
+    )
+    {
+        var variableLines = new StringBuilder();
+        foreach (var variable in variables)
+        {
+            var name = variable.Variable.Name.StringValue;
+            var optional =
+                variable.Type is not GraphQLNonNullType || variable.DefaultValue is not null;
+            variableLines.Append(
+                $"  {SdlTypes.Property(name)}{(optional ? "?" : "")}: {types.InputType(variable.Type)};\n"
+            );
+        }
+        return variableLines;
+    }
+
+    // The module's imports, its variables and result types, and its document descriptor.
+    private static void AppendOperationDeclarations(
+        StringBuilder sb,
+        ClientOperation operation,
+        string kind,
+        string document,
+        string variablesType,
+        string resultType,
+        List<GraphQLVariableDefinition> variables,
+        StringBuilder variableLines,
+        List<string> imports,
+        string answer
+    )
+    {
         sb.Append(
             string.Equals(kind, "subscription", StringComparison.Ordinal)
                 ? "import { subscribe, type TraxDocument, type TraxSink } from \"../client.g\";\n"
@@ -229,6 +311,20 @@ internal sealed partial class ClientGenerator
                     + $"  text: {TypeScript.Literal(operation.Text)},\n"
             )
             .Append("};\n\n");
+    }
+
+    // The function that sends the document or, for a subscription, follows it.
+    private static void AppendOperationFunction(
+        StringBuilder sb,
+        string kind,
+        string function,
+        string document,
+        string variablesType,
+        string resultType,
+        List<GraphQLVariableDefinition> variables,
+        bool required
+    )
+    {
         var parameter =
             variables.Count == 0 ? ""
             : required ? $"variables: {variablesType}"
@@ -252,8 +348,6 @@ internal sealed partial class ClientGenerator
             sb.Append($"export function {function}({parameter}): Promise<{resultType}> {{\n");
             sb.Append($"  return send({document}, {value});\n");
         }
-        sb.Append("}\n");
-        return sb.ToString();
     }
 
     // The documents a host that serves the console registers: each one with an id, by name, as Trax.Api.Dashboard

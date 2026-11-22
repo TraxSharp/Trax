@@ -239,49 +239,8 @@ public partial class GeneratedNamesPropertyTests
                             Document = $"query {{ views {{ {view} {{ externalId other }} }} }}",
                         },
                     ],
-                Trains =
-                [
-                    new Trax.StateMachine.ClientManifestTrain
-                    {
-                        Field = field,
-                        Root = "mutation",
-                        Answer = "Started!",
-                        Arguments =
-                        [
-                            new Trax.StateMachine.ClientManifestArgument
-                            {
-                                Name = "input",
-                                Type = $"{c.Input}!",
-                            },
-                            new Trax.StateMachine.ClientManifestArgument
-                            {
-                                Name = "mode",
-                                Type = c.Enum,
-                            },
-                        ],
-                    },
-                ],
-                Types =
-                    $$"""
-                    type Started { externalId: String! mode: {{c.Enum}} other: {{c.OtherEnum}} }
-
-                    enum {{c.Enum}} { {{string.Join(' ', c.EnumValues)}} }
-
-                    enum {{c.OtherEnum}} { {{string.Join(' ', c.OtherValues)}} }
-
-                    input {{c.Input}} { {{c.InputField}}: {{c.OtherEnum}} }
-                    """
-                    + (
-                        view is null
-                            ? ""
-                            : $$"""
-
-
-                            type {{TypeScript.Upper(
-                                view
-                            )}}View { externalId: String! other: {{c.OtherEnum}} }
-                            """
-                    ),
+                Trains = ManifestTrains(c, field),
+                Types = ManifestTypes(c, view),
             },
             Documents:
             [
@@ -294,6 +253,52 @@ public partial class GeneratedNamesPropertyTests
                     """
                 ),
             ]
+        );
+
+    // The manifest's one train: the field a frontend's document sends, with its input and mode arguments.
+    private static IReadOnlyList<Trax.StateMachine.ClientManifestTrain> ManifestTrains(
+        Case c,
+        string field
+    ) =>
+        [
+            new Trax.StateMachine.ClientManifestTrain
+            {
+                Field = field,
+                Root = "mutation",
+                Answer = "Started!",
+                Arguments =
+                [
+                    new Trax.StateMachine.ClientManifestArgument
+                    {
+                        Name = "input",
+                        Type = $"{c.Input}!",
+                    },
+                    new Trax.StateMachine.ClientManifestArgument { Name = "mode", Type = c.Enum },
+                ],
+            },
+        ];
+
+    // The manifest's types: the train's answer, its two enums and its input, and the view's type when there is one.
+    private static string ManifestTypes(Case c, string? view) =>
+        $$"""
+            type Started { externalId: String! mode: {{c.Enum}} other: {{c.OtherEnum}} }
+
+            enum {{c.Enum}} { {{string.Join(' ', c.EnumValues)}} }
+
+            enum {{c.OtherEnum}} { {{string.Join(' ', c.OtherValues)}} }
+
+            input {{c.Input}} { {{c.InputField}}: {{c.OtherEnum}} }
+            """
+        + (
+            view is null
+                ? ""
+                : $$"""
+
+
+                type {{TypeScript.Upper(
+                    view
+                )}}View { externalId: String! other: {{c.OtherEnum}} }
+                """
         );
 
     [Test]
@@ -376,97 +381,12 @@ public partial class GeneratedNamesPropertyTests
         var root = Directory.CreateTempSubdirectory("trax-ts-names-");
         try
         {
-            var random = new System.Random(20261105);
-            // Views are drawn apart, so adding them left the other names each seed draws as they were.
-            var views = new System.Random(20261107);
-            string Pick() =>
-                random.Next(4) == 0
-                    ? "abAB_"[random.Next(5)]
-                        + new string(
-                            Enumerable
-                                .Range(0, random.Next(5))
-                                .Select(_ => "abAB_09"[random.Next(7)])
-                                .ToArray()
-                        )
-                    : Hostile[random.Next(Hostile.Length)];
-            var operations = 0;
-            var manifests = 0;
-            for (var i = 0; i < 4000 && (operations < 40 || manifests < 40); i++)
-            {
-                var c = new Case(
-                    Pick(),
-                    [Pick(), Pick()],
-                    Pick(),
-                    Pick(),
-                    Pick(),
-                    [Pick()],
-                    Pick(),
-                    Pick(),
-                    Pick()
-                );
-                var fragment = Pick();
-                if (
-                    operations < 40
-                    && await TryWriteAsync(
-                            root,
-                            string.Create(CultureInfo.InvariantCulture, $"operations-{i}"),
-                            OperationsWithFragment(c, fragment)
-                        )
-                        .ConfigureAwait(false)
-                )
-                    operations++;
-                if (
-                    manifests < 40
-                    && await TryWriteAsync(
-                            root,
-                            string.Create(CultureInfo.InvariantCulture, $"manifest-{i}"),
-                            ManifestWithProgress(
-                                c,
-                                Pick(),
-                                fragment,
-                                Hostile[views.Next(Hostile.Length)]
-                            )
-                        )
-                        .ConfigureAwait(false)
-                )
-                    manifests++;
-            }
+            var (operations, manifests) = await WriteSampleAsync(root).ConfigureAwait(false);
             operations.Should().Be(40, "the seed writes enough operations clients to check");
             manifests.Should().Be(40, "the seed writes enough manifest clients to check");
             await File.WriteAllTextAsync(
                     Path.Combine(root.FullName, "tsconfig.json"),
-                    $$"""
-                {
-                  "compilerOptions": {
-                    "target": "es2022",
-                    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-                    "module": "esnext",
-                    "moduleResolution": "bundler",
-                    "moduleDetection": "force",
-                    "jsx": "react-jsx",
-                    "verbatimModuleSyntax": true,
-                    "strict": true,
-                    "noUnusedLocals": true,
-                    "noUnusedParameters": true,
-                    "noFallthroughCasesInSwitch": true,
-                    "skipLibCheck": true,
-                    "types": ["node"],
-                    "noEmit": true,
-                    "paths": {
-                      "@traxsharp/state-machine": [{{Json(
-                    Path.Combine(engine, "src", "index.ts")
-                )}}],
-                      "@traxsharp/state-machine/client": [{{Json(
-                    Path.Combine(engine, "src", "client", "index.ts")
-                )}}],
-                      "@traxsharp/state-machine/react": [{{Json(
-                    Path.Combine(engine, "src", "react.ts")
-                )}}]
-                    }
-                  },
-                  "include": ["cases"]
-                }
-                """
+                    SampleTsConfig(engine)
                 )
                 .ConfigureAwait(false);
             Directory.CreateSymbolicLink(
@@ -503,6 +423,103 @@ public partial class GeneratedNamesPropertyTests
             root.Delete(recursive: true);
         }
     }
+
+    // Draws cases from the fixed seeds and writes up to 40 operations clients and 40 manifest clients under root;
+    // returns how many of each were written.
+    private static async Task<(int Operations, int Manifests)> WriteSampleAsync(DirectoryInfo root)
+    {
+        var random = new System.Random(20261105);
+        // Views are drawn apart, so adding them left the other names each seed draws as they were.
+        var views = new System.Random(20261107);
+        string Pick() =>
+            random.Next(4) == 0
+                ? "abAB_"[random.Next(5)]
+                    + new string(
+                        Enumerable
+                            .Range(0, random.Next(5))
+                            .Select(_ => "abAB_09"[random.Next(7)])
+                            .ToArray()
+                    )
+                : Hostile[random.Next(Hostile.Length)];
+        var operations = 0;
+        var manifests = 0;
+        for (var i = 0; i < 4000 && (operations < 40 || manifests < 40); i++)
+        {
+            var c = new Case(
+                Pick(),
+                [Pick(), Pick()],
+                Pick(),
+                Pick(),
+                Pick(),
+                [Pick()],
+                Pick(),
+                Pick(),
+                Pick()
+            );
+            var fragment = Pick();
+            if (
+                operations < 40
+                && await TryWriteAsync(
+                        root,
+                        string.Create(CultureInfo.InvariantCulture, $"operations-{i}"),
+                        OperationsWithFragment(c, fragment)
+                    )
+                    .ConfigureAwait(false)
+            )
+                operations++;
+            if (
+                manifests < 40
+                && await TryWriteAsync(
+                        root,
+                        string.Create(CultureInfo.InvariantCulture, $"manifest-{i}"),
+                        ManifestWithProgress(
+                            c,
+                            Pick(),
+                            fragment,
+                            Hostile[views.Next(Hostile.Length)]
+                        )
+                    )
+                    .ConfigureAwait(false)
+            )
+                manifests++;
+        }
+        return (operations, manifests);
+    }
+
+    // The compiler options the sampled clients are checked under, with the engine's modules mapped to its sources.
+    private static string SampleTsConfig(string engine) =>
+        $$"""
+        {
+          "compilerOptions": {
+            "target": "es2022",
+            "lib": ["ES2022", "DOM", "DOM.Iterable"],
+            "module": "esnext",
+            "moduleResolution": "bundler",
+            "moduleDetection": "force",
+            "jsx": "react-jsx",
+            "verbatimModuleSyntax": true,
+            "strict": true,
+            "noUnusedLocals": true,
+            "noUnusedParameters": true,
+            "noFallthroughCasesInSwitch": true,
+            "skipLibCheck": true,
+            "types": ["node"],
+            "noEmit": true,
+            "paths": {
+              "@traxsharp/state-machine": [{{Json(
+            Path.Combine(engine, "src", "index.ts")
+        )}}],
+              "@traxsharp/state-machine/client": [{{Json(
+            Path.Combine(engine, "src", "client", "index.ts")
+        )}}],
+              "@traxsharp/state-machine/react": [{{Json(
+            Path.Combine(engine, "src", "react.ts")
+        )}}]
+            }
+          },
+          "include": ["cases"]
+        }
+        """;
 
     // Writes the client `render` makes under cases/<folder>, beside the schema and documents it was made from; false
     // when the generator refuses them.

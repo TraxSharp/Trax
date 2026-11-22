@@ -130,62 +130,67 @@ internal static class BoardWriter
             Colours.Select(c => $".{c.Key.ToString().ToLowerInvariant()}{{background:{c.Value}}}")
         );
         return $$"""
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-            <meta charset="utf-8">
-            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
-            <title>Machines board</title>
-            <style>
-            body{font:14px system-ui,sans-serif;margin:16px;color:#111}
-            section{margin-bottom:24px}h2{font-size:16px;margin:0 0 8px}
-            .row{display:flex;flex-wrap:wrap;gap:8px}
-            .sticky{padding:8px 10px;border-radius:3px;box-shadow:0 1px 2px #0003;max-width:240px;cursor:default}
-            .sticky small{display:block;opacity:.7}
-            ul{margin:4px 0 0;padding-left:16px}
-            {{colours}}
-            </style>
-            </head>
-            <body>
-            <h1>Machines board</h1>
-            <div id="board"></div>
-            <script type="application/json" id="data">{{data}}</script>
-            <script>
-            const board = JSON.parse(document.getElementById("data").textContent);
-            const root = document.getElementById("board");
-            const machines = [...new Set(board.stickies.map(s => s.machine))];
-            for (const machine of machines) {
-              const section = document.createElement("section");
-              const title = document.createElement("h2");
-              title.textContent = machine;
-              section.append(title);
-              const row = document.createElement("div");
-              row.className = "row";
-              for (const sticky of board.stickies.filter(s => s.machine === machine)) {
-                const note = document.createElement("div");
-                note.className = "sticky " + sticky.kind;
-                note.dataset.sticky = sticky.id;
-                const kind = document.createElement("small");
-                kind.textContent = sticky.kind;
-                note.append(kind, document.createTextNode(sticky.label));
-                if (sticky.scenarios.length > 0) {
-                  const list = document.createElement("ul");
-                  for (const s of sticky.scenarios) {
-                    const item = document.createElement("li");
-                    item.textContent = s.file + ":" + s.line + " " + s.scenario;
-                    list.append(item);
-                  }
-                  note.append(list);
-                }
-                row.append(note);
-              }
-              section.append(row);
-              root.append(section);
-            }
-            </script>
-            </body>
-            </html>
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                <meta charset="utf-8">
+                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+                <title>Machines board</title>
+                <style>
+                body{font:14px system-ui,sans-serif;margin:16px;color:#111}
+                section{margin-bottom:24px}h2{font-size:16px;margin:0 0 8px}
+                .row{display:flex;flex-wrap:wrap;gap:8px}
+                .sticky{padding:8px 10px;border-radius:3px;box-shadow:0 1px 2px #0003;max-width:240px;cursor:default}
+                .sticky small{display:block;opacity:.7}
+                ul{margin:4px 0 0;padding-left:16px}
+                {{colours}}
+                </style>
+                </head>
+                <body>
+                <h1>Machines board</h1>
+                <div id="board"></div>
+                <script type="application/json" id="data">{{data}}</script>
 
-            """;
+                """ + BoardScript;
     }
+
+    // The board page's script, which draws the stickies from its JSON.
+    private const string BoardScript = """
+        <script>
+        const board = JSON.parse(document.getElementById("data").textContent);
+        const root = document.getElementById("board");
+        const machines = [...new Set(board.stickies.map(s => s.machine))];
+        for (const machine of machines) {
+          const section = document.createElement("section");
+          const title = document.createElement("h2");
+          title.textContent = machine;
+          section.append(title);
+          const row = document.createElement("div");
+          row.className = "row";
+          for (const sticky of board.stickies.filter(s => s.machine === machine)) {
+            const note = document.createElement("div");
+            note.className = "sticky " + sticky.kind;
+            note.dataset.sticky = sticky.id;
+            const kind = document.createElement("small");
+            kind.textContent = sticky.kind;
+            note.append(kind, document.createTextNode(sticky.label));
+            if (sticky.scenarios.length > 0) {
+              const list = document.createElement("ul");
+              for (const s of sticky.scenarios) {
+                const item = document.createElement("li");
+                item.textContent = s.file + ":" + s.line + " " + s.scenario;
+                list.append(item);
+              }
+              note.append(list);
+            }
+            row.append(note);
+          }
+          section.append(row);
+          root.append(section);
+        }
+        </script>
+        </body>
+        </html>
+
+        """;
 }

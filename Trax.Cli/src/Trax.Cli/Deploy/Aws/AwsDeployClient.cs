@@ -180,89 +180,18 @@ internal sealed class AwsDeployClient(string region, TimeProvider clock) : IAwsD
         var existing = await DescribeStackAsync(stack, ct).ConfigureAwait(false);
         var started = clock.GetUtcNow().UtcDateTime;
         var changeSet = await cfn.CreateChangeSetAsync(
-                new CreateChangeSetRequest
-                {
-                    StackName = stack,
-                    ChangeSetName = string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"trax-{started:yyyyMMddHHmmss}"
-                    ),
-                    ChangeSetType = ChangeSetTypeFor(existing),
-                    TemplateBody = template,
-                    UsePreviousTemplate = template is null ? true : null,
-                    Parameters =
-                    [
-                        .. parameters.Select(p =>
-                            p.Value is null
-                                ? new Parameter { ParameterKey = p.Key, UsePreviousValue = true }
-                                : new Parameter { ParameterKey = p.Key, ParameterValue = p.Value }
-                        ),
-                    ],
-                    Capabilities = ["CAPABILITY_IAM"],
-                    Tags =
-                    [
-                        .. tags.Select(t => new Amazon.CloudFormation.Model.Tag
-                        {
-                            Key = t.Key,
-                            Value = t.Value,
-                        }),
-                    ],
-                },
+                ChangeSetRequest(stack, template, parameters, tags, existing, started),
                 ct
             )
             .ConfigureAwait(false);
 
         try
         {
-            DescribeChangeSetResponse described;
-            while (true)
-            {
-                described = await cfn.DescribeChangeSetAsync(
-                        new DescribeChangeSetRequest { ChangeSetName = changeSet.Id },
-                        ct
-                    )
-                    .ConfigureAwait(false);
-                if (described.Status == ChangeSetStatus.CREATE_COMPLETE)
-                    break;
-                if (described.Status == ChangeSetStatus.FAILED)
-                {
-                    await cfn.DeleteChangeSetAsync(
-                            new DeleteChangeSetRequest { ChangeSetName = changeSet.Id },
-                            ct
-                        )
-                        .ConfigureAwait(false);
-                    if (
-                        described.StatusReason?.Contains(
-                            "didn't contain changes",
-                            StringComparison.Ordinal
-                        )
-                            is true
-                        || described.StatusReason?.Contains("No updates", StringComparison.Ordinal)
-                            is true
-                    )
-                        return false;
-                    throw new InvalidOperationException(
-                        $"CloudFormation refused the change to {stack}: {described.StatusReason}"
-                    );
-                }
-                await Task.Delay(TimeSpan.FromSeconds(3), clock, ct).ConfigureAwait(false);
-            }
-            foreach (var change in described.Changes ?? [])
-            {
-                var resource = change.ResourceChange;
-                progress(
-                    $"  {resource.Action?.Value, -8}{resource.LogicalResourceId} ({resource.ResourceType})"
-                        + (
-                            string.Equals(
-                                resource.Replacement?.Value,
-                                "True",
-                                StringComparison.Ordinal
-                            )
-                                ? ", replaced"
-                                : ""
-                        )
-                );
-            }
+            var described = await WaitForChangeSetAsync(cfn, changeSet.Id, stack, ct)
+                .ConfigureAwait(false);
+            if (described is null)
+                return false;
+            ReportChanges(described, progress);
 
             await cfn.ExecuteChangeSetAsync(
                     new ExecuteChangeSetRequest { ChangeSetName = changeSet.Id },
@@ -287,6 +216,87 @@ internal sealed class AwsDeployClient(string region, TimeProvider clock) : IAwsD
         }
         await WaitAsync(cfn, stack, started, progress, ct).ConfigureAwait(false);
         return true;
+    }
+
+    // The change set request: CREATE or UPDATE as the stack stands, named for when the deploy started.
+    private static CreateChangeSetRequest ChangeSetRequest(
+        string stack,
+        string? template,
+        IReadOnlyDictionary<string, string?> parameters,
+        IReadOnlyDictionary<string, string> tags,
+        AwsStackState? existing,
+        DateTime started
+    ) =>
+        new CreateChangeSetRequest
+        {
+            StackName = stack,
+            ChangeSetName = string.Create(
+                CultureInfo.InvariantCulture,
+                $"trax-{started:yyyyMMddHHmmss}"
+            ),
+            ChangeSetType = ChangeSetTypeFor(existing),
+            TemplateBody = template,
+            UsePreviousTemplate = template is null ? true : null,
+            Parameters =
+            [
+                .. parameters.Select(p =>
+                    p.Value is null
+                        ? new Parameter { ParameterKey = p.Key, UsePreviousValue = true }
+                        : new Parameter { ParameterKey = p.Key, ParameterValue = p.Value }
+                ),
+            ],
+            Capabilities = ["CAPABILITY_IAM"],
+            Tags =
+            [
+                .. tags.Select(t => new Amazon.CloudFormation.Model.Tag
+                {
+                    Key = t.Key,
+                    Value = t.Value,
+                }),
+            ],
+        };
+
+    // Waits until the change set is ready. Null when it holds no change, once it is deleted; throws when
+    // CloudFormation refused it for any other reason.
+    private async Task<DescribeChangeSetResponse?> WaitForChangeSetAsync(
+        AmazonCloudFormationClient cfn,
+        string changeSetId,
+        string stack,
+        CancellationToken ct
+    )
+    {
+        while (true)
+        {
+            var described = await cfn.DescribeChangeSetAsync(
+                    new DescribeChangeSetRequest { ChangeSetName = changeSetId },
+                    ct
+                )
+                .ConfigureAwait(false);
+            if (described.Status == ChangeSetStatus.CREATE_COMPLETE)
+                return described;
+            if (described.Status == ChangeSetStatus.FAILED)
+            {
+                await cfn.DeleteChangeSetAsync(
+                        new DeleteChangeSetRequest { ChangeSetName = changeSetId },
+                        ct
+                    )
+                    .ConfigureAwait(false);
+                if (
+                    described.StatusReason?.Contains(
+                        "didn't contain changes",
+                        StringComparison.Ordinal
+                    )
+                        is true
+                    || described.StatusReason?.Contains("No updates", StringComparison.Ordinal)
+                        is true
+                )
+                    return null;
+                throw new InvalidOperationException(
+                    $"CloudFormation refused the change to {stack}: {described.StatusReason}"
+                );
+            }
+            await Task.Delay(TimeSpan.FromSeconds(3), clock, ct).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -352,18 +362,7 @@ internal sealed class AwsDeployClient(string region, TimeProvider clock) : IAwsD
                 continue;
             if (status is "CREATE_COMPLETE" or "UPDATE_COMPLETE" or "DELETE_COMPLETE")
                 return;
-            var reasons = events
-                .Where(e =>
-                    e.Timestamp >= since
-                    && e.ResourceStatus?.Value.EndsWith("_FAILED", StringComparison.Ordinal) is true
-                )
-                .Select(e => $"{e.LogicalResourceId}: {e.ResourceStatusReason}")
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
-            throw new InvalidOperationException(
-                $"Stack {stack} ended {status}."
-                    + (reasons.Count == 0 ? "" : "\n  " + string.Join("\n  ", reasons))
-            );
+            throw StackFailed(stack, status, events, since);
         }
     }
 
@@ -374,29 +373,7 @@ internal sealed class AwsDeployClient(string region, TimeProvider clock) : IAwsD
     )
     {
         using var ecs = new AmazonECSClient(_region);
-        var run = await ecs.RunTaskAsync(
-                new RunTaskRequest
-                {
-                    Cluster = request.Cluster,
-                    TaskDefinition = request.TaskDefinition,
-                    LaunchType = LaunchType.FARGATE,
-                    Count = 1,
-                    StartedBy = "trax-deploy",
-                    NetworkConfiguration = new NetworkConfiguration
-                    {
-                        AwsvpcConfiguration = new AwsVpcConfiguration
-                        {
-                            Subnets = [.. request.Subnets],
-                            SecurityGroups = [request.SecurityGroup],
-                            AssignPublicIp = request.AssignPublicIp
-                                ? AssignPublicIp.ENABLED
-                                : AssignPublicIp.DISABLED,
-                        },
-                    },
-                },
-                ct
-            )
-            .ConfigureAwait(false);
+        var run = await ecs.RunTaskAsync(MigrateTaskRequest(request), ct).ConfigureAwait(false);
         var task =
             run.Tasks?.FirstOrDefault()
             ?? throw new InvalidOperationException(
@@ -435,6 +412,65 @@ internal sealed class AwsDeployClient(string region, TimeProvider clock) : IAwsD
             );
         }
     }
+
+    private static void ReportChanges(DescribeChangeSetResponse described, Action<string> progress)
+    {
+        foreach (var change in described.Changes ?? [])
+        {
+            var resource = change.ResourceChange;
+            progress(
+                $"  {resource.Action?.Value, -8}{resource.LogicalResourceId} ({resource.ResourceType})"
+                    + (
+                        string.Equals(resource.Replacement?.Value, "True", StringComparison.Ordinal)
+                            ? ", replaced"
+                            : ""
+                    )
+            );
+        }
+    }
+
+    // What a stack that did not end complete fails with: its status and each failed resource's reason.
+    private static InvalidOperationException StackFailed(
+        string stack,
+        string status,
+        List<StackEvent> events,
+        DateTime since
+    )
+    {
+        var reasons = events
+            .Where(e =>
+                e.Timestamp >= since
+                && e.ResourceStatus?.Value.EndsWith("_FAILED", StringComparison.Ordinal) is true
+            )
+            .Select(e => $"{e.LogicalResourceId}: {e.ResourceStatusReason}")
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        return new InvalidOperationException(
+            $"Stack {stack} ended {status}."
+                + (reasons.Count == 0 ? "" : "\n  " + string.Join("\n  ", reasons))
+        );
+    }
+
+    private static RunTaskRequest MigrateTaskRequest(AwsTaskRequest request) =>
+        new RunTaskRequest
+        {
+            Cluster = request.Cluster,
+            TaskDefinition = request.TaskDefinition,
+            LaunchType = LaunchType.FARGATE,
+            Count = 1,
+            StartedBy = "trax-deploy",
+            NetworkConfiguration = new NetworkConfiguration
+            {
+                AwsvpcConfiguration = new AwsVpcConfiguration
+                {
+                    Subnets = [.. request.Subnets],
+                    SecurityGroups = [request.SecurityGroup],
+                    AssignPublicIp = request.AssignPublicIp
+                        ? AssignPublicIp.ENABLED
+                        : AssignPublicIp.DISABLED,
+                },
+            },
+        };
 
     public async Task DeleteStackAsync(string stack, Action<string> progress, CancellationToken ct)
     {

@@ -558,6 +558,12 @@ public partial class OperationsClientGeneratorTests
             .And.Contain(
                 "client.SendAsync(global::Trax.Operations.TraxOperations.Runs, variables ?? new(), cancellationToken)"
             );
+        AssertCSharpCancelAndTypes(files);
+    }
+
+    // The Cancel mutation's document and the shared Types.g.cs of the C# client of Runs and Cancel.
+    private static void AssertCSharpCancelAndTypes(IReadOnlyList<ClientFile> files)
+    {
         Text(files, "Documents/Cancel.g.cs")
             .Should()
             .Contain("    public required long Id { get; init; }")
@@ -1437,6 +1443,12 @@ public partial class OperationsClientGeneratorTests
                 $"    public {List}<ShapesResultOperationsMaybe?>? Maybe {{ get; init; }}",
                 "a nullable list of nullable objects"
             );
+        AssertShapesTouchAndTypes(files);
+    }
+
+    // Touch's defaulted variable, the shared Types.g.cs, and that the whole client compiles without a warning.
+    private static void AssertShapesTouchAndTypes(IReadOnlyList<ClientFile> files)
+    {
         Text(files, "Documents/Touch.g.cs")
             .Should()
             .Contain(
@@ -1459,74 +1471,76 @@ public partial class OperationsClientGeneratorTests
             .BeEmpty();
     }
 
+    private const string TraxJsonProbe = """
+        namespace Trax.Operations;
+
+        internal static class Probe
+        {
+            private static string Write<T>(T value) =>
+                global::System.Text.Json.JsonSerializer.Serialize(value, global::Trax.Client.TraxJson.Options);
+
+            public static string LeftOut() => Write(new ShapesVariables { Key = global::System.Guid.Empty });
+
+            public static string Sent() =>
+                Write(new ShapesVariables { Key = global::System.Guid.Empty, Window = Window.Last24Hours, Filter = null });
+
+            public static string Nested() =>
+                Write(
+                    new ShapesVariables
+                    {
+                        Key = global::System.Guid.Empty,
+                        Filter = new ThingFilter { Note = null, Window = Window.AllTime },
+                    }
+                );
+
+            public static string Read(string json)
+            {
+                var operations = global::System.Text.Json.JsonSerializer
+                    .Deserialize<ShapesResult>(json, global::Trax.Client.TraxJson.Options)!
+                    .Operations!;
+                var thing = operations.Thing;
+                return string.Join(
+                    "|",
+                    thing.Typename,
+                    thing.Id,
+                    thing.Key,
+                    thing.At.ToString("O", global::System.Globalization.CultureInfo.InvariantCulture),
+                    thing.When.Offset,
+                    thing.Data.GetRawText(),
+                    thing.Note ?? "null",
+                    thing.Window,
+                    operations.Grid[0]![1],
+                    operations.Grid[1] is null,
+                    operations.Maybe![0] is null,
+                    operations.Maybe[1]!.Id
+                );
+            }
+
+            public static string Refused(string json)
+            {
+                try
+                {
+                    global::System.Text.Json.JsonSerializer.Deserialize<ShapesResult>(json, global::Trax.Client.TraxJson.Options);
+                    return "read";
+                }
+                catch (global::System.Text.Json.JsonException)
+                {
+                    return "refused";
+                }
+            }
+        }
+        """;
+
+    private const string ShapesAnswer = """
+        {"operations":{"thing":{"__typename":"Thing","id":9007199254740993,"key":"3f2504e0-4f89-11d3-9a0c-0305e82c3301","at":"2026-10-23T10:00:00+02:00","when":"2026-10-23T08:00:00Z","data":{"a":[1,"x"]},"note":null,"window":"LAST24_HOURS"},"grid":[[1,2],null],"maybe":[null,{"id":3}]}}
+        """;
+
     [Test]
     public void The_csharp_records_read_and_write_the_wire_through_TraxJson()
     {
-        const string probe = """
-            namespace Trax.Operations;
-
-            internal static class Probe
-            {
-                private static string Write<T>(T value) =>
-                    global::System.Text.Json.JsonSerializer.Serialize(value, global::Trax.Client.TraxJson.Options);
-
-                public static string LeftOut() => Write(new ShapesVariables { Key = global::System.Guid.Empty });
-
-                public static string Sent() =>
-                    Write(new ShapesVariables { Key = global::System.Guid.Empty, Window = Window.Last24Hours, Filter = null });
-
-                public static string Nested() =>
-                    Write(
-                        new ShapesVariables
-                        {
-                            Key = global::System.Guid.Empty,
-                            Filter = new ThingFilter { Note = null, Window = Window.AllTime },
-                        }
-                    );
-
-                public static string Read(string json)
-                {
-                    var operations = global::System.Text.Json.JsonSerializer
-                        .Deserialize<ShapesResult>(json, global::Trax.Client.TraxJson.Options)!
-                        .Operations!;
-                    var thing = operations.Thing;
-                    return string.Join(
-                        "|",
-                        thing.Typename,
-                        thing.Id,
-                        thing.Key,
-                        thing.At.ToString("O", global::System.Globalization.CultureInfo.InvariantCulture),
-                        thing.When.Offset,
-                        thing.Data.GetRawText(),
-                        thing.Note ?? "null",
-                        thing.Window,
-                        operations.Grid[0]![1],
-                        operations.Grid[1] is null,
-                        operations.Maybe![0] is null,
-                        operations.Maybe[1]!.Id
-                    );
-                }
-
-                public static string Refused(string json)
-                {
-                    try
-                    {
-                        global::System.Text.Json.JsonSerializer.Deserialize<ShapesResult>(json, global::Trax.Client.TraxJson.Options);
-                        return "read";
-                    }
-                    catch (global::System.Text.Json.JsonException)
-                    {
-                        return "refused";
-                    }
-                }
-            }
-            """;
-        const string answer = """
-            {"operations":{"thing":{"__typename":"Thing","id":9007199254740993,"key":"3f2504e0-4f89-11d3-9a0c-0305e82c3301","at":"2026-10-23T10:00:00+02:00","when":"2026-10-23T08:00:00Z","data":{"a":[1,"x"]},"note":null,"window":"LAST24_HOURS"},"grid":[[1,2],null],"maybe":[null,{"id":3}]}}
-            """;
         var files = RenderShapes(("src/graphql/Shapes.graphql", ShapesQuery));
 
-        CompileCSharp(files, out var assembly, probe)
+        CompileCSharp(files, out var assembly, TraxJsonProbe)
             .Where(d => d.Severity >= Microsoft.CodeAnalysis.DiagnosticSeverity.Warning)
             .Select(d => d.ToString())
             .Should()
@@ -1552,12 +1566,15 @@ public partial class OperationsClientGeneratorTests
             .Be(
                 "{\"key\":\"00000000-0000-0000-0000-000000000000\",\"filter\":{\"note\":null,\"window\":\"ALL_TIME\"}}"
             );
-        Call("Read", answer)
+        Call("Read", ShapesAnswer)
             .Should()
             .Be(
                 "Thing|9007199254740993|3f2504e0-4f89-11d3-9a0c-0305e82c3301|2026-10-23T10:00:00.0000000+02:00|00:00:00|{\"a\":[1,\"x\"]}|null|Last24Hours|2|True|True|3"
             );
-        Call("Refused", answer.Replace("\"id\":9007199254740993,", "", StringComparison.Ordinal))
+        Call(
+                "Refused",
+                ShapesAnswer.Replace("\"id\":9007199254740993,", "", StringComparison.Ordinal)
+            )
             .Should()
             .Be("refused", "a required field the answer lacks is an error, not a default");
     }

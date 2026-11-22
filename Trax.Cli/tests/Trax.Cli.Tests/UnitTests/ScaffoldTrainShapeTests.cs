@@ -83,54 +83,63 @@ public class ScaffoldTrainShapeTests
 
         foreach (var (path, source) in trains)
         {
-            var trainClass = (
-                await CSharpSyntaxTree.ParseText(source).GetRootAsync().ConfigureAwait(false)
-            )
-                .DescendantNodes()
-                .OfType<ClassDeclarationSyntax>()
-                .SingleOrDefault(c =>
-                    string.Equals(
-                        c.Identifier.ValueText,
-                        Path.GetFileNameWithoutExtension(path),
-                        StringComparison.Ordinal
-                    )
-                );
-
-            trainClass.Should().NotBeNull($"{path} must declare the train class it is named for");
-
-            trainClass
-                .NotNull()
-                .Members.OfType<MethodDeclarationSyntax>()
-                .Should()
-                .Contain(
-                    m =>
-                        m.Identifier.ValueText == "Junctions"
-                        && m.Modifiers.Any(SyntaxKind.OverrideKeyword),
-                    $"{path} must declare its chain by overriding Junctions(), which current Trax requires"
-                );
+            await AssertOverridesJunctionsAsync(path, source).ConfigureAwait(false);
         }
 
         foreach (var (path, source) in sources)
         {
-            var root = await CSharpSyntaxTree
-                .ParseText(source)
-                .GetRootAsync()
-                .ConfigureAwait(false);
-
-            root.DescendantNodes()
-                .OfType<MemberDeclarationSyntax>()
-                .Where(m => string.Equals(MemberName(m), "RunInternal", StringComparison.Ordinal))
-                .Should()
-                .BeEmpty($"{path} would not compile against the Trax a new scaffold references");
-
-            root.DescendantNodes()
-                .OfType<InvocationExpressionSyntax>()
-                .Where(i =>
-                    string.Equals(InvokedName(i.Expression), "Activate", StringComparison.Ordinal)
-                )
-                .Should()
-                .BeEmpty($"{path} would not compile against the Trax a new scaffold references");
+            await AssertUsesNoOldTemplateApiAsync(path, source).ConfigureAwait(false);
         }
+    }
+
+    // The train class the file at path is named for overrides Junctions().
+    private static async Task AssertOverridesJunctionsAsync(string path, string source)
+    {
+        var trainClass = (
+            await CSharpSyntaxTree.ParseText(source).GetRootAsync().ConfigureAwait(false)
+        )
+            .DescendantNodes()
+            .OfType<ClassDeclarationSyntax>()
+            .SingleOrDefault(c =>
+                string.Equals(
+                    c.Identifier.ValueText,
+                    Path.GetFileNameWithoutExtension(path),
+                    StringComparison.Ordinal
+                )
+            );
+
+        trainClass.Should().NotBeNull($"{path} must declare the train class it is named for");
+
+        trainClass
+            .NotNull()
+            .Members.OfType<MethodDeclarationSyntax>()
+            .Should()
+            .Contain(
+                m =>
+                    m.Identifier.ValueText == "Junctions"
+                    && m.Modifiers.Any(SyntaxKind.OverrideKeyword),
+                $"{path} must declare its chain by overriding Junctions(), which current Trax requires"
+            );
+    }
+
+    // Nothing in the file declares RunInternal or calls Activate(.
+    private static async Task AssertUsesNoOldTemplateApiAsync(string path, string source)
+    {
+        var root = await CSharpSyntaxTree.ParseText(source).GetRootAsync().ConfigureAwait(false);
+
+        root.DescendantNodes()
+            .OfType<MemberDeclarationSyntax>()
+            .Where(m => string.Equals(MemberName(m), "RunInternal", StringComparison.Ordinal))
+            .Should()
+            .BeEmpty($"{path} would not compile against the Trax a new scaffold references");
+
+        root.DescendantNodes()
+            .OfType<InvocationExpressionSyntax>()
+            .Where(i =>
+                string.Equals(InvokedName(i.Expression), "Activate", StringComparison.Ordinal)
+            )
+            .Should()
+            .BeEmpty($"{path} would not compile against the Trax a new scaffold references");
     }
 
     private static string? MemberName(MemberDeclarationSyntax member) =>

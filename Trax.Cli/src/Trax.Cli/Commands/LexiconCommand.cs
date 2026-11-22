@@ -106,62 +106,8 @@ internal static class LexiconCommand
         var failed = false;
         foreach (var file in files)
         {
-            string text;
-            try
-            {
-                text = await File.ReadAllTextAsync(file).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
+            if (await FormatFileAsync(file, check, stdout, stderr).ConfigureAwait(false))
                 failed = true;
-                continue;
-            }
-            var (formatted, problems) = LexiconFormatter.Format(text);
-            if (formatted is null)
-            {
-                foreach (var problem in problems)
-                    await stderr
-                        .WriteLineAsync(
-                            string.Create(
-                                CultureInfo.InvariantCulture,
-                                $"{file}:{problem.Line}: {problem.Message}"
-                            )
-                        )
-                        .ConfigureAwait(false);
-                failed = true;
-                continue;
-            }
-            if (
-                string.Equals(
-                    formatted,
-                    text.Replace("\r\n", "\n", StringComparison.Ordinal),
-                    StringComparison.Ordinal
-                )
-            )
-                continue;
-            if (check)
-            {
-                await stderr.WriteLineAsync($"{file} is not in its layout.").ConfigureAwait(false);
-                failed = true;
-                continue;
-            }
-            try
-            {
-                await File.WriteAllTextAsync(
-                        file,
-                        formatted,
-                        new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
-                    )
-                    .ConfigureAwait(false);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
-                failed = true;
-                continue;
-            }
-            await stdout.WriteLineAsync($"formatted {file}").ConfigureAwait(false);
         }
         if (failed && check)
             await stderr
@@ -170,5 +116,79 @@ internal static class LexiconCommand
                 )
                 .ConfigureAwait(false);
         return failed ? 1 : 0;
+    }
+
+    // Formats one lexicon in place, or with check only reports it; true when it failed.
+    private static async Task<bool> FormatFileAsync(
+        string file,
+        bool check,
+        TextWriter stdout,
+        TextWriter stderr
+    )
+    {
+        string text;
+        try
+        {
+            text = await File.ReadAllTextAsync(file).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
+            return true;
+        }
+        var (formatted, problems) = LexiconFormatter.Format(text);
+        if (formatted is null)
+        {
+            foreach (var problem in problems)
+                await stderr
+                    .WriteLineAsync(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{file}:{problem.Line}: {problem.Message}"
+                        )
+                    )
+                    .ConfigureAwait(false);
+            return true;
+        }
+        if (
+            string.Equals(
+                formatted,
+                text.Replace("\r\n", "\n", StringComparison.Ordinal),
+                StringComparison.Ordinal
+            )
+        )
+            return false;
+        if (check)
+        {
+            await stderr.WriteLineAsync($"{file} is not in its layout.").ConfigureAwait(false);
+            return true;
+        }
+        return await WriteFormattedAsync(file, formatted, stdout, stderr).ConfigureAwait(false);
+    }
+
+    // Writes the formatted lexicon; true when the write failed.
+    private static async Task<bool> WriteFormattedAsync(
+        string file,
+        string formatted,
+        TextWriter stdout,
+        TextWriter stderr
+    )
+    {
+        try
+        {
+            await File.WriteAllTextAsync(
+                    file,
+                    formatted,
+                    new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
+                )
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
+            return true;
+        }
+        await stdout.WriteLineAsync($"formatted {file}").ConfigureAwait(false);
+        return false;
     }
 }

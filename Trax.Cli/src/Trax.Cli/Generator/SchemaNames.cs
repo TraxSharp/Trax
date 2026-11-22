@@ -66,22 +66,7 @@ internal static partial class SchemaNames
             CheckType(operation.InputType, $"input type of '{operation.Name}'", problems);
             CheckType(operation.OutputType, $"output type of '{operation.Name}'", problems);
         }
-
-        CheckDistinct(ModelSources(schema), "type or enum", problems);
-        CheckDistinct(
-            schema.Operations.Select(o => (o.Name, o.SourceName ?? o.Name)),
-            "operation",
-            problems
-        );
-        CheckDistinct(
-            schema
-                .Operations.Select(o => o.Group)
-                .OfType<string>()
-                .Distinct(StringComparer.Ordinal)
-                .Select(g => (g, g)),
-            "group",
-            problems
-        );
+        CheckCollisions(schema, problems);
 
         if (problems.Count == 0)
             return;
@@ -100,6 +85,26 @@ internal static partial class SchemaNames
                         .Distinct(StringComparer.Ordinal)
                         .Select(p => "  " + GeneratedText.SingleLine(p))
                 )
+        );
+    }
+
+    // No two types or enums, operations or groups convert to the same file or folder name.
+    private static void CheckCollisions(ApiSchema schema, List<string> problems)
+    {
+        CheckDistinct(ModelSources(schema), "type or enum", problems);
+        CheckDistinct(
+            schema.Operations.Select(o => (o.Name, o.SourceName ?? o.Name)),
+            "operation",
+            problems
+        );
+        CheckDistinct(
+            schema
+                .Operations.Select(o => o.Group)
+                .OfType<string>()
+                .Distinct(StringComparer.Ordinal)
+                .Select(g => (g, g)),
+            "group",
+            problems
         );
     }
 

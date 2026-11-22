@@ -35,6 +35,25 @@ internal static class ComposeTarget
             ?? file.Services.Keys.First();
 
         var y = new StringBuilder();
+        AppendCommon(y, file, rabbit);
+        AppendDatabase(y, file);
+
+        if (rabbit)
+            AppendRabbitMq(y, file);
+
+        AppendMigrate(y, file, migrator);
+
+        AppendServices(y, file, exports, rabbit);
+
+        y.AppendLine();
+        y.AppendLine("volumes:");
+        y.AppendLine("  database:");
+
+        return [(ComposeFile, y.ToString()), (EnvExampleFile, EnvExample(file, rabbit))];
+    }
+
+    private static void AppendCommon(StringBuilder y, DeployFile file, bool rabbit)
+    {
         y.AppendLine(Header);
         y.AppendLine(
             "# Passwords, settings and secrets come from the environment, or from a .env file beside this one: copy"
@@ -61,7 +80,10 @@ internal static class ComposeTarget
             y.AppendLine($"  {name}: {Required(name)}");
         y.AppendLine();
         y.AppendLine("services:");
+    }
 
+    private static void AppendDatabase(StringBuilder y, DeployFile file)
+    {
         y.AppendLine("  database:");
         y.AppendLine("    image: postgres:17");
         y.AppendLine("    environment:");
@@ -76,23 +98,26 @@ internal static class ComposeTarget
         y.AppendLine("    security_opt:");
         y.AppendLine("      - no-new-privileges:true");
         y.AppendLine("    restart: unless-stopped");
+    }
 
-        if (rabbit)
-        {
-            y.AppendLine();
-            y.AppendLine("  rabbitmq:");
-            y.AppendLine("    image: rabbitmq:4");
-            y.AppendLine("    environment:");
-            y.AppendLine($"      RABBITMQ_DEFAULT_USER: {file.App}");
-            y.AppendLine($"      RABBITMQ_DEFAULT_PASS: {Required("RABBITMQ_PASSWORD")}");
-            y.AppendLine("    healthcheck:");
-            y.AppendLine("      test: [\"CMD\", \"rabbitmq-diagnostics\", \"-q\", \"ping\"]");
-            y.AppendLine("      interval: 5s");
-            y.AppendLine("    security_opt:");
-            y.AppendLine("      - no-new-privileges:true");
-            y.AppendLine("    restart: unless-stopped");
-        }
+    private static void AppendRabbitMq(StringBuilder y, DeployFile file)
+    {
+        y.AppendLine();
+        y.AppendLine("  rabbitmq:");
+        y.AppendLine("    image: rabbitmq:4");
+        y.AppendLine("    environment:");
+        y.AppendLine($"      RABBITMQ_DEFAULT_USER: {file.App}");
+        y.AppendLine($"      RABBITMQ_DEFAULT_PASS: {Required("RABBITMQ_PASSWORD")}");
+        y.AppendLine("    healthcheck:");
+        y.AppendLine("      test: [\"CMD\", \"rabbitmq-diagnostics\", \"-q\", \"ping\"]");
+        y.AppendLine("      interval: 5s");
+        y.AppendLine("    security_opt:");
+        y.AppendLine("      - no-new-privileges:true");
+        y.AppendLine("    restart: unless-stopped");
+    }
 
+    private static void AppendMigrate(StringBuilder y, DeployFile file, string migrator)
+    {
         y.AppendLine();
         y.AppendLine(
             "  # The new version migrates the database once, before any service of it starts."
@@ -106,7 +131,15 @@ internal static class ComposeTarget
         y.AppendLine("      database:");
         y.AppendLine("        condition: service_healthy");
         y.AppendLine("    restart: \"no\"");
+    }
 
+    private static void AppendServices(
+        StringBuilder y,
+        DeployFile file,
+        IReadOnlyDictionary<string, DeployManifest> exports,
+        bool rabbit
+    )
+    {
         // A port asked for in the file is the service's; the rest take 8080 and on, skipping those.
         var taken = file.Services.Values.Select(s => s.Port).OfType<int>().ToHashSet();
         var nextPort = 8080;
@@ -155,11 +188,10 @@ internal static class ComposeTarget
             }
             y.AppendLine("    restart: unless-stopped");
         }
+    }
 
-        y.AppendLine();
-        y.AppendLine("volumes:");
-        y.AppendLine("  database:");
-
+    private static string EnvExample(DeployFile file, bool rabbit)
+    {
         var env = new StringBuilder();
         env.AppendLine(
             "# Copy to .env beside compose.yaml and fill in every value. Never commit the .env."
@@ -172,7 +204,7 @@ internal static class ComposeTarget
         env.AppendLine("# The tag of the images to run, as trax deploy --build tagged them.");
         env.AppendLine("TRAX_IMAGE_TAG=latest");
 
-        return [(ComposeFile, y.ToString()), (EnvExampleFile, env.ToString())];
+        return env.ToString();
     }
 
     private static string Image(DeployFile file, string service) =>

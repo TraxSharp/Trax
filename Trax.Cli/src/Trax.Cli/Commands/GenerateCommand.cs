@@ -34,11 +34,7 @@ public static class GenerateCommand
                 "Schema type: graphql or openapi (auto-detected from extension if omitted)",
         };
 
-        var forceOption = new Option<bool>("--force")
-        {
-            Description =
-                "Replace the output directory if it exists, once generation has succeeded (refused for the current directory, its parents, or a git repository)",
-        };
+        var forceOption = CreateForceOption();
 
         var command = new Command("generate", "Generate a Trax API project from a schema file")
         {
@@ -72,6 +68,13 @@ public static class GenerateCommand
 
         return command;
     }
+
+    private static Option<bool> CreateForceOption() =>
+        new("--force")
+        {
+            Description =
+                "Replace the output directory if it exists, once generation has succeeded (refused for the current directory, its parents, or a git repository)",
+        };
 
     // Returns the exit code as well as setting Environment.ExitCode: Program returns InvokeAsync's
     // result, which wins over Environment.ExitCode, so an action that only set it exited 0.
@@ -123,6 +126,37 @@ public static class GenerateCommand
             return Fail();
         }
 
+        if (
+            !await ParseAndGenerateAsync(
+                    schema,
+                    output,
+                    name,
+                    force,
+                    schemaType,
+                    stdout,
+                    stderr,
+                    generator
+                )
+                .ConfigureAwait(false)
+        )
+            return Fail();
+
+        await WriteNextStepsAsync(output, name, stdout).ConfigureAwait(false);
+        return 0;
+    }
+
+    // Parses the schema and generates the project; false once the failure is written to stderr.
+    private static async Task<bool> ParseAndGenerateAsync(
+        FileInfo schema,
+        DirectoryInfo output,
+        string name,
+        bool force,
+        string schemaType,
+        TextWriter stdout,
+        TextWriter stderr,
+        TraxProjectGenerator? generator
+    )
+    {
         try
         {
             ISchemaParser parser = schemaType switch
@@ -145,13 +179,21 @@ public static class GenerateCommand
             await (generator ?? new TraxProjectGenerator())
                 .GenerateAsync(apiSchema, output.FullName, name, force)
                 .ConfigureAwait(false);
+            return true;
         }
         catch (InvalidOperationException ex)
         {
             await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
-            return Fail();
+            return false;
         }
+    }
 
+    private static async Task WriteNextStepsAsync(
+        DirectoryInfo output,
+        string name,
+        TextWriter stdout
+    )
+    {
         await stdout
             .WriteLineAsync($"Generated Trax project at: {output.FullName}")
             .ConfigureAwait(false);
@@ -169,7 +211,6 @@ public static class GenerateCommand
             .WriteLineAsync("  # Fill in junction implementations (search for TODO)")
             .ConfigureAwait(false);
         await stdout.WriteLineAsync("  dotnet run").ConfigureAwait(false);
-        return 0;
     }
 
     private static int Fail()

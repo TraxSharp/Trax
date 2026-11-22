@@ -81,6 +81,11 @@ public sealed class DeclarativeIngestMachine : Machine<IngestState, IngestTrigge
             .On(IngestTrigger.Retry)
             .To(IngestState.Fetching);
 
+        ConfigureOutcomeSamples(m);
+    }
+
+    private static void ConfigureOutcomeSamples(IMachineBuilder<IngestState, IngestTrigger> m)
+    {
         m.Differential(d =>
             d.OutcomeSample(
                     IngestState.Fetching,
