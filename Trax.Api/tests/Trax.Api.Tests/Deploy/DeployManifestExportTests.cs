@@ -125,9 +125,14 @@ public class DeployManifestExportTests
                 )
         );
 
-        await app.RunTraxAsync(["--trax-export-deploy", _path]);
+        await app.RunTraxAsync(
+            ["--trax-export-deploy", _path.NotNull()],
+            cancellationToken: CancellationToken.None
+        );
 
-        var manifest = DeployManifest.Read(await File.ReadAllTextAsync(_path));
+        var manifest = DeployManifest.Read(
+            await File.ReadAllTextAsync(_path.NotNull(), cancellationToken: CancellationToken.None)
+        );
         manifest.Transports.Should().Equal("rabbitmq");
     }
 
@@ -142,9 +147,14 @@ public class DeployManifestExportTests
             );
         });
 
-        await app.RunTraxAsync(["--trax-export-deploy", _path]);
+        await app.RunTraxAsync(
+            ["--trax-export-deploy", _path.NotNull()],
+            cancellationToken: CancellationToken.None
+        );
 
-        var manifest = DeployManifest.Read(await File.ReadAllTextAsync(_path));
+        var manifest = DeployManifest.Read(
+            await File.ReadAllTextAsync(_path.NotNull(), cancellationToken: CancellationToken.None)
+        );
         manifest.Transports.Should().Equal("rabbitmq");
     }
 
@@ -156,9 +166,14 @@ public class DeployManifestExportTests
             g => g.UsePersistedOperations(po => po.SingleNode())
         );
 
-        await app.RunTraxAsync(["--trax-export-deploy", _path]);
+        await app.RunTraxAsync(
+            ["--trax-export-deploy", _path.NotNull()],
+            cancellationToken: CancellationToken.None
+        );
 
-        var manifest = DeployManifest.Read(await File.ReadAllTextAsync(_path));
+        var manifest = DeployManifest.Read(
+            await File.ReadAllTextAsync(_path.NotNull(), cancellationToken: CancellationToken.None)
+        );
         manifest.Transports.Should().BeEmpty();
     }
 

@@ -241,7 +241,8 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
     private async Task<long> CheckpointedFailedOrderAsync()
     {
         long run;
-        using (var scope = _host.NotNull().Services.CreateScope())
+        var scope = _host.NotNull().Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var train = scope.ServiceProvider.GetRequiredService<ICheckpointedOrderTrain>();
             var act = async () =>
