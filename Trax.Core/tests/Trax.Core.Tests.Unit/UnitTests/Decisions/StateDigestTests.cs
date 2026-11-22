@@ -230,7 +230,11 @@ public class StateDigestTests : TestSetup
             "s1:53ff01d3688aa7646245446244d1b194b817ec1a449c2bc2812e0df06b1a0079",
             "k1:aa335fcdcc1677e8071c26de6cc929bf74670e918e909a981d714239f868c131"
         );
-        yield return Pinned(
+        yield return PinnedLeaves();
+    }
+
+    private static TestCaseData PinnedLeaves() =>
+        Pinned(
             "Leaves",
             (
                 new DateTime(2026, 10, 3, 12, 0, 0, DateTimeKind.Utc),
@@ -258,7 +262,6 @@ public class StateDigestTests : TestSetup
             "s1:f2485a1565a9807206e30b584c5d2b7709f7ea56075bc9f97bbb40a5b56d08c4",
             "k1:8f74fa90608f3a95dbaa2291b0d05b18eb360c042af18b583ff25c9c2fdc348f"
         );
-    }
 
     // A dictionary given no comparer, which is what the pinned digest is of. Written over any key
     // type because the build asks every dictionary keyed by string to name its comparer, and
@@ -770,24 +773,7 @@ public class StateDigestTests : TestSetup
         yield return Differ("TimeSpan", TimeSpan.FromTicks(1), TimeSpan.FromTicks(2));
         yield return Differ("DateOnly", new DateOnly(2026, 10, 3), new DateOnly(2026, 10, 4));
         yield return Differ("TimeOnly", new TimeOnly(1, 0), new TimeOnly(1, 0, 1));
-        yield return Differ(
-            "Guid",
-            new Guid(
-                0x0,
-                0x0,
-                0x0,
-                0x0,
-                0x0,
-                0x0,
-                0x0,
-                0x0,
-                0x0,
-                0x0,
-                0x1
-            ) /* 00000000-0000-0000-0000-000000000001 */
-            ,
-            new Guid(0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x2) /* 00000000-0000-0000-0000-000000000002 */
-        );
+        yield return DifferingGuids();
         yield return Differ(
             "Uri",
             new Uri("https://example.com/a"),
@@ -807,6 +793,26 @@ public class StateDigestTests : TestSetup
         yield return Differ("Bool", one: true, other: false);
         yield return Differ("String", "a", "b");
     }
+
+    private static TestCaseData DifferingGuids() =>
+        Differ(
+            "Guid",
+            new Guid(
+                0x0,
+                0x0,
+                0x0,
+                0x0,
+                0x0,
+                0x0,
+                0x0,
+                0x0,
+                0x0,
+                0x0,
+                0x1
+            ) /* 00000000-0000-0000-0000-000000000001 */
+            ,
+            new Guid(0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x2) /* 00000000-0000-0000-0000-000000000002 */
+        );
 
     private static TestCaseData Differ(string name, object one, object other) =>
         new TestCaseData(one, other).SetArgDisplayNames(name);

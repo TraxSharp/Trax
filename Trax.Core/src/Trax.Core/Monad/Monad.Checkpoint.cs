@@ -62,6 +62,20 @@ public partial class Monad<TInput, TReturn>
         if (Optional<ICheckpointStore>() is not { } store)
             return this;
 
+        return await WriteCheckpoint<TState>(store, nodeId, step, state).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Stores <paramref name="state"/> with the tracks taken so far, failing the step when the
+    /// store throws for any reason but the run's own cancellation.
+    /// </summary>
+    private async Task<Monad<TInput, TReturn>> WriteCheckpoint<TState>(
+        ICheckpointStore store,
+        string nodeId,
+        string step,
+        object state
+    )
+    {
         var tracks = Memory
             .Where(m =>
                 m.Key.IsGenericType && m.Key.GetGenericTypeDefinition() == typeof(TrackTaken<>)

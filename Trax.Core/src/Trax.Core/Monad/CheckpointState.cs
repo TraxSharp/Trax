@@ -72,23 +72,7 @@ internal static class CheckpointState
         // as a string.
         if (type.IsEnum)
         {
-            shape.Append(':').Append(Enum.GetUnderlyingType(type).FullName).Append('{');
-            foreach (var member in type.GetFields(BindingFlags.Public | BindingFlags.Static))
-            {
-                shape
-                    .Append(member.Name)
-                    .Append('=')
-                    .Append(
-                        Convert.ToString(
-                            member.GetRawConstantValue(),
-                            System.Globalization.CultureInfo.InvariantCulture
-                        )
-                    );
-                if (member.GetCustomAttribute<JsonStringEnumMemberNameAttribute>() is { } named)
-                    shape.Append('"').Append(named.Name).Append('"');
-                shape.Append(',');
-            }
-            shape.Append('}');
+            DescribeEnum(type, shape);
             return;
         }
 
@@ -115,6 +99,36 @@ internal static class CheckpointState
             return;
         }
 
+        DescribeProperties(type, shape, seen);
+    }
+
+    private static void DescribeEnum(Type type, StringBuilder shape)
+    {
+        shape.Append(':').Append(Enum.GetUnderlyingType(type).FullName).Append('{');
+        foreach (var member in type.GetFields(BindingFlags.Public | BindingFlags.Static))
+        {
+            shape
+                .Append(member.Name)
+                .Append('=')
+                .Append(
+                    Convert.ToString(
+                        member.GetRawConstantValue(),
+                        System.Globalization.CultureInfo.InvariantCulture
+                    )
+                );
+            if (member.GetCustomAttribute<JsonStringEnumMemberNameAttribute>() is { } named)
+                shape.Append('"').Append(named.Name).Append('"');
+            shape.Append(',');
+        }
+        shape.Append('}');
+    }
+
+    private static void DescribeProperties(
+        Type type,
+        StringBuilder shape,
+        System.Collections.Generic.HashSet<Type> seen
+    )
+    {
         shape.Append('{');
         foreach (
             var property in type.GetProperties(BindingFlags.Instance | BindingFlags.Public)
@@ -229,6 +243,24 @@ internal static class CheckpointState
                     + "be read back as the base type. Seal it."
             );
 
+        VisitFields(type, at, problems);
+
+        foreach (
+            var property in type.GetProperties(BindingFlags.Instance | BindingFlags.Public)
+                .Where(p =>
+                    p.GetIndexParameters().Length == 0
+                    && !Attribute.IsDefined(p, typeof(JsonIgnoreAttribute))
+                )
+        )
+            Visit(property.PropertyType, $"{at}.{property.Name}", problems, seen);
+    }
+
+    /// <summary>
+    /// Every field <paramref name="type"/> and its base types declare: an auto-property's backing
+    /// field is checked as its property, and any other field is lost.
+    /// </summary>
+    private static void VisitFields(Type type, string at, List<string> problems)
+    {
         var parameters = type.GetConstructors()
             .SelectMany(c => c.GetParameters())
             .Select(p => p.Name)
@@ -252,25 +284,7 @@ internal static class CheckpointState
             {
                 if (BackedProperty(t, field) is { } property)
                 {
-                    if (Attribute.IsDefined(property, typeof(JsonIgnoreAttribute)))
-                        problems.Add(
-                            $"'{at}.{property.Name}' is ignored by the serializer, so it is lost "
-                                + "when the state is stored. Remove the [JsonIgnore] or the property."
-                        );
-                    else if (property.GetMethod?.IsPublic != true)
-                        problems.Add(
-                            $"'{at}.{property.Name}' has no public getter, so it is not stored. "
-                                + "Make it public."
-                        );
-                    else if (
-                        property.SetMethod?.IsPublic != true
-                        && !parameters.Contains(property.Name)
-                    )
-                        problems.Add(
-                            $"'{at}.{property.Name}' has no public setter or init accessor and no "
-                                + "constructor parameter of its name, so it is not read back."
-                        );
-
+                    VisitBackedProperty(property, at, parameters, problems);
                     continue;
                 }
 
@@ -283,15 +297,30 @@ internal static class CheckpointState
                 );
             }
         }
+    }
 
-        foreach (
-            var property in type.GetProperties(BindingFlags.Instance | BindingFlags.Public)
-                .Where(p =>
-                    p.GetIndexParameters().Length == 0
-                    && !Attribute.IsDefined(p, typeof(JsonIgnoreAttribute))
-                )
-        )
-            Visit(property.PropertyType, $"{at}.{property.Name}", problems, seen);
+    private static void VisitBackedProperty(
+        PropertyInfo property,
+        string at,
+        System.Collections.Generic.HashSet<string?> parameters,
+        List<string> problems
+    )
+    {
+        if (Attribute.IsDefined(property, typeof(JsonIgnoreAttribute)))
+            problems.Add(
+                $"'{at}.{property.Name}' is ignored by the serializer, so it is lost "
+                    + "when the state is stored. Remove the [JsonIgnore] or the property."
+            );
+        else if (property.GetMethod?.IsPublic != true)
+            problems.Add(
+                $"'{at}.{property.Name}' has no public getter, so it is not stored. "
+                    + "Make it public."
+            );
+        else if (property.SetMethod?.IsPublic != true && !parameters.Contains(property.Name))
+            problems.Add(
+                $"'{at}.{property.Name}' has no public setter or init accessor and no "
+                    + "constructor parameter of its name, so it is not read back."
+            );
     }
 
     /// <summary>The auto-property <paramref name="field"/> backs, or null for a field of its own.</summary>

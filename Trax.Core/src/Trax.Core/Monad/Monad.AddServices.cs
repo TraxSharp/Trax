@@ -185,45 +185,7 @@ public partial class Monad<TInput, TReturn>
             // Each service lands in Memory under the interface it was passed as, so that is the
             // type the rest of the chain can find.
             for (var i = 0; i < typeArray.Length; i++)
-            {
-                var serviceType = typeArray[i];
-
-                if (services[i] is null)
-                    Recorder.RefuseStep(
-                        ChainStepKind.Seed,
-                        junction: null,
-                        NullServiceMessage(i, typeArray, whileRecording: true)
-                    );
-                else if (services[i].NotNull().GetType().IsValueType)
-                    // A struct passed as an interface is boxed, and the runtime refuses it.
-                    Recorder.RefuseStep(
-                        ChainStepKind.Seed,
-                        junction: null,
-                        $"AddServices<{serviceType.Name}> received a value of the struct type "
-                            + $"{services[i].NotNull().GetType().Name}; a service must be a class."
-                    );
-
-                // A value is stored under an interface it implements; the runtime refuses a
-                // class on every run.
-                if (!serviceType.IsInterface)
-                    Recorder.RefuseStep(
-                        ChainStepKind.Seed,
-                        junction: null,
-                        $"AddServices<{serviceType.Name}> names a class; a service is stored "
-                            + "under an interface it implements. Pass it as that interface."
-                    );
-
-                Recorder.Record(ChainStepKind.Seed, junction: null, tIn: null, serviceType);
-
-                // Kept where the run would keep it, so a decider handed over here can vet the
-                // questions it will be asked. Nothing else reads Memory while a chain is read.
-                if (
-                    services[i] is { } given
-                    && serviceType.IsInterface
-                    && !given.GetType().IsValueType
-                )
-                    Memory[serviceType] = given;
-            }
+                RecordService(Recorder, services, typeArray, i);
 
             return this;
         }
@@ -259,6 +221,47 @@ public partial class Monad<TInput, TReturn>
         }
 
         return this;
+    }
+
+    /// <summary>
+    /// Records the service at <paramref name="i"/> while a chain is read, refusing one the run
+    /// would refuse.
+    /// </summary>
+    private void RecordService(ChainRecorder recorder, object?[] services, Type[] typeArray, int i)
+    {
+        var serviceType = typeArray[i];
+
+        if (services[i] is null)
+            recorder.RefuseStep(
+                ChainStepKind.Seed,
+                junction: null,
+                NullServiceMessage(i, typeArray, whileRecording: true)
+            );
+        else if (services[i].NotNull().GetType().IsValueType)
+            // A struct passed as an interface is boxed, and the runtime refuses it.
+            recorder.RefuseStep(
+                ChainStepKind.Seed,
+                junction: null,
+                $"AddServices<{serviceType.Name}> received a value of the struct type "
+                    + $"{services[i].NotNull().GetType().Name}; a service must be a class."
+            );
+
+        // A value is stored under an interface it implements; the runtime refuses a
+        // class on every run.
+        if (!serviceType.IsInterface)
+            recorder.RefuseStep(
+                ChainStepKind.Seed,
+                junction: null,
+                $"AddServices<{serviceType.Name}> names a class; a service is stored "
+                    + "under an interface it implements. Pass it as that interface."
+            );
+
+        recorder.Record(ChainStepKind.Seed, junction: null, tIn: null, serviceType);
+
+        // Kept where the run would keep it, so a decider handed over here can vet the
+        // questions it will be asked. Nothing else reads Memory while a chain is read.
+        if (services[i] is { } given && serviceType.IsInterface && !given.GetType().IsValueType)
+            Memory[serviceType] = given;
     }
 
     /// <summary>

@@ -393,7 +393,12 @@ internal static class StateDigest
         }
 
         /// <summary>Writes a value encoded directly rather than by its fields.</summary>
-        private bool Leaf(object value)
+        private bool Leaf(object value) => TextOrNumberLeaf(value) ?? OtherLeaf(value);
+
+        /// <summary>
+        /// Writes a string, a bool or a number; null when <paramref name="value"/> is none of them.
+        /// </summary>
+        private bool? TextOrNumberLeaf(object value)
         {
             switch (value)
             {
@@ -442,6 +447,16 @@ internal static class StateDigest
                     return Long(unchecked((long)(ulong)n));
                 case BigInteger n:
                     return Text(n.ToString(CultureInfo.InvariantCulture));
+            }
+
+            return null;
+        }
+
+        /// <summary>Writes a time, an identifier or a culture; false for anything else.</summary>
+        private bool OtherLeaf(object value)
+        {
+            switch (value)
+            {
                 // All 64 bits: the ticks, the kind, and whether a local time is the second of
                 // the two instants it names in the hour a clock goes back.
                 case DateTime t:
@@ -623,43 +638,8 @@ internal static class StateDigest
         Func<object, object?>? inner = null
     )
     {
-        var levels = new List<Type>();
-
-        for (var level = type; level is not null && level != collection; level = level.BaseType)
-            levels.Insert(0, level);
-
-        var fields = new List<FieldPlan>();
-
-        foreach (var level in levels)
-        {
-            var declared = level
-                .GetFields(
-                    BindingFlags.Instance
-                        | BindingFlags.Public
-                        | BindingFlags.NonPublic
-                        | BindingFlags.DeclaredOnly
-                )
-                .OrderBy(f => f.Name, StringComparer.Ordinal);
-
-            foreach (var field in declared)
-            {
-                if (field.GetCustomAttribute<FixedBufferAttribute>() is { } buffer)
-                {
-                    fields.Add(
-                        new FieldPlan(
-                            field,
-                            Spreader(field.FieldType, buffer.ElementType, buffer.Length)
-                        )
-                    );
-                    continue;
-                }
-
-                if (field.FieldType.IsPointer || field.FieldType.IsByRefLike)
-                    return Refused;
-
-                fields.Add(new FieldPlan(field, Spread: null));
-            }
-        }
+        if (FieldPlans(type, collection) is not { } fields)
+            return Refused;
 
         var unordered =
             collection is not null && kind == Kind.Collection && IsUnordered(collection);
@@ -692,6 +672,52 @@ internal static class StateDigest
         };
     }
 
+    /// <summary>
+    /// The fields a type is written by, base type first and each level's in name order; null when
+    /// one is a pointer or a ref struct, which cannot be read.
+    /// </summary>
+    private static List<FieldPlan>? FieldPlans(Type type, Type? collection)
+    {
+        var levels = new List<Type>();
+
+        for (var level = type; level is not null && level != collection; level = level.BaseType)
+            levels.Insert(0, level);
+
+        var fields = new List<FieldPlan>();
+        foreach (var level in levels)
+        {
+            var declared = level
+                .GetFields(
+                    BindingFlags.Instance
+                        | BindingFlags.Public
+                        | BindingFlags.NonPublic
+                        | BindingFlags.DeclaredOnly
+                )
+                .OrderBy(f => f.Name, StringComparer.Ordinal);
+
+            foreach (var field in declared)
+            {
+                if (field.GetCustomAttribute<FixedBufferAttribute>() is { } buffer)
+                {
+                    fields.Add(
+                        new FieldPlan(
+                            field,
+                            Spreader(field.FieldType, buffer.ElementType, buffer.Length)
+                        )
+                    );
+                    continue;
+                }
+
+                if (field.FieldType.IsPointer || field.FieldType.IsByRefLike)
+                    return null;
+
+                fields.Add(new FieldPlan(field, Spread: null));
+            }
+        }
+
+        return fields;
+    }
+
     private static readonly string[] ComparerNames = ["Comparer", "KeyComparer", "ValueComparer"];
 
     /// <summary>
@@ -713,27 +739,9 @@ internal static class StateDigest
         var header = new ArrayBufferWriter<byte>();
 
         void Write(ReadOnlySpan<byte> bytes) => header.Write(bytes);
-
-        void Int(int n)
-        {
-            Span<byte> buffer = stackalloc byte[4];
-            BitConverter.TryWriteBytes(buffer, n);
-            Write(buffer);
-        }
-
-        void Text(string s)
-        {
-            var bytes = Encoding.UTF8.GetBytes(s);
-            Int(bytes.Length);
-            Write(bytes);
-        }
-
-        void Long(long n)
-        {
-            Span<byte> buffer = stackalloc byte[8];
-            BitConverter.TryWriteBytes(buffer, n);
-            Write(buffer);
-        }
+        void Int(int n) => HeaderInt(header, n);
+        void Text(string s) => HeaderText(header, s);
+        void Long(long n) => HeaderLong(header, n);
 
         Text(Identity(type));
         Write([(byte)kind]);
@@ -779,6 +787,27 @@ internal static class StateDigest
         }
 
         return header.WrittenSpan.ToArray();
+    }
+
+    private static void HeaderInt(ArrayBufferWriter<byte> header, int n)
+    {
+        Span<byte> buffer = stackalloc byte[4];
+        BitConverter.TryWriteBytes(buffer, n);
+        header.Write(buffer);
+    }
+
+    private static void HeaderText(ArrayBufferWriter<byte> header, string s)
+    {
+        var bytes = Encoding.UTF8.GetBytes(s);
+        HeaderInt(header, bytes.Length);
+        header.Write(bytes);
+    }
+
+    private static void HeaderLong(ArrayBufferWriter<byte> header, long n)
+    {
+        Span<byte> buffer = stackalloc byte[8];
+        BitConverter.TryWriteBytes(buffer, n);
+        header.Write(buffer);
     }
 
     /// <summary>

@@ -65,20 +65,10 @@ public partial class Monad<TInput, TReturn>
 
         // A resumed run whose point is after this step skips it whole; one resuming at it runs
         // it, each branch from its own checkpoint.
-        if (
-            SkipStep(
-                ChainNodeScope.KeyOf(
-                    new ChainStep(ChainStepKind.Parallel, Junction: null, In: null, Out: null)
-                )
-            )
-        )
+        if (SkipStep(ParallelKey()))
             return this;
 
-        var step = Nodes.Next(
-            ChainNodeScope.KeyOf(
-                new ChainStep(ChainStepKind.Parallel, Junction: null, In: null, Out: null)
-            )
-        );
+        var step = Nodes.Next(ParallelKey());
         var train = Train.GetType().ReadableName();
 
         // A declaration the startup check refuses is refused here too, for a host that skips it.
@@ -93,8 +83,7 @@ public partial class Monad<TInput, TReturn>
         CancellationToken.ThrowIfCancellationRequested();
 
         using var siblings = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken);
-        var outcomes = new BranchOutcome[declared.Declared.Count];
-        var failedFirst = 0;
+        var branches = new BranchesRunning(declared, siblings);
 
         var claims = new Dictionary<object, string>(ReferenceEqualityComparer.Instance);
         var children = new List<Monad<TInput, TReturn>>(declared.Declared.Count);
@@ -108,73 +97,103 @@ public partial class Monad<TInput, TReturn>
         // RunBranch never throws, so every task completes and each outcome is read on its own.
         var running =
             runner.Execution == BranchExecution.Sequential
-                ? InOrder()
+                ? RunInOrder(runner, declared, children, branches)
                 : Task.WhenAll(
                     declared.Declared.Select(
                         (branch, i) =>
                             runner.Start(
                                 children[i].BranchPath.NotNull(),
-                                () => RunBranch(children[i], branch, i)
+                                () => RunBranch(children[i], branch, i, branches)
                             )
                     )
                 );
 
         await runner.Join(BranchPath, running).ConfigureAwait(false);
 
-        return Join(step, declared.Declared, children, outcomes);
+        return Join(step, declared.Declared, children, branches.Outcomes);
+    }
 
-        async Task InOrder()
+    private static string ParallelKey() =>
+        ChainNodeScope.KeyOf(
+            new ChainStep(ChainStepKind.Parallel, Junction: null, In: null, Out: null)
+        );
+
+    private async Task RunInOrder(
+        IBranchRunner runner,
+        Branches<TInput, TReturn> declared,
+        List<Monad<TInput, TReturn>> children,
+        BranchesRunning branches
+    )
+    {
+        for (var i = 0; i < declared.Declared.Count; i++)
         {
-            for (var i = 0; i < declared.Declared.Count; i++)
-            {
-                var (child, branch, at) = (children[i], declared.Declared[i], i);
-                await runner
-                    .Start(child.BranchPath.NotNull(), () => RunBranch(child, branch, at))
+            var (child, branch, at) = (children[i], declared.Declared[i], i);
+            await runner
+                .Start(child.BranchPath.NotNull(), () => RunBranch(child, branch, at, branches))
+                .ConfigureAwait(false);
+        }
+    }
+
+    private async Task RunBranch(
+        Monad<TInput, TReturn> child,
+        DeclaredBranch<TInput, TReturn> branch,
+        int i,
+        BranchesRunning branches
+    )
+    {
+        RunningBranch.Enter(
+            Train,
+            child.CancellationToken,
+            child.Memory.GetValueOrDefault(typeof(IServiceProvider)) as IServiceProvider
+        );
+        // Two branches log and trace side by side; the scope and the Activity say which one wrote
+        // what. Both flow into the branch's junctions with the async context.
+        using var activity = BranchDiagnostics.Source.StartActivity(child.BranchPath.NotNull());
+        activity?.SetTag(BranchDiagnostics.BranchPathKey, child.BranchPath);
+        using var scope = child.BranchLogScope();
+        Exception? failure;
+
+        try
+        {
+            if (child.Exception is null)
+                await branch
+                    .Body(new MonadTask<TInput, TReturn>(Task.FromResult(child)))
                     .ConfigureAwait(false);
-            }
+
+            failure = child.Exception;
+        }
+        catch (Exception e)
+        {
+            failure = e;
         }
 
-        async Task RunBranch(
-            Monad<TInput, TReturn> child,
-            DeclaredBranch<TInput, TReturn> branch,
-            int i
-        )
+        if (failure is null)
+            return;
+
+        await branches.Failed(i, failure).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The branches of one Parallel step as they run: how each one that failed ended, the order
+    /// they failed in, and the token that cancels them all.
+    /// </summary>
+    private sealed class BranchesRunning(
+        Branches<TInput, TReturn> declared,
+        CancellationTokenSource siblings
+    )
+    {
+        private int _failedFirst;
+
+        public BranchOutcome[] Outcomes { get; } = new BranchOutcome[declared.Declared.Count];
+
+        public async Task Failed(int i, Exception failure)
         {
-            RunningBranch.Enter(
-                Train,
-                child.CancellationToken,
-                child.Memory.GetValueOrDefault(typeof(IServiceProvider)) as IServiceProvider
-            );
-            // Two branches log and trace side by side; the scope and the Activity say which one wrote
-            // what. Both flow into the branch's junctions with the async context.
-            using var activity = BranchDiagnostics.Source.StartActivity(child.BranchPath.NotNull());
-            activity?.SetTag(BranchDiagnostics.BranchPathKey, child.BranchPath);
-            using var scope = child.BranchLogScope();
-            Exception? failure;
-
-            try
-            {
-                if (child.Exception is null)
-                    await branch
-                        .Body(new MonadTask<TInput, TReturn>(Task.FromResult(child)))
-                        .ConfigureAwait(false);
-
-                failure = child.Exception;
-            }
-            catch (Exception e)
-            {
-                failure = e;
-            }
-
-            if (failure is null)
-                return;
-
             // Whether the siblings had already been cancelled when this branch failed decides
             // whether its cancellation is its own or the sibling's.
             var siblingsCancelled = siblings.IsCancellationRequested;
-            outcomes[i] = new BranchOutcome(
+            Outcomes[i] = new BranchOutcome(
                 failure,
-                Interlocked.Increment(ref failedFirst),
+                Interlocked.Increment(ref _failedFirst),
                 siblingsCancelled
             );
 

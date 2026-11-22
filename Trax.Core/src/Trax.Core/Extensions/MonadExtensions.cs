@@ -35,23 +35,7 @@ internal static class MonadExtensions
     {
         var junctionType = typeof(TJunction);
 
-        var cached = ConstructorCache.GetOrAdd(
-            junctionType,
-            type =>
-            {
-                if (JunctionConstructorProblem(type) is not null)
-                    return null;
-
-                var constructors = type.GetConstructors();
-
-                var parameterTypes = constructors[0]
-                    .GetParameters()
-                    .Select(x => x.ParameterType)
-                    .ToArray();
-
-                return (constructors[0], parameterTypes);
-            }
-        );
+        var cached = ConstructorCache.GetOrAdd(junctionType, JunctionConstructor);
 
         if (cached is null)
         {
@@ -102,6 +86,24 @@ internal static class MonadExtensions
         }
 
         return initializedJunction;
+    }
+
+    /// <summary>
+    /// The one public constructor Trax builds <paramref name="type"/> with and its parameter
+    /// types, or null when it cannot build the junction at all.
+    /// </summary>
+    private static (ConstructorInfo Constructor, Type[] ParameterTypes)? JunctionConstructor(
+        Type type
+    )
+    {
+        if (JunctionConstructorProblem(type) is not null)
+            return null;
+
+        var constructors = type.GetConstructors();
+
+        var parameterTypes = constructors[0].GetParameters().Select(x => x.ParameterType).ToArray();
+
+        return (constructors[0], parameterTypes);
     }
 
     /// <summary>

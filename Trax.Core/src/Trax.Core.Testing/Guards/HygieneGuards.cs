@@ -283,38 +283,7 @@ public static partial class HygieneGuards
                 .Replace("\r\n", "\n", StringComparison.Ordinal)
                 .Split('\n');
 
-            int? started = null;
-            for (var i = 0; i < stripped.Length && i < raw.Length; i++)
-            {
-                var line = stripped[i];
-                if (MemberDeclaration.IsMatch(line))
-                {
-                    started = null;
-                    continue;
-                }
-                if (StartCall.IsMatch(line) && !HasMarker(raw, i, SynchronousStart))
-                {
-                    started = i;
-                    continue;
-                }
-                if (started is null)
-                    continue;
-                if (Synchronisation.IsMatch(line))
-                {
-                    started = null;
-                    continue;
-                }
-                if (ReceivedCheck.IsMatch(line))
-                {
-                    offenders.Add(
-                        string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"{rel}:{i + 1}  -> {raw[i].Trim()}  (started at line {started.Value + 1})"
-                        )
-                    );
-                    started = null;
-                }
-            }
+            AddUnsynchronisedChecks(rel, raw, stripped, offenders);
         }
 
         var message =
@@ -328,6 +297,51 @@ public static partial class HygieneGuards
             + string.Join("\n  ", offenders);
 
         return new GuardResult(offenders, inspected, message);
+    }
+
+    /// <summary>
+    /// Adds each line of one file that checks a substitute after a start with nothing between
+    /// them that waits for the started work.
+    /// </summary>
+    private static void AddUnsynchronisedChecks(
+        string rel,
+        string[] raw,
+        string[] stripped,
+        List<string> offenders
+    )
+    {
+        int? started = null;
+        for (var i = 0; i < stripped.Length && i < raw.Length; i++)
+        {
+            var line = stripped[i];
+            if (MemberDeclaration.IsMatch(line))
+            {
+                started = null;
+                continue;
+            }
+            if (StartCall.IsMatch(line) && !HasMarker(raw, i, SynchronousStart))
+            {
+                started = i;
+                continue;
+            }
+            if (started is null)
+                continue;
+            if (Synchronisation.IsMatch(line))
+            {
+                started = null;
+                continue;
+            }
+            if (ReceivedCheck.IsMatch(line))
+            {
+                offenders.Add(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{rel}:{i + 1}  -> {raw[i].Trim()}  (started at line {started.Value + 1})"
+                    )
+                );
+                started = null;
+            }
+        }
     }
 
     private static bool HasMarker(string[] rawLines, int lineIndex, string marker)

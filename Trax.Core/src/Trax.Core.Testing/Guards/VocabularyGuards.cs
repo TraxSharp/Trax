@@ -74,20 +74,7 @@ public static partial class VocabularyGuards
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
-        var patterns = banned.ToDictionary(
-            entry => entry,
-            entry => new Regex(
-                // Attribute position: opening the list (with an optional target such as
-                // property:) or following another attribute, then the name with or without its
-                // Attribute suffix, then arguments, the closing bracket, or another attribute. The
-                // lookahead leaves that comma for the next attribute in the list.
-                @"(?:\[\s*(?:\w+\s*:\s*)?|,)\s*(?:[\w.]+\.)?(?:"
-                    + string.Join('|', entry.Attributes.Select(Regex.Escape))
-                    + @")(?:Attribute)?(?=\s*(?:\(|\]|,))",
-                RegexOptions.Compiled,
-                RegexTimeout
-            )
-        );
+        var patterns = banned.ToDictionary(entry => entry, AttributePattern);
 
         var offenders = new List<string>();
         var inspected = 0;
@@ -119,16 +106,7 @@ public static partial class VocabularyGuards
                 )
                     continue;
 
-                foreach (Match match in pattern.Matches(text))
-                {
-                    var line = text.Take(match.Index).Count(c => c == '\n') + 1;
-                    offenders.Add(
-                        string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"{relative}:{line} ({match.Value.Trim()} from {entry.Library}; "
-                        ) + $"use {entry.Replacement})"
-                    );
-                }
+                AddAttributeUses(entry, pattern, text, relative, offenders);
             }
         }
 
@@ -142,6 +120,39 @@ public static partial class VocabularyGuards
                 + "behalf, add it to the allowlist with a reason. Offenders: "
                 + string.Join(", ", offenders)
         );
+    }
+
+    private static Regex AttributePattern(ForeignVocabulary entry) =>
+        new(
+            // Attribute position: opening the list (with an optional target such as
+            // property:) or following another attribute, then the name with or without its
+            // Attribute suffix, then arguments, the closing bracket, or another attribute. The
+            // lookahead leaves that comma for the next attribute in the list.
+            @"(?:\[\s*(?:\w+\s*:\s*)?|,)\s*(?:[\w.]+\.)?(?:"
+                + string.Join('|', entry.Attributes.Select(Regex.Escape))
+                + @")(?:Attribute)?(?=\s*(?:\(|\]|,))",
+            RegexOptions.Compiled,
+            RegexTimeout
+        );
+
+    private static void AddAttributeUses(
+        ForeignVocabulary entry,
+        Regex pattern,
+        string text,
+        string relative,
+        List<string> offenders
+    )
+    {
+        foreach (Match match in pattern.Matches(text))
+        {
+            var line = text.Take(match.Index).Count(c => c == '\n') + 1;
+            offenders.Add(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{relative}:{line} ({match.Value.Trim()} from {entry.Library}; "
+                ) + $"use {entry.Replacement})"
+            );
+        }
     }
 
     [GeneratedRegex(

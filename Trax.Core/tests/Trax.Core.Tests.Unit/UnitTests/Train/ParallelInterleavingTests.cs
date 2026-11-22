@@ -91,50 +91,7 @@ public class ParallelInterleavingTests : TestSetup
                         );
 
                 foreach (var run in explored)
-                {
-                    var where =
-                        $"[{policy}] fault {fault?.ToString() ?? "none"}, "
-                        + $"order {string.Join(' ', run.Runner.Trace)}";
-
-                    foreach (var difference in Differences(run.Result, oracle))
-                        mismatches.Add($"{where}: {difference}");
-
-                    if (
-                        run.Result.IsRight
-                        && !string.Equals(
-                            run.Result.Snapshot,
-                            expected.Snapshot,
-                            StringComparison.Ordinal
-                        )
-                    )
-                        mismatches.Add(
-                            $"{where}: Memory {run.Result.Snapshot}, not {expected.Snapshot}"
-                        );
-
-                    if (fault is not { } f || run.Result.Failure is not BranchesFailedException)
-                        continue;
-
-                    // Which siblings are stopped is the one thing an interleaving may change, and
-                    // it is decided: exactly those that had not finished when the failing branch
-                    // did.
-                    var finished = run.Runner.Finished.ToList();
-                    var predicted =
-                        policy == BranchFailurePolicy.WaitForAll
-                            ? []
-                            : branches
-                                .Except(
-                                    finished.Take(finished.IndexOf(f.Branch)),
-                                    StringComparer.Ordinal
-                                )
-                                .Where(b => !string.Equals(b, f.Branch, StringComparison.Ordinal))
-                                .ToHashSet(StringComparer.Ordinal);
-
-                    if (!run.Result.Stopped.SetEquals(predicted))
-                        mismatches.Add(
-                            $"{where}: stopped [{string.Join(", ", run.Result.Stopped.Order(StringComparer.Ordinal))}], "
-                                + $"not [{string.Join(", ", predicted.Order(StringComparer.Ordinal))}]"
-                        );
-                }
+                    CheckInterleaving(run, oracle, expected, policy, fault, branches, mismatches);
             }
 
             await TestContext
@@ -151,6 +108,55 @@ public class ParallelInterleavingTests : TestSetup
                     $"a concurrent Parallel is equivalent to its branches run in order ({Adr})"
                 );
         }
+    }
+
+    /// <summary>
+    /// Adds to <paramref name="mismatches"/> every way one interleaving's run differs from the
+    /// branches run in order, and, when a branch failed, which siblings it should have stopped.
+    /// </summary>
+    private static void CheckInterleaving(
+        Interleavings.Explored<Outcome> run,
+        Outcome oracle,
+        Expectation expected,
+        BranchFailurePolicy policy,
+        (string Branch, int Index)? fault,
+        List<string> branches,
+        List<string> mismatches
+    )
+    {
+        var where =
+            $"[{policy}] fault {fault?.ToString() ?? "none"}, "
+            + $"order {string.Join(' ', run.Runner.Trace)}";
+
+        foreach (var difference in Differences(run.Result, oracle))
+            mismatches.Add($"{where}: {difference}");
+
+        if (
+            run.Result.IsRight
+            && !string.Equals(run.Result.Snapshot, expected.Snapshot, StringComparison.Ordinal)
+        )
+            mismatches.Add($"{where}: Memory {run.Result.Snapshot}, not {expected.Snapshot}");
+
+        if (fault is not { } f || run.Result.Failure is not BranchesFailedException)
+            return;
+
+        // Which siblings are stopped is the one thing an interleaving may change, and
+        // it is decided: exactly those that had not finished when the failing branch
+        // did.
+        var finished = run.Runner.Finished.ToList();
+        var predicted =
+            policy == BranchFailurePolicy.WaitForAll
+                ? []
+                : branches
+                    .Except(finished.Take(finished.IndexOf(f.Branch)), StringComparer.Ordinal)
+                    .Where(b => !string.Equals(b, f.Branch, StringComparison.Ordinal))
+                    .ToHashSet(StringComparer.Ordinal);
+
+        if (!run.Result.Stopped.SetEquals(predicted))
+            mismatches.Add(
+                $"{where}: stopped [{string.Join(", ", run.Result.Stopped.Order(StringComparer.Ordinal))}], "
+                    + $"not [{string.Join(", ", predicted.Order(StringComparer.Ordinal))}]"
+            );
     }
 
     [Test]

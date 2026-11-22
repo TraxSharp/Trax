@@ -480,22 +480,22 @@ public class ParallelTests : TestSetup
         Carries(cocitation.Activity, "Parallel#0/cocitation")
             .Should()
             .BeTrue($"each Activity carries its branch's path ({Adr})");
-
-        static bool NamesBranch(IReadOnlyList<object?> scopes, string path) =>
-            scopes.Any(s => s?.ToString()?.Contains(path, StringComparison.Ordinal) == true);
-
-        static bool Carries(Activity? activity, string path) =>
-            activity is not null
-            && (
-                activity.DisplayName.Contains(path, StringComparison.Ordinal)
-                || activity.Tags.Any(t =>
-                    (t.Value ?? string.Empty).Contains(path, StringComparison.Ordinal)
-                )
-                || activity.Baggage.Any(b =>
-                    (b.Value ?? string.Empty).Contains(path, StringComparison.Ordinal)
-                )
-            );
     }
+
+    private static bool NamesBranch(IReadOnlyList<object?> scopes, string path) =>
+        scopes.Any(s => s?.ToString()?.Contains(path, StringComparison.Ordinal) == true);
+
+    private static bool Carries(Activity? activity, string path) =>
+        activity is not null
+        && (
+            activity.DisplayName.Contains(path, StringComparison.Ordinal)
+            || activity.Tags.Any(t =>
+                (t.Value ?? string.Empty).Contains(path, StringComparison.Ordinal)
+            )
+            || activity.Baggage.Any(b =>
+                (b.Value ?? string.Empty).Contains(path, StringComparison.Ordinal)
+            )
+        );
 
     #endregion
 

@@ -81,74 +81,91 @@ public class ResumeCheckPropertyTests : TestSetup
                     .Prepend(element: null);
 
                 foreach (var point in points)
-                {
-                    var outcome = ChainVerification.CheckResume(
-                        chain,
-                        typeof(V0),
-                        typeof(Out),
-                        t => t.IsInterface,
-                        written,
-                        point
-                    );
-
-                    if (outcome.CanResume)
-                    {
-                        var rounds = Rounds.All(2);
-                        var resumed = await Resumed(ops, Plan(outcome, store), rounds)
-                            .ConfigureAwait(false);
-                        resumed
-                            .IsRight.Should()
-                            .BeTrue(
-                                $"the check allowed resuming at {point ?? "the latest checkpoint"}, "
-                                    + $"so no step from there lacks an input ({Adr})"
-                            );
-
-                        // After the latest checkpoint every value a later step reads is the
-                        // checkpoint's or recomputed from it, as in a full run in which the
-                        // same steps ran again. An operator's later point also skips the steps
-                        // between, which is what they asked.
-                        if (point is null)
-                        {
-                            var expected = await new GeneratedTrain(
-                                ops,
-                                new Services(),
-                                rounds.RanAgain()
-                            )
-                                .RunEither(new V0(1))
-                                .ConfigureAwait(false);
-
-                            resumed
-                                .ValueUnsafe()
-                                .Should()
-                                .Be(
-                                    expected.ValueUnsafe(),
-                                    "a resumed run equals a full run in which the steps it ran "
-                                        + $"again ran again ({Adr})"
-                                );
-                        }
-                    }
-                    else if (
-                        string.Equals(
-                            outcome.RefusalCode,
-                            ResumeRefusals.MissingInput,
-                            StringComparison.Ordinal
-                        ) && Forced(chain, store, written, point) is { } forcedPlan
-                    )
-                    {
-                        var forced = await Resumed(ops, forcedPlan, Rounds.All(2))
-                            .ConfigureAwait(false);
-                        forced
-                            .IsLeft.Should()
-                            .BeTrue(
-                                $"the check refused {point ?? "the latest checkpoint"} for a missing input, "
-                                    + $"so running from it fails: {outcome.Refusal} ({Adr})"
-                            );
-                    }
-                }
+                    await CheckAgreesAt(ops, store, chain, written, point).ConfigureAwait(false);
             },
             iter: 400,
             print: ops => string.Join(' ', ops)
         );
+
+    /// <summary>
+    /// Checks one resume point: where the check allows it, resuming there runs; where it refuses
+    /// it for a missing input, forcing the resume fails.
+    /// </summary>
+    private static async Task CheckAgreesAt(
+        Op[] ops,
+        Store store,
+        ChainRecorder chain,
+        List<string> written,
+        string? point
+    )
+    {
+        var outcome = ChainVerification.CheckResume(
+            chain,
+            typeof(V0),
+            typeof(Out),
+            t => t.IsInterface,
+            written,
+            point
+        );
+
+        if (outcome.CanResume)
+        {
+            await CheckResumedRun(ops, outcome, store, point).ConfigureAwait(false);
+        }
+        else if (
+            string.Equals(
+                outcome.RefusalCode,
+                ResumeRefusals.MissingInput,
+                StringComparison.Ordinal
+            ) && Forced(chain, store, written, point) is { } forcedPlan
+        )
+        {
+            var forced = await Resumed(ops, forcedPlan, Rounds.All(2)).ConfigureAwait(false);
+            forced
+                .IsLeft.Should()
+                .BeTrue(
+                    $"the check refused {point ?? "the latest checkpoint"} for a missing input, "
+                        + $"so running from it fails: {outcome.Refusal} ({Adr})"
+                );
+        }
+    }
+
+    private static async Task CheckResumedRun(
+        Op[] ops,
+        ResumeOutcome outcome,
+        Store store,
+        string? point
+    )
+    {
+        var rounds = Rounds.All(2);
+        var resumed = await Resumed(ops, Plan(outcome, store), rounds).ConfigureAwait(false);
+        resumed
+            .IsRight.Should()
+            .BeTrue(
+                $"the check allowed resuming at {point ?? "the latest checkpoint"}, "
+                    + $"so no step from there lacks an input ({Adr})"
+            );
+
+        // After the latest checkpoint every value a later step reads is the
+        // checkpoint's or recomputed from it, as in a full run in which the
+        // same steps ran again. An operator's later point also skips the steps
+        // between, which is what they asked.
+        if (point is null)
+        {
+            var expected = await new GeneratedTrain(ops, new Services(), rounds.RanAgain())
+                .RunEither(new V0(1))
+                .ConfigureAwait(false);
+
+            resumed
+                .ValueUnsafe()
+                .Should()
+                .Be(
+                    expected.ValueUnsafe(),
+                    "a resumed run equals a full run in which the steps it ran "
+                        + $"again ran again ({Adr})"
+                );
+        }
+    }
 
     private static bool Startable(string? id) =>
         id is not null

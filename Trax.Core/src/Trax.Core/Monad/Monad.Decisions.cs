@@ -315,178 +315,227 @@ public partial class Monad<TInput, TReturn>
         if (Exception is not null)
             return this;
 
-        var specs = questions.Specs;
-        var nodeIds = specs.ToDictionary(
-            s => s.Key,
-            s => Nodes.Next(ChainNodeScope.DecideKey(s.DecisionType)),
+        return await Deciding<TState>
+            .Start(this, questions, step, train, at, state)
+            .RunAsync()
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// One Decide step as it decides: each question as it is asked, the answers so far, which of
+    /// them were replayed or refused for replay, and the state's hash once it is taken.
+    /// </summary>
+    private sealed class Deciding<TState>(
+        Monad<TInput, TReturn> monad,
+        Questions<TState> questions,
+        string step,
+        string train,
+        string at,
+        TState? state,
+        Dictionary<string, string> nodeIds,
+        Dictionary<string, Question> questionsAsked,
+        Dictionary<string, string> fingerprints
+    )
+    {
+        private readonly Dictionary<string, Answer> _answers = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, int> _occurrences = new(StringComparer.Ordinal);
+        private readonly System.Collections.Generic.HashSet<string> _replayed = new(
             StringComparer.Ordinal
         );
-        var answers = new Dictionary<string, Answer>(StringComparer.Ordinal);
-        var occurrences = new Dictionary<string, int>(StringComparer.Ordinal);
-        var replayed = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
-        var replayRefused = new Dictionary<string, string>(StringComparer.Ordinal);
-        var questionsAsked = specs.ToDictionary(
-            s => s.Key,
-            s => s.ToQuestion(),
-            StringComparer.Ordinal
-        );
-        var fingerprints = specs.ToDictionary(
-            s => s.Key,
-            s => QuestionFingerprint.Of(step, typeof(TState), questionsAsked[s.Key]),
-            StringComparer.Ordinal
-        );
+        private readonly Dictionary<string, string> _replayRefused = new(StringComparer.Ordinal);
 
         // The state hashed once, on first need and before the decider or any step after this one
         // can change it, so a replayed answer is acted on only for the state it was given about.
         // A state that cannot be hashed has no hash, so nothing recorded for it is replayed; that
         // is never the run's failure.
-        string? stateHash = null;
-        var hashed = false;
-        var keyResolved = true;
+        private string? _stateHash;
+        private bool _hashed;
+        private bool _keyResolved = true;
 
-        void HashState()
+        private IReadOnlyList<ShadowResult> _shadowResults = [];
+        private Type? _deciderType;
+
+        public static Deciding<TState> Start(
+            Monad<TInput, TReturn> monad,
+            Questions<TState> questions,
+            string step,
+            string train,
+            string at,
+            TState? state
+        )
         {
-            if (hashed)
+            var specs = questions.Specs;
+            var nodeIds = specs.ToDictionary(
+                s => s.Key,
+                s => monad.Nodes.Next(ChainNodeScope.DecideKey(s.DecisionType)),
+                StringComparer.Ordinal
+            );
+            var questionsAsked = specs.ToDictionary(
+                s => s.Key,
+                s => s.ToQuestion(),
+                StringComparer.Ordinal
+            );
+            var fingerprints = specs.ToDictionary(
+                s => s.Key,
+                s => QuestionFingerprint.Of(step, typeof(TState), questionsAsked[s.Key]),
+                StringComparer.Ordinal
+            );
+
+            return new Deciding<TState>(
+                monad,
+                questions,
+                step,
+                train,
+                at,
+                state,
+                nodeIds,
+                questionsAsked,
+                fingerprints
+            );
+        }
+
+        public async Task<Monad<TInput, TReturn>> RunAsync()
+        {
+            // Counts this asking of each question and takes every recorded answer that still
+            // fits. The loop stays in this method: the node each lookup enters is an AsyncLocal,
+            // and the decider and the shadows asked below must see the last one entered.
+            try
+            {
+                var replay = monad.Optional<IDecisionReplay>();
+
+                foreach (var spec in questions.Specs)
+                {
+                    var asking = monad._askings.GetValueOrDefault(spec.Key);
+                    monad._askings[spec.Key] = asking + 1;
+                    _occurrences[spec.Key] = asking;
+
+                    if (replay is null)
+                        continue;
+
+                    // Entered before the lookup, so a replay can tell which branch is asking: two
+                    // branches asking one question both count their askings on from the fork.
+                    ChainGraph.Enter(nodeIds[spec.Key], monad.BranchPath);
+
+                    await ReplayRecordedAnswerAsync(replay, spec, asking).ConfigureAwait(false);
+                }
+            }
+            catch (Exception e)
+            {
+                return monad.Failed(e, step);
+            }
+
+            // Resolved before the decider is asked, so an observer that cannot be built fails the
+            // step before it costs a decision.
+            var (observer, unresolved) = monad.ResolveObserver();
+
+            if (unresolved is not null)
+                return monad.ObserverFailed(unresolved, step);
+
+            var pending = questions.Specs.Where(s => !_replayed.Contains(s.Key)).ToList();
+
+            if (
+                pending.Count > 0
+                && await AskDeciderAsync(pending, observer).ConfigureAwait(false) is { } stopped
+            )
+                return stopped;
+
+            var (decided, refused) = SortAnswers();
+
+            if (refused.Count > 0)
+                return await RefuseAnswersAsync(observer, refused).ConfigureAwait(false);
+
+            monad.CancellationToken.ThrowIfCancellationRequested();
+
+            return await ActOnDecisionsAsync(observer, decided).ConfigureAwait(false);
+        }
+
+        private void HashState()
+        {
+            if (_hashed)
                 return;
 
-            hashed = true;
-            keyResolved = HashKey(out var key);
-            stateHash = keyResolved ? StateDigest.Of(state, key) : null;
+            _hashed = true;
+            _keyResolved = monad.HashKey(out var key);
+            _stateHash = _keyResolved ? StateDigest.Of(state, key) : null;
         }
 
-        try
+        private async Task ReplayRecordedAnswerAsync(
+            IDecisionReplay replay,
+            QuestionSpec spec,
+            int asking
+        )
         {
-            var replay = Optional<IDecisionReplay>();
+            var earlier = await replay
+                .Replay(train, monad.Train.ExternalId, spec.Key, asking, monad.CancellationToken)
+                .ConfigureAwait(false);
 
-            foreach (var spec in specs)
+            if (earlier is null)
+                return;
+
+            // An answer recorded for a different asking (the question reworded, its options
+            // changed, another step now asking it first) or against an older declaration (an
+            // option since renamed or dropped, fewer levels, another kind of question) cannot
+            // repeat what that run did, so the decider is asked as if nothing had been
+            // recorded.
+            // The reason names what does not fit, never the recorded answer itself.
+            var problem = !string.Equals(
+                earlier.Fingerprint,
+                fingerprints[spec.Key],
+                StringComparison.Ordinal
+            )
+                ? "it was given to the question as an earlier version of the chain asked "
+                    + "it, and the question or the steps asking it have changed since"
+                : spec.ReplayProblem(earlier.Answer);
+
+            if (problem is not null)
             {
-                var asking = _askings.GetValueOrDefault(spec.Key);
-                _askings[spec.Key] = asking + 1;
-                occurrences[spec.Key] = asking;
-
-                if (replay is null)
-                    continue;
-
-                // Entered before the lookup, so a replay can tell which branch is asking: two
-                // branches asking one question both count their askings on from the fork.
-                ChainGraph.Enter(nodeIds[spec.Key], BranchPath);
-
-                var earlier = await replay
-                    .Replay(train, Train.ExternalId, spec.Key, asking, CancellationToken)
-                    .ConfigureAwait(false);
-
-                if (earlier is null)
-                    continue;
-
-                // An answer recorded for a different asking (the question reworded, its options
-                // changed, another step now asking it first) or against an older declaration (an
-                // option since renamed or dropped, fewer levels, another kind of question) cannot
-                // repeat what that run did, so the decider is asked as if nothing had been
-                // recorded.
-                // The reason names what does not fit, never the recorded answer itself.
-                var problem = !string.Equals(
-                    earlier.Fingerprint,
-                    fingerprints[spec.Key],
-                    StringComparison.Ordinal
-                )
-                    ? "it was given to the question as an earlier version of the chain asked "
-                        + "it, and the question or the steps asking it have changed since"
-                    : spec.ReplayProblem(earlier.Answer);
-
-                if (problem is not null)
-                {
-                    replayRefused[spec.Key] =
-                        $"the answer recorded for '{spec.Key}' no longer fits the question as it "
-                        + $"is asked now: {problem}";
-                    Warn($"{at}: {replayRefused[spec.Key]}. The decider is asked afresh.");
-                    continue;
-                }
-
-                // A recorded answer replays only into the state it was given about: the hash of
-                // the state asked about now must equal the recorded one exactly.
-                HashState();
-
-                if (
-                    StateProblem(spec.Key, earlier.StateHash, stateHash, keyResolved) is { } differs
-                )
-                {
-                    replayRefused[spec.Key] = differs;
-                    Warn($"{at}: {differs}. The decider is asked afresh.");
-                    continue;
-                }
-
-                answers[spec.Key] = earlier.Answer;
-                replayed.Add(spec.Key);
+                _replayRefused[spec.Key] =
+                    $"the answer recorded for '{spec.Key}' no longer fits the question as it "
+                    + $"is asked now: {problem}";
+                monad.Warn($"{at}: {_replayRefused[spec.Key]}. The decider is asked afresh.");
+                return;
             }
+
+            // A recorded answer replays only into the state it was given about: the hash of
+            // the state asked about now must equal the recorded one exactly.
+            HashState();
+
+            if (StateProblem(spec.Key, earlier.StateHash, _stateHash, _keyResolved) is { } differs)
+            {
+                _replayRefused[spec.Key] = differs;
+                monad.Warn($"{at}: {differs}. The decider is asked afresh.");
+                return;
+            }
+
+            _answers[spec.Key] = earlier.Answer;
+            _replayed.Add(spec.Key);
         }
-        catch (Exception e)
-        {
-            return Failed(e, step);
-        }
 
-        // Resolved before the decider is asked, so an observer that cannot be built fails the step
-        // before it costs a decision.
-        var (observer, unresolved) = ResolveObserver();
-
-        if (unresolved is not null)
-            return ObserverFailed(unresolved, step);
-
-        var pending = specs.Where(s => !replayed.Contains(s.Key)).ToList();
-        IReadOnlyList<ShadowResult> shadowResults = [];
-        Type? deciderType = null;
-
-        if (pending.Count > 0)
+        /// <summary>
+        /// Asks the live decider the questions no recorded answer settled, and the shadows beside
+        /// it. Null when the step goes on; the run, failed or refused, when it stops here.
+        /// </summary>
+        private async Task<Monad<TInput, TReturn>?> AskDeciderAsync(
+            List<QuestionSpec> pending,
+            IDecisionObserver? observer
+        )
         {
             var decider =
                 MonadExtensions.ExtractTypeFromMemory(
-                    this,
+                    monad,
                     questions.Decider,
                     missing => $"{at} needs a decider '{missing.ReadableName()}'"
                 ) as IDecider;
 
             if (decider is null)
-                return this;
+                return monad;
 
-            deciderType = decider.GetType();
+            _deciderType = decider.GetType();
 
-            // Shadows are resolved here, on the run's own thread, so they never read Memory while
-            // the run writes to it. One nobody registered is refused, as the startup check
-            // refuses it; one that is registered but fails, is slow or disagrees never changes
-            // the run. Each one from the container is built in a scope of its own, so it shares
-            // no scoped service (a DbContext, say) with the live decider or the junctions after
-            // this step, and that scope is disposed when the shadow ends.
             var shadowDeciders = new List<(Type Type, Shadow? Shadow, string? Error)>();
 
-            foreach (var type in questions.Shadows)
-            {
-                Shadow? resolved;
-
-                try
-                {
-                    resolved = await ResolveShadow(type).ConfigureAwait(false);
-                }
-                catch (Exception e)
-                {
-                    shadowDeciders.Add((type, null, $"could not be resolved: {e.Message}"));
-                    continue;
-                }
-
-                if (resolved is null)
-                {
-                    foreach (var built in shadowDeciders)
-                        if (built.Shadow is { } unused)
-                            await unused.DisposeAsync().ConfigureAwait(false);
-
-                    return Refuse(
-                        step,
-                        $"{at} needs a shadow decider '{type.ReadableName()}' and neither "
-                            + "Memory nor the container holds one. Register it, or hand one to "
-                            + "AddServices."
-                    );
-                }
-
-                shadowDeciders.Add((type, resolved, null));
-            }
+            if (await ResolveShadowsAsync(shadowDeciders).ConfigureAwait(false) is { } refused)
+                return refused;
 
             // Only what the live decider is asked goes to the shadows: a replayed answer is not
             // being decided, so there is nothing to compare.
@@ -501,6 +550,108 @@ public partial class Monad<TInput, TReturn>
             if (observer is not null)
                 HashState();
 
+            var (snapshot, uncopied) = SnapshotForShadows(shadowDeciders);
+
+            // Disposed when this step is done with the shadows, whether they finished or not, so
+            // a shadow that never returns does not keep a registration on the run's token.
+            using var shadowing = CancellationTokenSource.CreateLinkedTokenSource(
+                monad.CancellationToken
+            );
+            var shadows = StartShadows(shadowDeciders, request, snapshot, uncopied, shadowing);
+
+            if (
+                await AskLiveDeciderAsync(decider, request, pending, shadowing)
+                    .ConfigureAwait(false) is
+                { } failed
+            )
+                return failed;
+
+            _shadowResults = await monad
+                .Settle(shadows, shadowing, questions.ShadowWait)
+                .ConfigureAwait(false);
+
+            return null;
+        }
+
+        private async Task<Monad<TInput, TReturn>?> AskLiveDeciderAsync(
+            IDecider decider,
+            DecisionRequest request,
+            List<QuestionSpec> pending,
+            CancellationTokenSource shadowing
+        )
+        {
+            try
+            {
+                var result = await decider
+                    .Decide(request, monad.CancellationToken)
+                    .ConfigureAwait(false);
+
+                foreach (var spec in pending)
+                    if (result?.Answers?.GetValueOrDefault(spec.Key) is { } answer)
+                        _answers[spec.Key] = answer;
+            }
+            catch (Exception e)
+            {
+                // The run fails here, so nothing will read what the shadows say.
+                await Stop(shadowing).ConfigureAwait(false);
+                return monad.Failed(e, step);
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Resolves every shadow decider into <paramref name="shadowDeciders"/>. The refused run
+        /// when one is not registered at all, else null.
+        /// </summary>
+        private async Task<Monad<TInput, TReturn>?> ResolveShadowsAsync(
+            List<(Type Type, Shadow? Shadow, string? Error)> shadowDeciders
+        )
+        {
+            // Shadows are resolved here, on the run's own thread, so they never read Memory while
+            // the run writes to it. One nobody registered is refused, as the startup check
+            // refuses it; one that is registered but fails, is slow or disagrees never changes
+            // the run. Each one from the container is built in a scope of its own, so it shares
+            // no scoped service (a DbContext, say) with the live decider or the junctions after
+            // this step, and that scope is disposed when the shadow ends.
+            foreach (var type in questions.Shadows)
+            {
+                Shadow? resolved;
+
+                try
+                {
+                    resolved = await monad.ResolveShadow(type).ConfigureAwait(false);
+                }
+                catch (Exception e)
+                {
+                    shadowDeciders.Add((type, null, $"could not be resolved: {e.Message}"));
+                    continue;
+                }
+
+                if (resolved is null)
+                {
+                    foreach (var built in shadowDeciders)
+                        if (built.Shadow is { } unused)
+                            await unused.DisposeAsync().ConfigureAwait(false);
+
+                    return monad.Refuse(
+                        step,
+                        $"{at} needs a shadow decider '{type.ReadableName()}' and neither "
+                            + "Memory nor the container holds one. Register it, or hand one to "
+                            + "AddServices."
+                    );
+                }
+
+                shadowDeciders.Add((type, resolved, null));
+            }
+
+            return null;
+        }
+
+        private (byte[]? Snapshot, string? Uncopied) SnapshotForShadows(
+            List<(Type Type, Shadow? Shadow, string? Error)> shadowDeciders
+        )
+        {
             // Written once, here, before the live decider or any step after this one can change
             // the state, and read back separately for each shadow on its own thread, so no shadow
             // shares an object with the run or with another shadow. A state that cannot be
@@ -518,12 +669,17 @@ public partial class Monad<TInput, TReturn>
                     uncopied = Uncopied(e.Message);
                 }
 
-            // Disposed when this step is done with the shadows, whether they finished or not, so
-            // a shadow that never returns does not keep a registration on the run's token.
-            using var shadowing = CancellationTokenSource.CreateLinkedTokenSource(
-                CancellationToken
-            );
-            var shadows = shadowDeciders
+            return (snapshot, uncopied);
+        }
+
+        private List<(Type Decider, Task<ShadowResult> Asked)> StartShadows(
+            List<(Type Type, Shadow? Shadow, string? Error)> shadowDeciders,
+            DecisionRequest request,
+            byte[]? snapshot,
+            string? uncopied,
+            CancellationTokenSource shadowing
+        ) =>
+            shadowDeciders
                 .Select(s =>
                     (
                         Decider: s.Type,
@@ -536,98 +692,68 @@ public partial class Monad<TInput, TReturn>
                             request,
                             snapshot,
                             state.NotNull().GetType(),
-                            Clock,
+                            monad.Clock,
                             shadowing.Token
                         )
                     )
                 )
                 .ToList();
 
-            try
-            {
-                var result = await decider.Decide(request, CancellationToken).ConfigureAwait(false);
-
-                foreach (var spec in pending)
-                    if (result?.Answers?.GetValueOrDefault(spec.Key) is { } answer)
-                        answers[spec.Key] = answer;
-            }
-            catch (Exception e)
-            {
-                // The run fails here, so nothing will read what the shadows say.
-                await Stop(shadowing).ConfigureAwait(false);
-                return Failed(e, step);
-            }
-
-            shadowResults = await Settle(shadows, shadowing, questions.ShadowWait)
-                .ConfigureAwait(false);
-        }
-
-        var decided = new List<(QuestionSpec Spec, Answer Answer, object Decision)>();
-        var refused =
-            new List<(QuestionSpec Spec, Answer? Answer, string Reason, string Sentence)>();
-
-        foreach (var spec in specs)
+        private (
+            List<(QuestionSpec Spec, Answer Answer, object Decision)> Decided,
+            List<(QuestionSpec Spec, Answer? Answer, string Reason, string Sentence)> Refused
+        ) SortAnswers()
         {
-            // A decider that skips a question or garbles an answer is a model having a bad call,
-            // not a declaration that cannot work, so asking again may well get a usable answer.
-            if (!answers.TryGetValue(spec.Key, out var answer))
+            var decided = new List<(QuestionSpec Spec, Answer Answer, object Decision)>();
+            var refused =
+                new List<(QuestionSpec Spec, Answer? Answer, string Reason, string Sentence)>();
+
+            foreach (var spec in questions.Specs)
             {
-                var reason = $"gave no answer to '{spec.Key}'";
-                refused.Add((spec, null, reason, $"{reason}, so there is nothing to act on."));
-                continue;
+                // A decider that skips a question or garbles an answer is a model having a bad
+                // call, not a declaration that cannot work, so asking again may well get a usable
+                // answer.
+                if (!_answers.TryGetValue(spec.Key, out var answer))
+                {
+                    var reason = $"gave no answer to '{spec.Key}'";
+                    refused.Add((spec, null, reason, $"{reason}, so there is nothing to act on."));
+                    continue;
+                }
+
+                try
+                {
+                    decided.Add((spec, answer, spec.ToDecision(answer)));
+                }
+                catch (InvalidAnswerException invalid)
+                {
+                    // A replayed answer was checked before it was kept, so this one is the
+                    // decider's.
+                    refused.Add(
+                        (
+                            spec,
+                            answer,
+                            invalid.Message,
+                            $"{invalid.Message}, so it is not acted on."
+                        )
+                    );
+                }
             }
 
-            try
-            {
-                decided.Add((spec, answer, spec.ToDecision(answer)));
-            }
-            catch (InvalidAnswerException invalid)
-            {
-                // A replayed answer was checked before it was kept, so this one is the decider's.
-                refused.Add(
-                    (spec, answer, invalid.Message, $"{invalid.Message}, so it is not acted on.")
-                );
-            }
+            return (decided, refused);
         }
 
-        if (refused.Count > 0)
+        private async Task<Monad<TInput, TReturn>> RefuseAnswersAsync(
+            IDecisionObserver? observer,
+            List<(QuestionSpec Spec, Answer? Answer, string Reason, string Sentence)> refused
+        )
         {
             // Told before the step fails, so the answer the run would not act on, and why, is on
             // record next to the failure rather than lost with it.
             if (observer is not null)
                 foreach (var (spec, answer, reason, _) in refused)
-                {
-                    var refusal = new DecisionRefused(
-                        train,
-                        Train.ExternalId,
-                        questionsAsked[spec.Key],
-                        occurrences[spec.Key],
-                        fingerprints[spec.Key],
-                        answer,
-                        deciderType.NotNull(),
-                        $"the decider {reason}"
-                    )
-                    {
-                        QuestionType = spec.On,
-                    };
+                    await TellRefusedAsync(observer, spec, answer, reason).ConfigureAwait(false);
 
-                    ChainGraph.Enter(nodeIds[spec.Key], BranchPath);
-
-                    // The step fails on the refusal either way, so an observer that cannot record
-                    // it is only logged: its failure would hide why the step failed.
-                    if (
-                        await Tell(observer, (o, ct) => o.Refused(refusal, ct), at)
-                            .ConfigureAwait(false) is
-                        { } failed
-                    )
-                        Warn(
-                            $"{at}: the decision observer '{observer.GetType().ReadableName()}' "
-                                + $"could not record the refused answer to '{spec.Key}': "
-                                + failed.Message
-                        );
-                }
-
-            return Refuse(
+            return monad.Refuse(
                 step,
                 $"{at}: "
                     + string.Join(
@@ -640,64 +766,117 @@ public partial class Monad<TInput, TReturn>
             );
         }
 
-        CancellationToken.ThrowIfCancellationRequested();
-
-        foreach (var (spec, answer, decision) in decided)
+        private async Task TellRefusedAsync(
+            IDecisionObserver observer,
+            QuestionSpec spec,
+            Answer? answer,
+            string reason
+        )
         {
-            Memory[spec.DecisionType] = decision;
-
-            var wasReplayed = replayed.Contains(spec.Key);
-            var compared = wasReplayed
-                ? []
-                : shadowResults
-                    .Select(s =>
-                        s.Answers?.GetValueOrDefault(spec.Key) is { } shadow
-                            ? new ShadowAnswer(
-                                s.Decider,
-                                shadow,
-                                spec.SameOutcome(answer, shadow),
-                                Error: null
-                            )
-                            : new ShadowAnswer(
-                                s.Decider,
-                                Answer: null,
-                                Agrees: false,
-                                s.Error ?? $"gave no answer to '{spec.Key}'"
-                            )
-                    )
-                    .ToList();
-
-            if (observer is null)
-                continue;
-
-            var made = new DecisionMade(
+            var refusal = new DecisionRefused(
                 train,
-                Train.ExternalId,
+                monad.Train.ExternalId,
                 questionsAsked[spec.Key],
-                occurrences[spec.Key],
+                _occurrences[spec.Key],
                 fingerprints[spec.Key],
                 answer,
-                wasReplayed ? null : deciderType,
-                wasReplayed,
-                compared,
-                replayRefused.GetValueOrDefault(spec.Key)
+                _deciderType.NotNull(),
+                $"the decider {reason}"
             )
             {
-                StateHash = stateHash,
+                QuestionType = spec.On,
+            };
+
+            ChainGraph.Enter(nodeIds[spec.Key], monad.BranchPath);
+
+            // The step fails on the refusal either way, so an observer that cannot record
+            // it is only logged: its failure would hide why the step failed.
+            if (
+                await monad
+                    .Tell(observer, (o, ct) => o.Refused(refusal, ct), at)
+                    .ConfigureAwait(false) is
+                { } failed
+            )
+                monad.Warn(
+                    $"{at}: the decision observer '{observer.GetType().ReadableName()}' "
+                        + $"could not record the refused answer to '{spec.Key}': "
+                        + failed.Message
+                );
+        }
+
+        private async Task<Monad<TInput, TReturn>> ActOnDecisionsAsync(
+            IDecisionObserver? observer,
+            List<(QuestionSpec Spec, Answer Answer, object Decision)> decided
+        )
+        {
+            foreach (var (spec, answer, decision) in decided)
+            {
+                monad.Memory[spec.DecisionType] = decision;
+
+                var wasReplayed = _replayed.Contains(spec.Key);
+                var compared = wasReplayed ? [] : CompareShadows(spec, answer);
+
+                if (observer is null)
+                    continue;
+
+                var made = Made(spec, answer, wasReplayed, compared);
+
+                ChainGraph.Enter(nodeIds[spec.Key], monad.BranchPath);
+
+                if (
+                    await monad
+                        .Tell(observer, (o, ct) => o.Decided(made, ct), at)
+                        .ConfigureAwait(false) is
+                    { } failed
+                )
+                    return monad.ObserverFailed(failed, step);
+            }
+
+            return monad;
+        }
+
+        private List<ShadowAnswer> CompareShadows(QuestionSpec spec, Answer answer) =>
+            _shadowResults
+                .Select(s =>
+                    s.Answers?.GetValueOrDefault(spec.Key) is { } shadow
+                        ? new ShadowAnswer(
+                            s.Decider,
+                            shadow,
+                            spec.SameOutcome(answer, shadow),
+                            Error: null
+                        )
+                        : new ShadowAnswer(
+                            s.Decider,
+                            Answer: null,
+                            Agrees: false,
+                            s.Error ?? $"gave no answer to '{spec.Key}'"
+                        )
+                )
+                .ToList();
+
+        private DecisionMade Made(
+            QuestionSpec spec,
+            Answer answer,
+            bool wasReplayed,
+            List<ShadowAnswer> compared
+        ) =>
+            new(
+                train,
+                monad.Train.ExternalId,
+                questionsAsked[spec.Key],
+                _occurrences[spec.Key],
+                fingerprints[spec.Key],
+                answer,
+                wasReplayed ? null : _deciderType,
+                wasReplayed,
+                compared,
+                _replayRefused.GetValueOrDefault(spec.Key)
+            )
+            {
+                StateHash = _stateHash,
                 QuestionType = spec.On,
                 StateType = (object?)state is { } held ? held.GetType() : typeof(TState),
             };
-
-            ChainGraph.Enter(nodeIds[spec.Key], BranchPath);
-
-            if (
-                await Tell(observer, (o, ct) => o.Decided(made, ct), at).ConfigureAwait(false) is
-                { } failed
-            )
-                return ObserverFailed(failed, step);
-        }
-
-        return this;
     }
 
     private sealed record ShadowResult(
@@ -1304,40 +1483,10 @@ public partial class Monad<TInput, TReturn>
 
         foreach (var (type, role) in deciders)
         {
-            IVetsQuestions? vetter;
-
-            try
-            {
-                vetter =
-                    (
-                        Memory.GetValueOrDefault(type)
-                        ?? (
-                            Memory.GetValueOrDefault(typeof(IServiceProvider)) as IServiceProvider
-                        )?.GetService(type)
-                    ) as IVetsQuestions;
-            }
-            catch
-            {
-                continue;
-            }
-
-            if (vetter is null)
+            if (FindVetter(type) is not { } vetter)
                 continue;
 
-            List<string> problems;
-
-            try
-            {
-                problems = (vetter.Problems(declared) ?? [])
-                    .Where(p => !string.IsNullOrWhiteSpace(p))
-                    .ToList();
-            }
-            catch (Exception e)
-            {
-                problems = [$"failed while vetting the questions: {e.Message}"];
-            }
-
-            foreach (var problem in problems)
+            foreach (var problem in VetProblems(vetter, declared))
                 Recorder
                     .NotNull()
                     .RefuseRecordedStep(
@@ -1347,6 +1496,42 @@ public partial class Monad<TInput, TReturn>
                         $"{step}: the {role} '{vetter.GetType().ReadableName()}' cannot answer it: "
                             + problem
                     );
+        }
+    }
+
+    /// <summary>
+    /// The decider of <paramref name="type"/> when it vets questions and can be found without
+    /// running anything; null when it cannot, or finding it threw.
+    /// </summary>
+    private IVetsQuestions? FindVetter(Type type)
+    {
+        try
+        {
+            return (
+                    Memory.GetValueOrDefault(type)
+                    ?? (
+                        Memory.GetValueOrDefault(typeof(IServiceProvider)) as IServiceProvider
+                    )?.GetService(type)
+                ) as IVetsQuestions;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>What <paramref name="vetter"/> says is wrong, or that it failed while vetting.</summary>
+    private static List<string> VetProblems(IVetsQuestions vetter, DeclaredQuestions declared)
+    {
+        try
+        {
+            return (vetter.Problems(declared) ?? [])
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .ToList();
+        }
+        catch (Exception e)
+        {
+            return [$"failed while vetting the questions: {e.Message}"];
         }
     }
 

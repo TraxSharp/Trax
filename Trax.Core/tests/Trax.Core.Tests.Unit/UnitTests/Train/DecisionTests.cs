@@ -134,14 +134,17 @@ public class DecisionTests : TestSetup
         string reason
     ) => Verify(Train(chain)).Should().Contain(f => f.IsRefusal && f.Reason.Contains(reason));
 
-    private static IEnumerable<TestCaseData> RefusedDeclarations()
-    {
-        TestCaseData Case(
-            string name,
-            Func<MonadTask<string, bool>, MonadTask<string, bool>> chain,
-            string reason
-        ) => new TestCaseData(chain, reason).SetName($"DeclaredChain_Refuses_{name}");
+    private static IEnumerable<TestCaseData> RefusedDeclarations() =>
+        RefusedTrackAndQuestionDeclarations().Concat(RefusedScaleAndShadowDeclarations());
 
+    private static TestCaseData Case(
+        string name,
+        Func<MonadTask<string, bool>, MonadTask<string, bool>> chain,
+        string reason
+    ) => new TestCaseData(chain, reason).SetName($"DeclaredChain_Refuses_{name}");
+
+    private static IEnumerable<TestCaseData> RefusedTrackAndQuestionDeclarations()
+    {
         yield return Case(
             "ATrackDeclaredTwice",
             t => t.Switch<string, Lane>(s => s.When(Lane.Left, l => l).When(Lane.Left, l => l)),
@@ -199,6 +202,10 @@ public class DecisionTests : TestSetup
                     .Switch<Lane>(s => s.When(Lane.Left, l => l).When((Lane)7, l => l)),
             "declares a track for '7', which is not a member of 'Lane'"
         );
+    }
+
+    private static IEnumerable<TestCaseData> RefusedScaleAndShadowDeclarations()
+    {
         yield return Case(
             "AScaleTrackOnAValueTheEnumDoesNotDefine",
             t =>

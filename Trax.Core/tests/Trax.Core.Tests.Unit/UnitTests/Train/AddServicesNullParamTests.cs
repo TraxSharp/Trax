@@ -280,56 +280,11 @@ public class AddServicesNullParamTests : TestSetup
         var s5 = new TestService5();
         var s6 = new TestService6();
 
-        var a1 = Fails(monad =>
-            monad.AddServices<
-                ITestService1,
-                ITestService2,
-                ITestService3,
-                ITestService4,
-                ITestService5,
-                ITestService6
-            >(Null.Of<ITestService1>(), s2, s3, s4, s5, s6)
-        );
-        var a2 = Fails(monad =>
-            monad.AddServices<
-                ITestService1,
-                ITestService2,
-                ITestService3,
-                ITestService4,
-                ITestService5,
-                ITestService6
-            >(s1, Null.Of<ITestService2>(), s3, s4, s5, s6)
-        );
-        var a3 = Fails(monad =>
-            monad.AddServices<
-                ITestService1,
-                ITestService2,
-                ITestService3,
-                ITestService4,
-                ITestService5,
-                ITestService6
-            >(s1, s2, Null.Of<ITestService3>(), s4, s5, s6)
-        );
-        var a4 = Fails(monad =>
-            monad.AddServices<
-                ITestService1,
-                ITestService2,
-                ITestService3,
-                ITestService4,
-                ITestService5,
-                ITestService6
-            >(s1, s2, s3, Null.Of<ITestService4>(), s5, s6)
-        );
-        var a5 = Fails(monad =>
-            monad.AddServices<
-                ITestService1,
-                ITestService2,
-                ITestService3,
-                ITestService4,
-                ITestService5,
-                ITestService6
-            >(s1, s2, s3, s4, Null.Of<ITestService5>(), s6)
-        );
+        var a1 = FailsT6(Null.Of<ITestService1>(), s2, s3, s4, s5, s6);
+        var a2 = FailsT6(s1, Null.Of<ITestService2>(), s3, s4, s5, s6);
+        var a3 = FailsT6(s1, s2, Null.Of<ITestService3>(), s4, s5, s6);
+        var a4 = FailsT6(s1, s2, s3, Null.Of<ITestService4>(), s5, s6);
+        var a5 = FailsT6(s1, s2, s3, s4, Null.Of<ITestService5>(), s6);
 
         a1.Should().BeOfType<TrainException>();
         a2.Should().BeOfType<TrainException>();
@@ -349,72 +304,12 @@ public class AddServicesNullParamTests : TestSetup
         var s6 = new TestService6();
         var s7 = new TestService7();
 
-        var a1 = Fails(monad =>
-            monad.AddServices<
-                ITestService1,
-                ITestService2,
-                ITestService3,
-                ITestService4,
-                ITestService5,
-                ITestService6,
-                ITestService7
-            >(Null.Of<ITestService1>(), s2, s3, s4, s5, s6, s7)
-        );
-        var a2 = Fails(monad =>
-            monad.AddServices<
-                ITestService1,
-                ITestService2,
-                ITestService3,
-                ITestService4,
-                ITestService5,
-                ITestService6,
-                ITestService7
-            >(s1, Null.Of<ITestService2>(), s3, s4, s5, s6, s7)
-        );
-        var a3 = Fails(monad =>
-            monad.AddServices<
-                ITestService1,
-                ITestService2,
-                ITestService3,
-                ITestService4,
-                ITestService5,
-                ITestService6,
-                ITestService7
-            >(s1, s2, Null.Of<ITestService3>(), s4, s5, s6, s7)
-        );
-        var a4 = Fails(monad =>
-            monad.AddServices<
-                ITestService1,
-                ITestService2,
-                ITestService3,
-                ITestService4,
-                ITestService5,
-                ITestService6,
-                ITestService7
-            >(s1, s2, s3, Null.Of<ITestService4>(), s5, s6, s7)
-        );
-        var a5 = Fails(monad =>
-            monad.AddServices<
-                ITestService1,
-                ITestService2,
-                ITestService3,
-                ITestService4,
-                ITestService5,
-                ITestService6,
-                ITestService7
-            >(s1, s2, s3, s4, Null.Of<ITestService5>(), s6, s7)
-        );
-        var a6 = Fails(monad =>
-            monad.AddServices<
-                ITestService1,
-                ITestService2,
-                ITestService3,
-                ITestService4,
-                ITestService5,
-                ITestService6,
-                ITestService7
-            >(s1, s2, s3, s4, s5, Null.Of<ITestService6>(), s7)
-        );
+        var a1 = FailsT7(Null.Of<ITestService1>(), s2, s3, s4, s5, s6, s7);
+        var a2 = FailsT7(s1, Null.Of<ITestService2>(), s3, s4, s5, s6, s7);
+        var a3 = FailsT7(s1, s2, Null.Of<ITestService3>(), s4, s5, s6, s7);
+        var a4 = FailsT7(s1, s2, s3, Null.Of<ITestService4>(), s5, s6, s7);
+        var a5 = FailsT7(s1, s2, s3, s4, Null.Of<ITestService5>(), s6, s7);
+        var a6 = FailsT7(s1, s2, s3, s4, s5, Null.Of<ITestService6>(), s7);
 
         a1.Should().BeOfType<TrainException>();
         a2.Should().BeOfType<TrainException>();
@@ -423,6 +318,46 @@ public class AddServicesNullParamTests : TestSetup
         a5.Should().BeOfType<TrainException>();
         a6.Should().BeOfType<TrainException>();
     }
+
+    private static Exception FailsT6(
+        ITestService1 s1,
+        ITestService2 s2,
+        ITestService3 s3,
+        ITestService4 s4,
+        ITestService5 s5,
+        ITestService6 s6
+    ) =>
+        Fails(monad =>
+            monad.AddServices<
+                ITestService1,
+                ITestService2,
+                ITestService3,
+                ITestService4,
+                ITestService5,
+                ITestService6
+            >(s1, s2, s3, s4, s5, s6)
+        );
+
+    private static Exception FailsT7(
+        ITestService1 s1,
+        ITestService2 s2,
+        ITestService3 s3,
+        ITestService4 s4,
+        ITestService5 s5,
+        ITestService6 s6,
+        ITestService7 s7
+    ) =>
+        Fails(monad =>
+            monad.AddServices<
+                ITestService1,
+                ITestService2,
+                ITestService3,
+                ITestService4,
+                ITestService5,
+                ITestService6,
+                ITestService7
+            >(s1, s2, s3, s4, s5, s6, s7)
+        );
 
     /// <summary>
     /// Runs <paramref name="add"/> on a fresh chain and returns what it recorded. A null service
