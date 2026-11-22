@@ -122,7 +122,7 @@ public class ScaffoldedTemplateTests
         // and -t:PublishContainer puts the publish output in /app.
         var dir = await Scaffold("trax-hub");
         // Outside the project, whose globs would otherwise pick the output up.
-        var output = Path.Combine(_workDir, "trax-hub-publish");
+        var output = Path.Combine(_workDir.NotNull(), "trax-hub-publish");
 
         var publish = await Run(
             dir,
