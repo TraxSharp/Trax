@@ -90,32 +90,38 @@ public static partial class Fences
                 j++;
             }
 
-            var words = info.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-            var language = words.Length > 0 ? words[0].ToLowerInvariant() : "";
-            var markers = words.Skip(1).ToList();
-            var from = markers
-                .FirstOrDefault(w => w.StartsWith(FromMarker, StringComparison.Ordinal))
-                ?[FromMarker.Length..];
-            var hash = from?.IndexOf('#', StringComparison.Ordinal) ?? -1;
-
-            yield return new Fence(
-                page,
-                i + 1,
-                language,
-                GroupsOf(markers, i + 1),
-                string.Join('\n', body)
-            )
-            {
-                IsFragment = markers.Contains(FragmentMarker, StringComparer.Ordinal),
-                From = from is null || hash < 0 ? from : from[..hash],
-                FromRegion = from is null || hash < 0 ? null : from[(hash + 1)..],
-                File = markers
-                    .FirstOrDefault(w => w.StartsWith(FileWord, StringComparison.Ordinal))
-                    ?[FileWord.Length..],
-                Section = section,
-            };
+            yield return Described(page, i + 1, info, body, section);
             i = j;
         }
+    }
+
+    /// <summary>The fence opening on <paramref name="line"/>, described by its info string.</summary>
+    private static Fence Described(
+        string page,
+        int line,
+        string info,
+        List<string> body,
+        string? section
+    )
+    {
+        var words = info.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        var language = words.Length > 0 ? words[0].ToLowerInvariant() : "";
+        var markers = words.Skip(1).ToList();
+        var from = markers
+            .FirstOrDefault(w => w.StartsWith(FromMarker, StringComparison.Ordinal))
+            ?[FromMarker.Length..];
+        var hash = from?.IndexOf('#', StringComparison.Ordinal) ?? -1;
+
+        return new Fence(page, line, language, GroupsOf(markers, line), string.Join('\n', body))
+        {
+            IsFragment = markers.Contains(FragmentMarker, StringComparer.Ordinal),
+            From = from is null || hash < 0 ? from : from[..hash],
+            FromRegion = from is null || hash < 0 ? null : from[(hash + 1)..],
+            File = markers
+                .FirstOrDefault(w => w.StartsWith(FileWord, StringComparison.Ordinal))
+                ?[FileWord.Length..],
+            Section = section,
+        };
     }
 
     /// <summary>Every fence in every markdown file under the docs root, published or not.</summary>

@@ -38,79 +38,22 @@ public static class CSharp
         var output = source.ToCharArray();
         var i = 0;
 
-        void Blank(int from, int to)
-        {
-            for (var k = from; k < to && k < output.Length; k++)
-            {
-                if (output[k] != '\n' && output[k] != '\r')
-                    output[k] = ' ';
-            }
-        }
-
         while (i < source.Length)
         {
             var c = source[i];
 
-            // Comments are walked either way. Stepping over one is what stops a quote inside
-            // it from opening a literal and blanking the code that follows.
-            if (c == '/' && i + 1 < source.Length && source[i + 1] == '/')
+            var commentEnd = CommentEnd(source, i);
+            if (commentEnd >= 0)
             {
-                var end = source.IndexOf('\n', i);
-                end = end < 0 ? source.Length : end;
                 if (blankComments)
-                    Blank(i, end);
-                i = end;
-                continue;
-            }
-
-            // A preprocessor directive runs to the end of its line and holds no literal. Its
-            // text is free prose, so '#region the connection's operations' must not open a
-            // character literal and blank the rest of the file.
-            if (c == '#' && AtLineStart(source, i))
-            {
-                var end = source.IndexOf('\n', i);
-                end = end < 0 ? source.Length : end;
-                if (blankComments)
-                    Blank(i, end);
-                i = end;
-                continue;
-            }
-
-            if (c == '/' && i + 1 < source.Length && source[i + 1] == '*')
-            {
-                var end = source.IndexOf("*/", i + 2, StringComparison.Ordinal);
-                end = end < 0 ? source.Length : end + 2;
-                if (blankComments)
-                    Blank(i, end);
-                i = end;
+                    Blank(output, i, commentEnd);
+                i = commentEnd;
                 continue;
             }
 
             if (c == '"' && i + 2 < source.Length && source[i + 1] == '"' && source[i + 2] == '"')
             {
-                var open = 0;
-                while (i + open < source.Length && source[i + open] == '"')
-                    open++;
-
-                var scan = i + open;
-                while (scan < source.Length)
-                {
-                    if (source[scan] != '"')
-                    {
-                        scan++;
-                        continue;
-                    }
-
-                    var run = 0;
-                    while (scan + run < source.Length && source[scan + run] == '"')
-                        run++;
-                    if (run >= open)
-                        break;
-                    scan += run;
-                }
-
-                Blank(i + open, Math.Min(scan, source.Length));
-                i = scan >= source.Length ? source.Length : scan + open;
+                i = SkipRawString(source, output, i);
                 continue;
             }
 
@@ -125,27 +68,7 @@ public static class CSharp
 
             if (verbatim || interpolated)
             {
-                var quote = source.IndexOf('"', i);
-                var scan = quote + 1;
-                while (scan < source.Length)
-                {
-                    if (source[scan] != '"')
-                    {
-                        scan++;
-                        continue;
-                    }
-
-                    if (scan + 1 < source.Length && source[scan + 1] == '"')
-                    {
-                        scan += 2;
-                        continue;
-                    }
-
-                    break;
-                }
-
-                Blank(quote + 1, Math.Min(scan, source.Length));
-                i = scan < source.Length ? scan + 1 : source.Length;
+                i = SkipVerbatimString(source, output, i);
                 continue;
             }
 
@@ -155,7 +78,7 @@ public static class CSharp
                 while (scan < source.Length && source[scan] != c)
                     scan += source[scan] == '\\' ? 2 : 1;
 
-                Blank(i + 1, Math.Min(scan, source.Length));
+                Blank(output, i + 1, Math.Min(scan, source.Length));
                 i = scan < source.Length ? scan + 1 : source.Length;
                 continue;
             }
@@ -164,6 +87,109 @@ public static class CSharp
         }
 
         return new string(output);
+    }
+
+    /// <summary>
+    /// The end of the comment or preprocessor directive starting at <paramref name="i"/>, or -1
+    /// when none starts there.
+    /// </summary>
+    private static int CommentEnd(string source, int i)
+    {
+        var c = source[i];
+
+        // Comments are walked either way. Stepping over one is what stops a quote inside
+        // it from opening a literal and blanking the code that follows.
+        if (c == '/' && i + 1 < source.Length && source[i + 1] == '/')
+        {
+            var end = source.IndexOf('\n', i);
+            return end < 0 ? source.Length : end;
+        }
+
+        // A preprocessor directive runs to the end of its line and holds no literal. Its
+        // text is free prose, so '#region the connection's operations' must not open a
+        // character literal and blank the rest of the file.
+        if (c == '#' && AtLineStart(source, i))
+        {
+            var end = source.IndexOf('\n', i);
+            return end < 0 ? source.Length : end;
+        }
+
+        if (c == '/' && i + 1 < source.Length && source[i + 1] == '*')
+        {
+            var end = source.IndexOf("*/", i + 2, StringComparison.Ordinal);
+            return end < 0 ? source.Length : end + 2;
+        }
+
+        return -1;
+    }
+
+    private static void Blank(char[] output, int from, int to)
+    {
+        for (var k = from; k < to && k < output.Length; k++)
+        {
+            if (output[k] != '\n' && output[k] != '\r')
+                output[k] = ' ';
+        }
+    }
+
+    /// <summary>
+    /// Blanks the raw string literal opening at <paramref name="i"/> and returns the index
+    /// after it.
+    /// </summary>
+    private static int SkipRawString(string source, char[] output, int i)
+    {
+        var open = 0;
+        while (i + open < source.Length && source[i + open] == '"')
+            open++;
+
+        var scan = i + open;
+        while (scan < source.Length)
+        {
+            if (source[scan] != '"')
+            {
+                scan++;
+                continue;
+            }
+
+            var run = 0;
+            while (scan + run < source.Length && source[scan + run] == '"')
+                run++;
+            if (run >= open)
+                break;
+            scan += run;
+        }
+
+        Blank(output, i + open, Math.Min(scan, source.Length));
+        return scan >= source.Length ? source.Length : scan + open;
+    }
+
+    /// <summary>
+    /// Blanks the verbatim string literal opening at <paramref name="i"/> and returns the index
+    /// after it.
+    /// </summary>
+    private static int SkipVerbatimString(string source, char[] output, int i)
+    {
+        var quote = source.IndexOf('"', i);
+        var scan = quote + 1;
+        while (scan < source.Length)
+        {
+            if (source[scan] != '"')
+            {
+                scan++;
+                continue;
+            }
+
+            if (scan + 1 < source.Length && source[scan + 1] == '"')
+            {
+                scan += 2;
+                continue;
+            }
+
+            break;
+        }
+
+        Blank(output, quote + 1, Math.Min(scan, source.Length));
+        return scan < source.Length ? scan + 1 : source.Length;
     }
 
     /// <summary>Whether only whitespace precedes <paramref name="index"/> on its line.</summary>

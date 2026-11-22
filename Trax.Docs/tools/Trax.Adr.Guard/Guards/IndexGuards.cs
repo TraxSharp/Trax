@@ -78,6 +78,20 @@ public static partial class IndexGuards
             }
         }
 
+        CheckListedRows(adrs, listed, heading, frontmatterKey, offenders);
+
+        return new GuardResult(name, offenders, adrs.Count, Rule(heading, frontmatterKey));
+    }
+
+    /// <summary>Every file a tag row lists exists and declares that tag.</summary>
+    private static void CheckListedRows(
+        IReadOnlyList<Adr> adrs,
+        Dictionary<string, HashSet<string>> listed,
+        string heading,
+        string frontmatterKey,
+        List<string> offenders
+    )
+    {
         // Index -> frontmatter.
         // The same file name twice (an ADR and its copy in a subfolder) is frontmatter/file-names'
         // failure to report; the first one answers here rather than the check throwing.
@@ -103,8 +117,6 @@ public static partial class IndexGuards
                     );
             }
         }
-
-        return new GuardResult(name, offenders, adrs.Count, Rule(heading, frontmatterKey));
     }
 
     /// <summary>The full table lists every ADR exactly once, with its title and its tags.</summary>
@@ -144,31 +156,7 @@ public static partial class IndexGuards
                 continue;
             }
 
-            // Every row is checked, not the last one parsed. A second row for the same ADR is
-            // what a bad merge of two branches that each edited the row leaves behind, and a
-            // reader sees both; keeping only the last let the stale one say anything at all.
-            if (listed.Count > 1)
-                offenders.Add(
-                    $"'## {FullListHeading}': {adr.FileName} is listed {listed.Count} times. "
-                        + "Each ADR has one row."
-                );
-
-            foreach (var row in listed)
-            {
-                if (
-                    adr.Title is not null
-                    && !string.Equals(row.Title, adr.Title, StringComparison.Ordinal)
-                )
-                    offenders.Add(
-                        $"'## {FullListHeading}': the row for {adr.FileName} says '{row.Title}' but the "
-                            + $"document's title is '{adr.Title}'"
-                    );
-
-                if (options.RequireReposKey)
-                    CompareTags(offenders, adr, "repos", row.Repos);
-
-                CompareTags(offenders, adr, "areas", row.Areas);
-            }
+            CheckFullRows(adr, listed, options, offenders);
         }
 
         var known = adrs.Select(a => a.FileName).ToHashSet(StringComparer.Ordinal);
@@ -176,6 +164,41 @@ public static partial class IndexGuards
             offenders.Add($"'## {FullListHeading}': lists {file}, which does not exist");
 
         return new GuardResult(name, offenders, adrs.Count, rule);
+    }
+
+    /// <summary>Checks every full-table row for one ADR against its title and its tags.</summary>
+    private static void CheckFullRows(
+        Adr adr,
+        List<FullRow> listed,
+        GuardOptions options,
+        List<string> offenders
+    )
+    {
+        // Every row is checked, not the last one parsed. A second row for the same ADR is
+        // what a bad merge of two branches that each edited the row leaves behind, and a
+        // reader sees both; keeping only the last let the stale one say anything at all.
+        if (listed.Count > 1)
+            offenders.Add(
+                $"'## {FullListHeading}': {adr.FileName} is listed {listed.Count} times. "
+                    + "Each ADR has one row."
+            );
+
+        foreach (var row in listed)
+        {
+            if (
+                adr.Title is not null
+                && !string.Equals(row.Title, adr.Title, StringComparison.Ordinal)
+            )
+                offenders.Add(
+                    $"'## {FullListHeading}': the row for {adr.FileName} says '{row.Title}' but the "
+                        + $"document's title is '{adr.Title}'"
+                );
+
+            if (options.RequireReposKey)
+                CompareTags(offenders, adr, "repos", row.Repos);
+
+            CompareTags(offenders, adr, "areas", row.Areas);
+        }
     }
 
     private static string Rule(string heading, string key) =>

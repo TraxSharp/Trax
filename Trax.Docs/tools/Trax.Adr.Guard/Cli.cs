@@ -66,6 +66,19 @@ public static class Cli
             }
         }
 
+        return Validate(repo, adrRoot, testRoots, areas, repos, requireRepos, censusRoot);
+    }
+
+    private static Parsed Validate(
+        string repo,
+        string adrRoot,
+        List<string> testRoots,
+        HashSet<string> areas,
+        HashSet<string> repos,
+        bool requireRepos,
+        string? censusRoot
+    )
+    {
         if (!Directory.Exists(repo))
             return new Parsed(Options: null, $"Repository '{repo}' does not exist.");
 

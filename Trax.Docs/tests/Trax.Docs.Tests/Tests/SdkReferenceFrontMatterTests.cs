@@ -324,23 +324,8 @@ public partial class SdkReferenceFrontMatterTests
                 continue;
 
             checkedPages++;
-            var words = Word.Matches(
-                    await File.ReadAllTextAsync(project.Baseline).ConfigureAwait(false)
-                )
-                .Select(m => m.Value)
-                .ToHashSet(StringComparer.Ordinal);
-
-            var missing = SignatureFences(
-                    await File.ReadAllTextAsync(RepoRoot.Combine(page.Split('/')))
-                        .ConfigureAwait(false)
-                )
-                .SelectMany(f => DeclaredNames(f.Code).Select(n => (f.Line, Name: n)))
-                .Where(x => !words.Contains(x.Name))
-                .Select(x =>
-                    string.Create(CultureInfo.InvariantCulture, $"{x.Name} (line {x.Line})")
-                )
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
+            var missing = await MissingFromBaselineAsync(page, project.Baseline)
+                .ConfigureAwait(false);
             if (missing.Count > 0)
                 mismatched[page] = missing;
         }
@@ -560,6 +545,23 @@ public partial class SdkReferenceFrontMatterTests
         packable["Trax.Scheduler"].Baseline.Should().EndWith("Trax.Scheduler.received.txt");
     }
 
+    /// <summary>The names the page's signature fences declare that the baseline lacks.</summary>
+    private static async Task<List<string>> MissingFromBaselineAsync(string page, string baseline)
+    {
+        var words = Word.Matches(await File.ReadAllTextAsync(baseline).ConfigureAwait(false))
+            .Select(m => m.Value)
+            .ToHashSet(StringComparer.Ordinal);
+
+        return SignatureFences(
+                await File.ReadAllTextAsync(RepoRoot.Combine(page.Split('/'))).ConfigureAwait(false)
+            )
+            .SelectMany(f => DeclaredNames(f.Code).Select(n => (f.Line, Name: n)))
+            .Where(x => !words.Contains(x.Name))
+            .Select(x => string.Create(CultureInfo.InvariantCulture, $"{x.Name} (line {x.Line})"))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+
     /// <summary>The published SDK reference pages below the section and folder indexes.</summary>
     private static IEnumerable<string> LeafPages() =>
         RepoRoot.PublishedPages().Where(DocsSite.IsSdkReferenceLeaf);
@@ -619,6 +621,18 @@ public partial class SdkReferenceFrontMatterTests
             );
         }
 
+        CheckSources(frontMatter, missing, wrong);
+
+        return (missing, wrong);
+    }
+
+    /// <summary>Every <c>source</c> is a forward-slash path that exists in the repository.</summary>
+    private static void CheckSources(
+        FrontMatter frontMatter,
+        List<string> missing,
+        List<string> wrong
+    )
+    {
         var sources = frontMatter.List("source");
         if (sources.Count == 0)
             missing.Add("source");
@@ -635,8 +649,6 @@ public partial class SdkReferenceFrontMatterTests
             else if (!RepoRoot.ExistsInMonorepo(source))
                 wrong.Add($"source {source} does not exist");
         }
-
-        return (missing, wrong);
     }
 
     /// <summary>

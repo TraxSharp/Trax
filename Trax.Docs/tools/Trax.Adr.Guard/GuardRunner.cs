@@ -33,6 +33,24 @@ public static class GuardRunner
             ];
         }
 
+        var checks = Checks(adrs, options);
+
+        var results = new List<GuardResult>
+        {
+            GuardResult.Ok("corpus/discovery", adrs.Count, "Found ADRs to check."),
+        };
+        foreach (var (name, run) in checks)
+            results.Add(await GuardedAsync(name, run).ConfigureAwait(false));
+
+        return results;
+    }
+
+    /// <summary>The checks to run on a non-empty corpus, in report order.</summary>
+    private static List<(string Name, Func<Task<GuardResult>> Run)> Checks(
+        IReadOnlyList<Adr> adrs,
+        GuardOptions options
+    )
+    {
         var checks = new List<(string Name, Func<Task<GuardResult>> Run)>
         {
             ("frontmatter/parseable", Now(() => FrontmatterGuards.Parseable(adrs))),
@@ -78,14 +96,7 @@ public static class GuardRunner
                 ("census/classified", Now(() => CensusGuards.EveryGuardIsClassified(adrs, options)))
             );
 
-        var results = new List<GuardResult>
-        {
-            GuardResult.Ok("corpus/discovery", adrs.Count, "Found ADRs to check."),
-        };
-        foreach (var (name, run) in checks)
-            results.Add(await GuardedAsync(name, run).ConfigureAwait(false));
-
-        return results;
+        return checks;
     }
 
     /// <summary>A check that finishes without waiting on anything, in the shape the runner awaits.</summary>

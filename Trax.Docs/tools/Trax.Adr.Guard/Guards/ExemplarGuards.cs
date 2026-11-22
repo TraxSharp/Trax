@@ -97,47 +97,7 @@ public static partial class ExemplarGuards
                 continue;
             }
 
-            // Markers and claims are read from prose only, both here and in Claims below. A
-            // fenced example quoting the template is not this document declaring anything, and
-            // reading it as one let an ADR whose real Exemplars section was silent satisfy the
-            // check.
-            var prose = Markdown.WithoutFences(section);
-            var claims = Claims(section);
-            var unenforced = prose.Contains(UnenforcedMarker, StringComparison.Ordinal);
-            var elsewhere = prose.Contains(ElsewhereMarker, StringComparison.Ordinal);
-
-            if (unenforced && (claims.Count > 0 || elsewhere))
-            {
-                offenders.Add(
-                    $"{adr.RelativePath}: declares '{UnenforcedMarker}' AND claims enforcement. It is "
-                        + "one or the other; if something does enforce it, drop the marker."
-                );
-                continue;
-            }
-
-            if (claims.Count == 0 && !unenforced && !elsewhere)
-            {
-                offenders.Add(
-                    $"{adr.RelativePath}: names no guard in this repo and declares neither "
-                        + $"'{ElsewhereMarker}' nor '{UnenforcedMarker}'. Silence reads as a rule the "
-                        + "build is holding for you."
-                );
-                continue;
-            }
-
-            if (unenforced)
-            {
-                var problem = Reasons.Problem(ReasonText(prose, UnenforcedMarker));
-                if (problem is not null)
-                    offenders.Add($"{adr.RelativePath}: '{UnenforcedMarker}' {problem}");
-            }
-
-            if (elsewhere)
-            {
-                var problem = Reasons.Problem(ReasonText(prose, ElsewhereMarker));
-                if (problem is not null)
-                    offenders.Add($"{adr.RelativePath}: '{ElsewhereMarker}' {problem}");
-            }
+            CheckSection(adr, section, offenders);
         }
 
         return new GuardResult(
@@ -152,6 +112,52 @@ public static partial class ExemplarGuards
                 + "the guards do NOT cover is the half no test can verify and the half that stops a "
                 + "reader over-trusting the link."
         );
+    }
+
+    /// <summary>Checks one ADR's '## Exemplars' section, adding what it gets wrong.</summary>
+    private static void CheckSection(Adr adr, string section, List<string> offenders)
+    {
+        // Markers and claims are read from prose only, both here and in Claims below. A
+        // fenced example quoting the template is not this document declaring anything, and
+        // reading it as one let an ADR whose real Exemplars section was silent satisfy the
+        // check.
+        var prose = Markdown.WithoutFences(section);
+        var claims = Claims(section);
+        var unenforced = prose.Contains(UnenforcedMarker, StringComparison.Ordinal);
+        var elsewhere = prose.Contains(ElsewhereMarker, StringComparison.Ordinal);
+
+        if (unenforced && (claims.Count > 0 || elsewhere))
+        {
+            offenders.Add(
+                $"{adr.RelativePath}: declares '{UnenforcedMarker}' AND claims enforcement. It is "
+                    + "one or the other; if something does enforce it, drop the marker."
+            );
+            return;
+        }
+
+        if (claims.Count == 0 && !unenforced && !elsewhere)
+        {
+            offenders.Add(
+                $"{adr.RelativePath}: names no guard in this repo and declares neither "
+                    + $"'{ElsewhereMarker}' nor '{UnenforcedMarker}'. Silence reads as a rule the "
+                    + "build is holding for you."
+            );
+            return;
+        }
+
+        if (unenforced)
+        {
+            var problem = Reasons.Problem(ReasonText(prose, UnenforcedMarker));
+            if (problem is not null)
+                offenders.Add($"{adr.RelativePath}: '{UnenforcedMarker}' {problem}");
+        }
+
+        if (elsewhere)
+        {
+            var problem = Reasons.Problem(ReasonText(prose, ElsewhereMarker));
+            if (problem is not null)
+                offenders.Add($"{adr.RelativePath}: '{ElsewhereMarker}' {problem}");
+        }
     }
 
     /// <summary>
@@ -199,31 +205,7 @@ public static partial class ExemplarGuards
                     continue;
                 }
 
-                if (answering.Count > 1)
-                {
-                    offenders.Add(
-                        $"{adr.RelativePath}: names '{claim}', and {answering.Count} classes claim "
-                            + $"it back: {string.Join(", ", answering.Select(a => AdrCorpus.Relative(a.File, options)))}. "
-                            + "A claim must resolve to one declaration; drop the attribute from the others."
-                    );
-                    continue;
-                }
-
-                if (classes.ContainsKey(claim))
-                {
-                    offenders.Add(
-                        $"{adr.RelativePath}: names '{claim}', which exists but does not claim this ADR "
-                            + $"back. Put [Property(\"adr\", \"...{adr.FileName}\")] on the class that "
-                            + "enforces it, so the claim resolves to one declaration rather than to a name."
-                    );
-                    continue;
-                }
-
-                offenders.Add(
-                    $"{adr.RelativePath}: names '{claim}', which is not a class under "
-                        + $"{string.Join(" or ", options.TestRoots)}/. If it lives in another repo, "
-                        + "cite it by qualified path so it reads as prose rather than a claim."
-                );
+                offenders.Add(UnresolvedClaim(adr, claim, answering, classes, options));
             }
         }
 
@@ -236,6 +218,37 @@ public static partial class ExemplarGuards
                 + "class happens to share the name.",
             AllowsEmpty: true
         );
+    }
+
+    /// <summary>
+    /// The offender for a claim that no single declaration answers: claimed back by several
+    /// classes, named but not claiming the ADR back, or not a class at all.
+    /// </summary>
+    private static string UnresolvedClaim(
+        Adr adr,
+        string claim,
+        List<(string Name, string Adr, string File)> answering,
+        Dictionary<string, string> classes,
+        GuardOptions options
+    )
+    {
+        if (answering.Count > 1)
+        {
+            return $"{adr.RelativePath}: names '{claim}', and {answering.Count} classes claim "
+                + $"it back: {string.Join(", ", answering.Select(a => AdrCorpus.Relative(a.File, options)))}. "
+                + "A claim must resolve to one declaration; drop the attribute from the others.";
+        }
+
+        if (classes.ContainsKey(claim))
+        {
+            return $"{adr.RelativePath}: names '{claim}', which exists but does not claim this ADR "
+                + $"back. Put [Property(\"adr\", \"...{adr.FileName}\")] on the class that "
+                + "enforces it, so the claim resolves to one declaration rather than to a name.";
+        }
+
+        return $"{adr.RelativePath}: names '{claim}', which is not a class under "
+            + $"{string.Join(" or ", options.TestRoots)}/. If it lives in another repo, "
+            + "cite it by qualified path so it reads as prose rather than a claim.";
     }
 
     /// <summary>
@@ -635,30 +648,39 @@ public static partial class ExemplarGuards
                 continue;
             }
 
-            if (IsAdrAttribute(line))
-            {
-                // Every ADR the attributes above a class name belongs to that class. Keeping
-                // only the last let a second attribute silently cancel the first.
-                pending.AddRange(GuardProperty.Matches(line).Select(m => m.Groups["adr"].Value));
-                continue;
-            }
-
-            var declaration = ClassDeclaration.Match(line);
-            if (declaration.Success)
-            {
-                foreach (var adr in pending)
-                    declared.Add((declaration.Groups["name"].Value, adr));
-                pending.Clear();
-                continue;
-            }
-
-            // Anything else between the attribute and a class ends the pairing, so a
-            // class declaration quoted in a fixture string cannot inherit it.
-            if (!line.TrimStart().StartsWith('[') && line.Trim().Length > 0)
-                pending.Clear();
+            PairLine(line, pending, declared);
         }
 
         return declared;
+    }
+
+    /// <summary>
+    /// Pairs one joined code line: collects an ADR attribute, credits a class declaration with
+    /// the attributes above it, or ends the pairing.
+    /// </summary>
+    private static void PairLine(string line, List<string> pending, List<(string, string)> declared)
+    {
+        if (IsAdrAttribute(line))
+        {
+            // Every ADR the attributes above a class name belongs to that class. Keeping
+            // only the last let a second attribute silently cancel the first.
+            pending.AddRange(GuardProperty.Matches(line).Select(m => m.Groups["adr"].Value));
+            return;
+        }
+
+        var declaration = ClassDeclaration.Match(line);
+        if (declaration.Success)
+        {
+            foreach (var adr in pending)
+                declared.Add((declaration.Groups["name"].Value, adr));
+            pending.Clear();
+            return;
+        }
+
+        // Anything else between the attribute and a class ends the pairing, so a
+        // class declaration quoted in a fixture string cannot inherit it.
+        if (!line.TrimStart().StartsWith('[') && line.Trim().Length > 0)
+            pending.Clear();
     }
 
     [GeneratedRegex(@"\s+", RegexOptions.None, matchTimeoutMilliseconds: 1000)]

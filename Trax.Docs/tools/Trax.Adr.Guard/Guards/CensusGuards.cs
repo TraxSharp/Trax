@@ -77,60 +77,81 @@ public static partial class CensusGuards
             .OrderBy(f => AdrCorpus.Relative(f, options), StringComparer.Ordinal);
 
         foreach (var file in files)
-        {
-            var path = AdrCorpus.Relative(file, options);
-
-            var source = File.ReadAllText(file);
-            var declarations = ExemplarGuards.Declarations(source);
-
-            foreach (var (guard, docstring) in GuardClasses(source))
-            {
-                // A guard is credited either because a local ADR names it, or because it names
-                // an ADR itself. The second case is what makes the census usable in a repo whose
-                // shared guards enforce decisions recorded in the central corpus: that corpus is
-                // not present here, so nothing local can name them.
-                //
-                // A claim credits only the class that answers it: the one in this file carrying
-                // the claiming ADR's attribute. Crediting by bare name let a second class sharing
-                // the name ride on the first's claim, neither named by a decision nor opted out.
-                var answersAClaim = claims.Exists(c =>
-                    string.Equals(c.Name, guard, StringComparison.Ordinal)
-                    && declarations.Any(d =>
-                        string.Equals(d.Name, guard, StringComparison.Ordinal)
-                        && d.Adr.EndsWith(c.FileName, StringComparison.Ordinal)
-                    )
-                );
-                var credited = answersAClaim || CitesAnAdr(docstring, local, options);
-                var reason = OptOutReason(docstring);
-
-                if (credited && reason is not null)
-                {
-                    offenders.Add(
-                        $"{path}: '{guard}' is named by an ADR AND declares '{OptOutMarker}'. It is "
-                            + "one or the other; if it enforces the ADR, drop the marker."
-                    );
-                    continue;
-                }
-
-                if (!credited && reason is null)
-                {
-                    offenders.Add(
-                        $"{path}: '{guard}' is named by no ADR and does not opt out. Add it to an "
-                            + $"ADR's '## {ExemplarGuards.Heading}' section, or write '{OptOutMarker} "
-                            + "<reason>' in its docstring."
-                    );
-                    continue;
-                }
-
-                var problem = reason is null ? null : Reasons.Problem(reason);
-                if (problem is not null)
-                    offenders.Add($"{path}: '{guard}' {problem}");
-
-                classified++;
-            }
-        }
+            classified += ClassifyFile(
+                AdrCorpus.Relative(file, options),
+                File.ReadAllText(file),
+                claims,
+                local,
+                options,
+                offenders
+            );
 
         return new GuardResult("census/classified", offenders, classified, rule);
+    }
+
+    /// <summary>
+    /// Classifies every guard class in one file, adding its offenders, and returns how many it
+    /// classified.
+    /// </summary>
+    private static int ClassifyFile(
+        string path,
+        string source,
+        List<(string Name, string FileName)> claims,
+        HashSet<string> local,
+        GuardOptions options,
+        List<string> offenders
+    )
+    {
+        var classified = 0;
+        var declarations = ExemplarGuards.Declarations(source);
+
+        foreach (var (guard, docstring) in GuardClasses(source))
+        {
+            // A guard is credited either because a local ADR names it, or because it names
+            // an ADR itself. The second case is what makes the census usable in a repo whose
+            // shared guards enforce decisions recorded in the central corpus: that corpus is
+            // not present here, so nothing local can name them.
+            //
+            // A claim credits only the class that answers it: the one in this file carrying
+            // the claiming ADR's attribute. Crediting by bare name let a second class sharing
+            // the name ride on the first's claim, neither named by a decision nor opted out.
+            var answersAClaim = claims.Exists(c =>
+                string.Equals(c.Name, guard, StringComparison.Ordinal)
+                && declarations.Any(d =>
+                    string.Equals(d.Name, guard, StringComparison.Ordinal)
+                    && d.Adr.EndsWith(c.FileName, StringComparison.Ordinal)
+                )
+            );
+            var credited = answersAClaim || CitesAnAdr(docstring, local, options);
+            var reason = OptOutReason(docstring);
+
+            if (credited && reason is not null)
+            {
+                offenders.Add(
+                    $"{path}: '{guard}' is named by an ADR AND declares '{OptOutMarker}'. It is "
+                        + "one or the other; if it enforces the ADR, drop the marker."
+                );
+                continue;
+            }
+
+            if (!credited && reason is null)
+            {
+                offenders.Add(
+                    $"{path}: '{guard}' is named by no ADR and does not opt out. Add it to an "
+                        + $"ADR's '## {ExemplarGuards.Heading}' section, or write '{OptOutMarker} "
+                        + "<reason>' in its docstring."
+                );
+                continue;
+            }
+
+            var problem = reason is null ? null : Reasons.Problem(reason);
+            if (problem is not null)
+                offenders.Add($"{path}: '{guard}' {problem}");
+
+            classified++;
+        }
+
+        return classified;
     }
 
     /// <summary>
