@@ -15,10 +15,6 @@ dotnet_diagnostic.TRX0025.severity = none
 # binary break.
 dotnet_diagnostic.TRX0049.severity = none
 
-# Deferred: methods past 60 lines, the longest ChainVerification.Replay (516) and
-# Monad.DecideAsync (414). Splitting them is a change to the chain runtime of its own.
-dotnet_diagnostic.TRX0051.severity = none
-
 # Exempt: the rule (deprecated upstream in favour of CA1822) asks for public instance members that
 # use no state to become static, which breaks every caller (IrMachine.Serialize and others).
 dotnet_diagnostic.TRX0038.severity = none
