@@ -4,8 +4,7 @@
     {
       "folder": "Trax.Analyzers",
       "upstream": [],
-      "dotnet": { "solution": "Trax.Analyzers.slnx", "pack": true, "coverage": false, "postgres": "", "rabbitmq": false, "databases": [], "timeout": 15, "test-args": "" },
-      "adr": { "adr-root": "docs/adr", "known-areas": "tooling,packaging,testing", "census-root": "tests/Trax.Analyzers.Package.Tests" }
+      "dotnet": { "solution": "Trax.Analyzers.slnx", "pack": true, "coverage": false, "postgres": "", "rabbitmq": false, "databases": [], "timeout": 15, "test-args": "" }
     },
     {
       "folder": "Trax.Core",

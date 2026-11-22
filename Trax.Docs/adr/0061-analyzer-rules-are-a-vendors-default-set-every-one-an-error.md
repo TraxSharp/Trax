@@ -80,8 +80,10 @@ dependency bumped by hand, the tag must be at least 7 days old.
 .NET folder to import the profile, holds each `.globalconfig` line to a reason and a rule
 `rules.txt` lists, and refuses every other way to turn a rule off, across the whole repository.
 `ProfileTests` and `BanTests` in `Trax.Analyzers/tests/Trax.Analyzers.Package.Tests` hold the
-generated configuration to `rules.txt` and require each ban to report. The build itself fails on
-any rule the profile reports.
+generated configuration to `rules.txt` and require each ban to report.
+`NoHandBuiltClockOrLoweringTests` in Trax.Api's and Trax.Scheduler's Tests.Meta projects refuse a
+query that reaches the clock or a lowering by building the expression node itself, which the
+profile cannot see. The build itself fails on any rule the profile reports.
 
 ## Changelog
 

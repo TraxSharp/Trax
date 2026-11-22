@@ -13,7 +13,10 @@ namespace Trax.Api.Tests.Meta.Tests;
 /// Building the node needs its member by name, so the guard looks for the lookup: the string
 /// <c>"UtcNow"</c>, <c>"ToLower"</c> or <c>"ToUpper"</c>, or a <c>nameof</c> of one of those
 /// members, in <c>src/</c> outside comments.
+///
+/// <para>Enforces <c>Trax.Docs/adr/0061-analyzer-rules-are-a-vendors-default-set-every-one-an-error.md</c>.</para>
 /// </remarks>
+[Property("adr", "Trax.Docs/adr/0061-analyzer-rules-are-a-vendors-default-set-every-one-an-error.md")]
 [TestFixture]
 public partial class NoHandBuiltClockOrLoweringTests
 {
