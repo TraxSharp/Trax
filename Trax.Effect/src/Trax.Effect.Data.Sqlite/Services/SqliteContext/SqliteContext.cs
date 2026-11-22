@@ -25,6 +25,7 @@ internal sealed class SqliteContext(DbContextOptions<SqliteContext> options)
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.AddRunExternalIdUnchanged();
+        modelBuilder.AddSqliteDatabaseFunctions();
 
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {

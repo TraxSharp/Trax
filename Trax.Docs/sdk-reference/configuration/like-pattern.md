@@ -49,7 +49,8 @@ and a term of only `%` does not match everything. A `null` term throws `Argument
 | `50%` | `%50\%%` |
 | `tenant_limit` | `%tenant\_limit%` |
 
-The match is case-insensitive when the column is lowered too, which every provider translates. On Postgres that becomes `lower(failure_reason) LIKE @pattern ESCAPE '\'`. The trigram indexes Trax
+The match is case-insensitive when the column is lowered too, by
+[`DatabaseFunctions.Lower`](/docs/sdk-reference/configuration/database-functions), which every provider translates. On Postgres that becomes `lower(failure_reason) LIKE @pattern ESCAPE '\'`. The trigram indexes Trax
 ships (`ix_log_message_trgm` and `ix_log_category_trgm` from migration
 [063](/docs/reference/schema-migrations#log-text-search-063), and
 `ix_metadata_failure_reason_trgm` from [066](/docs/reference/schema-migrations#failure-search-066))
@@ -71,11 +72,12 @@ public class FailureSearch(IDataContext db)
     {
         var pattern = LikePattern.Contains(term);
         return db.Metadatas.Where(m =>
-            EF.Functions.Like(m.FailureReason!.ToLower(), pattern, LikePattern.Escape));
+            EF.Functions.Like(DatabaseFunctions.Lower(m.FailureReason), pattern, LikePattern.Escape));
     }
 }
 ```
 
 ## See also
 
+- [DatabaseFunctions](/docs/sdk-reference/configuration/database-functions)
 - [IDataContext](/docs/sdk-reference/configuration/i-data-context)

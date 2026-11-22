@@ -317,6 +317,11 @@ namespace Trax.Effect.Data.Services.WorkQueuePromotion
 }
 namespace Trax.Effect.Data.Utils
 {
+    public static class DatabaseFunctions
+    {
+        public static string? Lower(string? value) { }
+        public static System.DateTime UtcNow() { }
+    }
     public static class LikePattern
     {
         public const string Escape = "\\";

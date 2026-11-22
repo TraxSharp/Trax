@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Extensions;
+using Trax.Effect.Data.Utils;
 
 namespace Trax.Effect.Data.Services.DomainContext;
 
@@ -54,8 +55,9 @@ public abstract class DomainDataContext<TSelf>(DbContextOptions<TSelf> options)
 
     /// <summary>
     /// Sealed. Sets <see cref="Schema"/> as the default schema when the provider is PostgreSQL (SQLite
-    /// and the in-memory provider have none), then calls <see cref="ConfigureModel"/>, then makes every
-    /// <see cref="DateTime"/> property read back as UTC. Put model configuration in
+    /// and the in-memory provider have none), then calls <see cref="ConfigureModel"/>, then maps
+    /// <see cref="DatabaseFunctions"/> for the provider, then makes every <see cref="DateTime"/>
+    /// property read back as UTC. Put model configuration in
     /// <see cref="ConfigureModel"/>.
     /// </summary>
     /// <param name="modelBuilder">The model being built.</param>
@@ -67,6 +69,8 @@ public abstract class DomainDataContext<TSelf>(DbContextOptions<TSelf> options)
             modelBuilder.HasDefaultSchema(Schema);
 
         ConfigureModel(modelBuilder);
+
+        modelBuilder.AddDatabaseFunctions(Database.ProviderName);
 
         modelBuilder.ApplyUtcDateTimeConverter();
     }

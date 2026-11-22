@@ -1706,57 +1706,20 @@ public partial class OperationsService : IOperationsService
         if (!string.IsNullOrEmpty(query.MessageContains))
         {
             var pattern = LikePattern.Contains(query.MessageContains);
-            logs = WhereLoweredLike(logs, l => l.Message, pattern);
+            logs = logs.Where(l =>
+                EF.Functions.Like(DatabaseFunctions.Lower(l.Message), pattern, LikePattern.Escape)
+            );
         }
 
         if (!string.IsNullOrEmpty(query.CategoryContains))
         {
             var pattern = LikePattern.Contains(query.CategoryContains);
-            logs = WhereLoweredLike(logs, l => l.Category, pattern);
+            logs = logs.Where(l =>
+                EF.Functions.Like(DatabaseFunctions.Lower(l.Category), pattern, LikePattern.Escape)
+            );
         }
 
         return logs;
-    }
-
-    // string.ToLower(), which every provider translates to SQL's LOWER(). It is put into the
-    // query as a node rather than written: written, it reads as a lowering in this process's
-    // culture, which it never is, since only the database evaluates it.
-    private static readonly System.Reflection.MethodInfo SqlLower = typeof(string)
-        .GetMethod("ToLower", Type.EmptyTypes)
-        .NotNull();
-
-    /// <summary>
-    /// The logs whose <paramref name="column"/>, lowered by the database, is LIKE
-    /// <paramref name="pattern"/>. The pattern stays a query parameter.
-    /// </summary>
-    private static IQueryable<Trax.Effect.Models.Log.Log> WhereLoweredLike(
-        IQueryable<Trax.Effect.Models.Log.Log> logs,
-        System.Linq.Expressions.Expression<Func<Trax.Effect.Models.Log.Log, string>> column,
-        string pattern
-    )
-    {
-        System.Linq.Expressions.Expression<Func<string, bool>> like = lowered =>
-            EF.Functions.Like(lowered, pattern, LikePattern.Escape);
-        var body = new ReplaceParameter(
-            like.Parameters[0],
-            System.Linq.Expressions.Expression.Call(column.Body, SqlLower)
-        ).Visit(like.Body);
-        return logs.Where(
-            System.Linq.Expressions.Expression.Lambda<Func<Trax.Effect.Models.Log.Log, bool>>(
-                body,
-                column.Parameters
-            )
-        );
-    }
-
-    private sealed class ReplaceParameter(
-        System.Linq.Expressions.ParameterExpression parameter,
-        System.Linq.Expressions.Expression replacement
-    ) : System.Linq.Expressions.ExpressionVisitor
-    {
-        protected override System.Linq.Expressions.Expression VisitParameter(
-            System.Linq.Expressions.ParameterExpression node
-        ) => node == parameter ? replacement : base.VisitParameter(node);
     }
 
     /// <inheritdoc />
