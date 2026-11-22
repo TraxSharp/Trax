@@ -20,11 +20,15 @@ event="$1"
 config=.github/ci/packages.json
 all=$(jq -c '[.packages[].folder]' "$config")
 
-changed='[]'
+# The changed paths go to jq in a file, not as an argument: a pull request that touches
+# thousands of files would exceed the kernel's limit on an argument list.
+changed=$(mktemp)
+trap 'rm -f "$changed"' EXIT
+echo '[]' > "$changed"
 if [ "$event" = pull_request ]; then
-  changed=$(git diff --name-only HEAD^1 HEAD | jq -R . | jq -sc .)
-  selected=$(jq -c --argjson files "$changed" --argjson all "$all" -n '
-    ($files | map(split("/")[0])) as $tops
+  git diff --name-only HEAD^1 HEAD | jq -R . | jq -sc . > "$changed"
+  selected=$(jq -c --slurpfile changed "$changed" --argjson all "$all" -n '
+    ($changed[0] | map(split("/")[0])) as $tops
     | if ($tops | any(. as $t | $all | index($t) | not)) then $all
       else ($tops | unique) end')
 else
@@ -45,7 +49,8 @@ dotnet=$(jq -c --argjson selected "$selected" \
 adr=$(jq -c --argjson selected "$selected" \
   '[.packages[] | select(.adr and (.folder as $f | $selected | index($f))) | {folder} + .adr]' "$config")
 
-selected_suites=$(jq -c --argjson selected "$selected" --argjson files "$changed" --arg event "$event" '
+selected_suites=$(jq -c --argjson selected "$selected" --slurpfile changed "$changed" --arg event "$event" '
+  ($changed[0]) as $files |
   [(.suites // [])[]
    | select($event != "pull_request"
        or any(.upstream[]; . as $u | $selected | index($u))
