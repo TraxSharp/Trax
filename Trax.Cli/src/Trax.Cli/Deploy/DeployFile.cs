@@ -232,7 +232,7 @@ internal sealed partial class DeployFile
             if (service.Port is { } port && !ports.TryAdd(port, name))
                 throw new InvalidOperationException(
                     Problem(
-                        $"service '{name}' has port {port}, which service '{ports[port]}' has too."
+                        $"service '{name}' has port {port.ToString(CultureInfo.InvariantCulture)}, which service '{ports[port]}' has too."
                     )
                 );
             if (service.Count < 1)

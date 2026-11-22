@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using AwesomeAssertions;
 using Trax.Cli.Commands;
 using Trax.Cli.Deploy;
@@ -13,7 +14,7 @@ namespace Trax.Cli.Tests.UnitTests;
 /// service that serves HTTP and runs the api or scheduler role, so runs as one). It refuses what compose cannot give
 /// the hosts, and never overwrites a compose file it did not write.
 /// </summary>
-public class DeployComposeTests
+public partial class DeployComposeTests
 {
     private string _dir = "";
 
@@ -209,7 +210,7 @@ public class DeployComposeTests
         // What compose hands every Trax service once it has read the .env.
         var env = Interpolated(
             compose,
-            new Dictionary<string, string>
+            new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["POSTGRES_PASSWORD"] = password,
                 ["RABBITMQ_PASSWORD"] = password,
@@ -228,7 +229,7 @@ public class DeployComposeTests
         env["RabbitMq__Host"].Should().Be("rabbitmq");
         env["RabbitMq__UserName"].Should().Be("orders");
         env["RabbitMq__Password"].Should().Be(password);
-        env.Where(e => e.Value.Contains(password))
+        env.Where(e => e.Value.Contains(password, StringComparison.Ordinal))
             .Select(e => e.Key)
             .Should()
             .BeEquivalentTo(
@@ -250,14 +251,17 @@ public class DeployComposeTests
             .Select(l => l.Trim().Split(": ", 2))
             .ToDictionary(
                 p => p[0],
-                p =>
-                    System.Text.RegularExpressions.Regex.Replace(
-                        p[1],
-                        @"\$\{([A-Za-z_][A-Za-z0-9_]*):\?[^}]*\}",
-                        m => values[m.Groups[1].Value]
-                    )
+                p => Required.Replace(p[1], m => values[m.Groups["name"].Value]),
+                StringComparer.Ordinal
             );
     }
+
+    [GeneratedRegex(
+        @"\$\{(?<name>[A-Za-z_][A-Za-z0-9_]*):\?[^}]*\}",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Required { get; }
 
     [Test]
     public void A_stack_with_no_rabbitmq_host_runs_no_broker()
@@ -397,7 +401,7 @@ public class DeployComposeTests
     {
         if (OperatingSystem.IsWindows())
             Assert.Ignore("Uses sh; the timeout's code path is the same on every OS.");
-        var psi = new System.Diagnostics.ProcessStartInfo("sh");
+        var psi = new System.Diagnostics.ProcessStartInfo("sh") { UseShellExecute = false };
         psi.ArgumentList.Add("-c");
         psi.ArgumentList.Add("echo serving; sleep 20");
         var clock = TimeProvider.System.GetTimestamp();
@@ -419,7 +423,7 @@ public class DeployComposeTests
     {
         if (OperatingSystem.IsWindows())
             Assert.Ignore("Uses sh; the cancellation's code path is the same on every OS.");
-        var psi = new System.Diagnostics.ProcessStartInfo("sh");
+        var psi = new System.Diagnostics.ProcessStartInfo("sh") { UseShellExecute = false };
         psi.ArgumentList.Add("-c");
         psi.ArgumentList.Add("sleep 20");
         using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(1));

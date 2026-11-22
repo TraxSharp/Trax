@@ -42,7 +42,7 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         var env = file.Environment(environment);
         var stack = file.StackName(environment);
         var tags = Tags(file, environment);
-        var existing = await aws.DescribeStackAsync(stack, ct);
+        var existing = await aws.DescribeStackAsync(stack, ct).ConfigureAwait(false);
         // A first deploy that stopped before its change set ran left an empty stack in review: create it again.
         if (existing is { Created: false })
             existing = null;
@@ -113,7 +113,8 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         if (existing?.Parameters.ContainsKey(AwsStack.ProtectParameter) is true)
             first[AwsStack.ProtectParameter] = "true";
         if (KeepsItsUserPool(env))
-            first[AwsStack.UserPoolParameter] = await UserPoolAsync(stack, existing, ct);
+            first[AwsStack.UserPoolParameter] = await UserPoolAsync(stack, existing, ct)
+                .ConfigureAwait(false);
         say(existing is null ? $"Creating {stack}..." : $"Updating {stack}...");
         await aws.DeployAsync(stack, template, first, tags, say, ct).ConfigureAwait(false);
 
@@ -168,7 +169,8 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
 
     /// <summary>Whether the environment's user pool outlives its stack: production's Cognito pool.</summary>
     private static bool KeepsItsUserPool(DeployEnvironment env) =>
-        env.Profile == DeployEnvironment.Production && env.Auth is { Kind: DeployAuth.Cognito };
+        string.Equals(env.Profile, DeployEnvironment.Production, StringComparison.Ordinal)
+        && env.Auth is { Kind: DeployAuth.Cognito };
 
     /// <summary>
     /// The pool a deploy passes the stack: the one the stack already uses, or on a new stack the one an earlier
@@ -183,7 +185,7 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         if (existing is not null)
             // A stack keeps the pool it has: switching would take the one it created out of the stack.
             return existing.Parameters.GetValueOrDefault(AwsStack.UserPoolParameter) ?? "";
-        var kept = await aws.GetParameterAsync(UserPoolRecord(stack), ct);
+        var kept = await aws.GetParameterAsync(UserPoolRecord(stack), ct).ConfigureAwait(false);
         if (kept is not null)
             say($"Signing in against the user pool {kept}, which the last destroy kept.");
         return kept ?? "";
@@ -244,22 +246,22 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         {
             if (deleteData)
             {
-                await aws.DeleteUserPoolAsync(pool, ct);
-                await aws.DeleteParameterAsync(record, ct);
+                await aws.DeleteUserPoolAsync(pool, ct).ConfigureAwait(false);
+                await aws.DeleteParameterAsync(record, ct).ConfigureAwait(false);
                 say($"Deleted the user pool {pool} and every user in it.");
             }
             else
             {
-                var users = await aws.UserCountAsync(pool, ct);
+                var users = await aws.UserCountAsync(pool, ct).ConfigureAwait(false);
                 say(
                     users is null
                         ? $"The user pool {pool} recorded in {record} no longer exists; the next deploy creates one."
-                        : $"Kept the user pool {pool} with its {users} users (Cognito's estimate), recorded in "
+                        : $"Kept the user pool {pool} with its {users.Value.ToString(CultureInfo.InvariantCulture)} users (Cognito's estimate), recorded in "
                             + $"{record}. The next deploy of {environment} signs in against it; "
                             + $"'trax deploy destroy --env {environment} --delete-data' deletes it."
                 );
                 if (users is null)
-                    await aws.DeleteParameterAsync(record, ct);
+                    await aws.DeleteParameterAsync(record, ct).ConfigureAwait(false);
             }
         }
         if (!deleteData)
@@ -314,7 +316,7 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
     private static void CheckOwner(AwsStackState existing, DeployFile file, string stack)
     {
         var owner = existing.Tags.GetValueOrDefault("trax:app");
-        if (owner == file.App)
+        if (string.Equals(owner, file.App, StringComparison.Ordinal))
             return;
         throw new InvalidOperationException(
             owner is null

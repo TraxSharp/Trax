@@ -17,7 +17,7 @@ internal sealed record AwsStackState(
     /// Whether the stack holds anything. A first deploy's change set makes the stack exist in REVIEW_IN_PROGRESS
     /// before it is executed; a stack left there by a change set that failed or was abandoned is created again.
     /// </summary>
-    public bool Created => Status != "REVIEW_IN_PROGRESS";
+    public bool Created => !string.Equals(Status, "REVIEW_IN_PROGRESS", StringComparison.Ordinal);
 
     /// <summary>A stack whose creation failed and rolled back: it can only be deleted.</summary>
     public bool Dead => Status is "ROLLBACK_COMPLETE" or "ROLLBACK_FAILED" or "DELETE_FAILED";

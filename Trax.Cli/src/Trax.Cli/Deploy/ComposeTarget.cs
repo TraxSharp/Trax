@@ -207,7 +207,7 @@ internal static class ComposeTarget
         foreach (var (name, service) in file.Services)
             if (service.Port is { } port && !Hub(exports[name]))
                 throw new InvalidOperationException(
-                    $"Service '{name}' has port {port}, but compose publishes a port only for a service that serves "
+                    $"Service '{name}' has port {port.ToString(System.Globalization.CultureInfo.InvariantCulture)}, but compose publishes a port only for a service that serves "
                         + "HTTP and runs the api or scheduler role. Remove the port."
                 );
     }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using Amazon.SecretsManager;
@@ -121,7 +122,7 @@ public class AwsDeployerTests
         aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
         aws.Existing = FakeAws.Running() with
         {
-            Parameters = new Dictionary<string, string>
+            Parameters = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["Scale"] = "1",
                 [AwsStack.MigrateImageParameter] = "old",
@@ -146,7 +147,7 @@ public class AwsDeployerTests
         aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
         aws.Existing = FakeAws.Running() with
         {
-            Tags = new Dictionary<string, string>
+            Tags = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["trax:app"] = "orders-eu",
                 ["trax:environment"] = "production",
@@ -223,8 +224,8 @@ public class AwsDeployerTests
         aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
         aws.Existing = new AwsStackState(
             "REVIEW_IN_PROGRESS",
-            new Dictionary<string, string>(),
-            new Dictionary<string, string>()
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
         );
 
         await DeployAsync(deployer);
@@ -244,8 +245,8 @@ public class AwsDeployerTests
                     ? null
                     : new AwsStackState(
                         status,
-                        new Dictionary<string, string>(),
-                        new Dictionary<string, string>()
+                        new Dictionary<string, string>(StringComparer.Ordinal),
+                        new Dictionary<string, string>(StringComparer.Ordinal)
                     )
             )
             .Value.Should()
@@ -295,7 +296,7 @@ public class AwsDeployerTests
 
         aws.Parameters.Should()
             .Equal(
-                new Dictionary<string, string>
+                new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     [AwsDeployer.UserPoolRecord("orders-production")] = "us-west-2_pool1",
                 }
@@ -492,7 +493,7 @@ public class AwsDeployerTests
     public void The_tool_ships_what_the_AWS_SDK_signs_in_to_an_SSO_profile_with(string assembly) =>
         File.Exists(
                 Path.Combine(
-                    Path.GetDirectoryName(typeof(AwsDeployClient).Assembly.Location)!,
+                    Path.GetDirectoryName(typeof(AwsDeployClient).Assembly.Location).NotNull(),
                     assembly
                 )
             )
@@ -517,7 +518,8 @@ public class AwsDeployerTests
         DeployAwsCommands.ReadHidden(keys.Dequeue).Should().Be("abd");
     }
 
-    private static ConsoleKeyInfo Key(char c, ConsoleKey key) => new(c, key, false, false, false);
+    private static ConsoleKeyInfo Key(char c, ConsoleKey key) =>
+        new(c, key, shift: false, alt: false, control: false);
 
     [Test]
     public async Task Setting_a_secret_that_destroy_deleted_restores_it_first()
@@ -530,7 +532,7 @@ public class AwsDeployerTests
             secrets,
             "orders-staging/app/Stripe__ApiKey",
             "sk_test",
-            new Dictionary<string, string>(),
+            new Dictionary<string, string>(StringComparer.Ordinal),
             CancellationToken.None
         );
 
@@ -549,7 +551,7 @@ public class AwsDeployerTests
             secrets,
             "orders-staging/app/Stripe__ApiKey",
             "sk_test",
-            new Dictionary<string, string>(),
+            new Dictionary<string, string>(StringComparer.Ordinal),
             CancellationToken.None
         );
 
@@ -563,7 +565,9 @@ public class AwsDeployerTests
         var seen = new SeenLogEvents();
 
         for (var i = 0; i < 10_000; i++)
-            seen.Add($"e{i}", 1_000 + i).Should().BeTrue();
+            seen.Add(string.Create(CultureInfo.InvariantCulture, $"e{i}"), 1_000 + i)
+                .Should()
+                .BeTrue();
 
         seen.Count.Should().Be(1, "only an event at the newest time can be read again");
         seen.Add("e9999", 10_999).Should().BeFalse("it was printed already");
@@ -629,15 +633,15 @@ public class AwsDeployerTests
     /// </summary>
     public class FakeSecretsManager : DispatchProxy
     {
-        public List<string> Calls { get; } = [];
+        public IList<string> Calls { get; } = [];
         public bool PendingDeletion { get; set; }
         public bool Missing { get; set; }
         public string? Value { get; private set; }
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
-            var name = targetMethod!.Name;
-            if (name == "Dispose")
+            var name = targetMethod.NotNull().Name;
+            if (string.Equals(name, "Dispose", StringComparison.Ordinal))
                 return null;
             Calls.Add(name.Replace("Async", "", StringComparison.Ordinal));
             switch (name)
@@ -655,13 +659,13 @@ public class AwsDeployerTests
                                 "Secrets Manager can't find the specified secret."
                             )
                         );
-                    Value = ((PutSecretValueRequest)args![0]!).SecretString;
+                    Value = ((PutSecretValueRequest)args.NotNull()[0].NotNull()).SecretString;
                     return System.Threading.Tasks.Task.FromResult(new PutSecretValueResponse());
                 case "RestoreSecretAsync":
                     PendingDeletion = false;
                     return System.Threading.Tasks.Task.FromResult(new RestoreSecretResponse());
                 case "CreateSecretAsync":
-                    Value = ((CreateSecretRequest)args![0]!).SecretString;
+                    Value = ((CreateSecretRequest)args.NotNull()[0].NotNull()).SecretString;
                     return System.Threading.Tasks.Task.FromResult(new CreateSecretResponse());
                 default:
                     throw new NotSupportedException(name);
@@ -714,7 +718,7 @@ public class AwsDeployerTests
                 }
             )
             {
-                Tags = new Dictionary<string, string>
+                Tags = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     ["trax:app"] = "orders",
                     ["trax:environment"] = "production",

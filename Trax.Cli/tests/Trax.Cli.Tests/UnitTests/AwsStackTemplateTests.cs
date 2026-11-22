@@ -172,13 +172,23 @@ public class AwsStackTemplateTests
     public void The_connection_string_verifies_the_server()
     {
         var template = Build();
-        var env = Properties(template, "HubTaskDefinition")["ContainerDefinitions"]![0]![
-            "Environment"
-        ]!.AsArray();
+        var env = Properties(template, "HubTaskDefinition")["ContainerDefinitions"]
+            .NotNull()[0]
+            .NotNull()["Environment"]
+            .NotNull()
+            .AsArray();
 
-        var connection = env.Single(e => (string)e!["Name"]! == "ConnectionStrings__Trax")![
-            "Value"
-        ]!["Fn::Sub"]!.GetValue<string>();
+        var connection = env.Single(e =>
+                string.Equals(
+                    e.NotNull()["Name"].NotNull().GetValue<string>(),
+                    "ConnectionStrings__Trax",
+                    StringComparison.Ordinal
+                )
+            )
+            .NotNull()["Value"]
+            .NotNull()["Fn::Sub"]
+            .NotNull()
+            .GetValue<string>();
 
         connection.Should().Contain("SSL Mode=VerifyFull;");
         connection.Should().Contain($"Root Certificate={AwsStack.RdsCaBundle};");
@@ -302,7 +312,7 @@ public class AwsStackTemplateTests
     public void Each_service_runs_the_count_its_own_parameter_gives()
     {
         var template = Build();
-        var parameters = (JsonObject)template["Parameters"]!;
+        var parameters = (JsonObject)template["Parameters"].NotNull();
 
         Properties(template, "HubService")["DesiredCount"]
             .NotNull()
@@ -314,9 +324,11 @@ public class AwsStackTemplateTests
             .ToJsonString()
             .Should()
             .Be("""{"Ref":"WorkerCount"}""");
-        parameters["HubCount"]!["Type"]!.GetValue<string>().Should().Be("Number");
-        parameters["HubCount"]!["Default"]!.GetValue<string>().Should().Be("1");
-        parameters["WorkerCount"]!["Default"]!
+        parameters["HubCount"].NotNull()["Type"].NotNull().GetValue<string>().Should().Be("Number");
+        parameters["HubCount"].NotNull()["Default"].NotNull().GetValue<string>().Should().Be("1");
+        parameters["WorkerCount"]
+            .NotNull()["Default"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be("3", "the environment's count overrides the file's");
@@ -394,27 +406,41 @@ public class AwsStackTemplateTests
     public void Production_keeps_its_user_pool()
     {
         var template = Build();
-        var pool = (JsonObject)template["Resources"]!["UserPool"]!;
-        var group = (JsonObject)template["Resources"]!["OperatorGroup"]!;
+        var pool = (JsonObject)template["Resources"].NotNull()["UserPool"].NotNull();
+        var group = (JsonObject)template["Resources"].NotNull()["OperatorGroup"].NotNull();
 
-        ((string)pool["DeletionPolicy"]!).Should().Be("Retain");
-        ((string)pool["UpdateReplacePolicy"]!).Should().Be("Retain");
-        ((string)pool["Properties"]!["DeletionProtection"]!).Should().Be("ACTIVE");
-        ((string)group["DeletionPolicy"]!)
+        pool["DeletionPolicy"].NotNull().GetValue<string>().Should().Be("Retain");
+        pool["UpdateReplacePolicy"].NotNull().GetValue<string>().Should().Be("Retain");
+        pool["Properties"]
+            .NotNull()["DeletionProtection"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("ACTIVE");
+        group["DeletionPolicy"]
+            .NotNull()
+            .GetValue<string>()
             .Should()
             .Be("Retain", "deleting the group would drop every membership in the kept pool");
         // A pool a destroy kept is passed back in, and the stack creates none.
-        template["Parameters"]![AwsStack.UserPoolParameter]!["Default"]!
+        template["Parameters"]
+            .NotNull()[AwsStack.UserPoolParameter]
+            .NotNull()["Default"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be("");
-        ((string)pool["Condition"]!).Should().Be("CreateUserPool");
-        ((string)group["Condition"]!).Should().Be("CreateUserPool");
-        Properties(template, "UserPoolClient")["UserPoolId"]!
+        pool["Condition"].NotNull().GetValue<string>().Should().Be("CreateUserPool");
+        group["Condition"].NotNull().GetValue<string>().Should().Be("CreateUserPool");
+        Properties(template, "UserPoolClient")["UserPoolId"]
+            .NotNull()
             .ToJsonString()
             .Should()
             .Contain(AwsStack.UserPoolParameter);
-        template["Outputs"]!["UserPoolId"]!["Value"]!
+        template["Outputs"]
+            .NotNull()["UserPoolId"]
+            .NotNull()["Value"]
+            .NotNull()
             .ToJsonString()
             .Should()
             .Contain(AwsStack.UserPoolParameter);
@@ -424,13 +450,16 @@ public class AwsStackTemplateTests
     public void A_try_environment_keeps_no_user_pool()
     {
         var template = Build(File_(DeployEnvironment.Try));
-        var pool = (JsonObject)template["Resources"]!["UserPool"]!;
+        var pool = (JsonObject)template["Resources"].NotNull()["UserPool"].NotNull();
 
         pool.ContainsKey("DeletionPolicy").Should().BeFalse();
         pool.ContainsKey("UpdateReplacePolicy").Should().BeFalse();
         pool.ContainsKey("Condition").Should().BeFalse();
-        ((JsonObject)pool["Properties"]!).ContainsKey("DeletionProtection").Should().BeFalse();
-        ((JsonObject)template["Parameters"]!)
+        ((JsonObject)pool["Properties"].NotNull())
+            .ContainsKey("DeletionProtection")
+            .Should()
+            .BeFalse();
+        ((JsonObject)template["Parameters"].NotNull())
             .ContainsKey(AwsStack.UserPoolParameter)
             .Should()
             .BeFalse();

@@ -467,7 +467,7 @@ internal sealed class AwsDeployClient(string region, TimeProvider clock) : IAwsD
     )
     {
         using var secrets = new AmazonSecretsManagerClient(_region);
-        await PutSecretAsync(secrets, name, value, tags, ct);
+        await PutSecretAsync(secrets, name, value, tags, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -574,7 +574,10 @@ internal sealed class AwsDeployClient(string region, TimeProvider clock) : IAwsD
         using var ssm = new AmazonSimpleSystemsManagementClient(_region);
         try
         {
-            return (await ssm.GetParameterAsync(new GetParameterRequest { Name = name }, ct))
+            return (
+                await ssm.GetParameterAsync(new GetParameterRequest { Name = name }, ct)
+                    .ConfigureAwait(false)
+            )
                 .Parameter
                 .Value;
         }
@@ -595,36 +598,38 @@ internal sealed class AwsDeployClient(string region, TimeProvider clock) : IAwsD
         try
         {
             await ssm.PutParameterAsync(
-                new PutParameterRequest
-                {
-                    Name = name,
-                    Value = value,
-                    Type = ParameterType.String,
-                    Tags =
-                    [
-                        .. tags.Select(t => new Amazon.SimpleSystemsManagement.Model.Tag
-                        {
-                            Key = t.Key,
-                            Value = t.Value,
-                        }),
-                    ],
-                },
-                ct
-            );
+                    new PutParameterRequest
+                    {
+                        Name = name,
+                        Value = value,
+                        Type = ParameterType.String,
+                        Tags =
+                        [
+                            .. tags.Select(t => new Amazon.SimpleSystemsManagement.Model.Tag
+                            {
+                                Key = t.Key,
+                                Value = t.Value,
+                            }),
+                        ],
+                    },
+                    ct
+                )
+                .ConfigureAwait(false);
         }
         catch (ParameterAlreadyExistsException)
         {
             // Tags go only with a new parameter; an existing one is overwritten without them.
             await ssm.PutParameterAsync(
-                new PutParameterRequest
-                {
-                    Name = name,
-                    Value = value,
-                    Type = ParameterType.String,
-                    Overwrite = true,
-                },
-                ct
-            );
+                    new PutParameterRequest
+                    {
+                        Name = name,
+                        Value = value,
+                        Type = ParameterType.String,
+                        Overwrite = true,
+                    },
+                    ct
+                )
+                .ConfigureAwait(false);
         }
     }
 
@@ -633,7 +638,8 @@ internal sealed class AwsDeployClient(string region, TimeProvider clock) : IAwsD
         using var ssm = new AmazonSimpleSystemsManagementClient(_region);
         try
         {
-            await ssm.DeleteParameterAsync(new DeleteParameterRequest { Name = name }, ct);
+            await ssm.DeleteParameterAsync(new DeleteParameterRequest { Name = name }, ct)
+                .ConfigureAwait(false);
         }
         catch (ParameterNotFoundException) { }
     }
@@ -643,10 +649,9 @@ internal sealed class AwsDeployClient(string region, TimeProvider clock) : IAwsD
         using var cognito = new AmazonCognitoIdentityProviderClient(_region);
         try
         {
-            var pool = await cognito.DescribeUserPoolAsync(
-                new DescribeUserPoolRequest { UserPoolId = userPoolId },
-                ct
-            );
+            var pool = await cognito
+                .DescribeUserPoolAsync(new DescribeUserPoolRequest { UserPoolId = userPoolId }, ct)
+                .ConfigureAwait(false);
             return pool.UserPool.EstimatedNumberOfUsers ?? 0;
         }
         catch (Amazon.CognitoIdentityProvider.Model.ResourceNotFoundException)
@@ -661,17 +666,20 @@ internal sealed class AwsDeployClient(string region, TimeProvider clock) : IAwsD
         try
         {
             var pool = (
-                await cognito.DescribeUserPoolAsync(
-                    new DescribeUserPoolRequest { UserPoolId = userPoolId },
-                    ct
-                )
+                await cognito
+                    .DescribeUserPoolAsync(
+                        new DescribeUserPoolRequest { UserPoolId = userPoolId },
+                        ct
+                    )
+                    .ConfigureAwait(false)
             ).UserPool;
             if (pool.DeletionProtection == DeletionProtectionType.ACTIVE)
-                await cognito.UpdateUserPoolAsync(UnprotectedUpdate(pool), ct);
-            await cognito.DeleteUserPoolAsync(
-                new DeleteUserPoolRequest { UserPoolId = userPoolId },
-                ct
-            );
+                await cognito
+                    .UpdateUserPoolAsync(UnprotectedUpdate(pool), ct)
+                    .ConfigureAwait(false);
+            await cognito
+                .DeleteUserPoolAsync(new DeleteUserPoolRequest { UserPoolId = userPoolId }, ct)
+                .ConfigureAwait(false);
         }
         catch (Amazon.CognitoIdentityProvider.Model.ResourceNotFoundException) { }
     }

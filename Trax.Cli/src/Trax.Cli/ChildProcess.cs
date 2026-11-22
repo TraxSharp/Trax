@@ -63,7 +63,7 @@ internal static class ChildProcess
         {
             await process.WaitForExitAsync(limit.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
             try
             {
@@ -80,7 +80,8 @@ internal static class ChildProcess
                     CultureInfo.InvariantCulture,
                     $"'{psi.FileName}' did not finish within {timeout.TotalMinutes:0.#} minutes and was stopped. "
                 )
-                    + $"Its output:\n{await stdout.ConfigureAwait(false)}{await stderr.ConfigureAwait(false)}"
+                    + $"Its output:\n{await stdout.ConfigureAwait(false)}{await stderr.ConfigureAwait(false)}",
+                ex
             );
         }
         await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);

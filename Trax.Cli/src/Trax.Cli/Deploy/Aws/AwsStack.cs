@@ -994,7 +994,7 @@ internal static class AwsStack
         resources["OperatorGroup"] = group;
         if (production)
         {
-            ((JsonObject)pool["Properties"]!)["DeletionProtection"] = "ACTIVE";
+            ((JsonObject)pool["Properties"].NotNull())["DeletionProtection"] = "ACTIVE";
             foreach (var kept in new[] { pool, group })
             {
                 kept["Condition"] = CreateUserPool;

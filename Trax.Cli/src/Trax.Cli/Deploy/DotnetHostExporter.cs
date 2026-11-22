@@ -50,7 +50,7 @@ internal sealed class DotnetHostExporter(CancellationToken ct = default) : IHost
                         )
                         + $"app.Run() refuses. Its output:\n{stdout}{stderr}"
                 );
-            return DeployManifest.Read(await File.ReadAllTextAsync(path).ConfigureAwait(false));
+            return DeployManifest.Read(await File.ReadAllTextAsync(path, ct).ConfigureAwait(false));
         }
         finally
         {

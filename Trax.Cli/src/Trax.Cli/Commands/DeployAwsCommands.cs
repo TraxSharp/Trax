@@ -415,7 +415,11 @@ internal static class DeployAwsCommands
         var env = file.Environment(environment);
         var stack = file.StackName(environment);
         var cognito = env.Auth is { Kind: DeployAuth.Cognito };
-        var production = env.Profile == DeployEnvironment.Production;
+        var production = string.Equals(
+            env.Profile,
+            DeployEnvironment.Production,
+            StringComparison.Ordinal
+        );
         var gone = new List<string> { stack };
         if (cognito && (deleteData || !production))
             gone.Add("its user pool with every user in it");
