@@ -13,9 +13,84 @@ follows: book/scheduled-work/run-it-now
 # 9.6 Test it
 
 The junctions are tested against the test database, as the others are. The stock report reads the
-clock from a `TimeProvider`, so the test hands it a `FakeTimeProvider` from the
-`Microsoft.Extensions.TimeProvider.Testing` package: add a `PackageVersion` for it to
-`Directory.Packages.props` and a `PackageReference` to the test project.
+clock from a `TimeProvider`, so the test hands it a `FakeTimeProvider`, a clock the test sets by
+hand. It comes from the `Microsoft.Extensions.TimeProvider.Testing` package, which the test project
+needs from here on. `Directory.Packages.props` gains its version:
+
+```xml file=Directory.Packages.props
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageVersion Include="Trax.Api.Auth.Jwt" Version="1.69.0" />
+    <PackageVersion Include="Trax.Api.Dashboard" Version="1.69.0" />
+    <PackageVersion Include="Trax.Api.GraphQL" Version="1.69.0" />
+    <PackageVersion Include="Trax.Core" Version="1.69.0" />
+    <PackageVersion Include="Trax.Core.Testing" Version="1.69.0" />
+    <PackageVersion Include="Trax.Effect" Version="1.69.0" />
+    <PackageVersion Include="Trax.Effect.Data.InMemory" Version="1.69.0" />
+    <PackageVersion Include="Trax.Effect.Data.Postgres" Version="1.69.0" />
+    <PackageVersion Include="Trax.Effect.Data.Testing" Version="1.69.0" />
+    <PackageVersion Include="Trax.Effect.JunctionProvider.Logging" Version="1.69.0" />
+    <PackageVersion Include="Trax.Effect.Provider.Parameter" Version="1.69.0" />
+    <PackageVersion Include="Trax.Mediator" Version="1.69.0" />
+    <PackageVersion Include="Trax.Mediator.Testing" Version="1.69.0" />
+    <PackageVersion Include="Trax.Scheduler" Version="1.69.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageVersion Include="AwesomeAssertions" Version="9.6.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.10.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <!-- NUnit3TestAdapter pulls these at versions deprecated as Legacy; pin newer ones. -->
+    <PackageVersion Include="Microsoft.Testing.Extensions.VSTestBridge" Version="2.5.1" />
+    <PackageVersion Include="Microsoft.Testing.Platform.MSBuild" Version="2.5.1" />
+    <PackageVersion Include="NUnit" Version="5.0.0" />
+    <PackageVersion Include="NUnit.Analyzers" Version="4.15.0" />
+    <PackageVersion Include="NUnit3TestAdapter" Version="6.3.0" />
+  </ItemGroup>
+</Project>
+```
+
+and the test project references it:
+
+```xml file=tests/Shopfront.Tests/Shopfront.Tests.csproj
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Shopfront.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AwesomeAssertions" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="NUnit.Analyzers" />
+    <PackageReference Include="NUnit3TestAdapter" />
+    <PackageReference Include="Trax.Core.Testing" />
+    <PackageReference Include="Trax.Effect.Data.InMemory" />
+    <PackageReference Include="Trax.Effect.Data.Testing" />
+    <PackageReference Include="Trax.Mediator.Testing" />
+  </ItemGroup>
+</Project>
+```
 
 `tests/Shopfront.Tests/UnitTests/StockJunctionTests.cs`:
 
