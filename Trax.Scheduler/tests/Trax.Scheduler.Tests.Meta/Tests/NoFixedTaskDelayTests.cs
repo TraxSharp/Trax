@@ -50,24 +50,7 @@ public partial class NoFixedTaskDelayTests
                 .Split('\n');
 
             var rel = RepoRoot.Relative(file).Replace('\\', '/');
-            var count = 0;
-
-            for (var i = 0; i < strippedLines.Length; i++)
-            {
-                if (!DelayCall.IsMatch(strippedLines[i]))
-                    continue;
-                if (HasJustification(lines, i))
-                    continue;
-
-                count++;
-                if (!BaselineOffenders.ContainsKey(rel))
-                    newOffenders.Add(
-                        string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"{rel}:{i + 1}  -> {lines[i].Trim()}"
-                        )
-                    );
-            }
+            var count = CountUnjustifiedDelays(lines, strippedLines, rel, newOffenders);
 
             if (count > 0)
                 fileOffenderCounts[rel] = count;
@@ -84,6 +67,50 @@ public partial class NoFixedTaskDelayTests
                     + string.Join("\n  ", newOffenders)
             );
 
+        var regressions = BaselineRegressions(fileOffenderCounts);
+
+        regressions
+            .Should()
+            .BeEmpty(
+                "A grandfathered file's fixed-delay count differs from its baseline. A file that "
+                    + "gained one: synchronise the new code on its completion signal instead. A file "
+                    + "that lost some: lower its BaselineOffenders count to match, or remove the "
+                    + "entry at zero, so the cleanup cannot be undone quietly. Differences:\n  "
+                    + string.Join("\n  ", regressions)
+            );
+    }
+
+    private static int CountUnjustifiedDelays(
+        string[] lines,
+        string[] strippedLines,
+        string rel,
+        List<string> newOffenders
+    )
+    {
+        var count = 0;
+
+        for (var i = 0; i < strippedLines.Length; i++)
+        {
+            if (!DelayCall.IsMatch(strippedLines[i]))
+                continue;
+            if (HasJustification(lines, i))
+                continue;
+
+            count++;
+            if (!BaselineOffenders.ContainsKey(rel))
+                newOffenders.Add(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{rel}:{i + 1}  -> {lines[i].Trim()}"
+                    )
+                );
+        }
+
+        return count;
+    }
+
+    private static List<string> BaselineRegressions(Dictionary<string, int> fileOffenderCounts)
+    {
         var regressions = new List<string>();
         foreach (var (path, baselineCount) in BaselineOffenders)
         {
@@ -97,15 +124,7 @@ public partial class NoFixedTaskDelayTests
                 );
         }
 
-        regressions
-            .Should()
-            .BeEmpty(
-                "A grandfathered file's fixed-delay count differs from its baseline. A file that "
-                    + "gained one: synchronise the new code on its completion signal instead. A file "
-                    + "that lost some: lower its BaselineOffenders count to match, or remove the "
-                    + "entry at zero, so the cleanup cannot be undone quietly. Differences:\n  "
-                    + string.Join("\n  ", regressions)
-            );
+        return regressions;
     }
 
     private static bool HasJustification(string[] lines, int delayLineIndex)

@@ -288,38 +288,13 @@ public class QueryPerformanceTests : TestSetup
 
                 while (true)
                 {
-                    var batchIds = await DataContext
-                        .Metadatas.Where(m => whitelist.Contains(m.Name))
-                        .Where(m => m.StartTime < cutoff)
-                        .Where(m =>
-                            m.TrainState == TrainState.Completed
-                            || m.TrainState == TrainState.Failed
-                            || m.TrainState == TrainState.Cancelled
-                        )
-                        .Select(m => m.Id)
-                        .Take(batchSize)
-                        .ToListAsync()
+                    var batchIds = await ExpiredBatchIds(whitelist, cutoff, batchSize)
                         .ConfigureAwait(false);
 
                     if (batchIds.Count == 0)
                         break;
 
-                    await DataContext
-                        .WorkQueues.Where(wq =>
-                            wq.MetadataId.HasValue && batchIds.Contains(wq.MetadataId.Value)
-                        )
-                        .ExecuteDeleteAsync()
-                        .ConfigureAwait(false);
-
-                    await DataContext
-                        .Logs.Where(l => batchIds.Contains(l.MetadataId))
-                        .ExecuteDeleteAsync()
-                        .ConfigureAwait(false);
-
-                    totalDeleted += await DataContext
-                        .Metadatas.Where(m => batchIds.Contains(m.Id))
-                        .ExecuteDeleteAsync()
-                        .ConfigureAwait(false);
+                    totalDeleted += await DeleteExpiredBatch(batchIds).ConfigureAwait(false);
 
                     if (batchIds.Count < batchSize)
                         break;
@@ -360,17 +335,7 @@ public class QueryPerformanceTests : TestSetup
 
                 while (true)
                 {
-                    var batchIds = await DataContext
-                        .Metadatas.Where(m => whitelist.Contains(m.Name))
-                        .Where(m => m.StartTime < cutoff)
-                        .Where(m =>
-                            m.TrainState == TrainState.Completed
-                            || m.TrainState == TrainState.Failed
-                            || m.TrainState == TrainState.Cancelled
-                        )
-                        .Select(m => m.Id)
-                        .Take(batchSize)
-                        .ToListAsync()
+                    var batchIds = await ExpiredBatchIds(whitelist, cutoff, batchSize)
                         .ConfigureAwait(false);
 
                     if (batchIds.Count == 0)
@@ -378,22 +343,7 @@ public class QueryPerformanceTests : TestSetup
 
                     batchCount++;
 
-                    await DataContext
-                        .WorkQueues.Where(wq =>
-                            wq.MetadataId.HasValue && batchIds.Contains(wq.MetadataId.Value)
-                        )
-                        .ExecuteDeleteAsync()
-                        .ConfigureAwait(false);
-
-                    await DataContext
-                        .Logs.Where(l => batchIds.Contains(l.MetadataId))
-                        .ExecuteDeleteAsync()
-                        .ConfigureAwait(false);
-
-                    totalDeleted += await DataContext
-                        .Metadatas.Where(m => batchIds.Contains(m.Id))
-                        .ExecuteDeleteAsync()
-                        .ConfigureAwait(false);
+                    totalDeleted += await DeleteExpiredBatch(batchIds).ConfigureAwait(false);
 
                     if (batchIds.Count < batchSize)
                         break;
@@ -658,29 +608,7 @@ public class QueryPerformanceTests : TestSetup
 
                 staleManifestIds.Should().HaveCount(100);
 
-                await DataContext
-                    .WorkQueues.Where(w =>
-                        w.ManifestId.HasValue && staleManifestIds.Contains(w.ManifestId.Value)
-                    )
-                    .ExecuteDeleteAsync()
-                    .ConfigureAwait(false);
-
-                await DataContext
-                    .DeadLetters.Where(d => staleManifestIds.Contains(d.ManifestId))
-                    .ExecuteDeleteAsync()
-                    .ConfigureAwait(false);
-
-                await DataContext
-                    .Metadatas.Where(m =>
-                        m.ManifestId.HasValue && staleManifestIds.Contains(m.ManifestId.Value)
-                    )
-                    .ExecuteDeleteAsync()
-                    .ConfigureAwait(false);
-
-                await DataContext
-                    .Manifests.Where(m => staleManifestIds.Contains(m.Id))
-                    .ExecuteDeleteAsync()
-                    .ConfigureAwait(false);
+                await DeleteManifestsWithDependents(staleManifestIds).ConfigureAwait(false);
             },
             TimeSpan.FromSeconds(30)
         );
@@ -764,50 +692,11 @@ public class QueryPerformanceTests : TestSetup
         var scheduler = Scope.ServiceProvider.GetRequiredService<ITraxScheduler>();
 
         // First run
-        await scheduler.ScheduleManyAsync<
-            IStressTestTrain,
-            StressTestInput,
-            Trax.Core.Functional.Unit,
-            int
-        >(
-            Enumerable.Range(0, 1000),
-            i =>
-                (
-                    string.Create(CultureInfo.InvariantCulture, $"evolve-{i}"),
-                    new StressTestInput
-                    {
-                        Value = string.Create(CultureInfo.InvariantCulture, $"v1-{i}"),
-                    }
-                ),
-            Every.Minutes(5),
-            options => options.PrunePrefix("evolve-")
-        );
+        await ScheduleFirstEvolveRun(scheduler);
 
         // Second run: keep 0-899, drop 900-999
         var elapsed = await AssertCompletesWithin(
-            async () =>
-            {
-                await scheduler
-                    .ScheduleManyAsync<
-                        IStressTestTrain,
-                        StressTestInput,
-                        Core.Functional.Unit,
-                        int
-                    >(
-                        Enumerable.Range(0, 900),
-                        i =>
-                            (
-                                string.Create(CultureInfo.InvariantCulture, $"evolve-{i}"),
-                                new StressTestInput
-                                {
-                                    Value = string.Create(CultureInfo.InvariantCulture, $"v2-{i}"),
-                                }
-                            ),
-                        Every.Minutes(5),
-                        options => options.PrunePrefix("evolve-")
-                    )
-                    .ConfigureAwait(false);
-            },
+            () => ScheduleSecondEvolveRun(scheduler),
             TimeSpan.FromSeconds(15)
         );
 
@@ -844,43 +733,7 @@ public class QueryPerformanceTests : TestSetup
 
         var tasks = Enumerable
             .Range(0, 20)
-            .Select(async workerId =>
-            {
-                for (int attempt = 0; attempt < 10; attempt++)
-                {
-                    var ctx = (IDataContext)factory.Create();
-                    await using (ctx.ConfigureAwait(false))
-                    {
-                        using var tx = await ctx.BeginTransaction().ConfigureAwait(false);
-
-                        var job = await ctx
-                            .BackgroundJobs.FromSqlRaw(
-                                """
-                                SELECT * FROM trax.background_job
-                                WHERE fetched_at IS NULL
-                                ORDER BY created_at ASC
-                                LIMIT 1
-                                FOR UPDATE SKIP LOCKED
-                                """
-                            )
-                            .FirstOrDefaultAsync()
-                            .ConfigureAwait(false);
-
-                        if (job is not null)
-                        {
-                            job.FetchedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
-                            await ctx.SaveChanges(CancellationToken.None).ConfigureAwait(false);
-                            await ctx.CommitTransaction().ConfigureAwait(false);
-                            claimed.Add(job.Id);
-                        }
-                        else
-                        {
-                            await ctx.RollbackTransaction().ConfigureAwait(false);
-                            break; // No more jobs
-                        }
-                    }
-                }
-            })
+            .Select(workerId => ClaimJobsUntilNoneLeft(factory, claimed))
             .ToArray();
 
         var elapsed = await AssertCompletesWithin(
@@ -1071,46 +924,8 @@ public class QueryPerformanceTests : TestSetup
                 orphanedIds.Should().HaveCount(ManifestCount - 50);
 
                 // Database compute: delete in batches by integer PK
-                var totalPruned = 0;
-
-                foreach (var batch in orphanedIds.Chunk(batchSize))
-                {
-                    var batchIds = batch.ToList();
-
-                    await DataContext
-                        .Manifests.Where(m =>
-                            m.DependsOnManifestId.HasValue
-                            && batchIds.Contains(m.DependsOnManifestId.Value)
-                        )
-                        .ExecuteUpdateAsync(s =>
-                            s.SetProperty(m => m.DependsOnManifestId, (long?)null)
-                        )
-                        .ConfigureAwait(false);
-
-                    await DataContext
-                        .WorkQueues.Where(w =>
-                            w.ManifestId.HasValue && batchIds.Contains(w.ManifestId.Value)
-                        )
-                        .ExecuteDeleteAsync()
-                        .ConfigureAwait(false);
-
-                    await DataContext
-                        .DeadLetters.Where(d => batchIds.Contains(d.ManifestId))
-                        .ExecuteDeleteAsync()
-                        .ConfigureAwait(false);
-
-                    await DataContext
-                        .Metadatas.Where(m =>
-                            m.ManifestId.HasValue && batchIds.Contains(m.ManifestId.Value)
-                        )
-                        .ExecuteDeleteAsync()
-                        .ConfigureAwait(false);
-
-                    totalPruned += await DataContext
-                        .Manifests.Where(m => batchIds.Contains(m.Id))
-                        .ExecuteDeleteAsync()
-                        .ConfigureAwait(false);
-                }
+                var totalPruned = await PruneInBatches(orphanedIds, batchSize)
+                    .ConfigureAwait(false);
 
                 totalPruned.Should().Be(ManifestCount - 50);
             },
@@ -1156,46 +971,8 @@ public class QueryPerformanceTests : TestSetup
 
                 orphanedIds.Should().HaveCount(50);
 
-                var totalPruned = 0;
-
-                foreach (var batch in orphanedIds.Chunk(batchSize))
-                {
-                    var batchIds = batch.ToList();
-
-                    await DataContext
-                        .Manifests.Where(m =>
-                            m.DependsOnManifestId.HasValue
-                            && batchIds.Contains(m.DependsOnManifestId.Value)
-                        )
-                        .ExecuteUpdateAsync(s =>
-                            s.SetProperty(m => m.DependsOnManifestId, (long?)null)
-                        )
-                        .ConfigureAwait(false);
-
-                    await DataContext
-                        .WorkQueues.Where(w =>
-                            w.ManifestId.HasValue && batchIds.Contains(w.ManifestId.Value)
-                        )
-                        .ExecuteDeleteAsync()
-                        .ConfigureAwait(false);
-
-                    await DataContext
-                        .DeadLetters.Where(d => batchIds.Contains(d.ManifestId))
-                        .ExecuteDeleteAsync()
-                        .ConfigureAwait(false);
-
-                    await DataContext
-                        .Metadatas.Where(m =>
-                            m.ManifestId.HasValue && batchIds.Contains(m.ManifestId.Value)
-                        )
-                        .ExecuteDeleteAsync()
-                        .ConfigureAwait(false);
-
-                    totalPruned += await DataContext
-                        .Manifests.Where(m => batchIds.Contains(m.Id))
-                        .ExecuteDeleteAsync()
-                        .ConfigureAwait(false);
-                }
+                var totalPruned = await PruneInBatches(orphanedIds, batchSize)
+                    .ConfigureAwait(false);
 
                 totalPruned.Should().Be(50);
             },
@@ -1225,30 +1002,7 @@ public class QueryPerformanceTests : TestSetup
 
         // Seed 5000 additional orphan manifests (baseline 500 are the "expected" set)
         var orphanGroup = await SeedManifestGroup("orphan-5k-group");
-        var orphans = new List<Manifest>(orphanCount);
-        for (var i = 0; i < orphanCount; i++)
-        {
-            var manifest = Manifest.Create(
-                new CreateManifest
-                {
-                    Name = typeof(StressTestTrain),
-                    IsEnabled = true,
-                    ScheduleType = ScheduleType.Interval,
-                    IntervalSeconds = 60,
-                    MaxRetries = 3,
-                    Properties = new StressTestInput
-                    {
-                        Value = string.Create(CultureInfo.InvariantCulture, $"orphan-{i}"),
-                    },
-                }
-            );
-            manifest.ExternalId = string.Create(CultureInfo.InvariantCulture, $"orphan-{i}");
-            manifest.ManifestGroupId = orphanGroup.Id;
-            await DataContext.Track(manifest);
-            orphans.Add(manifest);
-        }
-        await DataContext.SaveChanges(CancellationToken.None);
-        DataContext.Reset();
+        await SeedOrphanManifests(orphanGroup, orphanCount);
 
         await TestContext
             .Out.WriteLineAsync(
@@ -1264,73 +1018,7 @@ public class QueryPerformanceTests : TestSetup
         var batchSize = SchedulerStartupService.PruneBatchSize;
 
         var elapsed = await AssertCompletesWithin(
-                async () =>
-                {
-                    // Server compute: load all (id, external_id) pairs, filter in C#
-                    var allManifests = await DataContext
-                        .Manifests.Select(m => new { m.Id, m.ExternalId })
-                        .ToListAsync()
-                        .ConfigureAwait(false);
-
-                    allManifests.Should().HaveCount(ManifestCount + orphanCount);
-
-                    var orphanedIds = allManifests
-                        .Where(m => !expectedIds.Contains(m.ExternalId))
-                        .Select(m => m.Id)
-                        .ToList();
-
-                    orphanedIds.Should().HaveCount(orphanCount);
-
-                    // Database compute: delete in batches of 500 by integer PK
-                    var totalPruned = 0;
-
-                    foreach (var batch in orphanedIds.Chunk(batchSize))
-                    {
-                        var batchIds = batch.ToList();
-
-                        await DataContext
-                            .Manifests.Where(m =>
-                                m.DependsOnManifestId.HasValue
-                                && batchIds.Contains(m.DependsOnManifestId.Value)
-                            )
-                            .ExecuteUpdateAsync(s =>
-                                s.SetProperty(m => m.DependsOnManifestId, (long?)null)
-                            )
-                            .ConfigureAwait(false);
-
-                        await DataContext
-                            .WorkQueues.Where(w =>
-                                w.ManifestId.HasValue && batchIds.Contains(w.ManifestId.Value)
-                            )
-                            .ExecuteDeleteAsync()
-                            .ConfigureAwait(false);
-
-                        await DataContext
-                            .DeadLetters.Where(d => batchIds.Contains(d.ManifestId))
-                            .ExecuteDeleteAsync()
-                            .ConfigureAwait(false);
-
-                        await DataContext
-                            .Metadatas.Where(m =>
-                                m.ManifestId.HasValue && batchIds.Contains(m.ManifestId.Value)
-                            )
-                            .ExecuteDeleteAsync()
-                            .ConfigureAwait(false);
-
-                        totalPruned += await DataContext
-                            .Manifests.Where(m => batchIds.Contains(m.Id))
-                            .ExecuteDeleteAsync()
-                            .ConfigureAwait(false);
-                    }
-
-                    totalPruned.Should().Be(orphanCount);
-
-                    // Verify expected manifests are untouched
-                    var remainingCount = await DataContext
-                        .Manifests.CountAsync()
-                        .ConfigureAwait(false);
-                    remainingCount.Should().Be(ManifestCount);
-                },
+                () => PruneEveryOrphan(expectedIds, batchSize, orphanCount),
                 TimeSpan.FromSeconds(120)
             )
             .ConfigureAwait(false);
@@ -1592,6 +1280,251 @@ public class QueryPerformanceTests : TestSetup
                 )
             )
             .ConfigureAwait(false);
+    }
+
+    #endregion
+
+    #region Extracted steps
+
+    private static async Task ClaimJobsUntilNoneLeft(
+        IDataContextProviderFactory factory,
+        System.Collections.Concurrent.ConcurrentBag<long> claimed
+    )
+    {
+        for (int attempt = 0; attempt < 10; attempt++)
+        {
+            var ctx = (IDataContext)factory.Create();
+            await using (ctx.ConfigureAwait(false))
+            {
+                using var tx = await ctx.BeginTransaction().ConfigureAwait(false);
+
+                var job = await ctx
+                    .BackgroundJobs.FromSqlRaw(
+                        """
+                        SELECT * FROM trax.background_job
+                        WHERE fetched_at IS NULL
+                        ORDER BY created_at ASC
+                        LIMIT 1
+                        FOR UPDATE SKIP LOCKED
+                        """
+                    )
+                    .FirstOrDefaultAsync()
+                    .ConfigureAwait(false);
+
+                if (job is not null)
+                {
+                    job.FetchedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
+                    await ctx.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+                    await ctx.CommitTransaction().ConfigureAwait(false);
+                    claimed.Add(job.Id);
+                }
+                else
+                {
+                    await ctx.RollbackTransaction().ConfigureAwait(false);
+                    break; // No more jobs
+                }
+            }
+        }
+    }
+
+    private Task<List<long>> ExpiredBatchIds(
+        HashSet<string> whitelist,
+        DateTime cutoff,
+        int batchSize
+    ) =>
+        DataContext
+            .Metadatas.Where(m => whitelist.Contains(m.Name))
+            .Where(m => m.StartTime < cutoff)
+            .Where(m =>
+                m.TrainState == TrainState.Completed
+                || m.TrainState == TrainState.Failed
+                || m.TrainState == TrainState.Cancelled
+            )
+            .Select(m => m.Id)
+            .Take(batchSize)
+            .ToListAsync();
+
+    private async Task<int> DeleteExpiredBatch(List<long> batchIds)
+    {
+        await DataContext
+            .WorkQueues.Where(wq =>
+                wq.MetadataId.HasValue && batchIds.Contains(wq.MetadataId.Value)
+            )
+            .ExecuteDeleteAsync()
+            .ConfigureAwait(false);
+
+        await DataContext
+            .Logs.Where(l => batchIds.Contains(l.MetadataId))
+            .ExecuteDeleteAsync()
+            .ConfigureAwait(false);
+
+        return await DataContext
+            .Metadatas.Where(m => batchIds.Contains(m.Id))
+            .ExecuteDeleteAsync()
+            .ConfigureAwait(false);
+    }
+
+    private async Task DeleteManifestsWithDependents(List<long> staleManifestIds)
+    {
+        await DataContext
+            .WorkQueues.Where(w =>
+                w.ManifestId.HasValue && staleManifestIds.Contains(w.ManifestId.Value)
+            )
+            .ExecuteDeleteAsync()
+            .ConfigureAwait(false);
+
+        await DataContext
+            .DeadLetters.Where(d => staleManifestIds.Contains(d.ManifestId))
+            .ExecuteDeleteAsync()
+            .ConfigureAwait(false);
+
+        await DataContext
+            .Metadatas.Where(m =>
+                m.ManifestId.HasValue && staleManifestIds.Contains(m.ManifestId.Value)
+            )
+            .ExecuteDeleteAsync()
+            .ConfigureAwait(false);
+
+        await DataContext
+            .Manifests.Where(m => staleManifestIds.Contains(m.Id))
+            .ExecuteDeleteAsync()
+            .ConfigureAwait(false);
+    }
+
+    private static async Task ScheduleFirstEvolveRun(ITraxScheduler scheduler)
+    {
+        await scheduler
+            .ScheduleManyAsync<IStressTestTrain, StressTestInput, Trax.Core.Functional.Unit, int>(
+                Enumerable.Range(0, 1000),
+                i =>
+                    (
+                        string.Create(CultureInfo.InvariantCulture, $"evolve-{i}"),
+                        new StressTestInput
+                        {
+                            Value = string.Create(CultureInfo.InvariantCulture, $"v1-{i}"),
+                        }
+                    ),
+                Every.Minutes(5),
+                options => options.PrunePrefix("evolve-")
+            )
+            .ConfigureAwait(false);
+    }
+
+    private static async Task ScheduleSecondEvolveRun(ITraxScheduler scheduler)
+    {
+        await scheduler
+            .ScheduleManyAsync<IStressTestTrain, StressTestInput, Core.Functional.Unit, int>(
+                Enumerable.Range(0, 900),
+                i =>
+                    (
+                        string.Create(CultureInfo.InvariantCulture, $"evolve-{i}"),
+                        new StressTestInput
+                        {
+                            Value = string.Create(CultureInfo.InvariantCulture, $"v2-{i}"),
+                        }
+                    ),
+                Every.Minutes(5),
+                options => options.PrunePrefix("evolve-")
+            )
+            .ConfigureAwait(false);
+    }
+
+    private async Task<int> PruneInBatches(List<long> orphanedIds, int batchSize)
+    {
+        var totalPruned = 0;
+
+        foreach (var batch in orphanedIds.Chunk(batchSize))
+        {
+            var batchIds = batch.ToList();
+
+            await DataContext
+                .Manifests.Where(m =>
+                    m.DependsOnManifestId.HasValue && batchIds.Contains(m.DependsOnManifestId.Value)
+                )
+                .ExecuteUpdateAsync(s => s.SetProperty(m => m.DependsOnManifestId, (long?)null))
+                .ConfigureAwait(false);
+
+            await DataContext
+                .WorkQueues.Where(w =>
+                    w.ManifestId.HasValue && batchIds.Contains(w.ManifestId.Value)
+                )
+                .ExecuteDeleteAsync()
+                .ConfigureAwait(false);
+
+            await DataContext
+                .DeadLetters.Where(d => batchIds.Contains(d.ManifestId))
+                .ExecuteDeleteAsync()
+                .ConfigureAwait(false);
+
+            await DataContext
+                .Metadatas.Where(m =>
+                    m.ManifestId.HasValue && batchIds.Contains(m.ManifestId.Value)
+                )
+                .ExecuteDeleteAsync()
+                .ConfigureAwait(false);
+
+            totalPruned += await DataContext
+                .Manifests.Where(m => batchIds.Contains(m.Id))
+                .ExecuteDeleteAsync()
+                .ConfigureAwait(false);
+        }
+
+        return totalPruned;
+    }
+
+    private async Task SeedOrphanManifests(ManifestGroup orphanGroup, int orphanCount)
+    {
+        var orphans = new List<Manifest>(orphanCount);
+        for (var i = 0; i < orphanCount; i++)
+        {
+            var manifest = Manifest.Create(
+                new CreateManifest
+                {
+                    Name = typeof(StressTestTrain),
+                    IsEnabled = true,
+                    ScheduleType = ScheduleType.Interval,
+                    IntervalSeconds = 60,
+                    MaxRetries = 3,
+                    Properties = new StressTestInput
+                    {
+                        Value = string.Create(CultureInfo.InvariantCulture, $"orphan-{i}"),
+                    },
+                }
+            );
+            manifest.ExternalId = string.Create(CultureInfo.InvariantCulture, $"orphan-{i}");
+            manifest.ManifestGroupId = orphanGroup.Id;
+            await DataContext.Track(manifest).ConfigureAwait(false);
+            orphans.Add(manifest);
+        }
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        DataContext.Reset();
+    }
+
+    private async Task PruneEveryOrphan(HashSet<string> expectedIds, int batchSize, int orphanCount)
+    {
+        // Server compute: load all (id, external_id) pairs, filter in C#
+        var allManifests = await DataContext
+            .Manifests.Select(m => new { m.Id, m.ExternalId })
+            .ToListAsync()
+            .ConfigureAwait(false);
+
+        allManifests.Should().HaveCount(ManifestCount + orphanCount);
+
+        var orphanedIds = allManifests
+            .Where(m => !expectedIds.Contains(m.ExternalId))
+            .Select(m => m.Id)
+            .ToList();
+
+        orphanedIds.Should().HaveCount(orphanCount);
+
+        // Database compute: delete in batches of 500 by integer PK
+        var totalPruned = await PruneInBatches(orphanedIds, batchSize).ConfigureAwait(false);
+
+        totalPruned.Should().Be(orphanCount);
+
+        // Verify expected manifests are untouched
+        var remainingCount = await DataContext.Manifests.CountAsync().ConfigureAwait(false);
+        remainingCount.Should().Be(ManifestCount);
     }
 
     #endregion

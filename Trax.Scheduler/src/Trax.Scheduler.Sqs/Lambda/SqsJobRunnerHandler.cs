@@ -135,56 +135,67 @@ public class SqsJobRunnerHandler(IServiceProvider serviceProvider)
 
         foreach (var record in sqsEvent.Records)
         {
-            var scope = serviceProvider.CreateAsyncScope();
-            await using var scopeDisposal = scope.ConfigureAwait(false);
-            var sp = scope.ServiceProvider;
-            var logger = sp.GetRequiredService<ILogger<SqsJobRunnerHandler>>();
-
-            RemoteJobRequest request;
-            try
-            {
-                request = await ReadAsync(record, verifier).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Refused SQS message {MessageId}", record.MessageId);
-                failures.Add(new RecordFailure(record.MessageId, ex));
-                continue;
-            }
-
-            try
-            {
-                var handler = sp.GetRequiredService<ITraxRequestHandler>();
-                await handler.ExecuteJobAsync(request, cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                if (await RunWasStartedAsync(sp, request.MetadataId).ConfigureAwait(false))
-                {
-                    // The train ran and its failure is recorded on the run's row. Delivering the
-                    // message again would not run it again; the scheduler's retries act on it.
-                    logger.LogWarning(
-                        ex,
-                        "SQS message {MessageId} ran Metadata {MetadataId}, which failed; its "
-                            + "outcome is recorded, so the message is acknowledged",
-                        record.MessageId,
-                        request.MetadataId
-                    );
-                    continue;
-                }
-
-                logger.LogError(
-                    ex,
-                    "SQS job execution failed for message {MessageId} before Metadata {MetadataId} "
-                        + "was started; the message will be delivered again",
-                    record.MessageId,
-                    request.MetadataId
-                );
-                failures.Add(new RecordFailure(record.MessageId, ex));
-            }
+            await ProcessRecordAsync(record, verifier, failures, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         return failures;
+    }
+
+    private async Task ProcessRecordAsync(
+        SQSEvent.SQSMessage record,
+        RunnerRequestVerifier verifier,
+        List<RecordFailure> failures,
+        CancellationToken cancellationToken
+    )
+    {
+        var scope = serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
+        var sp = scope.ServiceProvider;
+        var logger = sp.GetRequiredService<ILogger<SqsJobRunnerHandler>>();
+
+        RemoteJobRequest request;
+        try
+        {
+            request = await ReadAsync(record, verifier).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Refused SQS message {MessageId}", record.MessageId);
+            failures.Add(new RecordFailure(record.MessageId, ex));
+            return;
+        }
+
+        try
+        {
+            var handler = sp.GetRequiredService<ITraxRequestHandler>();
+            await handler.ExecuteJobAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            if (await RunWasStartedAsync(sp, request.MetadataId).ConfigureAwait(false))
+            {
+                // The train ran and its failure is recorded on the run's row. Delivering the
+                // message again would not run it again; the scheduler's retries act on it.
+                logger.LogWarning(
+                    ex,
+                    "SQS message {MessageId} ran Metadata {MetadataId}, which failed; its "
+                        + "outcome is recorded, so the message is acknowledged",
+                    record.MessageId,
+                    request.MetadataId
+                );
+                return;
+            }
+
+            logger.LogError(
+                ex,
+                "SQS job execution failed for message {MessageId} before Metadata {MetadataId} "
+                    + "was started; the message will be delivered again",
+                record.MessageId,
+                request.MetadataId
+            );
+            failures.Add(new RecordFailure(record.MessageId, ex));
+        }
     }
 
     private static async Task<RemoteJobRequest> ReadAsync(

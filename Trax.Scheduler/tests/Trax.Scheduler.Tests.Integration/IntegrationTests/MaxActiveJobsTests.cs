@@ -24,6 +24,7 @@ using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Mediator.Extensions;
+using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Tests.ArrayLogger.Services.ArrayLoggingProvider;
 using Trax.Scheduler.Tests.Integration.Fakes.Trains;
@@ -741,27 +742,10 @@ public class MaxActiveJobsTests
         }
 
         // Simulate completing 2 active jobs
-        foreach (var activeManifest in activeManifests.Take(2))
-        {
-            var metadata = await _dataContext
-                .NotNull()
-                .Metadatas.Where(m => m.ManifestId == activeManifest.Id)
-                .FirstAsync();
-            metadata.TrainState = TrainState.Completed;
-        }
-        await _dataContext.NotNull().SaveChanges(CancellationToken.None);
-        _dataContext.NotNull().Reset();
+        await CompleteRunsOf(activeManifests.Take(2));
 
         // Create a fresh scope for the second cycle (scoped services return the same instance within a scope)
-        if (_train is IDisposable disposable)
-            disposable.Dispose();
-        if (_dataContext is IDisposable dataContextDisposable)
-            dataContextDisposable.Dispose();
-        await _scope.DisposeAsync().ConfigureAwait(false);
-
-        _scope = _serviceProvider.NotNull().CreateAsyncScope();
-        _train = _scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
-        _dataContext = _scope.ServiceProvider.GetRequiredService<IDataContext>();
+        await RenewScope();
 
         // Act - Run second cycle (2 slots available)
         await _train.NotNull().Run(Unit.Default);
@@ -787,124 +771,20 @@ public class MaxActiveJobsTests
     public async Task Run_WithNullMaxActiveJobs_DispatchesAll()
     {
         // Arrange - Create a separate ServiceProvider with MaxActiveJobs = null
-        var connectionString = TestPostgres.ConnectionString;
-
-        var arrayLoggingProvider = new ArrayLoggingProvider();
-
-        await using var unlimitedProvider = new ServiceCollection()
-            .AddSingleton<ILoggerProvider>(arrayLoggingProvider)
-            .AddSingleton<IArrayLoggingProvider>(arrayLoggingProvider)
-            .AddLogging(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug))
-            .AddTrax(trax =>
-                trax.AddEffects(effects =>
-                        effects
-                            .SetEffectLogLevel(LogLevel.Information)
-                            .SaveTrainParameters()
-                            .UsePostgres(connectionString)
-                            .AddDataContextLogging(minimumLogLevel: LogLevel.Trace)
-                            .AddJson()
-                            .AddJunctionLogger(serializeJunctionData: true)
-                    )
-                    .AddMediator(typeof(AssemblyMarker).Assembly, typeof(JobRunnerTrain).Assembly)
-                    .AddScheduler(scheduler =>
-                        scheduler.UseInMemoryWorkers().MaxActiveJobs(maxJobs: null)
-                    )
-            )
-            .AddScoped<IDataContext>(sp =>
-            {
-                var factory = sp.GetRequiredService<IDataContextProviderFactory>();
-                return (IDataContext)factory.Create();
-            })
-            .BuildServiceProvider();
+        await using var unlimitedProvider = BuildDispatcherProvider(scheduler =>
+            scheduler.UseInMemoryWorkers().MaxActiveJobs(maxJobs: null)
+        );
 
         await using var scope = unlimitedProvider.CreateAsyncScope();
         var train = scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
         var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
         // Create many active metadata (well over the default limit of 10)
-        for (var i = 0; i < 15; i++)
-        {
-            var activeGroup = await TestSetup.CreateAndSaveManifestGroup(
-                dataContext,
-                name: $"group-active-{Guid.NewGuid():N}"
-            );
-
-            var activeManifest = Manifest.Create(
-                new CreateManifest
-                {
-                    Name = typeof(SchedulerTestTrain),
-                    IsEnabled = true,
-                    ScheduleType = ScheduleType.None,
-                    MaxRetries = 3,
-                    Properties = new SchedulerTestInput
-                    {
-                        Value = string.Create(CultureInfo.InvariantCulture, $"Active_{i}"),
-                    },
-                }
-            );
-            activeManifest.ManifestGroupId = activeGroup.Id;
-            await dataContext.Track(activeManifest);
-            await dataContext.SaveChanges(CancellationToken.None);
-
-            var metadata = Metadata.Create(
-                new CreateMetadata
-                {
-                    Name = typeof(SchedulerTestTrain).FullName.NotNull(),
-                    ExternalId = Guid.NewGuid().ToString("N"),
-                    Input = new SchedulerTestInput
-                    {
-                        Value = string.Create(CultureInfo.InvariantCulture, $"Active_{i}"),
-                    },
-                    ManifestId = activeManifest.Id,
-                },
-                TimeProvider.System
-            );
-            metadata.TrainState = TrainState.Pending;
-            await dataContext.Track(metadata);
-            await dataContext.SaveChanges(CancellationToken.None);
-        }
+        await SeedPendingRunsInOwnGroups(dataContext, 15);
 
         // Create queued entries
         var entryCount = 8;
-        var entryIds = new List<long>();
-        for (var i = 0; i < entryCount; i++)
-        {
-            var queuedGroup = await TestSetup.CreateAndSaveManifestGroup(
-                dataContext,
-                name: $"group-queued-{Guid.NewGuid():N}"
-            );
-
-            var manifest = Manifest.Create(
-                new CreateManifest
-                {
-                    Name = typeof(SchedulerTestTrain),
-                    IsEnabled = true,
-                    ScheduleType = ScheduleType.None,
-                    MaxRetries = 3,
-                    Properties = new SchedulerTestInput
-                    {
-                        Value = string.Create(CultureInfo.InvariantCulture, $"Queued_{i}"),
-                    },
-                }
-            );
-            manifest.ManifestGroupId = queuedGroup.Id;
-            await dataContext.Track(manifest);
-            await dataContext.SaveChanges(CancellationToken.None);
-
-            var entry = WorkQueue.Create(
-                new CreateWorkQueue
-                {
-                    TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
-                    Input = manifest.Properties,
-                    InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
-                    ManifestId = manifest.Id,
-                },
-                TimeProvider.System
-            );
-            await dataContext.Track(entry);
-            await dataContext.SaveChanges(CancellationToken.None);
-            entryIds.Add(entry.Id);
-        }
+        var entryIds = await QueueEntriesInOwnGroups(dataContext, entryCount);
 
         dataContext.Reset();
 
@@ -940,109 +820,22 @@ public class MaxActiveJobsTests
     public async Task Run_ExcludedTrain_NotCountedTowardMaxActiveJobs()
     {
         // Arrange — Create a separate ServiceProvider with ExcludeFromMaxActiveJobs
-        var connectionString = TestPostgres.ConnectionString;
-
-        var arrayLoggingProvider = new ArrayLoggingProvider();
-
-        await using var excludeProvider = new ServiceCollection()
-            .AddSingleton<ILoggerProvider>(arrayLoggingProvider)
-            .AddSingleton<IArrayLoggingProvider>(arrayLoggingProvider)
-            .AddLogging(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug))
-            .AddTrax(trax =>
-                trax.AddEffects(effects =>
-                        effects
-                            .SetEffectLogLevel(LogLevel.Information)
-                            .SaveTrainParameters()
-                            .UsePostgres(connectionString)
-                            .AddDataContextLogging(minimumLogLevel: LogLevel.Trace)
-                            .AddJson()
-                            .AddJunctionLogger(serializeJunctionData: true)
-                    )
-                    .AddMediator(typeof(AssemblyMarker).Assembly, typeof(JobRunnerTrain).Assembly)
-                    .AddScheduler(scheduler =>
-                        scheduler
-                            .UseInMemoryWorkers()
-                            .MaxActiveJobs(1)
-                            .ExcludeFromMaxActiveJobs<SchedulerTestTrain>()
-                    )
-            )
-            .AddScoped<IDataContext>(sp =>
-            {
-                var factory = sp.GetRequiredService<IDataContextProviderFactory>();
-                return (IDataContext)factory.Create();
-            })
-            .BuildServiceProvider();
+        await using var excludeProvider = BuildDispatcherProvider(scheduler =>
+            scheduler
+                .UseInMemoryWorkers()
+                .MaxActiveJobs(1)
+                .ExcludeFromMaxActiveJobs<SchedulerTestTrain>()
+        );
 
         await using var scope = excludeProvider.CreateAsyncScope();
         var train = scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
         var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
         // Create 1 active InProgress metadata for SchedulerTestTrain (excluded from count)
-        var activeGroup = await TestSetup.CreateAndSaveManifestGroup(
-            dataContext,
-            name: $"group-excluded-{Guid.NewGuid():N}"
-        );
-
-        var activeManifest = Manifest.Create(
-            new CreateManifest
-            {
-                Name = typeof(SchedulerTestTrain),
-                IsEnabled = true,
-                ScheduleType = ScheduleType.None,
-                MaxRetries = 3,
-                Properties = new SchedulerTestInput { Value = "ExcludedActive" },
-            }
-        );
-        activeManifest.ManifestGroupId = activeGroup.Id;
-        await dataContext.Track(activeManifest);
-        await dataContext.SaveChanges(CancellationToken.None);
-
-        var metadata = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = new SchedulerTestInput { Value = "ExcludedActive" },
-                ManifestId = activeManifest.Id,
-            },
-            TimeProvider.System
-        );
-        metadata.TrainState = TrainState.InProgress;
-        await dataContext.Track(metadata);
-        await dataContext.SaveChanges(CancellationToken.None);
+        await SeedExcludedRunInProgress(dataContext);
 
         // Create 1 queued work queue entry — should dispatch because excluded train doesn't count
-        var queuedGroup = await TestSetup.CreateAndSaveManifestGroup(
-            dataContext,
-            name: $"group-queued-{Guid.NewGuid():N}"
-        );
-
-        var queuedManifest = Manifest.Create(
-            new CreateManifest
-            {
-                Name = typeof(SchedulerTestTrain),
-                IsEnabled = true,
-                ScheduleType = ScheduleType.None,
-                MaxRetries = 3,
-                Properties = new SchedulerTestInput { Value = "QueuedEntry" },
-            }
-        );
-        queuedManifest.ManifestGroupId = queuedGroup.Id;
-        await dataContext.Track(queuedManifest);
-        await dataContext.SaveChanges(CancellationToken.None);
-
-        var entry = WorkQueue.Create(
-            new CreateWorkQueue
-            {
-                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
-                Input = queuedManifest.Properties,
-                InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
-                ManifestId = queuedManifest.Id,
-            },
-            TimeProvider.System
-        );
-        await dataContext.Track(entry);
-        await dataContext.SaveChanges(CancellationToken.None);
+        var entry = await QueueOneEntryInOwnGroup(dataContext);
         dataContext.Reset();
 
         // Act
@@ -1099,6 +892,227 @@ public class MaxActiveJobsTests
     #endregion
 
     #region Helper Methods
+
+    private async Task CompleteRunsOf(IEnumerable<Manifest> manifests)
+    {
+        foreach (var activeManifest in manifests)
+        {
+            var metadata = await _dataContext
+                .NotNull()
+                .Metadatas.Where(m => m.ManifestId == activeManifest.Id)
+                .FirstAsync()
+                .ConfigureAwait(false);
+            metadata.TrainState = TrainState.Completed;
+        }
+        await _dataContext.NotNull().SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        _dataContext.NotNull().Reset();
+    }
+
+    private async Task RenewScope()
+    {
+        if (_train is IDisposable disposable)
+            disposable.Dispose();
+        if (_dataContext is IDisposable dataContextDisposable)
+            dataContextDisposable.Dispose();
+        await _scope.DisposeAsync().ConfigureAwait(false);
+
+        _scope = _serviceProvider.NotNull().CreateAsyncScope();
+        _train = _scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
+        _dataContext = _scope.ServiceProvider.GetRequiredService<IDataContext>();
+    }
+
+    private static ServiceProvider BuildDispatcherProvider(
+        Func<SchedulerConfigurationBuilder, SchedulerConfigurationBuilder> configureScheduler
+    )
+    {
+        var connectionString = TestPostgres.ConnectionString;
+
+        var arrayLoggingProvider = new ArrayLoggingProvider();
+
+        return new ServiceCollection()
+            .AddSingleton<ILoggerProvider>(arrayLoggingProvider)
+            .AddSingleton<IArrayLoggingProvider>(arrayLoggingProvider)
+            .AddLogging(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug))
+            .AddTrax(trax =>
+                trax.AddEffects(effects =>
+                        effects
+                            .SetEffectLogLevel(LogLevel.Information)
+                            .SaveTrainParameters()
+                            .UsePostgres(connectionString)
+                            .AddDataContextLogging(minimumLogLevel: LogLevel.Trace)
+                            .AddJson()
+                            .AddJunctionLogger(serializeJunctionData: true)
+                    )
+                    .AddMediator(typeof(AssemblyMarker).Assembly, typeof(JobRunnerTrain).Assembly)
+                    .AddScheduler(configureScheduler)
+            )
+            .AddScoped<IDataContext>(sp =>
+            {
+                var factory = sp.GetRequiredService<IDataContextProviderFactory>();
+                return (IDataContext)factory.Create();
+            })
+            .BuildServiceProvider();
+    }
+
+    private static async Task SeedPendingRunsInOwnGroups(IDataContext dataContext, int count)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            var activeGroup = await TestSetup
+                .CreateAndSaveManifestGroup(dataContext, name: $"group-active-{Guid.NewGuid():N}")
+                .ConfigureAwait(false);
+
+            var activeManifest = Manifest.Create(
+                new CreateManifest
+                {
+                    Name = typeof(SchedulerTestTrain),
+                    IsEnabled = true,
+                    ScheduleType = ScheduleType.None,
+                    MaxRetries = 3,
+                    Properties = new SchedulerTestInput
+                    {
+                        Value = string.Create(CultureInfo.InvariantCulture, $"Active_{i}"),
+                    },
+                }
+            );
+            activeManifest.ManifestGroupId = activeGroup.Id;
+            await dataContext.Track(activeManifest).ConfigureAwait(false);
+            await dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+
+            var metadata = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = typeof(SchedulerTestTrain).FullName.NotNull(),
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = new SchedulerTestInput
+                    {
+                        Value = string.Create(CultureInfo.InvariantCulture, $"Active_{i}"),
+                    },
+                    ManifestId = activeManifest.Id,
+                },
+                TimeProvider.System
+            );
+            metadata.TrainState = TrainState.Pending;
+            await dataContext.Track(metadata).ConfigureAwait(false);
+            await dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task<List<long>> QueueEntriesInOwnGroups(
+        IDataContext dataContext,
+        int entryCount
+    )
+    {
+        var entryIds = new List<long>();
+        for (var i = 0; i < entryCount; i++)
+        {
+            var queuedGroup = await TestSetup
+                .CreateAndSaveManifestGroup(dataContext, name: $"group-queued-{Guid.NewGuid():N}")
+                .ConfigureAwait(false);
+
+            var manifest = Manifest.Create(
+                new CreateManifest
+                {
+                    Name = typeof(SchedulerTestTrain),
+                    IsEnabled = true,
+                    ScheduleType = ScheduleType.None,
+                    MaxRetries = 3,
+                    Properties = new SchedulerTestInput
+                    {
+                        Value = string.Create(CultureInfo.InvariantCulture, $"Queued_{i}"),
+                    },
+                }
+            );
+            manifest.ManifestGroupId = queuedGroup.Id;
+            await dataContext.Track(manifest).ConfigureAwait(false);
+            await dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+
+            var entry = WorkQueue.Create(
+                new CreateWorkQueue
+                {
+                    TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
+                    Input = manifest.Properties,
+                    InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
+                    ManifestId = manifest.Id,
+                },
+                TimeProvider.System
+            );
+            await dataContext.Track(entry).ConfigureAwait(false);
+            await dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+            entryIds.Add(entry.Id);
+        }
+        return entryIds;
+    }
+
+    private static async Task SeedExcludedRunInProgress(IDataContext dataContext)
+    {
+        var activeGroup = await TestSetup
+            .CreateAndSaveManifestGroup(dataContext, name: $"group-excluded-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
+
+        var activeManifest = Manifest.Create(
+            new CreateManifest
+            {
+                Name = typeof(SchedulerTestTrain),
+                IsEnabled = true,
+                ScheduleType = ScheduleType.None,
+                MaxRetries = 3,
+                Properties = new SchedulerTestInput { Value = "ExcludedActive" },
+            }
+        );
+        activeManifest.ManifestGroupId = activeGroup.Id;
+        await dataContext.Track(activeManifest).ConfigureAwait(false);
+        await dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+
+        var metadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = new SchedulerTestInput { Value = "ExcludedActive" },
+                ManifestId = activeManifest.Id,
+            },
+            TimeProvider.System
+        );
+        metadata.TrainState = TrainState.InProgress;
+        await dataContext.Track(metadata).ConfigureAwait(false);
+        await dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+    }
+
+    private static async Task<WorkQueue> QueueOneEntryInOwnGroup(IDataContext dataContext)
+    {
+        var queuedGroup = await TestSetup
+            .CreateAndSaveManifestGroup(dataContext, name: $"group-queued-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
+
+        var queuedManifest = Manifest.Create(
+            new CreateManifest
+            {
+                Name = typeof(SchedulerTestTrain),
+                IsEnabled = true,
+                ScheduleType = ScheduleType.None,
+                MaxRetries = 3,
+                Properties = new SchedulerTestInput { Value = "QueuedEntry" },
+            }
+        );
+        queuedManifest.ManifestGroupId = queuedGroup.Id;
+        await dataContext.Track(queuedManifest).ConfigureAwait(false);
+        await dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+
+        var entry = WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
+                Input = queuedManifest.Properties,
+                InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
+                ManifestId = queuedManifest.Id,
+            },
+            TimeProvider.System
+        );
+        await dataContext.Track(entry).ConfigureAwait(false);
+        await dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        return entry;
+    }
 
     private async Task<Manifest> CreateAndSaveManifest(string inputValue = "TestValue")
     {

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
 using Trax.Scheduler.Services.Scheduling;
@@ -41,28 +42,66 @@ public partial class OperationsService
         var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
         await using var dbDisposal = db.ConfigureAwait(false);
 
-        var rows = await db
+        var rows = await ReadUpcomingRowsAsync(db, ids, ct).ConfigureAwait(false);
+
+        var now = Clock.GetUtcNow().UtcDateTime;
+        var byId = rows.ToDictionary(r => r.Id);
+
+        return ids.Where(byId.ContainsKey)
+            .Select(id => UpcomingRunsOf(id, byId[id], count, now))
+            .ToList();
+    }
+
+    // A manifest's schedule and what decides whether it runs, read in one query.
+    private sealed class UpcomingRow
+    {
+        public long Id { get; init; }
+        public bool IsEnabled { get; init; }
+        public ScheduleType ScheduleType { get; init; }
+        public string? CronExpression { get; init; }
+        public int? IntervalSeconds { get; init; }
+        public MisfirePolicy MisfirePolicy { get; init; }
+        public int? MisfireThresholdSeconds { get; init; }
+        public DateTime? ScheduledAt { get; init; }
+        public string? Exclusions { get; init; }
+        public DateTime? LastSuccessfulRun { get; init; }
+        public DateTime? NextScheduledRun { get; init; }
+        public int? VarianceSeconds { get; init; }
+        public long? DependsOnManifestId { get; init; }
+        public bool GroupEnabled { get; init; }
+        public string? ParentExternalId { get; init; }
+        public bool ParentEnabled { get; init; }
+        public bool HasAwaitingDeadLetter { get; init; }
+        public DateTime? LastCancelledRun { get; init; }
+    }
+
+    private static async Task<List<UpcomingRow>> ReadUpcomingRowsAsync(
+        IDataContext db,
+        long[] ids,
+        CancellationToken ct
+    )
+    {
+        return await db
             .Manifests.AsNoTracking()
             .Where(m => ids.Contains(m.Id))
-            .Select(m => new
+            .Select(m => new UpcomingRow
             {
-                m.Id,
-                m.IsEnabled,
-                m.ScheduleType,
-                m.CronExpression,
-                m.IntervalSeconds,
-                m.MisfirePolicy,
-                m.MisfireThresholdSeconds,
-                m.ScheduledAt,
-                m.Exclusions,
-                m.LastSuccessfulRun,
-                m.NextScheduledRun,
-                m.VarianceSeconds,
-                m.DependsOnManifestId,
+                Id = m.Id,
+                IsEnabled = m.IsEnabled,
+                ScheduleType = m.ScheduleType,
+                CronExpression = m.CronExpression,
+                IntervalSeconds = m.IntervalSeconds,
+                MisfirePolicy = m.MisfirePolicy,
+                MisfireThresholdSeconds = m.MisfireThresholdSeconds,
+                ScheduledAt = m.ScheduledAt,
+                Exclusions = m.Exclusions,
+                LastSuccessfulRun = m.LastSuccessfulRun,
+                NextScheduledRun = m.NextScheduledRun,
+                VarianceSeconds = m.VarianceSeconds,
+                DependsOnManifestId = m.DependsOnManifestId,
                 GroupEnabled = m.ManifestGroup != null && m.ManifestGroup.IsEnabled,
-                ParentExternalId = m.DependsOnManifest == null
-                    ? null
-                    : m.DependsOnManifest.ExternalId,
+                ParentExternalId =
+                    m.DependsOnManifest == null ? null : m.DependsOnManifest.ExternalId,
                 ParentEnabled = m.DependsOnManifest != null && m.DependsOnManifest.IsEnabled,
                 HasAwaitingDeadLetter = m.DeadLetters.Any(dl =>
                     dl.Status == DeadLetterStatus.AwaitingIntervention
@@ -74,54 +113,48 @@ public partial class OperationsService
             })
             .ToListAsync(ct)
             .ConfigureAwait(false);
+    }
 
-        var now = Clock.GetUtcNow().UtcDateTime;
-        var byId = rows.ToDictionary(r => r.Id);
+    private ManifestUpcomingRuns UpcomingRunsOf(long id, UpcomingRow r, int count, DateTime now)
+    {
+        var manifest = new Effect.Models.Manifest.Manifest
+        {
+            IsEnabled = r.IsEnabled,
+            ScheduleType = r.ScheduleType,
+            CronExpression = r.CronExpression,
+            IntervalSeconds = r.IntervalSeconds,
+            MisfirePolicy = r.MisfirePolicy,
+            MisfireThresholdSeconds = r.MisfireThresholdSeconds,
+            ScheduledAt = r.ScheduledAt,
+            Exclusions = r.Exclusions,
+            LastSuccessfulRun = r.LastSuccessfulRun,
+            NextScheduledRun = r.NextScheduledRun,
+            VarianceSeconds = r.VarianceSeconds,
+            DependsOnManifestId = r.DependsOnManifestId,
+        };
 
-        return ids.Where(byId.ContainsKey)
-            .Select(id =>
-            {
-                var r = byId[id];
-                var manifest = new Effect.Models.Manifest.Manifest
-                {
-                    IsEnabled = r.IsEnabled,
-                    ScheduleType = r.ScheduleType,
-                    CronExpression = r.CronExpression,
-                    IntervalSeconds = r.IntervalSeconds,
-                    MisfirePolicy = r.MisfirePolicy,
-                    MisfireThresholdSeconds = r.MisfireThresholdSeconds,
-                    ScheduledAt = r.ScheduledAt,
-                    Exclusions = r.Exclusions,
-                    LastSuccessfulRun = r.LastSuccessfulRun,
-                    NextScheduledRun = r.NextScheduledRun,
-                    VarianceSeconds = r.VarianceSeconds,
-                    DependsOnManifestId = r.DependsOnManifestId,
-                };
+        // The manager skips a manifest that is disabled, sits in a disabled group, or
+        // waits on an operator's answer to its dead letter.
+        var canRun = r.IsEnabled && r.GroupEnabled && !r.HasAwaitingDeadLetter;
+        var runsAfter =
+            canRun && r.ScheduleType == ScheduleType.Dependent && r.ParentEnabled
+                ? r.DependsOnManifestId
+                : null;
 
-                // The manager skips a manifest that is disabled, sits in a disabled group, or
-                // waits on an operator's answer to its dead letter.
-                var canRun = r.IsEnabled && r.GroupEnabled && !r.HasAwaitingDeadLetter;
-                var runsAfter =
-                    canRun && r.ScheduleType == ScheduleType.Dependent && r.ParentEnabled
-                        ? r.DependsOnManifestId
-                        : null;
-
-                return new ManifestUpcomingRuns(
-                    id,
-                    ScheduleText.Describe(manifest, r.ParentExternalId),
-                    canRun
-                        ? SchedulingHelpers.UpcomingRuns(
-                            manifest,
-                            count,
-                            now,
-                            _schedulerConfiguration,
-                            r.LastCancelledRun
-                        )
-                        : Array.Empty<DateTime>(),
-                    runsAfter,
-                    runsAfter is null ? null : r.ParentExternalId
-                );
-            })
-            .ToList();
+        return new ManifestUpcomingRuns(
+            id,
+            ScheduleText.Describe(manifest, r.ParentExternalId),
+            canRun
+                ? SchedulingHelpers.UpcomingRuns(
+                    manifest,
+                    count,
+                    now,
+                    _schedulerConfiguration,
+                    r.LastCancelledRun
+                )
+                : Array.Empty<DateTime>(),
+            runsAfter,
+            runsAfter is null ? null : r.ParentExternalId
+        );
     }
 }

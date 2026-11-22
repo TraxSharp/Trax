@@ -838,18 +838,7 @@ public class MetadataCleanupTrainTests : TestSetup
             RetentionPeriod = TimeSpan.FromMinutes(30),
             DeleteBatchSize = runs.Count,
         };
-        var junction =
-            new Trax.Scheduler.Trains.MetadataCleanup.Junctions.DeleteExpiredMetadataJunction(
-                DataContext,
-                new SchedulerConfiguration { MetadataCleanup = cleanup },
-                Microsoft
-                    .Extensions
-                    .Logging
-                    .Abstractions
-                    .NullLogger<Trax.Scheduler.Trains.MetadataCleanup.Junctions.DeleteExpiredMetadataJunction>
-                    .Instance,
-                TimeProvider.System
-            );
+        var junction = NewDeleteJunction(cleanup);
         var attempts = 0;
         junction.BeforeMetadataDelete = async ct =>
         {
@@ -859,21 +848,7 @@ public class MetadataCleanupTrainTests : TestSetup
                 return;
             }
 
-            var other = Scope.ServiceProvider.CreateAsyncScope();
-            await using var otherDisposal = other.ConfigureAwait(false);
-            var otherData =
-                other.ServiceProvider.GetRequiredService<Trax.Effect.Data.Services.DataContext.IDataContext>();
-            otherData.WorkQueues.Add(
-                WorkQueue.Create(
-                    new CreateWorkQueue
-                    {
-                        TrainName = typeof(ManifestManagerTrain).FullName.NotNull(),
-                        ReplayDecisionsOf = runs[attempts++].Id,
-                    },
-                    TimeProvider.System
-                )
-            );
-            await otherData.SaveChanges(ct).ConfigureAwait(false);
+            await CommitReplayEntryOnOtherConnection(runs[attempts++].Id, ct).ConfigureAwait(false);
         };
 
         await junction.Run(new MetadataCleanupRequest());
@@ -1005,23 +980,13 @@ public class MetadataCleanupTrainTests : TestSetup
             state: TrainState.Failed,
             startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
-        var ownEntry = WorkQueue.Create(
-            new CreateWorkQueue { TrainName = typeof(ManifestManagerTrain).FullName.NotNull() },
-            TimeProvider.System
-        );
-        ownEntry.Status = WorkQueueStatus.Dispatched;
-        ownEntry.MetadataId = linked.Id;
-        await DataContext.Track(ownEntry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        var ownEntry = await SaveDispatchedEntryOf(linked.Id);
         var child = await CreateAndSaveChildMetadata(
             name: "Consumer.Trains.SomeChildTrain",
             state: TrainState.InProgress,
             parentId: linked.Id
         );
-        var deadLetter = await CreateAndSaveDeadLetter(await CreateAndSaveManifest());
-        await DataContext
-            .DeadLetters.Where(d => d.Id == deadLetter.Id)
-            .ExecuteUpdateAsync(s => s.SetProperty(d => d.RetryMetadataId, linked.Id));
+        var deadLetter = await SaveDeadLetterRetriedBy(linked.Id);
         DataContext.Reset();
 
         var linkedOnce = false;
@@ -1038,21 +1003,7 @@ public class MetadataCleanupTrainTests : TestSetup
                     linkedOnce = true;
 
                     // Committed on another connection, as a concurrent requeue would be.
-                    var other = Scope.ServiceProvider.CreateAsyncScope();
-                    await using var otherDisposal = other.ConfigureAwait(false);
-                    var otherData =
-                        other.ServiceProvider.GetRequiredService<Trax.Effect.Data.Services.DataContext.IDataContext>();
-                    otherData.WorkQueues.Add(
-                        WorkQueue.Create(
-                            new CreateWorkQueue
-                            {
-                                TrainName = typeof(ManifestManagerTrain).FullName.NotNull(),
-                                ReplayDecisionsOf = linked.Id,
-                            },
-                            TimeProvider.System
-                        )
-                    );
-                    await otherData.SaveChanges(ct).ConfigureAwait(false);
+                    await CommitReplayEntryOnOtherConnection(linked.Id, ct).ConfigureAwait(false);
                 }
             );
 
@@ -1070,6 +1021,113 @@ public class MetadataCleanupTrainTests : TestSetup
             .RetryMetadataId.Should()
             .Be(linked.Id, because);
         (await DataContext.Metadatas.AnyAsync(m => m.Id == unlinked.Id)).Should().BeFalse();
+    }
+
+    private Trax.Scheduler.Trains.MetadataCleanup.Junctions.DeleteExpiredMetadataJunction NewDeleteJunction(
+        MetadataCleanupConfiguration cleanup
+    ) =>
+        new(
+            DataContext,
+            new SchedulerConfiguration { MetadataCleanup = cleanup },
+            Microsoft
+                .Extensions
+                .Logging
+                .Abstractions
+                .NullLogger<Trax.Scheduler.Trains.MetadataCleanup.Junctions.DeleteExpiredMetadataJunction>
+                .Instance,
+            TimeProvider.System
+        );
+
+    private async Task CommitReplayEntryOnOtherConnection(long replayOf, CancellationToken ct)
+    {
+        var other = Scope.ServiceProvider.CreateAsyncScope();
+        await using var otherDisposal = other.ConfigureAwait(false);
+        var otherData =
+            other.ServiceProvider.GetRequiredService<Trax.Effect.Data.Services.DataContext.IDataContext>();
+        otherData.WorkQueues.Add(
+            WorkQueue.Create(
+                new CreateWorkQueue
+                {
+                    TrainName = typeof(ManifestManagerTrain).FullName.NotNull(),
+                    ReplayDecisionsOf = replayOf,
+                },
+                TimeProvider.System
+            )
+        );
+        await otherData.SaveChanges(ct).ConfigureAwait(false);
+    }
+
+    private async Task<WorkQueue> SaveDispatchedEntryOf(long metadataId)
+    {
+        var ownEntry = WorkQueue.Create(
+            new CreateWorkQueue { TrainName = typeof(ManifestManagerTrain).FullName.NotNull() },
+            TimeProvider.System
+        );
+        ownEntry.Status = WorkQueueStatus.Dispatched;
+        ownEntry.MetadataId = metadataId;
+        await DataContext.Track(ownEntry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        return ownEntry;
+    }
+
+    private async Task<DeadLetter> SaveDeadLetterRetriedBy(long metadataId)
+    {
+        var deadLetter = await CreateAndSaveDeadLetter(
+                await CreateAndSaveManifest().ConfigureAwait(false)
+            )
+            .ConfigureAwait(false);
+        await DataContext
+            .DeadLetters.Where(d => d.Id == deadLetter.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.RetryMetadataId, metadataId))
+            .ConfigureAwait(false);
+        return deadLetter;
+    }
+
+    private async Task<long> SaveLogOf(long metadataId)
+    {
+        var log = Log.Create(
+            new CreateLog
+            {
+                Level = LogLevel.Information,
+                Message = "Test log entry",
+                CategoryName = "TestCategory",
+                EventId = 1,
+            }
+        );
+        await DataContext.Logs.AddAsync(log).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        var logId = log.Id;
+        await DataContext
+            .Logs.Where(l => l.Id == logId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(l => l.MetadataId, metadataId))
+            .ConfigureAwait(false);
+        return logId;
+    }
+
+    private async Task<long> SaveDispatchedEntryRowOf(long metadataId)
+    {
+        var workQueueEntry = WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = typeof(ManifestManagerTrain).FullName.NotNull(),
+                Input = null,
+                InputTypeName = null,
+            },
+            TimeProvider.System
+        );
+        await DataContext.Track(workQueueEntry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        var entryId = workQueueEntry.Id;
+        await DataContext
+            .WorkQueues.Where(wq => wq.Id == entryId)
+            .ExecuteUpdateAsync(setters =>
+                setters
+                    .SetProperty(wq => wq.MetadataId, metadataId)
+                    .SetProperty(wq => wq.Status, WorkQueueStatus.Dispatched)
+                    .SetProperty(wq => wq.DispatchedAt, TimeProvider.System.GetUtcNow().UtcDateTime)
+            )
+            .ConfigureAwait(false);
+        return entryId;
     }
 
     private async Task<WorkQueue> QueueReplayOf(long metadataId)
@@ -1238,43 +1296,10 @@ public class MetadataCleanupTrainTests : TestSetup
         );
 
         // Create associated log
-        var log = Log.Create(
-            new CreateLog
-            {
-                Level = LogLevel.Information,
-                Message = "Test log entry",
-                CategoryName = "TestCategory",
-                EventId = 1,
-            }
-        );
-        await DataContext.Logs.AddAsync(log);
-        await DataContext.SaveChanges(CancellationToken.None);
-        var logId = log.Id;
-        await DataContext
-            .Logs.Where(l => l.Id == logId)
-            .ExecuteUpdateAsync(setters => setters.SetProperty(l => l.MetadataId, metadata.Id));
+        var logId = await SaveLogOf(metadata.Id);
 
         // Create associated work queue entry
-        var workQueueEntry = WorkQueue.Create(
-            new CreateWorkQueue
-            {
-                TrainName = typeof(ManifestManagerTrain).FullName.NotNull(),
-                Input = null,
-                InputTypeName = null,
-            },
-            TimeProvider.System
-        );
-        await DataContext.Track(workQueueEntry);
-        await DataContext.SaveChanges(CancellationToken.None);
-        var entryId = workQueueEntry.Id;
-        await DataContext
-            .WorkQueues.Where(wq => wq.Id == entryId)
-            .ExecuteUpdateAsync(setters =>
-                setters
-                    .SetProperty(wq => wq.MetadataId, metadata.Id)
-                    .SetProperty(wq => wq.Status, WorkQueueStatus.Dispatched)
-                    .SetProperty(wq => wq.DispatchedAt, TimeProvider.System.GetUtcNow().UtcDateTime)
-            );
+        var entryId = await SaveDispatchedEntryRowOf(metadata.Id);
 
         DataContext.Reset();
 

@@ -54,15 +54,7 @@ public partial class OperationsService
         CancellationToken ct
     )
     {
-        if (scope == MetricSeriesScope.Train && string.IsNullOrWhiteSpace(name))
-            throw new ArgumentException("A train's series needs the train's name.", nameof(name));
-        if (scope != MetricSeriesScope.Train && id is null)
-            throw new ArgumentException(
-                $"A {scope.ToString().ToLowerInvariant()}'s series needs its id.",
-                nameof(id)
-            );
-        if (MetricSeriesRefusal(scope, range) is { } refusal)
-            throw new ArgumentException(refusal, nameof(range));
+        ValidateMetricSeriesRequest(scope, id, name, range);
 
         var (size, count) = MetricSeriesBuckets(range);
         var now = Clock.GetUtcNow().UtcDateTime;
@@ -74,32 +66,101 @@ public partial class OperationsService
         var hourDiv = size >= TimeSpan.FromHours(1) ? (int)size.TotalHours : 1;
         var minuteDiv = size >= TimeSpan.FromHours(1) ? 60 : (int)size.TotalMinutes;
 
-        IQueryable<Metadata> Scoped(IDataContext db)
-        {
-            var runs = db
-                .Metadatas.AsNoTracking()
-                .Where(m => m.StartTime >= from && m.StartTime < to);
-            return scope switch
-            {
-                MetricSeriesScope.Train => runs.Where(m => m.Name == name),
-                MetricSeriesScope.Manifest => runs.Where(m => m.ManifestId == id),
-                _ => runs.Where(m =>
-                    m.ManifestId != null
-                    && db.Manifests.Any(mf => mf.Id == m.ManifestId && mf.ManifestGroupId == id)
-                ),
-            };
-        }
-
-        async Task<T> Read<T>(Func<IDataContext, Task<T>> read)
-        {
-            var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
-            await using var dbDisposal = db.ConfigureAwait(false);
-            return await read(db).ConfigureAwait(false);
-        }
+        IQueryable<Metadata> Scoped(IDataContext db) =>
+            ScopedSeriesRuns(db, scope, id, name, from, to);
 
         // Counts and the histogram read different index ranges; read them at once.
-        var countsRead = Read(db =>
-            Scoped(db)
+        var countsRead = ReadInOwnContextAsync(
+            db => ReadSeriesCountsAsync(Scoped(db), hourDiv, minuteDiv, ct),
+            ct
+        );
+        var histogramRead = ReadInOwnContextAsync(
+            db =>
+                ReadDurationHistogramAsync(
+                    db,
+                    Scoped(db)
+                        .Where(m => m.TrainState == TrainState.Completed && m.EndTime != null),
+                    hourDiv,
+                    minuteDiv,
+                    ct
+                ),
+            ct
+        );
+        await Task.WhenAll(countsRead, histogramRead).ConfigureAwait(false);
+
+        DateTime BucketOf(DateTime date, int hour, int minute) =>
+            DateTime.SpecifyKind(
+                date.Date.AddHours(hour * hourDiv).AddMinutes(minute * minuteDiv),
+                DateTimeKind.Utc
+            );
+
+        var counts = (await countsRead.ConfigureAwait(false))
+            .GroupBy(x => (BucketOf(x.Date, x.Hour, x.Minute), x.TrainState))
+            .ToDictionary(g => g.Key, g => g.Sum(x => x.Count));
+        var histograms = (await histogramRead.ConfigureAwait(false))
+            .GroupBy(x => BucketOf(x.Date, x.Hour, x.Minute))
+            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Bin).ToList());
+
+        var buckets = SeriesBuckets(from, size, count, counts, histograms);
+
+        return new MetricSeries(scope, range, from, to, (int)size.TotalSeconds, buckets);
+    }
+
+    private static void ValidateMetricSeriesRequest(
+        MetricSeriesScope scope,
+        long? id,
+        string? name,
+        MetricSeriesRange range
+    )
+    {
+        if (scope == MetricSeriesScope.Train && string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("A train's series needs the train's name.", nameof(name));
+        if (scope != MetricSeriesScope.Train && id is null)
+            throw new ArgumentException(
+                $"A {scope.ToString().ToLowerInvariant()}'s series needs its id.",
+                nameof(id)
+            );
+        if (MetricSeriesRefusal(scope, range) is { } refusal)
+            throw new ArgumentException(refusal, nameof(range));
+    }
+
+    private static IQueryable<Metadata> ScopedSeriesRuns(
+        IDataContext db,
+        MetricSeriesScope scope,
+        long? id,
+        string? name,
+        DateTime from,
+        DateTime to
+    )
+    {
+        var runs = db.Metadatas.AsNoTracking().Where(m => m.StartTime >= from && m.StartTime < to);
+        return scope switch
+        {
+            MetricSeriesScope.Train => runs.Where(m => m.Name == name),
+            MetricSeriesScope.Manifest => runs.Where(m => m.ManifestId == id),
+            _ => runs.Where(m =>
+                m.ManifestId != null
+                && db.Manifests.Any(mf => mf.Id == m.ManifestId && mf.ManifestGroupId == id)
+            ),
+        };
+    }
+
+    // One count of one bucket and state, as the database grouped it.
+    private sealed record SeriesCount(
+        DateTime Date,
+        int Hour,
+        int Minute,
+        TrainState TrainState,
+        int Count
+    );
+
+    private static async Task<List<SeriesCount>> ReadSeriesCountsAsync(
+        IQueryable<Metadata> scoped,
+        int hourDiv,
+        int minuteDiv,
+        CancellationToken ct
+    ) => (
+            await scoped
                 .Where(m =>
                     m.TrainState == TrainState.Completed
                     || m.TrainState == TrainState.Failed
@@ -121,35 +182,21 @@ public partial class OperationsService
                     Count = g.Count(),
                 })
                 .ToListAsync(ct)
-        );
-        var histogramRead = Read(db =>
-            ReadDurationHistogramAsync(
-                db,
-                Scoped(db).Where(m => m.TrainState == TrainState.Completed && m.EndTime != null),
-                hourDiv,
-                minuteDiv,
-                ct
-            )
-        );
-        await Task.WhenAll(countsRead, histogramRead).ConfigureAwait(false);
+                .ConfigureAwait(false)
+        ).Select(x => new SeriesCount(x.Date, x.Hour, x.Minute, x.TrainState, x.Count)).ToList();
 
-        DateTime BucketOf(DateTime date, int hour, int minute) =>
-            DateTime.SpecifyKind(
-                date.Date.AddHours(hour * hourDiv).AddMinutes(minute * minuteDiv),
-                DateTimeKind.Utc
-            );
-
-        var counts = (await countsRead.ConfigureAwait(false))
-            .GroupBy(x => (BucketOf(x.Date, x.Hour, x.Minute), x.TrainState))
-            .ToDictionary(g => g.Key, g => g.Sum(x => x.Count));
-        var histograms = (await histogramRead.ConfigureAwait(false))
-            .GroupBy(x => BucketOf(x.Date, x.Hour, x.Minute))
-            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Bin).ToList());
-
+    private static List<MetricSeriesBucket> SeriesBuckets(
+        DateTime from,
+        TimeSpan size,
+        int count,
+        Dictionary<(DateTime, TrainState), int> counts,
+        Dictionary<DateTime, List<DurationBin>> histograms
+    )
+    {
         int CountOf(DateTime bucket, TrainState state) =>
             counts.TryGetValue((bucket, state), out var c) ? c : 0;
 
-        var buckets = Enumerable
+        return Enumerable
             .Range(0, count)
             .Select(i =>
             {
@@ -165,8 +212,6 @@ public partial class OperationsService
                 );
             })
             .ToList();
-
-        return new MetricSeries(scope, range, from, to, (int)size.TotalSeconds, buckets);
     }
 
     /// <summary>One duration bin of one bucket: how many runs fell in it and the shortest and longest.</summary>
@@ -245,6 +290,17 @@ public partial class OperationsService
                 ))
                 .ToList();
 
+        return await ReadDurationHistogramFromTicksAsync(runs, hourDiv, minuteDiv, ct)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<List<DurationBin>> ReadDurationHistogramFromTicksAsync(
+        IQueryable<Metadata> runs,
+        int hourDiv,
+        int minuteDiv,
+        CancellationToken ct
+    )
+    {
         const double ticksPerMs = TimeSpan.TicksPerMillisecond;
         return (
             await runs.Select(m => new

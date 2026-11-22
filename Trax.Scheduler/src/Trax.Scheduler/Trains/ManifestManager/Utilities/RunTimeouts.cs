@@ -39,6 +39,84 @@ internal static class RunTimeouts
     {
         var known = runs.ToDictionary(r => r.Id);
 
+        await LoadAncestorsAsync(dataContext, runs, known, cancellationToken).ConfigureAwait(false);
+
+        var roots = new Dictionary<long, TimedRun?>();
+        foreach (var run in runs)
+            roots[run.Id] = FindRoot(run, known);
+
+        var unmanifestedRootIds = roots
+            .Values.Where(r => r is { ManifestId: null })
+            .Select(r => r.NotNull().Id)
+            .Distinct()
+            .ToList();
+
+        var dispatchedRootIds = await ReadDispatchedRootIdsAsync(
+                dataContext,
+                unmanifestedRootIds,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        var result = new Dictionary<long, RunBound>(runs.Count);
+        foreach (var run in runs)
+        {
+            var root = roots[run.Id];
+            var excluded =
+                IsExcluded(config, run.Name) || (root is not null && IsExcluded(config, root.Name));
+
+            TimeSpan? timeout = root switch
+            {
+                null => null,
+                { ManifestTimeoutSeconds: { } seconds } => TimeSpan.FromSeconds(seconds),
+                { ManifestId: not null } => config.DefaultJobTimeout,
+                _ when dispatchedRootIds.Contains(root.Id) => config.DefaultJobTimeout,
+                _ => null,
+            };
+
+            result[run.Id] = new RunBound(timeout, excluded, root?.ManifestId);
+        }
+
+        return result;
+    }
+
+    private static async Task<HashSet<long>> ReadDispatchedRootIdsAsync(
+        IDataContext dataContext,
+        List<long> unmanifestedRootIds,
+        CancellationToken cancellationToken
+    )
+    {
+        var dispatchedRootIds = new HashSet<long>();
+        if (unmanifestedRootIds.Count > 0)
+        {
+            dispatchedRootIds.UnionWith(
+                await dataContext
+                    .WorkQueues.Where(q =>
+                        q.MetadataId != null && unmanifestedRootIds.Contains(q.MetadataId.Value)
+                    )
+                    .Select(q => q.MetadataId.NotNull().Value)
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false)
+            );
+            dispatchedRootIds.UnionWith(
+                await dataContext
+                    .BackgroundJobs.Where(j => unmanifestedRootIds.Contains(j.MetadataId))
+                    .Select(j => j.MetadataId)
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false)
+            );
+        }
+
+        return dispatchedRootIds;
+    }
+
+    private static async Task LoadAncestorsAsync(
+        IDataContext dataContext,
+        IReadOnlyCollection<TimedRun> runs,
+        Dictionary<long, TimedRun> known,
+        CancellationToken cancellationToken
+    )
+    {
         var frontier = MissingParents(runs, known);
         for (var level = 0; level < MaxDepth && frontier.Count > 0; level++)
         {
@@ -61,58 +139,6 @@ internal static class RunTimeouts
 
             frontier = MissingParents(ancestors, known);
         }
-
-        var roots = new Dictionary<long, TimedRun?>();
-        foreach (var run in runs)
-            roots[run.Id] = FindRoot(run, known);
-
-        var unmanifestedRootIds = roots
-            .Values.Where(r => r is { ManifestId: null })
-            .Select(r => r.NotNull().Id)
-            .Distinct()
-            .ToList();
-
-        var dispatchedRootIds = new HashSet<long>();
-        if (unmanifestedRootIds.Count > 0)
-        {
-            dispatchedRootIds.UnionWith(
-                await dataContext
-                    .WorkQueues.Where(q =>
-                        q.MetadataId != null && unmanifestedRootIds.Contains(q.MetadataId.Value)
-                    )
-                    .Select(q => q.MetadataId.NotNull().Value)
-                    .ToListAsync(cancellationToken)
-                    .ConfigureAwait(false)
-            );
-            dispatchedRootIds.UnionWith(
-                await dataContext
-                    .BackgroundJobs.Where(j => unmanifestedRootIds.Contains(j.MetadataId))
-                    .Select(j => j.MetadataId)
-                    .ToListAsync(cancellationToken)
-                    .ConfigureAwait(false)
-            );
-        }
-
-        var result = new Dictionary<long, RunBound>(runs.Count);
-        foreach (var run in runs)
-        {
-            var root = roots[run.Id];
-            var excluded =
-                IsExcluded(config, run.Name) || (root is not null && IsExcluded(config, root.Name));
-
-            TimeSpan? timeout = root switch
-            {
-                null => null,
-                { ManifestTimeoutSeconds: { } seconds } => TimeSpan.FromSeconds(seconds),
-                { ManifestId: not null } => config.DefaultJobTimeout,
-                _ when dispatchedRootIds.Contains(root.Id) => config.DefaultJobTimeout,
-                _ => null,
-            };
-
-            result[run.Id] = new RunBound(timeout, excluded, root?.ManifestId);
-        }
-
-        return result;
     }
 
     private static List<long> MissingParents(

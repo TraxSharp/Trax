@@ -97,6 +97,54 @@ public class OperationsServiceMachineInstanceTransitionsTests : TestSetup
             InvokeToken = token,
         };
 
+    private static async Task SeedRanAndQueuedRuns(DbContext db, string ran, string queued)
+    {
+        await db
+            .Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                INSERT INTO trax.metadata (external_id, name, train_state, start_time, end_time, failure_class)
+                VALUES ({ran}, 'Ops.IHistoryTrain', 'completed', now() - interval '2 minutes', now() - interval '1 minute', 'unclassified')
+                """
+            )
+            .ConfigureAwait(false);
+        await db
+            .Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                INSERT INTO trax.work_queue (external_id, train_name, status, priority, created_at)
+                VALUES ({queued}, 'Ops.IHistoryTrain', 'queued', 0, now())
+                """
+            )
+            .ConfigureAwait(false);
+    }
+
+    private static async Task DeleteRanAndQueuedRuns(DbContext db, string ran, string queued)
+    {
+        await db
+            .Database.ExecuteSqlInterpolatedAsync(
+                $"DELETE FROM trax.metadata WHERE external_id = {ran}"
+            )
+            .ConfigureAwait(false);
+        await db
+            .Database.ExecuteSqlInterpolatedAsync(
+                $"DELETE FROM trax.work_queue WHERE external_id = {queued}"
+            )
+            .ConfigureAwait(false);
+    }
+
+    private Task<MachineInstanceTransitionPage?> TransitionsOfAnUnknownSystemInstance() =>
+        _operations
+            .NotNull()
+            .GetMachineInstanceTransitionsAsync(
+                new MachineInstanceKey(
+                    _machine.NotNull(),
+                    SnapshotOwnerKind.System,
+                    Guid.NewGuid()
+                ),
+                beforeRevision: null,
+                25,
+                CancellationToken.None
+            );
+
     private static MachineInstanceKey KeyOf(SnapshotDraft row) =>
         new(row.Machine, row.OwnerKind, row.Id, row.RowId);
 
@@ -174,18 +222,7 @@ public class OperationsServiceMachineInstanceTransitionsTests : TestSetup
             Row(3, SnapshotTransitionKind.Command, "Spawn", "Queued", "Waiting", at, spawned)
         );
         var db = (DbContext)DataContext;
-        await db.Database.ExecuteSqlInterpolatedAsync(
-            $"""
-            INSERT INTO trax.metadata (external_id, name, train_state, start_time, end_time, failure_class)
-            VALUES ({ran}, 'Ops.IHistoryTrain', 'completed', now() - interval '2 minutes', now() - interval '1 minute', 'unclassified')
-            """
-        );
-        await db.Database.ExecuteSqlInterpolatedAsync(
-            $"""
-            INSERT INTO trax.work_queue (external_id, train_name, status, priority, created_at)
-            VALUES ({queued}, 'Ops.IHistoryTrain', 'queued', 0, now())
-            """
-        );
+        await SeedRanAndQueuedRuns(db, ran, queued);
 
         try
         {
@@ -221,12 +258,7 @@ public class OperationsServiceMachineInstanceTransitionsTests : TestSetup
         }
         finally
         {
-            await db.Database.ExecuteSqlInterpolatedAsync(
-                $"DELETE FROM trax.metadata WHERE external_id = {ran}"
-            );
-            await db.Database.ExecuteSqlInterpolatedAsync(
-                $"DELETE FROM trax.work_queue WHERE external_id = {queued}"
-            );
+            await DeleteRanAndQueuedRuns(db, ran, queued);
         }
     }
 
@@ -272,18 +304,7 @@ public class OperationsServiceMachineInstanceTransitionsTests : TestSetup
                     25,
                     CancellationToken.None
                 );
-        var missing = await _operations
-            .NotNull()
-            .GetMachineInstanceTransitionsAsync(
-                new MachineInstanceKey(
-                    _machine.NotNull(),
-                    SnapshotOwnerKind.System,
-                    Guid.NewGuid()
-                ),
-                beforeRevision: null,
-                25,
-                CancellationToken.None
-            );
+        var missing = await TransitionsOfAnUnknownSystemInstance();
 
         page.NotNull()
             .Items.Should()

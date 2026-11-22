@@ -64,27 +64,7 @@ internal sealed class RunScheduledTrainJunction(
 
         try
         {
-            logger.LogDebug(
-                "Executing train {TrainName} for Metadata {MetadataId}",
-                metadata.Name,
-                metadata.Id
-            );
-
-            // By name: the train the row names runs, even when another train takes the same input type.
-            await trainBus
-                .RunByNameAsync(
-                    resolvedInput.TrainName,
-                    resolvedInput.Value,
-                    CancellationToken,
-                    metadata
-                )
-                .ConfigureAwait(false);
-
-            logger.LogDebug(
-                "Successfully executed train {TrainName} for Metadata {MetadataId}",
-                metadata.Name,
-                metadata.Id
-            );
+            await RunNamedTrainAsync(metadata, resolvedInput).ConfigureAwait(false);
         }
         catch (TrainAlreadyStartedException started) when (started.MetadataId == metadata.Id)
         {
@@ -106,6 +86,31 @@ internal sealed class RunScheduledTrainJunction(
         await dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         return Unit.Default;
+    }
+
+    private async Task RunNamedTrainAsync(Metadata metadata, ResolvedTrainInput resolvedInput)
+    {
+        logger.LogDebug(
+            "Executing train {TrainName} for Metadata {MetadataId}",
+            metadata.Name,
+            metadata.Id
+        );
+
+        // By name: the train the row names runs, even when another train takes the same input type.
+        await trainBus
+            .RunByNameAsync(
+                resolvedInput.TrainName,
+                resolvedInput.Value,
+                CancellationToken,
+                metadata
+            )
+            .ConfigureAwait(false);
+
+        logger.LogDebug(
+            "Successfully executed train {TrainName} for Metadata {MetadataId}",
+            metadata.Name,
+            metadata.Id
+        );
     }
 
     private void LogOwnedElsewhere(Metadata metadata) =>

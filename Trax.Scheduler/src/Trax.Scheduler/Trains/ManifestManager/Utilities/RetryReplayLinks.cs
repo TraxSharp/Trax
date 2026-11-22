@@ -143,39 +143,14 @@ internal static class RetryReplayLinks
                 )
             {
                 replayConflicts++;
-                var linked = entries.Where(e => e.ReplayDecisionsOf is not null).ToList();
-                var sources = linked.Select(e => e.ReplayDecisionsOf.NotNull().Value).ToList();
-                var taken =
-                    replayConflicts == 1
-                        ? (
-                            await context
-                                .WorkQueues.AsNoTracking()
-                                .Where(q =>
-                                    q.ReplayDecisionsOf != null
-                                    && sources.Contains(q.ReplayDecisionsOf.Value)
-                                    && q.Status == WorkQueueStatus.Queued
-                                )
-                                .Select(q => q.ReplayDecisionsOf.NotNull().Value)
-                                .ToListAsync(ct)
-                                .ConfigureAwait(false)
-                        ).ToHashSet()
-                        : sources.ToHashSet();
-
-                foreach (
-                    var entry in linked.Where(e =>
-                        taken.Contains(e.ReplayDecisionsOf.NotNull().Value)
+                cleared += await ClearReplayLinksAsync(
+                        context,
+                        entries,
+                        firstConflict: replayConflicts == 1,
+                        logger,
+                        ct
                     )
-                )
-                {
-                    logger.LogInformation(
-                        "A queued entry already replays run {ReplayDecisionsOf}, so the entry "
-                            + "queued for manifest {ManifestId} asks its deciders afresh",
-                        entry.ReplayDecisionsOf,
-                        entry.ManifestId
-                    );
-                    entry.ReplayDecisionsOf = null;
-                    cleared++;
-                }
+                    .ConfigureAwait(false);
             }
             catch (DbUpdateException ex)
                 when (resumeConflicts < 2
@@ -184,38 +159,100 @@ internal static class RetryReplayLinks
                 )
             {
                 resumeConflicts++;
-                var linked = entries.Where(e => e.ResumeFrom is not null).ToList();
-                var sources = linked.Select(e => e.ResumeFrom.NotNull().Value).ToList();
-                var taken =
-                    resumeConflicts == 1
-                        ? (
-                            await context
-                                .WorkQueues.AsNoTracking()
-                                .Where(q =>
-                                    q.ResumeFrom != null
-                                    && sources.Contains(q.ResumeFrom.Value)
-                                    && q.Status == WorkQueueStatus.Queued
-                                )
-                                .Select(q => q.ResumeFrom.NotNull().Value)
-                                .ToListAsync(ct)
-                                .ConfigureAwait(false)
-                        ).ToHashSet()
-                        : sources.ToHashSet();
-
-                foreach (
-                    var entry in linked.Where(e => taken.Contains(e.ResumeFrom.NotNull().Value))
-                )
-                {
-                    logger.LogInformation(
-                        "A queued entry already resumes run {ResumeFrom}, so the entry queued for "
-                            + "manifest {ManifestId} reruns from the top",
-                        entry.ResumeFrom,
-                        entry.ManifestId
-                    );
-                    entry.ResumeFrom = null;
-                    entry.ResumeAt = null;
-                }
+                await ClearResumeLinksAsync(
+                        context,
+                        entries,
+                        firstConflict: resumeConflicts == 1,
+                        logger,
+                        ct
+                    )
+                    .ConfigureAwait(false);
             }
+        }
+    }
+
+    // Clears the replay link of each entry whose run a queued entry already replays: on the first
+    // refusal those the database names, on a later one every link among them.
+    private static async Task<int> ClearReplayLinksAsync(
+        IDataContext context,
+        IReadOnlyCollection<WorkQueue> entries,
+        bool firstConflict,
+        ILogger logger,
+        CancellationToken ct
+    )
+    {
+        var cleared = 0;
+        var linked = entries.Where(e => e.ReplayDecisionsOf is not null).ToList();
+        var sources = linked.Select(e => e.ReplayDecisionsOf.NotNull().Value).ToList();
+        var taken = firstConflict
+            ? (
+                await context
+                    .WorkQueues.AsNoTracking()
+                    .Where(q =>
+                        q.ReplayDecisionsOf != null
+                        && sources.Contains(q.ReplayDecisionsOf.Value)
+                        && q.Status == WorkQueueStatus.Queued
+                    )
+                    .Select(q => q.ReplayDecisionsOf.NotNull().Value)
+                    .ToListAsync(ct)
+                    .ConfigureAwait(false)
+            ).ToHashSet()
+            : sources.ToHashSet();
+
+        foreach (
+            var entry in linked.Where(e => taken.Contains(e.ReplayDecisionsOf.NotNull().Value))
+        )
+        {
+            logger.LogInformation(
+                "A queued entry already replays run {ReplayDecisionsOf}, so the entry "
+                    + "queued for manifest {ManifestId} asks its deciders afresh",
+                entry.ReplayDecisionsOf,
+                entry.ManifestId
+            );
+            entry.ReplayDecisionsOf = null;
+            cleared++;
+        }
+
+        return cleared;
+    }
+
+    // Clears the resume link of each entry whose run a queued entry already resumes, chosen as
+    // ClearReplayLinksAsync chooses.
+    private static async Task ClearResumeLinksAsync(
+        IDataContext context,
+        IReadOnlyCollection<WorkQueue> entries,
+        bool firstConflict,
+        ILogger logger,
+        CancellationToken ct
+    )
+    {
+        var linked = entries.Where(e => e.ResumeFrom is not null).ToList();
+        var sources = linked.Select(e => e.ResumeFrom.NotNull().Value).ToList();
+        var taken = firstConflict
+            ? (
+                await context
+                    .WorkQueues.AsNoTracking()
+                    .Where(q =>
+                        q.ResumeFrom != null
+                        && sources.Contains(q.ResumeFrom.Value)
+                        && q.Status == WorkQueueStatus.Queued
+                    )
+                    .Select(q => q.ResumeFrom.NotNull().Value)
+                    .ToListAsync(ct)
+                    .ConfigureAwait(false)
+            ).ToHashSet()
+            : sources.ToHashSet();
+
+        foreach (var entry in linked.Where(e => taken.Contains(e.ResumeFrom.NotNull().Value)))
+        {
+            logger.LogInformation(
+                "A queued entry already resumes run {ResumeFrom}, so the entry queued for "
+                    + "manifest {ManifestId} reruns from the top",
+                entry.ResumeFrom,
+                entry.ManifestId
+            );
+            entry.ResumeFrom = null;
+            entry.ResumeAt = null;
         }
     }
 

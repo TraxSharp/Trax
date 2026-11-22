@@ -73,13 +73,7 @@ internal sealed class QueuedWorkListenerService(
                 backoff = FirstBackoff;
                 Subscribed?.Invoke(this, EventArgs.Empty);
 
-                while (true)
-                {
-                    await subscription.WaitAsync(stoppingToken).ConfigureAwait(false);
-                    Interlocked.Increment(ref _notices);
-                    wake.Signal();
-                    NoticeReceived?.Invoke(this, EventArgs.Empty);
-                }
+                await SignalEachNoticeAsync(subscription, stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -110,6 +104,20 @@ internal sealed class QueuedWorkListenerService(
             }
 
             backoff = backoff * 2 < MaxBackoff ? backoff * 2 : MaxBackoff;
+        }
+    }
+
+    private async Task SignalEachNoticeAsync(
+        IQueuedWorkSubscription subscription,
+        CancellationToken stoppingToken
+    )
+    {
+        while (true)
+        {
+            await subscription.WaitAsync(stoppingToken).ConfigureAwait(false);
+            Interlocked.Increment(ref _notices);
+            wake.Signal();
+            NoticeReceived?.Invoke(this, EventArgs.Empty);
         }
     }
 

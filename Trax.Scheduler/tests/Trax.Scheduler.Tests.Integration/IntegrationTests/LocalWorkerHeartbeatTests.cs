@@ -65,15 +65,7 @@ public class LocalWorkerHeartbeatTests : TestSetup
 
             // negative-wait: the job must still be held by the first worker well after its
             // visibility timeout has passed, which only elapsed time can show.
-            while (
-                TimeProvider.System.GetUtcNow().UtcDateTime - claimedAt < VisibilityTimeout * 2.5
-            )
-                // negative-wait: only elapsed time shows the job is still held.
-                await Task.Delay(
-                    TimeSpan.FromMilliseconds(100),
-                    TimeProvider.System,
-                    CancellationToken.None
-                );
+            await HoldPastTheVisibilityTimeout(claimedAt);
 
             DataContext.Reset();
             var jobRunnerRuns = await DataContext
@@ -141,21 +133,9 @@ public class LocalWorkerHeartbeatTests : TestSetup
 
             // negative-wait: the waiting jobs must still be held well after their visibility
             // timeout has passed, which only elapsed time can show.
-            while (
-                TimeProvider.System.GetUtcNow().UtcDateTime - claimedAt < VisibilityTimeout * 2.5
-            )
-                // negative-wait: only elapsed time shows the job is still held.
-                await Task.Delay(
-                    TimeSpan.FromMilliseconds(100),
-                    TimeProvider.System,
-                    CancellationToken.None
-                );
+            await HoldPastTheVisibilityTimeout(claimedAt);
 
-            foreach (var key in waiting)
-                DeliveryProbeTrain
-                    .Runs.ContainsKey(key)
-                    .Should()
-                    .BeFalse("the batch's worker still holds the jobs it has not reached");
+            AssertNoneHasRun(waiting);
 
             gate.TrySetResult();
             foreach (var run in waitingRuns)
@@ -193,16 +173,7 @@ public class LocalWorkerHeartbeatTests : TestSetup
         // The database refuses every refresh of this job's claim; the claim itself, which sets
         // fetched_at from null, is allowed.
         var function = string.Create(CultureInfo.InvariantCulture, $"refuse_refresh_{jobId}");
-        await ExecuteSqlAsync(
-            $"CREATE FUNCTION trax.{function}() RETURNS trigger LANGUAGE plpgsql AS $$ "
-                + string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"BEGIN IF OLD.id = {jobId} AND OLD.fetched_at IS NOT NULL THEN "
-                )
-                + "RAISE EXCEPTION 'refresh refused'; END IF; RETURN NEW; END $$; "
-                + $"CREATE TRIGGER {function} BEFORE UPDATE ON trax.background_job "
-                + $"FOR EACH ROW EXECUTE FUNCTION trax.{function}();"
-        );
+        await CreateRefreshRefusingTrigger(function, jobId);
 
         var logger = new CapturingLogger();
         using var stop = new CancellationTokenSource();
@@ -335,6 +306,39 @@ public class LocalWorkerHeartbeatTests : TestSetup
             DeliveryProbeTrain.Forget(key);
         }
     }
+
+    private static async Task HoldPastTheVisibilityTimeout(DateTime claimedAt)
+    {
+        while (TimeProvider.System.GetUtcNow().UtcDateTime - claimedAt < VisibilityTimeout * 2.5)
+            // negative-wait: only elapsed time shows the job is still held.
+            await Task.Delay(
+                    TimeSpan.FromMilliseconds(100),
+                    TimeProvider.System,
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
+    }
+
+    private static void AssertNoneHasRun(string[] waiting)
+    {
+        foreach (var key in waiting)
+            DeliveryProbeTrain
+                .Runs.ContainsKey(key)
+                .Should()
+                .BeFalse("the batch's worker still holds the jobs it has not reached");
+    }
+
+    private static Task CreateRefreshRefusingTrigger(string function, long jobId) =>
+        ExecuteSqlAsync(
+            $"CREATE FUNCTION trax.{function}() RETURNS trigger LANGUAGE plpgsql AS $$ "
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"BEGIN IF OLD.id = {jobId} AND OLD.fetched_at IS NOT NULL THEN "
+                )
+                + "RAISE EXCEPTION 'refresh refused'; END IF; RETURN NEW; END $$; "
+                + $"CREATE TRIGGER {function} BEFORE UPDATE ON trax.background_job "
+                + $"FOR EACH ROW EXECUTE FUNCTION trax.{function}();"
+        );
 
     private static async Task ExecuteSqlAsync(string sql)
     {

@@ -49,21 +49,7 @@ internal sealed class DeleteResolvedDeadLettersJunction(
 
         while (true)
         {
-            var batchIds = await dataContext
-                .DeadLetters.Where(dl =>
-                    dl.Status != DeadLetterStatus.AwaitingIntervention
-                    && dl.ResolvedAt != null
-                    && dl.ResolvedAt < cutoffTime
-                    // A retry still waiting in the queue has not run yet; deleting the dead
-                    // letter would delete it too.
-                    && !dataContext.WorkQueues.Any(wq =>
-                        wq.DeadLetterId == dl.Id && wq.Status == WorkQueueStatus.Queued
-                    )
-                )
-                .Select(dl => dl.Id)
-                .Take(BatchSize)
-                .ToListAsync(CancellationToken)
-                .ConfigureAwait(false);
+            var batchIds = await ReadExpiredBatchAsync(cutoffTime).ConfigureAwait(false);
 
             if (batchIds.Count == 0)
                 break;
@@ -99,4 +85,21 @@ internal sealed class DeleteResolvedDeadLettersJunction(
 
         return Unit.Default;
     }
+
+    private async Task<List<long>> ReadExpiredBatchAsync(DateTime cutoffTime) =>
+        await dataContext
+            .DeadLetters.Where(dl =>
+                dl.Status != DeadLetterStatus.AwaitingIntervention
+                && dl.ResolvedAt != null
+                && dl.ResolvedAt < cutoffTime
+                // A retry still waiting in the queue has not run yet; deleting the dead
+                // letter would delete it too.
+                && !dataContext.WorkQueues.Any(wq =>
+                    wq.DeadLetterId == dl.Id && wq.Status == WorkQueueStatus.Queued
+                )
+            )
+            .Select(dl => dl.Id)
+            .Take(BatchSize)
+            .ToListAsync(CancellationToken)
+            .ConfigureAwait(false);
 }

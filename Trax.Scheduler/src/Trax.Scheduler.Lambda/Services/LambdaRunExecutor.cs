@@ -68,36 +68,7 @@ internal sealed class LambdaRunExecutor(
         CancellationToken ct = default
     )
     {
-        var inputJson = JsonSerializer.Serialize(
-            input,
-            input.GetType(),
-            TraxJsonSerializationOptions.ManifestProperties
-        );
-
-        var runRequest = new RemoteRunRequest(
-            trainName,
-            inputJson,
-            input.GetType().FullName.NotNull()
-        );
-        var payloadJson = JsonSerializer.Serialize(runRequest);
-        var envelope = new LambdaEnvelope(LambdaRequestType.Run, payloadJson)
-        {
-            Signature = options.SigningKey is { } key
-                ? RunnerRequestSignature.Create(
-                    key,
-                    RunnerRequestPurpose.Run,
-                    Encoding.UTF8.GetBytes(payloadJson),
-                    timeProvider
-                )
-                : null,
-        };
-
-        var invokeRequest = new InvokeRequest
-        {
-            FunctionName = options.FunctionName,
-            InvocationType = InvocationType.RequestResponse,
-            Payload = JsonSerializer.Serialize(envelope),
-        };
+        var invokeRequest = BuildRunInvokeRequest(trainName, input);
 
         logger.LogDebug(
             "Invoking Lambda {FunctionName} (RequestResponse) for train {TrainName}",
@@ -145,6 +116,42 @@ internal sealed class LambdaRunExecutor(
         var output = RemoteRunOutput.Read(response.OutputJson, outputType, response.OutputType);
 
         return new RunTrainResult(response.MetadataId, response.ExternalId ?? "", output);
+    }
+
+    private InvokeRequest BuildRunInvokeRequest(string trainName, object input)
+    {
+        var inputJson = JsonSerializer.Serialize(
+            input,
+            input.GetType(),
+            TraxJsonSerializationOptions.ManifestProperties
+        );
+
+        var runRequest = new RemoteRunRequest(
+            trainName,
+            inputJson,
+            input.GetType().FullName.NotNull()
+        );
+        var payloadJson = JsonSerializer.Serialize(runRequest);
+        var envelope = new LambdaEnvelope(LambdaRequestType.Run, payloadJson)
+        {
+            Signature = options.SigningKey is { } key
+                ? RunnerRequestSignature.Create(
+                    key,
+                    RunnerRequestPurpose.Run,
+                    Encoding.UTF8.GetBytes(payloadJson),
+                    timeProvider
+                )
+                : null,
+        };
+
+        var invokeRequest = new InvokeRequest
+        {
+            FunctionName = options.FunctionName,
+            InvocationType = InvocationType.RequestResponse,
+            Payload = JsonSerializer.Serialize(envelope),
+        };
+
+        return invokeRequest;
     }
 
     private static async Task<string> ReadPayloadAsync(InvokeResponse response)

@@ -136,18 +136,7 @@ public class TriggerAlreadyQueuedTests
         await fx.Scheduler.TriggerAsync("aq-a");
         fx.DataContext.Reset();
 
-        var views = manifests
-            .Select(m => new ManifestDispatchView
-            {
-                Manifest = m,
-                ManifestGroup = m.ManifestGroup.NotNull(),
-                FailedCount = 0,
-                HasAwaitingDeadLetter = false,
-                HasQueuedWork = false,
-                HasActiveExecution = false,
-                HasSuccessfulMetadata = false,
-            })
-            .ToList();
+        var views = DueViewsOf(manifests);
 
         var context = fx.Services.GetRequiredService<IDataContext>();
         using (var transaction = await context.BeginTransaction())
@@ -302,6 +291,22 @@ public class TriggerAlreadyQueuedTests
                 "only a queued entry that already exists makes a failed insert a no-op"
             );
     }
+
+    private static List<ManifestDispatchView> DueViewsOf(
+        List<Trax.Effect.Models.Manifest.Manifest> manifests
+    ) =>
+        manifests
+            .Select(m => new ManifestDispatchView
+            {
+                Manifest = m,
+                ManifestGroup = m.ManifestGroup.NotNull(),
+                FailedCount = 0,
+                HasAwaitingDeadLetter = false,
+                HasQueuedWork = false,
+                HasActiveExecution = false,
+                HasSuccessfulMetadata = false,
+            })
+            .ToList();
 
     private static async Task<long> ManifestId(SchedulerE2EFixture fx, string externalId) =>
         await fx

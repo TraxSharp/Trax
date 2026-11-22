@@ -56,47 +56,7 @@ public class RemoteParallelRunTests(ClusterStore store)
     {
         _cluster = await InvokeCluster.Create(store);
 
-        _worker = await new HostBuilder()
-            .ConfigureWebHost(web =>
-                web.UseTestServer()
-                    .ConfigureServices(services =>
-                    {
-                        services.AddLogging(x => x.AddConsole().SetMinimumLevel(LogLevel.Warning));
-                        services.AddRouting();
-                        services.AddTrax(trax =>
-                            trax.AddEffects(effects =>
-                                    (
-                                        store == ClusterStore.Postgres
-                                            ? effects.UsePostgres(
-                                                _cluster.NotNull().ConnectionString
-                                            )
-                                            : effects.UseSqlite(_cluster.NotNull().ConnectionString)
-                                    )
-                                        .SaveTrainParameters()
-                                        .AddJunctionEvents()
-                                        // Some trains in this assembly ask a decider, and a runner
-                                        // that does not record decisions refuses to start.
-                                        .AddDecisionRecording()
-                                )
-                                // This assembly holds trains built to fail chain verification,
-                                // which a started host would refuse (the Parallel train is not
-                                // one), and the worker serves no API submissions.
-                                .AddMediator(mediator =>
-                                    mediator
-                                        .ScanAssemblies(typeof(AssemblyMarker).Assembly)
-                                        .SkipChainVerification()
-                                        .AllowMissingAuthorizationService()
-                                )
-                        );
-                        services.AddTraxJobRunner(runner => runner.AllowUnsignedRequests());
-                    })
-                    .Configure(app =>
-                    {
-                        app.UseRouting();
-                        app.UseEndpoints(endpoints => endpoints.UseTraxJobRunner());
-                    })
-            )
-            .StartAsync();
+        _worker = await StartWorker();
 
         var toWorker = _worker.NotNull().GetTestServer().CreateHandler();
         _scheduler = _cluster
@@ -173,6 +133,66 @@ public class RemoteParallelRunTests(ClusterStore store)
         rows.Should()
             .OnlyContain(r => r.Kind == JunctionRunKind.Junction)
             .And.OnlyContain(r => r.State == JunctionRunState.Completed);
+        AssertEveryJunctionRecordedWhereItRan(rows);
+
+        var left = rows.Where(r =>
+                string.Equals(r.BranchPath, "Parallel#0/left", StringComparison.Ordinal)
+            )
+            .ToList();
+        left.Select(r => r.Name)
+            .Should()
+            .Equal(
+                [nameof(ParallelRemoteScoreLeft), nameof(ParallelRemoteRefineLeft)],
+                "a branch's own junctions are recorded in the order they ran"
+            );
+        rows[0].Name.Should().Be(nameof(ParallelRemoteAdmit));
+        rows[^1].Name.Should().Be(nameof(ParallelRemoteCombine));
+    }
+
+    private Task<IHost> StartWorker() =>
+        new HostBuilder()
+            .ConfigureWebHost(web =>
+                web.UseTestServer()
+                    .ConfigureServices(services =>
+                    {
+                        services.AddLogging(x => x.AddConsole().SetMinimumLevel(LogLevel.Warning));
+                        services.AddRouting();
+                        services.AddTrax(trax =>
+                            trax.AddEffects(effects =>
+                                    (
+                                        store == ClusterStore.Postgres
+                                            ? effects.UsePostgres(
+                                                _cluster.NotNull().ConnectionString
+                                            )
+                                            : effects.UseSqlite(_cluster.NotNull().ConnectionString)
+                                    )
+                                        .SaveTrainParameters()
+                                        .AddJunctionEvents()
+                                        // Some trains in this assembly ask a decider, and a runner
+                                        // that does not record decisions refuses to start.
+                                        .AddDecisionRecording()
+                                )
+                                // This assembly holds trains built to fail chain verification,
+                                // which a started host would refuse (the Parallel train is not
+                                // one), and the worker serves no API submissions.
+                                .AddMediator(mediator =>
+                                    mediator
+                                        .ScanAssemblies(typeof(AssemblyMarker).Assembly)
+                                        .SkipChainVerification()
+                                        .AllowMissingAuthorizationService()
+                                )
+                        );
+                        services.AddTraxJobRunner(runner => runner.AllowUnsignedRequests());
+                    })
+                    .Configure(app =>
+                    {
+                        app.UseRouting();
+                        app.UseEndpoints(endpoints => endpoints.UseTraxJobRunner());
+                    })
+            )
+            .StartAsync();
+
+    private static void AssertEveryJunctionRecordedWhereItRan(List<JunctionRun> rows) =>
         rows.Select(r => (r.Name, r.NodeId, r.BranchPath))
             .Should()
             .BeEquivalentTo([
@@ -194,20 +214,6 @@ public class RemoteParallelRunTests(ClusterStore store)
                 ),
                 (nameof(ParallelRemoteCombine), "ParallelRemoteCombine#0", (string?)null),
             ]);
-
-        var left = rows.Where(r =>
-                string.Equals(r.BranchPath, "Parallel#0/left", StringComparison.Ordinal)
-            )
-            .ToList();
-        left.Select(r => r.Name)
-            .Should()
-            .Equal(
-                [nameof(ParallelRemoteScoreLeft), nameof(ParallelRemoteRefineLeft)],
-                "a branch's own junctions are recorded in the order they ran"
-            );
-        rows[0].Name.Should().Be(nameof(ParallelRemoteAdmit));
-        rows[^1].Name.Should().Be(nameof(ParallelRemoteCombine));
-    }
 
     private async Task<(Manifest, WorkQueue)> Queue(ParallelRemoteInput input)
     {

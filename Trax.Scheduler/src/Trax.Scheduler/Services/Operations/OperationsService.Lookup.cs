@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Trax.Core.Extensions;
+using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 
 namespace Trax.Scheduler.Services.Operations;
@@ -48,41 +49,197 @@ public partial class OperationsService
         var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
         await using var dbDisposal = db.ConfigureAwait(false);
 
-        // Runs.
-        if (number is { } runId)
+        await AddRunMatchesAsync(db, matches, number, term, ct).ConfigureAwait(false);
+
+        await AddManifestMatchesAsync(db, matches, number, term, ct).ConfigureAwait(false);
+
+        await AddEntryMatchesAsync(db, matches, number, term, ct).ConfigureAwait(false);
+
+        await AddDeadLetterMatchesAsync(db, matches, number, ct).ConfigureAwait(false);
+
+        await AddInstanceMatchesAsync(db, matches, guid, ct).ConfigureAwait(false);
+
+        // Trains, from the host's registry.
+        matches.AddRange(
+            _discoveryService
+                .DiscoverTrains()
+                .Where(r =>
+                    string.Equals(r.ServiceType.FullName, term, StringComparison.Ordinal)
+                    || string.Equals(r.ServiceTypeName, term, StringComparison.Ordinal)
+                )
+                .Take(LookupMatchCap)
+                .Select(r => new LookupMatch(
+                    LookupKind.Train,
+                    r.ServiceType.FullName.NotNull(),
+                    r.ServiceTypeName,
+                    "name"
+                ))
+        );
+
+        return matches;
+    }
+
+    private static async Task AddInstanceMatchesAsync(
+        IDataContext db,
+        List<LookupMatch> matches,
+        Guid? guid,
+        CancellationToken ct
+    )
+    {
+        // State-machine instances: what the operator's list shows of a row, never its context or
+        // its owner's key.
+        if (guid is { } instanceId)
             matches.AddRange(
                 (
                     await db
-                        .Metadatas.AsNoTracking()
-                        .Where(m => m.Id == runId)
-                        .Select(m => new
+                        .SnapshotDrafts.AsNoTracking()
+                        .Where(x => x.Id == instanceId)
+                        .OrderByDescending(x => x.RowId)
+                        .Take(LookupMatchCap)
+                        .Select(x => new
                         {
-                            m.Id,
-                            m.Name,
-                            m.TrainState,
+                            x.Id,
+                            x.Machine,
+                            x.State,
+                            x.OwnerKind,
+                            x.RowId,
                         })
                         .ToListAsync(ct)
                         .ConfigureAwait(false)
-                ).Select(m => RunMatch(m.Id, m.Name, m.TrainState, "id"))
+                ).Select(x => new LookupMatch(
+                    LookupKind.MachineInstance,
+                    x.Id.ToString(),
+                    $"{x.Machine} · {x.State}",
+                    "id"
+                )
+                {
+                    Machine = x.Machine,
+                    OwnerKind = x.OwnerKind,
+                    RowId = x.RowId,
+                })
+            );
+    }
+
+    private static async Task AddDeadLetterMatchesAsync(
+        IDataContext db,
+        List<LookupMatch> matches,
+        long? number,
+        CancellationToken ct
+    )
+    {
+        // Dead letters.
+        if (number is { } deadLetterId)
+            matches.AddRange(
+                (
+                    await db
+                        .DeadLetters.AsNoTracking()
+                        .Where(d => d.Id == deadLetterId)
+                        .Select(d => new
+                        {
+                            d.Id,
+                            Name = d.Manifest != null ? d.Manifest.Name : null,
+                            d.Status,
+                        })
+                        .ToListAsync(ct)
+                        .ConfigureAwait(false)
+                ).Select(d => new LookupMatch(
+                    LookupKind.DeadLetter,
+                    d.Id.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    $"{d.Name} · {d.Status}",
+                    "id"
+                ))
+            );
+    }
+
+    private static async Task AddEntryMatchesAsync(
+        IDataContext db,
+        List<LookupMatch> matches,
+        long? number,
+        string term,
+        CancellationToken ct
+    )
+    {
+        // Work queue entries.
+        if (number is { } entryId)
+            matches.AddRange(
+                (
+                    await db
+                        .WorkQueues.AsNoTracking()
+                        .Where(w => w.Id == entryId)
+                        .Select(w => new
+                        {
+                            w.Id,
+                            w.TrainName,
+                            w.Status,
+                        })
+                        .ToListAsync(ct)
+                        .ConfigureAwait(false)
+                ).Select(w => EntryMatch(w.Id, w.TrainName, w.Status, "id"))
             );
         matches.AddRange(
             (
                 await db
-                    .Metadatas.AsNoTracking()
-                    .Where(m => m.ExternalId == term)
-                    .OrderByDescending(m => m.Id)
+                    .WorkQueues.AsNoTracking()
+                    .Where(w => w.ExternalId == term)
                     .Take(LookupMatchCap)
-                    .Select(m => new
+                    .Select(w => new
                     {
-                        m.Id,
-                        m.Name,
-                        m.TrainState,
+                        w.Id,
+                        w.TrainName,
+                        w.Status,
                     })
                     .ToListAsync(ct)
                     .ConfigureAwait(false)
-            ).Select(m => RunMatch(m.Id, m.Name, m.TrainState, "externalId"))
+            ).Select(w => EntryMatch(w.Id, w.TrainName, w.Status, "externalId"))
         );
+        await AddSubjectKeyMatchesAsync(db, matches, term, ct).ConfigureAwait(false);
+    }
 
+    private static async Task AddSubjectKeyMatchesAsync(
+        IDataContext db,
+        List<LookupMatch> matches,
+        string term,
+        CancellationToken ct
+    )
+    {
+        // Each status on its own, so each read is the partial index that holds it.
+        foreach (var status in new[] { WorkQueueStatus.Queued, WorkQueueStatus.Dispatched })
+        {
+            var room =
+                LookupMatchCap
+                - matches.Count(x =>
+                    string.Equals(x.MatchedOn, "subjectKey", StringComparison.Ordinal)
+                );
+            if (room <= 0)
+                break;
+            matches.AddRange(
+                (
+                    await db
+                        .WorkQueues.AsNoTracking()
+                        .Where(w => w.SubjectKey == term && w.Status == status)
+                        .OrderByDescending(w => w.Id)
+                        .Take(room)
+                        .Select(w => new
+                        {
+                            w.Id,
+                            w.TrainName,
+                            w.Status,
+                        })
+                        .ToListAsync(ct)
+                        .ConfigureAwait(false)
+                ).Select(w => EntryMatch(w.Id, w.TrainName, w.Status, "subjectKey"))
+            );
+        }
+    }
+
+    private static async Task AddManifestMatchesAsync(
+        IDataContext db,
+        List<LookupMatch> matches,
+        long? number,
+        string term,
+        CancellationToken ct
+    )
+    {
         // Manifests.
         if (number is { } manifestId)
             matches.AddRange(
@@ -118,143 +275,50 @@ public partial class OperationsService
                     .ConfigureAwait(false)
             ).Select(m => ManifestMatch(m.Id, m.Name, "name"))
         );
+    }
 
-        // Work queue entries.
-        if (number is { } entryId)
+    private static async Task AddRunMatchesAsync(
+        IDataContext db,
+        List<LookupMatch> matches,
+        long? number,
+        string term,
+        CancellationToken ct
+    )
+    {
+        // Runs.
+        if (number is { } runId)
             matches.AddRange(
                 (
                     await db
-                        .WorkQueues.AsNoTracking()
-                        .Where(w => w.Id == entryId)
-                        .Select(w => new
+                        .Metadatas.AsNoTracking()
+                        .Where(m => m.Id == runId)
+                        .Select(m => new
                         {
-                            w.Id,
-                            w.TrainName,
-                            w.Status,
+                            m.Id,
+                            m.Name,
+                            m.TrainState,
                         })
                         .ToListAsync(ct)
                         .ConfigureAwait(false)
-                ).Select(w => EntryMatch(w.Id, w.TrainName, w.Status, "id"))
+                ).Select(m => RunMatch(m.Id, m.Name, m.TrainState, "id"))
             );
         matches.AddRange(
             (
                 await db
-                    .WorkQueues.AsNoTracking()
-                    .Where(w => w.ExternalId == term)
+                    .Metadatas.AsNoTracking()
+                    .Where(m => m.ExternalId == term)
+                    .OrderByDescending(m => m.Id)
                     .Take(LookupMatchCap)
-                    .Select(w => new
+                    .Select(m => new
                     {
-                        w.Id,
-                        w.TrainName,
-                        w.Status,
+                        m.Id,
+                        m.Name,
+                        m.TrainState,
                     })
                     .ToListAsync(ct)
                     .ConfigureAwait(false)
-            ).Select(w => EntryMatch(w.Id, w.TrainName, w.Status, "externalId"))
+            ).Select(m => RunMatch(m.Id, m.Name, m.TrainState, "externalId"))
         );
-        // Each status on its own, so each read is the partial index that holds it.
-        foreach (var status in new[] { WorkQueueStatus.Queued, WorkQueueStatus.Dispatched })
-        {
-            var room =
-                LookupMatchCap
-                - matches.Count(x =>
-                    string.Equals(x.MatchedOn, "subjectKey", StringComparison.Ordinal)
-                );
-            if (room <= 0)
-                break;
-            matches.AddRange(
-                (
-                    await db
-                        .WorkQueues.AsNoTracking()
-                        .Where(w => w.SubjectKey == term && w.Status == status)
-                        .OrderByDescending(w => w.Id)
-                        .Take(room)
-                        .Select(w => new
-                        {
-                            w.Id,
-                            w.TrainName,
-                            w.Status,
-                        })
-                        .ToListAsync(ct)
-                        .ConfigureAwait(false)
-                ).Select(w => EntryMatch(w.Id, w.TrainName, w.Status, "subjectKey"))
-            );
-        }
-
-        // Dead letters.
-        if (number is { } deadLetterId)
-            matches.AddRange(
-                (
-                    await db
-                        .DeadLetters.AsNoTracking()
-                        .Where(d => d.Id == deadLetterId)
-                        .Select(d => new
-                        {
-                            d.Id,
-                            Name = d.Manifest != null ? d.Manifest.Name : null,
-                            d.Status,
-                        })
-                        .ToListAsync(ct)
-                        .ConfigureAwait(false)
-                ).Select(d => new LookupMatch(
-                    LookupKind.DeadLetter,
-                    d.Id.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    $"{d.Name} · {d.Status}",
-                    "id"
-                ))
-            );
-
-        // State-machine instances: what the operator's list shows of a row, never its context or
-        // its owner's key.
-        if (guid is { } instanceId)
-            matches.AddRange(
-                (
-                    await db
-                        .SnapshotDrafts.AsNoTracking()
-                        .Where(x => x.Id == instanceId)
-                        .OrderByDescending(x => x.RowId)
-                        .Take(LookupMatchCap)
-                        .Select(x => new
-                        {
-                            x.Id,
-                            x.Machine,
-                            x.State,
-                            x.OwnerKind,
-                            x.RowId,
-                        })
-                        .ToListAsync(ct)
-                        .ConfigureAwait(false)
-                ).Select(x => new LookupMatch(
-                    LookupKind.MachineInstance,
-                    x.Id.ToString(),
-                    $"{x.Machine} · {x.State}",
-                    "id"
-                )
-                {
-                    Machine = x.Machine,
-                    OwnerKind = x.OwnerKind,
-                    RowId = x.RowId,
-                })
-            );
-
-        // Trains, from the host's registry.
-        matches.AddRange(
-            _discoveryService
-                .DiscoverTrains()
-                .Where(r =>
-                    string.Equals(r.ServiceType.FullName, term, StringComparison.Ordinal)
-                    || string.Equals(r.ServiceTypeName, term, StringComparison.Ordinal)
-                )
-                .Take(LookupMatchCap)
-                .Select(r => new LookupMatch(
-                    LookupKind.Train,
-                    r.ServiceType.FullName.NotNull(),
-                    r.ServiceTypeName,
-                    "name"
-                ))
-        );
-
-        return matches;
     }
 
     private static LookupMatch RunMatch(long id, string train, TrainState state, string on) =>

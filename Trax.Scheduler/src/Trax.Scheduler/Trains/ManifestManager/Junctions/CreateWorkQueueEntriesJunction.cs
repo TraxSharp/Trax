@@ -51,6 +51,49 @@ internal sealed class CreateWorkQueueEntriesJunction(
             views = SelectGroupFair(views, limit.Value);
         }
 
+        var cycle = await ReadRetrySourcesAsync(views).ConfigureAwait(false);
+
+        foreach (var view in views)
+        {
+            if (await TryCreateEntryAsync(view, cycle).ConfigureAwait(false))
+                entriesCreated++;
+        }
+
+        var duration = timeProvider.GetUtcNow().UtcDateTime - pollStartTime;
+
+        if (entriesCreated > 0)
+        {
+            logger.LogInformation(
+                "CreateWorkQueueEntriesJunction completed: {EntriesCreated} entries created in {Duration}ms",
+                entriesCreated,
+                duration.TotalMilliseconds
+            );
+            changeSignal?.Notify(ChangeDomain.WorkQueue);
+        }
+        else
+            logger.LogDebug("CreateWorkQueueEntriesJunction completed: no entries created");
+
+        return Unit.Default;
+    }
+
+    // What one cycle's entries share: the runs their retries replay and resume, and the
+    // database's now. The dispatcher compares ScheduledAt with the database's clock, so a retry's
+    // due time is the database's now plus its backoff; read once, by the first retry that has a
+    // backoff.
+    private sealed class EntryCycle(
+        IReadOnlyDictionary<long, long> replaySources,
+        IReadOnlyDictionary<long, long> resumeSources
+    )
+    {
+        public IReadOnlyDictionary<long, long> ReplaySources { get; } = replaySources;
+
+        public IReadOnlyDictionary<long, long> ResumeSources { get; } = resumeSources;
+
+        public DateTime? DatabaseNow { get; set; }
+    }
+
+    private async Task<EntryCycle> ReadRetrySourcesAsync(List<ManifestDispatchView> views)
+    {
         // A retry replays the decisions its failed run recorded, when that is sound, so it takes
         // the tracks the failed run took instead of asking the model again (docs/adr/0017). The
         // sources are read in one pass, from the database, never supplied; a failed lookup asks
@@ -84,145 +127,135 @@ internal sealed class CreateWorkQueueEntriesJunction(
                 )
                 .ConfigureAwait(false);
 
-        // The dispatcher compares ScheduledAt with the database's clock, so a retry's due time is
-        // the database's now plus its backoff; read once, by the first retry that has a backoff.
-        DateTime? databaseNow = null;
+        return new EntryCycle(replaySources, resumeSources);
+    }
 
-        foreach (var view in views)
+    private async Task<bool> TryCreateEntryAsync(ManifestDispatchView view, EntryCycle cycle)
+    {
+        Trax.Effect.Models.WorkQueue.WorkQueue? entry = null;
+
+        try
         {
-            Trax.Effect.Models.WorkQueue.WorkQueue? entry = null;
+            // The manifest's own priority, as a trigger or a dead-letter requeue uses. The
+            // dispatcher already orders by the group's priority before the entry's.
+            var basePriority = view.Manifest.Priority;
+            var effectivePriority =
+                view.Manifest.ScheduleType == ScheduleType.Dependent
+                    ? basePriority + schedulerConfiguration.DependentPriorityBoost
+                    : basePriority;
 
-            try
+            var scheduledAt = await RetryScheduledAtAsync(view, cycle).ConfigureAwait(false);
+
+            entry = CreateEntry(view, effectivePriority, scheduledAt, cycle);
+
+            await dataContext.Track(entry).ConfigureAwait(false);
+            // Another host, or a requeue, may have queued a replay of the same run since the
+            // lookup: the index refuses a second one and this retry asks afresh instead. An
+            // operator's resume of the same run queued since is refused the same way, and this
+            // retry reruns from the top.
+            await RetryReplayLinks
+                .SaveAskingAfreshOnConflictAsync(dataContext, [entry], logger, CancellationToken)
+                .ConfigureAwait(false);
+
+            logger.LogDebug(
+                "Created WorkQueue entry {WorkQueueId} for manifest {ManifestId} (name: {ManifestName})",
+                entry.Id,
+                view.Manifest.Id,
+                view.Manifest.Name
+            );
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            // The failed entry is still tracked as Added, so every later save in this cycle,
+            // the reapers' and the dead-letter writes included, would retry it and fail the
+            // same way. EF Core rolled the leader transaction back to the savepoint it takes
+            // before each save, so detaching the entry is all that is left to undo. A unique
+            // violation here is a manifest that a trigger queued after the cycle loaded it.
+            if (entry is not null && dataContext is DbContext db)
+                db.Entry(entry).State = EntityState.Detached;
+
+            logger.LogError(
+                ex,
+                "Error creating work queue entry for manifest {ManifestId} (name: {ManifestName})",
+                view.Manifest.Id,
+                view.Manifest.Name
+            );
+            return false;
+        }
+    }
+
+    private Trax.Effect.Models.WorkQueue.WorkQueue CreateEntry(
+        ManifestDispatchView view,
+        int effectivePriority,
+        DateTime? scheduledAt,
+        EntryCycle cycle
+    ) =>
+        Trax.Effect.Models.WorkQueue.WorkQueue.Create(
+            new CreateWorkQueue
             {
-                // The manifest's own priority, as a trigger or a dead-letter requeue uses. The
-                // dispatcher already orders by the group's priority before the entry's.
-                var basePriority = view.Manifest.Priority;
-                var effectivePriority =
-                    view.Manifest.ScheduleType == ScheduleType.Dependent
-                        ? basePriority + schedulerConfiguration.DependentPriorityBoost
-                        : basePriority;
+                TrainName = view.Manifest.Name,
+                Input = view.Manifest.Properties,
+                InputTypeName = view.Manifest.PropertyTypeName,
+                ManifestId = view.Manifest.Id,
+                // Every run of a manifest scheduled for a caller is that caller's to follow.
+                StarterHash = view.Manifest.StarterHash,
+                Priority = effectivePriority,
+                ScheduledAt = scheduledAt,
+                ReplayDecisionsOf = cycle.ReplaySources.TryGetValue(
+                    view.Manifest.Id,
+                    out var source
+                )
+                    ? source
+                    : null,
+                ResumeFrom = cycle.ResumeSources.TryGetValue(view.Manifest.Id, out var resumed)
+                    ? resumed
+                    : null,
+            },
+            timeProvider
+        );
 
-                // A retry, the run after a failed one, waits out an exponential backoff over the
-                // failures in the window. The run after a success or a cancel is an ordinary
-                // occurrence and goes on time; its window's failures still count toward the dead
-                // letter.
-                DateTime? scheduledAt = null;
-                if (view.LatestFinishedRunFailed && view.FailedCount > 0)
-                {
-                    var delaySeconds =
-                        schedulerConfiguration.DefaultRetryDelay.TotalSeconds
-                        * Math.Pow(
-                            schedulerConfiguration.RetryBackoffMultiplier,
-                            view.FailedCount - 1
-                        );
-                    var clampedDelay = TimeSpan.FromSeconds(
-                        Math.Min(delaySeconds, schedulerConfiguration.MaxRetryDelay.TotalSeconds)
-                    );
-                    // No backoff stores no time, so the retry is due on the next poll whatever the
-                    // clocks say. Otherwise its time is the database's (see DatabaseClock): this
-                    // host's clock running ahead of the database's would hold it back a poll.
-                    if (clampedDelay > TimeSpan.Zero)
-                    {
-                        var manifestId = view.Manifest.Id;
-                        databaseNow ??= await DatabaseClock
-                            .UtcNowAsync(
-                                dataContext.Manifests.Where(m => m.Id == manifestId),
-                                timeProvider,
-                                CancellationToken
-                            )
-                            .ConfigureAwait(false);
-                        scheduledAt = databaseNow + clampedDelay;
-                    }
-
-                    logger.LogDebug(
-                        "Applying retry delay of {Delay} for manifest {ManifestId} (failure #{FailureCount})",
-                        clampedDelay,
-                        view.Manifest.Id,
-                        view.FailedCount
-                    );
-                }
-
-                entry = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
-                    new CreateWorkQueue
-                    {
-                        TrainName = view.Manifest.Name,
-                        Input = view.Manifest.Properties,
-                        InputTypeName = view.Manifest.PropertyTypeName,
-                        ManifestId = view.Manifest.Id,
-                        // Every run of a manifest scheduled for a caller is that caller's to follow.
-                        StarterHash = view.Manifest.StarterHash,
-                        Priority = effectivePriority,
-                        ScheduledAt = scheduledAt,
-                        ReplayDecisionsOf = replaySources.TryGetValue(
-                            view.Manifest.Id,
-                            out var source
-                        )
-                            ? source
-                            : null,
-                        ResumeFrom = resumeSources.TryGetValue(view.Manifest.Id, out var resumed)
-                            ? resumed
-                            : null,
-                    },
-                    timeProvider
-                );
-
-                await dataContext.Track(entry).ConfigureAwait(false);
-                // Another host, or a requeue, may have queued a replay of the same run since the
-                // lookup: the index refuses a second one and this retry asks afresh instead. An
-                // operator's resume of the same run queued since is refused the same way, and this
-                // retry reruns from the top.
-                await RetryReplayLinks
-                    .SaveAskingAfreshOnConflictAsync(
-                        dataContext,
-                        [entry],
-                        logger,
+    private async Task<DateTime?> RetryScheduledAtAsync(ManifestDispatchView view, EntryCycle cycle)
+    {
+        // A retry, the run after a failed one, waits out an exponential backoff over the
+        // failures in the window. The run after a success or a cancel is an ordinary
+        // occurrence and goes on time; its window's failures still count toward the dead
+        // letter.
+        DateTime? scheduledAt = null;
+        if (view.LatestFinishedRunFailed && view.FailedCount > 0)
+        {
+            var delaySeconds =
+                schedulerConfiguration.DefaultRetryDelay.TotalSeconds
+                * Math.Pow(schedulerConfiguration.RetryBackoffMultiplier, view.FailedCount - 1);
+            var clampedDelay = TimeSpan.FromSeconds(
+                Math.Min(delaySeconds, schedulerConfiguration.MaxRetryDelay.TotalSeconds)
+            );
+            // No backoff stores no time, so the retry is due on the next poll whatever the
+            // clocks say. Otherwise its time is the database's (see DatabaseClock): this
+            // host's clock running ahead of the database's would hold it back a poll.
+            if (clampedDelay > TimeSpan.Zero)
+            {
+                var manifestId = view.Manifest.Id;
+                cycle.DatabaseNow ??= await DatabaseClock
+                    .UtcNowAsync(
+                        dataContext.Manifests.Where(m => m.Id == manifestId),
+                        timeProvider,
                         CancellationToken
                     )
                     .ConfigureAwait(false);
-
-                logger.LogDebug(
-                    "Created WorkQueue entry {WorkQueueId} for manifest {ManifestId} (name: {ManifestName})",
-                    entry.Id,
-                    view.Manifest.Id,
-                    view.Manifest.Name
-                );
-
-                entriesCreated++;
+                scheduledAt = cycle.DatabaseNow + clampedDelay;
             }
-            catch (Exception ex)
-            {
-                // The failed entry is still tracked as Added, so every later save in this cycle,
-                // the reapers' and the dead-letter writes included, would retry it and fail the
-                // same way. EF Core rolled the leader transaction back to the savepoint it takes
-                // before each save, so detaching the entry is all that is left to undo. A unique
-                // violation here is a manifest that a trigger queued after the cycle loaded it.
-                if (entry is not null && dataContext is DbContext db)
-                    db.Entry(entry).State = EntityState.Detached;
 
-                logger.LogError(
-                    ex,
-                    "Error creating work queue entry for manifest {ManifestId} (name: {ManifestName})",
-                    view.Manifest.Id,
-                    view.Manifest.Name
-                );
-            }
-        }
-
-        var duration = timeProvider.GetUtcNow().UtcDateTime - pollStartTime;
-
-        if (entriesCreated > 0)
-        {
-            logger.LogInformation(
-                "CreateWorkQueueEntriesJunction completed: {EntriesCreated} entries created in {Duration}ms",
-                entriesCreated,
-                duration.TotalMilliseconds
+            logger.LogDebug(
+                "Applying retry delay of {Delay} for manifest {ManifestId} (failure #{FailureCount})",
+                clampedDelay,
+                view.Manifest.Id,
+                view.FailedCount
             );
-            changeSignal?.Notify(ChangeDomain.WorkQueue);
         }
-        else
-            logger.LogDebug("CreateWorkQueueEntriesJunction completed: no entries created");
 
-        return Unit.Default;
+        return scheduledAt;
     }
 
     /// <summary>

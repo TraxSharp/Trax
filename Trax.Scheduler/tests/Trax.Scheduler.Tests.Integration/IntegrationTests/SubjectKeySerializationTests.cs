@@ -445,11 +445,16 @@ public class SubjectKeySerializationTests
             );
         }
 
-        (await EntryAsync(first.Id))
+        await AssertOnlyTheFirstDispatched(first.Id, second.Id);
+    }
+
+    private async Task AssertOnlyTheFirstDispatched(long firstId, long secondId)
+    {
+        (await EntryAsync(firstId).ConfigureAwait(false))
             .NotNull()
             .Status.Should()
             .Be(WorkQueueStatus.Dispatched, "dispatcher errors: {0}", DispatcherErrors());
-        (await EntryAsync(second.Id))
+        (await EntryAsync(secondId).ConfigureAwait(false))
             .NotNull()
             .Status.Should()
             .Be(
@@ -459,7 +464,7 @@ public class SubjectKeySerializationTests
                     + "Dispatcher errors: {0}",
                 DispatcherErrors()
             );
-        (await DispatchedCount()).Should().Be(1);
+        (await DispatchedCount().ConfigureAwait(false)).Should().Be(1);
     }
 
     /// <summary>

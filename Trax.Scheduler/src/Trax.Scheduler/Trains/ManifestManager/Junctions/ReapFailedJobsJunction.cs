@@ -59,13 +59,7 @@ internal sealed class ReapFailedJobsJunction(
             // the operator surface refused one) must not dead-letter a manifest that never failed.
             if (view.FailedCount > 0 && view.FailedCount > view.Manifest.MaxRetries)
             {
-                logger.LogWarning(
-                    "Manifest {ManifestId} (name: {ManifestName}) exceeds max retries ({FailedCount}/{MaxRetries}). Creating dead letter.",
-                    view.Manifest.Id,
-                    view.Manifest.Name,
-                    view.FailedCount,
-                    view.Manifest.MaxRetries
-                );
+                LogMaxRetriesExceeded(view);
 
                 var deadLetter = DeadLetter.Create(
                     new CreateDeadLetter
@@ -97,4 +91,13 @@ internal sealed class ReapFailedJobsJunction(
 
         return deadLettersCreated;
     }
+
+    private void LogMaxRetriesExceeded(ManifestDispatchView view) =>
+        logger.LogWarning(
+            "Manifest {ManifestId} (name: {ManifestName}) exceeds max retries ({FailedCount}/{MaxRetries}). Creating dead letter.",
+            view.Manifest.Id,
+            view.Manifest.Name,
+            view.FailedCount,
+            view.Manifest.MaxRetries
+        );
 }

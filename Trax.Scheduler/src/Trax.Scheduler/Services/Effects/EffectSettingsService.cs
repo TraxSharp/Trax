@@ -139,6 +139,23 @@ public sealed class EffectSettingsService(IServiceProvider services) : IEffectSe
                 errors
             );
 
+        if (ApplyAllOrNone(configuration, converted) is { } refused)
+            return refused;
+
+        return new EffectConfigurationResult(
+            Success: true,
+            converted.Count,
+            $"{configurable.GetConfigurationType().Name} updated in this process. Changes apply to "
+                + "the next train execution.",
+            new Dictionary<string, string>(StringComparer.Ordinal)
+        );
+    }
+
+    private static EffectConfigurationResult? ApplyAllOrNone(
+        object configuration,
+        List<(PropertyInfo Property, object? Value)> converted
+    )
+    {
         lock (WriteLock)
         {
             var applied = new List<(PropertyInfo Property, object? Previous)>();
@@ -169,13 +186,7 @@ public sealed class EffectSettingsService(IServiceProvider services) : IEffectSe
             }
         }
 
-        return new EffectConfigurationResult(
-            Success: true,
-            converted.Count,
-            $"{configurable.GetConfigurationType().Name} updated in this process. Changes apply to "
-                + "the next train execution.",
-            new Dictionary<string, string>(StringComparer.Ordinal)
-        );
+        return null;
     }
 
     private const string NoRegistry = "No effect registry is registered in this process.";

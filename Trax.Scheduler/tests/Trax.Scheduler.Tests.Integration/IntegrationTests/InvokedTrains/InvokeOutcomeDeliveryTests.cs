@@ -683,21 +683,7 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
         await using (scope.ConfigureAwait(false))
             await scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>().Run(Unit.Default);
 
-        var entry = (await _api.NotNull().Entry(token)).NotNull();
-        entry
-            .Status.Should()
-            .Be(WorkQueueStatus.Queued, "a dispatch with attempts left is requeued");
-        entry.DispatchAttempts.Should().Be(1);
-        var scope6 = _api.NotNull().Services.CreateAsyncScope();
-        await using (scope6.ConfigureAwait(false))
-            (
-                await scope6
-                    .ServiceProvider.GetRequiredService<IDataContext>()
-                    .Metadatas.AsNoTracking()
-                    .SingleAsync(m => m.ExternalId == token)
-            )
-                .FailureException.Should()
-                .Be(DispatchFailure.Requeued);
+        await AssertEntryRequeuedAfterOneFailedAttempt(token);
 
         (await _api.NotNull().Sweep()).Should().BeEmpty();
         (await _api.NotNull().Deliver(token))
@@ -710,17 +696,7 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
         row.InvokeToken.Should().Be(token);
 
         // Past its back-off, the entry is dispatched again, and that run's outcome comes back.
-        var scope7 = _api.NotNull().Services.CreateAsyncScope();
-        await using (scope7.ConfigureAwait(false))
-            await scope7
-                .ServiceProvider.GetRequiredService<IDataContext>()
-                .WorkQueues.Where(w => w.ExternalId == token)
-                .ExecuteUpdateAsync(s =>
-                    s.SetProperty(
-                        w => w.ScheduledAt,
-                        TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-1)
-                    )
-                );
+        await MoveEntryPastItsBackOff(token);
         await _worker.NotNull().DispatchAndRun(token);
         (await _api.NotNull().Sweep())
             .Should()
@@ -732,6 +708,42 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
             .GetValue<string>()
             .Should()
             .Be("artifact:again");
+    }
+
+    private async Task AssertEntryRequeuedAfterOneFailedAttempt(string token)
+    {
+        var entry = (await _api.NotNull().Entry(token).ConfigureAwait(false)).NotNull();
+        entry
+            .Status.Should()
+            .Be(WorkQueueStatus.Queued, "a dispatch with attempts left is requeued");
+        entry.DispatchAttempts.Should().Be(1);
+        var scope6 = _api.NotNull().Services.CreateAsyncScope();
+        await using (scope6.ConfigureAwait(false))
+            (
+                await scope6
+                    .ServiceProvider.GetRequiredService<IDataContext>()
+                    .Metadatas.AsNoTracking()
+                    .SingleAsync(m => m.ExternalId == token)
+                    .ConfigureAwait(false)
+            )
+                .FailureException.Should()
+                .Be(DispatchFailure.Requeued);
+    }
+
+    private async Task MoveEntryPastItsBackOff(string token)
+    {
+        var scope7 = _api.NotNull().Services.CreateAsyncScope();
+        await using (scope7.ConfigureAwait(false))
+            await scope7
+                .ServiceProvider.GetRequiredService<IDataContext>()
+                .WorkQueues.Where(w => w.ExternalId == token)
+                .ExecuteUpdateAsync(s =>
+                    s.SetProperty(
+                        w => w.ScheduledAt,
+                        TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-1)
+                    )
+                )
+                .ConfigureAwait(false);
     }
 
     [Test]

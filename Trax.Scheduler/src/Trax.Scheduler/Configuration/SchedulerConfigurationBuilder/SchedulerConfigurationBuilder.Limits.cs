@@ -12,7 +12,21 @@ public partial class SchedulerConfigurationBuilder
     /// <exception cref="InvalidOperationException">A value is outside its range.</exception>
     private void ValidateLimits()
     {
-        var problems = new[]
+        var problems = ConfigurationValueProblems()
+            .Concat(MetadataCleanupProblems(_configuration.MetadataCleanup))
+            .Concat(_localWorkerOptions.Problems(nameof(ConfigureLocalWorkers)))
+            .OfType<string>()
+            .ToList();
+
+        if (problems.Count > 0)
+            throw new InvalidOperationException(
+                "The scheduler configuration has values it cannot run with. "
+                    + string.Join(' ', problems)
+            );
+    }
+
+    private string?[] ConfigurationValueProblems() =>
+        new[]
         {
             SchedulerConfigLimits.TimerInterval(
                 _configuration.ManifestManagerPollingInterval,
@@ -67,18 +81,7 @@ public partial class SchedulerConfigurationBuilder
                 _configuration.SchedulerLivenessThreshold,
                 nameof(SchedulerLivenessThreshold)
             ),
-        }
-            .Concat(MetadataCleanupProblems(_configuration.MetadataCleanup))
-            .Concat(_localWorkerOptions.Problems(nameof(ConfigureLocalWorkers)))
-            .OfType<string>()
-            .ToList();
-
-        if (problems.Count > 0)
-            throw new InvalidOperationException(
-                "The scheduler configuration has values it cannot run with. "
-                    + string.Join(' ', problems)
-            );
-    }
+        };
 
     private static IEnumerable<string?> MetadataCleanupProblems(
         MetadataCleanupConfiguration? cleanup

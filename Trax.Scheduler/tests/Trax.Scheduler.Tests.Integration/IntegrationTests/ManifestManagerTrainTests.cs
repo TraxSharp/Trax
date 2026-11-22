@@ -689,22 +689,8 @@ public class ManifestManagerTrainTests : TestSetup
 
             // Assert
             DataContext.Reset();
-            var groupAEntries = await DataContext
-                .WorkQueues.Include(q => q.Manifest)
-                .Where(q =>
-                    q.Status == WorkQueueStatus.Queued
-                    && q.Manifest != null
-                    && q.Manifest.ManifestGroupId == groupA.Id
-                )
-                .CountAsync();
-            var groupBEntries = await DataContext
-                .WorkQueues.Include(q => q.Manifest)
-                .Where(q =>
-                    q.Status == WorkQueueStatus.Queued
-                    && q.Manifest != null
-                    && q.Manifest.ManifestGroupId == groupB.Id
-                )
-                .CountAsync();
+            var groupAEntries = await CountQueuedInGroup(groupA.Id);
+            var groupBEntries = await CountQueuedInGroup(groupB.Id);
 
             groupBEntries.Should().Be(3, "low-priority group gets all its due manifests");
             groupAEntries
@@ -2349,6 +2335,16 @@ public class ManifestManagerTrainTests : TestSetup
     #endregion
 
     #region Helper Methods
+
+    private Task<int> CountQueuedInGroup(long groupId) =>
+        DataContext
+            .WorkQueues.Include(q => q.Manifest)
+            .Where(q =>
+                q.Status == WorkQueueStatus.Queued
+                && q.Manifest != null
+                && q.Manifest.ManifestGroupId == groupId
+            )
+            .CountAsync();
 
     private async Task<Manifest> CreateAndSaveManifestInGroup(
         ManifestGroup group,

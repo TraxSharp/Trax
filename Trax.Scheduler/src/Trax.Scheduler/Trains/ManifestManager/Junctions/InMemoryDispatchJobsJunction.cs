@@ -53,30 +53,7 @@ internal sealed class InMemoryDispatchJobsJunction(
                     }
                 );
 
-                await dataContext.Track(metadata).ConfigureAwait(false);
-                await dataContext.SaveChanges(CancellationToken).ConfigureAwait(false);
-
-                logger.LogDebug(
-                    "Created Metadata {MetadataId} for manifest {ManifestId} (name: {ManifestName})",
-                    metadata.Id,
-                    view.Manifest.Id,
-                    view.Manifest.Name
-                );
-
-                var jobId = input is not null
-                    ? await jobSubmitter
-                        .EnqueueAsync(metadata.Id, input, CancellationToken)
-                        .ConfigureAwait(false)
-                    : await jobSubmitter
-                        .EnqueueAsync(metadata.Id, CancellationToken)
-                        .ConfigureAwait(false);
-
-                logger.LogDebug(
-                    "Dispatched manifest {ManifestId} as job {JobId} (Metadata: {MetadataId})",
-                    view.Manifest.Id,
-                    jobId,
-                    metadata.Id
-                );
+                await DispatchAsync(view, input, metadata).ConfigureAwait(false);
 
                 jobsDispatched++;
             }
@@ -100,5 +77,35 @@ internal sealed class InMemoryDispatchJobsJunction(
             logger.LogDebug("InMemoryDispatchJobsJunction completed: no jobs dispatched");
 
         return Unit.Default;
+    }
+
+    private async Task DispatchAsync(
+        ManifestDispatchView view,
+        object? input,
+        Trax.Effect.Models.Metadata.Metadata metadata
+    )
+    {
+        await dataContext.Track(metadata).ConfigureAwait(false);
+        await dataContext.SaveChanges(CancellationToken).ConfigureAwait(false);
+
+        logger.LogDebug(
+            "Created Metadata {MetadataId} for manifest {ManifestId} (name: {ManifestName})",
+            metadata.Id,
+            view.Manifest.Id,
+            view.Manifest.Name
+        );
+
+        var jobId = input is not null
+            ? await jobSubmitter
+                .EnqueueAsync(metadata.Id, input, CancellationToken)
+                .ConfigureAwait(false)
+            : await jobSubmitter.EnqueueAsync(metadata.Id, CancellationToken).ConfigureAwait(false);
+
+        logger.LogDebug(
+            "Dispatched manifest {ManifestId} as job {JobId} (Metadata: {MetadataId})",
+            view.Manifest.Id,
+            jobId,
+            metadata.Id
+        );
     }
 }

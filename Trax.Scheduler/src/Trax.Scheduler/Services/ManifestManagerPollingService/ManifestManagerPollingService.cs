@@ -87,38 +87,8 @@ internal sealed class ManifestManagerPollingService(
             // has no leader to elect: both run without the lock.
             if (configuration.HasDatabaseProvider && !sqlDialect.NotNull().HasSingleWriter)
             {
-                var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
-
-                using var transaction = await dataContext
-                    .BeginTransaction(cancellationToken)
+                await RunUnderLeaderLockAsync(scope.ServiceProvider, cancellationToken)
                     .ConfigureAwait(false);
-
-                var acquired = await ((DbContext)dataContext)
-                    .Database.SqlQuery<bool>(
-                        sqlDialect.TryAcquireLeaderLock("trax_manifest_manager")
-                    )
-                    .FirstAsync(cancellationToken)
-                    .ConfigureAwait(false);
-
-                if (!acquired)
-                {
-                    logger.LogDebug("Another server is running ManifestManager, skipping cycle");
-                    await dataContext.RollbackTransaction().ConfigureAwait(false);
-                    return;
-                }
-
-                // Run train within the advisory lock transaction
-                var train = scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
-
-                logger.LogDebug("ManifestManager polling cycle starting");
-                await train.Run(Unit.Default, cancellationToken).ConfigureAwait(false);
-                logger.LogDebug("ManifestManager polling cycle completed");
-
-                await dataContext.CommitTransaction().ConfigureAwait(false);
-
-                // The runs the cycle failed are committed now, so their lifecycle events go out.
-                if (scope.ServiceProvider.GetService<DeferredOutcomeEvents>() is { } outcomeEvents)
-                    await outcomeEvents.FlushAsync().ConfigureAwait(false);
             }
             else
             {
@@ -137,5 +107,44 @@ internal sealed class ManifestManagerPollingService(
         {
             logger.LogError(ex, "Error during ManifestManager polling cycle");
         }
+    }
+
+    private async Task RunUnderLeaderLockAsync(
+        IServiceProvider services,
+        CancellationToken cancellationToken
+    )
+    {
+        var dataContext = services.GetRequiredService<IDataContext>();
+
+        using var transaction = await dataContext
+            .BeginTransaction(cancellationToken)
+            .ConfigureAwait(false);
+
+        var acquired = await ((DbContext)dataContext)
+            .Database.SqlQuery<bool>(
+                sqlDialect.NotNull().TryAcquireLeaderLock("trax_manifest_manager")
+            )
+            .FirstAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!acquired)
+        {
+            logger.LogDebug("Another server is running ManifestManager, skipping cycle");
+            await dataContext.RollbackTransaction().ConfigureAwait(false);
+            return;
+        }
+
+        // Run train within the advisory lock transaction
+        var train = services.GetRequiredService<IManifestManagerTrain>();
+
+        logger.LogDebug("ManifestManager polling cycle starting");
+        await train.Run(Unit.Default, cancellationToken).ConfigureAwait(false);
+        logger.LogDebug("ManifestManager polling cycle completed");
+
+        await dataContext.CommitTransaction().ConfigureAwait(false);
+
+        // The runs the cycle failed are committed now, so their lifecycle events go out.
+        if (services.GetService<DeferredOutcomeEvents>() is { } outcomeEvents)
+            await outcomeEvents.FlushAsync().ConfigureAwait(false);
     }
 }

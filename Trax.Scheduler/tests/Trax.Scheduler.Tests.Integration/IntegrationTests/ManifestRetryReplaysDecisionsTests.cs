@@ -360,40 +360,7 @@ public class ManifestRetryReplaysDecisionsTests
         await RunManifestManagerAsync();
 
         // An operator's requeue of the failed run is queued, or already running.
-        await WithData(async data =>
-        {
-            if (queuedEntry)
-                data.WorkQueues.Add(
-                    WorkQueue.Create(
-                        new CreateWorkQueue
-                        {
-                            TrainName = manifest.Name,
-                            Input = manifest.Properties,
-                            InputTypeName = manifest.PropertyTypeName,
-                            ReplayDecisionsOf = failed.Id,
-                            ScheduledAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(1),
-                        },
-                        TimeProvider.System
-                    )
-                );
-            else
-            {
-                var running = Metadata.Create(
-                    new CreateMetadata
-                    {
-                        Name = manifest.Name,
-                        ExternalId = Guid.NewGuid().ToString("N"),
-                        Input = null,
-                        ReplayDecisionsOf = failed.Id,
-                    },
-                    TimeProvider.System
-                );
-                running.TrainState = TrainState.InProgress;
-                data.Metadatas.Add(running);
-            }
-            await data.SaveChanges(CancellationToken.None).ConfigureAwait(false);
-            return true;
-        });
+        await SeedReplayOf(manifest, failed.Id, queuedEntry);
 
         var deadLetterId = await WithData(data =>
             data.DeadLetters.AsNoTracking()
@@ -441,31 +408,7 @@ public class ManifestRetryReplaysDecisionsTests
             // Both runs are older than the retention. The sweep deletes the replay together with
             // the run it replayed, never the replay alone, which would leave that run looking as
             // though nothing had replayed it.
-            await WithData(async data =>
-            {
-                await data
-                    .Metadatas.Where(m => m.Id == first.Id)
-                    .ExecuteUpdateAsync(
-                        s =>
-                            s.SetProperty(
-                                m => m.StartTime,
-                                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-11)
-                            ),
-                        cancellationToken: CancellationToken.None
-                    )
-                    .ConfigureAwait(false);
-                return await data
-                    .Metadatas.Where(m => m.Id == replay.Id)
-                    .ExecuteUpdateAsync(
-                        s =>
-                            s.SetProperty(
-                                m => m.StartTime,
-                                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10)
-                            ),
-                        cancellationToken: CancellationToken.None
-                    )
-                    .ConfigureAwait(false);
-            });
+            await AgePastRetention(first.Id, replay.Id);
             var scope = Provider.CreateAsyncScope();
             await using (scope.ConfigureAwait(false))
                 await scope
@@ -1100,30 +1043,7 @@ public class ManifestRetryReplaysDecisionsTests
         var dispatchedAt = dispatchedAfterTheParentsSuccess
             ? success.AddMinutes(5)
             : success.AddMinutes(-5);
-        await WithData(async data =>
-        {
-            await data
-                .Metadatas.Where(m => m.Id == failed.Id)
-                .ExecuteUpdateAsync(
-                    s => s.SetProperty(m => m.StartTime, startedAt),
-                    cancellationToken: CancellationToken.None
-                )
-                .ConfigureAwait(false);
-            await data
-                .WorkQueues.Where(q => q.MetadataId == failed.Id)
-                .ExecuteUpdateAsync(
-                    s => s.SetProperty(q => q.DispatchedAt, (DateTime?)dispatchedAt),
-                    cancellationToken: CancellationToken.None
-                )
-                .ConfigureAwait(false);
-            return await data
-                .Manifests.Where(m => m.Id == parent.Id)
-                .ExecuteUpdateAsync(
-                    s => s.SetProperty(m => m.LastSuccessfulRun, (DateTime?)success),
-                    cancellationToken: CancellationToken.None
-                )
-                .ConfigureAwait(false);
-        });
+        await StampClocks(failed.Id, parent.Id, startedAt, dispatchedAt, success);
 
         var stored = await WithData(data =>
             data.Manifests.AsNoTracking()
@@ -2031,6 +1951,101 @@ public class ManifestRetryReplaysDecisionsTests
                 .OrderBy(d => d.Id)
                 .ToListAsync(cancellationToken: CancellationToken.None)
         );
+
+    private Task<int> StampClocks(
+        long failedId,
+        long parentId,
+        DateTime startedAt,
+        DateTime dispatchedAt,
+        DateTime success
+    ) =>
+        WithData(async data =>
+        {
+            await data
+                .Metadatas.Where(m => m.Id == failedId)
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(m => m.StartTime, startedAt),
+                    cancellationToken: CancellationToken.None
+                )
+                .ConfigureAwait(false);
+            await data
+                .WorkQueues.Where(q => q.MetadataId == failedId)
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(q => q.DispatchedAt, (DateTime?)dispatchedAt),
+                    cancellationToken: CancellationToken.None
+                )
+                .ConfigureAwait(false);
+            return await data
+                .Manifests.Where(m => m.Id == parentId)
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(m => m.LastSuccessfulRun, (DateTime?)success),
+                    cancellationToken: CancellationToken.None
+                )
+                .ConfigureAwait(false);
+        });
+
+    private Task<bool> SeedReplayOf(Manifest manifest, long failedId, bool queuedEntry) =>
+        WithData(async data =>
+        {
+            if (queuedEntry)
+                data.WorkQueues.Add(
+                    WorkQueue.Create(
+                        new CreateWorkQueue
+                        {
+                            TrainName = manifest.Name,
+                            Input = manifest.Properties,
+                            InputTypeName = manifest.PropertyTypeName,
+                            ReplayDecisionsOf = failedId,
+                            ScheduledAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(1),
+                        },
+                        TimeProvider.System
+                    )
+                );
+            else
+            {
+                var running = Metadata.Create(
+                    new CreateMetadata
+                    {
+                        Name = manifest.Name,
+                        ExternalId = Guid.NewGuid().ToString("N"),
+                        Input = null,
+                        ReplayDecisionsOf = failedId,
+                    },
+                    TimeProvider.System
+                );
+                running.TrainState = TrainState.InProgress;
+                data.Metadatas.Add(running);
+            }
+            await data.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+            return true;
+        });
+
+    private Task<int> AgePastRetention(long firstId, long replayId) =>
+        WithData(async data =>
+        {
+            await data
+                .Metadatas.Where(m => m.Id == firstId)
+                .ExecuteUpdateAsync(
+                    s =>
+                        s.SetProperty(
+                            m => m.StartTime,
+                            TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-11)
+                        ),
+                    cancellationToken: CancellationToken.None
+                )
+                .ConfigureAwait(false);
+            return await data
+                .Metadatas.Where(m => m.Id == replayId)
+                .ExecuteUpdateAsync(
+                    s =>
+                        s.SetProperty(
+                            m => m.StartTime,
+                            TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10)
+                        ),
+                    cancellationToken: CancellationToken.None
+                )
+                .ConfigureAwait(false);
+        });
 
     private async Task<T> WithData<T>(Func<IDataContext, Task<T>> read)
     {

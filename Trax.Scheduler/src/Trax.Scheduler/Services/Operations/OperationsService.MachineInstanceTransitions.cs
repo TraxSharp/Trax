@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Trax.Core.Extensions;
+using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 
 namespace Trax.Scheduler.Services.Operations;
@@ -37,6 +38,48 @@ public partial class OperationsService
         if (rowId is not { } row)
             return null;
 
+        var rows = await ReadTransitionRowsAsync(db, row, beforeRevision, take, ct)
+            .ConfigureAwait(false);
+
+        var page = rows.Take(take).ToList();
+        var tokens = page.Where(t => t.InvokeToken != null)
+            .Select(t => t.InvokeToken.NotNull())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        var started = await StartedByToken
+            .ReadAsync(db, tokens, key.OwnerKind, ct)
+            .ConfigureAwait(false);
+
+        var items = page.Select((t, i) => TransitionRecord(t, i, rows, started)).ToList();
+
+        return new MachineInstanceTransitionPage(
+            items,
+            take,
+            rows.Count > take ? page[^1].Revision : null
+        );
+    }
+
+    // A row of an instance's history, as the page reads it.
+    private sealed record TransitionRow(
+        long Revision,
+        SnapshotTransitionKind Kind,
+        string? Trigger,
+        SnapshotTransitionActor Actor,
+        string? FromState,
+        string ToState,
+        DateTimeOffset At,
+        string? InvokeToken
+    );
+
+    private static async Task<List<TransitionRow>> ReadTransitionRowsAsync(
+        IDataContext db,
+        long row,
+        long? beforeRevision,
+        int take,
+        CancellationToken ct
+    )
+    {
         var history = db.SnapshotTransitions.AsNoTracking().Where(t => t.DraftRowId == row);
         if (beforeRevision is { } before)
             history = history.Where(t => t.Revision < before);
@@ -56,17 +99,98 @@ public partial class OperationsService
             })
             .ToListAsync(ct)
             .ConfigureAwait(false);
-
-        var page = rows.Take(take).ToList();
-        var tokens = page.Where(t => t.InvokeToken != null)
-            .Select(t => t.InvokeToken.NotNull())
-            .Distinct(StringComparer.Ordinal)
+        return rows.Select(t => new TransitionRow(
+                t.Revision,
+                t.Kind,
+                t.Trigger,
+                t.Actor,
+                t.FromState,
+                t.ToState,
+                t.At,
+                t.InvokeToken
+            ))
             .ToList();
+    }
 
-        Dictionary<string, (long Id, TrainState State)> runs = new(StringComparer.Ordinal);
-        Dictionary<string, (long Id, WorkQueueStatus Status)> entries = new(StringComparer.Ordinal);
-        Dictionary<string, MachineInstanceStartedChild> children = new(StringComparer.Ordinal);
-        if (tokens.Count > 0)
+    private static MachineInstanceTransitionRecord TransitionRecord(
+        TransitionRow t,
+        int i,
+        List<TransitionRow> rows,
+        StartedByToken started
+    )
+    {
+        MachineInstanceStartedRun? startedRun = null;
+        MachineInstanceStartedChild? startedChild = null;
+        if (t.InvokeToken is { } token)
+        {
+            if (started.Children.TryGetValue(token, out var child))
+                startedChild = child;
+            else
+            {
+                var hasRun = started.Runs.TryGetValue(token, out var run);
+                var hasEntry = started.Entries.TryGetValue(token, out var entry);
+                TrainState? state =
+                    hasRun ? run.State
+                    : hasEntry
+                        ? entry.Status == WorkQueueStatus.Cancelled ? TrainState.Cancelled
+                            : TrainState.Pending
+                    : null;
+                startedRun = new MachineInstanceStartedRun(
+                    hasRun ? run.Id : null,
+                    state,
+                    hasEntry ? entry.Id : null
+                );
+            }
+        }
+        return new MachineInstanceTransitionRecord(
+            t.Revision,
+            t.Kind,
+            t.Trigger,
+            t.Actor,
+            t.FromState,
+            t.ToState,
+            t.At
+        )
+        {
+            PreviousAt = i + 1 < rows.Count ? rows[i + 1].At : null,
+            StartedRun = startedRun,
+            StartedChild = startedChild,
+        };
+    }
+
+    // What the transitions on a page started, by the token each holds.
+    private sealed class StartedByToken
+    {
+        public Dictionary<string, (long Id, TrainState State)> Runs { get; } =
+            new(StringComparer.Ordinal);
+
+        public Dictionary<string, (long Id, WorkQueueStatus Status)> Entries { get; } =
+            new(StringComparer.Ordinal);
+
+        public Dictionary<string, MachineInstanceStartedChild> Children { get; } =
+            new(StringComparer.Ordinal);
+
+        public static async Task<StartedByToken> ReadAsync(
+            IDataContext db,
+            List<string> tokens,
+            SnapshotOwnerKind ownerKind,
+            CancellationToken ct
+        )
+        {
+            var started = new StartedByToken();
+            if (tokens.Count > 0)
+            {
+                await started.ReadRunsAndEntriesAsync(db, tokens, ct).ConfigureAwait(false);
+                await started.ReadChildrenAsync(db, tokens, ownerKind, ct).ConfigureAwait(false);
+            }
+            return started;
+        }
+
+        private async Task ReadRunsAndEntriesAsync(
+            IDataContext db,
+            List<string> tokens,
+            CancellationToken ct
+        )
         {
             foreach (
                 var run in await db
@@ -81,7 +205,7 @@ public partial class OperationsService
                     .ToListAsync(ct)
                     .ConfigureAwait(false)
             )
-                runs[run.ExternalId] = (run.Id, run.TrainState);
+                Runs[run.ExternalId] = (run.Id, run.TrainState);
             foreach (
                 var entry in await db
                     .WorkQueues.AsNoTracking()
@@ -95,7 +219,16 @@ public partial class OperationsService
                     .ToListAsync(ct)
                     .ConfigureAwait(false)
             )
-                entries[entry.ExternalId] = (entry.Id, entry.Status);
+                Entries[entry.ExternalId] = (entry.Id, entry.Status);
+        }
+
+        private async Task ReadChildrenAsync(
+            IDataContext db,
+            List<string> tokens,
+            SnapshotOwnerKind ownerKind,
+            CancellationToken ct
+        )
+        {
             // A child lives under its parent's owner and shares the token the parent held for it.
             foreach (
                 var child in await db
@@ -103,7 +236,7 @@ public partial class OperationsService
                     .Where(d =>
                         d.SpawnedBy != null
                         && tokens.Contains(d.SpawnedBy)
-                        && d.OwnerKind == key.OwnerKind
+                        && d.OwnerKind == ownerKind
                     )
                     .Select(d => new
                     {
@@ -116,63 +249,12 @@ public partial class OperationsService
                     .ToListAsync(ct)
                     .ConfigureAwait(false)
             )
-                children[child.SpawnedBy.NotNull()] = new MachineInstanceStartedChild(
+                Children[child.SpawnedBy.NotNull()] = new MachineInstanceStartedChild(
                     child.Machine,
                     child.OwnerKind,
                     child.Id,
                     child.RowId
                 );
         }
-
-        var items = page.Select(
-                (t, i) =>
-                {
-                    MachineInstanceStartedRun? startedRun = null;
-                    MachineInstanceStartedChild? startedChild = null;
-                    if (t.InvokeToken is { } token)
-                    {
-                        if (children.TryGetValue(token, out var child))
-                            startedChild = child;
-                        else
-                        {
-                            var hasRun = runs.TryGetValue(token, out var run);
-                            var hasEntry = entries.TryGetValue(token, out var entry);
-                            TrainState? state =
-                                hasRun ? run.State
-                                : hasEntry
-                                    ? entry.Status == WorkQueueStatus.Cancelled
-                                            ? TrainState.Cancelled
-                                        : TrainState.Pending
-                                : null;
-                            startedRun = new MachineInstanceStartedRun(
-                                hasRun ? run.Id : null,
-                                state,
-                                hasEntry ? entry.Id : null
-                            );
-                        }
-                    }
-                    return new MachineInstanceTransitionRecord(
-                        t.Revision,
-                        t.Kind,
-                        t.Trigger,
-                        t.Actor,
-                        t.FromState,
-                        t.ToState,
-                        t.At
-                    )
-                    {
-                        PreviousAt = i + 1 < rows.Count ? rows[i + 1].At : null,
-                        StartedRun = startedRun,
-                        StartedChild = startedChild,
-                    };
-                }
-            )
-            .ToList();
-
-        return new MachineInstanceTransitionPage(
-            items,
-            take,
-            rows.Count > take ? page[^1].Revision : null
-        );
     }
 }

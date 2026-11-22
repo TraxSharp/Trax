@@ -47,23 +47,7 @@ internal sealed class CancelTimedOutJobsJunction(
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var adminTrainNames = AdminTrains.FullNames.ToList();
 
-        var inProgressMetadata = await dataContext
-            .Metadatas.Where(m =>
-                m.TrainState == TrainState.InProgress
-                && !m.CancellationRequested
-                && !adminTrainNames.Contains(m.Name)
-                && !config.ExcludedTrainTypeNames.Contains(m.Name)
-            )
-            .Select(m => new TimedRun(
-                m.Id,
-                m.ParentId,
-                m.Name,
-                m.StartTime,
-                m.ManifestId,
-                m.Manifest != null ? m.Manifest.TimeoutSeconds : null
-            ))
-            .AsNoTracking()
-            .ToListAsync(CancellationToken)
+        var inProgressMetadata = await ReadInProgressRunsAsync(adminTrainNames)
             .ConfigureAwait(false);
 
         if (inProgressMetadata.Count == 0)
@@ -76,28 +60,7 @@ internal sealed class CancelTimedOutJobsJunction(
             .ResolveAsync(dataContext, config, inProgressMetadata, CancellationToken)
             .ConfigureAwait(false);
 
-        var metadataIdsToCancel = new List<long>();
-
-        foreach (var md in inProgressMetadata)
-        {
-            var bound = bounds[md.Id];
-            if (bound.Excluded || bound.Timeout is not { } timeout)
-                continue;
-
-            var elapsed = now - md.StartTime;
-
-            if (elapsed > timeout)
-            {
-                metadataIdsToCancel.Add(md.Id);
-                logger.LogWarning(
-                    "Metadata {MetadataId} (Manifest {ManifestId}) timed out: elapsed {Elapsed} > timeout {Timeout}",
-                    md.Id,
-                    bound.RootManifestId,
-                    elapsed,
-                    timeout
-                );
-            }
-        }
+        var metadataIdsToCancel = TimedOutRunIds(inProgressMetadata, bounds, now);
 
         if (metadataIdsToCancel.Count == 0)
         {
@@ -129,5 +92,61 @@ internal sealed class CancelTimedOutJobsJunction(
         );
 
         return Unit.Default;
+    }
+
+    private async Task<List<TimedRun>> ReadInProgressRunsAsync(List<string> adminTrainNames)
+    {
+        var inProgressMetadata = await dataContext
+            .Metadatas.Where(m =>
+                m.TrainState == TrainState.InProgress
+                && !m.CancellationRequested
+                && !adminTrainNames.Contains(m.Name)
+                && !config.ExcludedTrainTypeNames.Contains(m.Name)
+            )
+            .Select(m => new TimedRun(
+                m.Id,
+                m.ParentId,
+                m.Name,
+                m.StartTime,
+                m.ManifestId,
+                m.Manifest != null ? m.Manifest.TimeoutSeconds : null
+            ))
+            .AsNoTracking()
+            .ToListAsync(CancellationToken)
+            .ConfigureAwait(false);
+
+        return inProgressMetadata;
+    }
+
+    private List<long> TimedOutRunIds(
+        List<TimedRun> inProgressMetadata,
+        Dictionary<long, RunBound> bounds,
+        DateTime now
+    )
+    {
+        var metadataIdsToCancel = new List<long>();
+
+        foreach (var md in inProgressMetadata)
+        {
+            var bound = bounds[md.Id];
+            if (bound.Excluded || bound.Timeout is not { } timeout)
+                continue;
+
+            var elapsed = now - md.StartTime;
+
+            if (elapsed > timeout)
+            {
+                metadataIdsToCancel.Add(md.Id);
+                logger.LogWarning(
+                    "Metadata {MetadataId} (Manifest {ManifestId}) timed out: elapsed {Elapsed} > timeout {Timeout}",
+                    md.Id,
+                    bound.RootManifestId,
+                    elapsed,
+                    timeout
+                );
+            }
+        }
+
+        return metadataIdsToCancel;
     }
 }

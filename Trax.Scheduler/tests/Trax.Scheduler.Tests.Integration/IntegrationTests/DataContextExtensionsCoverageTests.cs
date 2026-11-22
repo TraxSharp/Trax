@@ -372,30 +372,8 @@ public class DataContextExtensionsCoverageTests : TestSetup
     {
         var externalId = $"cron-first-{Guid.NewGuid():N}";
 
-        Task<Trax.Effect.Models.Manifest.Manifest> Seed(Schedule schedule) =>
-            DataContext.UpsertManifestAsync(
-                typeof(SchedulerTestTrain),
-                externalId,
-                new SchedulerTestInput(),
-                schedule,
-                new ManifestOptions(),
-                groupId: "cron-first-group",
-                group: new ManifestGroupSeed(PriorityIfNew: 0),
-                TimeProvider.System
-            );
-
-        async Task<DateTime?> SeedAndRead(Schedule schedule)
-        {
-            await Seed(schedule).ConfigureAwait(false);
-            await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
-            DataContext.Reset();
-            return await DataContext
-                .Manifests.AsNoTracking()
-                .Where(m => m.ExternalId == externalId)
-                .Select(m => m.NextScheduledRun)
-                .SingleAsync()
-                .ConfigureAwait(false);
-        }
+        Task<DateTime?> SeedAndRead(Schedule schedule) =>
+            SeedCronFirstAndReadNextRun(externalId, schedule);
 
         var daily = Schedule.FromCron("0 3 * * *", TimeProvider.System);
         (await SeedAndRead(daily)).Should().NotBeNull("a new cron waits for its first occurrence");
@@ -433,6 +411,34 @@ public class DataContextExtensionsCoverageTests : TestSetup
         (await SeedAndRead(daily))
             .Should()
             .NotBeNull("the same cron with no occurrence recorded computes one");
+    }
+
+    private Task<Trax.Effect.Models.Manifest.Manifest> SeedCronFirst(
+        string externalId,
+        Schedule schedule
+    ) =>
+        DataContext.UpsertManifestAsync(
+            typeof(SchedulerTestTrain),
+            externalId,
+            new SchedulerTestInput(),
+            schedule,
+            new ManifestOptions(),
+            groupId: "cron-first-group",
+            group: new ManifestGroupSeed(PriorityIfNew: 0),
+            TimeProvider.System
+        );
+
+    private async Task<DateTime?> SeedCronFirstAndReadNextRun(string externalId, Schedule schedule)
+    {
+        await SeedCronFirst(externalId, schedule).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        DataContext.Reset();
+        return await DataContext
+            .Manifests.AsNoTracking()
+            .Where(m => m.ExternalId == externalId)
+            .Select(m => m.NextScheduledRun)
+            .SingleAsync()
+            .ConfigureAwait(false);
     }
 
     #endregion

@@ -1273,6 +1273,21 @@ public class InvokesModelTests(ClusterStore store)
                 .Services.GetServices<IMachine>()
                 .ToDictionary(m => m.Name, m => (IMachineInternals)m, StringComparer.Ordinal);
 
+            CheckSnapshots(rows, machines);
+            CheckEntries(entries, metadata);
+            CheckLiveRuns(rows, entries, metadata);
+
+            // No run moved an instance twice.
+            _moved.Where(m => m.Value > 1).Should().BeEmpty("an outcome is applied at most once");
+
+            await CheckInvariants(machines.Values).ConfigureAwait(false);
+        }
+
+        private void CheckSnapshots(
+            List<SnapshotDraft> rows,
+            Dictionary<string, IMachineInternals> machines
+        )
+        {
             // Every stored snapshot rehydrates, in the state the model says.
             rows.Should().HaveCount(Instances.Count(i => i.State is not null));
             foreach (var instance in Instances.Where(i => i.State is not null))
@@ -1308,7 +1323,13 @@ public class InvokesModelTests(ClusterStore store)
                 row.OwnerKind.Should()
                     .Be(instance.System ? SnapshotOwnerKind.System : SnapshotOwnerKind.User);
             }
+        }
 
+        private void CheckEntries(
+            List<Trax.Effect.Models.WorkQueue.WorkQueue> entries,
+            Dictionary<long, Trax.Effect.Models.Metadata.Metadata> metadata
+        )
+        {
             // Every run the model queued, and no other, with the status the model says.
             entries
                 .Select(e => e.ExternalId)
@@ -1348,7 +1369,14 @@ public class InvokesModelTests(ClusterStore store)
                     meta.CancellationRequested.Should()
                         .Be(run.CancelRequested, $"the cancel flag of {run}");
             }
+        }
 
+        private static void CheckLiveRuns(
+            List<SnapshotDraft> rows,
+            List<Trax.Effect.Models.WorkQueue.WorkQueue> entries,
+            Dictionary<long, Trax.Effect.Models.Metadata.Metadata> metadata
+        )
+        {
             // At most one live run per instance, the one its token names; no live run is an orphan.
             var tokens = rows.Where(r => r.InvokeToken is not null)
                 .Select(r => r.InvokeToken.NotNull())
@@ -1382,11 +1410,6 @@ public class InvokesModelTests(ClusterStore store)
                         e => e.ExternalId == row.InvokeToken && e.InvokingInstanceId == row.Id,
                         "a token names a run its instance queued"
                     );
-
-            // No run moved an instance twice.
-            _moved.Where(m => m.Value > 1).Should().BeEmpty("an outcome is applied at most once");
-
-            await CheckInvariants(machines.Values).ConfigureAwait(false);
         }
 
         // The database's own invariants, read from the rows rather than from the model, so a token the model and

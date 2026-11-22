@@ -223,17 +223,7 @@ public class OperationsServiceReadModelTests : TestSetup
                 m.DependsOnManifestId = every.Id;
             }
         );
-        await DataContext.Track(
-            Trax.Effect.Models.DeadLetter.DeadLetter.Create(
-                new Trax.Effect.Models.DeadLetter.DTOs.CreateDeadLetter
-                {
-                    Manifest = deadLettered,
-                    Reason = "test",
-                    RetryCount = 1,
-                },
-                TimeProvider.System
-            )
-        );
+        await TrackDeadLetterFor(deadLettered);
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
@@ -629,17 +619,7 @@ public class OperationsServiceReadModelTests : TestSetup
             TimeProvider.System.GetUtcNow().UtcDateTime
         );
         var rows = OperationsService.LogTextWindow + 20_000;
-        var ctx = (DbContext)DataContext;
-        await ctx.Database.ExecuteSqlInterpolatedAsync(
-            $"""
-            INSERT INTO trax.log (metadata_id, event_id, level, message, category)
-            SELECT {run.Id}, 0, 'information'::trax.log_level,
-                   'line ' || g || CASE WHEN g % 1000 = 7 OR g IN (3, {rows
-                - 2}) THEN ' Needle' ELSE '' END,
-                   'Window'
-            FROM generate_series(1, {rows}) g
-            """
-        );
+        await SeedNeedleLogs(run.Id, rows);
         var matching = await DataContext
             .Logs.AsNoTracking()
             .Where(l => l.MetadataId == run.Id && l.Message.EndsWith(" Needle"))
@@ -686,6 +666,40 @@ public class OperationsServiceReadModelTests : TestSetup
     #endregion
 
     #region Helpers
+
+    private async Task TrackDeadLetterFor(Manifest deadLettered)
+    {
+        await DataContext
+            .Track(
+                Trax.Effect.Models.DeadLetter.DeadLetter.Create(
+                    new Trax.Effect.Models.DeadLetter.DTOs.CreateDeadLetter
+                    {
+                        Manifest = deadLettered,
+                        Reason = "test",
+                        RetryCount = 1,
+                    },
+                    TimeProvider.System
+                )
+            )
+            .ConfigureAwait(false);
+    }
+
+    private async Task SeedNeedleLogs(long runId, int rows)
+    {
+        var ctx = (DbContext)DataContext;
+        await ctx
+            .Database.ExecuteSqlInterpolatedAsync(
+                $"""
+            INSERT INTO trax.log (metadata_id, event_id, level, message, category)
+            SELECT {runId}, 0, 'information'::trax.log_level,
+                   'line ' || g || CASE WHEN g % 1000 = 7 OR g IN (3, {rows
+                - 2}) THEN ' Needle' ELSE '' END,
+                   'Window'
+            FROM generate_series(1, {rows}) g
+            """
+            )
+            .ConfigureAwait(false);
+    }
 
     private async Task<Manifest> SeedManifest(
         ManifestGroup group,

@@ -44,43 +44,12 @@ internal sealed class ReapStalePendingMetadataJunction(
     {
         var cutoff = timeProvider.GetUtcNow().UtcDateTime - config.StalePendingTimeout;
 
-        var staleMetadata = await dataContext
-            .Metadatas.Where(m =>
-                m.TrainState == TrainState.Pending
-                && m.StartTime < cutoff
-                && !config.ExcludedTrainTypeNames.Contains(m.Name)
-                && !dataContext.BackgroundJobs.Any(j => j.MetadataId == m.Id)
-            )
-            .Select(m => new
-            {
-                m.Id,
-                m.Name,
-                m.StartTime,
-                m.ManifestId,
-            })
-            .AsNoTracking()
-            .ToListAsync(CancellationToken)
-            .ConfigureAwait(false);
+        var staleIds = await StalePendingIdsAsync(cutoff).ConfigureAwait(false);
 
-        if (staleMetadata.Count == 0)
+        if (staleIds.Count == 0)
         {
             logger.LogDebug("ReapStalePendingMetadataJunction: no stale pending metadata found");
             return Unit.Default;
-        }
-
-        var staleIds = new List<long>(staleMetadata.Count);
-
-        foreach (var md in staleMetadata)
-        {
-            staleIds.Add(md.Id);
-            logger.LogWarning(
-                "Metadata {MetadataId} (train: {TrainName}, manifest: {ManifestId}) "
-                    + "has been Pending since {StartTime} — marking as failed",
-                md.Id,
-                md.Name,
-                md.ManifestId,
-                md.StartTime
-            );
         }
 
         // One conditional write for every run, which also tells the runs it moved to Failed: a run
@@ -112,5 +81,44 @@ internal sealed class ReapStalePendingMetadataJunction(
         await outcomeEvents.FailedAsync(dataContext, reaped).ConfigureAwait(false);
 
         return Unit.Default;
+    }
+
+    // The runs Pending since before the cutoff that no background job holds, each logged.
+    private async Task<List<long>> StalePendingIdsAsync(DateTime cutoff)
+    {
+        var staleMetadata = await dataContext
+            .Metadatas.Where(m =>
+                m.TrainState == TrainState.Pending
+                && m.StartTime < cutoff
+                && !config.ExcludedTrainTypeNames.Contains(m.Name)
+                && !dataContext.BackgroundJobs.Any(j => j.MetadataId == m.Id)
+            )
+            .Select(m => new
+            {
+                m.Id,
+                m.Name,
+                m.StartTime,
+                m.ManifestId,
+            })
+            .AsNoTracking()
+            .ToListAsync(CancellationToken)
+            .ConfigureAwait(false);
+
+        var staleIds = new List<long>(staleMetadata.Count);
+
+        foreach (var md in staleMetadata)
+        {
+            staleIds.Add(md.Id);
+            logger.LogWarning(
+                "Metadata {MetadataId} (train: {TrainName}, manifest: {ManifestId}) "
+                    + "has been Pending since {StartTime} — marking as failed",
+                md.Id,
+                md.Name,
+                md.ManifestId,
+                md.StartTime
+            );
+        }
+
+        return staleIds;
     }
 }

@@ -61,24 +61,13 @@ public class ResilienceStressTests : TestSetup
         await SeedDeadLettersReferencing(manifest, referencedIds);
         await SeedExpiredParentsWithRunningChildren(dispatcherName, parentChildPairs, expired);
 
-        var before = await DataContext.Metadatas.CountAsync();
-        before
-            .Should()
-            .Be(dispatcherRows + deadLetterRefRows + (parentChildPairs * 2), "seeded row count");
-        await TestContext
-            .Out.WriteLineAsync(
-                string.Create(CultureInfo.InvariantCulture, $"Seeded {before} metadata rows")
+        var before = await CountSeededRows(
+                dispatcherRows + deadLetterRefRows + (parentChildPairs * 2)
             )
             .ConfigureAwait(false);
 
         // The stress fixture doesn't call AddMetadataCleanup, so enable it on the shared config.
-        var config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
-        config.MetadataCleanup = new MetadataCleanupConfiguration
-        {
-            RetentionPeriod = TimeSpan.FromMinutes(30),
-            DeleteBatchSize = 1000,
-        };
-        var train = Scope.ServiceProvider.GetRequiredService<IMetadataCleanupTrain>();
+        var train = EnableMetadataCleanup();
 
         var elapsed = await AssertCompletesWithin(
                 async () => await train.Run(new MetadataCleanupRequest()).ConfigureAwait(false),
@@ -88,6 +77,53 @@ public class ResilienceStressTests : TestSetup
 
         DataContext.Reset();
 
+        await AssertTableBoundedAndRecordsKept(dispatcherName, parentChildPairs, deadLetterRefRows)
+            .ConfigureAwait(false);
+
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Cleanup of {before} rows ({dispatcherRows} dispatcher, {deadLetterRefRows} dead-letter-referenced, "
+                )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{parentChildPairs} parent/child): {elapsed.TotalMilliseconds:F0}ms"
+                    )
+            )
+            .ConfigureAwait(false);
+    }
+
+    private async Task<int> CountSeededRows(int expected)
+    {
+        var before = await DataContext.Metadatas.CountAsync().ConfigureAwait(false);
+        before.Should().Be(expected, "seeded row count");
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(CultureInfo.InvariantCulture, $"Seeded {before} metadata rows")
+            )
+            .ConfigureAwait(false);
+        return before;
+    }
+
+    private IMetadataCleanupTrain EnableMetadataCleanup()
+    {
+        var config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
+        config.MetadataCleanup = new MetadataCleanupConfiguration
+        {
+            RetentionPeriod = TimeSpan.FromMinutes(30),
+            DeleteBatchSize = 1000,
+        };
+        var train = Scope.ServiceProvider.GetRequiredService<IMetadataCleanupTrain>();
+        return train;
+    }
+
+    private async Task AssertTableBoundedAndRecordsKept(
+        string dispatcherName,
+        int parentChildPairs,
+        int deadLetterRefRows
+    )
+    {
         // Every expired JobDispatcher row is pruned, bounding the table.
         var remainingDispatcher = await DataContext
             .Metadatas.CountAsync(m => m.Name == dispatcherName)
@@ -119,19 +155,6 @@ public class ResilienceStressTests : TestSetup
             .Metadatas.CountAsync(m => m.ParentId != null)
             .ConfigureAwait(false);
         childrenWithParent.Should().Be(0, "child parent references should be nulled");
-
-        await TestContext
-            .Out.WriteLineAsync(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"Cleanup of {before} rows ({dispatcherRows} dispatcher, {deadLetterRefRows} dead-letter-referenced, "
-                )
-                    + string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"{parentChildPairs} parent/child): {elapsed.TotalMilliseconds:F0}ms"
-                    )
-            )
-            .ConfigureAwait(false);
     }
 
     #endregion

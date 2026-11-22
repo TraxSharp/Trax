@@ -108,51 +108,9 @@ internal sealed class LocalWorkerService(
     private async Task<int> TryClaimAndExecuteAsync(int workerId, CancellationToken stoppingToken)
     {
         // Phase 1: Claim jobs atomically
-        List<ClaimedJob> claimedJobs;
-
-        var claimScope = serviceProvider.CreateAsyncScope();
-        await using (claimScope.ConfigureAwait(false))
-        {
-            var dataContext = claimScope.ServiceProvider.GetRequiredService<IDataContext>();
-
-            var visibilitySeconds = (int)options.VisibilityTimeout.TotalSeconds;
-            var batchSize = Math.Max(1, options.BatchSize);
-
-            using var transaction = await dataContext
-                .BeginTransaction(stoppingToken)
-                .ConfigureAwait(false);
-
-            var jobs = await dataContext
-                .BackgroundJobs.FromSqlRaw(
-                    sqlDialect.NotNull().DequeueBackgroundJobs(),
-                    visibilitySeconds,
-                    batchSize
-                )
-                .ToListAsync(stoppingToken)
-                .ConfigureAwait(false);
-
-            if (jobs.Count == 0)
-            {
-                await dataContext.RollbackTransaction().ConfigureAwait(false);
-                return 0;
-            }
-
-            // Claim all jobs in the batch
-            foreach (var job in jobs)
-                job.FetchedAt = Clock.GetUtcNow().UtcDateTime;
-
-            await dataContext.SaveChanges(stoppingToken).ConfigureAwait(false);
-            await dataContext.CommitTransaction().ConfigureAwait(false);
-
-            claimedJobs = jobs.Select(j => new ClaimedJob(j.Id, j.MetadataId, j.Input, j.InputType))
-                .ToList();
-
-            logger.LogDebug(
-                "Worker {WorkerId} claimed {Count} job(s)",
-                workerId,
-                claimedJobs.Count
-            );
-        }
+        var claimedJobs = await ClaimJobsAsync(workerId, stoppingToken).ConfigureAwait(false);
+        if (claimedJobs.Count == 0)
+            return 0;
 
         // Phase 2 + 3: Execute and clean up each job sequentially. Every job in the batch that
         // has not finished keeps its claim fresh, not only the one running: the jobs waiting
@@ -202,6 +160,63 @@ internal sealed class LocalWorkerService(
         }
 
         return claimedJobs.Count;
+    }
+
+    private async Task<List<ClaimedJob>> ClaimJobsAsync(
+        int workerId,
+        CancellationToken stoppingToken
+    )
+    {
+        var claimScope = serviceProvider.CreateAsyncScope();
+        await using (claimScope.ConfigureAwait(false))
+        {
+            var dataContext = claimScope.ServiceProvider.GetRequiredService<IDataContext>();
+
+            var visibilitySeconds = (int)options.VisibilityTimeout.TotalSeconds;
+            var batchSize = Math.Max(1, options.BatchSize);
+
+            using var transaction = await dataContext
+                .BeginTransaction(stoppingToken)
+                .ConfigureAwait(false);
+
+            var jobs = await dataContext
+                .BackgroundJobs.FromSqlRaw(
+                    sqlDialect.NotNull().DequeueBackgroundJobs(),
+                    visibilitySeconds,
+                    batchSize
+                )
+                .ToListAsync(stoppingToken)
+                .ConfigureAwait(false);
+
+            if (jobs.Count == 0)
+            {
+                await dataContext.RollbackTransaction().ConfigureAwait(false);
+                return [];
+            }
+
+            // Claim all jobs in the batch
+            foreach (var job in jobs)
+                job.FetchedAt = Clock.GetUtcNow().UtcDateTime;
+
+            await dataContext.SaveChanges(stoppingToken).ConfigureAwait(false);
+            await dataContext.CommitTransaction().ConfigureAwait(false);
+
+            var claimedJobs = jobs.Select(j => new ClaimedJob(
+                    j.Id,
+                    j.MetadataId,
+                    j.Input,
+                    j.InputType
+                ))
+                .ToList();
+
+            logger.LogDebug(
+                "Worker {WorkerId} claimed {Count} job(s)",
+                workerId,
+                claimedJobs.Count
+            );
+
+            return claimedJobs;
+        }
     }
 
     /// <summary>
@@ -259,28 +274,12 @@ internal sealed class LocalWorkerService(
             var executeScope = serviceProvider.CreateAsyncScope();
             await using var executeScopeDisposal = executeScope.ConfigureAwait(false);
 
-            object? deserializedInput = null;
-            if (inputJson != null && inputType != null)
-            {
-                // Resolved among the registered trains' inputs only; a name that is not one of
-                // them fails this job like any other failure, and its row is deleted below.
-                var type =
-                    RegisteredInputTypes.Find(
-                        executeScope.ServiceProvider.GetRequiredService<ITrainRegistry>(),
-                        inputType
-                    )
-                    ?? throw new TrainException(
-                        string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"Background job {jobId} names input type '{inputType}', which is not "
-                        ) + "the input of any registered train."
-                    );
-                deserializedInput = JsonSerializer.Deserialize(
-                    inputJson,
-                    type,
-                    TraxJsonSerializationOptions.ManifestProperties
-                );
-            }
+            var deserializedInput = DeserializeInput(
+                executeScope.ServiceProvider,
+                jobId,
+                inputJson,
+                inputType
+            );
 
             var train = executeScope.ServiceProvider.GetRequiredService<IJobRunnerTrain>();
 
@@ -289,34 +288,15 @@ internal sealed class LocalWorkerService(
                     ? new RunJobRequest(metadataId, deserializedInput)
                     : new RunJobRequest(metadataId);
 
-            // Use shutdown timeout for in-flight jobs: when the host requests shutdown,
-            // give the train a grace period before forcefully cancelling.
-            // Use an unlinked CTS so we don't cancel immediately — the registration
-            // triggers CancelAfter(ShutdownTimeout) to provide a grace period.
-            using var shutdownCts = new CancellationTokenSource();
-            cancellationRegistry.Register(metadataId, shutdownCts);
-
-            try
-            {
-                var shutdownRegistration = stoppingToken.Register(() =>
-                    shutdownCts.CancelAfter(options.ShutdownTimeout)
-                );
-                await using (shutdownRegistration.ConfigureAwait(false))
-                {
-                    await train.Run(request, shutdownCts.Token).ConfigureAwait(false);
-
-                    logger.LogDebug(
-                        "Worker {WorkerId} completed job {JobId} (Metadata: {MetadataId})",
-                        workerId,
-                        jobId,
-                        metadataId
-                    );
-                }
-            }
-            finally
-            {
-                cancellationRegistry.Unregister(metadataId, shutdownCts);
-            }
+            await RunWithShutdownGraceAsync(
+                    train,
+                    request,
+                    workerId,
+                    jobId,
+                    metadataId,
+                    stoppingToken
+                )
+                .ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -339,6 +319,50 @@ internal sealed class LocalWorkerService(
         // has already recorded its outcome, so this is bookkeeping for finished work, for the same
         // reason the train's own outcome write is uncancellable (effect/0005). A row left here is
         // re-claimed after VisibilityTimeout and refused as no longer Pending.
+        await DeleteJobRowAsync(workerId, jobId).ConfigureAwait(false);
+    }
+
+    private async Task RunWithShutdownGraceAsync(
+        IJobRunnerTrain train,
+        RunJobRequest request,
+        int workerId,
+        long jobId,
+        long metadataId,
+        CancellationToken stoppingToken
+    )
+    {
+        // Use shutdown timeout for in-flight jobs: when the host requests shutdown,
+        // give the train a grace period before forcefully cancelling.
+        // Use an unlinked CTS so we don't cancel immediately — the registration
+        // triggers CancelAfter(ShutdownTimeout) to provide a grace period.
+        using var shutdownCts = new CancellationTokenSource();
+        cancellationRegistry.Register(metadataId, shutdownCts);
+
+        try
+        {
+            var shutdownRegistration = stoppingToken.Register(() =>
+                shutdownCts.CancelAfter(options.ShutdownTimeout)
+            );
+            await using (shutdownRegistration.ConfigureAwait(false))
+            {
+                await train.Run(request, shutdownCts.Token).ConfigureAwait(false);
+
+                logger.LogDebug(
+                    "Worker {WorkerId} completed job {JobId} (Metadata: {MetadataId})",
+                    workerId,
+                    jobId,
+                    metadataId
+                );
+            }
+        }
+        finally
+        {
+            cancellationRegistry.Unregister(metadataId, shutdownCts);
+        }
+    }
+
+    private async Task DeleteJobRowAsync(int workerId, long jobId)
+    {
         try
         {
             var cleanupScope = serviceProvider.CreateAsyncScope();
@@ -363,6 +387,36 @@ internal sealed class LocalWorkerService(
                 jobId
             );
         }
+    }
+
+    private static object? DeserializeInput(
+        IServiceProvider services,
+        long jobId,
+        string? inputJson,
+        string? inputType
+    )
+    {
+        object? deserializedInput = null;
+        if (inputJson != null && inputType != null)
+        {
+            // Resolved among the registered trains' inputs only; a name that is not one of
+            // them fails this job like any other failure, and its row is deleted below.
+            var type =
+                RegisteredInputTypes.Find(services.GetRequiredService<ITrainRegistry>(), inputType)
+                ?? throw new TrainException(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Background job {jobId} names input type '{inputType}', which is not "
+                    ) + "the input of any registered train."
+                );
+            deserializedInput = JsonSerializer.Deserialize(
+                inputJson,
+                type,
+                TraxJsonSerializationOptions.ManifestProperties
+            );
+        }
+
+        return deserializedInput;
     }
 
     /// <summary>

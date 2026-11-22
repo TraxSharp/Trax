@@ -92,89 +92,10 @@ public class InvokedRunOperationsTests(ClusterStore store)
 
         for (var i = 0; i < RaceIterations; i++)
         {
-            var instance = await _api.NotNull().Start(StepMachine.Context(InvokedStepModes.Ok));
-            var token = (await SystemRow(instance.Id)).InvokeToken.NotNull();
-
-            // The cancel reads the instance's token, then signals at its seam just before its
-            // conditional statement. On even iterations the dispatcher starts at that signal and
-            // the two race; on odd ones the dispatcher's whole pass runs there first, so its claim
-            // lands between the cancel's read and its statement.
-            var go = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            var dispatch = Task.Run(async () =>
-            {
-                await go.Task.ConfigureAwait(false);
-                var scope = _worker.NotNull().Services.CreateAsyncScope();
-                await using var scopeDisposal = scope.ConfigureAwait(false);
-                await scope
-                    .ServiceProvider.GetRequiredService<IJobDispatcherTrain>()
-                    .Run(Unit.Default)
-                    .ConfigureAwait(false);
-            });
-            var claimFirst = i % 2 == 1;
-            var cancel = Task.Run(async () =>
-            {
-                var scope = _worker.NotNull().Services.CreateAsyncScope();
-                await using var scopeDisposal = scope.ConfigureAwait(false);
-                var operations = (OperationsService)
-                    scope.ServiceProvider.GetRequiredService<IOperationsService>();
-                operations.BeforeMachineInstanceCancel = async _ =>
-                {
-                    go.SetResult();
-                    if (claimFirst)
-                        await dispatch.ConfigureAwait(false);
-                };
-                return await operations
-                    .CancelMachineInstanceAsync(SystemKey(instance.Id), CancellationToken.None)
-                    .ConfigureAwait(false);
-            });
-            await Task.WhenAll(dispatch, cancel).WaitAsync(Bound, TimeProvider.System);
-
-            var entry = (await _api.NotNull().Entry(token)).NotNull();
-            var run = await RunByExternalId(token);
-
-            if (entry.Status == WorkQueueStatus.Cancelled)
-            {
-                run.Should()
-                    .BeNull(
-                        $"a cancelled entry is never dispatched, so its run never starts. See {Adr}"
-                    );
-                (await cancel.ConfigureAwait(false))
-                    .Outcome.Should()
-                    .Be(MachineInstanceCancelOutcome.RunCancelled);
-                neverStarted++;
-            }
-            else
-            {
-                entry.Status.Should().Be(WorkQueueStatus.Dispatched);
-                run.Should().NotBeNull("the claim and the run's row commit together");
-                run.NotNull()
-                    .CancellationRequested.Should()
-                    .BeTrue(
-                        $"a cancel that finds the entry claimed flags the run the claim wrote: "
-                            + $"never neither. See {Adr}"
-                    );
-                (await cancel.ConfigureAwait(false))
-                    .Outcome.Should()
-                    .Be(MachineInstanceCancelOutcome.CancelRequested);
-
-                await _worker.NotNull().RunJob(run.Id).ConfigureAwait(false);
-                (await _worker.NotNull().Run(run.Id).ConfigureAwait(false))
-                    .TrainState.Should()
-                    .Be(TrainState.Cancelled, "a flagged run ends Cancelled");
+            if (await RaceOneCancelAgainstDispatch(claimFirst: i % 2 == 1))
                 cancelledRunning++;
-            }
-
-            (await _api.NotNull().Deliver(token).ConfigureAwait(false))
-                .Should()
-                .BeOfType<InvokeDelivery.Moved>()
-                .Which.To.Should()
-                .Be("Cancelled", "either way the instance moves through OnCancelled");
-            (await _api.NotNull().Deliver(token).ConfigureAwait(false))
-                .Should()
-                .BeOfType<InvokeDelivery.NoTransition>("and only once");
-            var row = await SystemRow(instance.Id).ConfigureAwait(false);
-            row.State.Should().Be("Cancelled");
-            row.InvokeToken.Should().BeNull();
+            else
+                neverStarted++;
         }
 
         (neverStarted + cancelledRunning).Should().Be(RaceIterations);
@@ -192,6 +113,125 @@ public class InvokedRunOperationsTests(ClusterStore store)
                 )
             )
             .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// One round of the race. True when the cancel found the entry claimed and flagged the run;
+    /// false when it cancelled the entry before dispatch.
+    /// </summary>
+    private async Task<bool> RaceOneCancelAgainstDispatch(bool claimFirst)
+    {
+        var instance = await _api.NotNull()
+            .Start(StepMachine.Context(InvokedStepModes.Ok))
+            .ConfigureAwait(false);
+        var token = (await SystemRow(instance.Id).ConfigureAwait(false)).InvokeToken.NotNull();
+
+        // The cancel reads the instance's token, then signals at its seam just before its
+        // conditional statement. On even iterations the dispatcher starts at that signal and
+        // the two race; on odd ones the dispatcher's whole pass runs there first, so its claim
+        // lands between the cancel's read and its statement.
+        var go = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var dispatch = DispatchOnceSignalled(go);
+        var cancel = CancelSignallingDispatch(instance.Id, go, dispatch, claimFirst);
+        await Task.WhenAll(dispatch, cancel)
+            .WaitAsync(Bound, TimeProvider.System)
+            .ConfigureAwait(false);
+
+        var entry = (await _api.NotNull().Entry(token).ConfigureAwait(false)).NotNull();
+        var run = await RunByExternalId(token).ConfigureAwait(false);
+
+        var cancelledRunning = await AssertCancelRaceOutcome(entry.Status, run, cancel)
+            .ConfigureAwait(false);
+
+        await AssertMovedThroughOnCancelledOnce(token, instance.Id).ConfigureAwait(false);
+        return cancelledRunning;
+    }
+
+    private Task DispatchOnceSignalled(TaskCompletionSource go) =>
+        Task.Run(async () =>
+        {
+            await go.Task.ConfigureAwait(false);
+            var scope = _worker.NotNull().Services.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
+            await scope
+                .ServiceProvider.GetRequiredService<IJobDispatcherTrain>()
+                .Run(Unit.Default)
+                .ConfigureAwait(false);
+        });
+
+    private Task<MachineInstanceCancelResult> CancelSignallingDispatch(
+        Guid instanceId,
+        TaskCompletionSource go,
+        Task dispatch,
+        bool claimFirst
+    ) =>
+        Task.Run(async () =>
+        {
+            var scope = _worker.NotNull().Services.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
+            var operations = (OperationsService)
+                scope.ServiceProvider.GetRequiredService<IOperationsService>();
+            operations.BeforeMachineInstanceCancel = async _ =>
+            {
+                go.SetResult();
+                if (claimFirst)
+                    await dispatch.ConfigureAwait(false);
+            };
+            return await operations
+                .CancelMachineInstanceAsync(SystemKey(instanceId), CancellationToken.None)
+                .ConfigureAwait(false);
+        });
+
+    private async Task<bool> AssertCancelRaceOutcome(
+        WorkQueueStatus entryStatus,
+        Trax.Effect.Models.Metadata.Metadata? run,
+        Task<MachineInstanceCancelResult> cancel
+    )
+    {
+        if (entryStatus == WorkQueueStatus.Cancelled)
+        {
+            run.Should()
+                .BeNull(
+                    $"a cancelled entry is never dispatched, so its run never starts. See {Adr}"
+                );
+            (await cancel.ConfigureAwait(false))
+                .Outcome.Should()
+                .Be(MachineInstanceCancelOutcome.RunCancelled);
+            return false;
+        }
+
+        entryStatus.Should().Be(WorkQueueStatus.Dispatched);
+        run.Should().NotBeNull("the claim and the run's row commit together");
+        run.NotNull()
+            .CancellationRequested.Should()
+            .BeTrue(
+                $"a cancel that finds the entry claimed flags the run the claim wrote: "
+                    + $"never neither. See {Adr}"
+            );
+        (await cancel.ConfigureAwait(false))
+            .Outcome.Should()
+            .Be(MachineInstanceCancelOutcome.CancelRequested);
+
+        await _worker.NotNull().RunJob(run.Id).ConfigureAwait(false);
+        (await _worker.NotNull().Run(run.Id).ConfigureAwait(false))
+            .TrainState.Should()
+            .Be(TrainState.Cancelled, "a flagged run ends Cancelled");
+        return true;
+    }
+
+    private async Task AssertMovedThroughOnCancelledOnce(string token, Guid instanceId)
+    {
+        (await _api.NotNull().Deliver(token).ConfigureAwait(false))
+            .Should()
+            .BeOfType<InvokeDelivery.Moved>()
+            .Which.To.Should()
+            .Be("Cancelled", "either way the instance moves through OnCancelled");
+        (await _api.NotNull().Deliver(token).ConfigureAwait(false))
+            .Should()
+            .BeOfType<InvokeDelivery.NoTransition>("and only once");
+        var row = await SystemRow(instanceId).ConfigureAwait(false);
+        row.State.Should().Be("Cancelled");
+        row.InvokeToken.Should().BeNull();
     }
 
     [Test]

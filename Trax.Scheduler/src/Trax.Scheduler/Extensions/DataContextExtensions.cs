@@ -338,36 +338,17 @@ internal static class DataContextExtensions
 
         if (existing != null)
         {
-            // A one-off that has not run keeps the time it was first given while its input is the
-            // same: a host seeds it at every start with "now plus the delay", and one that restarts
-            // more often than the delay would otherwise push it back for ever. A changed input
-            // schedules it from this seed. The delay itself is not stored, so a changed delay alone
-            // does not move it.
-            var unrun =
-                existing.ScheduleType == ScheduleType.Once
-                && existing.LastSuccessfulRun is null
-                && existing.ScheduledAt is not null;
-            var previousProperties = existing.Properties;
-
-            existing.Name = trainType.FullName.NotNull();
-            existing.SetProperties(input);
-            if (options._isEnabled is { } isEnabled)
-                existing.IsEnabled = isEnabled;
-            ApplyStatedSettings(existing, options);
-            existing.ManifestGroupId = manifestGroupId;
-            existing.ScheduleType = ScheduleType.Once;
-            if (!(unrun && SameProperties(previousProperties, existing.Properties)))
-                existing.ScheduledAt = scheduledAt;
-            existing.CronExpression = null;
-            existing.IntervalSeconds = null;
-            ApplyMisfireOptions(existing, options);
-            ApplyExclusions(existing, options);
-            ApplyFailureWindow(existing, options);
-            ApplyReplayDecisionsOnRetry(existing, options);
-            if (options.ReplayDecisionsOnRetry == false)
-                await RetryReplayLinks
-                    .ClearQueuedAsync(context, [existing.Id], ct, save: false)
-                    .ConfigureAwait(false);
+            await UpdateExistingOnceManifestAsync(
+                    context,
+                    existing,
+                    trainType,
+                    input,
+                    scheduledAt,
+                    options,
+                    manifestGroupId,
+                    ct
+                )
+                .ConfigureAwait(false);
 
             return existing;
         }
@@ -395,6 +376,49 @@ internal static class DataContextExtensions
         context.Manifests.Add(manifest);
 
         return manifest;
+    }
+
+    private static async Task UpdateExistingOnceManifestAsync(
+        IDataContext context,
+        Manifest existing,
+        Type trainType,
+        IManifestProperties input,
+        DateTime scheduledAt,
+        ManifestOptions options,
+        long manifestGroupId,
+        CancellationToken ct
+    )
+    {
+        // A one-off that has not run keeps the time it was first given while its input is the
+        // same: a host seeds it at every start with "now plus the delay", and one that restarts
+        // more often than the delay would otherwise push it back for ever. A changed input
+        // schedules it from this seed. The delay itself is not stored, so a changed delay alone
+        // does not move it.
+        var unrun =
+            existing.ScheduleType == ScheduleType.Once
+            && existing.LastSuccessfulRun is null
+            && existing.ScheduledAt is not null;
+        var previousProperties = existing.Properties;
+
+        existing.Name = trainType.FullName.NotNull();
+        existing.SetProperties(input);
+        if (options._isEnabled is { } isEnabled)
+            existing.IsEnabled = isEnabled;
+        ApplyStatedSettings(existing, options);
+        existing.ManifestGroupId = manifestGroupId;
+        existing.ScheduleType = ScheduleType.Once;
+        if (!(unrun && SameProperties(previousProperties, existing.Properties)))
+            existing.ScheduledAt = scheduledAt;
+        existing.CronExpression = null;
+        existing.IntervalSeconds = null;
+        ApplyMisfireOptions(existing, options);
+        ApplyExclusions(existing, options);
+        ApplyFailureWindow(existing, options);
+        ApplyReplayDecisionsOnRetry(existing, options);
+        if (options.ReplayDecisionsOnRetry == false)
+            await RetryReplayLinks
+                .ClearQueuedAsync(context, [existing.Id], ct, save: false)
+                .ConfigureAwait(false);
     }
 
     /// <summary>

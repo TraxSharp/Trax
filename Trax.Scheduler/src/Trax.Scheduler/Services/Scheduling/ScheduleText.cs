@@ -98,23 +98,7 @@ internal static class ScheduleText
         }
 
         if (IsAny(hour) && everyDay)
-        {
-            if (IsAny(minute))
-                return secondValue == 0
-                    ? "Every minute"
-                    : string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"Every minute at second {secondValue}"
-                    );
-            if (secondValue == 0 && Step(minute) is { } everyMinutes)
-                return string.Create(CultureInfo.InvariantCulture, $"Every {everyMinutes} minutes");
-            if (IsNumber(minute, out var atMinute))
-                return string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"Every hour at :{atMinute:00}{SecondSuffix(secondValue)}"
-                );
-            return null;
-        }
+            return DescribeEveryHour(minute, secondValue);
 
         if (!IsNumber(minute, out var m))
             return null;
@@ -136,17 +120,7 @@ internal static class ScheduleText
             return $"Daily {at}";
 
         if (IsAny(dayOfMonth) && IsAny(month))
-        {
-            if (string.Equals(dayOfWeek, "1-5", StringComparison.Ordinal))
-                return $"Weekdays {at}";
-            var days = NumberList(dayOfWeek, 0, 7);
-            if (days is null)
-                return null;
-            var distinct = days.Select(d => d % 7).Distinct().Order().ToList();
-            if (distinct.SequenceEqual([0, 6]))
-                return $"Weekends {at}";
-            return $"Every {JoinWords(distinct.Select(d => ((DayOfWeek)d).ToString()).ToList())} {at}";
-        }
+            return DescribeDaysOfWeek(dayOfWeek, at);
 
         if (IsAny(dayOfWeek) && IsNumber(dayOfMonth, out var dom) && dom is >= 1 and <= 31)
         {
@@ -159,6 +133,38 @@ internal static class ScheduleText
                 );
         }
 
+        return null;
+    }
+
+    private static string? DescribeDaysOfWeek(string dayOfWeek, string at)
+    {
+        if (string.Equals(dayOfWeek, "1-5", StringComparison.Ordinal))
+            return $"Weekdays {at}";
+        var days = NumberList(dayOfWeek, 0, 7);
+        if (days is null)
+            return null;
+        var distinct = days.Select(d => d % 7).Distinct().Order().ToList();
+        if (distinct.SequenceEqual([0, 6]))
+            return $"Weekends {at}";
+        return $"Every {JoinWords(distinct.Select(d => ((DayOfWeek)d).ToString()).ToList())} {at}";
+    }
+
+    private static string? DescribeEveryHour(string minute, int secondValue)
+    {
+        if (IsAny(minute))
+            return secondValue == 0
+                ? "Every minute"
+                : string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Every minute at second {secondValue}"
+                );
+        if (secondValue == 0 && Step(minute) is { } everyMinutes)
+            return string.Create(CultureInfo.InvariantCulture, $"Every {everyMinutes} minutes");
+        if (IsNumber(minute, out var atMinute))
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"Every hour at :{atMinute:00}{SecondSuffix(secondValue)}"
+            );
         return null;
     }
 

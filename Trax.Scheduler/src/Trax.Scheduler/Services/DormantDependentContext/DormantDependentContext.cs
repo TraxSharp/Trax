@@ -153,6 +153,133 @@ internal sealed class DormantDependentContext(
     )
         where TInput : IManifestProperties
     {
+        var manifest = await LoadDormantDependentAsync(context, externalId, ct)
+            .ConfigureAwait(false);
+
+        // A disabled manifest, or one in a disabled group, stays stopped: its parent's success
+        // does not restart it, just as the ManifestManager does not queue it.
+        if (!manifest.IsEnabled || !manifest.ManifestGroup.NotNull().IsEnabled)
+        {
+            logger.LogWarning(
+                "Skipping activation of dormant dependent '{ExternalId}' "
+                    + "(ManifestId: {ManifestId}) — {Disabled} is disabled",
+                externalId,
+                manifest.Id,
+                manifest.IsEnabled ? "its manifest group" : "the manifest"
+            );
+            return;
+        }
+
+        if (
+            await HasQueuedOrActiveWorkAsync(context, manifest, externalId, ct)
+                .ConfigureAwait(false)
+        )
+            return;
+
+        // Calculate priority with DependentPriorityBoost
+        var basePriority = manifest.ManifestGroup.Priority;
+        var effectivePriority = basePriority + schedulerConfiguration.DependentPriorityBoost;
+
+        var entry = CreateActivationEntry(manifest, input, effectivePriority);
+
+        await context.Track(entry).ConfigureAwait(false);
+
+        logger.LogInformation(
+            "Activated dormant dependent '{ExternalId}' (ManifestId: {ManifestId}, "
+                + "WorkQueueId: {WorkQueueId}, Priority: {Priority})",
+            externalId,
+            manifest.Id,
+            entry.Id,
+            effectivePriority
+        );
+    }
+
+    private Trax.Effect.Models.WorkQueue.WorkQueue CreateActivationEntry<TInput>(
+        Manifest manifest,
+        TInput input,
+        int effectivePriority
+    )
+        where TInput : IManifestProperties
+    {
+        // Serialize the runtime input
+        var inputJson = JsonSerializer.Serialize(
+            input,
+            input.GetType(),
+            TraxJsonSerializationOptions.ManifestProperties
+        );
+
+        var entry = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = manifest.Name,
+                Input = inputJson,
+                InputTypeName = typeof(TInput).FullName,
+                ManifestId = manifest.Id,
+                StarterHash = manifest.StarterHash,
+                Priority = effectivePriority,
+            },
+            timeProvider
+        );
+
+        return entry;
+    }
+
+    private async Task<bool> HasQueuedOrActiveWorkAsync(
+        IDataContext context,
+        Manifest manifest,
+        string externalId,
+        CancellationToken ct
+    )
+    {
+        // Concurrency guard: check for existing queued work
+        var hasQueuedWork = await context
+            .WorkQueues.AnyAsync(
+                w => w.ManifestId == manifest.Id && w.Status == WorkQueueStatus.Queued,
+                ct
+            )
+            .ConfigureAwait(false);
+        if (hasQueuedWork)
+        {
+            logger.LogWarning(
+                "Skipping activation of dormant dependent '{ExternalId}' "
+                    + "(ManifestId: {ManifestId}) — already has queued work",
+                externalId,
+                manifest.Id
+            );
+            return true;
+        }
+
+        // Concurrency guard: check for active execution
+        var hasActiveExecution = await context
+            .Metadatas.AnyAsync(
+                m =>
+                    m.ManifestId == manifest.Id
+                    && (
+                        m.TrainState == TrainState.Pending || m.TrainState == TrainState.InProgress
+                    ),
+                ct
+            )
+            .ConfigureAwait(false);
+        if (hasActiveExecution)
+        {
+            logger.LogWarning(
+                "Skipping activation of dormant dependent '{ExternalId}' "
+                    + "(ManifestId: {ManifestId}) — has active execution",
+                externalId,
+                manifest.Id
+            );
+            return true;
+        }
+
+        return false;
+    }
+
+    private async Task<Manifest> LoadDormantDependentAsync(
+        IDataContext context,
+        string externalId,
+        CancellationToken ct
+    )
+    {
         // Load manifest with its group for priority calculation
         var manifest =
             await context
@@ -185,94 +312,7 @@ internal sealed class DormantDependentContext(
                     + "A dormant dependent can only be activated by its declared parent."
             );
 
-        // A disabled manifest, or one in a disabled group, stays stopped: its parent's success
-        // does not restart it, just as the ManifestManager does not queue it.
-        if (!manifest.IsEnabled || !manifest.ManifestGroup.NotNull().IsEnabled)
-        {
-            logger.LogWarning(
-                "Skipping activation of dormant dependent '{ExternalId}' "
-                    + "(ManifestId: {ManifestId}) — {Disabled} is disabled",
-                externalId,
-                manifest.Id,
-                manifest.IsEnabled ? "its manifest group" : "the manifest"
-            );
-            return;
-        }
-
-        // Concurrency guard: check for existing queued work
-        var hasQueuedWork = await context
-            .WorkQueues.AnyAsync(
-                w => w.ManifestId == manifest.Id && w.Status == WorkQueueStatus.Queued,
-                ct
-            )
-            .ConfigureAwait(false);
-        if (hasQueuedWork)
-        {
-            logger.LogWarning(
-                "Skipping activation of dormant dependent '{ExternalId}' "
-                    + "(ManifestId: {ManifestId}) — already has queued work",
-                externalId,
-                manifest.Id
-            );
-            return;
-        }
-
-        // Concurrency guard: check for active execution
-        var hasActiveExecution = await context
-            .Metadatas.AnyAsync(
-                m =>
-                    m.ManifestId == manifest.Id
-                    && (
-                        m.TrainState == TrainState.Pending || m.TrainState == TrainState.InProgress
-                    ),
-                ct
-            )
-            .ConfigureAwait(false);
-        if (hasActiveExecution)
-        {
-            logger.LogWarning(
-                "Skipping activation of dormant dependent '{ExternalId}' "
-                    + "(ManifestId: {ManifestId}) — has active execution",
-                externalId,
-                manifest.Id
-            );
-            return;
-        }
-
-        // Calculate priority with DependentPriorityBoost
-        var basePriority = manifest.ManifestGroup.Priority;
-        var effectivePriority = basePriority + schedulerConfiguration.DependentPriorityBoost;
-
-        // Serialize the runtime input
-        var inputJson = JsonSerializer.Serialize(
-            input,
-            input.GetType(),
-            TraxJsonSerializationOptions.ManifestProperties
-        );
-
-        var entry = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
-            new CreateWorkQueue
-            {
-                TrainName = manifest.Name,
-                Input = inputJson,
-                InputTypeName = typeof(TInput).FullName,
-                ManifestId = manifest.Id,
-                StarterHash = manifest.StarterHash,
-                Priority = effectivePriority,
-            },
-            timeProvider
-        );
-
-        await context.Track(entry).ConfigureAwait(false);
-
-        logger.LogInformation(
-            "Activated dormant dependent '{ExternalId}' (ManifestId: {ManifestId}, "
-                + "WorkQueueId: {WorkQueueId}, Priority: {Priority})",
-            externalId,
-            manifest.Id,
-            entry.Id,
-            effectivePriority
-        );
+        return manifest;
     }
 
     private bool IsInitialized => ParentManifestId is not null;

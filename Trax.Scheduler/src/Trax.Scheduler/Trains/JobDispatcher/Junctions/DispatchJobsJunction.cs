@@ -74,65 +74,15 @@ internal sealed class DispatchJobsJunction(
     public override async Task<Unit> Run(List<WorkQueue> entries)
     {
         var dispatchStartTime = Clock.GetUtcNow().UtcDateTime;
-        var jobsDispatched = 0;
 
         logger.LogDebug("Starting DispatchJobsJunction for {EntryCount} entries", entries.Count);
 
         var maxConcurrent = schedulerConfiguration.MaxConcurrentDispatch;
 
-        if (maxConcurrent <= 1)
-        {
-            foreach (var entry in entries)
-            {
-                try
-                {
-                    var dispatched = await TryClaimAndDispatchAsync(entry).ConfigureAwait(false);
-
-                    if (dispatched)
-                        jobsDispatched++;
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(
-                        ex,
-                        "Error dispatching work queue entry {WorkQueueId} (train: {TrainName})",
-                        entry.Id,
-                        entry.TrainName
-                    );
-                }
-            }
-        }
-        else
-        {
-            using var semaphore = new SemaphoreSlim(maxConcurrent, maxConcurrent);
-
-            var tasks = entries.Select(async entry =>
-            {
-                await semaphore.WaitAsync(CancellationToken).ConfigureAwait(false);
-                try
-                {
-                    var dispatched = await TryClaimAndDispatchAsync(entry).ConfigureAwait(false);
-
-                    if (dispatched)
-                        Interlocked.Increment(ref jobsDispatched);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(
-                        ex,
-                        "Error dispatching work queue entry {WorkQueueId} (train: {TrainName})",
-                        entry.Id,
-                        entry.TrainName
-                    );
-                }
-                finally
-                {
-                    semaphore.Release();
-                }
-            });
-
-            await Task.WhenAll(tasks).ConfigureAwait(false);
-        }
+        var jobsDispatched =
+            maxConcurrent <= 1
+                ? await DispatchOneAtATimeAsync(entries).ConfigureAwait(false)
+                : await DispatchConcurrentlyAsync(entries, maxConcurrent).ConfigureAwait(false);
 
         var duration = Clock.GetUtcNow().UtcDateTime - dispatchStartTime;
 
@@ -149,6 +99,67 @@ internal sealed class DispatchJobsJunction(
             logger.LogDebug("DispatchJobsJunction completed: no jobs dispatched");
 
         return Unit.Default;
+    }
+
+    private async Task<int> DispatchOneAtATimeAsync(List<WorkQueue> entries)
+    {
+        var jobsDispatched = 0;
+        foreach (var entry in entries)
+        {
+            try
+            {
+                var dispatched = await TryClaimAndDispatchAsync(entry).ConfigureAwait(false);
+
+                if (dispatched)
+                    jobsDispatched++;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(
+                    ex,
+                    "Error dispatching work queue entry {WorkQueueId} (train: {TrainName})",
+                    entry.Id,
+                    entry.TrainName
+                );
+            }
+        }
+
+        return jobsDispatched;
+    }
+
+    private async Task<int> DispatchConcurrentlyAsync(List<WorkQueue> entries, int maxConcurrent)
+    {
+        var jobsDispatched = 0;
+        using var semaphore = new SemaphoreSlim(maxConcurrent, maxConcurrent);
+
+        var tasks = entries.Select(async entry =>
+        {
+            await semaphore.WaitAsync(CancellationToken).ConfigureAwait(false);
+            try
+            {
+                var dispatched = await TryClaimAndDispatchAsync(entry).ConfigureAwait(false);
+
+                if (dispatched)
+                    Interlocked.Increment(ref jobsDispatched);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(
+                    ex,
+                    "Error dispatching work queue entry {WorkQueueId} (train: {TrainName})",
+                    entry.Id,
+                    entry.TrainName
+                );
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        });
+
+        await Task.WhenAll(tasks).ConfigureAwait(false);
+
+        return jobsDispatched;
     }
 
     /// <summary>
@@ -180,6 +191,41 @@ internal sealed class DispatchJobsJunction(
             .BeginTransaction(CancellationToken)
             .ConfigureAwait(false);
 
+        var claimed = await LockSubjectAndClaimAsync(dataContext, entry).ConfigureAwait(false);
+        if (claimed is null)
+            return false;
+
+        var (readable, deserializedInput) = await ReadClaimedInputAsync(dataContext, claimed)
+            .ConfigureAwait(false);
+        if (!readable)
+            return false;
+
+        await DropReplayLinkIfManifestOptedOutAsync(dataContext, claimed).ConfigureAwait(false);
+        await DropReplayLinkIfAlreadyReplayedAsync(dataContext, claimed).ConfigureAwait(false);
+
+        var metadata = await RecordDispatchAsync(dataContext, claimed).ConfigureAwait(false);
+
+        // Link retry metadata on the dead letter if this WorkQueue was from a requeue
+        await LinkDeadLetterRetryAsync(dataContext, claimed, metadata.Id).ConfigureAwait(false);
+
+        // Commit the claim transaction before enqueuing. The Metadata and WorkQueue
+        // updates must be visible to the job submitter — InMemoryJobSubmitter executes
+        // synchronously and needs to read the Metadata, while PostgresJobSubmitter and
+        // other submitters need the committed state to be visible.
+        await dataContext.CommitTransaction().ConfigureAwait(false);
+
+        // Resolve the correct submitter for this train (routed or default)
+        var jobSubmitter = ResolveSubmitter(scope.ServiceProvider, claimed.TrainName);
+
+        return await SubmitAsync(jobSubmitter, entry, claimed, metadata, deserializedInput)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<WorkQueue?> LockSubjectAndClaimAsync(
+        IDataContext dataContext,
+        WorkQueue entry
+    )
+    {
         // Serialize claims for this subject before looking at the entry. Row locking is not enough:
         // two entries for one subject are two different rows, so FOR UPDATE SKIP LOCKED does not
         // make them contend, and while both are still queued neither can see a dispatched sibling
@@ -210,9 +256,17 @@ internal sealed class DispatchJobsJunction(
                 "Work queue entry {WorkQueueId} already claimed by another server, skipping",
                 entry.Id
             );
-            return false;
+            return null;
         }
 
+        return claimed;
+    }
+
+    private async Task<(bool Readable, object? Input)> ReadClaimedInputAsync(
+        IDataContext dataContext,
+        WorkQueue claimed
+    )
+    {
         // Deserialize input if present
         object? deserializedInput = null;
         if (claimed is { Input: not null, InputTypeName: not null })
@@ -228,7 +282,7 @@ internal sealed class DispatchJobsJunction(
                 if (claimed.DispatchAttempts + 1 < UnknownInputTypeMaxSkips)
                 {
                     await DeferUnknownInputTypeAsync(dataContext, claimed).ConfigureAwait(false);
-                    return false;
+                    return (false, null);
                 }
 
                 await RecordUnreadableInputAsync(
@@ -240,7 +294,7 @@ internal sealed class DispatchJobsJunction(
                         )
                     )
                     .ConfigureAwait(false);
-                return false;
+                return (false, null);
             }
 
             try
@@ -254,13 +308,18 @@ internal sealed class DispatchJobsJunction(
             catch (Exception ex) when (ex is JsonException or NotSupportedException)
             {
                 await RecordUnreadableInputAsync(dataContext, claimed, ex).ConfigureAwait(false);
-                return false;
+                return (false, null);
             }
         }
 
-        await DropReplayLinkIfManifestOptedOutAsync(dataContext, claimed).ConfigureAwait(false);
-        await DropReplayLinkIfAlreadyReplayedAsync(dataContext, claimed).ConfigureAwait(false);
+        return (true, deserializedInput);
+    }
 
+    private async Task<Trax.Effect.Models.Metadata.Metadata> RecordDispatchAsync(
+        IDataContext dataContext,
+        WorkQueue claimed
+    )
+    {
         // Create a new Metadata record for this execution.
         // Propagate the WorkQueue's ExternalId so clients can correlate the queue
         // mutation response with subscription events (both use the same externalId).
@@ -297,18 +356,17 @@ internal sealed class DispatchJobsJunction(
             .ConfigureAwait(false);
         await dataContext.SaveChanges(CancellationToken).ConfigureAwait(false);
 
-        // Link retry metadata on the dead letter if this WorkQueue was from a requeue
-        await LinkDeadLetterRetryAsync(dataContext, claimed, metadata.Id).ConfigureAwait(false);
+        return metadata;
+    }
 
-        // Commit the claim transaction before enqueuing. The Metadata and WorkQueue
-        // updates must be visible to the job submitter — InMemoryJobSubmitter executes
-        // synchronously and needs to read the Metadata, while PostgresJobSubmitter and
-        // other submitters need the committed state to be visible.
-        await dataContext.CommitTransaction().ConfigureAwait(false);
-
-        // Resolve the correct submitter for this train (routed or default)
-        var jobSubmitter = ResolveSubmitter(scope.ServiceProvider, claimed.TrainName);
-
+    private async Task<bool> SubmitAsync(
+        IJobSubmitter jobSubmitter,
+        WorkQueue entry,
+        WorkQueue claimed,
+        Trax.Effect.Models.Metadata.Metadata metadata,
+        object? deserializedInput
+    )
+    {
         // Enqueue to job submitter (outside the transaction).
         // If this fails, the Metadata is already committed — mark it as Failed
         // immediately so it doesn't stay orphaned in Pending state forever.
@@ -631,108 +689,13 @@ internal sealed class DispatchJobsJunction(
 
         try
         {
-            var scope = serviceProvider.CreateAsyncScope();
-            await using var scopeDisposal = scope.ConfigureAwait(false);
-            var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
-
-            using var transaction = await dataContext.BeginTransaction(token).ConfigureAwait(false);
-
-            var workQueueEntry = await dataContext
-                .WorkQueues.FirstOrDefaultAsync(w => w.Id == workQueueId, token)
-                .ConfigureAwait(false);
-
-            // An entry with attempts left is requeued, and its failed run is marked so it does
-            // not count as a failure of the manifest (see DispatchFailure).
-            var maxAttempts = schedulerConfiguration.MaxDispatchAttempts;
-            var attempts = (workQueueEntry?.DispatchAttempts ?? 0) + 1;
-            var requeue = maxAttempts > 0 && workQueueEntry is not null && attempts < maxAttempts;
-
-            // 1. Fail the run only if no runner has started it.
-            var failure = DescribeFailure(exception);
-            var failureException = requeue ? DispatchFailure.Requeued : failure.FailureException;
-            var failureReason = requeue
-                ? string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"Dispatch attempt {attempts} of {maxAttempts} failed and the job was requeued: "
-                ) + $"{failure.FailureException}: {failure.FailureReason}"
-                : failure.FailureReason;
-
-            var now = Clock.GetUtcNow().UtcDateTime;
-            var failed = await dataContext
-                .Metadatas.Where(m => m.Id == metadataId && m.TrainState == TrainState.Pending)
-                .ExecuteUpdateAsync(
-                    s =>
-                        s.SetProperty(m => m.TrainState, TrainState.Failed)
-                            .SetProperty(m => m.EndTime, now)
-                            .SetProperty(m => m.FailureException, failureException)
-                            .SetProperty(m => m.FailureReason, failureReason)
-                            .SetProperty(m => m.FailureJunction, nameof(DispatchJobsJunction))
-                            .SetProperty(m => m.StackTrace, failure.StackTrace)
-                            .SetProperty(m => m.FailureClass, failure.FailureClass),
+            failedForGood = await RecordDispatchFailureAsync(
+                    workQueueId,
+                    metadataId,
+                    exception,
                     token
                 )
                 .ConfigureAwait(false);
-
-            if (failed == 0)
-            {
-                await dataContext.RollbackTransaction().ConfigureAwait(false);
-                logger.LogWarning(
-                    exception,
-                    "The submitter reported a failure for work queue entry {WorkQueueId}, but a runner "
-                        + "has already started Metadata {MetadataId}; the run's outcome is the runner's "
-                        + "to record, so the entry is not requeued",
-                    workQueueId,
-                    metadataId
-                );
-                return;
-            }
-
-            // 2. Requeue the work queue entry if attempts remain, after a backoff
-            if (maxAttempts > 0 && workQueueEntry is not null)
-            {
-                workQueueEntry.DispatchAttempts = attempts;
-
-                if (requeue)
-                {
-                    var backoff = DispatchFailure.Backoff(attempts);
-                    workQueueEntry.Status = WorkQueueStatus.Queued;
-                    workQueueEntry.MetadataId = null;
-                    workQueueEntry.DispatchedAt = null;
-                    // By the database's clock, which the dispatcher compares it with (see
-                    // DatabaseClock).
-                    workQueueEntry.ScheduledAt =
-                        await DatabaseClock
-                            .UtcNowAsync(
-                                dataContext.WorkQueues.Where(w => w.Id == workQueueId),
-                                Clock,
-                                token
-                            )
-                            .ConfigureAwait(false) + backoff;
-
-                    logger.LogWarning(
-                        "Requeued work queue entry {WorkQueueId} after dispatch failure "
-                            + "(attempt {Attempt}/{MaxAttempts}); next attempt in {Backoff}",
-                        workQueueId,
-                        attempts,
-                        maxAttempts,
-                        backoff
-                    );
-                }
-                else
-                {
-                    logger.LogError(
-                        "Work queue entry {WorkQueueId} exhausted dispatch attempts "
-                            + "({Attempts}/{MaxAttempts}). Leaving as Dispatched for dead letter handling",
-                        workQueueId,
-                        attempts,
-                        maxAttempts
-                    );
-                }
-            }
-
-            await dataContext.SaveChanges(token).ConfigureAwait(false);
-            await dataContext.CommitTransaction().ConfigureAwait(false);
-            failedForGood = !requeue;
         }
         catch (Exception ex)
         {
@@ -751,6 +714,164 @@ internal sealed class DispatchJobsJunction(
         // a row no longer Pending, which a runner owns and reports itself.
         if (failedForGood)
             await PublishFailedAsync(metadataId).ConfigureAwait(false);
+    }
+
+    // Fails the run and requeues or settles its entry, in one transaction. True when the run
+    // failed for good; false when it was requeued or a runner already owns it.
+    private async Task<bool> RecordDispatchFailureAsync(
+        long workQueueId,
+        long metadataId,
+        Exception exception,
+        CancellationToken token
+    )
+    {
+        var scope = serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
+        var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
+
+        using var transaction = await dataContext.BeginTransaction(token).ConfigureAwait(false);
+
+        var workQueueEntry = await dataContext
+            .WorkQueues.FirstOrDefaultAsync(w => w.Id == workQueueId, token)
+            .ConfigureAwait(false);
+
+        // An entry with attempts left is requeued, and its failed run is marked so it does
+        // not count as a failure of the manifest (see DispatchFailure).
+        var maxAttempts = schedulerConfiguration.MaxDispatchAttempts;
+        var attempts = (workQueueEntry?.DispatchAttempts ?? 0) + 1;
+        var requeue = maxAttempts > 0 && workQueueEntry is not null && attempts < maxAttempts;
+
+        // 1. Fail the run only if no runner has started it.
+        var failed = await FailPendingRunAsync(
+                dataContext,
+                metadataId,
+                exception,
+                requeue,
+                attempts,
+                maxAttempts,
+                token
+            )
+            .ConfigureAwait(false);
+
+        if (failed == 0)
+        {
+            await dataContext.RollbackTransaction().ConfigureAwait(false);
+            logger.LogWarning(
+                exception,
+                "The submitter reported a failure for work queue entry {WorkQueueId}, but a runner "
+                    + "has already started Metadata {MetadataId}; the run's outcome is the runner's "
+                    + "to record, so the entry is not requeued",
+                workQueueId,
+                metadataId
+            );
+            return false;
+        }
+
+        // 2. Requeue the work queue entry if attempts remain, after a backoff
+        if (maxAttempts > 0 && workQueueEntry is not null)
+            await RecordAttemptAsync(
+                    dataContext,
+                    workQueueEntry,
+                    workQueueId,
+                    attempts,
+                    maxAttempts,
+                    requeue,
+                    token
+                )
+                .ConfigureAwait(false);
+
+        await dataContext.SaveChanges(token).ConfigureAwait(false);
+        await dataContext.CommitTransaction().ConfigureAwait(false);
+
+        return !requeue;
+    }
+
+    private async Task RecordAttemptAsync(
+        IDataContext dataContext,
+        WorkQueue workQueueEntry,
+        long workQueueId,
+        int attempts,
+        int maxAttempts,
+        bool requeue,
+        CancellationToken token
+    )
+    {
+        workQueueEntry.DispatchAttempts = attempts;
+
+        if (requeue)
+        {
+            var backoff = DispatchFailure.Backoff(attempts);
+            workQueueEntry.Status = WorkQueueStatus.Queued;
+            workQueueEntry.MetadataId = null;
+            workQueueEntry.DispatchedAt = null;
+            // By the database's clock, which the dispatcher compares it with (see
+            // DatabaseClock).
+            workQueueEntry.ScheduledAt =
+                await DatabaseClock
+                    .UtcNowAsync(
+                        dataContext.WorkQueues.Where(w => w.Id == workQueueId),
+                        Clock,
+                        token
+                    )
+                    .ConfigureAwait(false) + backoff;
+
+            logger.LogWarning(
+                "Requeued work queue entry {WorkQueueId} after dispatch failure "
+                    + "(attempt {Attempt}/{MaxAttempts}); next attempt in {Backoff}",
+                workQueueId,
+                attempts,
+                maxAttempts,
+                backoff
+            );
+        }
+        else
+        {
+            logger.LogError(
+                "Work queue entry {WorkQueueId} exhausted dispatch attempts "
+                    + "({Attempts}/{MaxAttempts}). Leaving as Dispatched for dead letter handling",
+                workQueueId,
+                attempts,
+                maxAttempts
+            );
+        }
+    }
+
+    private async Task<int> FailPendingRunAsync(
+        IDataContext dataContext,
+        long metadataId,
+        Exception exception,
+        bool requeue,
+        int attempts,
+        int maxAttempts,
+        CancellationToken token
+    )
+    {
+        var failure = DescribeFailure(exception);
+        var failureException = requeue ? DispatchFailure.Requeued : failure.FailureException;
+        var failureReason = requeue
+            ? string.Create(
+                CultureInfo.InvariantCulture,
+                $"Dispatch attempt {attempts} of {maxAttempts} failed and the job was requeued: "
+            ) + $"{failure.FailureException}: {failure.FailureReason}"
+            : failure.FailureReason;
+
+        var now = Clock.GetUtcNow().UtcDateTime;
+        var failed = await dataContext
+            .Metadatas.Where(m => m.Id == metadataId && m.TrainState == TrainState.Pending)
+            .ExecuteUpdateAsync(
+                s =>
+                    s.SetProperty(m => m.TrainState, TrainState.Failed)
+                        .SetProperty(m => m.EndTime, now)
+                        .SetProperty(m => m.FailureException, failureException)
+                        .SetProperty(m => m.FailureReason, failureReason)
+                        .SetProperty(m => m.FailureJunction, nameof(DispatchJobsJunction))
+                        .SetProperty(m => m.StackTrace, failure.StackTrace)
+                        .SetProperty(m => m.FailureClass, failure.FailureClass),
+                token
+            )
+            .ConfigureAwait(false);
+
+        return failed;
     }
 
     /// <summary>

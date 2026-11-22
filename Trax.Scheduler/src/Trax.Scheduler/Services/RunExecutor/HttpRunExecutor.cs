@@ -68,17 +68,7 @@ internal sealed class HttpRunExecutor(
         CancellationToken ct = default
     )
     {
-        var inputJson = JsonSerializer.Serialize(
-            input,
-            input.GetType(),
-            TraxJsonSerializationOptions.ManifestProperties
-        );
-
-        var request = new RemoteRunRequest(
-            trainName,
-            inputJson,
-            input.GetType().FullName.NotNull()
-        );
+        var request = BuildRunRequest(trainName, input);
 
         string? requestSignature = null;
         using var httpResponse = await HttpRetryHelper
@@ -98,19 +88,7 @@ internal sealed class HttpRunExecutor(
 
         if (!httpResponse.IsSuccessStatusCode)
         {
-            // The status and the reply are unauthenticated: the response signature covers a
-            // success body only, so this is only ever a failure, and the reply goes into Message
-            // only, capped. A client is shown PublicMessage, which is null here, so the GraphQL
-            // error filter answers "The train failed." (central docs/0028); Message reaches the
-            // caller's log, and the failure recorded for a train that made this run from a
-            // junction, which operators read.
-            var body = await ReadErrorBodyAsync(httpResponse, ct).ConfigureAwait(false);
-            throw new RemoteRunException(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"Remote run endpoint returned HTTP {(int)httpResponse.StatusCode}: {body}"
-                )
-            );
+            await ThrowForFailureStatusAsync(httpResponse, ct).ConfigureAwait(false);
         }
 
         // Read up to the limit before anything else looks at it, the signature included, so an
@@ -128,6 +106,65 @@ internal sealed class HttpRunExecutor(
                     + "bytes), so it was not read."
             );
 
+        VerifyResponseSignature(httpResponse, requestSignature, responseBody);
+
+        var response =
+            JsonSerializer.Deserialize<RemoteRunResponse>(responseBody, RemoteRunJson.Read)
+            ?? throw new RemoteRunException("Remote run endpoint returned null response.");
+
+        if (response.IsError)
+            throw BuildExceptionFromErrorResponse(response);
+
+        // Read into the output type the caller expects, or, when that is an interface or abstract
+        // type, into the loaded implementation of it the response names; never a type loaded by name.
+        var output = RemoteRunOutput.Read(response.OutputJson, outputType, response.OutputType);
+
+        return new RunTrainResult(response.MetadataId, response.ExternalId ?? "", output);
+    }
+
+    private static RemoteRunRequest BuildRunRequest(string trainName, object input)
+    {
+        var inputJson = JsonSerializer.Serialize(
+            input,
+            input.GetType(),
+            TraxJsonSerializationOptions.ManifestProperties
+        );
+
+        var request = new RemoteRunRequest(
+            trainName,
+            inputJson,
+            input.GetType().FullName.NotNull()
+        );
+
+        return request;
+    }
+
+    private async Task ThrowForFailureStatusAsync(
+        HttpResponseMessage httpResponse,
+        CancellationToken ct
+    )
+    {
+        // The status and the reply are unauthenticated: the response signature covers a
+        // success body only, so this is only ever a failure, and the reply goes into Message
+        // only, capped. A client is shown PublicMessage, which is null here, so the GraphQL
+        // error filter answers "The train failed." (central docs/0028); Message reaches the
+        // caller's log, and the failure recorded for a train that made this run from a
+        // junction, which operators read.
+        var body = await ReadErrorBodyAsync(httpResponse, ct).ConfigureAwait(false);
+        throw new RemoteRunException(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"Remote run endpoint returned HTTP {(int)httpResponse.StatusCode}: {body}"
+            )
+        );
+    }
+
+    private void VerifyResponseSignature(
+        HttpResponseMessage httpResponse,
+        string? requestSignature,
+        byte[] responseBody
+    )
+    {
         // With a signing key, only an answer the runner signed for this request is read: the
         // signature covers the body and is bound to the nonce of the attempt it answers, so an
         // answer to another request does not verify. Without one the runner answers unsigned.
@@ -162,19 +199,6 @@ internal sealed class HttpRunExecutor(
                         + "the key."
                 );
         }
-
-        var response =
-            JsonSerializer.Deserialize<RemoteRunResponse>(responseBody, RemoteRunJson.Read)
-            ?? throw new RemoteRunException("Remote run endpoint returned null response.");
-
-        if (response.IsError)
-            throw BuildExceptionFromErrorResponse(response);
-
-        // Read into the output type the caller expects, or, when that is an interface or abstract
-        // type, into the loaded implementation of it the response names; never a type loaded by name.
-        var output = RemoteRunOutput.Read(response.OutputJson, outputType, response.OutputType);
-
-        return new RunTrainResult(response.MetadataId, response.ExternalId ?? "", output);
     }
 
     /// <summary>Kept for the tests that call it; see <see cref="RemoteRunResponse.ToTrainException"/>.</summary>

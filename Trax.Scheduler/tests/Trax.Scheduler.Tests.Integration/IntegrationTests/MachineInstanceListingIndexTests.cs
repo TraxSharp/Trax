@@ -74,6 +74,41 @@ public class MachineInstanceListingIndexTests : TestSetup
             );
     }
 
+    private const string SeedInstancesSql = """
+        INSERT INTO trax.snapshot_draft (id, user_key, owner_kind, machine, version, state, context, concurrency_token, created_at, updated_at)
+        SELECT gen_random_uuid(),
+               CASE WHEN g % 3 = 0 THEN 'user-' || g ELSE NULL END,
+               CASE WHEN g % 3 = 0 THEN 'user'::trax.snapshot_owner_kind ELSE 'system'::trax.snapshot_owner_kind END,
+               'index-machine-' || (g % 4),
+               1,
+               'State' || (g % 10),
+               '{}',
+               gen_random_uuid(),
+               now() - (g || ' seconds')::interval,
+               now() - ((g % 86400) || ' seconds')::interval
+        FROM generate_series(1, 40000) AS g;
+
+        ANALYZE trax.snapshot_draft;
+        """;
+
+    private const string SeedRunsSql = """
+        UPDATE trax.snapshot_draft SET invoke_token = md5(row_id::text)
+        WHERE machine LIKE 'index-machine-%' AND row_id % 100 = 0;
+
+        INSERT INTO trax.metadata (external_id, name, train_state, start_time, end_time)
+        SELECT md5(g::text),
+               'index-train',
+               (ARRAY['completed','failed','cancelled']::trax.train_state[])[1 + (g % 3)],
+               now() - interval '1 hour',
+               now() - interval '1 hour'
+        FROM generate_series(1, 40000) AS g;
+
+        ANALYZE trax.snapshot_draft;
+        ANALYZE trax.metadata;
+
+        SET LOCAL work_mem = '64kB';
+        """;
+
     private async Task<string> PlanOf(MachineInstanceQuery query, bool withRuns = false)
     {
         var context = (DbContext)
@@ -88,53 +123,13 @@ public class MachineInstanceListingIndexTests : TestSetup
                 var npgsqlTransaction = (NpgsqlTransaction)transaction.GetDbTransaction();
 
                 // 40,000 instances over four machines and ten states, written over the last day.
-                await Execute(
-                        connection,
-                        npgsqlTransaction,
-                        """
-                        INSERT INTO trax.snapshot_draft (id, user_key, owner_kind, machine, version, state, context, concurrency_token, created_at, updated_at)
-                        SELECT gen_random_uuid(),
-                               CASE WHEN g % 3 = 0 THEN 'user-' || g ELSE NULL END,
-                               CASE WHEN g % 3 = 0 THEN 'user'::trax.snapshot_owner_kind ELSE 'system'::trax.snapshot_owner_kind END,
-                               'index-machine-' || (g % 4),
-                               1,
-                               'State' || (g % 10),
-                               '{}',
-                               gen_random_uuid(),
-                               now() - (g || ' seconds')::interval,
-                               now() - ((g % 86400) || ' seconds')::interval
-                        FROM generate_series(1, 40000) AS g;
-
-                        ANALYZE trax.snapshot_draft;
-                        """
-                    )
+                await Execute(connection, npgsqlTransaction, SeedInstancesSql)
                     .ConfigureAwait(false);
                 if (withRuns)
                     // One instance in a hundred waits on a run. A run table this small fits in one hash, which the planner
                     // reads once for every token; a real one does not, and then each token's run is looked up on its own.
                     // The small work_mem makes the planner plan for the real table.
-                    await Execute(
-                            connection,
-                            npgsqlTransaction,
-                            """
-                            UPDATE trax.snapshot_draft SET invoke_token = md5(row_id::text)
-                            WHERE machine LIKE 'index-machine-%' AND row_id % 100 = 0;
-
-                            INSERT INTO trax.metadata (external_id, name, train_state, start_time, end_time)
-                            SELECT md5(g::text),
-                                   'index-train',
-                                   (ARRAY['completed','failed','cancelled']::trax.train_state[])[1 + (g % 3)],
-                                   now() - interval '1 hour',
-                                   now() - interval '1 hour'
-                            FROM generate_series(1, 40000) AS g;
-
-                            ANALYZE trax.snapshot_draft;
-                            ANALYZE trax.metadata;
-
-                            SET LOCAL work_mem = '64kB';
-                            """
-                        )
-                        .ConfigureAwait(false);
+                    await Execute(connection, npgsqlTransaction, SeedRunsSql).ConfigureAwait(false);
 
                 var page = OperationsService.MachineInstancePageQuery(
                     (IDataContext)context,

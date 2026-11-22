@@ -325,19 +325,7 @@ public class RemoteDeliveryOutcomeTests
             CancellationToken cancellationToken
         )
         {
-            var job = JsonSerializer
-                .Deserialize<RemoteJobRequest>(
-                    await request
-                        .Content.NotNull()
-                        .ReadAsStringAsync(cancellationToken)
-                        .ConfigureAwait(false),
-                    new JsonSerializerOptions(JsonSerializerDefaults.Web)
-                    {
-                        RespectNullableAnnotations = false,
-                        RespectRequiredConstructorParameters = false,
-                    }
-                )
-                .NotNull();
+            var job = await ReadJob(request, cancellationToken).ConfigureAwait(false);
             var input = JsonSerializer
                 .Deserialize<DeliveryProbeInput>(
                     job.Input.NotNull(),
@@ -391,6 +379,24 @@ public class RemoteDeliveryOutcomeTests
                     }
             }
         }
+
+        private static async Task<RemoteJobRequest> ReadJob(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        ) =>
+            JsonSerializer
+                .Deserialize<RemoteJobRequest>(
+                    await request
+                        .Content.NotNull()
+                        .ReadAsStringAsync(cancellationToken)
+                        .ConfigureAwait(false),
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web)
+                    {
+                        RespectNullableAnnotations = false,
+                        RespectRequiredConstructorParameters = false,
+                    }
+                )
+                .NotNull();
 
         private async Task RunJob(long metadataId, DeliveryProbeInput input)
         {

@@ -186,77 +186,11 @@ public partial class OperationsService : IOperationsService
         CancellationToken ct
     )
     {
-        string trainName;
-        string savedInput;
-        string? starterHash;
-        bool hasDecisionsToReplay;
-        bool alreadyReplayed = false;
-
-        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
-        await using (db.ConfigureAwait(false))
-        {
-            var source = await db
-                .Metadatas.AsNoTracking()
-                .Where(m => m.Id == metadataId)
-                .Select(m => new
-                {
-                    m.Name,
-                    m.Input,
-                    m.InvokingMachine,
-                    m.StarterHash,
-                })
-                .FirstOrDefaultAsync(ct)
-                .ConfigureAwait(false);
-
-            if (source is null)
-                return new OperationResult(
-                    Success: false,
-                    Message: string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"Execution {metadataId} not found."
-                    )
-                );
-
-            // A run a state machine's invoking state queued belongs to that entry of the state: its
-            // outcome is applied only through the instance's invoke token, and a retry is the
-            // machine entering the state again, which queues a new run. A requeued copy would run
-            // with no state to deliver to (ADR 0046).
-            if (source.InvokingMachine is { } machine)
-                return new OperationResult(
-                    Success: false,
-                    Message: InvokedRunRequeueRefusal(metadataId, machine)
-                );
-
-            // Re-queueing reads the saved input back as the train's input. Nothing saved, a
-            // placeholder saved in its place, or masked [TraxSensitive] members would all read
-            // back as defaults, and the train would run with values it never had.
-            var refusal = RequeueInputCheck.RefusalFor(metadataId, source.Input);
-            if (refusal is not null || source.Input is not { } input)
-                return new OperationResult(Success: false, Message: refusal);
-
-            trainName = source.Name;
-            savedInput = input;
-            // The requeued run is the original's starter's, so they keep following it (Trax.Docs/adr/0051-only-the-caller-who-started-a-run-may-follow-its-progress.md).
-            starterHash = source.StarterHash;
-
-            // Only a run with decisions to replay is linked: one that recorded a decision, or one
-            // that was itself queued to replay another's. The second is a requeue of a requeue
-            // that recorded nothing, or only some of its questions, before it ended; the replay
-            // follows the link back to the answers it did not record. A run of a train that never
-            // decides, or on a host that does not record decisions, is re-queued exactly as an
-            // ordinary enqueue, through the overload every ITrainExecutionService has.
-            hasDecisionsToReplay =
-                !askAfresh && await db.HasDecisionsToReplay(metadataId, ct).ConfigureAwait(false);
-
-            // The run's answers are replayed once (docs/adr/0017): when a queued entry (a
-            // manifest's retry, an earlier requeue) or a run already replays them, this requeue
-            // asks afresh rather than queueing a second replay of the same answers.
-            if (hasDecisionsToReplay)
-            {
-                alreadyReplayed = await db.IsReplayedAsync(metadataId, ct).ConfigureAwait(false);
-                hasDecisionsToReplay = !alreadyReplayed;
-            }
-        }
+        var (source, refused) = await LoadRequeueSourceAsync(metadataId, askAfresh, ct)
+            .ConfigureAwait(false);
+        if (source is null)
+            return refused.NotNull();
+        var trainName = source.TrainName;
 
         // The same lookup as QueueTrainAsync. The caller named a run, not a train, so the miss is
         // reported as the run's train having gone rather than as an unknown name to look up.
@@ -277,36 +211,28 @@ public partial class OperationsService : IOperationsService
         // would be refused and a repeated object read back at its defaults. Resolving it first
         // hands over the plain tree the run was given. It does not depend on the input type, so
         // doing it before the mediator authorizes the caller tells them nothing about the input.
-        string requeuedInput;
+        var (requeuedInput, unreadable) = await ReadBackSavedInputAsync(
+                metadataId,
+                source.SavedInput,
+                registration
+            )
+            .ConfigureAwait(false);
+        if (requeuedInput is null)
+            return unreadable.NotNull();
 
-        try
-        {
-            // Held to the stored-input cap, not the caller's: the saved input is the run's input
-            // as stored (every member written, and jsonb renders a space after each ':' and ','),
-            // so an input accepted at the caller's cap reads back larger. Then written compactly,
-            // so jsonb's spacing does not count against the mediator's caller cap. Every member is
-            // still written, so an input that left members out and was accepted close to the cap
-            // can be over it here, and is refused: the caller cap is not widened for a requeue.
-            requeuedInput = await CompactAsync(
-                    TrainInputReader.ResolveSavedInput(savedInput, registration, StoredInputCap())
-                )
-                .ConfigureAwait(false);
-        }
-        catch (JsonException ex)
-        {
-            return new OperationResult(
-                Success: false,
-                Message: string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"Execution {metadataId}'s saved input cannot be read back as the input "
-                ) + $"it ran with: {ex.Message}"
-            );
-        }
-        catch (TrainInputValidationException ex)
-        {
-            // Generic by design, as in EnqueueAsync.
-            return new OperationResult(Success: false, Message: ex.Message);
-        }
+        return await EnqueueRequeueAsync(registration, requeuedInput, metadataId, source, ct)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<OperationResult> EnqueueRequeueAsync(
+        TrainRegistration registration,
+        string requeuedInput,
+        long metadataId,
+        RequeueSource source,
+        CancellationToken ct
+    )
+    {
+        var (_, _, starterHash, hasDecisionsToReplay, alreadyReplayed) = source;
 
         // The replay link is set here and nowhere a caller can reach, and only to the run being
         // re-queued, so the new run replays decisions of a run of the same train (docs/0041).
@@ -335,104 +261,10 @@ public partial class OperationsService : IOperationsService
         CancellationToken ct
     )
     {
-        string trainName;
-        string savedInput;
-        string? starterHash;
-        bool replays;
-        bool alreadyReplayed = false;
-
-        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
-        await using (db.ConfigureAwait(false))
-        {
-            var source = await db
-                .Metadatas.AsNoTracking()
-                .Where(m => m.Id == metadataId)
-                .Select(m => new
-                {
-                    m.Name,
-                    m.Input,
-                    m.InvokingMachine,
-                    m.TrainState,
-                    m.StarterHash,
-                })
-                .FirstOrDefaultAsync(ct)
-                .ConfigureAwait(false);
-
-            if (source is null)
-                return new OperationResult(
-                    Success: false,
-                    Message: string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"Execution {metadataId} not found."
-                    )
-                );
-
-            // Only a run that ended without finishing has work left to resume. A completed run
-            // keeps no checkpoints, and a running one may still finish.
-            if (source.TrainState is not (TrainState.Failed or TrainState.Cancelled))
-                return new OperationResult(
-                    Success: false,
-                    Message: string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"Execution {metadataId} is {source.TrainState}; only a failed or "
-                    ) + "cancelled run can be resumed."
-                );
-
-            // Requeue's reason, for the same cause (ADR 0046): the machine's step owns the run.
-            if (source.InvokingMachine is { } machine)
-                return new OperationResult(
-                    Success: false,
-                    Message: InvokedRunResumeRefusal(metadataId, machine)
-                );
-
-            var refusal = RequeueInputCheck.RefusalFor(metadataId, source.Input);
-            if (refusal is not null || source.Input is not { } input)
-                return new OperationResult(Success: false, Message: refusal);
-
-            // One queued resume per run (ix_work_queue_unique_queued_resume). Checked here for the
-            // message; the index decides a race.
-            var queued = await db
-                .WorkQueues.AsNoTracking()
-                .Where(q => q.ResumeFrom == metadataId && q.Status == WorkQueueStatus.Queued)
-                .Select(q => (long?)q.Id)
-                .FirstOrDefaultAsync(ct)
-                .ConfigureAwait(false);
-
-            if (queued is { } entry)
-                return new OperationResult(
-                    Success: false,
-                    Message: QueuedResumeRefusal(metadataId, entry)
-                );
-
-            // A resume that completed did the run's remaining work; resuming it again would do it
-            // twice. The resumed run checks this too as it starts (Trax.Docs/adr/0047).
-            if (
-                await db
-                    .Metadatas.AnyAsync(
-                        m => m.ResumeFrom == metadataId && m.TrainState == TrainState.Completed,
-                        ct
-                    )
-                    .ConfigureAwait(false)
-            )
-                return new OperationResult(
-                    Success: false,
-                    Message: CompletedResumeRefusal(metadataId)
-                );
-
-            trainName = source.Name;
-            savedInput = input;
-            // The requeued run is the original's starter's, so they keep following it (Trax.Docs/adr/0051-only-the-caller-who-started-a-run-may-follow-its-progress.md).
-            starterHash = source.StarterHash;
-
-            // The decisions of the run it resumes replay as a requeue's would, so a question asked
-            // after the checkpoint takes the track the run took (docs/0041).
-            replays = await db.HasDecisionsToReplay(metadataId, ct).ConfigureAwait(false);
-            if (replays)
-            {
-                alreadyReplayed = await db.IsReplayedAsync(metadataId, ct).ConfigureAwait(false);
-                replays = !alreadyReplayed;
-            }
-        }
+        var (source, refused) = await LoadResumeSourceAsync(metadataId, ct).ConfigureAwait(false);
+        if (source is null)
+            return refused.NotNull();
+        var (trainName, savedInput, starterHash, replays, alreadyReplayed) = source;
 
         var registration = _discoveryService
             .DiscoverTrains()
@@ -446,6 +278,50 @@ public partial class OperationsService : IOperationsService
                 Message: RequeueInputCheck.TrainNoLongerRegistered(metadataId, trainName)
             );
 
+        if (
+            await ResumeVerdictRefusalAsync(trainName, metadataId, from, ct)
+                .ConfigureAwait(false) is
+            { } cannotResume
+        )
+            return cannotResume;
+
+        // As a requeue reads it back: the stored-input cap, then compact.
+        var (resumedInput, unreadable) = await ReadBackSavedInputAsync(
+                metadataId,
+                savedInput,
+                registration
+            )
+            .ConfigureAwait(false);
+        if (resumedInput is null)
+            return unreadable.NotNull();
+
+        if (BeforeResumeEnqueue is { } beforeEnqueue)
+            await beforeEnqueue(ct).ConfigureAwait(false);
+
+        var result = await EnqueueAsync(
+                registration,
+                resumedInput,
+                priority: 0,
+                scheduledAt: null,
+                replayDecisionsOf: replays ? metadataId : null,
+                ct,
+                requeueOf: metadataId,
+                resumeFrom: metadataId,
+                resumeAt: from,
+                starterHash: starterHash
+            )
+            .ConfigureAwait(false);
+
+        return result.Success && alreadyReplayed ? AskedAfresh(result, metadataId) : result;
+    }
+
+    private async Task<OperationResult?> ResumeVerdictRefusalAsync(
+        string trainName,
+        long metadataId,
+        string? from,
+        CancellationToken ct
+    )
+    {
         if (
             _services?.GetService<ITrainChainGraphs>()?.FindDeclared(trainName) is not { } declared
             || _services.GetService<IRunResumes>() is not { } resumes
@@ -473,52 +349,289 @@ public partial class OperationsService : IOperationsService
             )
             .ConfigureAwait(false);
 
-        if (!verdict.CanResume)
-            return new OperationResult(Success: false, Message: verdict.Reason);
+        return verdict.CanResume
+            ? null
+            : new OperationResult(Success: false, Message: verdict.Reason);
+    }
 
-        string resumedInput;
+    private static async Task<(
+        bool HasDecisionsToReplay,
+        bool AlreadyReplayed
+    )> RequeueReplayStateAsync(
+        IDataContext db,
+        long metadataId,
+        bool askAfresh,
+        CancellationToken ct
+    )
+    {
+        // Only a run with decisions to replay is linked: one that recorded a decision, or one
+        // that was itself queued to replay another's. The second is a requeue of a requeue
+        // that recorded nothing, or only some of its questions, before it ended; the replay
+        // follows the link back to the answers it did not record. A run of a train that never
+        // decides, or on a host that does not record decisions, is re-queued exactly as an
+        // ordinary enqueue, through the overload every ITrainExecutionService has.
+        var hasDecisionsToReplay =
+            !askAfresh && await db.HasDecisionsToReplay(metadataId, ct).ConfigureAwait(false);
 
-        try
+        // The run's answers are replayed once (docs/adr/0017): when a queued entry (a
+        // manifest's retry, an earlier requeue) or a run already replays them, this requeue
+        // asks afresh rather than queueing a second replay of the same answers.
+        var alreadyReplayed = false;
+        if (hasDecisionsToReplay)
         {
-            // As a requeue reads it back: the stored-input cap, then compact.
-            resumedInput = await CompactAsync(
-                    TrainInputReader.ResolveSavedInput(savedInput, registration, StoredInputCap())
+            alreadyReplayed = await db.IsReplayedAsync(metadataId, ct).ConfigureAwait(false);
+            hasDecisionsToReplay = !alreadyReplayed;
+        }
+
+        return (hasDecisionsToReplay, alreadyReplayed);
+    }
+
+    private static (RequeueSource? Source, OperationResult? Refusal) RequeueRefused(
+        string? message
+    ) => (null, new OperationResult(Success: false, Message: message));
+
+    // What a requeue or a resume reads from the run it copies.
+    private sealed record RequeueSource(
+        string TrainName,
+        string SavedInput,
+        string? StarterHash,
+        bool Replays,
+        bool AlreadyReplayed
+    );
+
+    private async Task<(RequeueSource? Source, OperationResult? Refusal)> LoadRequeueSourceAsync(
+        long metadataId,
+        bool askAfresh,
+        CancellationToken ct
+    )
+    {
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var source = await db
+                .Metadatas.AsNoTracking()
+                .Where(m => m.Id == metadataId)
+                .Select(m => new
+                {
+                    m.Name,
+                    m.Input,
+                    m.InvokingMachine,
+                    m.StarterHash,
+                })
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
+
+            if (source is null)
+                return RequeueRefused(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Execution {metadataId} not found."
+                    )
+                );
+
+            // A run a state machine's invoking state queued belongs to that entry of the state: its
+            // outcome is applied only through the instance's invoke token, and a retry is the
+            // machine entering the state again, which queues a new run. A requeued copy would run
+            // with no state to deliver to (ADR 0046).
+            if (source.InvokingMachine is { } machine)
+                return RequeueRefused(InvokedRunRequeueRefusal(metadataId, machine));
+
+            // Re-queueing reads the saved input back as the train's input. Nothing saved, a
+            // placeholder saved in its place, or masked [TraxSensitive] members would all read
+            // back as defaults, and the train would run with values it never had.
+            var refusal = RequeueInputCheck.RefusalFor(metadataId, source.Input);
+            if (refusal is not null || source.Input is not { } input)
+                return RequeueRefused(refusal);
+
+            var (hasDecisionsToReplay, alreadyReplayed) = await RequeueReplayStateAsync(
+                    db,
+                    metadataId,
+                    askAfresh,
+                    ct
                 )
                 .ConfigureAwait(false);
+
+            return (
+                new RequeueSource(
+                    source.Name,
+                    input,
+                    // The requeued run is the original's starter's, so they keep following it (Trax.Docs/adr/0051-only-the-caller-who-started-a-run-may-follow-its-progress.md).
+                    source.StarterHash,
+                    hasDecisionsToReplay,
+                    alreadyReplayed
+                ),
+                null
+            );
         }
-        catch (JsonException ex)
+    }
+
+    private async Task<(RequeueSource? Source, OperationResult? Refusal)> LoadResumeSourceAsync(
+        long metadataId,
+        CancellationToken ct
+    )
+    {
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
+            var source = await db
+                .Metadatas.AsNoTracking()
+                .Where(m => m.Id == metadataId)
+                .Select(m => new
+                {
+                    m.Name,
+                    m.Input,
+                    m.InvokingMachine,
+                    m.TrainState,
+                    m.StarterHash,
+                })
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
+
+            if (source is null)
+                return RequeueRefused(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Execution {metadataId} not found."
+                    )
+                );
+
+            if (
+                ResumeStateRefusal(metadataId, source.TrainState, source.InvokingMachine) is
+                { } notResumable
+            )
+                return (null, notResumable);
+
+            var refusal = RequeueInputCheck.RefusalFor(metadataId, source.Input);
+            if (refusal is not null || source.Input is not { } input)
+                return RequeueRefused(refusal);
+
+            if (
+                await ExistingResumeRefusalAsync(db, metadataId, ct).ConfigureAwait(false) is
+                { } existing
+            )
+                return (null, existing);
+
+            // The requeued run is the original's starter's, so they keep following it (Trax.Docs/adr/0051-only-the-caller-who-started-a-run-may-follow-its-progress.md).
+            var starterHash = source.StarterHash;
+
+            // The decisions of the run it resumes replay as a requeue's would, so a question asked
+            // after the checkpoint takes the track the run took (docs/0041).
+            var replays = await db.HasDecisionsToReplay(metadataId, ct).ConfigureAwait(false);
+            var alreadyReplayed = false;
+            if (replays)
+            {
+                alreadyReplayed = await db.IsReplayedAsync(metadataId, ct).ConfigureAwait(false);
+                replays = !alreadyReplayed;
+            }
+
+            return (
+                new RequeueSource(source.Name, input, starterHash, replays, alreadyReplayed),
+                null
+            );
+        }
+    }
+
+    private static OperationResult? ResumeStateRefusal(
+        long metadataId,
+        TrainState trainState,
+        string? invokingMachine
+    )
+    {
+        // Only a run that ended without finishing has work left to resume. A completed run
+        // keeps no checkpoints, and a running one may still finish.
+        if (trainState is not (TrainState.Failed or TrainState.Cancelled))
             return new OperationResult(
                 Success: false,
                 Message: string.Create(
                     CultureInfo.InvariantCulture,
-                    $"Execution {metadataId}'s saved input cannot be read back as the input "
-                ) + $"it ran with: {ex.Message}"
+                    $"Execution {metadataId} is {trainState}; only a failed or "
+                ) + "cancelled run can be resumed."
+            );
+
+        // Requeue's reason, for the same cause (ADR 0046): the machine's step owns the run.
+        if (invokingMachine is { } machine)
+            return new OperationResult(
+                Success: false,
+                Message: InvokedRunResumeRefusal(metadataId, machine)
+            );
+
+        return null;
+    }
+
+    private static async Task<OperationResult?> ExistingResumeRefusalAsync(
+        IDataContext db,
+        long metadataId,
+        CancellationToken ct
+    )
+    {
+        // One queued resume per run (ix_work_queue_unique_queued_resume). Checked here for the
+        // message; the index decides a race.
+        var queued = await db
+            .WorkQueues.AsNoTracking()
+            .Where(q => q.ResumeFrom == metadataId && q.Status == WorkQueueStatus.Queued)
+            .Select(q => (long?)q.Id)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+
+        if (queued is { } entry)
+            return new OperationResult(
+                Success: false,
+                Message: QueuedResumeRefusal(metadataId, entry)
+            );
+
+        // A resume that completed did the run's remaining work; resuming it again would do it
+        // twice. The resumed run checks this too as it starts (Trax.Docs/adr/0047).
+        if (
+            await db
+                .Metadatas.AnyAsync(
+                    m => m.ResumeFrom == metadataId && m.TrainState == TrainState.Completed,
+                    ct
+                )
+                .ConfigureAwait(false)
+        )
+            return new OperationResult(Success: false, Message: CompletedResumeRefusal(metadataId));
+
+        return null;
+    }
+
+    private async Task<(string? Input, OperationResult? Refusal)> ReadBackSavedInputAsync(
+        long metadataId,
+        string savedInput,
+        TrainRegistration registration
+    )
+    {
+        try
+        {
+            // Held to the stored-input cap, not the caller's: the saved input is the run's input
+            // as stored (every member written, and jsonb renders a space after each ':' and ','),
+            // so an input accepted at the caller's cap reads back larger. Then written compactly,
+            // so jsonb's spacing does not count against the mediator's caller cap. Every member is
+            // still written, so an input that left members out and was accepted close to the cap
+            // can be over it here, and is refused: the caller cap is not widened for a requeue.
+            var requeuedInput = await CompactAsync(
+                    TrainInputReader.ResolveSavedInput(savedInput, registration, StoredInputCap())
+                )
+                .ConfigureAwait(false);
+            return (requeuedInput, null);
+        }
+        catch (JsonException ex)
+        {
+            return (
+                null,
+                new OperationResult(
+                    Success: false,
+                    Message: string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Execution {metadataId}'s saved input cannot be read back as the input "
+                    ) + $"it ran with: {ex.Message}"
+                )
             );
         }
         catch (TrainInputValidationException ex)
         {
-            return new OperationResult(Success: false, Message: ex.Message);
+            // Generic by design, as in EnqueueAsync.
+            return (null, new OperationResult(Success: false, Message: ex.Message));
         }
-
-        if (BeforeResumeEnqueue is { } beforeEnqueue)
-            await beforeEnqueue(ct).ConfigureAwait(false);
-
-        var result = await EnqueueAsync(
-                registration,
-                resumedInput,
-                priority: 0,
-                scheduledAt: null,
-                replayDecisionsOf: replays ? metadataId : null,
-                ct,
-                requeueOf: metadataId,
-                resumeFrom: metadataId,
-                resumeAt: from,
-                starterHash: starterHash
-            )
-            .ConfigureAwait(false);
-
-        return result.Success && alreadyReplayed ? AskedAfresh(result, metadataId) : result;
     }
 
     /// <summary>
@@ -707,75 +820,21 @@ public partial class OperationsService : IOperationsService
         // about the input it expects. A TrainAuthorizationException propagates rather than being
         // flattened into a failed OperationResult: not being allowed to run something is not a
         // validation outcome.
-        QueueTrainResult queued;
+        var call = new EnqueueCall(
+            registration,
+            inputJson,
+            priority,
+            scheduledAt,
+            replayDecisionsOf,
+            requeueOf,
+            resumeFrom,
+            resumeAt,
+            starterHash
+        );
+        var attempt = await QueueGuardedAsync(call, ct).ConfigureAwait(false);
 
-        try
+        if (attempt.AskAfreshFor is { } replayed)
         {
-            // Inside the try, so a store that cannot be reached is logged and thrown as the
-            // enqueue's own failure would be (scheduler/0004).
-            if (await NoDispatcherRefusalAsync(ct).ConfigureAwait(false) is { } noDispatcher)
-            {
-                // The mediator would have authorized the caller before anything else; the refusal
-                // names the host's store, so a caller who may not queue the train is told that
-                // instead, as the mediator would tell them. Nothing is written either way.
-                await AuthorizeAsTheMediatorWouldAsync(registration, ct).ConfigureAwait(false);
-                return new OperationResult(Success: false, Message: noDispatcher);
-            }
-
-            // Only a replay, a resume or a kept starter needs the options overload; every other enqueue goes
-            // through the overload every implementation has.
-            queued =
-                replayDecisionsOf is null && resumeFrom is null && starterHash is null
-                    ? await _trainExecution
-                        .QueueAsync(
-                            registration.ServiceType.FullName.NotNull(),
-                            inputJson,
-                            priority,
-                            scheduledAt,
-                            ct
-                        )
-                        .ConfigureAwait(false)
-                    : await _trainExecution
-                        .QueueAsync(
-                            registration.ServiceType.FullName.NotNull(),
-                            inputJson,
-                            new QueueTrainOptions
-                            {
-                                Priority = priority,
-                                ScheduledAt = scheduledAt,
-                                ReplayDecisionsOf = replayDecisionsOf,
-                                ResumeFrom = resumeFrom,
-                                ResumeAt = resumeAt,
-                                StarterHash = starterHash,
-                            },
-                            ct
-                        )
-                        .ConfigureAwait(false);
-        }
-        catch (Exception ex)
-            when (resumeFrom is { } resumed
-                && RetryReplayLinks.IsQueuedResumeConflict(ex, _services?.GetService<ISqlDialect>())
-            )
-        {
-            // A resume of the same run (a manifest's retry, another operator) was queued between
-            // the check and this insert, and the index refused a second (Trax.Docs/adr/0047).
-            _logger?.LogInformation(
-                "A queued entry already resumes run {ResumeFrom}; the resume is refused",
-                resumed
-            );
-            return new OperationResult(Success: false, Message: QueuedResumeRefusal(resumed));
-        }
-        catch (Exception ex)
-            when (replayDecisionsOf is { } replayed
-                && RetryReplayLinks.IsQueuedReplayConflict(ex, _services?.GetService<ISqlDialect>())
-            )
-        {
-            // A queued entry came to replay the same run between the check and this insert, and
-            // the index refused a second (docs/adr/0017). The run is queued to ask afresh instead.
-            _logger?.LogInformation(
-                "A queued entry already replays run {ReplayDecisionsOf}; the requeue asks afresh",
-                replayed
-            );
             var afresh = await EnqueueAsync(
                     registration,
                     inputJson,
@@ -791,23 +850,62 @@ public partial class OperationsService : IOperationsService
                 .ConfigureAwait(false);
             return afresh.Success ? AskedAfresh(afresh, replayed) : afresh;
         }
-        catch (JsonException ex)
+
+        if (attempt.Outcome is { } outcome)
+            return outcome;
+
+        var queued = attempt.Queued.NotNull();
+
+        _changeSignal?.Notify(ChangeDomain.WorkQueue);
+
+        return new OperationResult(
+            Success: true,
+            Id: queued.WorkQueueId,
+            Count: 1,
+            Message: string.Create(
+                CultureInfo.InvariantCulture,
+                $"Work queue entry {queued.WorkQueueId} created."
+            )
+        );
+    }
+
+    // An enqueue's arguments, as EnqueueAsync was handed them.
+    private sealed record EnqueueCall(
+        TrainRegistration Registration,
+        string? InputJson,
+        int Priority,
+        DateTime? ScheduledAt,
+        long? ReplayDecisionsOf,
+        long? RequeueOf,
+        long? ResumeFrom,
+        string? ResumeAt,
+        string? StarterHash
+    );
+
+    // How an enqueue ended: queued, answered with an outcome, or to be queued again asking afresh.
+    private sealed record EnqueueAttempt(
+        QueueTrainResult? Queued,
+        OperationResult? Outcome,
+        long? AskAfreshFor
+    )
+    {
+        public static EnqueueAttempt QueuedAs(QueueTrainResult queued) =>
+            new(queued, Outcome: null, AskAfreshFor: null);
+
+        public static EnqueueAttempt Answered(OperationResult outcome) =>
+            new(Queued: null, outcome, AskAfreshFor: null);
+
+        public static EnqueueAttempt AskingAfresh(long replayed) =>
+            new(Queued: null, Outcome: null, replayed);
+    }
+
+    // The failures that are the server's or the host's, not the enqueue's: logged and thrown, and
+    // every other failure is a refusal.
+    private async Task<EnqueueAttempt> QueueGuardedAsync(EnqueueCall call, CancellationToken ct)
+    {
+        try
         {
-            // A re-queue's caller supplied no JSON: the input is the run's own, saved when the
-            // train took another shape, so the refusal names the run rather than an InputJson.
-            return new OperationResult(
-                Success: false,
-                Message: requeueOf is { } run
-                    ? RequeueInputCheck.SavedInputNoLongerReads(run, registration, ex)
-                    : $"Invalid InputJson: {ex.Message}"
-            );
-        }
-        catch (TrainInputValidationException ex)
-        {
-            // Generic by design: the cap and the observed size are on the exception's properties,
-            // not in its message, so the caller cannot map the cap. Trax.Api's error filter makes
-            // the same promise for the typed exception.
-            return new OperationResult(Success: false, Message: ex.Message);
+            return await TryQueueAsync(call, ct).ConfigureAwait(false);
         }
         catch (Exception ex)
             when (ex is not UnauthorizedAccessException and not OperationCanceledException
@@ -822,7 +920,7 @@ public partial class OperationsService : IOperationsService
             _logger?.LogError(
                 ex,
                 "Queueing {TrainName} failed on infrastructure, not on a refusal",
-                registration.ServiceType.FullName
+                call.Registration.ServiceType.FullName
             );
             throw;
         }
@@ -834,7 +932,7 @@ public partial class OperationsService : IOperationsService
             _logger?.LogError(
                 ex,
                 "Queueing {TrainName} failed: the host has no ITrainAuthorizationService",
-                registration.ServiceType.FullName
+                call.Registration.ServiceType.FullName
             );
             throw;
         }
@@ -844,13 +942,7 @@ public partial class OperationsService : IOperationsService
             // or a decorator) that does not implement the overload carrying the link. The host is
             // misconfigured, as with a missing enforcer, so it is logged and thrown rather than
             // reported as a refusal. See scheduler/0004.
-            _logger?.LogError(
-                ex,
-                "Re-queueing {TrainName} failed: {Implementation} cannot queue a run that replays "
-                    + "decisions",
-                registration.ServiceType.FullName,
-                ex.ImplementationType.FullName
-            );
+            LogDecisionReplayNotSupported(ex, call.Registration);
             throw;
         }
         catch (Exception ex)
@@ -858,25 +950,153 @@ public partial class OperationsService : IOperationsService
         {
             // A refusal: the train's OnQueue hook or QueueSubjectKey threw, the subject key could
             // not be used, or a deferred entry was cancelled before it was confirmed.
-            return Refused(
-                "The enqueue was refused",
-                ex,
-                registration.ServiceType.FullName.NotNull()
+            return EnqueueAttempt.Answered(
+                Refused(
+                    "The enqueue was refused",
+                    ex,
+                    call.Registration.ServiceType.FullName.NotNull()
+                )
+            );
+        }
+    }
+
+    private async Task<EnqueueAttempt> TryQueueAsync(EnqueueCall call, CancellationToken ct)
+    {
+        try
+        {
+            // Inside the try, so a store that cannot be reached is logged and thrown as the
+            // enqueue's own failure would be (scheduler/0004).
+            if (await NoDispatcherAnswerAsync(call, ct).ConfigureAwait(false) is { } noDispatcher)
+                return noDispatcher;
+
+            // Only a replay, a resume or a kept starter needs the options overload; every other enqueue goes
+            // through the overload every implementation has.
+            var queued = await QueueThroughMediatorAsync(call, ct).ConfigureAwait(false);
+            return EnqueueAttempt.QueuedAs(queued);
+        }
+        catch (Exception ex)
+            when (call.ResumeFrom is { } resumed
+                && RetryReplayLinks.IsQueuedResumeConflict(ex, _services?.GetService<ISqlDialect>())
+            )
+        {
+            return QueuedResumeConflict(resumed);
+        }
+        catch (Exception ex)
+            when (call.ReplayDecisionsOf is { } replayed
+                && RetryReplayLinks.IsQueuedReplayConflict(ex, _services?.GetService<ISqlDialect>())
+            )
+        {
+            // A queued entry came to replay the same run between the check and this insert, and
+            // the index refused a second (docs/adr/0017). The run is queued to ask afresh instead.
+            _logger?.LogInformation(
+                "A queued entry already replays run {ReplayDecisionsOf}; the requeue asks afresh",
+                replayed
+            );
+            return EnqueueAttempt.AskingAfresh(replayed);
+        }
+        catch (JsonException ex)
+        {
+            // A re-queue's caller supplied no JSON: the input is the run's own, saved when the
+            // train took another shape, so the refusal names the run rather than an InputJson.
+            return EnqueueAttempt.Answered(
+                new OperationResult(
+                    Success: false,
+                    Message: call.RequeueOf is { } run
+                        ? RequeueInputCheck.SavedInputNoLongerReads(run, call.Registration, ex)
+                        : $"Invalid InputJson: {ex.Message}"
+                )
+            );
+        }
+        catch (TrainInputValidationException ex)
+        {
+            // Generic by design: the cap and the observed size are on the exception's properties,
+            // not in its message, so the caller cannot map the cap. Trax.Api's error filter makes
+            // the same promise for the typed exception.
+            return EnqueueAttempt.Answered(
+                new OperationResult(Success: false, Message: ex.Message)
+            );
+        }
+    }
+
+    private EnqueueAttempt QueuedResumeConflict(long resumed)
+    {
+        // A resume of the same run (a manifest's retry, another operator) was queued between
+        // the check and this insert, and the index refused a second (Trax.Docs/adr/0047).
+        _logger?.LogInformation(
+            "A queued entry already resumes run {ResumeFrom}; the resume is refused",
+            resumed
+        );
+        return EnqueueAttempt.Answered(
+            new OperationResult(Success: false, Message: QueuedResumeRefusal(resumed))
+        );
+    }
+
+    private async Task<EnqueueAttempt?> NoDispatcherAnswerAsync(
+        EnqueueCall call,
+        CancellationToken ct
+    )
+    {
+        if (await NoDispatcherRefusalAsync(ct).ConfigureAwait(false) is { } noDispatcher)
+        {
+            // The mediator would have authorized the caller before anything else; the refusal
+            // names the host's store, so a caller who may not queue the train is told that
+            // instead, as the mediator would tell them. Nothing is written either way.
+            await AuthorizeAsTheMediatorWouldAsync(call.Registration, ct).ConfigureAwait(false);
+            return EnqueueAttempt.Answered(
+                new OperationResult(Success: false, Message: noDispatcher)
             );
         }
 
-        _changeSignal?.Notify(ChangeDomain.WorkQueue);
-
-        return new OperationResult(
-            Success: true,
-            Id: queued.WorkQueueId,
-            Count: 1,
-            Message: string.Create(
-                CultureInfo.InvariantCulture,
-                $"Work queue entry {queued.WorkQueueId} created."
-            )
-        );
+        return null;
     }
+
+    private async Task<QueueTrainResult> QueueThroughMediatorAsync(
+        EnqueueCall call,
+        CancellationToken ct
+    )
+    {
+        var queued =
+            call.ReplayDecisionsOf is null && call.ResumeFrom is null && call.StarterHash is null
+                ? await _trainExecution
+                    .QueueAsync(
+                        call.Registration.ServiceType.FullName.NotNull(),
+                        call.InputJson,
+                        call.Priority,
+                        call.ScheduledAt,
+                        ct
+                    )
+                    .ConfigureAwait(false)
+                : await _trainExecution
+                    .QueueAsync(
+                        call.Registration.ServiceType.FullName.NotNull(),
+                        call.InputJson,
+                        new QueueTrainOptions
+                        {
+                            Priority = call.Priority,
+                            ScheduledAt = call.ScheduledAt,
+                            ReplayDecisionsOf = call.ReplayDecisionsOf,
+                            ResumeFrom = call.ResumeFrom,
+                            ResumeAt = call.ResumeAt,
+                            StarterHash = call.StarterHash,
+                        },
+                        ct
+                    )
+                    .ConfigureAwait(false);
+
+        return queued;
+    }
+
+    private void LogDecisionReplayNotSupported(
+        DecisionReplayNotSupportedException ex,
+        TrainRegistration registration
+    ) =>
+        _logger?.LogError(
+            ex,
+            "Re-queueing {TrainName} failed: {Implementation} cannot queue a run that replays "
+                + "decisions",
+            registration.ServiceType.FullName,
+            ex.ImplementationType.FullName
+        );
 
     /// <inheritdoc />
     public async Task<OperationResult> RunTrainAsync(RunTrainInput input, CancellationToken ct)
@@ -907,42 +1127,124 @@ public partial class OperationsService : IOperationsService
 
         var trainName = registration.ServiceType.FullName.NotNull();
 
-        // The mediator's step: authorization before the input is read, so a caller who may not run
-        // the train learns nothing about its input from a parse error, then the input read exactly
-        // as a queue reads it. An UnauthorizedAccessException, and the missing-enforcer
-        // TrainAuthorizationNotConfiguredException, are not caught: neither is an answer about
-        // this run.
-        object runInput;
-        TrainRegistration prepared;
+        var (preparation, unprepared) = await PrepareRunAsync(services, trainName, input, ct)
+            .ConfigureAwait(false);
+        if (preparation is null)
+            return unprepared.NotNull();
+        var prepared = preparation.Registration;
+        var runInput = preparation.Input;
 
+        if (SubjectKeyedRunRefusal(services, prepared, trainName) is { } subjectKeyed)
+            return subjectKeyed;
+
+        var (metadata, refusal) = await SaveRunRowAsync(services, prepared, runInput, trainName, ct)
+            .ConfigureAwait(false);
+        if (refusal is not null)
+            return refusal;
+
+        if (
+            await SubmitRunAsync(services, metadata, runInput, trainName).ConfigureAwait(false) is
+            { } pending
+        )
+            return pending;
+
+        return new OperationResult(
+            Success: true,
+            Id: metadata.Id,
+            Count: 1,
+            Message: string.Create(
+                CultureInfo.InvariantCulture,
+                $"Run {metadata.Id} of {trainName} submitted."
+            )
+        );
+    }
+
+    // A failed submit answers as SubmitFailureOutcomeAsync decides, or is thrown; null when the
+    // submit went through.
+    private async Task<OperationResult?> SubmitRunAsync(
+        IServiceProvider services,
+        Metadata metadata,
+        object runInput,
+        string trainName
+    )
+    {
+        // The row exists now, so the run is the server's to see through: the submit is not tied
+        // to the caller's request. A client that navigates away would otherwise abort the submit,
+        // and a runner that takes the request's cancellation would cancel the run with it. The
+        // submitter's own timeouts bound the call.
+        try
+        {
+            await ResolveSubmitter(services, trainName)
+                .EnqueueAsync(metadata.Id, runInput, CancellationToken.None)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            if (
+                await SubmitFailureOutcomeAsync(services, ex, metadata, trainName)
+                    .ConfigureAwait(false) is
+                { } submitted
+            )
+                return submitted;
+
+            throw;
+        }
+
+        return null;
+    }
+
+    // The mediator's step: authorization before the input is read, so a caller who may not run
+    // the train learns nothing about its input from a parse error, then the input read exactly
+    // as a queue reads it. An UnauthorizedAccessException, and the missing-enforcer
+    // TrainAuthorizationNotConfiguredException, are not caught: neither is an answer about
+    // this run.
+    private async Task<(PreparedTrain? Preparation, OperationResult? Refusal)> PrepareRunAsync(
+        IServiceProvider services,
+        string trainName,
+        RunTrainInput input,
+        CancellationToken ct
+    )
+    {
         try
         {
             var preparation = await _trainExecution
                 .PrepareAsync(trainName, input.InputJson, ct)
                 .ConfigureAwait(false);
-            prepared = preparation.Registration;
-            runInput = preparation.Input;
-            CheckStoredInputSize(services, prepared, runInput);
+            CheckStoredInputSize(services, preparation.Registration, preparation.Input);
+            return (preparation, null);
         }
         catch (TrainNotFoundException)
         {
-            return new OperationResult(
-                Success: false,
-                Message: $"Unknown train: {input.TrainName}. Use operations.getTrains to list registered trains."
+            return (
+                null,
+                new OperationResult(
+                    Success: false,
+                    Message: $"Unknown train: {input.TrainName}. Use operations.getTrains to list registered trains."
+                )
             );
         }
         catch (JsonException ex)
         {
-            return new OperationResult(Success: false, Message: $"Invalid InputJson: {ex.Message}");
+            return (
+                null,
+                new OperationResult(Success: false, Message: $"Invalid InputJson: {ex.Message}")
+            );
         }
         catch (TrainInputValidationException ex)
         {
             // Generic by design: the cap and the observed size are on the exception's properties,
             // not in its message, so the caller cannot map the cap. Trax.Api's error filter makes
             // the same promise for the typed exception.
-            return new OperationResult(Success: false, Message: ex.Message);
+            return (null, new OperationResult(Success: false, Message: ex.Message));
         }
+    }
 
+    private static OperationResult? SubjectKeyedRunRefusal(
+        IServiceProvider services,
+        TrainRegistration prepared,
+        string trainName
+    )
+    {
         // A subject-keyed train serializes its work through the queue (docs/0019), which a run
         // started now bypasses, so only a trusted caller may bypass it (docs/0037).
         if (
@@ -956,6 +1258,17 @@ public partial class OperationsService : IOperationsService
                     + "trusted scope. Queue it instead."
             );
 
+        return null;
+    }
+
+    private async Task<(Metadata Metadata, OperationResult? Refusal)> SaveRunRowAsync(
+        IServiceProvider services,
+        TrainRegistration prepared,
+        object runInput,
+        string trainName,
+        CancellationToken ct
+    )
+    {
         // The row the run reports on. Input stays null here, as the job dispatcher leaves it:
         // the run's own effects record the input when the train starts.
         var metadata = Metadata.Create(
@@ -979,83 +1292,71 @@ public partial class OperationsService : IOperationsService
             var refusal = await RunQueueHookAsync(services, prepared, runInput, metadata, db, ct)
                 .ConfigureAwait(false);
             if (refusal is not null)
-                return refusal;
+                return (metadata, refusal);
 
             await db.SaveChanges(ct).ConfigureAwait(false);
         }
 
-        // The row exists now, so the run is the server's to see through: the submit is not tied
-        // to the caller's request. A client that navigates away would otherwise abort the submit,
-        // and a runner that takes the request's cancellation would cancel the run with it. The
-        // submitter's own timeouts bound the call.
-        try
-        {
-            await ResolveSubmitter(services, trainName)
-                .EnqueueAsync(metadata.Id, runInput, CancellationToken.None)
+        return (metadata, null);
+    }
+
+    // The answer to a submit that threw, or null when the failure is the server's and is thrown.
+    private async Task<OperationResult?> SubmitFailureOutcomeAsync(
+        IServiceProvider services,
+        Exception ex,
+        Metadata metadata,
+        string trainName
+    )
+    {
+        // A submitter that throws may still have delivered the job: a runner that ran it and
+        // answered with an error, or is still running it when the call times out, has moved
+        // the row out of Pending and owns its outcome. Only a row still Pending is a job no
+        // runner started; it is failed now with the submitter's exception, as the job
+        // dispatcher does when a dispatch fails, and the failure is the server's, not a
+        // refusal, so it is thrown (scheduler/0004).
+        var failed = await FailUnsubmittedRunAsync(metadata.Id, ex).ConfigureAwait(false);
+
+        // Failed here, before any runner started it, so no train publishes the outcome. It is
+        // published as a failed dispatch is, without the submitter's detail.
+        if (failed > 0)
+            await OutOfTrainOutcomes
+                .PublishFailedAsync(
+                    services,
+                    [metadata.Id],
+                    (ILogger?)_logger ?? NullLogger.Instance,
+                    DispatchFailure.PublishedAndShown
+                )
                 .ConfigureAwait(false);
-        }
-        catch (Exception ex)
+
+        if (failed == 0)
         {
-            // A submitter that throws may still have delivered the job: a runner that ran it and
-            // answered with an error, or is still running it when the call times out, has moved
-            // the row out of Pending and owns its outcome. Only a row still Pending is a job no
-            // runner started; it is failed now with the submitter's exception, as the job
-            // dispatcher does when a dispatch fails, and the failure is the server's, not a
-            // refusal, so it is thrown (scheduler/0004).
-            var failed = await FailUnsubmittedRunAsync(metadata.Id, ex).ConfigureAwait(false);
-
-            // Failed here, before any runner started it, so no train publishes the outcome. It is
-            // published as a failed dispatch is, without the submitter's detail.
-            if (failed > 0)
-                await OutOfTrainOutcomes
-                    .PublishFailedAsync(
-                        services,
-                        [metadata.Id],
-                        (ILogger?)_logger ?? NullLogger.Instance,
-                        DispatchFailure.PublishedAndShown
-                    )
-                    .ConfigureAwait(false);
-
-            if (failed == 0)
-            {
-                _logger?.LogWarning(
-                    ex,
-                    "The submitter reported a failure for a run of {TrainName} (metadata "
-                        + "{MetadataId}), but a runner has already started it; the run records "
-                        + "its own outcome",
-                    trainName,
-                    metadata.Id
-                );
-
-                return new OperationResult(
-                    Success: true,
-                    Id: metadata.Id,
-                    Count: 1,
-                    Message: string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"Run {metadata.Id} of {trainName} submitted; its outcome is pending "
-                    ) + "on the run."
-                );
-            }
-
-            _logger?.LogError(
+            _logger?.LogWarning(
                 ex,
-                "Submitting a run of {TrainName} (metadata {MetadataId}) failed",
+                "The submitter reported a failure for a run of {TrainName} (metadata "
+                    + "{MetadataId}), but a runner has already started it; the run records "
+                    + "its own outcome",
                 trainName,
                 metadata.Id
             );
-            throw;
+
+            return new OperationResult(
+                Success: true,
+                Id: metadata.Id,
+                Count: 1,
+                Message: string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Run {metadata.Id} of {trainName} submitted; its outcome is pending "
+                ) + "on the run."
+            );
         }
 
-        return new OperationResult(
-            Success: true,
-            Id: metadata.Id,
-            Count: 1,
-            Message: string.Create(
-                CultureInfo.InvariantCulture,
-                $"Run {metadata.Id} of {trainName} submitted."
-            )
+        _logger?.LogError(
+            ex,
+            "Submitting a run of {TrainName} (metadata {MetadataId}) failed",
+            trainName,
+            metadata.Id
         );
+        return null;
     }
 
     /// <summary>
@@ -1356,6 +1657,36 @@ public partial class OperationsService : IOperationsService
             .ToListAsync(ct)
             .ConfigureAwait(false);
 
+        var execAgg = await ReadGroupExecutionAggregatesAsync(db, ids, ct).ConfigureAwait(false);
+
+        return ids.Select(id =>
+            {
+                var manifestCount = manifestCounts.FirstOrDefault(x => x.GroupId == id)?.Count ?? 0;
+                var rows = execAgg.Where(x => x.ManifestGroupId == id).ToList();
+                long StateCount(TrainState state) =>
+                    rows.Where(x => x.TrainState == state).Sum(x => x.Count);
+                return new ManifestGroupExecutionStats(
+                    id,
+                    ManifestCount: manifestCount,
+                    TotalExecutions: rows.Sum(x => x.Count),
+                    Completed: StateCount(TrainState.Completed),
+                    Failed: StateCount(TrainState.Failed),
+                    InProgress: StateCount(TrainState.InProgress),
+                    LastRun: rows.Count == 0 ? null : rows.Max(x => x.LastRun)
+                )
+                {
+                    LastEndedRunFailed = LastEndedRunFailed(
+                        rows.Select(x => (x.TrainState, x.LastRun))
+                    ),
+                };
+            })
+            .ToList();
+    }
+
+    private static async Task<
+        List<(long ManifestGroupId, TrainState TrainState, long Count, DateTime? LastRun)>
+    > ReadGroupExecutionAggregatesAsync(IDataContext db, long[] ids, CancellationToken ct)
+    {
         // Join runs to the group's manifests, then aggregate per (group, state). The manifest
         // side is filtered to the requested groups first, so each manifest_id seek stays cheap.
         var execAgg = await db
@@ -1384,28 +1715,7 @@ public partial class OperationsService : IOperationsService
             .ToListAsync(ct)
             .ConfigureAwait(false);
 
-        return ids.Select(id =>
-            {
-                var manifestCount = manifestCounts.FirstOrDefault(x => x.GroupId == id)?.Count ?? 0;
-                var rows = execAgg.Where(x => x.ManifestGroupId == id).ToList();
-                long StateCount(TrainState state) =>
-                    rows.Where(x => x.TrainState == state).Sum(x => x.Count);
-                return new ManifestGroupExecutionStats(
-                    id,
-                    ManifestCount: manifestCount,
-                    TotalExecutions: rows.Sum(x => x.Count),
-                    Completed: StateCount(TrainState.Completed),
-                    Failed: StateCount(TrainState.Failed),
-                    InProgress: StateCount(TrainState.InProgress),
-                    LastRun: rows.Count == 0 ? null : rows.Max(x => x.LastRun)
-                )
-                {
-                    LastEndedRunFailed = LastEndedRunFailed(
-                        rows.Select(x => (x.TrainState, x.LastRun))
-                    ),
-                };
-            })
-            .ToList();
+        return execAgg.Select(x => (x.ManifestGroupId, x.TrainState, x.Count, x.LastRun)).ToList();
     }
 
     // Whether the run that started last among a group's ended runs (completed, failed or
@@ -1468,56 +1778,12 @@ public partial class OperationsService : IOperationsService
         {
             if (onWithheldTrack)
             {
-                items.Add(
-                    new RecordedDecisionRecord(
-                        d.Id,
-                        d.MetadataId,
-                        QuestionKey: null,
-                        d.Occurrence,
-                        Kind: null,
-                        Question: null,
-                        Answer: null,
-                        Refused: null,
-                        IsRefused: d.Refused is not null,
-                        Fingerprint: null,
-                        Model: null,
-                        Decider: null,
-                        d.Replayed,
-                        Shadows: null,
-                        Routes: null,
-                        StateHash: null,
-                        d.DecidedAt,
-                        AnswerWithheld: true,
-                        TrackWithheld: true
-                    )
-                );
+                items.Add(WithheldTrackRecord(d));
                 continue;
             }
 
             var withheld = TraxRedaction.IsSensitiveQuestion(d.QuestionKey);
-            items.Add(
-                new RecordedDecisionRecord(
-                    d.Id,
-                    d.MetadataId,
-                    d.QuestionKey,
-                    d.Occurrence,
-                    d.Kind,
-                    d.Question,
-                    Answer: withheld ? null : d.Answer,
-                    Refused: withheld ? null : d.Refused,
-                    IsRefused: d.Refused is not null,
-                    d.Fingerprint,
-                    d.Model,
-                    d.Decider,
-                    d.Replayed,
-                    Shadows: withheld ? null : d.Shadows,
-                    Routes: withheld ? null : d.Routes,
-                    d.StateHash,
-                    d.DecidedAt,
-                    AnswerWithheld: withheld,
-                    TrackWithheld: false
-                )
-            );
+            items.Add(DecisionRecord(d, withheld));
 
             // Every decision after a track taken on this answer is on that track.
             if (withheld && d.Routes is not null)
@@ -1526,6 +1792,57 @@ public partial class OperationsService : IOperationsService
 
         return new RecordedDecisionPage(items, take, items[^1].Id);
     }
+
+    private static RecordedDecisionRecord WithheldTrackRecord(
+        Effect.Models.RecordedDecision.RecordedDecision d
+    ) =>
+        new(
+            d.Id,
+            d.MetadataId,
+            QuestionKey: null,
+            d.Occurrence,
+            Kind: null,
+            Question: null,
+            Answer: null,
+            Refused: null,
+            IsRefused: d.Refused is not null,
+            Fingerprint: null,
+            Model: null,
+            Decider: null,
+            d.Replayed,
+            Shadows: null,
+            Routes: null,
+            StateHash: null,
+            d.DecidedAt,
+            AnswerWithheld: true,
+            TrackWithheld: true
+        );
+
+    private static RecordedDecisionRecord DecisionRecord(
+        Effect.Models.RecordedDecision.RecordedDecision d,
+        bool withheld
+    ) =>
+        new(
+            d.Id,
+            d.MetadataId,
+            d.QuestionKey,
+            d.Occurrence,
+            d.Kind,
+            d.Question,
+            Answer: withheld ? null : d.Answer,
+            Refused: withheld ? null : d.Refused,
+            IsRefused: d.Refused is not null,
+            d.Fingerprint,
+            d.Model,
+            d.Decider,
+            d.Replayed,
+            Shadows: withheld ? null : d.Shadows,
+            Routes: withheld ? null : d.Routes,
+            d.StateHash,
+            d.DecidedAt,
+            AnswerWithheld: withheld,
+            TrackWithheld: false
+        );
 
     /// <inheritdoc />
     /// <remarks>
@@ -1909,22 +2226,7 @@ public partial class OperationsService : IOperationsService
         {
             try
             {
-                var differing = db.Manifests.Where(m =>
-                    distinct.Contains(m.Id) && m.ReplayDecisionsOnRetry != replay
-                );
-                changed = db.SupportsSetUpdates()
-                    ? await differing
-                        .ExecuteUpdateAsync(
-                            s => s.SetProperty(m => m.ReplayDecisionsOnRetry, replay),
-                            ct
-                        )
-                        .ConfigureAwait(false)
-                    : await db.UpdateEachAsync(
-                            differing,
-                            m => m.ReplayDecisionsOnRetry = replay,
-                            ct
-                        )
-                        .ConfigureAwait(false);
+                changed = await SetReplayFlagAsync(db, distinct, replay, ct).ConfigureAwait(false);
 
                 // Turned off, a retry already queued to replay asks afresh too (docs/adr/0017).
                 // The dispatcher checks the flag again when it claims the entry, for one queued
@@ -1960,6 +2262,26 @@ public partial class OperationsService : IOperationsService
             );
 
         return new OperationResult(Success: true, Count: changed, Message: message);
+    }
+
+    private static async Task<int> SetReplayFlagAsync(
+        IDataContext db,
+        List<long> distinct,
+        bool replay,
+        CancellationToken ct
+    )
+    {
+        var differing = db.Manifests.Where(m =>
+            distinct.Contains(m.Id) && m.ReplayDecisionsOnRetry != replay
+        );
+        var changed = db.SupportsSetUpdates()
+            ? await differing
+                .ExecuteUpdateAsync(s => s.SetProperty(m => m.ReplayDecisionsOnRetry, replay), ct)
+                .ConfigureAwait(false)
+            : await db.UpdateEachAsync(differing, m => m.ReplayDecisionsOnRetry = replay, ct)
+                .ConfigureAwait(false);
+
+        return changed;
     }
 
     /// <inheritdoc />
@@ -2501,6 +2823,26 @@ public partial class OperationsService : IOperationsService
         return false;
     }
 
+    private static async Task<long?> ReadSubjectHeldByAsync(
+        IDataContext db,
+        string subject,
+        CancellationToken ct
+    ) =>
+        await db
+            .WorkQueues.AsNoTracking()
+            .Where(b =>
+                b.SubjectKey == subject
+                && b.Status == WorkQueueStatus.Dispatched
+                && b.Metadata != null
+                && (
+                    b.Metadata.TrainState == TrainState.Pending
+                    || b.Metadata.TrainState == TrainState.InProgress
+                )
+            )
+            .Select(b => (long?)b.Id)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+
     /// <inheritdoc />
     /// <remarks>
     /// The held-by read is served by <c>ix_work_queue_subject_busy</c>, the queued-behind read by
@@ -2528,20 +2870,7 @@ public partial class OperationsService : IOperationsService
         {
             // A queued entry whose subject has a run in flight is skipped by dispatch until that
             // run finishes. Without saying so it looks like an entry that is simply never picked up.
-            heldBy = await db
-                .WorkQueues.AsNoTracking()
-                .Where(b =>
-                    b.SubjectKey == subject
-                    && b.Status == WorkQueueStatus.Dispatched
-                    && b.Metadata != null
-                    && (
-                        b.Metadata.TrainState == TrainState.Pending
-                        || b.Metadata.TrainState == TrainState.InProgress
-                    )
-                )
-                .Select(b => (long?)b.Id)
-                .FirstOrDefaultAsync(ct)
-                .ConfigureAwait(false);
+            heldBy = await ReadSubjectHeldByAsync(db, subject, ct).ConfigureAwait(false);
 
             // Dispatch also offers only the first queued entry per subject each cycle, so an entry
             // behind a sibling it would take first waits even with nothing running.
@@ -2773,6 +3102,39 @@ public partial class OperationsService : IOperationsService
                 )
             );
 
+        var changed = ApplyManifestGroupPatch(group, input);
+
+        if (changed == 0)
+            return new OperationResult(
+                Success: true,
+                Id: id,
+                Count: 0,
+                Message: string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Manifest group {id}: no changes."
+                )
+            );
+
+        group.UpdatedAt = Clock.GetUtcNow().UtcDateTime;
+        await db.SaveChanges(ct).ConfigureAwait(false);
+        _changeSignal?.Notify(ChangeDomain.ManifestGroup);
+
+        return new OperationResult(
+            Success: true,
+            Id: id,
+            Count: changed,
+            Message: string.Create(
+                CultureInfo.InvariantCulture,
+                $"Manifest group {id}: {changed} field(s) updated."
+            )
+        );
+    }
+
+    private static int ApplyManifestGroupPatch(
+        Effect.Models.ManifestGroup.ManifestGroup group,
+        UpdateManifestGroupInput input
+    )
+    {
         var changed = 0;
 
         if (input.ClearMaxActiveJobs)
@@ -2801,30 +3163,7 @@ public partial class OperationsService : IOperationsService
             changed++;
         }
 
-        if (changed == 0)
-            return new OperationResult(
-                Success: true,
-                Id: id,
-                Count: 0,
-                Message: string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"Manifest group {id}: no changes."
-                )
-            );
-
-        group.UpdatedAt = Clock.GetUtcNow().UtcDateTime;
-        await db.SaveChanges(ct).ConfigureAwait(false);
-        _changeSignal?.Notify(ChangeDomain.ManifestGroup);
-
-        return new OperationResult(
-            Success: true,
-            Id: id,
-            Count: changed,
-            Message: string.Create(
-                CultureInfo.InvariantCulture,
-                $"Manifest group {id}: {changed} field(s) updated."
-            )
-        );
+        return changed;
     }
 
     /// <inheritdoc />
@@ -2870,37 +3209,31 @@ public partial class OperationsService : IOperationsService
                 Array.Empty<DependencyGraphEdge>()
             );
 
-        // Upstream: groups containing manifests our manifests depend on.
-        var upstreamGroupIds = await db
-            .Manifests.AsNoTracking()
-            .Where(m => m.ManifestGroupId == groupId && m.DependsOnManifestId != null)
-            .Join(
-                db.Manifests.AsNoTracking(),
-                dependent => dependent.DependsOnManifestId,
-                parent => (long?)parent.Id,
-                (dependent, parent) => parent.ManifestGroupId
+        var neighborGroupIds = await ReadNeighborGroupIdsAsync(
+                db,
+                groupId,
+                currentManifestIdsQuery,
+                ct
             )
-            .Where(parentGroupId => parentGroupId != groupId)
-            .Distinct()
-            .ToListAsync(ct)
             .ConfigureAwait(false);
-
-        // Downstream: groups containing manifests that depend on our manifests.
-        var downstreamGroupIds = await db
-            .Manifests.AsNoTracking()
-            .Where(m =>
-                m.DependsOnManifestId != null
-                && currentManifestIdsQuery.Contains(m.DependsOnManifestId.Value)
-                && m.ManifestGroupId != groupId
-            )
-            .Select(m => m.ManifestGroupId)
-            .Distinct()
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
-
-        var neighborGroupIds = upstreamGroupIds.Union(downstreamGroupIds).ToHashSet();
         var allRelevantGroupIds = neighborGroupIds.Append(groupId).ToList();
 
+        var nodes = await ReadGroupNodesAsync(db, allRelevantGroupIds, groupId, ct)
+            .ConfigureAwait(false);
+
+        var edges = await ReadCrossGroupEdgesAsync(db, allRelevantGroupIds, ct)
+            .ConfigureAwait(false);
+
+        return new ManifestGroupDependencyGraph(nodes, edges);
+    }
+
+    private static async Task<List<DependencyGraphNode>> ReadGroupNodesAsync(
+        IDataContext db,
+        List<long> allRelevantGroupIds,
+        long groupId,
+        CancellationToken ct
+    )
+    {
         var groups = await db
             .ManifestGroups.AsNoTracking()
             .Where(g => allRelevantGroupIds.Contains(g.Id))
@@ -2920,6 +3253,15 @@ public partial class OperationsService : IOperationsService
             })
             .ToList();
 
+        return nodes;
+    }
+
+    private static async Task<List<DependencyGraphEdge>> ReadCrossGroupEdgesAsync(
+        IDataContext db,
+        List<long> allRelevantGroupIds,
+        CancellationToken ct
+    )
+    {
         // Cross-group edges only.
         var crossGroupEdges = await db
             .Manifests.AsNoTracking()
@@ -2949,7 +3291,47 @@ public partial class OperationsService : IOperationsService
             .Select(e => new DependencyGraphEdge(e.ParentGroupId, e.DependentGroupId))
             .ToList();
 
-        return new ManifestGroupDependencyGraph(nodes, edges);
+        return edges;
+    }
+
+    private static async Task<HashSet<long>> ReadNeighborGroupIdsAsync(
+        IDataContext db,
+        long groupId,
+        IQueryable<long> currentManifestIdsQuery,
+        CancellationToken ct
+    )
+    {
+        // Upstream: groups containing manifests our manifests depend on.
+        var upstreamGroupIds = await db
+            .Manifests.AsNoTracking()
+            .Where(m => m.ManifestGroupId == groupId && m.DependsOnManifestId != null)
+            .Join(
+                db.Manifests.AsNoTracking(),
+                dependent => dependent.DependsOnManifestId,
+                parent => (long?)parent.Id,
+                (dependent, parent) => parent.ManifestGroupId
+            )
+            .Where(parentGroupId => parentGroupId != groupId)
+            .Distinct()
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        // Downstream: groups containing manifests that depend on our manifests.
+        var downstreamGroupIds = await db
+            .Manifests.AsNoTracking()
+            .Where(m =>
+                m.DependsOnManifestId != null
+                && currentManifestIdsQuery.Contains(m.DependsOnManifestId.Value)
+                && m.ManifestGroupId != groupId
+            )
+            .Select(m => m.ManifestGroupId)
+            .Distinct()
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var neighborGroupIds = upstreamGroupIds.Union(downstreamGroupIds).ToHashSet();
+
+        return neighborGroupIds;
     }
 
     /// <inheritdoc />
@@ -3014,89 +3396,187 @@ public partial class OperationsService : IOperationsService
         var todayStart = now.Date;
         var last7d = now.AddDays(-7);
 
-        IQueryable<Effect.Models.Metadata.Metadata> ScopedMetadatas(
-            Effect.Data.Services.DataContext.IDataContext db
-        ) => WithoutAdminTrains(db.Metadatas.AsNoTracking(), hideAdminTrains);
+        var reads = StartDashboardReads(range, hideAdminTrains, now, todayStart, last7d, ct);
 
+        await Task.WhenAll(
+                reads.TodayStateCounts,
+                reads.CurrentlyRunning,
+                reads.UnresolvedDeadLetters,
+                reads.Executions,
+                reads.TopFailures,
+                reads.TopDurations,
+                reads.Throughput
+            )
+            .ConfigureAwait(false);
+
+        var kpis = TodayKpis(
+            await reads.TodayStateCounts.ConfigureAwait(false),
+            await reads.CurrentlyRunning.ConfigureAwait(false),
+            await reads.UnresolvedDeadLetters.ConfigureAwait(false)
+        );
+
+        var topFailures = await reads.TopFailures.ConfigureAwait(false);
+
+        var topDurations = await reads.TopDurations.ConfigureAwait(false);
+
+        return new DashboardMetrics(
+            kpis,
+            await reads.Executions.ConfigureAwait(false),
+            topFailures,
+            topDurations,
+            await reads.Throughput.ConfigureAwait(false)
+        );
+    }
+
+    // The dashboard's seven aggregations, started in this order and awaited together.
+    private sealed record DashboardReads(
+        Task<List<TodayStateCount>> TodayStateCounts,
+        Task<int> CurrentlyRunning,
+        Task<int> UnresolvedDeadLetters,
+        Task<IReadOnlyList<ExecutionsBucket>> Executions,
+        Task<List<TrainFailureCount>> TopFailures,
+        Task<List<TrainAverageDuration>> TopDurations,
+        Task<IReadOnlyList<ThroughputSeries>> Throughput
+    );
+
+    private DashboardReads StartDashboardReads(
+        MetricsRange range,
+        bool hideAdminTrains,
+        DateTime now,
+        DateTime todayStart,
+        DateTime last7d,
+        CancellationToken ct
+    )
+    {
         // Each aggregation reads different rows through a different index and none depends on
         // another, so they run at once, each on a context and connection of its own: the
         // dashboard waits for the slowest rather than for the sum.
-        async Task<T> Read<T>(Func<Effect.Data.Services.DataContext.IDataContext, Task<T>> read)
-        {
-            var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
-            await using var dbDisposal = db.ConfigureAwait(false);
-            return await read(db).ConfigureAwait(false);
-        }
 
         // ── KPIs (today) ─────────────────────────────────────────────────────
-        var todayStateCountsRead = Read(db =>
-            ScopedMetadatas(db)
+        var todayStateCountsRead = ReadInOwnContextAsync(
+            db => ReadTodayStateCountsAsync(db, hideAdminTrains, todayStart, ct),
+            ct
+        );
+
+        var currentlyRunningRead = ReadInOwnContextAsync(
+            db =>
+                ScopedMetadatas(db, hideAdminTrains)
+                    .Where(m => m.TrainState == TrainState.InProgress)
+                    .CountAsync(ct),
+            ct
+        );
+
+        var unresolvedDeadLettersRead = ReadInOwnContextAsync(
+            db =>
+                db.DeadLetters.AsNoTracking()
+                    .CountAsync(d => d.Status == DeadLetterStatus.AwaitingIntervention, ct),
+            ct
+        );
+
+        // ── Executions over time ─────────────────────────────────────────────
+        var executionsRead = ReadInOwnContextAsync(
+            db => BuildExecutionsOverTimeAsync(db, range, hideAdminTrains, now, ct),
+            ct
+        );
+
+        var topFailuresRead = ReadInOwnContextAsync(
+            db => ReadTopFailuresAsync(db, hideAdminTrains, last7d, ct),
+            ct
+        );
+
+        var topDurationsRead = ReadInOwnContextAsync(
+            db => ReadTopDurationsAsync(db, hideAdminTrains, last7d, ct),
+            ct
+        );
+
+        // ── Throughput sparklines (7d, top 3 + Other, 28 6h buckets) ─────────
+        var throughputRead = ReadInOwnContextAsync(
+            db => BuildThroughputSeriesAsync(db, hideAdminTrains, now, last7d, ct),
+            ct
+        );
+
+        return new DashboardReads(
+            todayStateCountsRead,
+            currentlyRunningRead,
+            unresolvedDeadLettersRead,
+            executionsRead,
+            topFailuresRead,
+            topDurationsRead,
+            throughputRead
+        );
+    }
+
+    private static IQueryable<Effect.Models.Metadata.Metadata> ScopedMetadatas(
+        IDataContext db,
+        bool hideAdminTrains
+    ) => WithoutAdminTrains(db.Metadatas.AsNoTracking(), hideAdminTrains);
+
+    private sealed record TodayStateCount(TrainState State, int Count);
+
+    private static async Task<List<TodayStateCount>> ReadTodayStateCountsAsync(
+        IDataContext db,
+        bool hideAdminTrains,
+        DateTime todayStart,
+        CancellationToken ct
+    ) =>
+        (
+            await ScopedMetadatas(db, hideAdminTrains)
                 .Where(m => m.StartTime >= todayStart)
                 .GroupBy(m => m.TrainState)
                 .Select(g => new { State = g.Key, Count = g.Count() })
                 .ToListAsync(ct)
-        );
+                .ConfigureAwait(false)
+        )
+            .Select(x => new TodayStateCount(x.State, x.Count))
+            .ToList();
 
-        var currentlyRunningRead = Read(db =>
-            ScopedMetadatas(db).Where(m => m.TrainState == TrainState.InProgress).CountAsync(ct)
-        );
-
-        var unresolvedDeadLettersRead = Read(db =>
-            db.DeadLetters.AsNoTracking()
-                .CountAsync(d => d.Status == DeadLetterStatus.AwaitingIntervention, ct)
-        );
-
-        // ── Executions over time ─────────────────────────────────────────────
-        var executionsRead = Read(db =>
-            BuildExecutionsOverTimeAsync(db, range, hideAdminTrains, now, ct)
-        );
-
-        // ── Top failures (7d) ────────────────────────────────────────────────
-        // EF can't construct positional records server-side; project to an anonymous
-        // type, then materialise to TrainFailureCount.
-        var topFailuresRead = Read(db =>
-            ScopedMetadatas(db)
+    // ── Top failures (7d) ────────────────────────────────────────────────
+    // EF can't construct positional records server-side; project to an anonymous
+    // type, then materialise to TrainFailureCount.
+    private static async Task<List<TrainFailureCount>> ReadTopFailuresAsync(
+        IDataContext db,
+        bool hideAdminTrains,
+        DateTime last7d,
+        CancellationToken ct
+    ) =>
+        (
+            await ScopedMetadatas(db, hideAdminTrains)
                 .Where(m => m.TrainState == TrainState.Failed && m.StartTime >= last7d)
                 .GroupBy(m => m.Name)
                 .Select(g => new { Name = g.Key, Count = g.Count() })
                 .OrderByDescending(x => x.Count)
                 .Take(10)
                 .ToListAsync(ct)
+                .ConfigureAwait(false)
+        )
+            .Select(x => new TrainFailureCount(x.Name, x.Count))
+            .ToList();
+
+    // ── Top average durations (7d, root-level only) ──────────────────────
+    private static Task<List<TrainAverageDuration>> ReadTopDurationsAsync(
+        IDataContext db,
+        bool hideAdminTrains,
+        DateTime last7d,
+        CancellationToken ct
+    ) =>
+        ReadTopAverageDurationsAsync(
+            db,
+            ScopedMetadatas(db, hideAdminTrains)
+                .Where(m =>
+                    m.TrainState == TrainState.Completed
+                    && m.EndTime != null
+                    && m.StartTime >= last7d
+                    && m.ParentId == null
+                ),
+            ct
         );
 
-        // ── Top average durations (7d, root-level only) ──────────────────────
-        var topDurationsRead = Read(db =>
-            ReadTopAverageDurationsAsync(
-                db,
-                ScopedMetadatas(db)
-                    .Where(m =>
-                        m.TrainState == TrainState.Completed
-                        && m.EndTime != null
-                        && m.StartTime >= last7d
-                        && m.ParentId == null
-                    ),
-                ct
-            )
-        );
-
-        // ── Throughput sparklines (7d, top 3 + Other, 28 6h buckets) ─────────
-        var throughputRead = Read(db =>
-            BuildThroughputSeriesAsync(db, hideAdminTrains, now, last7d, ct)
-        );
-
-        await Task.WhenAll(
-                todayStateCountsRead,
-                currentlyRunningRead,
-                unresolvedDeadLettersRead,
-                executionsRead,
-                topFailuresRead,
-                topDurationsRead,
-                throughputRead
-            )
-            .ConfigureAwait(false);
-
-        var todayStateCounts = await todayStateCountsRead.ConfigureAwait(false);
-
+    private static DashboardKpis TodayKpis(
+        List<TodayStateCount> todayStateCounts,
+        int currentlyRunning,
+        int unresolvedDeadLetters
+    )
+    {
         int CountForState(TrainState s) =>
             todayStateCounts.FirstOrDefault(x => x.State == s)?.Count ?? 0;
 
@@ -3106,25 +3586,11 @@ public partial class OperationsService : IOperationsService
         var successRate =
             terminal > 0 ? Math.Round(100.0 * completed / terminal, 1, MidpointRounding.ToEven) : 0;
 
-        var kpis = new DashboardKpis(
+        return new DashboardKpis(
             executionsToday,
             successRate,
-            await currentlyRunningRead.ConfigureAwait(false),
-            await unresolvedDeadLettersRead.ConfigureAwait(false)
-        );
-
-        var topFailures = (await topFailuresRead.ConfigureAwait(false))
-            .Select(x => new TrainFailureCount(x.Name, x.Count))
-            .ToList();
-
-        var topDurations = await topDurationsRead.ConfigureAwait(false);
-
-        return new DashboardMetrics(
-            kpis,
-            await executionsRead.ConfigureAwait(false),
-            topFailures,
-            topDurations,
-            await throughputRead.ConfigureAwait(false)
+            currentlyRunning,
+            unresolvedDeadLetters
         );
     }
 
@@ -3266,59 +3732,8 @@ public partial class OperationsService : IOperationsService
         // across providers, so we keep it provider-agnostic.
         var raw =
             range == MetricsRange.Last60Minutes
-                ? (
-                    await q.GroupBy(m => new
-                        {
-                            m.StartTime.Date,
-                            m.StartTime.Hour,
-                            m.StartTime.Minute,
-                            m.TrainState,
-                        })
-                        .Select(g => new
-                        {
-                            g.Key.Date,
-                            g.Key.Hour,
-                            g.Key.Minute,
-                            g.Key.TrainState,
-                            Count = g.Count(),
-                        })
-                        .ToListAsync(ct)
-                        .ConfigureAwait(false)
-                )
-                    .Select(x => new
-                    {
-                        Bucket = DateTime.SpecifyKind(
-                            x.Date.AddHours(x.Hour).AddMinutes(x.Minute),
-                            DateTimeKind.Utc
-                        ),
-                        x.TrainState,
-                        x.Count,
-                    })
-                    .ToList()
-                : (
-                    await q.GroupBy(m => new
-                        {
-                            m.StartTime.Date,
-                            m.StartTime.Hour,
-                            m.TrainState,
-                        })
-                        .Select(g => new
-                        {
-                            g.Key.Date,
-                            g.Key.Hour,
-                            g.Key.TrainState,
-                            Count = g.Count(),
-                        })
-                        .ToListAsync(ct)
-                        .ConfigureAwait(false)
-                )
-                    .Select(x => new
-                    {
-                        Bucket = DateTime.SpecifyKind(x.Date.AddHours(x.Hour), DateTimeKind.Utc),
-                        x.TrainState,
-                        x.Count,
-                    })
-                    .ToList();
+                ? await ReadMinuteBucketsAsync(q, ct).ConfigureAwait(false)
+                : await ReadHourBucketsAsync(q, ct).ConfigureAwait(false);
 
         // Truncate "now" to the bucket boundary so labels line up.
         var lastBucket =
@@ -3347,6 +3762,72 @@ public partial class OperationsService : IOperationsService
             .ToList();
     }
 
+    private static async Task<
+        List<(DateTime Bucket, TrainState TrainState, int Count)>
+    > ReadMinuteBucketsAsync(IQueryable<Effect.Models.Metadata.Metadata> q, CancellationToken ct) =>
+        (
+            await q.GroupBy(m => new
+                {
+                    m.StartTime.Date,
+                    m.StartTime.Hour,
+                    m.StartTime.Minute,
+                    m.TrainState,
+                })
+                .Select(g => new
+                {
+                    g.Key.Date,
+                    g.Key.Hour,
+                    g.Key.Minute,
+                    g.Key.TrainState,
+                    Count = g.Count(),
+                })
+                .ToListAsync(ct)
+                .ConfigureAwait(false)
+        ).Select(x => (Bucket: DateTime.SpecifyKind(x.Date.AddHours(x.Hour).AddMinutes(x.Minute), DateTimeKind.Utc), x.TrainState, x.Count)).ToList();
+
+    private static async Task<
+        List<(DateTime Bucket, TrainState TrainState, int Count)>
+    > ReadHourBucketsAsync(IQueryable<Effect.Models.Metadata.Metadata> q, CancellationToken ct) => (
+            await q.GroupBy(m => new
+                {
+                    m.StartTime.Date,
+                    m.StartTime.Hour,
+                    m.TrainState,
+                })
+                .Select(g => new
+                {
+                    g.Key.Date,
+                    g.Key.Hour,
+                    g.Key.TrainState,
+                    Count = g.Count(),
+                })
+                .ToListAsync(ct)
+                .ConfigureAwait(false)
+        ).Select(x => (Bucket: DateTime.SpecifyKind(x.Date.AddHours(x.Hour), DateTimeKind.Utc), x.TrainState, x.Count)).ToList();
+
+    private static async Task<
+        List<(DateTime Bucket, string Name, int Count)>
+    > ReadThroughputStatsAsync(
+        IQueryable<Effect.Models.Metadata.Metadata> q,
+        CancellationToken ct
+    ) => (
+            await q.GroupBy(m => new
+                {
+                    m.StartTime.Date,
+                    Block = m.StartTime.Hour / 6,
+                    m.Name,
+                })
+                .Select(g => new
+                {
+                    g.Key.Date,
+                    g.Key.Block,
+                    g.Key.Name,
+                    Count = g.Count(),
+                })
+                .ToListAsync(ct)
+                .ConfigureAwait(false)
+        ).Select(x => (Bucket: DateTime.SpecifyKind(x.Date.AddHours(x.Block * 6), DateTimeKind.Utc), x.Name, x.Count)).ToList();
+
     private static async Task<IReadOnlyList<ThroughputSeries>> BuildThroughputSeriesAsync(
         Effect.Data.Services.DataContext.IDataContext db,
         bool hideAdminTrains,
@@ -3363,30 +3844,7 @@ public partial class OperationsService : IOperationsService
 
         // 6-hour blocks. Keep the bucket calc identical to the dashboard's existing logic
         // (group on raw date-parts, materialise DateTime in memory).
-        var stats = (
-            await q.GroupBy(m => new
-                {
-                    m.StartTime.Date,
-                    Block = m.StartTime.Hour / 6,
-                    m.Name,
-                })
-                .Select(g => new
-                {
-                    g.Key.Date,
-                    g.Key.Block,
-                    g.Key.Name,
-                    Count = g.Count(),
-                })
-                .ToListAsync(ct)
-                .ConfigureAwait(false)
-        )
-            .Select(x => new
-            {
-                Bucket = DateTime.SpecifyKind(x.Date.AddHours(x.Block * 6), DateTimeKind.Utc),
-                x.Name,
-                x.Count,
-            })
-            .ToList();
+        var stats = await ReadThroughputStatsAsync(q, ct).ConfigureAwait(false);
 
         const int blockCount = 28; // 7 days * 4 blocks/day
         var lastBlockStart = DateTime.SpecifyKind(
@@ -3488,20 +3946,8 @@ public partial class OperationsService : IOperationsService
                 Message: "Scheduler config: no changes."
             );
 
-        int changes;
-        try
-        {
-            changes = await SaveSchedulerConfigPatchAsync(patch, target, ct).ConfigureAwait(false);
-        }
-        catch (DbUpdateException ex)
-            when (_services?.GetService<ISqlDialect>() is { } dialect
-                && dialect.IsUniqueViolation(ex)
-            )
-        {
-            // Another host made the first save between this one's read and its insert. Its row
-            // now exists, so read it and apply the patch to it, as any later save does.
-            changes = await SaveSchedulerConfigPatchAsync(patch, target, ct).ConfigureAwait(false);
-        }
+        var changes = await SaveSchedulerConfigPatchOrRetryAsync(patch, target, ct)
+            .ConfigureAwait(false);
 
         // This host applies the patch at once; every scheduler host, this one included, also
         // picks the saved row up on its next settings refresh.
@@ -3531,6 +3977,27 @@ public partial class OperationsService : IOperationsService
     /// what the scheduler runs with, and saves it, creating the row on the first save. Returns
     /// how many settings changed; none writes nothing.
     /// </summary>
+    private async Task<int> SaveSchedulerConfigPatchOrRetryAsync(
+        IReadOnlyList<(ISchedulerSetting Setting, object? Value)> patch,
+        SchedulerSettingsTarget target,
+        CancellationToken ct
+    )
+    {
+        try
+        {
+            return await SaveSchedulerConfigPatchAsync(patch, target, ct).ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex)
+            when (_services?.GetService<ISqlDialect>() is { } dialect
+                && dialect.IsUniqueViolation(ex)
+            )
+        {
+            // Another host made the first save between this one's read and its insert. Its row
+            // now exists, so read it and apply the patch to it, as any later save does.
+            return await SaveSchedulerConfigPatchAsync(patch, target, ct).ConfigureAwait(false);
+        }
+    }
+
     private async Task<int> SaveSchedulerConfigPatchAsync(
         IReadOnlyList<(ISchedulerSetting Setting, object? Value)> patch,
         SchedulerSettingsTarget target,
@@ -3638,7 +4105,16 @@ public partial class OperationsService : IOperationsService
     /// </summary>
     internal static string? ValidateSchedulerConfigPatch(UpdateSchedulerConfigInput input)
     {
-        var problems = new[]
+        var problems = PollingAndRetryProblems(input)
+            .Concat(DelayAndRetentionProblems(input))
+            .OfType<string>()
+            .ToList();
+
+        return problems.Count == 0 ? null : string.Join(' ', problems);
+    }
+
+    private static string?[] PollingAndRetryProblems(UpdateSchedulerConfigInput input) =>
+        new[]
         {
             SchedulerConfigLimits.TimerInterval(
                 input.ManifestManagerPollingInterval,
@@ -3666,6 +4142,11 @@ public partial class OperationsService : IOperationsService
                 input.DefaultRetryDelay,
                 nameof(input.DefaultRetryDelay)
             ),
+        };
+
+    private static string?[] DelayAndRetentionProblems(UpdateSchedulerConfigInput input) =>
+        new[]
+        {
             SchedulerConfigLimits.BackoffMultiplier(
                 input.RetryBackoffMultiplier,
                 nameof(input.RetryBackoffMultiplier)
@@ -3700,10 +4181,5 @@ public partial class OperationsService : IOperationsService
                 input.MetadataCleanupRetention,
                 nameof(input.MetadataCleanupRetention)
             ),
-        }
-            .OfType<string>()
-            .ToList();
-
-        return problems.Count == 0 ? null : string.Join(' ', problems);
-    }
+        };
 }

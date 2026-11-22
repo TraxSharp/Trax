@@ -282,15 +282,7 @@ public class TimersModelTests(ClusterStore store)
                         .ConfigureAwait(false);
                     break;
                 case Kind.MakeDue:
-                    if (draft.Armed)
-                    {
-                        await test
-                            ._db.NotNull()
-                            .MakeDue(draft.RowId.NotNull().Value)
-                            .ConfigureAwait(false);
-                        draft.Revision++;
-                        draft.Due = true;
-                    }
+                    await MakeDue(draft).ConfigureAwait(false);
                     break;
                 case Kind.FireTimers:
                     Fired(
@@ -301,13 +293,7 @@ public class TimersModelTests(ClusterStore store)
                     );
                     break;
                 case Kind.FireTimersConcurrently:
-                    var both = await Task.WhenAll(
-                            test._api.NotNull().FireTimers(),
-                            test._api2.NotNull().FireTimers()
-                        )
-                        .WaitAsync(Bound, TimeProvider.System)
-                        .ConfigureAwait(false);
-                    Fired(both.SelectMany(b => b).ToList(), readsVersion2: false);
+                    await FireTimersConcurrently().ConfigureAwait(false);
                     break;
                 case Kind.ClientEventRacingFire:
                     await RaceFire(draft, ReminderTrigger.Approve).ConfigureAwait(false);
@@ -316,98 +302,16 @@ public class TimersModelTests(ClusterStore store)
                     await RaceFire(draft, ReminderTrigger.Extend).ConfigureAwait(false);
                     break;
                 case Kind.ForgeTimerTrigger:
-                    if (draft.State is not null)
-                        await Forged(
-                                draft,
-                                () => Advance(test._api.NotNull(), draft, TimerTrigger),
-                                RefusalCode.TimerBound
-                            )
-                            .ConfigureAwait(false);
+                    await ForgeTimerTrigger(draft).ConfigureAwait(false);
                     break;
                 case Kind.AutosaveTimedState:
-                    if (draft.State is not null)
-                    {
-                        var target =
-                            op.B == 0
-                                ? nameof(ReminderState.Expired)
-                                : nameof(ReminderState.Review);
-                        var saved = await test
-                            ._api.NotNull()
-                            .NotNull()
-                            .Save(
-                                draft.User,
-                                draft.Id,
-                                ReminderMachine.Json(
-                                    target,
-                                    ReminderMachine.Context("rewritten"),
-                                    draft.Version
-                                )
-                            )
-                            .ConfigureAwait(false);
-                        if (draft.Armed)
-                            saved
-                                .Should()
-                                .NotBeOfType<AutosaveResult.Saved>(
-                                    $"autosave never leaves or rewrites a timed state. See {Adr}"
-                                );
-                        else if (saved is AutosaveResult.Saved)
-                        {
-                            draft.State = target;
-                            draft.Revision++;
-                            draft.Due = false;
-                            draft.FiredThisArming = 0;
-                        }
-                    }
+                    await AutosaveTimedState(draft, op.B).ConfigureAwait(false);
                     break;
                 case Kind.ExpireDraft:
-                    if (draft.State is not null)
-                    {
-                        await test
-                            ._api.NotNull()
-                            .IdleDraft(draft.RowId.NotNull().Value, TimeSpan.FromHours(2))
-                            .ConfigureAwait(false);
-                        draft.Revision++;
-                        await test._expiring.NotNull().ExpireDrafts().ConfigureAwait(false);
-                        var loaded = await Load(test._expiring.NotNull(), draft)
-                            .ConfigureAwait(false);
-                        if (draft.Armed)
-                            loaded
-                                .Should()
-                                .BeOfType<LoadResult.Loaded>("a pending timer keeps the draft");
-                        else if (
-                            string.Equals(
-                                draft.State,
-                                nameof(ReminderState.Published),
-                                StringComparison.Ordinal
-                            )
-                        )
-                            loaded
-                                .Should()
-                                .BeOfType<LoadResult.Loaded>(
-                                    "the effect's target is the record of what the server did, which the TTL keeps"
-                                );
-                        else
-                        {
-                            loaded.Should().BeOfType<LoadResult.NotFound>("idle past its TTL");
-                            Forget(draft);
-                        }
-                    }
+                    await ExpireDraft(draft).ConfigureAwait(false);
                     break;
                 case Kind.DeleteAndRecreate:
-                    // Published is the effect's target, which discard refuses (discard-not-allowed): only the server
-                    // puts a draft there, so its owner cannot erase it.
-                    if (draft.State is not null and not nameof(ReminderState.Published))
-                    {
-                        await test
-                            ._api.NotNull()
-                            .NotNull()
-                            .Delete(draft.User, draft.Id)
-                            .ConfigureAwait(false);
-                        var oldRow = draft.RowId;
-                        Forget(draft);
-                        await Open(draft).ConfigureAwait(false);
-                        draft.RowId.Should().NotBe(oldRow, "a re-created draft has a new row id");
-                    }
+                    await DeleteAndRecreate(draft).ConfigureAwait(false);
                     break;
                 case Kind.ClaimEffect:
                     await Claim(draft).ConfigureAwait(false);
@@ -418,6 +322,123 @@ public class TimersModelTests(ClusterStore store)
                         readsVersion2: true
                     );
                     break;
+            }
+        }
+
+        private async Task MakeDue(Draft draft)
+        {
+            if (draft.Armed)
+            {
+                await test._db.NotNull().MakeDue(draft.RowId.NotNull().Value).ConfigureAwait(false);
+                draft.Revision++;
+                draft.Due = true;
+            }
+        }
+
+        private async Task FireTimersConcurrently()
+        {
+            var both = await Task.WhenAll(
+                    test._api.NotNull().FireTimers(),
+                    test._api2.NotNull().FireTimers()
+                )
+                .WaitAsync(Bound, TimeProvider.System)
+                .ConfigureAwait(false);
+            Fired(both.SelectMany(b => b).ToList(), readsVersion2: false);
+        }
+
+        private async Task ForgeTimerTrigger(Draft draft)
+        {
+            if (draft.State is not null)
+                await Forged(
+                        draft,
+                        () => Advance(test._api.NotNull(), draft, TimerTrigger),
+                        RefusalCode.TimerBound
+                    )
+                    .ConfigureAwait(false);
+        }
+
+        private async Task AutosaveTimedState(Draft draft, int b)
+        {
+            if (draft.State is not null)
+            {
+                var target = b == 0 ? nameof(ReminderState.Expired) : nameof(ReminderState.Review);
+                var saved = await test
+                    ._api.NotNull()
+                    .NotNull()
+                    .Save(
+                        draft.User,
+                        draft.Id,
+                        ReminderMachine.Json(
+                            target,
+                            ReminderMachine.Context("rewritten"),
+                            draft.Version
+                        )
+                    )
+                    .ConfigureAwait(false);
+                if (draft.Armed)
+                    saved
+                        .Should()
+                        .NotBeOfType<AutosaveResult.Saved>(
+                            $"autosave never leaves or rewrites a timed state. See {Adr}"
+                        );
+                else if (saved is AutosaveResult.Saved)
+                {
+                    draft.State = target;
+                    draft.Revision++;
+                    draft.Due = false;
+                    draft.FiredThisArming = 0;
+                }
+            }
+        }
+
+        private async Task ExpireDraft(Draft draft)
+        {
+            if (draft.State is not null)
+            {
+                await test
+                    ._api.NotNull()
+                    .IdleDraft(draft.RowId.NotNull().Value, TimeSpan.FromHours(2))
+                    .ConfigureAwait(false);
+                draft.Revision++;
+                await test._expiring.NotNull().ExpireDrafts().ConfigureAwait(false);
+                var loaded = await Load(test._expiring.NotNull(), draft).ConfigureAwait(false);
+                if (draft.Armed)
+                    loaded.Should().BeOfType<LoadResult.Loaded>("a pending timer keeps the draft");
+                else if (
+                    string.Equals(
+                        draft.State,
+                        nameof(ReminderState.Published),
+                        StringComparison.Ordinal
+                    )
+                )
+                    loaded
+                        .Should()
+                        .BeOfType<LoadResult.Loaded>(
+                            "the effect's target is the record of what the server did, which the TTL keeps"
+                        );
+                else
+                {
+                    loaded.Should().BeOfType<LoadResult.NotFound>("idle past its TTL");
+                    Forget(draft);
+                }
+            }
+        }
+
+        private async Task DeleteAndRecreate(Draft draft)
+        {
+            // Published is the effect's target, which discard refuses (discard-not-allowed): only the server
+            // puts a draft there, so its owner cannot erase it.
+            if (draft.State is not null and not nameof(ReminderState.Published))
+            {
+                await test
+                    ._api.NotNull()
+                    .NotNull()
+                    .Delete(draft.User, draft.Id)
+                    .ConfigureAwait(false);
+                var oldRow = draft.RowId;
+                Forget(draft);
+                await Open(draft).ConfigureAwait(false);
+                draft.RowId.Should().NotBe(oldRow, "a re-created draft has a new row id");
             }
         }
 

@@ -86,38 +86,7 @@ public class JobRunnerTrainTests : TestSetup
         // a shutdown landing between the train completing and the JobRunner's bookkeeping would.
         var key = Guid.NewGuid().ToString("N");
         var input = new CancelsItsRunnerInput { Key = key };
-        var group = await CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
-        var manifest = Manifest.Create(
-            new CreateManifest
-            {
-                Name = typeof(CancelsItsRunnerTrain),
-                IsEnabled = true,
-                ScheduleType = ScheduleType.Once,
-                MaxRetries = 3,
-                Properties = input,
-            }
-        );
-        manifest.ManifestGroupId = group.Id;
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
-        DataContext.Reset();
-
-        var metadata = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = typeof(CancelsItsRunnerTrain).FullName.NotNull(),
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = input,
-                ManifestId = manifest.Id,
-            },
-            TimeProvider.System
-        );
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
-        DataContext.Reset();
+        var (manifest, metadata) = await SaveCancelsItsRunnerManifestAndRun(input);
 
         using var runner = new CancellationTokenSource();
         CancelsItsRunnerTrain.Runners[key] = runner;
@@ -151,6 +120,44 @@ public class JobRunnerTrainTests : TestSetup
                     + "not be skipped. See docs/adr/0005-a-scheduled-runs-bookkeeping-lives-in-the-junction-that-ran-it.md"
             );
         updated.IsEnabled.Should().BeFalse("a Once manifest is disabled once it has succeeded");
+    }
+
+    private async Task<(Manifest Manifest, Metadata Metadata)> SaveCancelsItsRunnerManifestAndRun(
+        CancelsItsRunnerInput input
+    )
+    {
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
+        var manifest = Manifest.Create(
+            new CreateManifest
+            {
+                Name = typeof(CancelsItsRunnerTrain),
+                IsEnabled = true,
+                ScheduleType = ScheduleType.Once,
+                MaxRetries = 3,
+                Properties = input,
+            }
+        );
+        manifest.ManifestGroupId = group.Id;
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        DataContext.Reset();
+
+        var metadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = typeof(CancelsItsRunnerTrain).FullName.NotNull(),
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = input,
+                ManifestId = manifest.Id,
+            },
+            TimeProvider.System
+        );
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        DataContext.Reset();
+
+        return (manifest, metadata);
     }
 
     #endregion

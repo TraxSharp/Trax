@@ -216,36 +216,19 @@ public class TraxScheduler(
 
             try
             {
-                var effectiveGroupId =
-                    resolved.GroupId
-                    ?? resolved.PrunePrefix
-                    ?? sourceList.Select(s => map(s).ExternalId).FirstOrDefault()
-                    ?? "batch";
+                var effectiveGroupId = EffectiveGroupId(resolved, sourceList, map);
 
-                var results = new List<Manifest>(sourceList.Count);
-
-                foreach (var source in sourceList)
-                {
-                    var (externalId, input) = map(source);
-                    var itemOptions = resolved.ManifestOptions.Copy();
-                    configureEach?.Invoke(source, itemOptions);
-
-                    var manifest = await context
-                        .UpsertManifestAsync<TTrain, TInput, TOutput>(
-                            externalId,
-                            input,
-                            schedule,
-                            itemOptions,
-                            groupId: effectiveGroupId,
-                            group: resolved.Group,
-                            timeProvider,
-                            ct: ct
-                        )
-                        .ConfigureAwait(false);
-
-                    StampOwner(manifest);
-                    results.Add(manifest);
-                }
+                var results = await UpsertEachAsync<TTrain, TInput, TOutput, TSource>(
+                        context,
+                        sourceList,
+                        map,
+                        schedule,
+                        resolved,
+                        configureEach,
+                        effectiveGroupId,
+                        ct
+                    )
+                    .ConfigureAwait(false);
 
                 await context.SaveChanges(ct).ConfigureAwait(false);
                 await context.CommitTransaction().ConfigureAwait(false);
@@ -256,19 +239,8 @@ public class TraxScheduler(
                     typeof(TTrain).Name
                 );
 
-                if (resolved.PrunePrefix is not null)
-                {
-                    var keepIds = results
-                        .Select(m => m.ExternalId)
-                        .ToHashSet(StringComparer.Ordinal);
-                    await PruneSafeAsync(
-                            resolved.PrunePrefix,
-                            resolved.BatchName is null ? null : effectiveGroupId,
-                            keepIds,
-                            ct
-                        )
-                        .ConfigureAwait(false);
-                }
+                await PruneBatchAsync(resolved, effectiveGroupId, results, ct)
+                    .ConfigureAwait(false);
 
                 return results;
             }
@@ -282,6 +254,47 @@ public class TraxScheduler(
                 transaction?.Dispose();
             }
         }
+    }
+
+    private async Task<List<Manifest>> UpsertEachAsync<TTrain, TInput, TOutput, TSource>(
+        IDataContext context,
+        List<TSource> sourceList,
+        Func<TSource, (string ExternalId, TInput Input)> map,
+        Schedule schedule,
+        ResolvedOptions resolved,
+        Action<TSource, ManifestOptions>? configureEach,
+        string effectiveGroupId,
+        CancellationToken ct
+    )
+        where TTrain : IServiceTrain<TInput, TOutput>
+        where TInput : IManifestProperties
+    {
+        var results = new List<Manifest>(sourceList.Count);
+
+        foreach (var source in sourceList)
+        {
+            var (externalId, input) = map(source);
+            var itemOptions = resolved.ManifestOptions.Copy();
+            configureEach?.Invoke(source, itemOptions);
+
+            var manifest = await context
+                .UpsertManifestAsync<TTrain, TInput, TOutput>(
+                    externalId,
+                    input,
+                    schedule,
+                    itemOptions,
+                    groupId: effectiveGroupId,
+                    group: resolved.Group,
+                    timeProvider,
+                    ct: ct
+                )
+                .ConfigureAwait(false);
+
+            StampOwner(manifest);
+            results.Add(manifest);
+        }
+
+        return results;
     }
 
     /// <inheritdoc />
@@ -372,54 +385,19 @@ public class TraxScheduler(
 
             try
             {
-                var effectiveGroupId =
-                    resolved.GroupId
-                    ?? resolved.PrunePrefix
-                    ?? sourceList.Select(s => map(s).ExternalId).FirstOrDefault()
-                    ?? "batch";
+                var effectiveGroupId = EffectiveGroupId(resolved, sourceList, map);
 
-                // Resolve all parent manifests in one query
-                var parentExternalIds = sourceList
-                    .Select(dependsOn)
-                    .Distinct(StringComparer.Ordinal)
-                    .ToList();
-                var parentManifests = await context
-                    .Manifests.Where(m => parentExternalIds.Contains(m.ExternalId))
-                    .ToDictionaryAsync(m => m.ExternalId, StringComparer.Ordinal, ct)
+                var results = await UpsertEachDependentAsync<TTrain, TInput, TOutput, TSource>(
+                        context,
+                        sourceList,
+                        map,
+                        dependsOn,
+                        resolved,
+                        configureEach,
+                        effectiveGroupId,
+                        ct
+                    )
                     .ConfigureAwait(false);
-
-                var results = new List<Manifest>(sourceList.Count);
-
-                foreach (var source in sourceList)
-                {
-                    var (externalId, input) = map(source);
-                    var parentExternalId = dependsOn(source);
-
-                    if (!parentManifests.TryGetValue(parentExternalId, out var parentManifest))
-                        throw new InvalidOperationException(
-                            $"Parent manifest with ExternalId '{parentExternalId}' not found. "
-                                + "Ensure parent manifests are scheduled before their dependents."
-                        );
-
-                    var itemOptions = resolved.ManifestOptions.Copy();
-                    configureEach?.Invoke(source, itemOptions);
-
-                    var manifest = await context
-                        .UpsertDependentManifestAsync<TTrain, TInput, TOutput>(
-                            externalId,
-                            input,
-                            parentManifest.Id,
-                            itemOptions,
-                            groupId: effectiveGroupId,
-                            group: resolved.Group,
-                            timeProvider,
-                            ct: ct
-                        )
-                        .ConfigureAwait(false);
-
-                    StampOwner(manifest);
-                    results.Add(manifest);
-                }
 
                 await context.SaveChanges(ct).ConfigureAwait(false);
                 await context.CommitTransaction().ConfigureAwait(false);
@@ -430,19 +408,8 @@ public class TraxScheduler(
                     typeof(TTrain).Name
                 );
 
-                if (resolved.PrunePrefix is not null)
-                {
-                    var keepIds = results
-                        .Select(m => m.ExternalId)
-                        .ToHashSet(StringComparer.Ordinal);
-                    await PruneSafeAsync(
-                            resolved.PrunePrefix,
-                            resolved.BatchName is null ? null : effectiveGroupId,
-                            keepIds,
-                            ct
-                        )
-                        .ConfigureAwait(false);
-                }
+                await PruneBatchAsync(resolved, effectiveGroupId, results, ct)
+                    .ConfigureAwait(false);
 
                 return results;
             }
@@ -456,6 +423,59 @@ public class TraxScheduler(
                 transaction?.Dispose();
             }
         }
+    }
+
+    private async Task<List<Manifest>> UpsertEachDependentAsync<TTrain, TInput, TOutput, TSource>(
+        IDataContext context,
+        List<TSource> sourceList,
+        Func<TSource, (string ExternalId, TInput Input)> map,
+        Func<TSource, string> dependsOn,
+        ResolvedOptions resolved,
+        Action<TSource, ManifestOptions>? configureEach,
+        string effectiveGroupId,
+        CancellationToken ct
+    )
+        where TTrain : IServiceTrain<TInput, TOutput>
+        where TInput : IManifestProperties
+    {
+        // Resolve all parent manifests in one query
+        var parentManifests = await LoadParentManifestsAsync(context, sourceList, dependsOn, ct)
+            .ConfigureAwait(false);
+
+        var results = new List<Manifest>(sourceList.Count);
+
+        foreach (var source in sourceList)
+        {
+            var (externalId, input) = map(source);
+            var parentExternalId = dependsOn(source);
+
+            if (!parentManifests.TryGetValue(parentExternalId, out var parentManifest))
+                throw new InvalidOperationException(
+                    $"Parent manifest with ExternalId '{parentExternalId}' not found. "
+                        + "Ensure parent manifests are scheduled before their dependents."
+                );
+
+            var itemOptions = resolved.ManifestOptions.Copy();
+            configureEach?.Invoke(source, itemOptions);
+
+            var manifest = await context
+                .UpsertDependentManifestAsync<TTrain, TInput, TOutput>(
+                    externalId,
+                    input,
+                    parentManifest.Id,
+                    itemOptions,
+                    groupId: effectiveGroupId,
+                    group: resolved.Group,
+                    timeProvider,
+                    ct: ct
+                )
+                .ConfigureAwait(false);
+
+            StampOwner(manifest);
+            results.Add(manifest);
+        }
+
+        return results;
     }
 
     /// <inheritdoc />
@@ -683,20 +703,7 @@ public class TraxScheduler(
 
             // An immediate trigger stores no time, as it always has; a delayed one stores its time.
             DateTime? scheduledAt = runAt > timeProvider.GetUtcNow().UtcDateTime ? runAt : null;
-            var entry = WorkQueue.Create(
-                new CreateWorkQueue
-                {
-                    TrainName = manifest.Name,
-                    Input = manifest.Properties,
-                    InputTypeName = manifest.PropertyTypeName,
-                    ManifestId = manifest.Id,
-                    StarterHash = manifest.StarterHash,
-                    Priority = manifest.Priority,
-                    ScheduledAt = scheduledAt,
-                    ExplicitTrigger = true,
-                },
-                timeProvider
-            );
+            var entry = CreateTriggerEntry(manifest, scheduledAt, timeProvider);
             context.WorkQueues.Add(entry);
 
             try
@@ -730,6 +737,30 @@ public class TraxScheduler(
                 throw;
             }
         }
+    }
+
+    private static WorkQueue CreateTriggerEntry(
+        Manifest manifest,
+        DateTime? scheduledAt,
+        TimeProvider timeProvider
+    )
+    {
+        var entry = WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = manifest.Name,
+                Input = manifest.Properties,
+                InputTypeName = manifest.PropertyTypeName,
+                ManifestId = manifest.Id,
+                StarterHash = manifest.StarterHash,
+                Priority = manifest.Priority,
+                ScheduledAt = scheduledAt,
+                ExplicitTrigger = true,
+            },
+            timeProvider
+        );
+
+        return entry;
     }
 
     // How many times a trigger inserts before it gives up on a manifest whose queued entry keeps being dispatched
@@ -807,8 +838,47 @@ public class TraxScheduler(
             ? (runAt > timeProvider.GetUtcNow().UtcDateTime ? runAt : (DateTime?)null)
             : queued.ScheduledAt;
 
+        var released = await ReleaseQueuedAsync(context, queued.Id, dueAt, askAfresh, ct)
+            .ConfigureAwait(false);
+
+        if (released == 0)
+        {
+            // Claimed between the read and the update: the entry keeps its time and its link.
+            var claimed = await context
+                .WorkQueues.AsNoTracking()
+                .Where(w => w.Id == queued.Id)
+                .Select(w => new { w.ScheduledAt, w.ReplayDecisionsOf })
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
+            return new TriggerOutcome(
+                queued.Id,
+                Created: false,
+                MovedForward: false,
+                claimed?.ScheduledAt ?? queued.ScheduledAt,
+                AlreadyDispatched: true,
+                claimed is null ? queued.ReplayDecisionsOf : claimed.ReplayDecisionsOf
+            );
+        }
+
+        return new TriggerOutcome(
+            queued.Id,
+            Created: false,
+            moveForward,
+            dueAt,
+            ReplayDecisionsOf: askAfresh ? null : queued.ReplayDecisionsOf
+        );
+    }
+
+    private static async Task<int> ReleaseQueuedAsync(
+        IDataContext context,
+        long queuedId,
+        DateTime? dueAt,
+        bool askAfresh,
+        CancellationToken ct
+    )
+    {
         var entry = context.WorkQueues.Where(w =>
-            w.Id == queued.Id && w.Status == WorkQueueStatus.Queued
+            w.Id == queuedId && w.Status == WorkQueueStatus.Queued
         );
         int released;
         if (context.SupportsSetUpdates())
@@ -840,32 +910,7 @@ public class TraxScheduler(
                 )
                 .ConfigureAwait(false);
 
-        if (released == 0)
-        {
-            // Claimed between the read and the update: the entry keeps its time and its link.
-            var claimed = await context
-                .WorkQueues.AsNoTracking()
-                .Where(w => w.Id == queued.Id)
-                .Select(w => new { w.ScheduledAt, w.ReplayDecisionsOf })
-                .FirstOrDefaultAsync(ct)
-                .ConfigureAwait(false);
-            return new TriggerOutcome(
-                queued.Id,
-                Created: false,
-                MovedForward: false,
-                claimed?.ScheduledAt ?? queued.ScheduledAt,
-                AlreadyDispatched: true,
-                claimed is null ? queued.ReplayDecisionsOf : claimed.ReplayDecisionsOf
-            );
-        }
-
-        return new TriggerOutcome(
-            queued.Id,
-            Created: false,
-            moveForward,
-            dueAt,
-            ReplayDecisionsOf: askAfresh ? null : queued.ReplayDecisionsOf
-        );
+        return released;
     }
 
     /// <inheritdoc />
@@ -1234,37 +1279,20 @@ public class TraxScheduler(
 
             try
             {
-                var effectiveGroupId =
-                    resolved.GroupId
-                    ?? resolved.PrunePrefix
-                    ?? sourceList.Select(s => map(s).ExternalId).FirstOrDefault()
-                    ?? "batch";
+                var effectiveGroupId = EffectiveGroupId(resolved, sourceList, map);
 
-                var results = new List<Manifest>(sourceList.Count);
-
-                foreach (var source in sourceList)
-                {
-                    var (externalId, input) = map(source);
-                    var itemOptions = resolved.ManifestOptions.Copy();
-                    configureEach?.Invoke(source, itemOptions);
-
-                    var manifest = await context
-                        .UpsertManifestAsync(
-                            trainType,
-                            externalId,
-                            input,
-                            schedule,
-                            itemOptions,
-                            groupId: effectiveGroupId,
-                            group: resolved.Group,
-                            timeProvider,
-                            ct: ct
-                        )
-                        .ConfigureAwait(false);
-
-                    StampOwner(manifest);
-                    results.Add(manifest);
-                }
+                var results = await UpsertEachUntypedAsync(
+                        context,
+                        trainType,
+                        sourceList,
+                        map,
+                        schedule,
+                        resolved,
+                        configureEach,
+                        effectiveGroupId,
+                        ct
+                    )
+                    .ConfigureAwait(false);
 
                 await context.SaveChanges(ct).ConfigureAwait(false);
                 await context.CommitTransaction().ConfigureAwait(false);
@@ -1275,19 +1303,8 @@ public class TraxScheduler(
                     trainType.Name
                 );
 
-                if (resolved.PrunePrefix is not null)
-                {
-                    var keepIds = results
-                        .Select(m => m.ExternalId)
-                        .ToHashSet(StringComparer.Ordinal);
-                    await PruneSafeAsync(
-                            resolved.PrunePrefix,
-                            resolved.BatchName is null ? null : effectiveGroupId,
-                            keepIds,
-                            ct
-                        )
-                        .ConfigureAwait(false);
-                }
+                await PruneBatchAsync(resolved, effectiveGroupId, results, ct)
+                    .ConfigureAwait(false);
 
                 return results;
             }
@@ -1301,6 +1318,47 @@ public class TraxScheduler(
                 transaction?.Dispose();
             }
         }
+    }
+
+    private async Task<List<Manifest>> UpsertEachUntypedAsync<TSource>(
+        IDataContext context,
+        Type trainType,
+        List<TSource> sourceList,
+        Func<TSource, (string ExternalId, IManifestProperties Input)> map,
+        Schedule schedule,
+        ResolvedOptions resolved,
+        Action<TSource, ManifestOptions>? configureEach,
+        string effectiveGroupId,
+        CancellationToken ct
+    )
+    {
+        var results = new List<Manifest>(sourceList.Count);
+
+        foreach (var source in sourceList)
+        {
+            var (externalId, input) = map(source);
+            var itemOptions = resolved.ManifestOptions.Copy();
+            configureEach?.Invoke(source, itemOptions);
+
+            var manifest = await context
+                .UpsertManifestAsync(
+                    trainType,
+                    externalId,
+                    input,
+                    schedule,
+                    itemOptions,
+                    groupId: effectiveGroupId,
+                    group: resolved.Group,
+                    timeProvider,
+                    ct: ct
+                )
+                .ConfigureAwait(false);
+
+            StampOwner(manifest);
+            results.Add(manifest);
+        }
+
+        return results;
     }
 
     internal async Task<IReadOnlyList<Manifest>> ScheduleManyDependentAsyncUntyped<TSource>(
@@ -1329,55 +1387,20 @@ public class TraxScheduler(
 
             try
             {
-                var effectiveGroupId =
-                    resolved.GroupId
-                    ?? resolved.PrunePrefix
-                    ?? sourceList.Select(s => map(s).ExternalId).FirstOrDefault()
-                    ?? "batch";
+                var effectiveGroupId = EffectiveGroupId(resolved, sourceList, map);
 
-                // Resolve all parent manifests in one query
-                var parentExternalIds = sourceList
-                    .Select(dependsOn)
-                    .Distinct(StringComparer.Ordinal)
-                    .ToList();
-                var parentManifests = await context
-                    .Manifests.Where(m => parentExternalIds.Contains(m.ExternalId))
-                    .ToDictionaryAsync(m => m.ExternalId, StringComparer.Ordinal, ct)
+                var results = await UpsertEachDependentUntypedAsync(
+                        context,
+                        trainType,
+                        sourceList,
+                        map,
+                        dependsOn,
+                        resolved,
+                        configureEach,
+                        effectiveGroupId,
+                        ct
+                    )
                     .ConfigureAwait(false);
-
-                var results = new List<Manifest>(sourceList.Count);
-
-                foreach (var source in sourceList)
-                {
-                    var (externalId, input) = map(source);
-                    var parentExternalId = dependsOn(source);
-
-                    if (!parentManifests.TryGetValue(parentExternalId, out var parentManifest))
-                        throw new InvalidOperationException(
-                            $"Parent manifest with ExternalId '{parentExternalId}' not found. "
-                                + "Ensure parent manifests are scheduled before their dependents."
-                        );
-
-                    var itemOptions = resolved.ManifestOptions.Copy();
-                    configureEach?.Invoke(source, itemOptions);
-
-                    var manifest = await context
-                        .UpsertDependentManifestAsync(
-                            trainType,
-                            externalId,
-                            input,
-                            parentManifest.Id,
-                            itemOptions,
-                            groupId: effectiveGroupId,
-                            group: resolved.Group,
-                            timeProvider,
-                            ct: ct
-                        )
-                        .ConfigureAwait(false);
-
-                    StampOwner(manifest);
-                    results.Add(manifest);
-                }
 
                 await context.SaveChanges(ct).ConfigureAwait(false);
                 await context.CommitTransaction().ConfigureAwait(false);
@@ -1388,19 +1411,8 @@ public class TraxScheduler(
                     trainType.Name
                 );
 
-                if (resolved.PrunePrefix is not null)
-                {
-                    var keepIds = results
-                        .Select(m => m.ExternalId)
-                        .ToHashSet(StringComparer.Ordinal);
-                    await PruneSafeAsync(
-                            resolved.PrunePrefix,
-                            resolved.BatchName is null ? null : effectiveGroupId,
-                            keepIds,
-                            ct
-                        )
-                        .ConfigureAwait(false);
-                }
+                await PruneBatchAsync(resolved, effectiveGroupId, results, ct)
+                    .ConfigureAwait(false);
 
                 return results;
             }
@@ -1414,6 +1426,59 @@ public class TraxScheduler(
                 transaction?.Dispose();
             }
         }
+    }
+
+    private async Task<List<Manifest>> UpsertEachDependentUntypedAsync<TSource>(
+        IDataContext context,
+        Type trainType,
+        List<TSource> sourceList,
+        Func<TSource, (string ExternalId, IManifestProperties Input)> map,
+        Func<TSource, string> dependsOn,
+        ResolvedOptions resolved,
+        Action<TSource, ManifestOptions>? configureEach,
+        string effectiveGroupId,
+        CancellationToken ct
+    )
+    {
+        // Resolve all parent manifests in one query
+        var parentManifests = await LoadParentManifestsAsync(context, sourceList, dependsOn, ct)
+            .ConfigureAwait(false);
+
+        var results = new List<Manifest>(sourceList.Count);
+
+        foreach (var source in sourceList)
+        {
+            var (externalId, input) = map(source);
+            var parentExternalId = dependsOn(source);
+
+            if (!parentManifests.TryGetValue(parentExternalId, out var parentManifest))
+                throw new InvalidOperationException(
+                    $"Parent manifest with ExternalId '{parentExternalId}' not found. "
+                        + "Ensure parent manifests are scheduled before their dependents."
+                );
+
+            var itemOptions = resolved.ManifestOptions.Copy();
+            configureEach?.Invoke(source, itemOptions);
+
+            var manifest = await context
+                .UpsertDependentManifestAsync(
+                    trainType,
+                    externalId,
+                    input,
+                    parentManifest.Id,
+                    itemOptions,
+                    groupId: effectiveGroupId,
+                    group: resolved.Group,
+                    timeProvider,
+                    ct: ct
+                )
+                .ConfigureAwait(false);
+
+            StampOwner(manifest);
+            results.Add(manifest);
+        }
+
+        return results;
     }
 
     // ── Dead Letter Operations ────────────────────────────────────────────
@@ -1462,39 +1527,15 @@ public class TraxScheduler(
                     "Dead letter not found or already resolved"
                 );
 
-            // One queued entry per manifest (ix_work_queue_unique_queued_manifest). A second would
-            // fail the insert; the queued one already runs the manifest's work.
-            var queuedId = await context
-                .WorkQueues.Where(q =>
-                    q.ManifestId == deadLetter.ManifestId && q.Status == WorkQueueStatus.Queued
-                )
-                .Select(q => (long?)q.Id)
-                .FirstOrDefaultAsync(ct)
+            if (
+                await QueuedEntryRefusalAsync(context, deadLetter.ManifestId, ct)
+                    .ConfigureAwait(false) is
+                { } queuedRefusal
+            )
+                return queuedRefusal;
+
+            var entry = await CreateRequeueEntryAsync(deadLetter, askAfresh, ct)
                 .ConfigureAwait(false);
-
-            if (queuedId is { } existing)
-                return new DeadLetterOperationResult(
-                    Success: false,
-                    WorkQueueId: null,
-                    string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"The manifest already has a queued entry (WorkQueue {existing}); the dead letter "
-                    ) + "is left awaiting intervention."
-                );
-
-            var replayDecisionsOf = askAfresh
-                ? null
-                : await RetryReplay
-                    .SourceForRetryAsync(deadLetter.Manifest.NotNull(), ct)
-                    .ConfigureAwait(false);
-            // Resumed after the failed run's latest checkpoint when it has one the chain allows,
-            // whether or not it asks afresh: that concerns its deciders (Trax.Docs/adr/0047).
-            var resumeFrom = RetryResume is { } resume
-                ? await resume
-                    .SourceForRetryAsync(deadLetter.Manifest.NotNull(), ct)
-                    .ConfigureAwait(false)
-                : null;
-            var entry = CreateWorkQueueFromDeadLetter(deadLetter, replayDecisionsOf, resumeFrom);
             context.WorkQueues.Add(entry);
 
             deadLetter.Requeue(
@@ -1502,27 +1543,12 @@ public class TraxScheduler(
                 timeProvider
             );
 
-            try
-            {
-                // A replay of the same run queued since the lookup: the entry asks afresh instead.
-                await RetryReplayLinks
-                    .SaveAskingAfreshOnConflictAsync(context, [entry], logger, ct)
-                    .ConfigureAwait(false);
-            }
-            catch (DbUpdateException)
-            {
-                // Queued by someone else between the check above and this insert: the index refused
-                // the second entry and nothing was written. Anything else is rethrown.
-                if (!await AnyQueuedAsync([deadLetter.ManifestId], ct).ConfigureAwait(false))
-                    throw;
-
-                return new DeadLetterOperationResult(
-                    Success: false,
-                    WorkQueueId: null,
-                    "The manifest already has a queued entry; the dead letter is left awaiting "
-                        + "intervention."
-                );
-            }
+            if (
+                await SaveRequeueAsync(context, entry, deadLetter.ManifestId, ct)
+                    .ConfigureAwait(false) is
+                { } collided
+            )
+                return collided;
 
             // WorkQueue ID is available after SaveChanges — update the resolution note
             deadLetter.ResolutionNote = string.Create(
@@ -1531,18 +1557,105 @@ public class TraxScheduler(
             );
             await context.SaveChanges(ct).ConfigureAwait(false);
 
-            // A requeue both resolves a dead letter and creates a work-queue entry.
-            changeSignal?.Notify(ChangeDomain.DeadLetter);
-            changeSignal?.Notify(ChangeDomain.WorkQueue);
-
-            logger.LogInformation(
-                "Requeued dead letter {DeadLetterId} as WorkQueue {WorkQueueId}",
-                deadLetterId,
-                entry.Id
-            );
+            AnnounceRequeue(deadLetterId, entry.Id);
 
             return new DeadLetterOperationResult(Success: true, entry.Id, "Dead letter requeued");
         }
+    }
+
+    private void AnnounceRequeue(long deadLetterId, long workQueueId)
+    {
+        // A requeue both resolves a dead letter and creates a work-queue entry.
+        changeSignal?.Notify(ChangeDomain.DeadLetter);
+        changeSignal?.Notify(ChangeDomain.WorkQueue);
+
+        logger.LogInformation(
+            "Requeued dead letter {DeadLetterId} as WorkQueue {WorkQueueId}",
+            deadLetterId,
+            workQueueId
+        );
+    }
+
+    private async Task<DeadLetterOperationResult?> SaveRequeueAsync(
+        IDataContext context,
+        WorkQueue entry,
+        long manifestId,
+        CancellationToken ct
+    )
+    {
+        try
+        {
+            // A replay of the same run queued since the lookup: the entry asks afresh instead.
+            await RetryReplayLinks
+                .SaveAskingAfreshOnConflictAsync(context, [entry], logger, ct)
+                .ConfigureAwait(false);
+        }
+        catch (DbUpdateException)
+        {
+            // Queued by someone else between the check above and this insert: the index refused
+            // the second entry and nothing was written. Anything else is rethrown.
+            if (!await AnyQueuedAsync([manifestId], ct).ConfigureAwait(false))
+                throw;
+
+            return new DeadLetterOperationResult(
+                Success: false,
+                WorkQueueId: null,
+                "The manifest already has a queued entry; the dead letter is left awaiting "
+                    + "intervention."
+            );
+        }
+
+        return null;
+    }
+
+    private async Task<WorkQueue> CreateRequeueEntryAsync(
+        Effect.Models.DeadLetter.DeadLetter deadLetter,
+        bool askAfresh,
+        CancellationToken ct
+    )
+    {
+        var replayDecisionsOf = askAfresh
+            ? null
+            : await RetryReplay
+                .SourceForRetryAsync(deadLetter.Manifest.NotNull(), ct)
+                .ConfigureAwait(false);
+        // Resumed after the failed run's latest checkpoint when it has one the chain allows,
+        // whether or not it asks afresh: that concerns its deciders (Trax.Docs/adr/0047).
+        var resumeFrom = RetryResume is { } resume
+            ? await resume
+                .SourceForRetryAsync(deadLetter.Manifest.NotNull(), ct)
+                .ConfigureAwait(false)
+            : null;
+        var entry = CreateWorkQueueFromDeadLetter(deadLetter, replayDecisionsOf, resumeFrom);
+
+        return entry;
+    }
+
+    private static async Task<DeadLetterOperationResult?> QueuedEntryRefusalAsync(
+        IDataContext context,
+        long manifestId,
+        CancellationToken ct
+    )
+    {
+        // One queued entry per manifest (ix_work_queue_unique_queued_manifest). A second would
+        // fail the insert; the queued one already runs the manifest's work.
+        var queuedId = await context
+            .WorkQueues.Where(q => q.ManifestId == manifestId && q.Status == WorkQueueStatus.Queued)
+            .Select(q => (long?)q.Id)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+
+        if (queuedId is { } existing)
+            return new DeadLetterOperationResult(
+                Success: false,
+                WorkQueueId: null,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The manifest already has a queued entry (WorkQueue {existing}); the dead letter "
+                ) + "is left awaiting intervention."
+            );
+
+        return null;
     }
 
     /// <inheritdoc />
@@ -1965,17 +2078,8 @@ public class TraxScheduler(
     )
     {
         var manifestIds = deadLetters.Select(d => d.ManifestId).Distinct().ToList();
-        var alreadyQueued = (
-            await context
-                .WorkQueues.Where(q =>
-                    q.ManifestId != null
-                    && manifestIds.Contains(q.ManifestId.Value)
-                    && q.Status == WorkQueueStatus.Queued
-                )
-                .Select(q => q.ManifestId.NotNull().Value)
-                .ToListAsync(ct)
-                .ConfigureAwait(false)
-        ).ToHashSet();
+        var alreadyQueued = await QueuedManifestIdsAsync(context, manifestIds, ct)
+            .ConfigureAwait(false);
 
         var skipped = deadLetters.Count(d => alreadyQueued.Contains(d.ManifestId));
         var groups = deadLetters
@@ -1984,6 +2088,78 @@ public class TraxScheduler(
             .Select(g => g.OrderByDescending(d => d.Id).ToList())
             .ToList();
 
+        var batches = await BuildRequeueBatchesAsync(groups, askAfresh, ct).ConfigureAwait(false);
+
+        if (firstAttempt && BeforeRequeueInsert is { } hook)
+            await hook(ct).ConfigureAwait(false);
+
+        foreach (var (entry, members) in batches)
+        {
+            context.WorkQueues.Add(entry);
+            foreach (var dl in members)
+                dl.Requeue("Re-queued (batch)", timeProvider);
+        }
+
+        // A replay of the same run queued since the lookup: that entry asks afresh instead.
+        await RetryReplayLinks
+            .SaveAskingAfreshOnConflictAsync(
+                context,
+                batches.Select(b => b.Entry).ToList(),
+                logger,
+                ct
+            )
+            .ConfigureAwait(false);
+
+        NoteRequeuedEntries(batches);
+
+        var resolved = batches.Sum(b => b.Members.Count);
+        var folded = resolved - batches.Count;
+
+        if (resolved > 0)
+        {
+            await context.SaveChanges(ct).ConfigureAwait(false);
+            changeSignal?.Notify(ChangeDomain.DeadLetter);
+            changeSignal?.Notify(ChangeDomain.WorkQueue);
+        }
+
+        logger.LogInformation(
+            "Requeued {Count} dead letters as {Entries} work queue entries ({Folded} folded, {Skipped} skipped)",
+            resolved,
+            batches.Count,
+            folded,
+            skipped
+        );
+
+        return new RequeueCounts(resolved, batches.Count, folded, skipped);
+    }
+
+    private static void NoteRequeuedEntries(
+        List<(WorkQueue Entry, List<Effect.Models.DeadLetter.DeadLetter> Members)> batches
+    )
+    {
+        // Entry ids exist only after the first save; name them in the notes, as a single requeue does.
+        foreach (var (entry, members) in batches)
+        {
+            members[0].ResolutionNote = string.Create(
+                CultureInfo.InvariantCulture,
+                $"Re-queued (WorkQueue {entry.Id})"
+            );
+            foreach (var dl in members.Skip(1))
+                dl.ResolutionNote = string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Re-queued with dead letter {members[0].Id} (WorkQueue {entry.Id})"
+                );
+        }
+    }
+
+    private async Task<
+        List<(WorkQueue Entry, List<Effect.Models.DeadLetter.DeadLetter> Members)>
+    > BuildRequeueBatchesAsync(
+        List<List<Effect.Models.DeadLetter.DeadLetter>> groups,
+        bool askAfresh,
+        CancellationToken ct
+    )
+    {
         // A dead-letter requeue retries the manifest's failed run, so it replays that run's
         // decisions as the ManifestManager's retry does, under the same checks, looked up for the
         // whole page at once (docs/adr/0017). An operator who asks afresh gets no link.
@@ -2017,59 +2193,28 @@ public class TraxScheduler(
             )
             .ToList();
 
-        if (firstAttempt && BeforeRequeueInsert is { } hook)
-            await hook(ct).ConfigureAwait(false);
+        return batches;
+    }
 
-        foreach (var (entry, members) in batches)
-        {
-            context.WorkQueues.Add(entry);
-            foreach (var dl in members)
-                dl.Requeue("Re-queued (batch)", timeProvider);
-        }
+    private static async Task<HashSet<long>> QueuedManifestIdsAsync(
+        IDataContext context,
+        List<long> manifestIds,
+        CancellationToken ct
+    )
+    {
+        var alreadyQueued = (
+            await context
+                .WorkQueues.Where(q =>
+                    q.ManifestId != null
+                    && manifestIds.Contains(q.ManifestId.Value)
+                    && q.Status == WorkQueueStatus.Queued
+                )
+                .Select(q => q.ManifestId.NotNull().Value)
+                .ToListAsync(ct)
+                .ConfigureAwait(false)
+        ).ToHashSet();
 
-        // A replay of the same run queued since the lookup: that entry asks afresh instead.
-        await RetryReplayLinks
-            .SaveAskingAfreshOnConflictAsync(
-                context,
-                batches.Select(b => b.Entry).ToList(),
-                logger,
-                ct
-            )
-            .ConfigureAwait(false);
-
-        // Entry ids exist only after the first save; name them in the notes, as a single requeue does.
-        foreach (var (entry, members) in batches)
-        {
-            members[0].ResolutionNote = string.Create(
-                CultureInfo.InvariantCulture,
-                $"Re-queued (WorkQueue {entry.Id})"
-            );
-            foreach (var dl in members.Skip(1))
-                dl.ResolutionNote = string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"Re-queued with dead letter {members[0].Id} (WorkQueue {entry.Id})"
-                );
-        }
-
-        var resolved = batches.Sum(b => b.Members.Count);
-        var folded = resolved - batches.Count;
-
-        if (resolved > 0)
-        {
-            await context.SaveChanges(ct).ConfigureAwait(false);
-            changeSignal?.Notify(ChangeDomain.DeadLetter);
-            changeSignal?.Notify(ChangeDomain.WorkQueue);
-        }
-
-        logger.LogInformation(
-            "Requeued {Count} dead letters as {Entries} work queue entries ({Folded} folded, {Skipped} skipped)",
-            resolved,
-            batches.Count,
-            folded,
-            skipped
-        );
-
-        return new RequeueCounts(resolved, batches.Count, folded, skipped);
+        return alreadyQueued;
     }
 
     private WorkQueue CreateWorkQueueFromDeadLetter(
@@ -2198,6 +2343,53 @@ public class TraxScheduler(
             .Manifests.FirstOrDefaultAsync(m => m.ExternalId == externalId, ct)
             .ConfigureAwait(false)
         ?? throw new InvalidOperationException($"No manifest found with ExternalId '{externalId}'");
+
+    private static string EffectiveGroupId<TSource, TInput>(
+        ResolvedOptions resolved,
+        List<TSource> sourceList,
+        Func<TSource, (string ExternalId, TInput Input)> map
+    ) =>
+        resolved.GroupId
+        ?? resolved.PrunePrefix
+        ?? sourceList.Select(s => map(s).ExternalId).FirstOrDefault()
+        ?? "batch";
+
+    private static async Task<Dictionary<string, Manifest>> LoadParentManifestsAsync<TSource>(
+        IDataContext context,
+        List<TSource> sourceList,
+        Func<TSource, string> dependsOn,
+        CancellationToken ct
+    )
+    {
+        var parentExternalIds = sourceList
+            .Select(dependsOn)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        return await context
+            .Manifests.Where(m => parentExternalIds.Contains(m.ExternalId))
+            .ToDictionaryAsync(m => m.ExternalId, StringComparer.Ordinal, ct)
+            .ConfigureAwait(false);
+    }
+
+    private async Task PruneBatchAsync(
+        ResolvedOptions resolved,
+        string effectiveGroupId,
+        List<Manifest> results,
+        CancellationToken ct
+    )
+    {
+        if (resolved.PrunePrefix is not null)
+        {
+            var keepIds = results.Select(m => m.ExternalId).ToHashSet(StringComparer.Ordinal);
+            await PruneSafeAsync(
+                    resolved.PrunePrefix,
+                    resolved.BatchName is null ? null : effectiveGroupId,
+                    keepIds,
+                    ct
+                )
+                .ConfigureAwait(false);
+        }
+    }
 
     private async Task PruneSafeAsync(
         string prunePrefix,

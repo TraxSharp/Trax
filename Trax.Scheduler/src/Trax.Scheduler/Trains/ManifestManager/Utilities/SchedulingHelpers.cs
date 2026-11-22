@@ -110,19 +110,7 @@ internal static class SchedulingHelpers
                 : null;
 
         // A copy holding only what due-ness reads, advanced as each listed run "succeeds".
-        var state = new Manifest
-        {
-            ScheduleType = manifest.ScheduleType,
-            CronExpression = manifest.CronExpression,
-            IntervalSeconds = manifest.IntervalSeconds,
-            MisfirePolicy = manifest.MisfirePolicy,
-            MisfireThresholdSeconds = manifest.MisfireThresholdSeconds,
-            ScheduledAt = AsUtc(manifest.ScheduledAt),
-            Exclusions = manifest.Exclusions,
-            LastSuccessfulRun = AsUtc(manifest.LastSuccessfulRun),
-            NextScheduledRun = AsUtc(manifest.NextScheduledRun),
-            IsEnabled = true,
-        };
+        var state = DueStateCopy(manifest);
         var exclusions = manifest.GetExclusions();
         var cancelled = AsUtc(lastCancelledRun);
 
@@ -159,6 +147,21 @@ internal static class SchedulingHelpers
 
         return runs;
     }
+
+    private static Manifest DueStateCopy(Manifest manifest) =>
+        new()
+        {
+            ScheduleType = manifest.ScheduleType,
+            CronExpression = manifest.CronExpression,
+            IntervalSeconds = manifest.IntervalSeconds,
+            MisfirePolicy = manifest.MisfirePolicy,
+            MisfireThresholdSeconds = manifest.MisfireThresholdSeconds,
+            ScheduledAt = AsUtc(manifest.ScheduledAt),
+            Exclusions = manifest.Exclusions,
+            LastSuccessfulRun = AsUtc(manifest.LastSuccessfulRun),
+            NextScheduledRun = AsUtc(manifest.NextScheduledRun),
+            IsEnabled = true,
+        };
 
     /// <summary>
     /// The first instant after <paramref name="cursor"/> at which the schedule itself, leaving
@@ -430,33 +433,8 @@ internal static class SchedulingHelpers
                 is not null;
 
         // Use pre-computed next run time if available (variance-aware, or the first occurrence)
-        DateTime nextDueValue;
-        if (anchor.NextScheduledRun.HasValue)
-        {
-            nextDueValue = anchor.NextScheduledRun.Value;
-        }
-        else
-        {
-            var parsed = CronParser.TryParse(manifest.CronExpression.NotNull());
-            if (parsed is null)
-            {
-                logger.LogWarning(
-                    "Manifest {ManifestId}: could not parse cron expression '{Expression}'",
-                    manifest.Id,
-                    manifest.CronExpression
-                );
-                return false;
-            }
-
-            var nextDue = parsed.GetNextOccurrence(
-                anchor.LastRun.NotNull().Value,
-                TimeZoneInfo.Utc
-            );
-            if (nextDue is null)
-                return false;
-
-            nextDueValue = nextDue.Value;
-        }
+        if (NextCronDue(manifest, anchor, logger) is not { } nextDueValue)
+            return false;
 
         // Not yet due
         if (nextDueValue > now)
@@ -496,6 +474,29 @@ internal static class SchedulingHelpers
             overdueSeconds,
             logger
         );
+    }
+
+    private static DateTime? NextCronDue(Manifest manifest, ScheduleAnchor anchor, ILogger logger)
+    {
+        if (anchor.NextScheduledRun.HasValue)
+            return anchor.NextScheduledRun.Value;
+
+        var parsed = CronParser.TryParse(manifest.CronExpression.NotNull());
+        if (parsed is null)
+        {
+            logger.LogWarning(
+                "Manifest {ManifestId}: could not parse cron expression '{Expression}'",
+                manifest.Id,
+                manifest.CronExpression
+            );
+            return null;
+        }
+
+        var nextDue = parsed.GetNextOccurrence(anchor.LastRun.NotNull().Value, TimeZoneInfo.Utc);
+        if (nextDue is null)
+            return null;
+
+        return nextDue.Value;
     }
 
     /// <summary>
