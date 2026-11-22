@@ -105,7 +105,7 @@ public class MigrateOnDeployTests
         );
         var host = new UnstartedHost(services);
 
-        var act = async () => await host.RunTraxAsync(["--trax-migrate"]);
+        var act = async () => await host.RunTraxAsync(["--trax-migrate"]).ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -137,17 +137,26 @@ public class MigrateOnDeployTests
 
     private async Task<List<string>> AppliedMigrations()
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(
-            $"SELECT \"MigrationId\" FROM {Schema}.\"__EFMigrationsHistory\" ORDER BY 1",
-            connection
-        );
-        var ids = new List<string>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-            ids.Add(reader.GetString(0));
-        return ids;
+        var connection = new NpgsqlConnection(_connectionString);
+        await using (connection.ConfigureAwait(false))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            var command = new NpgsqlCommand(
+                $"SELECT \"MigrationId\" FROM {Schema}.\"__EFMigrationsHistory\" ORDER BY 1",
+                connection
+            );
+            await using (command.ConfigureAwait(false))
+            {
+                var ids = new List<string>();
+                var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+                await using (reader.ConfigureAwait(false))
+                {
+                    while (await reader.ReadAsync().ConfigureAwait(false))
+                        ids.Add(reader.GetString(0));
+                }
+                return ids;
+            }
+        }
     }
 
     private async Task Exec(string sql)
@@ -206,7 +215,7 @@ public class MigrateOnDeployTests
     public sealed class Widget
     {
         public int Id { get; set; }
-        public string Name { get; set; } = null!;
+        public string Name { get; set; } = "";
     }
 
     /// <summary>A context that has EF migrations, so a migrate process runs them rather than creating its tables.</summary>
