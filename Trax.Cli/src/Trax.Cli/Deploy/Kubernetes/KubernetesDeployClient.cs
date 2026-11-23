@@ -217,18 +217,72 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
                     failed?.Reason ?? failed?.Message,
                     await LogTailAsync(ns, $"job-name={name}", ct).ConfigureAwait(false)
                 );
-            if (_clock.GetUtcNow() > deadline)
-                return new KubernetesJobResult(
-                    Succeeded: false,
-                    string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"still running after {timeout.TotalMinutes:0} minutes"
-                    ),
-                    await LogTailAsync(ns, $"job-name={name}", ct).ConfigureAwait(false)
-                );
+            var stuck = await StuckAsync(ns, name, ct).ConfigureAwait(false);
+            if (stuck is not null || _clock.GetUtcNow() > deadline)
+                return await GiveUpAsync(
+                        ns,
+                        name,
+                        stuck
+                            ?? string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"still running after {timeout.TotalMinutes:0} minutes"
+                            ),
+                        ct
+                    )
+                    .ConfigureAwait(false);
             await Task.Delay(Poll, _clock, ct).ConfigureAwait(false);
         }
     }
+
+    /// <summary>
+    /// Why the Job's pod can never start, or null. A Job with no retries does not fail while its pod waits on an
+    /// image it cannot pull, so without this the wait would run to its deadline.
+    /// </summary>
+    private async Task<string?> StuckAsync(string ns, string job, CancellationToken ct)
+    {
+        var pods = await _client
+            .CoreV1.ListNamespacedPodAsync(
+                ns,
+                labelSelector: $"job-name={job}",
+                cancellationToken: ct
+            )
+            .ConfigureAwait(false);
+        return pods
+            .Items.Select(Waiting)
+            .Where(w => w?.Reason is { } reason && NeverStarts.Contains(reason))
+            .Select(w => $"{w?.Reason}: {w?.Message}".TrimEnd(' ', ':'))
+            .FirstOrDefault();
+    }
+
+    /// <summary>Reads the end of the Job's log, then deletes the Job so its pod stops retrying.</summary>
+    private async Task<KubernetesJobResult> GiveUpAsync(
+        string ns,
+        string job,
+        string reason,
+        CancellationToken ct
+    )
+    {
+        var tail = await LogTailAsync(ns, $"job-name={job}", ct).ConfigureAwait(false);
+        await OrNull(() =>
+                _client.BatchV1.DeleteNamespacedJobAsync(
+                    job,
+                    ns,
+                    propagationPolicy: "Background",
+                    cancellationToken: ct
+                )
+            )
+            .ConfigureAwait(false);
+        return new KubernetesJobResult(Succeeded: false, reason, tail);
+    }
+
+    /// <summary>The waiting reasons a container does not recover from without a change to the Job.</summary>
+    private static readonly HashSet<string> NeverStarts = new(StringComparer.Ordinal)
+    {
+        "ImagePullBackOff",
+        "ErrImagePull",
+        "CreateContainerConfigError",
+        "InvalidImageName",
+    };
 
     private async Task<string> LogTailAsync(string ns, string selector, CancellationToken ct)
     {
@@ -238,7 +292,7 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
         var tail = new List<string>();
         foreach (var pod in pods.Items)
         {
-            var log = await OrNull(() =>
+            var log = await NotStarted(() =>
                     _client.CoreV1.ReadNamespacedPodLogAsync(
                         pod.Metadata.Name,
                         ns,
@@ -249,7 +303,7 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
                 .ConfigureAwait(false);
             if (log is null)
             {
-                var waiting = pod.Status?.ContainerStatuses?.FirstOrDefault()?.State?.Waiting;
+                var waiting = Waiting(pod);
                 tail.Add(
                     $"[{pod.Metadata.Name}] no log ({waiting?.Reason ?? pod.Status?.Phase}: {waiting?.Message})"
                 );
@@ -537,6 +591,23 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
                 }
             )
             .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// A pod's log, or null when there is none to read: the pod is gone (404), or its container has not started
+    /// (400).
+    /// </summary>
+    private static async Task<Stream?> NotStarted(Func<Task<Stream>> call)
+    {
+        try
+        {
+            return await call().ConfigureAwait(false);
+        }
+        catch (HttpOperationException ex)
+            when (ex.Response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.BadRequest)
+        {
+            return null;
+        }
     }
 
     /// <summary>The call's result, or null when the object does not exist.</summary>
