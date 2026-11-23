@@ -45,8 +45,9 @@ internal sealed class KubernetesDeployer(
     }
 
     /// <summary>
-    /// Makes the namespace this app's to apply to: creates it when missing, refuses it or any object in it another
-    /// app deployed, and refuses a Secret without every key the app needs. Nothing is applied before this passes.
+    /// Makes the namespace this app's to apply to: refuses it or any object in it another app deployed, and a Secret
+    /// without every key the app needs, then creates the namespace when it is missing. A missing namespace has no
+    /// Secret, so it is refused before it is made unless the app reads none. Nothing is applied before this passes.
     /// </summary>
     private async Task PrepareNamespaceAsync(
         DeployFile file,
@@ -57,6 +58,7 @@ internal sealed class KubernetesDeployer(
     {
         var ns = manifests.NamespaceName;
         var labels = await cluster.NamespaceLabelsAsync(ns, ct).ConfigureAwait(false);
+        var exists = labels is not null;
         if (labels is not null)
             CheckOwner(
                 file,
@@ -64,17 +66,25 @@ internal sealed class KubernetesDeployer(
                 labels.GetValueOrDefault(KubernetesTarget.AppLabel),
                 ownerless: true
             );
-        else
+
+        await CheckSecretAsync(
+                ns,
+                manifests.SecretName,
+                manifests.SecretKeys,
+                environment,
+                exists,
+                ct
+            )
+            .ConfigureAwait(false);
+        if (manifests.DatabaseSecret is { } database)
+            await CheckSecretAsync(ns, database.Name, [database.Key], environment, exists, ct)
+                .ConfigureAwait(false);
+
+        if (!exists)
         {
             say($"Creating namespace {ns}...");
             await cluster.CreateNamespaceAsync(manifests.Namespace, ct).ConfigureAwait(false);
         }
-
-        await CheckSecretAsync(ns, manifests.SecretName, manifests.SecretKeys, environment, ct)
-            .ConfigureAwait(false);
-        if (manifests.DatabaseSecret is { } database)
-            await CheckSecretAsync(ns, database.Name, [database.Key], environment, ct)
-                .ConfigureAwait(false);
 
         var applying = manifests.All.Skip(1).Select(o => (o.Kind, o.Metadata.Name)).ToHashSet();
         foreach (var existing in await cluster.ListAsync(ns, ct).ConfigureAwait(false))
@@ -219,6 +229,7 @@ internal sealed class KubernetesDeployer(
         string secret,
         IReadOnlyList<string> keys,
         string environment,
+        bool namespaceExists,
         CancellationToken ct
     )
     {
@@ -238,6 +249,7 @@ internal sealed class KubernetesDeployer(
                 + " Nothing was applied. Write every key it needs into a file, one KEY=value line each ("
                 + string.Join(", ", keys)
                 + "), and create it from that file, so no value is on a command line:\n  "
+                + (namespaceExists ? "" : $"kubectl create namespace {ns}\n  ")
                 + $"kubectl create secret generic {secret} -n {ns} --from-env-file=<file>"
                 + (held is null ? "" : " --dry-run=client -o yaml | kubectl apply -f -")
                 + $"\nthen delete the file and run 'trax deploy --env {environment}' again."

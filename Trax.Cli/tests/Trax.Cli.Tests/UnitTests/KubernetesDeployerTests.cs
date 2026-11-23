@@ -46,8 +46,8 @@ public class KubernetesDeployerTests
             .Calls.Should()
             .Equal(
                 "read-namespace orders-staging",
-                "create-namespace orders-staging",
                 "secret orders-staging",
+                "create-namespace orders-staging",
                 "list",
                 "apply Service/database",
                 "apply StatefulSet/database",
@@ -83,6 +83,20 @@ public class KubernetesDeployerTests
             .And.NotContain("--from-literal", "a value on the command line lands in shell history");
         cluster.Calls.Should().NotContain(c => c.StartsWith("apply") || c.StartsWith("create-job"));
         images.Published.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task A_missing_namespace_without_its_secret_is_refused_before_it_is_created()
+    {
+        var (deployer, cluster, _) = Deployer();
+        cluster.SecretKeys = null;
+
+        var act = () => Deploy(deployer);
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
+            "*no Secret orders-staging*Nothing was applied*kubectl create namespace orders-staging*"
+        );
+        cluster.Calls.Should().Equal("read-namespace orders-staging", "secret orders-staging");
     }
 
     [Test]
