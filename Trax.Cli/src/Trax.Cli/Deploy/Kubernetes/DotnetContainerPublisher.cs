@@ -14,11 +14,12 @@ internal sealed class DotnetContainerPublisher : IContainerImagePublisher
         string projectPath,
         string? registry,
         string repository,
-        string tag
+        string tag,
+        string? localRuntime = null
     )
     {
         var (exit, stdout, stderr) = await ChildProcess
-            .RunAsync(StartInfo(projectPath, registry, repository, tag))
+            .RunAsync(StartInfo(projectPath, registry, repository, tag, localRuntime))
             .ConfigureAwait(false);
         if (exit != 0)
             throw new InvalidOperationException(
@@ -33,7 +34,8 @@ internal sealed class DotnetContainerPublisher : IContainerImagePublisher
         string projectPath,
         string? registry,
         string repository,
-        string tag
+        string tag,
+        string? localRuntime = null
     )
     {
         var psi = new ProcessStartInfo("dotnet")
@@ -57,7 +59,12 @@ internal sealed class DotnetContainerPublisher : IContainerImagePublisher
         foreach (var arg in args)
             psi.ArgumentList.Add(arg);
         if (registry is null)
+        {
             psi.ArgumentList.Add($"-p:ContainerRepository={repository}");
+            // The SDK loads into docker when it finds one; a podman environment's units read podman's store.
+            if (localRuntime is not null)
+                psi.ArgumentList.Add($"-p:LocalRegistry={localRuntime}");
+        }
         else
         {
             // ghcr.io/acme is the registry ghcr.io and the repository acme/<image>.

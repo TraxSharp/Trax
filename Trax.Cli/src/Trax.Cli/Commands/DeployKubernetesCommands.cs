@@ -21,6 +21,19 @@ internal static class DeployKubernetesCommands
 
     internal static IContainerImagePublisher Images { get; set; } = new DotnetContainerPublisher();
 
+    /// <summary>
+    /// Where a podman environment's Secrets are written with their values: <c>$XDG_CONFIG_HOME</c>, else
+    /// <c>~/.config</c>. Tests point it at a folder of their own.
+    /// </summary>
+    internal static Func<string> ConfigHome { get; set; } =
+        () =>
+            Environment.GetEnvironmentVariable("XDG_CONFIG_HOME") is { Length: > 0 } xdg
+                ? xdg
+                : Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    ".config"
+                );
+
     internal static async Task<int> DeployAsync(
         string filePath,
         string environment,
@@ -34,7 +47,12 @@ internal static class DeployKubernetesCommands
                 async () =>
                 {
                     var file = await DeployFile.ReadAsync(filePath).ConfigureAwait(false);
-                    file.Environment(environment);
+                    if (OnPodman(file, environment))
+                    {
+                        await DeployPodmanAsync(file, filePath, environment, exporter, stdout)
+                            .ConfigureAwait(false);
+                        return;
+                    }
                     var exports = await DeployCommand
                         .ExportAsync(file, filePath, exporter, stdout)
                         .ConfigureAwait(false);
@@ -82,6 +100,29 @@ internal static class DeployKubernetesCommands
                     var tag = await ImageTags
                         .CreateAsync(root, Clock.GetUtcNow().UtcDateTime)
                         .ConfigureAwait(false);
+                    if (OnPodman(file, environment))
+                    {
+                        await WritePodmanAsync(
+                                PodmanTarget.Render(
+                                    file,
+                                    environment,
+                                    exports,
+                                    tag,
+                                    PodmanTarget.DeployDirectory(root, file.StackName(environment)),
+                                    PodmanTarget.SecretPath(
+                                        ConfigHome(),
+                                        file.StackName(environment)
+                                    )
+                                ),
+                                PodmanTarget.DeployDirectory(root, file.StackName(environment)),
+                                secretYaml: null,
+                                secretPath: null,
+                                stdout,
+                                ct
+                            )
+                            .ConfigureAwait(false);
+                        return;
+                    }
                     var manifests = KubernetesTarget.Render(file, environment, exports, tag);
                     var dir = Path.Combine(
                         root,
@@ -132,7 +173,7 @@ internal static class DeployKubernetesCommands
                 async () =>
                 {
                     var file = await DeployFile.ReadAsync(filePath).ConfigureAwait(false);
-                    file.Environment(environment);
+                    NotOnPodman(file, environment);
                     var ns = Namespace(file, environment);
                     var cluster = Client();
                     if (await cluster.NamespaceLabelsAsync(ns, ct).ConfigureAwait(false) is null)
@@ -179,7 +220,7 @@ internal static class DeployKubernetesCommands
                 async () =>
                 {
                     var file = await DeployFile.ReadAsync(filePath).ConfigureAwait(false);
-                    file.Environment(environment);
+                    NotOnPodman(file, environment);
                     string[] readable =
                     [
                         .. file.Services.Keys,
@@ -235,7 +276,7 @@ internal static class DeployKubernetesCommands
                 async () =>
                 {
                     var file = await DeployFile.ReadAsync(filePath).ConfigureAwait(false);
-                    file.Environment(environment);
+                    NotOnPodman(file, environment);
                     if (!yes)
                     {
                         await stdout
@@ -256,6 +297,154 @@ internal static class DeployKubernetesCommands
                 }
             )
             .ConfigureAwait(false);
+
+    private static bool OnPodman(DeployFile file, string environment) =>
+        string.Equals(
+            file.Environment(environment).Runtime,
+            DeployEnvironment.Podman,
+            StringComparison.Ordinal
+        );
+
+    /// <summary>
+    /// A podman environment's pods run under systemd on the host it was installed on, which status, logs and destroy
+    /// do not reach; each says what does.
+    /// </summary>
+    private static void NotOnPodman(DeployFile file, string environment)
+    {
+        if (!OnPodman(file, environment))
+            return;
+        var stack = file.StackName(environment);
+        throw new InvalidOperationException(
+            $"'{environment}' runs under podman, through the Quadlet units trax deploy wrote. On that host: "
+                + $"'systemctl --user status {stack}-*' for its state, 'journalctl --user -u {stack}-<service>' "
+                + $"for a service's log, and to take it down, stop the units, delete them from "
+                + $"~/.config/containers/systemd/ and run 'systemctl --user daemon-reload'; 'podman volume rm "
+                + $"{stack}-data' then deletes its database."
+        );
+    }
+
+    /// <summary>
+    /// Deploys a podman environment: asks each host what it needs, fills the Secrets from the <c>.env</c> beside
+    /// trax.deploy.json (refusing before anything is built when a key has no value), builds the images into this
+    /// host's podman, and writes the pod YAML and Quadlet units. It starts nothing; it says how.
+    /// </summary>
+    private static async Task DeployPodmanAsync(
+        DeployFile file,
+        string filePath,
+        string environment,
+        IHostExporter exporter,
+        TextWriter stdout
+    )
+    {
+        var root = Path.GetDirectoryName(Path.GetFullPath(filePath)).NotNull();
+        var stackName = file.StackName(environment);
+        var exports = await DeployCommand
+            .ExportAsync(file, filePath, exporter, stdout)
+            .ConfigureAwait(false);
+        var tag = await ImageTags
+            .CreateAsync(root, Clock.GetUtcNow().UtcDateTime)
+            .ConfigureAwait(false);
+        var dir = PodmanTarget.DeployDirectory(root, stackName);
+        var secretPath = PodmanTarget.SecretPath(ConfigHome(), stackName);
+        var stack = PodmanTarget.Render(file, environment, exports, tag, dir, secretPath);
+        var envFile = Path.Combine(root, ".env");
+        var secretYaml = PodmanTarget.SecretYaml(
+            stack,
+            await DotEnv.ReadAsync(envFile).ConfigureAwait(false),
+            envFile
+        );
+        foreach (var (name, service) in file.Services)
+        {
+            await stdout
+                .WriteLineAsync(
+                    $"Building {PodmanTarget.FullImage($"{ComposeTarget.ImageName(file, name)}:{tag}")}..."
+                )
+                .ConfigureAwait(false);
+            await Images
+                .PublishAsync(
+                    DeployFile.ProjectPath(filePath, service),
+                    registry: null,
+                    ComposeTarget.ImageName(file, name),
+                    tag,
+                    DeployEnvironment.Podman
+                )
+                .ConfigureAwait(false);
+        }
+        await WritePodmanAsync(stack, dir, secretYaml, secretPath, stdout, CancellationToken.None)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Writes the stack's files under <paramref name="dir"/>, replacing what an earlier run wrote there, and the
+    /// Secrets, when given, to <paramref name="secretPath"/> as a file only the user can read.
+    /// </summary>
+    private static async Task WritePodmanAsync(
+        PodmanStack stack,
+        string dir,
+        string? secretYaml,
+        string? secretPath,
+        TextWriter stdout,
+        CancellationToken ct
+    )
+    {
+        Directory.CreateDirectory(dir);
+        foreach (
+            var old in Directory
+                .EnumerateFiles(dir)
+                .Where(f => Path.GetExtension(f) is ".yaml" or ".kube" or ".network")
+        )
+            File.Delete(old);
+        foreach (var (name, content) in stack.Files)
+            await File.WriteAllTextAsync(Path.Combine(dir, name), content, ct)
+                .ConfigureAwait(false);
+        await stdout.WriteLineAsync($"Wrote {dir}.").ConfigureAwait(false);
+        if (secretYaml is null || secretPath is null)
+        {
+            await stdout
+                .WriteLineAsync(
+                    "A plan builds no image and writes no secret: 'trax deploy --env' does both, then says how to "
+                        + "start the units."
+                )
+                .ConfigureAwait(false);
+            return;
+        }
+        await WritePrivateAsync(secretPath, secretYaml, ct).ConfigureAwait(false);
+        await stdout.WriteLineAsync($"Wrote {secretPath} (mode 0600).").ConfigureAwait(false);
+        var units = string.Join(' ', stack.Units.Select(u => $"{u}.service"));
+        await stdout
+            .WriteLineAsync(
+                "Install and start it on this host:\n"
+                    + $"  mkdir -p ~/.config/containers/systemd && cp {dir}/*.kube {dir}/*.network "
+                    + "~/.config/containers/systemd/\n"
+                    + "  systemctl --user daemon-reload\n"
+                    + $"  systemctl --user restart {units}"
+            )
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>Writes <paramref name="content"/> where only this user can read it: the folder 0700, the file 0600.</summary>
+    private static async Task WritePrivateAsync(string path, string content, CancellationToken ct)
+    {
+        var folder = Path.GetDirectoryName(path).NotNull();
+        Directory.CreateDirectory(folder);
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(
+                folder,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute
+            );
+        var options = new FileStreamOptions { Mode = FileMode.Create, Access = FileAccess.Write };
+        if (!OperatingSystem.IsWindows())
+            options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        var stream = new FileStream(path, options);
+        await using (stream.ConfigureAwait(false))
+        {
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            var writer = new StreamWriter(stream);
+            await using (writer.ConfigureAwait(false))
+                await writer.WriteAsync(content.AsMemory(), ct).ConfigureAwait(false);
+        }
+    }
 
     private static string Namespace(DeployFile file, string environment) =>
         KubernetesTarget.NamespaceName(file, environment, file.Environment(environment));

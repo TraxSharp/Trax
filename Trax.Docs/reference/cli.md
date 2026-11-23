@@ -889,6 +889,7 @@ kubeconfig context names, with the Kubernetes .NET client: no `kubectl`, no Helm
 | Key | Meaning |
 |---|---|
 | `profile` | `production` (the default) or `try`. Only `try` may run Postgres or RabbitMQ in the cluster. The predicate is the profile, not the kind of cluster: a `try` environment on a managed cloud cluster may, a `production` one on kind may not. |
+| `runtime` | `cluster` (the default): applied to the current kubeconfig context. `podman`: written for one host to run under systemd, below. |
 | `namespace` | The namespace the app goes in; `<app>-<env>` when left out. trax creates it when it does not exist. |
 | `registry` | Where images are pushed and pulled from (`ghcr.io/acme`), as `<registry>/<app>-<service>:<tag>`, with the login docker or podman holds for it. Without one, images are built into the local container runtime as `<app>-<service>:<tag>` with `imagePullPolicy: IfNotPresent`, for a cluster that reads that runtime (Docker Desktop, podman). kind does not: give it a registry, such as kind's local one on `localhost:5001`. |
 | `database` | Required: every kubernetes environment names its database, and a `production` one names a Secret. `{ "secret": ..., "key": ... }`: an existing Secret in the namespace holding the whole Postgres connection string, read as `ConnectionStrings__<trax name>`. Or `{ "inCluster": true }`: Postgres 17 as a StatefulSet of one with a 1Gi volume and a headless Service, refused under `production`. |
@@ -953,6 +954,55 @@ trax deploy destroy --env staging    # asks for the namespace's name; --delete-d
 `destroy` deletes the app's Deployments, StatefulSet, Jobs and Services in the namespace. It keeps the namespace,
 the Secret, and an in-cluster database's volume, which the next deploy uses again; `--delete-data` deletes the
 volume and every row in it.
+
+#### On one host, under podman
+
+`"runtime": "podman"` runs the same manifests on one host with no cluster: `podman kube play` under a Quadlet `.kube`
+unit per pod, which systemd starts at boot and restarts when it dies. compose stays beside it.
+
+```json
+"home": {
+  "target": "kubernetes",
+  "runtime": "podman",
+  "profile": "try",
+  "database": { "inCluster": true },
+  "settings": { "Auth__Authority": "https://issuer.example.com", "Auth__Audience": "orders" }
+}
+```
+
+`trax deploy --env home` asks each host what it needs, then refuses, naming them, while the `.env` beside
+`trax.deploy.json` lacks a value for any key the Secret needs (`POSTGRES_PASSWORD`, `RABBITMQ_PASSWORD` when a host
+uses RabbitMQ, each name under `secrets`, and the database's `key` when it names one). Then it builds the images into
+this host's podman as `localhost/<app>-<service>:<tag>` and writes:
+
+- under `.trax/deploy/podman/<app>-<env>/`: a YAML file and a `.kube` unit for each pod, the migration's YAML, and a
+  `.network` unit, `<app>-<env>`, that every pod joins. None of them holds a secret value;
+- `~/.config/trax/<app>-<env>/secret.yaml` (or under `$XDG_CONFIG_HOME`), mode 0600 in a 0700 folder: the
+  Secrets with their values from `.env`, which each unit plays before its pod. It is never written beside the
+  project.
+
+It starts nothing. It prints the three commands that do:
+
+```bash
+mkdir -p ~/.config/containers/systemd && cp .trax/deploy/podman/orders-home/*.{kube,network} ~/.config/containers/systemd/
+systemctl --user daemon-reload
+systemctl --user restart orders-home-database.service orders-home-hub.service orders-home-reports.service orders-home-worker.service
+```
+
+What differs from a cluster, and why:
+
+| On a cluster | Under podman |
+|---|---|
+| A namespace per environment | A network per environment; every pod's name starts with `<app>-<env>`, since podman's pod names are global. `namespace` and `registry` are refused. |
+| A Service in front of each hub, Postgres and RabbitMQ | No Service: on the network each container answers by its own name (`database`, `rabbitmq`), the name a Service gives it, so the connection strings are the same. A hub with a `port` is published on `127.0.0.1:<port>`. |
+| Postgres as a StatefulSet | A Deployment of one on a claim, which podman keeps as the named volume `<app>-<env>-data`; `kube play` has no StatefulSet. |
+| A migrate Job the deploy waits on | The migration runs in the migrator's unit before its pod starts (after waiting up to two minutes for this host's Postgres), and fails the unit unless it exits 0, printing the end of its log. Every other service's unit `Requires=` the migrator's. |
+| `hostUsers: false` | `UserNS=nomap` on every unit, as compose: rootless podman cannot map a range per pod. |
+
+`plan --env home` writes the same files without building an image or writing the secret file. `status`, `logs`
+and `destroy` do not reach a podman environment and say what does: `systemctl --user status`, `journalctl --user -u
+<app>-<env>-<service>`, and stopping the units and deleting them from `~/.config/containers/systemd/`
+(`podman volume rm <app>-<env>-data` then deletes the database).
 
 ## SDK Reference
 

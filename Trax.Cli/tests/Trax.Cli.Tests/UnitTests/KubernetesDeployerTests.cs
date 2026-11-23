@@ -285,14 +285,18 @@ public class KubernetesDeployerTests
     {
         public List<string> Published { get; } = [];
 
+        public List<string?> LocalRuntimes { get; } = [];
+
         public Task PublishAsync(
             string projectPath,
             string? registry,
             string repository,
-            string tag
+            string tag,
+            string? localRuntime = null
         )
         {
             Published.Add(repository);
+            LocalRuntimes.Add(localRuntime);
             return Task.CompletedTask;
         }
     }
