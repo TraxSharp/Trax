@@ -160,6 +160,62 @@ public class AwsDeployerTests
     }
 
     [Test]
+    public async Task A_deploy_over_a_foundation_protects_its_database_again_and_keeps_its_pool()
+    {
+        var (deployer, aws, _) = Deployer();
+        aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
+        aws.Existing = FakeAws.Running();
+        // A destroy that stopped after turning protection off left Protect at false.
+        aws.Foundation = FakeAws.FoundationRunning(pool: "us-west-2_given", protect: "false");
+        aws.Parameters[AwsDeployer.UserPoolRecord("orders-production")] = "us-west-2_other";
+
+        await DeployAsync(deployer);
+
+        aws.Stacks[0].Should().Be("orders-production-base");
+        aws.Deploys[0][AwsStack.ProtectParameter].Should().Be("true");
+        aws.Deploys[0][AwsStack.UserPoolParameter]
+            .Should()
+            .Be("us-west-2_given", "a foundation keeps the pool it was given");
+    }
+
+    [TestCase("ROLLBACK_COMPLETE", "*orders-production-base*ROLLBACK_COMPLETE*destroy*")]
+    [TestCase("UPDATE_IN_PROGRESS", "*orders-production-base*UPDATE_IN_PROGRESS*settle*")]
+    public async Task A_foundation_that_cannot_be_changed_stops_the_deploy_before_anything_is_pushed(
+        string status,
+        string message
+    )
+    {
+        var (deployer, aws, images) = Deployer();
+        aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
+        aws.Existing = FakeAws.Running();
+        aws.Foundation = FakeAws.FoundationRunning(status: status);
+
+        var act = () => DeployAsync(deployer);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage(message);
+        aws.Calls.Should().BeEmpty();
+        images.Published.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task A_foundation_missing_an_output_the_services_need_stops_before_the_runtime()
+    {
+        var (deployer, aws, _) = Deployer();
+        aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
+        aws.Existing = FakeAws.Running();
+        var outputs = FakeAws.FoundationOutputs();
+        outputs.Remove("DatabaseAddress");
+        aws.Foundation = FakeAws.FoundationRunning() with { Outputs = outputs };
+
+        var act = () => DeployAsync(deployer);
+
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*no output DatabaseAddress*");
+        aws.Calls.Should().Equal("deploy-base");
+    }
+
+    [Test]
     public async Task Refuses_a_foundation_another_app_owns()
     {
         var (deployer, aws, images) = Deployer();
@@ -326,6 +382,47 @@ public class AwsDeployerTests
             .Be("orders-production-base", "the database's protection is in the foundation");
         aws.Deploys[0][AwsStack.ProtectParameter].Should().Be("false");
         aws.Templates[0].Should().BeNull("destroy keeps the template the stack has");
+    }
+
+    [Test]
+    public async Task Destroy_unprotects_and_deletes_a_single_stack_from_before_the_split()
+    {
+        var (deployer, aws, _) = Deployer();
+        var outputs = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["UserPoolId"] = "us-west-2_old",
+        };
+        aws.Existing = new AwsStackState(
+            "UPDATE_COMPLETE",
+            outputs,
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [AwsStack.ProtectParameter] = "true",
+                ["HubImage"] = "old",
+            }
+        )
+        {
+            Tags = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["trax:app"] = "orders",
+                ["trax:environment"] = "production",
+            },
+        };
+        aws.Pools["us-west-2_old"] = 7;
+
+        await deployer.DestroyAsync(
+            AwsStackTemplateTests.File_(),
+            "production",
+            deleteData: false,
+            CancellationToken.None
+        );
+
+        aws.Calls.Should().Equal("put-parameter", "deploy", "delete-stack");
+        aws.Stacks.Should().Equal("orders-production");
+        aws.Deploys[0][AwsStack.ProtectParameter].Should().Be("false");
+        aws.Parameters[AwsDeployer.UserPoolRecord("orders-production")]
+            .Should()
+            .Be("us-west-2_old", "the old stack kept its pool in its own outputs");
     }
 
     [Test]
@@ -894,14 +991,19 @@ public class AwsDeployerTests
                 },
             };
 
-        public static AwsStackState FoundationRunning(bool ownsVpc = true) =>
+        public static AwsStackState FoundationRunning(
+            bool ownsVpc = true,
+            string pool = "",
+            string protect = "true",
+            string status = "UPDATE_COMPLETE"
+        ) =>
             new(
-                "UPDATE_COMPLETE",
+                status,
                 FoundationOutputs(ownsVpc),
                 new Dictionary<string, string>(StringComparer.Ordinal)
                 {
-                    [AwsStack.ProtectParameter] = "true",
-                    [AwsStack.UserPoolParameter] = "",
+                    [AwsStack.ProtectParameter] = protect,
+                    [AwsStack.UserPoolParameter] = pool,
                 }
             )
             {
@@ -925,7 +1027,7 @@ public class AwsDeployerTests
                 ["Url"] = "https://orders.example.com",
             };
 
-        private static Dictionary<string, string> FoundationOutputs(bool ownsVpc = true) =>
+        internal static Dictionary<string, string> FoundationOutputs(bool ownsVpc = true) =>
             new(StringComparer.Ordinal)
             {
                 ["VpcId"] = "vpc-1",
