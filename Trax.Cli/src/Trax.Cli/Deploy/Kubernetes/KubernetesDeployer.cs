@@ -235,11 +235,12 @@ internal sealed class KubernetesDeployer(
                     ? $"Namespace {ns} has no Secret {secret}, which must hold {string.Join(", ", missing)}."
                     : $"The Secret {secret} in namespace {ns} has no {string.Join(", ", missing)}."
             )
-                + " Nothing was applied. Create it before deploying, with every key it needs:\n  kubectl create "
-                + $"secret generic {secret} -n {ns} "
-                + string.Join(' ', keys.Select(k => $"--from-literal={k}=...")).TrimEnd()
+                + " Nothing was applied. Write every key it needs into a file, one KEY=value line each ("
+                + string.Join(", ", keys)
+                + "), and create it from that file, so no value is on a command line:\n  "
+                + $"kubectl create secret generic {secret} -n {ns} --from-env-file=<file>"
                 + (held is null ? "" : " --dry-run=client -o yaml | kubectl apply -f -")
-                + $"\nthen run 'trax deploy --env {environment}' again."
+                + $"\nthen delete the file and run 'trax deploy --env {environment}' again."
         );
     }
 

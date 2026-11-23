@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Globalization;
 using Trax.Cli.Deploy;
 using Trax.Cli.Deploy.Aws;
+using Trax.Cli.Deploy.Kubernetes;
 using Trax.Core.Extensions;
 using Trax.Effect.Configuration.Deploy;
 
@@ -687,9 +688,11 @@ internal static class DeployAwsCommands
             DeployEnvironment.Aws => env,
             DeployEnvironment.Kubernetes => throw new InvalidOperationException(
                 $"'trax deploy {command}' is for aws environments, and '{environment}' is a kubernetes one. Its "
-                    + $"secrets live in the Secret {file.StackName(environment)} in its namespace: set them with "
-                    + $"'kubectl create secret generic {file.StackName(environment)} -n <namespace> "
-                    + "--from-literal=<name>=...', and list them with 'kubectl describe secret'."
+                    + $"secrets live in the Secret {file.StackName(environment)} in its namespace. Write them into a "
+                    + "file, one KEY=value line each, and set them with 'kubectl create secret generic "
+                    + $"{file.StackName(environment)} -n {KubernetesTarget.NamespaceName(file, environment, env)} "
+                    + "--from-env-file=<file> --dry-run=client -o yaml | kubectl apply -f -', then delete the file. "
+                    + "'kubectl describe secret' lists them."
             ),
             _ => throw new InvalidOperationException(
                 $"'trax deploy {command}' is for aws and kubernetes environments, and '{environment}' is a "

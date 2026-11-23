@@ -684,7 +684,12 @@ public partial class DeployKubernetesTests
         )
             .Should()
             .Be(1);
-        error.ToString().Should().Contain("kubectl create secret generic orders-staging");
+        error
+            .ToString()
+            .Should()
+            .Contain("kubectl create secret generic orders-staging")
+            .And.Contain("--from-env-file=")
+            .And.NotContain("--from-literal");
     }
 
     [Test]

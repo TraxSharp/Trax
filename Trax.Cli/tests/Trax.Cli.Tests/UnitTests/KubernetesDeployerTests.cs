@@ -73,9 +73,14 @@ public class KubernetesDeployerTests
 
         var act = () => Deploy(deployer);
 
-        (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
-            "*has no Stripe__ApiKey*Nothing was applied*kubectl create secret generic orders-staging*"
-        );
+        var refusal = (await act.Should().ThrowAsync<InvalidOperationException>()).Which.Message;
+        refusal
+            .Should()
+            .Match(
+                "*has no Stripe__ApiKey*Nothing was applied*kubectl create secret generic orders-staging*"
+                    + "--from-env-file=*"
+            )
+            .And.NotContain("--from-literal", "a value on the command line lands in shell history");
         cluster.Calls.Should().NotContain(c => c.StartsWith("apply") || c.StartsWith("create-job"));
         images.Published.Should().BeEmpty();
     }
