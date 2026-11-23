@@ -50,6 +50,9 @@ public class PublicApiSurfaceTests
             typeof(Trax.Effect.Broadcaster.RabbitMQ.RabbitMqTrainEventReceiver).Assembly
         ).SetName("Trax.Effect.Broadcaster.RabbitMQ");
         yield return new TestCaseData(
+            typeof(Trax.Effect.Configuration.Aws.TraxAwsSecretsExtensions).Assembly
+        ).SetName("Trax.Effect.Configuration.Aws");
+        yield return new TestCaseData(
             typeof(Trax.Effect.Broadcaster.SignalR.Services.ITraxTrainEventClient).Assembly
         ).SetName("Trax.Effect.Broadcaster.SignalR");
         yield return new TestCaseData(

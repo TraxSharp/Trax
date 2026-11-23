@@ -26,6 +26,7 @@ each member ships in.
 - [IFailureClassifier](/docs/sdk-reference/configuration/i-failure-classifier): how a failed run's exception becomes a `FailureClass`
 - [IJunctionEffectProvider](/docs/sdk-reference/configuration/i-junction-effect-provider): code run before and after every `EffectJunction`
 - [UseBroadcaster](/docs/sdk-reference/configuration/use-broadcaster): carries lifecycle events between processes
+- [AddTraxAwsSecretsAsync](/docs/sdk-reference/configuration/add-trax-aws-secrets) (`Trax.Effect.Configuration.Aws`): a host's secrets read from AWS Secrets Manager at start
 
 ## Trax.Mediator
 

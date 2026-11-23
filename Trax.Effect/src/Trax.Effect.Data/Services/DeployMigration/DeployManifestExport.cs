@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Effect.Configuration.ClientExport;
@@ -40,6 +41,19 @@ internal static class DeployManifestExport
             .ConfigureAwait(false);
     }
 
+    /// <summary>The secrets readers that marked themselves in the host's configuration, sorted.</summary>
+    private static IEnumerable<string> SecretSources(IServiceProvider services) =>
+        (
+            services
+                .GetService<IConfiguration>()
+                ?.GetSection(DeployManifest.SecretSourcesSection)
+                .GetChildren()
+            ?? []
+        )
+            .Where(c => string.Equals(c.Value, "true", StringComparison.OrdinalIgnoreCase))
+            .Select(c => c.Key)
+            .Order(StringComparer.Ordinal);
+
     /// <summary>The manifest of the host <paramref name="services"/> belong to.</summary>
     public static async Task<DeployManifest> BuildAsync(
         IServiceProvider services,
@@ -61,6 +75,7 @@ internal static class DeployManifestExport
         {
             Roles = [.. Values(DeployFact.Role)],
             Transports = [.. Values(DeployFact.Transport)],
+            SecretSources = [.. SecretSources(services)],
         };
         if (Values(DeployFact.Database) is [var provider, ..])
             manifest.Database = new DeployDatabase

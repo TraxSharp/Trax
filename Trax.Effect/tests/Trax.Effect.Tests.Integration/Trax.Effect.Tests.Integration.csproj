@@ -45,6 +45,7 @@
     <ProjectReference Include="../../src/Trax.Effect.JunctionProvider.Logging/Trax.Effect.JunctionProvider.Logging.csproj" />
     <ProjectReference Include="../../src/Trax.Effect.JunctionProvider.Progress/Trax.Effect.JunctionProvider.Progress.csproj" />
     <ProjectReference Include="../../src/Trax.Effect.Data/Trax.Effect.Data.csproj" />
+    <ProjectReference Include="../../src/Trax.Effect.Configuration.Aws/Trax.Effect.Configuration.Aws.csproj" />
     <ProjectReference Include="../../src/Trax.Effect.Data.InMemory/Trax.Effect.Data.InMemory.csproj" />
     <ProjectReference Include="../../src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
     <!-- The checkpoint tests run on every data provider. -->

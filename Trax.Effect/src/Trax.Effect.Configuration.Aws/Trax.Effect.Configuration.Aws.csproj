@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Description>Reads a Trax .NET host's secrets from AWS Secrets Manager into its configuration at start, with the credentials the host already has (on EKS, its Pod Identity role). Adds AddTraxAwsSecretsAsync to the host's configuration. trax deploy names the secrets; the values never pass through Kubernetes.</Description>
+    <AssemblyName>Trax.Effect.Configuration.Aws</AssemblyName>
+    <!-- New package: nothing on nuget.org to validate against yet. Remove once it has shipped. -->
+    <EnablePackageValidation>false</EnablePackageValidation>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Trax.Effect/Trax.Effect.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.SecretsManager" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Effect.Tests.Integration" />
+  </ItemGroup>
+</Project>

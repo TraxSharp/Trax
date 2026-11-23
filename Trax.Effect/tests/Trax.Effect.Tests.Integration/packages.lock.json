@@ -153,6 +153,11 @@
           "Microsoft.Testing.Platform.MSBuild": "2.3.3"
         }
       },
+      "AWSSDK.Core": {
+        "type": "Transitive",
+        "resolved": "4.0.102.8",
+        "contentHash": "90B9Skhl+ORbtWNXrrmGdGhGvAfZiPmZafRYrB/xHelZjePIwPvXioqz9UiiF1vo21eDLzTnXh5EC4RjbNWsFQ=="
+      },
       "Castle.Core": {
         "type": "Transitive",
         "resolved": "5.1.1",
@@ -426,6 +431,14 @@
           "Trax.Core": "[1.99.99, )"
         }
       },
+      "trax.effect.configuration.aws": {
+        "type": "Project",
+        "dependencies": {
+          "AWSSDK.SecretsManager": "[4.0.100.15, )",
+          "Microsoft.Extensions.Configuration": "[10.0.12, )",
+          "Trax.Effect": "[1.99.99, )"
+        }
+      },
       "trax.effect.data": {
         "type": "Project",
         "dependencies": {
@@ -505,6 +518,15 @@
         "type": "Project",
         "dependencies": {
           "Trax.Effect": "[1.99.99, )"
+        }
+      },
+      "AWSSDK.SecretsManager": {
+        "type": "CentralTransitive",
+        "requested": "[4.0.100.15, )",
+        "resolved": "4.0.100.15",
+        "contentHash": "rT7ynrNzVwjrKVOPncko6lCkd2oZCZV7Fq9BW1bnEP9IZurexHz+Gqg+TNN1CCCh4J9HNnd8vIuSg29IX9FxMA==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
         }
       },
       "dbup-core": {

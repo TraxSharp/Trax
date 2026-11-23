@@ -15,6 +15,12 @@ public sealed class DeployManifest
     /// <summary>The format version this build writes.</summary>
     public const int CurrentVersion = 1;
 
+    /// <summary>
+    /// The configuration section a secrets reader marks itself in (<c>Trax:Deploy:SecretSources:&lt;name&gt; =
+    /// true</c>), so the export reports it in <see cref="SecretSources"/>.
+    /// </summary>
+    public const string SecretSourcesSection = "Trax:Deploy:SecretSources";
+
     private static readonly JsonSerializerOptions Json = new()
     {
         RespectNullableAnnotations = false,
@@ -44,6 +50,12 @@ public sealed class DeployManifest
 
     /// <summary>The authentication schemes the host registers, sorted by name.</summary>
     public IList<DeployAuthenticationScheme> Authentication { get; set; } = [];
+
+    /// <summary>
+    /// Where the host reads its secrets from at start besides its environment, sorted (<c>aws-secrets</c>, from
+    /// <c>AddTraxAwsSecretsAsync</c>). A deploy target that delivers secrets only that way refuses a host without it.
+    /// </summary>
+    public IList<string> SecretSources { get; set; } = [];
 
     /// <summary>Writes the manifest as indented JSON.</summary>
     public string Write() => JsonSerializer.Serialize(this, Json) + "\n";

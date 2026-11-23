@@ -1,0 +1,9 @@
+namespace Trax.Effect.Configuration.Aws
+{
+    public static class TraxAwsSecretsExtensions
+    {
+        public const string Section = "Trax:AwsSecrets";
+        public const string SourceName = "aws-secrets";
+        public static System.Threading.Tasks.Task<Microsoft.Extensions.Configuration.IConfigurationManager> AddTraxAwsSecretsAsync(this Microsoft.Extensions.Configuration.IConfigurationManager configuration, Amazon.SecretsManager.IAmazonSecretsManager? client = null, System.Threading.CancellationToken cancellationToken = default) { }
+    }
+}
