@@ -208,6 +208,41 @@ public class KubernetesDeployerTests
         cluster.Calls.Should().Contain("wait Deployment/hub");
     }
 
+    [Test]
+    public async Task A_database_that_does_not_roll_out_stops_the_deploy_before_the_migration()
+    {
+        var (deployer, cluster, _) = Deployer();
+        cluster.SecretKeys = ["POSTGRES_PASSWORD", "Stripe__ApiKey"];
+        cluster.FailRollout = "StatefulSet/database";
+
+        var act = () => Deploy(deployer);
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
+            "StatefulSet database did not roll out*"
+        );
+        cluster
+            .Calls.Should()
+            .NotContain(c => c.StartsWith("create-job", StringComparison.Ordinal));
+        cluster
+            .Calls.Should()
+            .NotContain(c => c.StartsWith("apply Deployment", StringComparison.Ordinal));
+    }
+
+    [Test]
+    public async Task A_service_that_does_not_roll_out_fails_the_deploy()
+    {
+        var (deployer, cluster, _) = Deployer();
+        cluster.SecretKeys = ["POSTGRES_PASSWORD", "Stripe__ApiKey"];
+        cluster.FailRollout = "Deployment/hub";
+
+        var act = () => Deploy(deployer);
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
+            "Deployment hub did not roll out*"
+        );
+        cluster.Calls.Should().NotContain("wait Deployment/reports");
+    }
+
     [TestCase(false)]
     [TestCase(true)]
     public async Task Destroy_keeps_the_database_volume_unless_asked(bool deleteData)
@@ -275,6 +310,13 @@ public class KubernetesDeployerTests
         public List<KubernetesObjectState> Existing { get; } = [];
 
         public KubernetesJobResult Job { get; set; } = new(Succeeded: true, Reason: null, "");
+
+        /// <summary>The kind/name whose rollout times out, as the real client reports it.</summary>
+        public string? FailRollout { get; set; }
+
+        public List<KubernetesWorkloadState> Workloads { get; } = [];
+
+        public List<string> LogLines { get; } = [];
 
         public string Context => "kind-test";
 
@@ -345,14 +387,24 @@ public class KubernetesDeployerTests
         )
         {
             Calls.Add($"wait {kind}/{name}");
-            return Task.CompletedTask;
+            return string.Equals(FailRollout, $"{kind}/{name}", StringComparison.Ordinal)
+                ? Task.FromException(
+                    new InvalidOperationException(
+                        $"{kind} {name} did not roll out within 10 minutes"
+                    )
+                )
+                : Task.CompletedTask;
         }
 
         public Task<IReadOnlyList<KubernetesWorkloadState>> WorkloadsAsync(
             string ns,
             string app,
             CancellationToken ct
-        ) => Task.FromResult<IReadOnlyList<KubernetesWorkloadState>>([]);
+        )
+        {
+            Calls.Add($"workloads {app}");
+            return Task.FromResult<IReadOnlyList<KubernetesWorkloadState>>(Workloads);
+        }
 
         public async IAsyncEnumerable<string> LogsAsync(
             string ns,
@@ -363,8 +415,12 @@ public class KubernetesDeployerTests
             [EnumeratorCancellation] CancellationToken ct
         )
         {
-            await Task.CompletedTask.ConfigureAwait(false);
-            yield break;
+            Calls.Add($"logs {service}");
+            foreach (var line in LogLines)
+            {
+                await Task.Yield();
+                yield return line;
+            }
         }
 
         public Task DeleteAsync(string ns, KubernetesObjectState target, CancellationToken ct)
