@@ -358,7 +358,7 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
         }
     }
 
-    private static (bool, string) Rolled(V1Deployment d)
+    internal static (bool Done, string State) Rolled(V1Deployment d)
     {
         var want = d.Spec.Replicas ?? 1;
         var s = d.Status;
@@ -377,7 +377,7 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
         );
     }
 
-    private static (bool, string) Rolled(V1StatefulSet set)
+    internal static (bool Done, string State) Rolled(V1StatefulSet set)
     {
         var want = set.Spec.Replicas ?? 1;
         var s = set.Status;
